@@ -185,6 +185,14 @@ describe('generateTrainingPlan', () => {
     const result = await generateTrainingPlan(profile, 'sk-test')
     expect(result[0].date).toBe('2024-05-01')
   })
+
+  it('repairs malformed JSON where the model embeds units in numeric values', async () => {
+    // Simulate what gpt-4o-mini / Gemini sometimes produces: "durationMinutes": 90 minutes
+    const malformed = `{"plan":[{"date":"2024-05-01","workoutType":"endurance","title":"Easy Ride","description":"Z2","durationMinutes":90 minutes,"completed":false}]}`
+    mockOpenAIResponse(malformed)
+    const result = await generateTrainingPlan(profile, 'sk-test')
+    expect(result[0].durationMinutes).toBe(90)
+  })
 })
 
 describe('adaptTrainingPlan', () => {

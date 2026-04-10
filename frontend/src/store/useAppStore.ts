@@ -64,8 +64,17 @@ export interface StravaActivity {
   total_elevation_gain: number
   start_date: string
   average_watts?: number
+  weighted_average_watts?: number
+  max_watts?: number
   average_heartrate?: number
   max_heartrate?: number
+}
+
+export interface RiderAssessment {
+  estimatedFTP?: number
+  estimatedThresholdHR?: number
+  riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
+  notes: string
 }
 
 interface AppState {
@@ -73,6 +82,8 @@ interface AppState {
   trainingPlan: TrainingDay[]
   workoutLogs: Record<string, WorkoutFeedback>
   stravaTokens: StravaTokens | null
+  riderAssessment: RiderAssessment | null
+  stravaAnalysisComplete: boolean
   aiProvider: AiProvider
   aiApiKey: string
   isOnboarded: boolean
@@ -83,6 +94,8 @@ interface AppState {
   setTrainingPlan: (plan: TrainingDay[]) => void
   logWorkout: (date: string, feedback: WorkoutFeedback) => void
   setStravaTokens: (tokens: StravaTokens | null) => void
+  setRiderAssessment: (assessment: RiderAssessment | null) => void
+  setStravaAnalysisComplete: (v: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setAiApiKey: (key: string) => void
   setOnboarded: (v: boolean) => void
@@ -98,6 +111,8 @@ const initialState = {
   trainingPlan: [],
   workoutLogs: {},
   stravaTokens: null,
+  riderAssessment: null,
+  stravaAnalysisComplete: false,
   aiProvider: 'openai' as AiProvider,
   aiApiKey: '',
   isOnboarded: false,
@@ -120,6 +135,8 @@ export const useAppStore = create<AppState>()(
           ),
         })),
       setStravaTokens: (tokens) => set({ stravaTokens: tokens }),
+      setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
+      setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (key) => set({ aiApiKey: key }),
       setOnboarded: (v) => set({ isOnboarded: v }),

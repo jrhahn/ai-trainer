@@ -5,9 +5,17 @@ import { CheckCircle, Link2Off } from 'lucide-react'
 export default function StravaConnect() {
   const stravaTokens = useAppStore((s) => s.stravaTokens)
   const setStravaTokens = useAppStore((s) => s.setStravaTokens)
+  const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
+  const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
 
   const handleConnect = () => {
     window.location.href = getStravaAuthUrl()
+  }
+
+  const handleDisconnect = () => {
+    setStravaTokens(null)
+    setStravaAnalysisComplete(false)
+    setRiderAssessment(null)
   }
 
   if (stravaTokens) {
@@ -19,7 +27,7 @@ export default function StravaConnect() {
           <p className="text-xs text-green-600">{stravaTokens.athleteName}</p>
         </div>
         <button
-          onClick={() => setStravaTokens(null)}
+          onClick={handleDisconnect}
           className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
         >
           <Link2Off size={14} />
