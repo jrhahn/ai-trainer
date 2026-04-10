@@ -31,3 +31,5 @@ backend/*.pyc
 backend/.env
 # uv cache (never commit the ephemeral cache dir)
 .uv-cache/
+# direnv cache
+.direnv/

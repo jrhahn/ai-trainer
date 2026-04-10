@@ -51,6 +51,19 @@ uv sync
 `uv sync` reads `pyproject.toml` and `uv.lock`, creates a `.venv` automatically,
 and installs all dependencies in one step — no separate `python -m venv` or `pip install` needed.
 
+> **Tip – automatic activation with direnv**
+>
+> If you have [direnv](https://direnv.net) installed and hooked into your shell,
+> simply run `direnv allow` once inside the `backend/` directory. direnv will
+> then run `uv sync` (if `.venv` is missing) and activate the virtual
+> environment every time you `cd` into the folder.
+>
+> ```bash
+> cd backend
+> direnv allow   # one-time approval
+> # .venv is created and activated automatically from here on
+> ```
+
 ### 4. Run the server
 
 ```bash
