@@ -45,15 +45,16 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
 ```
+
+`uv sync` reads `pyproject.toml` and `uv.lock`, creates a `.venv` automatically,
+and installs all dependencies in one step — no separate `python -m venv` or `pip install` needed.
 
 ### 4. Run the server
 
 ```bash
-uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8000
 ```
 
 Interactive API docs are available at <http://localhost:8000/docs>.
@@ -74,6 +75,13 @@ Deploy this server on any platform that supports Python (Render, Railway,
 Fly.io, AWS Lambda via Mangum, etc.).  Set `BACKEND_URL` to your server's
 public HTTPS URL and update the **Authorization Callback Domain** in your
 Strava app settings to match.
+
+Most platforms detect `pyproject.toml` and run `uv sync` automatically.
+For platforms that need an explicit start command, use:
+
+```bash
+uv run uvicorn main:app --host 0.0.0.0 --port $PORT
+```
 
 ## API reference
 

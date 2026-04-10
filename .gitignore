@@ -28,3 +28,5 @@ backend/.venv
 backend/__pycache__
 backend/*.pyc
 backend/.env
+# uv cache (never commit the ephemeral cache dir)
+.uv-cache/
