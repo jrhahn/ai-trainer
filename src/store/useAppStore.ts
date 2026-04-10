@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { AiProvider } from '../services/ai'
 
 export interface UserProfile {
   name: string
@@ -66,7 +67,8 @@ interface AppState {
   trainingPlan: TrainingDay[]
   workoutLogs: Record<string, WorkoutFeedback>
   stravaTokens: StravaTokens | null
-  openaiApiKey: string
+  aiProvider: AiProvider
+  aiApiKey: string
   stravaClientId: string
   stravaClientSecret: string
   isOnboarded: boolean
@@ -75,7 +77,8 @@ interface AppState {
   setTrainingPlan: (plan: TrainingDay[]) => void
   logWorkout: (date: string, feedback: WorkoutFeedback) => void
   setStravaTokens: (tokens: StravaTokens | null) => void
-  setOpenaiApiKey: (key: string) => void
+  setAiProvider: (provider: AiProvider) => void
+  setAiApiKey: (key: string) => void
   setStravaConfig: (clientId: string, clientSecret: string) => void
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
@@ -87,7 +90,8 @@ const initialState = {
   trainingPlan: [],
   workoutLogs: {},
   stravaTokens: null,
-  openaiApiKey: '',
+  aiProvider: 'openai' as AiProvider,
+  aiApiKey: '',
   stravaClientId: '',
   stravaClientSecret: '',
   isOnboarded: false,
@@ -108,7 +112,8 @@ export const useAppStore = create<AppState>()(
           ),
         })),
       setStravaTokens: (tokens) => set({ stravaTokens: tokens }),
-      setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
+      setAiProvider: (provider) => set({ aiProvider: provider }),
+      setAiApiKey: (key) => set({ aiApiKey: key }),
       setStravaConfig: (clientId, clientSecret) =>
         set({ stravaClientId: clientId, stravaClientSecret: clientSecret }),
       setOnboarded: (v) => set({ isOnboarded: v }),

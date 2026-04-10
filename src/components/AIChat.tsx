@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { askTrainer } from '../services/openai'
+import { askTrainer } from '../services/ai'
 import type { TrainingDay } from '../store/useAppStore'
 
 interface Message {
@@ -15,9 +15,10 @@ interface Props {
 }
 
 export default function AIChat({ contextWorkout }: Props) {
-  const { openaiApiKey, userProfile, trainingPlan } = useAppStore(
+  const { aiApiKey, aiProvider, userProfile, trainingPlan } = useAppStore(
     useShallow((s) => ({
-      openaiApiKey: s.openaiApiKey,
+      aiApiKey: s.aiApiKey,
+      aiProvider: s.aiProvider,
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
     }))
@@ -41,11 +42,11 @@ export default function AIChat({ contextWorkout }: Props) {
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return
-    if (!openaiApiKey) {
+    if (!aiApiKey) {
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: input },
-        { role: 'assistant', content: 'Please add your OpenAI API key in Settings to chat with me.' },
+        { role: 'assistant', content: 'Please add your AI provider API key in Settings to chat with me.' },
       ])
       setInput('')
       return
@@ -58,7 +59,7 @@ export default function AIChat({ contextWorkout }: Props) {
     setLoading(true)
 
     try {
-      const answer = await askTrainer(userMsg, trainingPlan, userProfile, openaiApiKey)
+      const answer = await askTrainer(userMsg, trainingPlan, userProfile, aiApiKey, aiProvider)
       setMessages((prev) => [...prev, { role: 'assistant', content: answer }])
     } catch {
       setMessages((prev) => [

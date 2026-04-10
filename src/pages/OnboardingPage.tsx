@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Bike, Target, Loader2, CheckCircle } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
-import { generateTrainingPlan } from '../services/openai'
+import { generateTrainingPlan, type AiProvider } from '../services/ai'
 
 const TOTAL_STEPS = 6
 
@@ -22,19 +22,23 @@ type FormData = {
 }
 
 export default function OnboardingPage() {
-  const { setUserProfile, setTrainingPlan, setOnboarded, openaiApiKey } = useAppStore(
+  const { setUserProfile, setTrainingPlan, setOnboarded, aiProvider, aiApiKey, setAiProvider, setAiApiKey } = useAppStore(
     useShallow((s) => ({
       setUserProfile: s.setUserProfile,
       setTrainingPlan: s.setTrainingPlan,
       setOnboarded: s.setOnboarded,
-      openaiApiKey: s.openaiApiKey,
+      aiProvider: s.aiProvider,
+      aiApiKey: s.aiApiKey,
+      setAiProvider: s.setAiProvider,
+      setAiApiKey: s.setAiApiKey,
     }))
   )
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [apiKeyInput, setApiKeyInput] = useState(openaiApiKey)
+  const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
+  const [apiKeyInput, setApiKeyInput] = useState(aiApiKey)
   const [form, setForm] = useState<FormData>({
     name: '',
     email: '',
@@ -62,7 +66,8 @@ export default function OnboardingPage() {
   const handleGenerate = async () => {
     setLoading(true)
     setError('')
-    useAppStore.getState().setOpenaiApiKey(apiKeyInput)
+    setAiProvider(selectedProvider)
+    setAiApiKey(apiKeyInput)
 
     const profile: UserProfile = {
       name: form.name,
@@ -80,7 +85,7 @@ export default function OnboardingPage() {
     }
 
     try {
-      const plan = await generateTrainingPlan(profile, apiKeyInput)
+      const plan = await generateTrainingPlan(profile, apiKeyInput, selectedProvider)
       setUserProfile(profile)
       setTrainingPlan(plan)
       setOnboarded(true)
@@ -388,18 +393,42 @@ export default function OnboardingPage() {
               </div>
 
               <div className="mb-4">
+                {/* Provider selector */}
+                <label className="block text-sm font-medium text-gray-700 mb-2">AI Provider *</label>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {([
+                    { value: 'openai', label: 'OpenAI', hint: 'GPT-4o mini' },
+                    { value: 'gemini', label: 'Google Gemini', hint: 'Gemini 2.0 Flash' },
+                  ] as { value: AiProvider; label: string; hint: string }[]).map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setSelectedProvider(p.value)}
+                      className={`flex flex-col items-start px-3 py-2.5 rounded-lg border-2 text-left transition-all ${
+                        selectedProvider === p.value
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <span className="font-semibold text-sm text-gray-900">{p.label}</span>
+                      <span className="text-xs text-gray-500">{p.hint}</span>
+                    </button>
+                  ))}
+                </div>
+
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  OpenAI API Key *
+                  {selectedProvider === 'openai' ? 'OpenAI' : 'Google Gemini'} API Key *
                 </label>
                 <input
                   type="password"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                  placeholder="sk-..."
+                  placeholder={selectedProvider === 'openai' ? 'sk-...' : 'AIza...'}
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  Stored locally in your browser. Never sent to any server except OpenAI.
+                  Stored locally in your browser. Sent only to{' '}
+                  {selectedProvider === 'openai' ? 'OpenAI' : 'Google'}.
                 </p>
               </div>
 
