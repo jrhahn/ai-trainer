@@ -115,11 +115,11 @@ export async function analyseStravaActivities(
   provider: AiProvider = 'openai'
 ): Promise<RiderAssessment> {
   const systemPrompt = `You are an expert cycling coach and sports scientist. Analyse the provided Strava activities and return a JSON assessment.
-Return ONLY a JSON object with these fields:
-- estimatedFTP: number (watts) or null if insufficient power data
-- estimatedThresholdHR: number (bpm) or null if insufficient heart rate data
-- riderType: one of "timetrial" | "sprinter" | "climber" | "allrounder" | "endurance"
-- notes: string summarising the athlete's strengths, weaknesses, and how this was derived
+Return ONLY a valid JSON object with these fields (all keys double-quoted, numeric values must be plain numbers with no units):
+- "estimatedFTP": integer watts, or null if insufficient power data
+- "estimatedThresholdHR": integer bpm, or null if insufficient heart rate data
+- "riderType": one of "timetrial", "sprinter", "climber", "allrounder", "endurance"
+- "notes": string summarising the athlete's strengths, weaknesses, and how this was derived
 
 Guidelines for assessment:
 - FTP estimation from power: if weighted_average_watts or average_watts is available, use the best 20-min equivalent effort ≈ 95% of best 20-min avg power. Otherwise estimate from average_watts of long sustained efforts.
@@ -155,9 +155,9 @@ export async function generateTrainingPlan(
   riderAssessment?: RiderAssessment
 ): Promise<TrainingDay[]> {
   const systemPrompt = `You are an expert cycling coach. Generate a 28-day training plan as JSON.
-Return ONLY a JSON object with a "plan" array of training days.
-Each day must have: date (ISO string starting from today), workoutType (rest|endurance|intervals|tempo|race|recovery|strength), title, description, durationMinutes.
-Optional fields: targetPower ({low, high}), targetHeartRate ({low, high}), intervals (array of {duration (seconds), power (watts), rest (seconds)}).
+Return ONLY a valid JSON object with a "plan" array of training days. All keys must be double-quoted. All numeric fields must be plain numbers with no units.
+Each day must have: "date" (ISO date string starting from today), "workoutType" (one of: "rest","endurance","intervals","tempo","race","recovery","strength"), "title" (string), "description" (string), "durationMinutes" (integer).
+Optional fields: "targetPower" (object with "low" and "high" integer fields in watts), "targetHeartRate" (object with "low" and "high" integer fields in bpm), "intervals" (array of objects with "duration" (integer seconds), "power" (integer watts), "rest" (integer seconds)).
 Principles:
 - Build progressive overload over 4 weeks
 - Include rest days (1-2 per week)
@@ -195,8 +195,8 @@ export async function adaptTrainingPlan(
 ): Promise<TrainingDay[]> {
   const incompleteDays = plan.filter((d) => !d.completed)
   const systemPrompt = `You are an expert cycling coach. Adapt the remaining training plan based on recent workout feedback.
-Return ONLY a JSON object with an "updatedDays" array. Keep the same date fields.
-Each updated day must include all required TrainingDay fields.`
+Return ONLY a valid JSON object with an "updatedDays" array. All keys must be double-quoted. All numeric fields must be plain numbers with no units. Keep the same date fields.
+Each updated day must include all required TrainingDay fields: "date", "workoutType", "title", "description", "durationMinutes".`
 
   const userMsg = `Profile: ${JSON.stringify(profile)}
 Recent feedback: ${JSON.stringify(recentFeedback)}
