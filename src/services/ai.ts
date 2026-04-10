@@ -39,12 +39,16 @@ async function geminiChat(
   apiKey: string,
   model: string,
   systemPrompt: string,
-  userMsg: string
+  userMsg: string,
+  jsonMode = false
 ): Promise<string> {
   const genAI = makeGemini(apiKey)
   const genModel = genAI.getGenerativeModel({
     model,
     systemInstruction: systemPrompt,
+    ...(jsonMode
+      ? { generationConfig: { responseMimeType: 'application/json' } }
+      : {}),
   })
   const result = await genModel.generateContent(userMsg)
   return result.response.text()
@@ -80,7 +84,7 @@ Generate a 28-day training plan starting from today (${new Date().toISOString().
 
   let raw: string
   if (provider === 'gemini') {
-    raw = await geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg)
+    raw = await geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg, true)
   } else {
     raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
   }
@@ -108,7 +112,7 @@ Adapt the remaining days based on the feedback. Return the full updated days arr
 
   let raw: string
   if (provider === 'gemini') {
-    raw = await geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg)
+    raw = await geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg, true)
   } else {
     raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
   }
