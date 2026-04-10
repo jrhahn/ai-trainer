@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/openai'
 import type { TrainingDay } from '../store/useAppStore'
@@ -14,11 +15,13 @@ interface Props {
 }
 
 export default function AIChat({ contextWorkout }: Props) {
-  const { openaiApiKey, userProfile, trainingPlan } = useAppStore((s) => ({
-    openaiApiKey: s.openaiApiKey,
-    userProfile: s.userProfile,
-    trainingPlan: s.trainingPlan,
-  }))
+  const { openaiApiKey, userProfile, trainingPlan } = useAppStore(
+    useShallow((s) => ({
+      openaiApiKey: s.openaiApiKey,
+      userProfile: s.userProfile,
+      trainingPlan: s.trainingPlan,
+    }))
+  )
 
   const [messages, setMessages] = useState<Message[]>([
     {

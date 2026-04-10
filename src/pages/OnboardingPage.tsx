@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Bike, Target, Loader2, CheckCircle } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { generateTrainingPlan } from '../services/openai'
 
@@ -21,12 +22,14 @@ type FormData = {
 }
 
 export default function OnboardingPage() {
-  const { setUserProfile, setTrainingPlan, setOnboarded, openaiApiKey } = useAppStore((s) => ({
-    setUserProfile: s.setUserProfile,
-    setTrainingPlan: s.setTrainingPlan,
-    setOnboarded: s.setOnboarded,
-    openaiApiKey: s.openaiApiKey,
-  }))
+  const { setUserProfile, setTrainingPlan, setOnboarded, openaiApiKey } = useAppStore(
+    useShallow((s) => ({
+      setUserProfile: s.setUserProfile,
+      setTrainingPlan: s.setTrainingPlan,
+      setOnboarded: s.setOnboarded,
+      openaiApiKey: s.openaiApiKey,
+    }))
+  )
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2 } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
@@ -19,10 +20,12 @@ const typeColors: Record<string, string> = {
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
-  const { trainingPlan, logWorkout } = useAppStore((s) => ({
-    trainingPlan: s.trainingPlan,
-    logWorkout: s.logWorkout,
-  }))
+  const { trainingPlan, logWorkout } = useAppStore(
+    useShallow((s) => ({
+      trainingPlan: s.trainingPlan,
+      logWorkout: s.logWorkout,
+    }))
+  )
   const [showForm, setShowForm] = useState(false)
 
   const day = trainingPlan.find((d) => d.date === date)

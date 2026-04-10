@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { exchangeStravaToken } from '../services/strava'
 
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
-  const { stravaClientId, stravaClientSecret, setStravaTokens } = useAppStore((s) => ({
-    stravaClientId: s.stravaClientId,
-    stravaClientSecret: s.stravaClientSecret,
-    setStravaTokens: s.setStravaTokens,
-  }))
+  const { stravaClientId, stravaClientSecret, setStravaTokens } = useAppStore(
+    useShallow((s) => ({
+      stravaClientId: s.stravaClientId,
+      stravaClientSecret: s.stravaClientSecret,
+      setStravaTokens: s.setStravaTokens,
+    }))
+  )
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')

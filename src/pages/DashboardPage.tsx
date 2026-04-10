@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { differenceInDays, format } from 'date-fns'
 import { Calendar, Clock, Trophy, TrendingUp, Activity } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import WorkoutCard from '../components/WorkoutCard'
@@ -9,14 +10,16 @@ import { getStravaActivities, refreshStravaToken } from '../services/strava'
 
 export default function DashboardPage() {
   const { userProfile, trainingPlan, stravaTokens, stravaClientId, stravaClientSecret, setStravaTokens } =
-    useAppStore((s) => ({
-      userProfile: s.userProfile,
-      trainingPlan: s.trainingPlan,
-      stravaTokens: s.stravaTokens,
-      stravaClientId: s.stravaClientId,
-      stravaClientSecret: s.stravaClientSecret,
-      setStravaTokens: s.setStravaTokens,
-    }))
+    useAppStore(
+      useShallow((s) => ({
+        userProfile: s.userProfile,
+        trainingPlan: s.trainingPlan,
+        stravaTokens: s.stravaTokens,
+        stravaClientId: s.stravaClientId,
+        stravaClientSecret: s.stravaClientSecret,
+        setStravaTokens: s.setStravaTokens,
+      }))
+    )
 
   const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([])
 

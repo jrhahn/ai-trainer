@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Eye, EyeOff, Save, Trash2, AlertTriangle } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
 import { getStravaAuthUrl } from '../services/strava'
@@ -13,15 +14,17 @@ export default function SettingsPage() {
     setOpenaiApiKey,
     setStravaConfig,
     resetAll,
-  } = useAppStore((s) => ({
-    openaiApiKey: s.openaiApiKey,
-    stravaClientId: s.stravaClientId,
-    stravaClientSecret: s.stravaClientSecret,
-    stravaTokens: s.stravaTokens,
-    setOpenaiApiKey: s.setOpenaiApiKey,
-    setStravaConfig: s.setStravaConfig,
-    resetAll: s.resetAll,
-  }))
+  } = useAppStore(
+    useShallow((s) => ({
+      openaiApiKey: s.openaiApiKey,
+      stravaClientId: s.stravaClientId,
+      stravaClientSecret: s.stravaClientSecret,
+      stravaTokens: s.stravaTokens,
+      setOpenaiApiKey: s.setOpenaiApiKey,
+      setStravaConfig: s.setStravaConfig,
+      resetAll: s.resetAll,
+    }))
+  )
 
   const [apiKey, setApiKey] = useState(openaiApiKey)
   const [showKey, setShowKey] = useState(false)
