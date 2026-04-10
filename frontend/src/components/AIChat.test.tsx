@@ -101,7 +101,7 @@ describe('AIChat', () => {
   })
 
   it('sends a message and displays the AI response', async () => {
-    mockAskTrainer.mockResolvedValue('Cadence of 90 rpm is ideal.')
+    mockAskTrainer.mockResolvedValue({ response: 'Cadence of 90 rpm is ideal.' })
     setupStore()
     render(<AIChat />)
 
@@ -130,7 +130,7 @@ describe('AIChat', () => {
   })
 
   it('clears the input field after sending', async () => {
-    mockAskTrainer.mockResolvedValue('Answer.')
+    mockAskTrainer.mockResolvedValue({ response: 'Answer.' })
     setupStore()
     render(<AIChat />)
 
@@ -211,7 +211,7 @@ describe('AIChat', () => {
   })
 
   it('calls updateCoachMemory in background after a successful exchange', async () => {
-    mockAskTrainer.mockResolvedValue('Great question!')
+    mockAskTrainer.mockResolvedValue({ response: 'Great question!' })
     mockUpdateCoachMemory.mockResolvedValue('Updated memory')
     setupStore()
     render(<AIChat />)
@@ -229,5 +229,34 @@ describe('AIChat', () => {
         'openai'
       )
     })
+  })
+
+  it('shows a plan-updated badge when the AI returns planUpdates', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    mockAskTrainer.mockResolvedValue({
+      response: 'I have swapped tomorrow to a recovery ride.',
+      planUpdates: [
+        { date: tomorrow, workoutType: 'recovery', title: 'Recovery Ride', description: 'Easy spin', durationMinutes: 45 },
+      ],
+    })
+    setupStore({
+      trainingPlan: [
+        { date: tomorrow, workoutType: 'intervals', title: 'Hard Intervals', description: '5x5min', durationMinutes: 60 },
+      ],
+    })
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Can you swap tomorrow to an easy ride?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Training plan updated: 1 day modified/i)).toBeInTheDocument()
+    })
+
+    // Verify the store was updated
+    const state = useAppStore.getState()
+    const updatedDay = state.trainingPlan.find((d) => d.date === tomorrow)
+    expect(updatedDay?.workoutType).toBe('recovery')
   })
 })

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Brain, Trash2 } from 'lucide-react'
+import { Send, Bot, User, Brain, Trash2, CalendarCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer, updateCoachMemory, MAX_CONVERSATION_HISTORY } from '../services/ai'
@@ -20,6 +20,7 @@ export default function AIChat({ contextWorkout }: Props) {
     addChatMessage,
     setCoachMemory,
     clearChatHistory,
+    updateTrainingDay,
   } = useAppStore(
     useShallow((s) => ({
       aiApiKey: s.aiApiKey,
@@ -31,6 +32,7 @@ export default function AIChat({ contextWorkout }: Props) {
       addChatMessage: s.addChatMessage,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
+      updateTrainingDay: s.updateTrainingDay,
     }))
   )
 
@@ -76,14 +78,32 @@ export default function AIChat({ contextWorkout }: Props) {
     setLoading(true)
 
     try {
-      const answer = await askTrainer(userMsg, trainingPlan, userProfile, aiApiKey, aiProvider, {
+      const result = await askTrainer(userMsg, trainingPlan, userProfile, aiApiKey, aiProvider, {
         coachMemory,
         conversationHistory: recentHistory,
       })
-      addChatMessage({ role: 'assistant', content: answer, timestamp: new Date().toISOString() })
+
+      // Apply any training plan modifications the AI suggested
+      let planChangeNote = ''
+      if (result.planUpdates && result.planUpdates.length > 0) {
+        for (const update of result.planUpdates) {
+          const { date, ...fields } = update
+          updateTrainingDay(date, fields)
+        }
+        planChangeNote =
+          result.planUpdates.length === 1
+            ? `\n\n📅 Training plan updated: 1 day modified.`
+            : `\n\n📅 Training plan updated: ${result.planUpdates.length} days modified.`
+      }
+
+      addChatMessage({
+        role: 'assistant',
+        content: result.response + planChangeNote,
+        timestamp: new Date().toISOString(),
+      })
 
       // Update coach memory in background (fire-and-forget)
-      updateCoachMemory(coachMemory, userMsg, answer, aiApiKey, aiProvider)
+      updateCoachMemory(coachMemory, userMsg, result.response, aiApiKey, aiProvider)
         .then((updated) => {
           if (updated && updated !== coachMemory) setCoachMemory(updated)
         })
@@ -162,7 +182,19 @@ export default function AIChat({ contextWorkout }: Props) {
                   : 'bg-gray-100 text-gray-800 rounded-bl-sm'
               }`}
             >
-              {msg.content}
+              {msg.content.includes('📅 Training plan updated') ? (
+                <>
+                  <p className="whitespace-pre-wrap">
+                    {msg.content.replace(/\n\n📅 Training plan updated.*/, '')}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
+                    <CalendarCheck size={12} />
+                    {msg.content.match(/📅 Training plan updated[^\n]*/)?.[0]?.replace('📅 ', '')}
+                  </p>
+                </>
+              ) : (
+                msg.content
+              )}
             </div>
             {msg.role === 'user' && (
               <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
