@@ -84,22 +84,20 @@ export default function AIChat({ contextWorkout }: Props) {
       })
 
       // Apply any training plan modifications the AI suggested
-      let planChangeNote = ''
+      let planUpdateCount = 0
       if (result.planUpdates && result.planUpdates.length > 0) {
         for (const update of result.planUpdates) {
           const { date, ...fields } = update
           updateTrainingDay(date, fields)
         }
-        planChangeNote =
-          result.planUpdates.length === 1
-            ? `\n\n📅 Training plan updated: 1 day modified.`
-            : `\n\n📅 Training plan updated: ${result.planUpdates.length} days modified.`
+        planUpdateCount = result.planUpdates.length
       }
 
       addChatMessage({
         role: 'assistant',
-        content: result.response + planChangeNote,
+        content: result.response,
         timestamp: new Date().toISOString(),
+        planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
       })
 
       // Update coach memory in background (fire-and-forget)
@@ -182,14 +180,13 @@ export default function AIChat({ contextWorkout }: Props) {
                   : 'bg-gray-100 text-gray-800 rounded-bl-sm'
               }`}
             >
-              {msg.content.includes('📅 Training plan updated') ? (
+              {msg.planUpdateCount ? (
                 <>
-                  <p className="whitespace-pre-wrap">
-                    {msg.content.replace(/\n\n📅 Training plan updated.*/, '')}
-                  </p>
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
                   <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
                     <CalendarCheck size={12} />
-                    {msg.content.match(/📅 Training plan updated[^\n]*/)?.[0]?.replace('📅 ', '')}
+                    Training plan updated:{' '}
+                    {msg.planUpdateCount === 1 ? '1 day modified.' : `${msg.planUpdateCount} days modified.`}
                   </p>
                 </>
               ) : (

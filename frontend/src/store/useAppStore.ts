@@ -45,6 +45,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
+  planUpdateCount?: number
 }
 
 export interface StravaTokens {
