@@ -1,31 +1,58 @@
 import { useEffect, useState } from 'react'
 import { differenceInDays, format } from 'date-fns'
-import { Calendar, Clock, Trophy, TrendingUp, Activity } from 'lucide-react'
+import { Calendar, Clock, Trophy, TrendingUp, Activity, Loader2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import { getStravaActivities, refreshStravaToken } from '../services/strava'
+import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, stravaTokens, setStravaTokens } =
+  const {
+    userProfile,
+    trainingPlan,
+    stravaTokens,
+    setStravaTokens,
+    riderAssessment,
+    stravaAnalysisComplete,
+    setRiderAssessment,
+    setStravaAnalysisComplete,
+    setTrainingPlan,
+    setUserProfile,
+    aiProvider,
+    aiApiKey,
+  } =
     useAppStore(
       useShallow((s) => ({
         userProfile: s.userProfile,
         trainingPlan: s.trainingPlan,
         stravaTokens: s.stravaTokens,
         setStravaTokens: s.setStravaTokens,
+        riderAssessment: s.riderAssessment,
+        stravaAnalysisComplete: s.stravaAnalysisComplete,
+        setRiderAssessment: s.setRiderAssessment,
+        setStravaAnalysisComplete: s.setStravaAnalysisComplete,
+        setTrainingPlan: s.setTrainingPlan,
+        setUserProfile: s.setUserProfile,
+        aiProvider: s.aiProvider,
+        aiApiKey: s.aiApiKey,
       }))
     )
 
   const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([])
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'analysing' | 'done' | 'error'>('idle')
+  const [analysisError, setAnalysisError] = useState('')
 
   const today = new Date().toISOString().split('T')[0]
   const todayWorkout = trainingPlan.find((d) => d.date === today)
   const weekPlan = trainingPlan.slice(0, 7)
   const weekWorkouts = weekPlan.filter((d) => d.workoutType !== 'rest')
   const weekHours = weekPlan.reduce((sum, d) => sum + d.durationMinutes, 0) / 60
+
+  // Threshold HR is typically ~87% of max HR (used to estimate max HR from threshold HR)
+  const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
 
   useEffect(() => {
     if (!stravaTokens) return
@@ -43,12 +70,43 @@ export default function DashboardPage() {
       try {
         const acts = await getStravaActivities(tokens.accessToken)
         setStravaActivities(acts)
+
+        // Analyse rides on first Strava connection if API key is available
+        if (!stravaAnalysisComplete && acts.length > 0 && aiApiKey && userProfile) {
+          setAnalysisStatus('analysing')
+          setAnalysisError('')
+          try {
+            const assessment = await analyseStravaActivities(acts, aiApiKey, aiProvider)
+            setRiderAssessment(assessment)
+
+            // Update profile with assessed FTP / threshold HR if not already set
+            const updatedProfile = {
+              ...userProfile,
+              currentFTP: userProfile.currentFTP ?? assessment.estimatedFTP,
+              maxHeartRate: userProfile.maxHeartRate ?? (assessment.estimatedThresholdHR
+                ? Math.round(assessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
+                : undefined),
+            }
+            setUserProfile(updatedProfile)
+
+            // Regenerate training plan with the new assessment
+            const updatedPlan = await generateTrainingPlan(updatedProfile, aiApiKey, aiProvider, assessment)
+            setTrainingPlan(updatedPlan)
+
+            setStravaAnalysisComplete(true)
+            setAnalysisStatus('done')
+          } catch (e) {
+            setAnalysisError(e instanceof Error ? e.message : 'Analysis failed')
+            setAnalysisStatus('error')
+          }
+        }
       } catch {
         // silently fail
       }
     }
     fetchActivities()
-  }, [stravaTokens, setStravaTokens])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stravaTokens, stravaAnalysisComplete, aiApiKey, aiProvider, userProfile])
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -120,6 +178,40 @@ export default function DashboardPage() {
 
       {/* Strava */}
       <StravaConnect />
+
+      {/* Strava analysis status */}
+      {analysisStatus === 'analysing' && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <Loader2 size={18} className="animate-spin text-blue-500 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Analysing your recent rides…</p>
+            <p className="text-xs text-blue-600">Assessing your FTP, threshold HR and rider profile to personalise your training plan.</p>
+          </div>
+        </div>
+      )}
+      {(analysisStatus === 'done' || stravaAnalysisComplete) && riderAssessment && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-amber-800 mb-1">🎯 Training plan updated based on your Strava rides</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-amber-700">
+            {riderAssessment.estimatedFTP && (
+              <span>⚡ Est. FTP: <strong>{riderAssessment.estimatedFTP} W</strong></span>
+            )}
+            {riderAssessment.estimatedThresholdHR && (
+              <span>❤️ Threshold HR: <strong>{riderAssessment.estimatedThresholdHR} bpm</strong></span>
+            )}
+            <span>🚴 Rider type: <strong className="capitalize">{riderAssessment.riderType}</strong></span>
+          </div>
+          {riderAssessment.notes && (
+            <p className="text-xs text-amber-600 mt-2 italic">{riderAssessment.notes}</p>
+          )}
+        </div>
+      )}
+      {analysisStatus === 'error' && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">Ride analysis failed</p>
+          <p className="text-xs text-red-600">{analysisError}</p>
+        </div>
+      )}
 
       {/* Today's workout */}
       {todayWorkout && (

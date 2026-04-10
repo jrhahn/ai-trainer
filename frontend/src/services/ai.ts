@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import type { UserProfile, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
+import type { UserProfile, TrainingDay, WorkoutFeedback, StravaActivity, RiderAssessment } from '../store/useAppStore'
 
 export type AiProvider = 'openai' | 'gemini'
 
@@ -62,10 +62,50 @@ function extractJson(text: string): string {
 
 // ─── public API ──────────────────────────────────────────────────────────────
 
+export async function analyseStravaActivities(
+  activities: StravaActivity[],
+  apiKey: string,
+  provider: AiProvider = 'openai'
+): Promise<RiderAssessment> {
+  const systemPrompt = `You are an expert cycling coach and sports scientist. Analyse the provided Strava activities and return a JSON assessment.
+Return ONLY a JSON object with these fields:
+- estimatedFTP: number (watts) or null if insufficient power data
+- estimatedThresholdHR: number (bpm) or null if insufficient heart rate data
+- riderType: one of "timetrial" | "sprinter" | "climber" | "allrounder" | "endurance"
+- notes: string summarising the athlete's strengths, weaknesses, and how this was derived
+
+Guidelines for assessment:
+- FTP estimation from power: if weighted_average_watts or average_watts is available, use the best 20-min equivalent effort ≈ 95% of best 20-min avg power. Otherwise estimate from average_watts of long sustained efforts.
+- FTP estimation from HR: if only heart rate data is available, note that FTP estimation requires power data; use HR data to assess aerobic base.
+- Threshold HR: typically the average HR during a hard 20-30 min sustained effort, or ~85-90% of max HR.
+- Rider type: analyse power distribution (high peaks vs. sustained), climb tendency (elevation gain per km), and effort duration patterns.
+- timetrial: strong sustained power, low variability, long average efforts
+- sprinter: high max power, shorter efforts, high power variability
+- climber: high elevation gain per km, longer sustained efforts at moderate power
+- endurance: long rides, moderate intensity, high volume
+- allrounder: balanced across metrics`
+
+  const userMsg = `Last ${activities.length} Strava rides:
+${JSON.stringify(activities, null, 2)}
+
+Assess the rider's fitness level, estimated FTP, threshold heart rate, and rider type.`
+
+  let raw: string
+  if (provider === 'gemini') {
+    raw = await geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg, true)
+  } else {
+    raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
+  }
+
+  const parsed = JSON.parse(extractJson(raw)) as RiderAssessment
+  return parsed
+}
+
 export async function generateTrainingPlan(
   profile: UserProfile,
   apiKey: string,
-  provider: AiProvider = 'openai'
+  provider: AiProvider = 'openai',
+  riderAssessment?: RiderAssessment
 ): Promise<TrainingDay[]> {
   const systemPrompt = `You are an expert cycling coach. Generate a 28-day training plan as JSON.
 Return ONLY a JSON object with a "plan" array of training days.
@@ -77,10 +117,16 @@ Principles:
 - Mix workout types based on goal
 - For FTP improvement: include threshold and VO2max work
 - For race prep: include race-specific workouts
-- Duration and intensity based on fitness level and weekly hours`
+- Duration and intensity based on fitness level and weekly hours
+- If a rider assessment is provided, use the estimated FTP and threshold HR for precise power/HR targets
+- Tailor workout types to the rider type (e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)`
 
-  const userMsg = `Profile: ${JSON.stringify(profile)}
-Generate a 28-day training plan starting from today (${new Date().toISOString().split('T')[0]}).`
+  const assessmentSection = riderAssessment
+    ? `\nRider assessment from recent Strava rides: ${JSON.stringify(riderAssessment)}`
+    : ''
+
+  const userMsg = `Profile: ${JSON.stringify(profile)}${assessmentSection}
+Generate a 28-day training plan starting from today (${new Date().toISOString().split('T')[0]}) that reflects both the athlete's goals and their actual fitness level from recent rides.`
 
   let raw: string
   if (provider === 'gemini') {
