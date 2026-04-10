@@ -1,0 +1,461 @@
+import { useState } from 'react'
+import { Bike, Target, Loader2, CheckCircle } from 'lucide-react'
+import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { generateTrainingPlan } from '../services/openai'
+
+const TOTAL_STEPS = 6
+
+type FormData = {
+  name: string
+  email: string
+  bikeType: UserProfile['bikeType']
+  trainingGoal: UserProfile['trainingGoal']
+  raceDate: string
+  raceDescription: string
+  weeklyHours: number
+  followsTrainingPlan: boolean
+  currentFTP: string
+  fitnessLevel: UserProfile['fitnessLevel']
+  restingHeartRate: string
+  maxHeartRate: string
+}
+
+export default function OnboardingPage() {
+  const { setUserProfile, setTrainingPlan, setOnboarded, openaiApiKey } = useAppStore((s) => ({
+    setUserProfile: s.setUserProfile,
+    setTrainingPlan: s.setTrainingPlan,
+    setOnboarded: s.setOnboarded,
+    openaiApiKey: s.openaiApiKey,
+  }))
+
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [apiKeyInput, setApiKeyInput] = useState(openaiApiKey)
+  const [form, setForm] = useState<FormData>({
+    name: '',
+    email: '',
+    bikeType: 'road',
+    trainingGoal: 'general_fitness',
+    raceDate: '',
+    raceDescription: '',
+    weeklyHours: 8,
+    followsTrainingPlan: false,
+    currentFTP: '',
+    fitnessLevel: 'intermediate',
+    restingHeartRate: '',
+    maxHeartRate: '',
+  })
+
+  const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
+    setForm((f) => ({ ...f, [key]: value }))
+
+  const canNext = () => {
+    if (step === 1) return form.name.trim().length > 0 && form.email.trim().length > 0
+    if (step === 3 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
+    return true
+  }
+
+  const handleGenerate = async () => {
+    setLoading(true)
+    setError('')
+    useAppStore.getState().setOpenaiApiKey(apiKeyInput)
+
+    const profile: UserProfile = {
+      name: form.name,
+      email: form.email,
+      bikeType: form.bikeType,
+      trainingGoal: form.trainingGoal,
+      raceDate: form.raceDate || undefined,
+      raceDescription: form.raceDescription || undefined,
+      weeklyHours: form.weeklyHours,
+      followsTrainingPlan: form.followsTrainingPlan,
+      currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
+      fitnessLevel: form.fitnessLevel,
+      restingHeartRate: form.restingHeartRate ? Number(form.restingHeartRate) : undefined,
+      maxHeartRate: form.maxHeartRate ? Number(form.maxHeartRate) : undefined,
+    }
+
+    try {
+      const plan = await generateTrainingPlan(profile, apiKeyInput)
+      setUserProfile(profile)
+      setTrainingPlan(plan)
+      setOnboarded(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to generate plan. Check your API key.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const bikeTypes: { value: UserProfile['bikeType']; label: string; emoji: string }[] = [
+    { value: 'road', label: 'Road', emoji: '🚴' },
+    { value: 'mtb', label: 'MTB', emoji: '🚵' },
+    { value: 'gravel', label: 'Gravel', emoji: '🛤️' },
+    { value: 'other', label: 'Other', emoji: '🚲' },
+  ]
+
+  const goals: { value: UserProfile['trainingGoal']; label: string; desc: string; emoji: string }[] = [
+    { value: 'race', label: 'Race Prep', desc: 'Prepare for a specific event', emoji: '🏆' },
+    { value: 'ftp_improvement', label: 'FTP Improvement', desc: 'Build sustained power', emoji: '⚡' },
+    { value: 'general_fitness', label: 'General Fitness', desc: 'Stay fit and healthy', emoji: '💪' },
+    { value: 'weight_loss', label: 'Weight Loss', desc: 'Burn calories and slim down', emoji: '🔥' },
+  ]
+
+  const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
+    { value: 'beginner', label: 'Beginner', desc: 'Cycling < 1 year' },
+    { value: 'intermediate', label: 'Intermediate', desc: '1-3 years experience' },
+    { value: 'advanced', label: 'Advanced', desc: '3+ years, racing or structured training' },
+  ]
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        {/* Header */}
+        <div className="px-8 pt-8 pb-4">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="bg-amber-500 rounded-lg p-1.5">
+              <Bike size={22} className="text-white" />
+            </div>
+            <span className="font-bold text-xl text-gray-900">AI Cycling Trainer</span>
+          </div>
+          <div className="mb-2">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span>Step {step} of {TOTAL_STEPS}</span>
+              <span>{Math.round((step / TOTAL_STEPS) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-8 pb-8">
+          {/* Step 1: Name + Email */}
+          {step === 1 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome!</h2>
+              <p className="text-sm text-gray-500 mb-6">Let's set up your personal training profile.</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => update('name', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update('email', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="your@email.com"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Bike type */}
+          {step === 2 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">What do you ride?</h2>
+              <p className="text-sm text-gray-500 mb-6">Choose your primary bike type.</p>
+              <div className="grid grid-cols-2 gap-3">
+                {bikeTypes.map((b) => (
+                  <button
+                    key={b.value}
+                    type="button"
+                    onClick={() => update('bikeType', b.value)}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                      form.bikeType === b.value
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-amber-300'
+                    }`}
+                  >
+                    <span className="text-3xl">{b.emoji}</span>
+                    <span className="font-semibold text-sm text-gray-800">{b.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Training goal */}
+          {step === 3 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">What's your goal?</h2>
+              <p className="text-sm text-gray-500 mb-4">This shapes your entire training plan.</p>
+              <div className="space-y-2">
+                {goals.map((g) => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => update('trainingGoal', g.value)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                      form.trainingGoal === g.value
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-amber-300'
+                    }`}
+                  >
+                    <span className="text-2xl">{g.emoji}</span>
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{g.label}</div>
+                      <div className="text-xs text-gray-500">{g.desc}</div>
+                    </div>
+                    {form.trainingGoal === g.value && (
+                      <CheckCircle size={16} className="ml-auto text-amber-500" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {form.trainingGoal === 'race' && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Date *</label>
+                    <input
+                      type="date"
+                      value={form.raceDate}
+                      onChange={(e) => update('raceDate', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Description</label>
+                    <input
+                      type="text"
+                      value={form.raceDescription}
+                      onChange={(e) => update('raceDescription', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                      placeholder="e.g. 80km gran fondo with 2000m climbing"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Fitness */}
+          {step === 4 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Your Fitness</h2>
+              <p className="text-sm text-gray-500 mb-4">Helps calibrate workout intensity.</p>
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Weekly Training Hours: <span className="text-amber-600 font-bold">{form.weeklyHours}h</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={20}
+                    value={form.weeklyHours}
+                    onChange={(e) => update('weeklyHours', Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>1h</span>
+                    <span>20h</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={form.currentFTP}
+                    onChange={(e) => update('currentFTP', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="e.g. 250"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
+                  <div className="space-y-2">
+                    {levels.map((l) => (
+                      <button
+                        key={l.value}
+                        type="button"
+                        onClick={() => update('fitnessLevel', l.value)}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-all ${
+                          form.fitnessLevel === l.value
+                            ? 'border-amber-500 bg-amber-50'
+                            : 'border-gray-200 hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <div className="font-semibold text-sm">{l.label}</div>
+                          <div className="text-xs text-gray-500">{l.desc}</div>
+                        </div>
+                        {form.fitnessLevel === l.value && (
+                          <CheckCircle size={16} className="text-amber-500" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.followsTrainingPlan}
+                    onChange={(e) => update('followsTrainingPlan', e.target.checked)}
+                    className="w-4 h-4 rounded accent-amber-500"
+                  />
+                  <span className="text-sm text-gray-700">I currently follow a structured training plan</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Heart rate */}
+          {step === 5 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Heart Rate Zones</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Optional — used to calculate your training zones.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resting Heart Rate (bpm)
+                  </label>
+                  <input
+                    type="number"
+                    value={form.restingHeartRate}
+                    onChange={(e) => update('restingHeartRate', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="e.g. 55"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Heart Rate (bpm)
+                  </label>
+                  <input
+                    type="number"
+                    value={form.maxHeartRate}
+                    onChange={(e) => update('maxHeartRate', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="e.g. 185"
+                  />
+                </div>
+                <div className="bg-blue-50 rounded-xl p-4 text-xs text-blue-700">
+                  <strong>Tip:</strong> If you don't know your max HR, a rough estimate is 220 minus your age.
+                  Resting HR is best measured in the morning before getting up.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Summary */}
+          {step === 6 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
+              <p className="text-sm text-gray-500 mb-4">Review your details and generate your plan.</p>
+
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
+                {(
+                  [
+                    ['Name', form.name],
+                    ['Email', form.email],
+                    ['Bike', form.bikeType],
+                    ['Goal', form.trainingGoal.replace('_', ' ')],
+                    ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
+                    ['Weekly Hours', `${form.weeklyHours}h`],
+                    ['Fitness Level', form.fitnessLevel],
+                    ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
+                    ...(form.restingHeartRate ? [['Resting HR', `${form.restingHeartRate} bpm`]] : []),
+                    ...(form.maxHeartRate ? [['Max HR', `${form.maxHeartRate} bpm`]] : []),
+                  ] as [string, string][]
+                ).map(([label, value]) => (
+                  <div key={label} className="flex justify-between">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="font-medium text-gray-900 capitalize">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OpenAI API Key *
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="sk-..."
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Stored locally in your browser. Never sent to any server except OpenAI.
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !apiKeyInput.trim()}
+                className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Generating your plan...
+                  </>
+                ) : (
+                  <>
+                    <Target size={18} />
+                    Generate My Training Plan
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Navigation */}
+          {step < 6 && (
+            <div className="flex gap-3 mt-8">
+              {step > 1 && (
+                <button
+                  onClick={() => setStep(step - 1)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Back
+                </button>
+              )}
+              <button
+                onClick={() => setStep(step + 1)}
+                disabled={!canNext()}
+                className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+              >
+                Continue
+              </button>
+            </div>
+          )}
+          {step === 6 && step > 1 && !loading && (
+            <button
+              onClick={() => setStep(step - 1)}
+              className="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 py-1"
+            >
+              ← Back
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
