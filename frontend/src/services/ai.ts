@@ -101,7 +101,13 @@ function extractJson(text: string): string {
   return fenced ? fenced[1].trim() : text.trim()
 }
 
+// ─── constants ───────────────────────────────────────────────────────────────
+
+const MAX_CONVERSATION_HISTORY = 20
+
 // ─── public API ──────────────────────────────────────────────────────────────
+
+export { MAX_CONVERSATION_HISTORY }
 
 export async function generateTrainingPlan(
   profile: UserProfile,
@@ -178,7 +184,7 @@ export async function askTrainer(
 ): Promise<string> {
   const today = new Date().toISOString().split('T')[0]
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  const last7Days = plan.filter((d) => d.date >= sevenDaysAgo && d.date < today)
+  const last7Days = plan.filter((d) => d.date >= sevenDaysAgo && d.date <= today)
   const next7Days = plan.filter((d) => d.date >= today).slice(0, 7)
 
   const memorySection = options.coachMemory

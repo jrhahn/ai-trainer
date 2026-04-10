@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Brain, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { askTrainer, updateCoachMemory } from '../services/ai'
+import { askTrainer, updateCoachMemory, MAX_CONVERSATION_HISTORY } from '../services/ai'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
 interface Props {
@@ -70,7 +70,7 @@ export default function AIChat({ contextWorkout }: Props) {
     if (!userProfile) return
 
     // Capture history before adding the new user message
-    const recentHistory = chatHistory.slice(-20).map((m) => ({ role: m.role, content: m.content }))
+    const recentHistory = chatHistory.slice(-MAX_CONVERSATION_HISTORY).map((m) => ({ role: m.role, content: m.content }))
 
     addChatMessage({ role: 'user', content: userMsg, timestamp: new Date().toISOString() })
     setLoading(true)
@@ -87,7 +87,9 @@ export default function AIChat({ contextWorkout }: Props) {
         .then((updated) => {
           if (updated && updated !== coachMemory) setCoachMemory(updated)
         })
-        .catch(() => {})
+        .catch((err) => {
+          console.warn('Coach memory update failed:', err)
+        })
     } catch {
       addChatMessage({
         role: 'assistant',
