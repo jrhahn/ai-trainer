@@ -40,6 +40,7 @@ import {
   updateCoachMemory,
   generateTrainingPlan,
   adaptTrainingPlan,
+  rateCompletedWorkout,
 } from '../services/ai'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -88,13 +89,13 @@ describe('MAX_CONVERSATION_HISTORY', () => {
 
 describe('askTrainer', () => {
   it('returns the OpenAI response text', async () => {
-    mockOpenAIResponse('Try interval training twice a week.')
-    const answer = await askTrainer('How should I train?', [], profile, 'sk-test')
-    expect(answer).toBe('Try interval training twice a week.')
+    mockOpenAIResponse(JSON.stringify({ response: 'Try interval training twice a week.' }))
+    const result = await askTrainer('How should I train?', [], profile, 'sk-test')
+    expect(result.response).toBe('Try interval training twice a week.')
   })
 
   it('includes coach memory in the system prompt when provided', async () => {
-    mockOpenAIResponse('Sure!')
+    mockOpenAIResponse(JSON.stringify({ response: 'Sure!' }))
     await askTrainer('Any tips?', [], profile, 'sk-test', 'openai', {
       coachMemory: 'Athlete has a knee injury.',
     })
@@ -103,14 +104,14 @@ describe('askTrainer', () => {
   })
 
   it('does not include a memory section when coachMemory is absent', async () => {
-    mockOpenAIResponse('Sure!')
+    mockOpenAIResponse(JSON.stringify({ response: 'Sure!' }))
     await askTrainer('Any tips?', [], profile, 'sk-test')
     const systemPrompt: string = (mockCreate.mock.calls[0][0] as { messages: Array<{ role: string; content: string }> }).messages[0].content
     expect(systemPrompt).not.toContain('Coach notes')
   })
 
   it('includes the last 7 days of completed training in the system prompt', async () => {
-    mockOpenAIResponse('Great job!')
+    mockOpenAIResponse(JSON.stringify({ response: 'Great job!' }))
     const today = new Date().toISOString().split('T')[0]
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
     const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
@@ -123,7 +124,7 @@ describe('askTrainer', () => {
   })
 
   it('passes the conversation history as messages (excluding system)', async () => {
-    mockOpenAIResponse('Follow-up answer')
+    mockOpenAIResponse(JSON.stringify({ response: 'Follow-up answer' }))
     const history = [
       { role: 'user' as const, content: 'First question' },
       { role: 'assistant' as const, content: 'First answer' },
@@ -140,10 +141,32 @@ describe('askTrainer', () => {
   })
 
   it('uses Gemini when provider is gemini', async () => {
-    mockGeminiResponse('Gemini answer')
-    const answer = await askTrainer('Test?', [], profile, 'gemini-key', 'gemini')
-    expect(answer).toBe('Gemini answer')
+    mockGeminiResponse(JSON.stringify({ response: 'Gemini answer' }))
+    const result = await askTrainer('Test?', [], profile, 'gemini-key', 'gemini')
+    expect(result.response).toBe('Gemini answer')
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('returns planUpdates when AI includes them', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    mockOpenAIResponse(
+      JSON.stringify({
+        response: 'Sure, I have swapped your interval session for an easy ride.',
+        planUpdates: [
+          { date: tomorrow, workoutType: 'recovery', title: 'Easy Recovery Ride', description: 'Light spin', durationMinutes: 45 },
+        ],
+      })
+    )
+    const result = await askTrainer('Can you swap tomorrow to an easy ride?', [], profile, 'sk-test')
+    expect(result.planUpdates).toHaveLength(1)
+    expect(result.planUpdates![0].date).toBe(tomorrow)
+    expect(result.planUpdates![0].workoutType).toBe('recovery')
+  })
+
+  it('returns empty planUpdates when AI does not include them', async () => {
+    mockOpenAIResponse(JSON.stringify({ response: 'Just a normal answer.' }))
+    const result = await askTrainer('How should I train?', [], profile, 'sk-test')
+    expect(result.planUpdates).toBeUndefined()
   })
 })
 
@@ -207,5 +230,38 @@ describe('adaptTrainingPlan', () => {
 
     expect(result[0]).toEqual(completedDay) // completed day unchanged
     expect(result[1].durationMinutes).toBe(45) // incomplete day updated
+  })
+})
+
+describe('rateCompletedWorkout', () => {
+  const completedDay = {
+    ...makeDay('2024-05-01', true),
+    feedback: {
+      actualDurationMinutes: 85,
+      averagePower: 210,
+      perceivedEffort: 3 as const,
+      notes: 'Felt good',
+      completedAt: '2024-05-01T10:00:00Z',
+    },
+  }
+
+  it('returns the OpenAI rating text', async () => {
+    mockOpenAIResponse('Great session! You matched the plan well.')
+    const result = await rateCompletedWorkout(completedDay, profile, 'sk-test')
+    expect(result).toBe('Great session! You matched the plan well.')
+  })
+
+  it('returns empty string when feedback is absent', async () => {
+    const dayWithoutFeedback = makeDay('2024-05-01')
+    const result = await rateCompletedWorkout(dayWithoutFeedback, profile, 'sk-test')
+    expect(result).toBe('')
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('uses Gemini when provider is gemini', async () => {
+    mockGeminiResponse('Gemini rating')
+    const result = await rateCompletedWorkout(completedDay, profile, 'gemini-key', 'gemini')
+    expect(result).toBe('Gemini rating')
+    expect(mockCreate).not.toHaveBeenCalled()
   })
 })

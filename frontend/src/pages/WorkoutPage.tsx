@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2 } from 'lucide-react'
+import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
+import { rateCompletedWorkout } from '../services/ai'
 import type { WorkoutFeedback } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
@@ -20,13 +21,18 @@ const typeColors: Record<string, string> = {
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
-  const { trainingPlan, logWorkout } = useAppStore(
+  const { trainingPlan, logWorkout, aiApiKey, aiProvider, userProfile, updateTrainingDay } = useAppStore(
     useShallow((s) => ({
       trainingPlan: s.trainingPlan,
       logWorkout: s.logWorkout,
+      aiApiKey: s.aiApiKey,
+      aiProvider: s.aiProvider,
+      userProfile: s.userProfile,
+      updateTrainingDay: s.updateTrainingDay,
     }))
   )
   const [showForm, setShowForm] = useState(false)
+  const [ratingLoading, setRatingLoading] = useState(false)
 
   const day = trainingPlan.find((d) => d.date === date)
 
@@ -41,9 +47,24 @@ export default function WorkoutPage() {
     )
   }
 
-  const handleFeedback = (feedback: WorkoutFeedback) => {
+  const handleFeedback = async (feedback: WorkoutFeedback) => {
     logWorkout(day.date, feedback)
     setShowForm(false)
+
+    if (aiApiKey && userProfile) {
+      setRatingLoading(true)
+      try {
+        const dayWithFeedback = { ...day, completed: true, feedback }
+        const coachFeedback = await rateCompletedWorkout(dayWithFeedback, userProfile, aiApiKey, aiProvider)
+        if (coachFeedback) {
+          updateTrainingDay(day.date, { coachFeedback })
+        }
+      } catch {
+        // silently fail – rating is a nice-to-have
+      } finally {
+        setRatingLoading(false)
+      }
+    }
   }
 
   const effortLabels: Record<number, string> = {
@@ -162,6 +183,21 @@ export default function WorkoutPage() {
             </div>
             {day.feedback.notes && (
               <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
+            )}
+            {/* Coach rating */}
+            {ratingLoading && (
+              <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
+                <Loader2 size={13} className="animate-spin" />
+                Coach is reviewing your session…
+              </div>
+            )}
+            {!ratingLoading && day.coachFeedback && (
+              <div className="mt-3 border-t border-green-200 pt-3">
+                <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
+                  <Bot size={12} /> Coach's Feedback
+                </p>
+                <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
+              </div>
             )}
           </div>
         )}

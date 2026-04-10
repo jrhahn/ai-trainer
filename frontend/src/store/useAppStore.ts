@@ -38,12 +38,14 @@ export interface TrainingDay {
   intervals?: Array<{ duration: number; power: number; rest: number }>
   completed?: boolean
   feedback?: WorkoutFeedback
+  coachFeedback?: string
 }
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
+  planUpdateCount?: number
 }
 
 export interface StravaTokens {
