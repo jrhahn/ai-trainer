@@ -1,32 +1,27 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Save, Trash2, AlertTriangle } from 'lucide-react'
+import { Eye, EyeOff, Save, Trash2, AlertTriangle, Server } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
-import { getStravaAuthUrl } from '../services/strava'
 import type { AiProvider } from '../services/ai'
+
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string | undefined ?? 'http://localhost:8000').replace(/\/$/, '')
 
 export default function SettingsPage() {
   const {
     aiProvider,
     aiApiKey,
-    stravaClientId,
-    stravaClientSecret,
     stravaTokens,
     setAiProvider,
     setAiApiKey,
-    setStravaConfig,
     resetAll,
   } = useAppStore(
     useShallow((s) => ({
       aiProvider: s.aiProvider,
       aiApiKey: s.aiApiKey,
-      stravaClientId: s.stravaClientId,
-      stravaClientSecret: s.stravaClientSecret,
       stravaTokens: s.stravaTokens,
       setAiProvider: s.setAiProvider,
       setAiApiKey: s.setAiApiKey,
-      setStravaConfig: s.setStravaConfig,
       resetAll: s.resetAll,
     }))
   )
@@ -34,9 +29,6 @@ export default function SettingsPage() {
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [apiKey, setApiKey] = useState(aiApiKey)
   const [showKey, setShowKey] = useState(false)
-  const [clientId, setClientId] = useState(stravaClientId)
-  const [clientSecret, setClientSecret] = useState(stravaClientSecret)
-  const [showSecret, setShowSecret] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
 
   const saveAI = () => {
@@ -44,22 +36,6 @@ export default function SettingsPage() {
     setAiApiKey(apiKey)
     setSavedMsg('AI settings saved!')
     setTimeout(() => setSavedMsg(''), 2000)
-  }
-
-  const saveStrava = () => {
-    setStravaConfig(clientId, clientSecret)
-    setSavedMsg('Strava config saved!')
-    setTimeout(() => setSavedMsg(''), 2000)
-  }
-
-  const handleStravaConnect = () => {
-    if (!clientId) {
-      alert('Enter your Strava Client ID first and save.')
-      return
-    }
-    setStravaConfig(clientId, clientSecret)
-    const redirectUri = window.location.origin + '/strava/callback'
-    window.location.href = getStravaAuthUrl(clientId, redirectUri)
   }
 
   const handleReset = () => {
@@ -163,59 +139,18 @@ export default function SettingsPage() {
           Connect Strava to sync your activities automatically.
         </p>
 
-        <div className="space-y-3 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
-            <input
-              type="text"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-              placeholder="Your Strava App Client ID"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
-            <div className="relative">
-              <input
-                type={showSecret ? 'text' : 'password'}
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:ring-amber-500 focus:border-amber-500"
-                placeholder="Your Strava App Client Secret"
-              />
-              <button
-                type="button"
-                onClick={() => setShowSecret(!showSecret)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={saveStrava}
-            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
-          >
-            <Save size={15} /> Save Config
-          </button>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
+          <Server size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700">
+            OAuth is handled by the backend at <code className="font-mono bg-blue-100 px-1 rounded">{BACKEND_URL}</code>.
+            Your Strava credentials are never stored in the browser.
+          </p>
         </div>
 
         {stravaTokens ? (
           <StravaConnect />
         ) : (
-          <button
-            onClick={handleStravaConnect}
-            className="flex items-center gap-2 bg-[#fc4c02] text-white rounded-xl px-5 py-3 font-semibold text-sm hover:bg-[#e03d00] transition-colors"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-            </svg>
-            Connect to Strava
-          </button>
+          <StravaConnect />
         )}
       </div>
 

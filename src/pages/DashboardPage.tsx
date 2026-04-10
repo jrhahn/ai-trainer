@@ -9,14 +9,12 @@ import StravaConnect from '../components/StravaConnect'
 import { getStravaActivities, refreshStravaToken } from '../services/strava'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, stravaTokens, stravaClientId, stravaClientSecret, setStravaTokens } =
+  const { userProfile, trainingPlan, stravaTokens, setStravaTokens } =
     useAppStore(
       useShallow((s) => ({
         userProfile: s.userProfile,
         trainingPlan: s.trainingPlan,
         stravaTokens: s.stravaTokens,
-        stravaClientId: s.stravaClientId,
-        stravaClientSecret: s.stravaClientSecret,
         setStravaTokens: s.setStravaTokens,
       }))
     )
@@ -33,9 +31,9 @@ export default function DashboardPage() {
     if (!stravaTokens) return
     const fetchActivities = async () => {
       let tokens = stravaTokens
-      if (tokens.expiresAt < Date.now() / 1000 && stravaClientId && stravaClientSecret) {
+      if (tokens.expiresAt < Date.now() / 1000) {
         try {
-          const refreshed = await refreshStravaToken(tokens, stravaClientId, stravaClientSecret)
+          const refreshed = await refreshStravaToken(tokens)
           tokens = refreshed
           setStravaTokens(tokens)
         } catch {
@@ -50,7 +48,7 @@ export default function DashboardPage() {
       }
     }
     fetchActivities()
-  }, [stravaTokens, stravaClientId, stravaClientSecret, setStravaTokens])
+  }, [stravaTokens, setStravaTokens])
 
   const greeting = () => {
     const hour = new Date().getHours()

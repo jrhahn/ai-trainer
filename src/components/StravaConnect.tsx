@@ -1,24 +1,13 @@
 import { useAppStore } from '../store/useAppStore'
-import { useShallow } from 'zustand/shallow'
 import { getStravaAuthUrl } from '../services/strava'
 import { CheckCircle, Link2Off } from 'lucide-react'
 
 export default function StravaConnect() {
-  const { stravaTokens, stravaClientId, setStravaTokens } = useAppStore(
-    useShallow((s) => ({
-      stravaTokens: s.stravaTokens,
-      stravaClientId: s.stravaClientId,
-      setStravaTokens: s.setStravaTokens,
-    }))
-  )
+  const stravaTokens = useAppStore((s) => s.stravaTokens)
+  const setStravaTokens = useAppStore((s) => s.setStravaTokens)
 
   const handleConnect = () => {
-    if (!stravaClientId) {
-      alert('Please set your Strava Client ID in Settings first.')
-      return
-    }
-    const redirectUri = window.location.origin + '/strava/callback'
-    window.location.href = getStravaAuthUrl(stravaClientId, redirectUri)
+    window.location.href = getStravaAuthUrl()
   }
 
   if (stravaTokens) {

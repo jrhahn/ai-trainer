@@ -1,51 +1,47 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { exchangeStravaToken } from '../services/strava'
 
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
-  const { stravaClientId, stravaClientSecret, setStravaTokens } = useAppStore(
-    useShallow((s) => ({
-      stravaClientId: s.stravaClientId,
-      stravaClientSecret: s.stravaClientSecret,
-      setStravaTokens: s.setStravaTokens,
-    }))
-  )
+  const setStravaTokens = useAppStore((s) => s.setStravaTokens)
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
     const error = params.get('error')
 
-    if (error || !code) {
-      setErrorMsg(error ?? 'No authorization code received.')
+    if (error) {
+      setErrorMsg(decodeURIComponent(error))
       setStatus('error')
       return
     }
 
-    if (!stravaClientId || !stravaClientSecret) {
-      setErrorMsg('Strava credentials not configured. Please add them in Settings first.')
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+    const expiresAt = params.get('expires_at')
+    const athleteId = params.get('athlete_id')
+    const athleteName = params.get('athlete_name')
+
+    if (!accessToken || !refreshToken || !expiresAt || !athleteId) {
+      setErrorMsg('Incomplete token data received. Please try again.')
       setStatus('error')
       return
     }
 
-    exchangeStravaToken(code, stravaClientId, stravaClientSecret)
-      .then((tokens) => {
-        setStravaTokens(tokens)
-        setStatus('success')
-        setTimeout(() => navigate('/'), 2000)
-      })
-      .catch((e: unknown) => {
-        setErrorMsg(e instanceof Error ? e.message : 'Token exchange failed.')
-        setStatus('error')
-      })
-  }, [stravaClientId, stravaClientSecret, setStravaTokens, navigate])
+    setStravaTokens({
+      accessToken,
+      refreshToken,
+      expiresAt: Number(expiresAt),
+      athleteId: Number(athleteId),
+      athleteName: athleteName ?? '',
+    })
+    setStatus('success')
+    setTimeout(() => navigate('/'), 2000)
+  }, [setStravaTokens, navigate])
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">

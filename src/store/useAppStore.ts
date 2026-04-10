@@ -69,8 +69,6 @@ interface AppState {
   stravaTokens: StravaTokens | null
   aiProvider: AiProvider
   aiApiKey: string
-  stravaClientId: string
-  stravaClientSecret: string
   isOnboarded: boolean
 
   setUserProfile: (profile: UserProfile) => void
@@ -79,7 +77,6 @@ interface AppState {
   setStravaTokens: (tokens: StravaTokens | null) => void
   setAiProvider: (provider: AiProvider) => void
   setAiApiKey: (key: string) => void
-  setStravaConfig: (clientId: string, clientSecret: string) => void
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
   resetAll: () => void
@@ -92,8 +89,6 @@ const initialState = {
   stravaTokens: null,
   aiProvider: 'openai' as AiProvider,
   aiApiKey: '',
-  stravaClientId: '',
-  stravaClientSecret: '',
   isOnboarded: false,
 }
 
@@ -114,8 +109,6 @@ export const useAppStore = create<AppState>()(
       setStravaTokens: (tokens) => set({ stravaTokens: tokens }),
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (key) => set({ aiApiKey: key }),
-      setStravaConfig: (clientId, clientSecret) =>
-        set({ stravaClientId: clientId, stravaClientSecret: clientSecret }),
       setOnboarded: (v) => set({ isOnboarded: v }),
       updateTrainingDay: (date, updates) =>
         set((state) => ({
