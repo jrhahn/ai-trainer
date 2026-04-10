@@ -120,6 +120,11 @@ function parseAiJson<T>(text: string): T {
 
 const MAX_CONVERSATION_HISTORY = 20
 
+/** Shared identity statement prepended to every system prompt so the model
+ *  always knows it is acting as a professional cycling coach. */
+const COACH_PERSONA =
+  'You are a professional cycling coach with extensive experience in competitive road, track, and endurance cycling.'
+
 // ─── public API ──────────────────────────────────────────────────────────────
 
 export { MAX_CONVERSATION_HISTORY }
@@ -129,7 +134,7 @@ export async function analyseStravaActivities(
   apiKey: string,
   provider: AiProvider = 'openai'
 ): Promise<RiderAssessment> {
-  const systemPrompt = `You are an expert cycling coach and sports scientist. Analyse the provided Strava activities and return a JSON assessment.
+  const systemPrompt = `${COACH_PERSONA} Analyse the provided Strava activities and return a JSON assessment.
 Return ONLY a valid JSON object with these fields (all keys double-quoted, numeric values must be plain numbers with no units):
 - "estimatedFTP": integer watts, or null if insufficient power data
 - "estimatedThresholdHR": integer bpm, or null if insufficient heart rate data
@@ -169,7 +174,7 @@ export async function generateTrainingPlan(
   provider: AiProvider = 'openai',
   riderAssessment?: RiderAssessment
 ): Promise<TrainingDay[]> {
-  const systemPrompt = `You are an expert cycling coach. Generate a 28-day training plan as JSON.
+  const systemPrompt = `${COACH_PERSONA} Generate a 28-day training plan as JSON.
 Return ONLY a valid JSON object with a "plan" array of training days. All keys must be double-quoted. All numeric fields must be plain numbers with no units.
 Each day must have: "date" (ISO date string starting from today), "workoutType" (one of: "rest","endurance","intervals","tempo","race","recovery","strength"), "title" (string), "description" (string), "durationMinutes" (integer).
 Optional fields: "targetPower" (object with "low" and "high" integer fields in watts), "targetHeartRate" (object with "low" and "high" integer fields in bpm), "intervals" (array of objects with "duration" (integer seconds), "power" (integer watts), "rest" (integer seconds)).
@@ -209,7 +214,7 @@ export async function adaptTrainingPlan(
   provider: AiProvider = 'openai'
 ): Promise<TrainingDay[]> {
   const incompleteDays = plan.filter((d) => !d.completed)
-  const systemPrompt = `You are an expert cycling coach. Adapt the remaining training plan based on recent workout feedback.
+  const systemPrompt = `${COACH_PERSONA} Adapt the remaining training plan based on recent workout feedback.
 Return ONLY a valid JSON object with an "updatedDays" array. All keys must be double-quoted. All numeric fields must be plain numbers with no units. Keep the same date fields.
 Each updated day must include all required TrainingDay fields: "date", "workoutType", "title", "description", "durationMinutes".`
 
@@ -269,7 +274,7 @@ export async function askTrainer(
     ? `\n\nCoach notes about this athlete (remember these):\n${options.coachMemory}`
     : ''
 
-  const systemPrompt = `You are a friendly, expert cycling coach. Answer the athlete's question concisely and practically.
+  const systemPrompt = `${COACH_PERSONA} Answer the athlete's question concisely and practically.
 Athlete profile: ${JSON.stringify(profile)}
 Last 7 days of training: ${JSON.stringify(last7Days)}
 Upcoming plan (next 14 days): ${JSON.stringify(next14Days)}${memorySection}
@@ -299,7 +304,7 @@ export async function updateCoachMemory(
   apiKey: string,
   provider: AiProvider = 'openai'
 ): Promise<string> {
-  const systemPrompt = `You are a cycling coach maintaining concise notes about an athlete.
+  const systemPrompt = `${COACH_PERSONA} Maintain concise notes about an athlete.
 Extract any important, actionable information from this conversation exchange and update the notes.
 Keep notes under 300 words. Focus on: goals, limitations, health issues, preferences, performance achievements, recurring problems.
 Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged.`
@@ -327,7 +332,7 @@ export async function rateCompletedWorkout(
 ): Promise<string> {
   if (!day.feedback) return ''
 
-  const systemPrompt = `You are a cycling coach reviewing a completed training session. Compare the actual workout against the planned one and provide brief, encouraging feedback in 2-4 sentences. Note how well the athlete followed the plan, highlight any significant deviations, and explain what it means for their training progress.`
+  const systemPrompt = `${COACH_PERSONA} Review a completed training session. Compare the actual workout against the planned one and provide brief, encouraging feedback in 2-4 sentences. Note how well the athlete followed the plan, highlight any significant deviations, and explain what it means for their training progress.`
 
   const plannedPower = day.targetPower
     ? `\n- Target power: ${day.targetPower.low}–${day.targetPower.high}W`
