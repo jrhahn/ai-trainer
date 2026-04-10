@@ -5,7 +5,8 @@ import { useAppStore } from '../store/useAppStore'
 
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
-  const setStravaTokens = useAppStore((s) => s.setStravaTokens)
+  const authToken = useAppStore((s) => s.authToken)
+  const loadUserData = useAppStore((s) => s.loadUserData)
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
@@ -13,6 +14,7 @@ export default function StravaCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const error = params.get('error')
+    const success = params.get('success')
 
     if (error) {
       setErrorMsg(decodeURIComponent(error))
@@ -20,28 +22,18 @@ export default function StravaCallbackPage() {
       return
     }
 
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token')
-    const expiresAt = params.get('expires_at')
-    const athleteId = params.get('athlete_id')
-    const athleteName = params.get('athlete_name')
-
-    if (!accessToken || !refreshToken || !expiresAt || !athleteId) {
-      setErrorMsg('Incomplete token data received. Please try again.')
+    if (!success) {
+      setErrorMsg('No success confirmation received. Please try again.')
       setStatus('error')
       return
     }
 
-    setStravaTokens({
-      accessToken,
-      refreshToken,
-      expiresAt: Number(expiresAt),
-      athleteId: Number(athleteId),
-      athleteName: athleteName ?? '',
-    })
     setStatus('success')
-    setTimeout(() => navigate('/'), 2000)
-  }, [setStravaTokens, navigate])
+    if (authToken) {
+      void loadUserData(authToken)
+    }
+    setTimeout(() => navigate('/'), 1500)
+  }, [authToken, loadUserData, navigate])
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -50,7 +42,7 @@ export default function StravaCallbackPage() {
           <>
             <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-4" />
             <h2 className="text-lg font-bold text-gray-900">Connecting to Strava...</h2>
-            <p className="text-sm text-gray-500 mt-1">Exchanging authorization token</p>
+            <p className="text-sm text-gray-500 mt-1">Finalising the connection</p>
           </>
         )}
         {status === 'success' && (

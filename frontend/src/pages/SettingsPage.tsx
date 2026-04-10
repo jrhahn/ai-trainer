@@ -1,47 +1,53 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Save, Trash2, AlertTriangle, Server } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
-import type { AiProvider } from '../services/ai'
-
-const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string | undefined ?? 'http://localhost:8000').replace(/\/$/, '')
+import type { AiProvider } from '../store/useAppStore'
+import { BACKEND_URL } from '../services/api'
+import { deleteCurrentUser, updateCurrentUser } from '../services/user'
 
 export default function SettingsPage() {
   const {
+    authToken,
+    userProfile,
     aiProvider,
-    aiApiKey,
-    stravaTokens,
     setAiProvider,
-    setAiApiKey,
     resetAll,
+    logout,
   } = useAppStore(
     useShallow((s) => ({
+      authToken: s.authToken,
+      userProfile: s.userProfile,
       aiProvider: s.aiProvider,
-      aiApiKey: s.aiApiKey,
-      stravaTokens: s.stravaTokens,
       setAiProvider: s.setAiProvider,
-      setAiApiKey: s.setAiApiKey,
       resetAll: s.resetAll,
+      logout: s.logout,
     }))
   )
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
-  const [apiKey, setApiKey] = useState(aiApiKey)
-  const [showKey, setShowKey] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
 
-  const saveAI = () => {
+  const saveAI = async () => {
+    if (!authToken) return
+
+    await updateCurrentUser(authToken, { aiProvider: selectedProvider })
     setAiProvider(selectedProvider)
-    setAiApiKey(apiKey)
     setSavedMsg('AI settings saved!')
     setTimeout(() => setSavedMsg(''), 2000)
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    if (!authToken) return
     if (window.confirm('Are you sure? This will delete all your data and training plan.')) {
+      await deleteCurrentUser(authToken)
       resetAll()
     }
+  }
+
+  const handleLogout = () => {
+    logout()
   }
 
   const providers: { value: AiProvider; label: string; hint: string; placeholder: string }[] = [
@@ -53,7 +59,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your AI provider, API keys, and integrations</p>
+        <p className="text-sm text-gray-500 mt-0.5">Manage your AI provider, account, and integrations</p>
       </div>
 
       {savedMsg && (
@@ -66,7 +72,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">AI Provider</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Choose which AI service powers your training plan and coach chat.
+          Choose which server-side model powers your training plan and coach chat.
         </p>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -87,49 +93,32 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {providers.find((p) => p.value === selectedProvider)?.label} API Key
-        </label>
-        <div className="relative mb-3">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:ring-amber-500 focus:border-amber-500"
-            placeholder={providers.find((p) => p.value === selectedProvider)?.placeholder}
-          />
-          <button
-            type="button"
-            onClick={() => setShowKey(!showKey)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          >
-            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 flex gap-2">
           <AlertTriangle size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-yellow-700">
-            Your API key is stored only in your browser's localStorage and is sent directly to{' '}
-            {selectedProvider === 'openai' ? 'OpenAI' : 'Google'}.
-            Never share your API key with anyone.
+            Model keys live on the backend now. The browser no longer stores or sends provider API keys.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={saveAI}
             className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
           >
             <Save size={15} /> Save
           </button>
-          <button
-            onClick={() => { setApiKey(''); setAiApiKey('') }}
-            className="flex items-center gap-1.5 border border-gray-300 text-gray-600 rounded-lg px-4 py-2 text-sm hover:bg-gray-50"
-          >
-            <Trash2 size={15} /> Clear Key
-          </button>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
+        <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
+        >
+          <LogOut size={15} /> Sign Out
+        </button>
       </div>
 
       {/* Strava */}
@@ -147,11 +136,7 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {stravaTokens ? (
-          <StravaConnect />
-        ) : (
-          <StravaConnect />
-        )}
+        <StravaConnect />
       </div>
 
       {/* Danger zone */}

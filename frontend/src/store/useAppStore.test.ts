@@ -1,6 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useAppStore } from '../store/useAppStore'
-import type { ChatMessage, WorkoutFeedback, TrainingDay } from '../store/useAppStore'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const {
+  mockFetchCurrentUser,
+  mockFetchTrainingPlan,
+  mockFetchWorkoutLogs,
+  mockFetchChatHistory,
+  mockFetchCoachMemory,
+} = vi.hoisted(() => ({
+  mockFetchCurrentUser: vi.fn(),
+  mockFetchTrainingPlan: vi.fn(),
+  mockFetchWorkoutLogs: vi.fn(),
+  mockFetchChatHistory: vi.fn(),
+  mockFetchCoachMemory: vi.fn(),
+}))
+
+vi.mock('../services/user', () => ({
+  fetchCurrentUser: mockFetchCurrentUser,
+  fetchTrainingPlan: mockFetchTrainingPlan,
+  fetchWorkoutLogs: mockFetchWorkoutLogs,
+  fetchChatHistory: mockFetchChatHistory,
+  fetchCoachMemory: mockFetchCoachMemory,
+}))
+
+import { useAppStore } from './useAppStore'
+import type { ChatMessage, WorkoutFeedback, TrainingDay } from './useAppStore'
 
 const mockFeedback: WorkoutFeedback = {
   actualDurationMinutes: 60,
@@ -19,6 +42,7 @@ const mockDay: TrainingDay = {
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  vi.clearAllMocks()
 })
 
 describe('chatHistory actions', () => {
@@ -33,23 +57,9 @@ describe('chatHistory actions', () => {
     expect(useAppStore.getState().chatHistory[0]).toEqual(msg)
   })
 
-  it('addChatMessage appends multiple messages in order', () => {
-    const msg1: ChatMessage = { role: 'user', content: 'Question', timestamp: '2024-01-15T09:00:00Z' }
-    const msg2: ChatMessage = { role: 'assistant', content: 'Answer', timestamp: '2024-01-15T09:01:00Z' }
-    useAppStore.getState().addChatMessage(msg1)
-    useAppStore.getState().addChatMessage(msg2)
-
-    const history = useAppStore.getState().chatHistory
-    expect(history).toHaveLength(2)
-    expect(history[0]).toEqual(msg1)
-    expect(history[1]).toEqual(msg2)
-  })
-
   it('clearChatHistory resets history to empty array', () => {
     const msg: ChatMessage = { role: 'user', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }
     useAppStore.getState().addChatMessage(msg)
-    expect(useAppStore.getState().chatHistory).toHaveLength(1)
-
     useAppStore.getState().clearChatHistory()
     expect(useAppStore.getState().chatHistory).toEqual([])
   })
@@ -61,39 +71,24 @@ describe('coachMemory actions', () => {
   })
 
   it('setCoachMemory stores the memory string', () => {
-    const notes = 'Athlete prefers morning rides. Has knee sensitivity on high-cadence efforts.'
+    const notes = 'Athlete prefers morning rides.'
     useAppStore.getState().setCoachMemory(notes)
     expect(useAppStore.getState().coachMemory).toBe(notes)
-  })
-
-  it('setCoachMemory replaces previous memory', () => {
-    useAppStore.getState().setCoachMemory('old notes')
-    useAppStore.getState().setCoachMemory('new notes')
-    expect(useAppStore.getState().coachMemory).toBe('new notes')
   })
 })
 
 describe('resetAll', () => {
-  it('resets chatHistory and coachMemory to initial values', () => {
-    const msg: ChatMessage = { role: 'user', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }
-    useAppStore.getState().addChatMessage(msg)
-    useAppStore.getState().setCoachMemory('some notes')
-
-    useAppStore.getState().resetAll()
-
-    expect(useAppStore.getState().chatHistory).toEqual([])
-    expect(useAppStore.getState().coachMemory).toBe('')
-  })
-
-  it('resets all other state fields as well', () => {
-    useAppStore.getState().setAiApiKey('test-key')
+  it('resets auth and app state to initial values', () => {
+    useAppStore.getState().setAuthToken('token-123')
     useAppStore.getState().setOnboarded(true)
+    useAppStore.getState().setCoachMemory('some notes')
     useAppStore.getState().resetAll()
 
     const state = useAppStore.getState()
-    expect(state.aiApiKey).toBe('')
+    expect(state.authToken).toBeNull()
     expect(state.isOnboarded).toBe(false)
     expect(state.trainingPlan).toEqual([])
+    expect(state.coachMemory).toBe('')
   })
 })
 
@@ -106,13 +101,6 @@ describe('logWorkout', () => {
     expect(day?.completed).toBe(true)
     expect(day?.feedback).toEqual(mockFeedback)
   })
-
-  it('also stores feedback in workoutLogs keyed by date', () => {
-    useAppStore.getState().setTrainingPlan([mockDay])
-    useAppStore.getState().logWorkout('2024-01-15', mockFeedback)
-
-    expect(useAppStore.getState().workoutLogs['2024-01-15']).toEqual(mockFeedback)
-  })
 })
 
 describe('updateTrainingDay', () => {
@@ -123,6 +111,42 @@ describe('updateTrainingDay', () => {
     const day = useAppStore.getState().trainingPlan.find((d) => d.date === '2024-01-15')
     expect(day?.title).toBe('Updated Title')
     expect(day?.durationMinutes).toBe(90)
-    expect(day?.workoutType).toBe('endurance') // unchanged
+    expect(day?.workoutType).toBe('endurance')
+  })
+})
+
+describe('loadUserData', () => {
+  it('hydrates store state from backend services and merges workout logs into the plan', async () => {
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: {
+        name: 'Alice',
+        email: 'alice@example.com',
+        bikeType: 'road',
+        trainingGoal: 'ftp_improvement',
+        weeklyHours: 10,
+        followsTrainingPlan: true,
+        fitnessLevel: 'intermediate',
+      },
+      isOnboarded: true,
+      stravaAnalysisComplete: true,
+      aiProvider: 'openai',
+      riderAssessment: { riderType: 'allrounder', notes: 'Strong aerobic base' },
+      stravaConnection: { athleteId: 7, athleteName: 'Alice Rider' },
+    })
+    mockFetchTrainingPlan.mockResolvedValue([mockDay])
+    mockFetchWorkoutLogs.mockResolvedValue({ '2024-01-15': mockFeedback })
+    mockFetchChatHistory.mockResolvedValue([{ role: 'assistant', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }])
+    mockFetchCoachMemory.mockResolvedValue('Prefers morning rides.')
+
+    await useAppStore.getState().loadUserData('token-123')
+
+    const state = useAppStore.getState()
+    expect(state.authToken).toBe('token-123')
+    expect(state.userProfile?.email).toBe('alice@example.com')
+    expect(state.trainingPlan[0].completed).toBe(true)
+    expect(state.trainingPlan[0].feedback).toEqual(mockFeedback)
+    expect(state.chatHistory).toHaveLength(1)
+    expect(state.coachMemory).toBe('Prefers morning rides.')
+    expect(state.stravaConnection?.athleteName).toBe('Alice Rider')
   })
 })

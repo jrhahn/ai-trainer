@@ -1,30 +1,30 @@
 import { useAppStore } from '../store/useAppStore'
-import { getStravaAuthUrl } from '../services/strava'
+import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
 import { CheckCircle, Link2Off } from 'lucide-react'
 
 export default function StravaConnect() {
-  const stravaTokens = useAppStore((s) => s.stravaTokens)
-  const setStravaTokens = useAppStore((s) => s.setStravaTokens)
-  const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
-  const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
+  const authToken = useAppStore((s) => s.authToken)
+  const stravaConnection = useAppStore((s) => s.stravaConnection)
+  const setStravaConnection = useAppStore((s) => s.setStravaConnection)
 
   const handleConnect = () => {
-    window.location.href = getStravaAuthUrl()
+    if (!authToken) return
+    window.location.href = getStravaAuthUrl(authToken)
   }
 
-  const handleDisconnect = () => {
-    setStravaTokens(null)
-    setStravaAnalysisComplete(false)
-    setRiderAssessment(null)
+  const handleDisconnect = async () => {
+    if (!authToken) return
+    await disconnectStrava(authToken)
+    setStravaConnection(null)
   }
 
-  if (stravaTokens) {
+  if (stravaConnection) {
     return (
       <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
         <CheckCircle size={18} className="text-green-600" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-green-800">Connected to Strava</p>
-          <p className="text-xs text-green-600">{stravaTokens.athleteName}</p>
+          <p className="text-xs text-green-600">{stravaConnection.athleteName}</p>
         </div>
         <button
           onClick={handleDisconnect}

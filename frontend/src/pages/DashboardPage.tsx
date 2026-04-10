@@ -7,38 +7,35 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
-import { getStravaActivities, refreshStravaToken } from '../services/strava'
+import { getStravaActivities } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
+import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 
 export default function DashboardPage() {
   const {
+    authToken,
     userProfile,
     trainingPlan,
-    stravaTokens,
-    setStravaTokens,
+    stravaConnection,
     riderAssessment,
     stravaAnalysisComplete,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setTrainingPlan,
     setUserProfile,
-    aiProvider,
-    aiApiKey,
   } =
     useAppStore(
       useShallow((s) => ({
+        authToken: s.authToken,
         userProfile: s.userProfile,
         trainingPlan: s.trainingPlan,
-        stravaTokens: s.stravaTokens,
-        setStravaTokens: s.setStravaTokens,
+        stravaConnection: s.stravaConnection,
         riderAssessment: s.riderAssessment,
         stravaAnalysisComplete: s.stravaAnalysisComplete,
         setRiderAssessment: s.setRiderAssessment,
         setStravaAnalysisComplete: s.setStravaAnalysisComplete,
         setTrainingPlan: s.setTrainingPlan,
         setUserProfile: s.setUserProfile,
-        aiProvider: s.aiProvider,
-        aiApiKey: s.aiApiKey,
       }))
     )
 
@@ -56,31 +53,20 @@ export default function DashboardPage() {
   const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
 
   useEffect(() => {
-    if (!stravaTokens) return
+    if (!stravaConnection || !authToken || !userProfile) return
+
     const fetchActivities = async () => {
-      let tokens = stravaTokens
-      if (tokens.expiresAt < Date.now() / 1000) {
-        try {
-          const refreshed = await refreshStravaToken(tokens)
-          tokens = refreshed
-          setStravaTokens(tokens)
-        } catch {
-          return
-        }
-      }
       try {
-        const acts = await getStravaActivities(tokens.accessToken)
+        const acts = await getStravaActivities(authToken)
         setStravaActivities(acts)
 
-        // Analyse rides on first Strava connection if API key is available
-        if (!stravaAnalysisComplete && acts.length > 0 && aiApiKey && userProfile) {
+        if (!stravaAnalysisComplete && acts.length > 0) {
           setAnalysisStatus('analysing')
           setAnalysisError('')
           try {
-            const assessment = await analyseStravaActivities(acts, aiApiKey, aiProvider)
+            const assessment = await analyseStravaActivities(acts, authToken)
             setRiderAssessment(assessment)
 
-            // Update profile with assessed FTP / threshold HR if not already set
             const updatedProfile = {
               ...userProfile,
               currentFTP: userProfile.currentFTP ?? assessment.estimatedFTP,
@@ -90,8 +76,14 @@ export default function DashboardPage() {
             }
             setUserProfile(updatedProfile)
 
-            // Regenerate training plan with the new assessment
-            const updatedPlan = await generateTrainingPlan(updatedProfile, aiApiKey, aiProvider, assessment)
+            await updateCurrentUser(authToken, {
+              currentFTP: updatedProfile.currentFTP,
+              maxHeartRate: updatedProfile.maxHeartRate,
+              stravaAnalysisComplete: true,
+            })
+
+            const updatedPlan = await generateTrainingPlan(updatedProfile, authToken, assessment)
+            await saveTrainingPlan(authToken, updatedPlan)
             setTrainingPlan(updatedPlan)
 
             setStravaAnalysisComplete(true)
@@ -102,12 +94,12 @@ export default function DashboardPage() {
           }
         }
       } catch {
-        // silently fail
+        setAnalysisStatus('error')
+        setAnalysisError('Failed to fetch Strava activities')
       }
     }
-    fetchActivities()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stravaTokens, stravaAnalysisComplete, aiApiKey, aiProvider, userProfile])
+    void fetchActivities()
+  }, [authToken, stravaConnection, stravaAnalysisComplete, userProfile, setRiderAssessment, setStravaAnalysisComplete, setTrainingPlan, setUserProfile])
 
   const greeting = () => {
     const hour = new Date().getHours()

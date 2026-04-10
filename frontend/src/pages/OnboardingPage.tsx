@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Bike, Target, Loader2, CheckCircle } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
-import { generateTrainingPlan, type AiProvider } from '../services/ai'
+import { generateTrainingPlan } from '../services/ai'
+import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 5
 
 type FormData = {
   name: string
@@ -22,36 +23,32 @@ type FormData = {
 }
 
 export default function OnboardingPage() {
-  const { setUserProfile, setTrainingPlan, setOnboarded, aiProvider, aiApiKey, setAiProvider, setAiApiKey } = useAppStore(
+  const { userProfile, authToken, setUserProfile, setTrainingPlan, setOnboarded } = useAppStore(
     useShallow((s) => ({
+      userProfile: s.userProfile,
+      authToken: s.authToken,
       setUserProfile: s.setUserProfile,
       setTrainingPlan: s.setTrainingPlan,
       setOnboarded: s.setOnboarded,
-      aiProvider: s.aiProvider,
-      aiApiKey: s.aiApiKey,
-      setAiProvider: s.setAiProvider,
-      setAiApiKey: s.setAiApiKey,
     }))
   )
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
-  const [apiKeyInput, setApiKeyInput] = useState(aiApiKey)
   const [form, setForm] = useState<FormData>({
-    name: '',
-    email: '',
-    bikeType: 'road',
-    trainingGoal: 'general_fitness',
-    raceDate: '',
-    raceDescription: '',
-    weeklyHours: 8,
-    followsTrainingPlan: false,
-    currentFTP: '',
-    fitnessLevel: 'intermediate',
-    restingHeartRate: '',
-    maxHeartRate: '',
+    name: userProfile?.name ?? '',
+    email: userProfile?.email ?? '',
+    bikeType: userProfile?.bikeType ?? 'road',
+    trainingGoal: userProfile?.trainingGoal ?? 'general_fitness',
+    raceDate: userProfile?.raceDate ?? '',
+    raceDescription: userProfile?.raceDescription ?? '',
+    weeklyHours: userProfile?.weeklyHours ?? 8,
+    followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
+    currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
+    fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
+    restingHeartRate: userProfile?.restingHeartRate ? String(userProfile.restingHeartRate) : '',
+    maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
   })
 
   const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
@@ -64,10 +61,10 @@ export default function OnboardingPage() {
   }
 
   const handleGenerate = async () => {
+    if (!authToken) return
+
     setLoading(true)
     setError('')
-    setAiProvider(selectedProvider)
-    setAiApiKey(apiKeyInput)
 
     const profile: UserProfile = {
       name: form.name,
@@ -85,12 +82,14 @@ export default function OnboardingPage() {
     }
 
     try {
-      const plan = await generateTrainingPlan(profile, apiKeyInput, selectedProvider)
+      await updateCurrentUser(authToken, { ...profile, isOnboarded: true })
+      const plan = await generateTrainingPlan(profile, authToken)
+      await saveTrainingPlan(authToken, plan)
       setUserProfile(profile)
       setTrainingPlan(plan)
       setOnboarded(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate plan. Check your API key.')
+      setError(e instanceof Error ? e.message : 'Failed to generate plan.')
     } finally {
       setLoading(false)
     }
@@ -324,14 +323,13 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 5: Heart rate */}
+          {/* Step 5: Summary */}
           {step === 5 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Heart Rate Zones</h2>
-              <p className="text-sm text-gray-500 mb-6">
-                Optional — used to calculate your training zones.
-              </p>
-              <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
+              <p className="text-sm text-gray-500 mb-4">Add optional heart-rate details, review your profile, and generate your plan.</p>
+
+              <div className="space-y-4 mb-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Resting Heart Rate (bpm)
@@ -357,18 +355,10 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div className="bg-blue-50 rounded-xl p-4 text-xs text-blue-700">
-                  <strong>Tip:</strong> If you don't know your max HR, a rough estimate is 220 minus your age.
+                  <strong>Tip:</strong> If you do not know your max HR, a rough estimate is 220 minus your age.
                   Resting HR is best measured in the morning before getting up.
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Step 6: Summary */}
-          {step === 6 && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
-              <p className="text-sm text-gray-500 mb-4">Review your details and generate your plan.</p>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(
@@ -392,46 +382,6 @@ export default function OnboardingPage() {
                 ))}
               </div>
 
-              <div className="mb-4">
-                {/* Provider selector */}
-                <label className="block text-sm font-medium text-gray-700 mb-2">AI Provider *</label>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {([
-                    { value: 'openai', label: 'OpenAI', hint: 'GPT-4o mini' },
-                    { value: 'gemini', label: 'Google Gemini', hint: 'Gemini 2.0 Flash' },
-                  ] as { value: AiProvider; label: string; hint: string }[]).map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setSelectedProvider(p.value)}
-                      className={`flex flex-col items-start px-3 py-2.5 rounded-lg border-2 text-left transition-all ${
-                        selectedProvider === p.value
-                          ? 'border-amber-500 bg-amber-50'
-                          : 'border-gray-200 hover:border-amber-300'
-                      }`}
-                    >
-                      <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-                      <span className="text-xs text-gray-500">{p.hint}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {selectedProvider === 'openai' ? 'OpenAI' : 'Google Gemini'} API Key *
-                </label>
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                  placeholder={selectedProvider === 'openai' ? 'sk-...' : 'AIza...'}
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Stored locally in your browser. Sent only to{' '}
-                  {selectedProvider === 'openai' ? 'OpenAI' : 'Google'}.
-                </p>
-              </div>
-
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
                   {error}
@@ -440,7 +390,7 @@ export default function OnboardingPage() {
 
               <button
                 onClick={handleGenerate}
-                disabled={loading || !apiKeyInput.trim()}
+                disabled={loading}
                 className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
                 {loading ? (
@@ -459,7 +409,7 @@ export default function OnboardingPage() {
           )}
 
           {/* Navigation */}
-          {step < 6 && (
+          {step < TOTAL_STEPS && (
             <div className="flex gap-3 mt-8">
               {step > 1 && (
                 <button
@@ -478,7 +428,7 @@ export default function OnboardingPage() {
               </button>
             </div>
           )}
-          {step === 6 && step > 1 && !loading && (
+          {step === TOTAL_STEPS && step > 1 && !loading && (
             <button
               onClick={() => setStep(step - 1)}
               className="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 py-1"

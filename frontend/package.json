@@ -12,12 +12,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@tailwindcss/forms": "^0.5.11",
     "date-fns": "^4.1.0",
-    "jsonrepair": "^3.13.3",
     "lucide-react": "^1.8.0",
-    "openai": "^6.34.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0",

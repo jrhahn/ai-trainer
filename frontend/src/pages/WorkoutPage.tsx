@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout } from '../services/ai'
+import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
 import type { WorkoutFeedback } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
@@ -21,12 +22,11 @@ const typeColors: Record<string, string> = {
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
-  const { trainingPlan, logWorkout, aiApiKey, aiProvider, userProfile, updateTrainingDay } = useAppStore(
+  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay } = useAppStore(
     useShallow((s) => ({
+      authToken: s.authToken,
       trainingPlan: s.trainingPlan,
       logWorkout: s.logWorkout,
-      aiApiKey: s.aiApiKey,
-      aiProvider: s.aiProvider,
       userProfile: s.userProfile,
       updateTrainingDay: s.updateTrainingDay,
     }))
@@ -51,13 +51,22 @@ export default function WorkoutPage() {
     logWorkout(day.date, feedback)
     setShowForm(false)
 
-    if (aiApiKey && userProfile) {
+    if (authToken) {
+      try {
+        await saveWorkoutLog(authToken, day.date, feedback)
+      } catch {
+        // keep optimistic local state even if the network fails
+      }
+    }
+
+    if (authToken && userProfile) {
       setRatingLoading(true)
       try {
         const dayWithFeedback = { ...day, completed: true, feedback }
-        const coachFeedback = await rateCompletedWorkout(dayWithFeedback, userProfile, aiApiKey, aiProvider)
+        const coachFeedback = await rateCompletedWorkout(dayWithFeedback, userProfile, authToken)
         if (coachFeedback) {
           updateTrainingDay(day.date, { coachFeedback })
+          await saveTrainingPlan(authToken, useAppStore.getState().trainingPlan)
         }
       } catch {
         // silently fail – rating is a nice-to-have
