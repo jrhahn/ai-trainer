@@ -201,6 +201,7 @@ export default function AIChat({ contextWorkout }: Props) {
         <button
           onClick={sendMessage}
           disabled={loading || !input.trim()}
+          aria-label="Send message"
           className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
           <Send size={16} />
