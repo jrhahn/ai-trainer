@@ -97,8 +97,12 @@ def strava_auth() -> RedirectResponse:
 async def strava_callback(code: str = "", error: str = "") -> RedirectResponse:
     """Exchange the authorisation code for tokens and forward them to the frontend."""
     if error or not code:
-        msg = urllib.parse.quote(error or "No authorisation code received.")
-        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error={msg}")
+        # Use a fixed safe message – never reflect the raw user-supplied error value
+        # in the redirect URL to avoid an open-redirect / injection risk.
+        safe_error = urllib.parse.quote(
+            "Strava authorisation was denied or failed. Please try again."
+        )
+        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error={safe_error}")
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
