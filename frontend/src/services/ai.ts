@@ -54,13 +54,60 @@ async function geminiChat(
   return result.response.text()
 }
 
+type ConversationMessage = { role: 'user' | 'assistant'; content: string }
+
+/** Call OpenAI with a full conversation history */
+async function openaiChatHistory(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: ConversationMessage[]
+): Promise<string> {
+  const client = makeOpenAI(apiKey)
+  const resp = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ],
+  })
+  return resp.choices[0].message.content ?? ''
+}
+
+/** Call Gemini with a full conversation history using startChat */
+async function geminiChatHistory(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: ConversationMessage[]
+): Promise<string> {
+  const genAI = makeGemini(apiKey)
+  const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt })
+
+  const history = messages.slice(0, -1).map((m) => ({
+    role: m.role === 'assistant' ? 'model' : ('user' as const),
+    parts: [{ text: m.content }],
+  }))
+
+  const chat = genModel.startChat({ history })
+  const lastMsg = messages[messages.length - 1].content
+  const result = await chat.sendMessage(lastMsg)
+  return result.response.text()
+}
+
 /** Extract JSON text from a Gemini response that may wrap it in a markdown code fence */
 function extractJson(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   return fenced ? fenced[1].trim() : text.trim()
 }
 
+// ─── constants ───────────────────────────────────────────────────────────────
+
+const MAX_CONVERSATION_HISTORY = 20
+
 // ─── public API ──────────────────────────────────────────────────────────────
+
+export { MAX_CONVERSATION_HISTORY }
 
 export async function analyseStravaActivities(
   activities: StravaActivity[],
@@ -168,19 +215,62 @@ Adapt the remaining days based on the feedback. Return the full updated days arr
   return plan.map((d) => (d.completed ? d : (updatedMap.get(d.date) ?? d)))
 }
 
+export interface AskTrainerOptions {
+  coachMemory?: string
+  conversationHistory?: ConversationMessage[]
+}
+
 export async function askTrainer(
   question: string,
   plan: TrainingDay[],
   profile: UserProfile,
   apiKey: string,
+  provider: AiProvider = 'openai',
+  options: AskTrainerOptions = {}
+): Promise<string> {
+  const today = new Date().toISOString().split('T')[0]
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const last7Days = plan.filter((d) => d.date >= sevenDaysAgo && d.date <= today)
+  const next7Days = plan.filter((d) => d.date >= today).slice(0, 7)
+
+  const memorySection = options.coachMemory
+    ? `\n\nCoach notes about this athlete (remember these):\n${options.coachMemory}`
+    : ''
+
+  const systemPrompt = `You are a friendly, expert cycling coach. Answer the athlete's question concisely and practically.
+Athlete profile: ${JSON.stringify(profile)}
+Last 7 days of training: ${JSON.stringify(last7Days)}
+Upcoming plan (next 7 days): ${JSON.stringify(next7Days)}${memorySection}`
+
+  const history = options.conversationHistory ?? []
+  const messages: ConversationMessage[] = [...history, { role: 'user', content: question }]
+
+  if (provider === 'gemini') {
+    return geminiChatHistory(apiKey, 'gemini-2.0-flash', systemPrompt, messages)
+  }
+  return openaiChatHistory(apiKey, 'gpt-4o-mini', systemPrompt, messages)
+}
+
+export async function updateCoachMemory(
+  currentMemory: string,
+  userMessage: string,
+  coachResponse: string,
+  apiKey: string,
   provider: AiProvider = 'openai'
 ): Promise<string> {
-  const systemPrompt = `You are a friendly, expert cycling coach. Answer the athlete's question concisely.
-You have access to their training plan and profile. Be practical and specific.`
+  const systemPrompt = `You are a cycling coach maintaining concise notes about an athlete.
+Extract any important, actionable information from this conversation exchange and update the notes.
+Keep notes under 300 words. Focus on: goals, limitations, health issues, preferences, performance achievements, recurring problems.
+Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged.`
 
-  const userMsg = `Profile: ${JSON.stringify(profile)}
-Upcoming plan (next 7 days): ${JSON.stringify(plan.slice(0, 7))}
-Question: ${question}`
+  const userMsg = `Existing notes:
+${currentMemory || '(none)'}
+
+Latest exchange:
+Athlete: ${userMessage}
+Coach: ${coachResponse}
+
+Update the notes with any new important information.`
 
   if (provider === 'gemini') {
     return geminiChat(apiKey, 'gemini-2.0-flash', systemPrompt, userMsg)

@@ -6,6 +6,7 @@ import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
+import AIChat from '../components/AIChat'
 import { getStravaActivities, refreshStravaToken } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 
@@ -225,6 +226,12 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-base font-bold text-gray-800 mb-2">Training Calendar</h2>
         <TrainingCalendar plan={trainingPlan} />
+      </div>
+
+      {/* AI Coach Chat */}
+      <div>
+        <h2 className="text-base font-bold text-gray-800 mb-2">Coach Chat</h2>
+        <AIChat />
       </div>
 
       {/* Strava activities */}

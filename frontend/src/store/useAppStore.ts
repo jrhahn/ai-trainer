@@ -40,6 +40,12 @@ export interface TrainingDay {
   feedback?: WorkoutFeedback
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+}
+
 export interface StravaTokens {
   accessToken: string
   refreshToken: string
@@ -81,6 +87,8 @@ interface AppState {
   aiProvider: AiProvider
   aiApiKey: string
   isOnboarded: boolean
+  chatHistory: ChatMessage[]
+  coachMemory: string
 
   setUserProfile: (profile: UserProfile) => void
   setTrainingPlan: (plan: TrainingDay[]) => void
@@ -93,6 +101,9 @@ interface AppState {
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
   resetAll: () => void
+  addChatMessage: (msg: ChatMessage) => void
+  setCoachMemory: (memory: string) => void
+  clearChatHistory: () => void
 }
 
 const initialState = {
@@ -105,6 +116,8 @@ const initialState = {
   aiProvider: 'openai' as AiProvider,
   aiApiKey: '',
   isOnboarded: false,
+  chatHistory: [] as ChatMessage[],
+  coachMemory: '',
 }
 
 export const useAppStore = create<AppState>()(
@@ -134,6 +147,10 @@ export const useAppStore = create<AppState>()(
           ),
         })),
       resetAll: () => set(initialState),
+      addChatMessage: (msg) =>
+        set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
+      setCoachMemory: (memory) => set({ coachMemory: memory }),
+      clearChatHistory: () => set({ chatHistory: [] }),
     }),
     { name: 'ai-trainer-store' }
   )
