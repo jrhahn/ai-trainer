@@ -35,8 +35,8 @@ export default function DashboardPage() {
       let tokens = stravaTokens
       if (tokens.expiresAt < Date.now() / 1000 && stravaClientId && stravaClientSecret) {
         try {
-          const refreshed = await refreshStravaToken(tokens.refreshToken, stravaClientId, stravaClientSecret)
-          tokens = { ...refreshed, athleteId: stravaTokens.athleteId, athleteName: stravaTokens.athleteName }
+          const refreshed = await refreshStravaToken(tokens, stravaClientId, stravaClientSecret)
+          tokens = refreshed
           setStravaTokens(tokens)
         } catch {
           return

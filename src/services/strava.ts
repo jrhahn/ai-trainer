@@ -54,7 +54,7 @@ export async function getStravaActivities(accessToken: string): Promise<StravaAc
 }
 
 export async function refreshStravaToken(
-  refreshToken: string,
+  existingTokens: StravaTokens,
   clientId: string,
   clientSecret: string
 ): Promise<StravaTokens> {
@@ -64,7 +64,7 @@ export async function refreshStravaToken(
     body: JSON.stringify({
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: refreshToken,
+      refresh_token: existingTokens.refreshToken,
       grant_type: 'refresh_token',
     }),
   })
@@ -78,7 +78,7 @@ export async function refreshStravaToken(
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt: data.expires_at,
-    athleteId: 0,
-    athleteName: '',
+    athleteId: existingTokens.athleteId,
+    athleteName: existingTokens.athleteName,
   }
 }
