@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { jsonrepair } from 'jsonrepair'
 import type { UserProfile, TrainingDay, WorkoutFeedback, StravaActivity, RiderAssessment } from '../store/useAppStore'
 
 export type AiProvider = 'openai' | 'gemini'
@@ -95,10 +96,17 @@ async function geminiChatHistory(
   return result.response.text()
 }
 
-/** Extract JSON text from a Gemini response that may wrap it in a markdown code fence */
-function extractJson(text: string): string {
+/** Extract JSON from a response that may wrap it in a markdown code fence, then
+ *  strip trailing unit words from numeric values (e.g. `90 minutes` → `90`)
+ *  and repair any other minor syntax issues before parsing, so that
+ *  malformed-but-fixable AI output doesn't throw. */
+function parseAiJson<T>(text: string): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-  return fenced ? fenced[1].trim() : text.trim()
+  const extracted = fenced ? fenced[1].trim() : text.trim()
+  // Strip unit words that appear after numbers and before JSON delimiters
+  // e.g. `"durationMinutes": 90 minutes,` → `"durationMinutes": 90,`
+  const stripped = extracted.replace(/(\d+)\s+[a-zA-Z_]+(?=\s*[,\}\]\n])/g, '$1')
+  return JSON.parse(jsonrepair(stripped)) as T
 }
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -144,7 +152,7 @@ Assess the rider's fitness level, estimated FTP, threshold heart rate, and rider
     raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
   }
 
-  const parsed = JSON.parse(extractJson(raw)) as RiderAssessment
+  const parsed = parseAiJson<RiderAssessment>(raw)
   return parsed
 }
 
@@ -182,7 +190,7 @@ Generate a 28-day training plan starting from today (${new Date().toISOString().
     raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
   }
 
-  const parsed = JSON.parse(extractJson(raw)) as { plan: TrainingDay[] }
+  const parsed = parseAiJson<{ plan: TrainingDay[] }>(raw)
   return parsed.plan ?? []
 }
 
@@ -210,7 +218,7 @@ Adapt the remaining days based on the feedback. Return the full updated days arr
     raw = await openaiChat(apiKey, 'gpt-4o-mini', systemPrompt, userMsg, true)
   }
 
-  const parsed = JSON.parse(extractJson(raw)) as { updatedDays: TrainingDay[] }
+  const parsed = parseAiJson<{ updatedDays: TrainingDay[] }>(raw)
   const updatedMap = new Map(parsed.updatedDays.map((d) => [d.date, d]))
   return plan.map((d) => (d.completed ? d : (updatedMap.get(d.date) ?? d)))
 }
