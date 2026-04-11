@@ -9,7 +9,9 @@ export default function StravaConnect() {
 
   const handleConnect = () => {
     if (!authToken) return
-    window.location.href = getStravaAuthUrl(authToken)
+    void getStravaAuthUrl(authToken).then((authUrl) => {
+      window.location.href = authUrl
+    })
   }
 
   const handleDisconnect = async () => {

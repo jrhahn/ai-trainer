@@ -1,4 +1,7 @@
+import urllib.parse
+
 import pytest
+from fastapi import HTTPException
 
 from auth import decode_token
 from database import async_session_maker
@@ -22,13 +25,16 @@ class DummyResponse:
 @pytest.mark.asyncio
 async def test_strava_auth_redirect_contains_state(client, auth_headers):
     token = auth_headers["Authorization"].split(" ", 1)[1]
-    response = await client.get(
-        f"/api/v1/auth/strava?token={token}",
-        follow_redirects=False,
-    )
-    assert response.status_code in {302, 307}
-    assert "www.strava.com/oauth/authorize" in response.headers["location"]
-    assert decode_token(token)
+    response = await client.get("/api/v1/auth/strava", headers=auth_headers)
+
+    assert response.status_code == 200
+    auth_url = response.json()["authUrl"]
+    assert "www.strava.com/oauth/authorize" in auth_url
+
+    state = urllib.parse.parse_qs(urllib.parse.urlparse(auth_url).query)["state"][0]
+    assert state != token
+    with pytest.raises(HTTPException):
+        decode_token(state)
 
 
 @pytest.mark.asyncio

@@ -1,8 +1,13 @@
 import type { StravaActivity } from '../store/useAppStore'
-import { API_BASE, apiFetch } from './api'
+import { apiFetch } from './api'
 
-export function getStravaAuthUrl(authToken: string): string {
-  return `${API_BASE}/auth/strava?token=${encodeURIComponent(authToken)}`
+interface StravaAuthResponse {
+  authUrl: string
+}
+
+export async function getStravaAuthUrl(authToken: string): Promise<string> {
+  const { authUrl } = await apiFetch<StravaAuthResponse>('/auth/strava', { token: authToken })
+  return authUrl
 }
 
 export async function getStravaActivities(authToken: string): Promise<StravaActivity[]> {

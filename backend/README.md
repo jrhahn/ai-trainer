@@ -7,12 +7,12 @@ end-users never have to register their own Strava application.
 
 ```
 User clicks "Connect Strava"
-  → frontend navigates to  GET /auth/strava
-  → backend redirects user  →  Strava OAuth page
+  → frontend calls         GET /auth/strava (with bearer token)
+  → backend returns OAuth URL with short-lived server-side state
+  → frontend redirects user →  Strava OAuth page
   → Strava redirects back   →  GET /auth/strava/callback?code=…
   → backend exchanges code for tokens
-  → backend redirects user  →  <frontend>/strava/callback?access_token=…&…
-  → frontend stores tokens in localStorage
+  → backend redirects user  →  <frontend>/strava/callback?success=true
 ```
 
 The Strava Client ID and Client Secret live only in this server's environment
@@ -101,6 +101,6 @@ uv run uvicorn main:app --host 0.0.0.0 --port $PORT
 | Method | Path                    | Description                            |
 |--------|-------------------------|----------------------------------------|
 | GET    | `/healthz`              | Health check                           |
-| GET    | `/auth/strava`          | Initiate Strava OAuth flow             |
+| GET    | `/auth/strava`          | Return Strava OAuth URL (auth required)|
 | GET    | `/auth/strava/callback` | Strava OAuth callback (code exchange)  |
 | POST   | `/auth/strava/refresh`  | Refresh an expired access token        |

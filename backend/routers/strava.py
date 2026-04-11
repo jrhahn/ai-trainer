@@ -1,10 +1,12 @@
 """Strava OAuth and activity proxy routes."""
 
 import os
+import secrets
+import time
 import urllib.parse
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +22,8 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 STRAVA_OAUTH_BASE = "https://www.strava.com"
 
 router = APIRouter(tags=["strava"])
+STATE_TTL_SECONDS = 600
+_oauth_states: dict[str, tuple[str, float]] = {}
 
 
 class RefreshRequest(schemas.CamelModel):
@@ -32,20 +36,27 @@ class RefreshResponse(schemas.CamelModel):
     expires_at: int
 
 
+class StravaAuthResponse(schemas.CamelModel):
+    auth_url: str
+
+
 @router.get("/auth/strava")
-async def strava_auth(request: Request, token: str = "") -> RedirectResponse:
+async def strava_auth(
+    current_user: models.User = Depends(auth.get_current_user),
+) -> StravaAuthResponse:
     if not STRAVA_CLIENT_ID or not STRAVA_CLIENT_SECRET:
         raise HTTPException(
             status_code=500,
             detail="Strava credentials are not configured on the server.",
         )
 
-    auth_header = request.headers.get("authorization", "")
-    state_token = token
-    if not state_token and auth_header.startswith("Bearer "):
-        state_token = auth_header.split(" ", 1)[1]
-    if not state_token:
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+    now = time.time()
+    for key, (_, expires_at) in list(_oauth_states.items()):
+        if expires_at <= now:
+            del _oauth_states[key]
+
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = (current_user.id, now + STATE_TTL_SECONDS)
 
     callback_uri = f"{BACKEND_URL}/api/v1/auth/strava/callback"
     params = urllib.parse.urlencode(
@@ -55,10 +66,10 @@ async def strava_auth(request: Request, token: str = "") -> RedirectResponse:
             "response_type": "code",
             "approval_prompt": "force",
             "scope": "read,activity:read_all",
-            "state": state_token,
+            "state": state,
         }
     )
-    return RedirectResponse(f"{STRAVA_OAUTH_BASE}/oauth/authorize?{params}")
+    return StravaAuthResponse(auth_url=f"{STRAVA_OAUTH_BASE}/oauth/authorize?{params}")
 
 
 @router.get("/auth/strava/callback")
@@ -74,7 +85,16 @@ async def strava_callback(
         )
         return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error={safe_error}")
 
-    user_id = auth.decode_token(state)
+    state_data = _oauth_states.pop(state, None)
+    if state_data is None:
+        return RedirectResponse(
+            f"{FRONTEND_URL}/strava/callback?error=Invalid%20or%20expired%20state"
+        )
+
+    user_id, expires_at = state_data
+    if expires_at <= time.time():
+        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error=State%20expired")
+
     user = await db.get(models.User, user_id)
     if user is None:
         return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error=User%20not%20found")
