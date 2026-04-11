@@ -1,0 +1,67 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Hetzner
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      TARGET_HOST: ${{ vars.SERVER_URL || secrets.SERVER_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Validate required deployment inputs
+        run: |
+          test -n "$TARGET_HOST"
+          test -n "${{ secrets.SSH_KEY }}"
+          test -n "${{ secrets.JWT_SECRET }}"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf "%s" "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Create runtime inventory
+        run: |
+          cat > /tmp/hetzner-inventory.ini <<EOF
+          [production]
+          hetzner ansible_host=$TARGET_HOST ansible_user=root ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_python_interpreter=/usr/bin/python3
+          EOF
+
+      - name: Run deployment playbook
+        env:
+          SERVER_URL: ${{ env.TARGET_HOST }}
+          DEPLOY_BRANCH: develop
+        run: |
+          ansible-playbook \
+            -i /tmp/hetzner-inventory.ini \
+            deploy/ansible/deploy.yml \
+            --extra-vars "server_url=$SERVER_URL \
+            jwt_secret=${{ secrets.JWT_SECRET }} \
+            postgres_password=${{ secrets.POSTGRES_PASSWORD }} \
+            strava_client_id=${{ secrets.STRAVA_CLIENT_ID }} \
+            strava_client_secret=${{ secrets.STRAVA_CLIENT_SECRET }} \
+            openai_api_key=${{ secrets.OPENAI_API_KEY }} \
+            gemini_api_key=${{ secrets.GEMINI_API_KEY }}"
