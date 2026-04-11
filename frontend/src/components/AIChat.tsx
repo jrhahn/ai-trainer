@@ -3,6 +3,7 @@ import { Send, Bot, User, Brain, Trash2, CalendarCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer, updateCoachMemory, MAX_CONVERSATION_HISTORY } from '../services/ai'
+import { clearChatHistoryRemote, saveChatMessage, saveCoachMemoryRemote, saveTrainingPlan } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
 interface Props {
@@ -11,8 +12,7 @@ interface Props {
 
 export default function AIChat({ contextWorkout }: Props) {
   const {
-    aiApiKey,
-    aiProvider,
+    authToken,
     userProfile,
     trainingPlan,
     chatHistory,
@@ -23,8 +23,7 @@ export default function AIChat({ contextWorkout }: Props) {
     updateTrainingDay,
   } = useAppStore(
     useShallow((s) => ({
-      aiApiKey: s.aiApiKey,
-      aiProvider: s.aiProvider,
+      authToken: s.authToken,
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       chatHistory: s.chatHistory,
@@ -58,32 +57,23 @@ export default function AIChat({ contextWorkout }: Props) {
     if (!input.trim() || loading) return
 
     const userMsg = input.trim()
+    const timestamp = new Date().toISOString()
     setInput('')
 
-    if (!aiApiKey) {
-      addChatMessage({ role: 'user', content: userMsg, timestamp: new Date().toISOString() })
-      addChatMessage({
-        role: 'assistant',
-        content: 'Please add your AI provider API key in Settings to chat with me.',
-        timestamp: new Date().toISOString(),
-      })
-      return
-    }
-    if (!userProfile) return
+    if (!userProfile || !authToken) return
 
-    // Capture history before adding the new user message
     const recentHistory = chatHistory.slice(-MAX_CONVERSATION_HISTORY).map((m) => ({ role: m.role, content: m.content }))
 
-    addChatMessage({ role: 'user', content: userMsg, timestamp: new Date().toISOString() })
+    addChatMessage({ role: 'user', content: userMsg, timestamp })
+    void saveChatMessage(authToken, { role: 'user', content: userMsg, timestamp })
     setLoading(true)
 
     try {
-      const result = await askTrainer(userMsg, trainingPlan, userProfile, aiApiKey, aiProvider, {
+      const result = await askTrainer(userMsg, trainingPlan, userProfile, authToken, {
         coachMemory,
         conversationHistory: recentHistory,
       })
 
-      // Apply any training plan modifications the AI suggested
       let planUpdateCount = 0
       if (result.planUpdates && result.planUpdates.length > 0) {
         for (const update of result.planUpdates) {
@@ -91,19 +81,28 @@ export default function AIChat({ contextWorkout }: Props) {
           updateTrainingDay(date, fields)
         }
         planUpdateCount = result.planUpdates.length
+        await saveTrainingPlan(authToken, useAppStore.getState().trainingPlan)
       }
 
-      addChatMessage({
-        role: 'assistant',
+      const assistantMessage = {
+        role: 'assistant' as const,
         content: result.response,
         timestamp: new Date().toISOString(),
         planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
-      })
+      }
 
-      // Update coach memory in background (fire-and-forget)
-      updateCoachMemory(coachMemory, userMsg, result.response, aiApiKey, aiProvider)
+      addChatMessage({
+        ...assistantMessage,
+      })
+      void saveChatMessage(authToken, assistantMessage)
+
+      updateCoachMemory(coachMemory, userMsg, result.response, authToken)
         .then((updated) => {
-          if (updated && updated !== coachMemory) setCoachMemory(updated)
+          if (updated && updated !== coachMemory) {
+            setCoachMemory(updated)
+            return saveCoachMemoryRemote(authToken, updated)
+          }
+          return undefined
         })
         .catch((err) => {
           console.warn('Coach memory update failed:', err)
@@ -111,11 +110,21 @@ export default function AIChat({ contextWorkout }: Props) {
     } catch {
       addChatMessage({
         role: 'assistant',
-        content: 'Sorry, something went wrong. Please check your API key.',
+        content: 'Sorry, something went wrong.',
         timestamp: new Date().toISOString(),
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleClearChatHistory = async () => {
+    if (!authToken) return
+    clearChatHistory()
+    try {
+      await clearChatHistoryRemote(authToken)
+    } catch {
+      // keep local state cleared
     }
   }
 
@@ -144,7 +153,7 @@ export default function AIChat({ contextWorkout }: Props) {
           )}
           {chatHistory.length > 0 && (
             <button
-              onClick={clearChatHistory}
+              onClick={() => void handleClearChatHistory()}
               title="Clear chat history"
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
             >

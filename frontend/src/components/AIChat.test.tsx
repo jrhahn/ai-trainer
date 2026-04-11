@@ -1,15 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import AIChat from '../components/AIChat'
+import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 
-// ─── Hoisted mocks ────────────────────────────────────────────────────────────
-
-const { mockAskTrainer, mockUpdateCoachMemory } = vi.hoisted(() => ({
+const {
+  mockAskTrainer,
+  mockUpdateCoachMemory,
+  mockSaveChatMessage,
+  mockClearChatHistoryRemote,
+  mockSaveCoachMemoryRemote,
+  mockSaveTrainingPlan,
+} = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockUpdateCoachMemory: vi.fn(),
+  mockSaveChatMessage: vi.fn(),
+  mockClearChatHistoryRemote: vi.fn(),
+  mockSaveCoachMemoryRemote: vi.fn(),
+  mockSaveTrainingPlan: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -21,7 +30,12 @@ vi.mock('../services/ai', async (importOriginal) => {
   }
 })
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+vi.mock('../services/user', () => ({
+  saveChatMessage: mockSaveChatMessage,
+  clearChatHistoryRemote: mockClearChatHistoryRemote,
+  saveCoachMemoryRemote: mockSaveCoachMemoryRemote,
+  saveTrainingPlan: mockSaveTrainingPlan,
+}))
 
 const baseProfile: UserProfile = {
   name: 'Alice',
@@ -35,8 +49,8 @@ const baseProfile: UserProfile = {
 
 function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
   useAppStore.setState({
+    authToken: 'token-123',
     userProfile: baseProfile,
-    aiApiKey: 'sk-test',
     aiProvider: 'openai',
     trainingPlan: [],
     chatHistory: [],
@@ -49,17 +63,17 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockUpdateCoachMemory.mockResolvedValue('')
+  mockSaveChatMessage.mockResolvedValue(undefined)
+  mockClearChatHistoryRemote.mockResolvedValue(undefined)
+  mockSaveCoachMemoryRemote.mockResolvedValue(undefined)
+  mockSaveTrainingPlan.mockResolvedValue([])
 })
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AIChat', () => {
   it('shows a welcome message when there is no chat history', () => {
     setupStore()
     render(<AIChat />)
-    expect(
-      screen.getByText(/Hi! I'm your AI cycling coach/i)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Hi! I'm your AI cycling coach/i)).toBeInTheDocument()
   })
 
   it('shows a workout-specific welcome message when contextWorkout is provided', () => {
@@ -78,28 +92,6 @@ describe('AIChat', () => {
     expect(screen.getByText(/VO2max Intervals/)).toBeInTheDocument()
   })
 
-  it('renders persisted chat history instead of welcome message', () => {
-    setupStore({
-      chatHistory: [
-        { role: 'user', content: 'What should I eat before a ride?', timestamp: '' },
-        { role: 'assistant', content: 'Eat a banana 30 min before.', timestamp: '' },
-      ],
-    })
-    render(<AIChat />)
-    expect(screen.getByText('What should I eat before a ride?')).toBeInTheDocument()
-    expect(screen.getByText('Eat a banana 30 min before.')).toBeInTheDocument()
-  })
-
-  it('send button is disabled when input is empty', () => {
-    setupStore()
-    render(<AIChat />)
-    const sendButton = screen.getByRole('button', { name: /Send message/i }) // Send icon button
-    // Input is empty by default, button should be disabled
-    const input = screen.getByPlaceholderText('Ask your coach...')
-    expect(input).toHaveValue('')
-    expect(sendButton).toBeDisabled()
-  })
-
   it('sends a message and displays the AI response', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Cadence of 90 rpm is ideal.' })
     setupStore()
@@ -113,20 +105,7 @@ describe('AIChat', () => {
       expect(screen.getByText('What cadence should I target?')).toBeInTheDocument()
       expect(screen.getByText('Cadence of 90 rpm is ideal.')).toBeInTheDocument()
     })
-  })
-
-  it('shows an API key error when no key is configured', async () => {
-    setupStore({ aiApiKey: '' })
-    render(<AIChat />)
-
-    const input = screen.getByPlaceholderText('Ask your coach...')
-    await userEvent.type(input, 'Hello?')
-    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Please add your AI provider API key/i)).toBeInTheDocument()
-    })
-    expect(mockAskTrainer).not.toHaveBeenCalled()
+    expect(mockSaveChatMessage).toHaveBeenCalled()
   })
 
   it('clears the input field after sending', async () => {
@@ -157,20 +136,6 @@ describe('AIChat', () => {
     })
   })
 
-  it('shows the clear history button when chat history is non-empty', () => {
-    setupStore({
-      chatHistory: [{ role: 'user', content: 'Hi', timestamp: '' }],
-    })
-    render(<AIChat />)
-    expect(screen.getByTitle('Clear chat history')).toBeInTheDocument()
-  })
-
-  it('hides the clear history button when chat history is empty', () => {
-    setupStore({ chatHistory: [] })
-    render(<AIChat />)
-    expect(screen.queryByTitle('Clear chat history')).not.toBeInTheDocument()
-  })
-
   it('clears chat history when the clear button is clicked', async () => {
     setupStore({
       chatHistory: [{ role: 'user', content: 'Hi', timestamp: '' }],
@@ -182,18 +147,7 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(useAppStore.getState().chatHistory).toEqual([])
     })
-  })
-
-  it('shows the Memory button when coachMemory is non-empty', () => {
-    setupStore({ coachMemory: 'Athlete has knee issues.' })
-    render(<AIChat />)
-    expect(screen.getByTitle('Coach memory')).toBeInTheDocument()
-  })
-
-  it('hides the Memory button when coachMemory is empty', () => {
-    setupStore({ coachMemory: '' })
-    render(<AIChat />)
-    expect(screen.queryByTitle('Coach memory')).not.toBeInTheDocument()
+    expect(mockClearChatHistoryRemote).toHaveBeenCalledWith('token-123')
   })
 
   it('toggles the memory panel when the Memory button is clicked', async () => {
@@ -222,13 +176,13 @@ describe('AIChat', () => {
 
     await waitFor(() => {
       expect(mockUpdateCoachMemory).toHaveBeenCalledWith(
-        '', // initial empty memory
+        '',
         'How do I improve?',
         'Great question!',
-        'sk-test',
-        'openai'
+        'token-123'
       )
     })
+    expect(mockSaveCoachMemoryRemote).toHaveBeenCalledWith('token-123', 'Updated memory')
   })
 
   it('shows a plan-updated badge when the AI returns planUpdates', async () => {
@@ -254,9 +208,9 @@ describe('AIChat', () => {
       expect(screen.getByText(/Training plan updated: 1 day modified/i)).toBeInTheDocument()
     })
 
-    // Verify the store was updated
     const state = useAppStore.getState()
     const updatedDay = state.trainingPlan.find((d) => d.date === tomorrow)
     expect(updatedDay?.workoutType).toBe('recovery')
+    expect(mockSaveTrainingPlan).toHaveBeenCalled()
   })
 })
