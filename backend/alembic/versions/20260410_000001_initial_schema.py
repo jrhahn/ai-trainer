@@ -66,6 +66,7 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.String(length=50), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("user_id", "date"),
     )
     op.create_index(op.f("ix_workout_logs_date"), "workout_logs", ["date"], unique=False)
 
