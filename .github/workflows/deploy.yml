@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      TARGET_HOST: ${{ vars.SERVER_URL || secrets.SERVER_URL }}
+      TARGET_HOST: ${{ vars.SERVER_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,18 +28,29 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install community.docker
+
       - name: Validate required deployment inputs
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           test -n "$TARGET_HOST"
-          test -n "${{ secrets.SSH_KEY }}"
-          test -n "${{ secrets.JWT_SECRET }}"
+          test -n "$SSH_KEY"
+          test -n "$JWT_SECRET"
+          test -n "$POSTGRES_PASSWORD"
 
-      - name: Configure SSH
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Add host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf "%s" "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
@@ -47,21 +58,39 @@ jobs:
         run: |
           cat > /tmp/hetzner-inventory.ini <<EOF
           [production]
-          hetzner ansible_host=$TARGET_HOST ansible_user=root ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_python_interpreter=/usr/bin/python3
+          hetzner ansible_host=$TARGET_HOST ansible_user=root ansible_python_interpreter=/usr/bin/python3
           EOF
 
       - name: Run deployment playbook
         env:
-          SERVER_URL: ${{ env.TARGET_HOST }}
-          DEPLOY_BRANCH: develop
+          SERVER_URL: ${{ vars.SERVER_URL }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          python - <<'PY'
+          import json
+          import os
+
+          extra_vars = {
+              "server_url": os.environ["SERVER_URL"],
+              "jwt_secret": os.environ["JWT_SECRET"],
+              "postgres_password": os.environ["POSTGRES_PASSWORD"],
+              "strava_client_id": os.environ.get("STRAVA_CLIENT_ID", ""),
+              "strava_client_secret": os.environ.get("STRAVA_CLIENT_SECRET", ""),
+              "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
+              "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
+          }
+
+          with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:
+              json.dump(extra_vars, fh)
+          PY
+
           ansible-playbook \
             -i /tmp/hetzner-inventory.ini \
             deploy/ansible/deploy.yml \
-            --extra-vars "server_url=$SERVER_URL \
-            jwt_secret=${{ secrets.JWT_SECRET }} \
-            postgres_password=${{ secrets.POSTGRES_PASSWORD }} \
-            strava_client_id=${{ secrets.STRAVA_CLIENT_ID }} \
-            strava_client_secret=${{ secrets.STRAVA_CLIENT_SECRET }} \
-            openai_api_key=${{ secrets.OPENAI_API_KEY }} \
-            gemini_api_key=${{ secrets.GEMINI_API_KEY }}"
+            --extra-vars "@/tmp/deploy-vars.json"
