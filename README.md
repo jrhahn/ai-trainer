@@ -12,6 +12,23 @@ ai-trainer/
 
 ## Quick start
 
+### Docker Compose
+
+```bash
+cp .env.example .env
+# fill in the secrets you want to use
+docker compose up -d
+```
+
+This starts:
+
+- frontend on <http://localhost:5173>
+- backend on <http://localhost:8000>
+- postgres inside the compose network with a persistent named volume
+
+The backend can boot with placeholder AI and Strava credentials, but those
+features will only work after you set real values in `.env`.
+
 ### Backend (Strava OAuth)
 
 ```bash
