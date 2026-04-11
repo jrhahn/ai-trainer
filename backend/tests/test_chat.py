@@ -26,6 +26,33 @@ async def test_chat_history_roundtrip(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_chat_history_is_returned_in_chronological_order(client, auth_headers):
+    await client.post(
+        "/api/v1/users/me/chat",
+        headers=auth_headers,
+        json={
+            "role": "assistant",
+            "content": "Second message",
+            "timestamp": "2026-04-10T11:00:00Z",
+        },
+    )
+    await client.post(
+        "/api/v1/users/me/chat",
+        headers=auth_headers,
+        json={
+            "role": "user",
+            "content": "First message",
+            "timestamp": "2026-04-10T10:00:00Z",
+        },
+    )
+
+    response = await client.get("/api/v1/users/me/chat", headers=auth_headers)
+    assert response.status_code == 200
+    messages = response.json()["messages"]
+    assert [message["content"] for message in messages] == ["First message", "Second message"]
+
+
+@pytest.mark.asyncio
 async def test_clear_chat_history(client, auth_headers):
     await client.post(
         "/api/v1/users/me/chat",

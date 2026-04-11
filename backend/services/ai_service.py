@@ -37,13 +37,16 @@ def _make_gemini() -> genai.Client:
 
 async def _openai_chat(system_prompt: str, user_msg: str, json_mode: bool = False) -> str:
     client = _make_openai()
+    kwargs: dict[str, Any] = {}
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
     response = await client.chat.completions.create(
         model=OPENAI_MODEL,
-        response_format={"type": "json_object"} if json_mode else None,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_msg},
         ],
+        **kwargs,
     )
     return response.choices[0].message.content or ""
 
@@ -52,10 +55,13 @@ async def _openai_chat_history(
     system_prompt: str, messages: list[dict[str, str]], json_mode: bool = False
 ) -> str:
     client = _make_openai()
+    kwargs: dict[str, Any] = {}
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
     response = await client.chat.completions.create(
         model=OPENAI_MODEL,
-        response_format={"type": "json_object"} if json_mode else None,
         messages=[{"role": "system", "content": system_prompt}, *messages],
+        **kwargs,
     )
     return response.choices[0].message.content or ""
 

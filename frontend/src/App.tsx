@@ -18,7 +18,7 @@ export default function App() {
 
   useEffect(() => {
     if (authToken) {
-      void loadUserData()
+      void loadUserData().catch(() => {})
     }
   }, [authToken, loadUserData])
 

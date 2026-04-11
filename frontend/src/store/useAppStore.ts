@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import {
   fetchChatHistory,
   fetchCoachMemory,
@@ -146,78 +145,72 @@ function mergePlanWithWorkouts(
 }
 
 export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      ...initialState,
+  (set, get) => ({
+    ...initialState,
 
-      setAuthToken: (token) => set({ authToken: token }),
-      logout: () => set(initialState),
-      setUserProfile: (profile) => set({ userProfile: profile }),
-      setTrainingPlan: (plan) => set({ trainingPlan: plan }),
-      logWorkout: (date, feedback) =>
-        set((state) => ({
-          workoutLogs: { ...state.workoutLogs, [date]: feedback },
-          trainingPlan: state.trainingPlan.map((day) =>
-            day.date === date ? { ...day, completed: true, feedback } : day
-          ),
-        })),
-      setStravaConnection: (connection) => set({ stravaConnection: connection }),
-      setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
-      setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
-      setAiProvider: (provider) => set({ aiProvider: provider }),
-      setOnboarded: (v) => set({ isOnboarded: v }),
-      updateTrainingDay: (date, updates) =>
-        set((state) => ({
-          trainingPlan: state.trainingPlan.map((day) =>
-            day.date === date ? { ...day, ...updates } : day
-          ),
-        })),
-      resetAll: () => set(initialState),
-      addChatMessage: (msg) =>
-        set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
-      setCoachMemory: (memory) => set({ coachMemory: memory }),
-      clearChatHistory: () => set({ chatHistory: [] }),
-      loadUserData: async (tokenOverride) => {
-        const token = tokenOverride ?? get().authToken
-        if (!token) return
+    setAuthToken: (token) => set({ authToken: token }),
+    logout: () => set(initialState),
+    setUserProfile: (profile) => set({ userProfile: profile }),
+    setTrainingPlan: (plan) => set({ trainingPlan: plan }),
+    logWorkout: (date, feedback) =>
+      set((state) => ({
+        workoutLogs: { ...state.workoutLogs, [date]: feedback },
+        trainingPlan: state.trainingPlan.map((day) =>
+          day.date === date ? { ...day, completed: true, feedback } : day
+        ),
+      })),
+    setStravaConnection: (connection) => set({ stravaConnection: connection }),
+    setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
+    setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
+    setAiProvider: (provider) => set({ aiProvider: provider }),
+    setOnboarded: (v) => set({ isOnboarded: v }),
+    updateTrainingDay: (date, updates) =>
+      set((state) => ({
+        trainingPlan: state.trainingPlan.map((day) =>
+          day.date === date ? { ...day, ...updates } : day
+        ),
+      })),
+    resetAll: () => set(initialState),
+    addChatMessage: (msg) =>
+      set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
+    setCoachMemory: (memory) => set({ coachMemory: memory }),
+    clearChatHistory: () => set({ chatHistory: [] }),
+    loadUserData: async (tokenOverride) => {
+      const token = tokenOverride ?? get().authToken
+      if (!token) return
 
-        set({ isLoadingUserData: true, authToken: token })
-        try {
-          const [user, plan, workoutLogs, chatHistory, coachMemory] = await Promise.all([
-            fetchCurrentUser(token),
-            fetchTrainingPlan(token),
-            fetchWorkoutLogs(token),
-            fetchChatHistory(token),
-            fetchCoachMemory(token),
-          ])
+      set({ isLoadingUserData: true, authToken: token })
+      try {
+        const [user, plan, workoutLogs, chatHistory, coachMemory] = await Promise.all([
+          fetchCurrentUser(token),
+          fetchTrainingPlan(token),
+          fetchWorkoutLogs(token),
+          fetchChatHistory(token),
+          fetchCoachMemory(token),
+        ])
 
-          set({
-            authToken: token,
-            userProfile: user.profile,
-            trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
-            workoutLogs,
-            stravaConnection: user.stravaConnection,
-            riderAssessment: user.riderAssessment,
-            stravaAnalysisComplete: user.stravaAnalysisComplete,
-            aiProvider: user.aiProvider,
-            isOnboarded: user.isOnboarded,
-            chatHistory,
-            coachMemory,
-          })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to load user data'
-          if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
-            set(initialState)
-          }
-          throw error
-        } finally {
-          set({ isLoadingUserData: false })
+        set({
+          authToken: token,
+          userProfile: user.profile,
+          trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
+          workoutLogs,
+          stravaConnection: user.stravaConnection,
+          riderAssessment: user.riderAssessment,
+          stravaAnalysisComplete: user.stravaAnalysisComplete,
+          aiProvider: user.aiProvider,
+          isOnboarded: user.isOnboarded,
+          chatHistory,
+          coachMemory,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to load user data'
+        if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
+          set(initialState)
         }
-      },
-    }),
-    {
-      name: 'ai-trainer-store',
-      partialize: (state) => ({ authToken: state.authToken }),
-    }
-  )
+        throw error
+      } finally {
+        set({ isLoadingUserData: false })
+      }
+    },
+  })
 )

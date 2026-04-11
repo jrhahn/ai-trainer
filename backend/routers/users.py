@@ -166,7 +166,9 @@ async def get_chat(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ChatHistoryResponse:
     messages = await db.scalars(
-        select(models.ChatMessage).where(models.ChatMessage.user_id == current_user.id)
+        select(models.ChatMessage)
+        .where(models.ChatMessage.user_id == current_user.id)
+        .order_by(models.ChatMessage.timestamp)
     )
     return schemas.ChatHistoryResponse(
         messages=[schemas.ChatMessageSchema.model_validate(m, from_attributes=True) for m in messages]

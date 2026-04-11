@@ -6,6 +6,8 @@ export default function StravaConnect() {
   const authToken = useAppStore((s) => s.authToken)
   const stravaConnection = useAppStore((s) => s.stravaConnection)
   const setStravaConnection = useAppStore((s) => s.setStravaConnection)
+  const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
+  const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
 
   const handleConnect = () => {
     if (!authToken) return
@@ -18,6 +20,8 @@ export default function StravaConnect() {
     if (!authToken) return
     await disconnectStrava(authToken)
     setStravaConnection(null)
+    setRiderAssessment(null)
+    setStravaAnalysisComplete(false)
   }
 
   if (stravaConnection) {
