@@ -1,0 +1,99 @@
+- name: Deploy AI Trainer to Hetzner
+  hosts: production
+  become: true
+  vars:
+    app_dir: /opt/ai-trainer
+    docker_arch_map:
+      x86_64: amd64
+      aarch64: arm64
+      armv7l: armhf
+
+  tasks:
+    - name: Check if Docker is already installed
+      ansible.builtin.command: docker --version
+      register: docker_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Install APT prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+      when: docker_installed.rc != 0
+
+    - name: Ensure Docker keyring directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+      when: docker_installed.rc != 0
+
+    - name: Add Docker apt GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: true
+      when: docker_installed.rc != 0
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ docker_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}
+          signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable
+        state: present
+        filename: docker
+        update_cache: true
+      when: docker_installed.rc != 0
+
+    - name: Install latest Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: latest
+        update_cache: true
+      when: docker_installed.rc != 0
+
+    - name: Ensure Docker service is enabled and running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Ensure app directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync repository to server
+      ansible.posix.synchronize:
+        src: "{{ lookup('env', 'GITHUB_WORKSPACE') }}/"
+        dest: "{{ app_dir }}/"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--delete"
+
+    - name: Render deployment environment file
+      ansible.builtin.template:
+        src: templates/app.env.j2
+        dest: "{{ app_dir }}/.env"
+        mode: "0600"
+
+    - name: Build and start Docker services
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        files:
+          - compose.yml
+        build: always
+        remove_orphans: true
+        state: present

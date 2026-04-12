@@ -64,3 +64,14 @@ cd frontend
 npm run build   # outputs to frontend/dist/
 ```
 
+## Deployment (Hetzner)
+
+This repository includes Ansible-based deployment for a Debian Hetzner VPS:
+
+- Playbook: `deploy/ansible/deploy.yml`
+- Workflow: `.github/workflows/deploy.yml`
+
+The deployment workflow is tied to the `production` environment. If that
+environment is configured with required reviewers, deployment waits for manual
+maintainer approval. If required reviewers are not available (for example on
+free plans), deployment runs automatically after pushes to `develop`.
