@@ -14,6 +14,40 @@ services:
       timeout: 5s
       retries: 12
 
+  traefik:
+    image: traefik:v3.6.6
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt_data:/letsencrypt
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
+      - traefik.http.routers.traefik-dashboard-http.entrypoints=web
+      - traefik.http.routers.traefik-dashboard-http.middlewares=redirect-to-https@docker
+      - traefik.http.routers.traefik-dashboard-https.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
+      - traefik.http.routers.traefik-dashboard-https.entrypoints=websecure
+      - traefik.http.routers.traefik-dashboard-https.tls=true
+      - traefik.http.routers.traefik-dashboard-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.traefik-dashboard-https.service=api@internal
+      - traefik.http.routers.traefik-dashboard-https.middlewares=traefik-auth@docker
+      - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
+
   backend:
     build:
       context: ./backend
@@ -39,6 +73,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-http.entrypoints=web
+      - traefik.http.routers.backend-http.middlewares=redirect-to-https@docker
+      - traefik.http.routers.backend-http.service=backend
+      - traefik.http.routers.backend-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-https.entrypoints=websecure
+      - traefik.http.routers.backend-https.tls=true
+      - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.backend-https.service=backend
+      - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
     build:
@@ -49,8 +95,19 @@ services:
     depends_on:
       backend:
         condition: service_started
-    ports:
-      - "5173:80"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
+      - traefik.http.routers.frontend-http.entrypoints=web
+      - traefik.http.routers.frontend-http.middlewares=redirect-to-https@docker
+      - traefik.http.routers.frontend-http.service=frontend
+      - traefik.http.routers.frontend-https.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
+      - traefik.http.routers.frontend-https.entrypoints=websecure
+      - traefik.http.routers.frontend-https.tls=true
+      - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.frontend-https.service=frontend
+      - traefik.http.services.frontend.loadbalancer.server.port=80
 
 volumes:
   postgres_data:
+  letsencrypt_data:

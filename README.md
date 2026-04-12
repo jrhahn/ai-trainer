@@ -24,6 +24,7 @@ This starts:
 
 - frontend on <http://localhost:5173>
 - backend on <http://localhost:8000>
+- traefik reverse proxy on <http://localhost> and <https://localhost>
 - postgres inside the compose network with a persistent named volume
 
 The backend can boot with placeholder AI and Strava credentials, but those
@@ -75,3 +76,17 @@ The deployment workflow is tied to the `production` environment. If that
 environment is configured with required reviewers, deployment waits for manual
 maintainer approval. If required reviewers are not available (for example on
 free plans), deployment runs automatically after pushes to `develop`.
+
+Traefik is configured as the public reverse proxy with Let's Encrypt TLS:
+
+- `trainlikea.pro` and `train-like-a.pro` (and any subdomain) route to the frontend
+- backend API routes (`/api`, `/healthz`) are proxied through the same domains
+
+DNS records must point to the server:
+
+- `A/AAAA trainlikea.pro`
+- `A/AAAA *.trainlikea.pro`
+- `A/AAAA train-like-a.pro`
+- `A/AAAA *.train-like-a.pro`
+
+Set `ACME_EMAIL` in `.env` (or deployment vars) to receive certificate notices.
