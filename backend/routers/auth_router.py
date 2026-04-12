@@ -86,6 +86,7 @@ async def register(
             hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
         )
         db.add(user)
+        await db.flush()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     existing = await db.scalar(select(models.User).where(models.User.email == body.email))
@@ -150,7 +151,7 @@ async def login(
 
         try:
             authelia_data = authelia_resp.json()
-        except Exception:
+        except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Invalid response from authentication service.",
