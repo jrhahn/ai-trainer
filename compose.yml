@@ -101,6 +101,16 @@ services:
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-https.service=backend
+      # Dedicated higher-priority router for /api/v1/auth/session so that Traefik's
+      # authelia-api middleware injects Remote-Email/User headers from the Authelia
+      # session cookie. The authelia-api variant returns 401 (not 302) for
+      # unauthenticated requests, which is correct for a JSON API endpoint.
+      - traefik.http.routers.backend-session-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && Path(`/api/v1/auth/session`)
+      - traefik.http.routers.backend-session-https.entrypoints=websecure
+      - traefik.http.routers.backend-session-https.tls=true
+      - traefik.http.routers.backend-session-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.backend-session-https.service=backend
+      - traefik.http.routers.backend-session-https.middlewares=authelia-api@docker
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:

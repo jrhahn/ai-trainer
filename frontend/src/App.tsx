@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { getSessionToken } from './services/auth'
 import { useAppStore } from './store/useAppStore'
@@ -16,9 +16,11 @@ export default function App() {
   const isOnboarded = useAppStore((s) => s.isOnboarded)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
   const loadUserData = useAppStore((s) => s.loadUserData)
+  const [isCheckingSession, setIsCheckingSession] = useState(!authToken)
 
   useEffect(() => {
     if (authToken) {
+      setIsCheckingSession(false)
       void loadUserData().catch(() => {})
       return
     }
@@ -30,9 +32,12 @@ export default function App() {
       .catch(() => {
         // Ignore when Authelia session is not available and fall back to login/register.
       })
+      .finally(() => {
+        setIsCheckingSession(false)
+      })
   }, [authToken, loadUserData])
 
-  if (authToken && isLoadingUserData) {
+  if (isCheckingSession || (authToken && isLoadingUserData)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 text-center">
