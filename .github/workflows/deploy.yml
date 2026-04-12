@@ -37,11 +37,13 @@ jobs:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
         run: |
           test -n "$TARGET_HOST"
           test -n "$SSH_KEY"
           test -n "$JWT_SECRET"
           test -n "$POSTGRES_PASSWORD"
+          test -n "$ADMIN_PASS_HASH"
 
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -73,6 +75,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+          ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
         run: |
           python - <<'PY'
           import json
@@ -87,6 +90,7 @@ jobs:
               "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
               "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
               "acme_email": os.environ.get("ACME_EMAIL", ""),
+              "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
           }
 
           with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:
