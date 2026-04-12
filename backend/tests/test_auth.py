@@ -77,8 +77,12 @@ async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_authelia_mode_disables_local_login_and_registration(client, monkeypatch):
+async def test_authelia_mode_returns_503_when_not_configured(client, monkeypatch):
+    """When Authelia is enabled but the internal URL / users-DB path are not set,
+    the endpoints return 503 rather than silently falling back to local auth."""
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+    monkeypatch.setattr(auth, "AUTHELIA_INTERNAL_URL", "")
 
     register_response = await client.post(
         "/api/v1/auth/register",
@@ -88,10 +92,10 @@ async def test_authelia_mode_disables_local_login_and_registration(client, monke
             "password": "hunter2xx",
         },
     )
-    assert register_response.status_code == 501
+    assert register_response.status_code == 503
 
     login_response = await client.post(
         "/api/v1/auth/login",
         json={"email": "rider@example.com", "password": "hunter2xx"},
     )
-    assert login_response.status_code == 501
+    assert login_response.status_code == 503

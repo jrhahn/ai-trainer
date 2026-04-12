@@ -22,6 +22,8 @@ AUTHELIA_AUTH_ENABLED = os.environ.get("AUTHELIA_AUTH_ENABLED", "false").lower()
 AUTHELIA_REMOTE_USER_HEADER = os.environ.get("AUTHELIA_REMOTE_USER_HEADER", "Remote-User")
 AUTHELIA_REMOTE_EMAIL_HEADER = os.environ.get("AUTHELIA_REMOTE_EMAIL_HEADER", "Remote-Email")
 AUTHELIA_REMOTE_NAME_HEADER = os.environ.get("AUTHELIA_REMOTE_NAME_HEADER", "Remote-Name")
+AUTHELIA_INTERNAL_URL = os.environ.get("AUTHELIA_INTERNAL_URL", "").rstrip("/")
+AUTHELIA_USERS_DB_PATH = os.environ.get("AUTHELIA_USERS_DB_PATH", "")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 

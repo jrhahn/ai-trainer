@@ -79,6 +79,8 @@ services:
       AUTHELIA_REMOTE_USER_HEADER: ${AUTHELIA_REMOTE_USER_HEADER:-Remote-User}
       AUTHELIA_REMOTE_EMAIL_HEADER: ${AUTHELIA_REMOTE_EMAIL_HEADER:-Remote-Email}
       AUTHELIA_REMOTE_NAME_HEADER: ${AUTHELIA_REMOTE_NAME_HEADER:-Remote-Name}
+      AUTHELIA_INTERNAL_URL: ${AUTHELIA_INTERNAL_URL:-http://authelia:9091}
+      AUTHELIA_USERS_DB_PATH: ${AUTHELIA_USERS_DB_PATH:-/authelia-config/users_database.yml}
     ports:
       - "8000:8000"
     healthcheck:
@@ -86,6 +88,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    volumes:
+      - ./authelia:/authelia-config
     labels:
       - traefik.enable=true
       - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
@@ -96,7 +100,6 @@ services:
       - traefik.http.routers.backend-https.entrypoints=websecure
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.backend-https.middlewares=authelia-api@docker
       - traefik.http.routers.backend-https.service=backend
       - traefik.http.services.backend.loadbalancer.server.port=8000
 

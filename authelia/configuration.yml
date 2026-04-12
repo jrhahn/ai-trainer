@@ -13,6 +13,8 @@ identity_validation:
 authentication_backend:
   file:
     path: /config/users_database.yml
+    search:
+      email: true
 
 access_control:
   default_policy: deny
