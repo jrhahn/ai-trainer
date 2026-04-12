@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      TARGET_HOST: ${{ vars.SERVER_URL }}
+      TARGET_HOST: ${{ vars.SERVER_IP }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,8 +38,12 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
+          SERVER_URL: ${{ vars.SERVER_URL }}
+          SERVER_URL_2: ${{ vars.SERVER_URL_2 }}
         run: |
           test -n "$TARGET_HOST"
+          test -n "$SERVER_URL"
+          test -n "$SERVER_URL_2"
           test -n "$SSH_KEY"
           test -n "$JWT_SECRET"
           test -n "$POSTGRES_PASSWORD"
@@ -67,6 +71,8 @@ jobs:
       - name: Run deployment playbook
         env:
           SERVER_URL: ${{ vars.SERVER_URL }}
+          SERVER_URL_2: ${{ vars.SERVER_URL_2 }}
+          SERVER_IP: ${{ vars.SERVER_IP }}
           DEPLOY_BRANCH: ${{ github.ref_name }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -83,6 +89,8 @@ jobs:
 
           extra_vars = {
               "server_url": os.environ["SERVER_URL"],
+              "server_url_2": os.environ["SERVER_URL_2"],
+              "server_ip": os.environ["SERVER_IP"],
               "jwt_secret": os.environ["JWT_SECRET"],
               "postgres_password": os.environ["POSTGRES_PASSWORD"],
               "strava_client_id": os.environ.get("STRAVA_CLIENT_ID", ""),
