@@ -10,7 +10,12 @@ from routers import ai, auth_router, strava, users
 
 load_dotenv()
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+_frontend_url_raw = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+# Support a comma-separated list of origins so that deployments accessible from
+# multiple hostnames / IP addresses (e.g. domain + raw IP during initial setup)
+# can all be permitted without wildcard CORS.
+ALLOWED_ORIGINS = [u.strip().rstrip("/") for u in _frontend_url_raw.split(",") if u.strip()]
+FRONTEND_URL = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "http://localhost:5173"
 
 
 @asynccontextmanager
@@ -24,7 +29,7 @@ app = FastAPI(title="AI Trainer backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
@@ -43,7 +48,7 @@ def healthz() -> dict:
     return {
         "status": "ok",
         "api_version": "v1",
-        "frontend_url": FRONTEND_URL,
+        "frontend_url": ALLOWED_ORIGINS,
     }
 
     if not resp.is_success:
