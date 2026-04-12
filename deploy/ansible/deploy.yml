@@ -11,6 +11,12 @@
       armv7l: armhf
 
   tasks:
+    - name: Check if Docker is already installed
+      ansible.builtin.command: docker --version
+      register: docker_installed
+      failed_when: false
+      changed_when: false
+
     - name: Install APT prerequisites
       ansible.builtin.apt:
         name:
@@ -19,12 +25,14 @@
           - git
         state: present
         update_cache: true
+      when: docker_installed.rc != 0
 
     - name: Ensure Docker keyring directory exists
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
         mode: "0755"
+      when: docker_installed.rc != 0
 
     - name: Add Docker apt GPG key
       ansible.builtin.get_url:
@@ -32,16 +40,18 @@
         dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
         force: true
+      when: docker_installed.rc != 0
 
     - name: Add Docker apt repository
       ansible.builtin.apt_repository:
         repo: >-
-          deb [arch={{ docker_arch_map.get(ansible_architecture, ansible_architecture) }}
+          deb [arch={{ docker_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}
           signed-by=/etc/apt/keyrings/docker.asc]
-          https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+          https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable
         state: present
         filename: docker
         update_cache: true
+      when: docker_installed.rc != 0
 
     - name: Install latest Docker packages
       ansible.builtin.apt:
@@ -53,6 +63,7 @@
           - docker-compose-plugin
         state: latest
         update_cache: true
+      when: docker_installed.rc != 0
 
     - name: Ensure Docker service is enabled and running
       ansible.builtin.service:
