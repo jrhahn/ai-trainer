@@ -135,6 +135,7 @@ services:
       AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:-change-this-authelia-storage-encryption-key}
     volumes:
       - ./authelia:/config
+      - authelia_data:/data
     labels:
       - traefik.enable=true
       - traefik.http.routers.authelia-http.rule=Host(`auth.trainlikea.pro`) || Host(`auth.train-like-a.pro`)
@@ -153,3 +154,4 @@ services:
 volumes:
   postgres_data:
   letsencrypt_data:
+  authelia_data:

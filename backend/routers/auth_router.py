@@ -1,7 +1,10 @@
 """Authentication routes."""
 
+import contextlib
 import fcntl
+import os
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +28,13 @@ def _create_authelia_user(email: str, display_name: str, password: str) -> None:
     if not db_path.exists():
         raise RuntimeError(f"Authelia users database not found at {db_path}")
 
-    with open(db_path, "r+", encoding="utf-8") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
+    # Use a separate lock file so the main file is never partially written.
+    lock_path = db_path.with_suffix(".lock")
+    with open(lock_path, "w", encoding="utf-8") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
         try:
-            data: dict[str, Any] = yaml.safe_load(fh) or {}
+            with open(db_path, "r", encoding="utf-8") as fh:
+                data: dict[str, Any] = yaml.safe_load(fh) or {}
             users: dict[str, Any] = data.get("users") or {}
 
             # Reject if the email is already taken
@@ -49,11 +55,24 @@ def _create_authelia_user(email: str, display_name: str, password: str) -> None:
             }
             data["users"] = users
 
-            fh.seek(0)
-            fh.truncate()
-            yaml.dump(data, fh, default_flow_style=False, allow_unicode=True)
+            # Write atomically: write to a temp file in the same directory, then
+            # rename over the target.  This ensures Authelia's file-watcher always
+            # sees a complete, valid YAML file and receives a single clean inotify
+            # CREATE event rather than a truncate-then-write sequence that can
+            # cause Authelia to cache an empty user list.
+            tmp_fd, tmp_name = tempfile.mkstemp(
+                dir=db_path.parent, suffix=".tmp", prefix="users_database_"
+            )
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_fh:
+                    yaml.dump(data, tmp_fh, default_flow_style=False, allow_unicode=True)
+                os.replace(tmp_name, db_path)
+            except Exception:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(tmp_name)
+                raise
         finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
 @router.post("/register", response_model=schemas.TokenResponse)
