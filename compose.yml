@@ -132,11 +132,13 @@ services:
       - traefik.http.routers.authelia-http.entrypoints=web
       - traefik.http.routers.authelia-http.middlewares=redirect-to-https@docker
       - traefik.http.routers.authelia-http.service=authelia
+      - traefik.http.routers.authelia-http.priority=1000
       - traefik.http.routers.authelia-https.rule=Host(`auth.trainlikea.pro`) || Host(`auth.train-like-a.pro`)
       - traefik.http.routers.authelia-https.entrypoints=websecure
       - traefik.http.routers.authelia-https.tls=true
       - traefik.http.routers.authelia-https.tls.certresolver=letsencrypt
       - traefik.http.routers.authelia-https.service=authelia
+      - traefik.http.routers.authelia-https.priority=1000
       - traefik.http.services.authelia.loadbalancer.server.port=9091
 
 volumes:
