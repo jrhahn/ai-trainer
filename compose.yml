@@ -26,12 +26,25 @@ services:
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=true
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt_data:/letsencrypt
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
+      - traefik.http.routers.traefik-dashboard-http.entrypoints=web
+      - traefik.http.routers.traefik-dashboard-http.middlewares=redirect-to-https@docker
+      - traefik.http.routers.traefik-dashboard-https.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
+      - traefik.http.routers.traefik-dashboard-https.entrypoints=websecure
+      - traefik.http.routers.traefik-dashboard-https.tls=true
+      - traefik.http.routers.traefik-dashboard-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.traefik-dashboard-https.service=api@internal
+      - traefik.http.routers.traefik-dashboard-https.middlewares=traefik-auth@docker
+      - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
 
   backend:
     build:
@@ -78,8 +91,6 @@ services:
     depends_on:
       backend:
         condition: service_started
-    ports:
-      - "5173:80"
     labels:
       - traefik.enable=true
       - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
