@@ -45,6 +45,8 @@ services:
       - traefik.http.routers.traefik-dashboard-https.service=api@internal
       - traefik.http.routers.traefik-dashboard-https.middlewares=traefik-auth@docker
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
 
   backend:
     build:
@@ -95,8 +97,6 @@ services:
         condition: service_started
     labels:
       - traefik.enable=true
-      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
-      - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
       - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
       - traefik.http.routers.frontend-http.entrypoints=web
       - traefik.http.routers.frontend-http.middlewares=redirect-to-https@docker
