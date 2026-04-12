@@ -38,6 +38,12 @@ services:
       - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth
       - traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true
       - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
+      # authelia-api uses the AuthRequest implementation which returns 401 (not 302) for
+      # unauthenticated requests, preventing cross-origin redirects that cause CORS errors
+      # in JavaScript fetch() calls.
+      - traefik.http.middlewares.authelia-api.forwardauth.address=http://authelia:9091/api/authz/auth-request
+      - traefik.http.middlewares.authelia-api.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia-api.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
       - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
       - traefik.http.routers.traefik-dashboard-http.entrypoints=web
       - traefik.http.routers.traefik-dashboard-http.middlewares=redirect-to-https@docker
@@ -90,7 +96,7 @@ services:
       - traefik.http.routers.backend-https.entrypoints=websecure
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.backend-https.middlewares=authelia@docker
+      - traefik.http.routers.backend-https.middlewares=authelia-api@docker
       - traefik.http.routers.backend-https.service=backend
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
