@@ -17,6 +17,8 @@ services:
   traefik:
     image: traefik:v3.2
     restart: unless-stopped
+    environment:
+      - DOCKER_API_VERSION=1.47
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
