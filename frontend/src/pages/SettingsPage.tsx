@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
 import type { AiProvider } from '../store/useAppStore'
-import { BACKEND_URL } from '../services/api'
+import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
 import { deleteCurrentUser, updateCurrentUser } from '../services/user'
 
 export default function SettingsPage() {
@@ -48,6 +48,9 @@ export default function SettingsPage() {
 
   const handleLogout = () => {
     logout()
+    if (AUTHELIA_URL) {
+      window.location.href = `${AUTHELIA_URL}/logout`
+    }
   }
 
   const providers: { value: AiProvider; label: string; hint: string; placeholder: string }[] = [

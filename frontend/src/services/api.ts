@@ -1,6 +1,9 @@
 export const BACKEND_URL =
   (import.meta.env.VITE_BACKEND_URL as string | undefined ?? 'http://localhost:8000').replace(/\/$/, '')
 
+export const AUTHELIA_URL =
+  ((import.meta.env.VITE_AUTHELIA_URL as string | undefined) ?? '').replace(/\/$/, '')
+
 export const API_BASE = `${BACKEND_URL}/api/v1`
 
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
