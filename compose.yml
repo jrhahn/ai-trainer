@@ -73,10 +73,10 @@ services:
       retries: 12
     labels:
       - traefik.enable=true
-      - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.trainlikea.pro`) || Host(`train-like-a.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.train-like-a.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
       - traefik.http.routers.backend-http.entrypoints=web
       - traefik.http.routers.backend-http.middlewares=redirect-to-https@docker
-      - traefik.http.routers.backend-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.trainlikea.pro`) || Host(`train-like-a.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.train-like-a.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
       - traefik.http.routers.backend-https.entrypoints=websecure
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
@@ -95,10 +95,10 @@ services:
       - traefik.enable=true
       - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
       - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
-      - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.trainlikea.pro`) || Host(`train-like-a.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.train-like-a.pro`)
+      - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
       - traefik.http.routers.frontend-http.entrypoints=web
       - traefik.http.routers.frontend-http.middlewares=redirect-to-https
-      - traefik.http.routers.frontend-https.rule=Host(`trainlikea.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.trainlikea.pro`) || Host(`train-like-a.pro`) || HostRegexp(`{subdomain:[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?}.train-like-a.pro`)
+      - traefik.http.routers.frontend-https.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
       - traefik.http.routers.frontend-https.entrypoints=websecure
       - traefik.http.routers.frontend-https.tls=true
       - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
