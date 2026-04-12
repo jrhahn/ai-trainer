@@ -30,7 +30,7 @@ jobs:
         run: pip install ansible
 
       - name: Install Ansible collections
-        run: ansible-galaxy collection install community.docker
+        run: ansible-galaxy collection install community.docker ansible.posix
 
       - name: Validate required deployment inputs
         env:

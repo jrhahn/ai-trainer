@@ -3,8 +3,6 @@
   become: true
   vars:
     app_dir: /opt/ai-trainer
-    repo_url: https://github.com/jrhahn/ai-trainer.git
-    repo_version: "{{ lookup('env', 'DEPLOY_BRANCH') | default('develop', true) }}"
     docker_arch_map:
       x86_64: amd64
       aarch64: arm64
@@ -22,7 +20,6 @@
         name:
           - ca-certificates
           - curl
-          - git
         state: present
         update_cache: true
       when: docker_installed.rc != 0
@@ -71,12 +68,20 @@
         state: started
         enabled: true
 
-    - name: Clone or update repository on server
-      ansible.builtin.git:
-        repo: "{{ repo_url }}"
-        dest: "{{ app_dir }}"
-        version: "{{ repo_version }}"
-        force: true
+    - name: Ensure app directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync repository to server
+      ansible.posix.synchronize:
+        src: "{{ lookup('env', 'GITHUB_WORKSPACE') }}/"
+        dest: "{{ app_dir }}/"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--delete"
 
     - name: Render deployment environment file
       ansible.builtin.template:
