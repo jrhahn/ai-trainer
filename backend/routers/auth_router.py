@@ -1,6 +1,6 @@
 """Authentication routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,12 @@ async def register(
     body: schemas.RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse:
+    if auth.AUTHELIA_AUTH_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Registration is managed by Authelia.",
+        )
+
     existing = await db.scalar(select(models.User).where(models.User.email == body.email))
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -38,9 +44,27 @@ async def login(
     body: schemas.LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse:
+    if auth.AUTHELIA_AUTH_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Login is managed by Authelia.",
+        )
+
     user = await db.scalar(select(models.User).where(models.User.email == body.email))
     if user is None or not auth.verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+    token = auth.create_access_token(user.id)
+    return schemas.TokenResponse(access_token=token)
+
+
+@router.get("/session", response_model=schemas.TokenResponse)
+async def session_token(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> schemas.TokenResponse:
+    user = await auth.get_authelia_user(request, db)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authelia session not found")
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)

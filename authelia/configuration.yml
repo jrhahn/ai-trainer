@@ -1,0 +1,49 @@
+theme: auto
+
+server:
+  address: tcp://0.0.0.0:9091
+
+log:
+  level: info
+
+identity_validation:
+  reset_password:
+    jwt_secret: replace-in-env
+
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+
+access_control:
+  default_policy: deny
+  rules:
+    - domain:
+        - trainlikea.pro
+        - '*.trainlikea.pro'
+        - train-like-a.pro
+        - '*.train-like-a.pro'
+      policy: one_factor
+
+session:
+  secret: replace-in-env
+  name: authelia_session
+  same_site: lax
+  expiration: 12h
+  inactivity: 45m
+  remember_me: 30d
+  cookies:
+    - domain: trainlikea.pro
+      authelia_url: https://auth.trainlikea.pro
+      default_redirection_url: https://trainlikea.pro
+    - domain: train-like-a.pro
+      authelia_url: https://auth.train-like-a.pro
+      default_redirection_url: https://train-like-a.pro
+
+storage:
+  encryption_key: replace-in-env
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /config/notification.txt

@@ -20,3 +20,8 @@ export async function login(email: string, password: string): Promise<string> {
   })
   return response.access_token
 }
+
+export async function getSessionToken(): Promise<string> {
+  const response = await apiFetch<AuthResponse>('/auth/session')
+  return response.access_token
+}

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { getSessionToken } from './services/auth'
 import { useAppStore } from './store/useAppStore'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -19,7 +20,14 @@ export default function App() {
   useEffect(() => {
     if (authToken) {
       void loadUserData().catch(() => {})
+      return
     }
+
+    void getSessionToken()
+      .then((token) => {
+        useAppStore.getState().setAuthToken(token)
+      })
+      .catch(() => {})
   }, [authToken, loadUserData])
 
   if (authToken && isLoadingUserData) {
