@@ -13,6 +13,7 @@ identity_validation:
 authentication_backend:
   file:
     path: /config/users_database.yml
+    watch: true
     search:
       email: true
 
