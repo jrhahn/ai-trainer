@@ -27,7 +27,9 @@ export default function App() {
       .then((token) => {
         useAppStore.getState().setAuthToken(token)
       })
-      .catch(() => {})
+      .catch(() => {
+        // Ignore when Authelia session is not available and fall back to login/register.
+      })
   }, [authToken, loadUserData])
 
   if (authToken && isLoadingUserData) {

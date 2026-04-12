@@ -30,8 +30,8 @@ This starts:
 
 The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
-The bundled Authelia user is `trainer` with password `change-me`; replace this
-immediately by updating `authelia/users_database.yml`.
+Before first deploy, replace the placeholder Authelia user in
+`authelia/users_database.yml` with your real admin account.
 
 ### Backend (Strava OAuth)
 

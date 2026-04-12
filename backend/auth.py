@@ -134,6 +134,8 @@ async def _get_or_create_authelia_user(
     user = models.User(
         email=email,
         name=remote_name or remote_user,
+        # Authelia-managed users do not authenticate via local password login.
+        # A random one-way hash ensures no reusable local password exists.
         hashed_password=hash_password(secrets.token_urlsafe(32)),
     )
     db.add(user)

@@ -1,8 +1,8 @@
 users:
   trainer:
     disabled: false
-    displayname: AI Trainer Admin
-    email: admin@trainlikea.pro
-    password: "$2b$12$OLRTLMzdSLfOENYky6yS6ejTzEDKO5ayTKD9Y9pn19UyU1dWAFvhu"
+    displayname: Replace Me
+    email: replace-me@trainlikea.pro
+    password: "$2b$12$3Qw52vkJxljmA6PtyhLX4u3ZOyExPbbQPm2Wuyz6.4aXxuJBOmO.q"
     groups:
       - admins
