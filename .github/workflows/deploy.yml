@@ -72,6 +72,7 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
         run: |
           python - <<'PY'
           import json
@@ -85,6 +86,7 @@ jobs:
               "strava_client_secret": os.environ.get("STRAVA_CLIENT_SECRET", ""),
               "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
               "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
+              "acme_email": os.environ.get("ACME_EMAIL", ""),
           }
 
           with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:
