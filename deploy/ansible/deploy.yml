@@ -9,11 +9,17 @@
       armv7l: armhf
 
   tasks:
-    - name: Check if Docker is already installed
-      ansible.builtin.command: docker --version
-      register: docker_installed
-      failed_when: false
-      changed_when: false
+    - name: Remove conflicting old Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-doc
+          - docker-compose
+          - podman-docker
+          - containerd
+          - runc
+        state: absent
+        purge: true
 
     - name: Install APT prerequisites
       ansible.builtin.apt:
@@ -22,14 +28,12 @@
           - curl
         state: present
         update_cache: true
-      when: docker_installed.rc != 0
 
     - name: Ensure Docker keyring directory exists
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
         mode: "0755"
-      when: docker_installed.rc != 0
 
     - name: Add Docker apt GPG key
       ansible.builtin.get_url:
@@ -37,7 +41,6 @@
         dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
         force: true
-      when: docker_installed.rc != 0
 
     - name: Add Docker apt repository
       ansible.builtin.apt_repository:
@@ -48,9 +51,8 @@
         state: present
         filename: docker
         update_cache: true
-      when: docker_installed.rc != 0
 
-    - name: Install latest Docker packages
+    - name: Install latest Docker CE packages
       ansible.builtin.apt:
         name:
           - docker-ce
@@ -60,7 +62,6 @@
           - docker-compose-plugin
         state: latest
         update_cache: true
-      when: docker_installed.rc != 0
 
     - name: Ensure Docker service is enabled and running
       ansible.builtin.service:
