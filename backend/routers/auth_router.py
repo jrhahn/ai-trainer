@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import httpx
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -124,62 +123,53 @@ async def register(
     return schemas.TokenResponse(access_token=token)
 
 
+def _verify_authelia_credentials(email: str, password: str) -> bool:
+    """Verify credentials directly against Authelia's file-based users_database.yml.
+
+    This avoids calling Authelia's /api/firstfactor REST endpoint, which is a
+    browser-session API (requires an existing session cookie) and will reject
+    server-side requests without that context.
+    """
+    db_path = Path(auth.AUTHELIA_USERS_DB_PATH)
+    if not db_path.exists():
+        return False
+
+    with open(db_path, "r", encoding="utf-8") as fh:
+        data: dict[str, Any] = yaml.safe_load(fh) or {}
+
+    users: dict[str, Any] = data.get("users") or {}
+
+    # Users are keyed by username (set to email at registration).
+    # Also support lookup by the email field for flexibility.
+    user_entry: dict[str, Any] | None = None
+    for key, entry in users.items():
+        if key == email or entry.get("email") == email:
+            user_entry = entry
+            break
+
+    if user_entry is None or user_entry.get("disabled", False):
+        return False
+
+    hashed = user_entry.get("password", "")
+    return auth.verify_password(password, hashed)
+
+
 @router.post("/login", response_model=schemas.TokenResponse)
 async def login(
     body: schemas.LoginRequest,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse:
     if auth.AUTHELIA_AUTH_ENABLED:
-        if not auth.AUTHELIA_INTERNAL_URL:
+        if not auth.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Authentication service is not configured.",
             )
 
-        try:
-            async with httpx.AsyncClient() as client:
-                authelia_resp = await client.post(
-                    f"{auth.AUTHELIA_INTERNAL_URL}/api/firstfactor",
-                    json={
-                        "username": body.email,
-                        "password": body.password,
-                        "keepMeLoggedIn": False,
-                        "requestMethod": "GET",
-                        "targetURL": "",
-                    },
-                    timeout=10.0,
-                )
-        except httpx.RequestError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Authentication service unavailable.",
-            )
-
-        if authelia_resp.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many login attempts. Please try again later.",
-            )
-
-        if authelia_resp.status_code != status.HTTP_200_OK:
+        if not _verify_authelia_credentials(body.email, body.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password.",
-            )
-
-        try:
-            authelia_data = authelia_resp.json()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Invalid response from authentication service.",
-            )
-
-        if authelia_data.get("status") != "OK":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=authelia_data.get("message") or "Incorrect username or password.",
             )
 
         # Find or auto-create the app user for this Authelia account
@@ -194,12 +184,6 @@ async def login(
             await db.flush()
 
         token = auth.create_access_token(user.id)
-
-        # Forward the Authelia session cookie so the browser can use
-        # the Authelia portal (password-reset, etc.) without re-authenticating.
-        for cookie_header in authelia_resp.headers.get_list("set-cookie"):
-            response.headers.append("set-cookie", cookie_header)
-
         return schemas.TokenResponse(access_token=token)
 
     user = await db.scalar(select(models.User).where(models.User.email == body.email))
