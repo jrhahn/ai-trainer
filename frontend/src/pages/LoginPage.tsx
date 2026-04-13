@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Bike, Loader2 } from 'lucide-react'
 import { login } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
-import { AUTHELIA_URL } from '../services/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -14,41 +13,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // When Authelia is configured, redirect the browser to the Authelia portal so
-  // that Traefik can inject the Remote-Email header on the way back.
-  if (AUTHELIA_URL) {
-    const rd = encodeURIComponent(window.location.origin + '/')
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="bg-amber-500 rounded-lg p-1.5">
-              <Bike size={22} className="text-white" />
-            </div>
-            <span className="font-bold text-xl text-gray-900">AI Cycling Trainer</span>
-          </div>
-
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h1>
-          <p className="text-sm text-gray-500 mb-6">Click below to sign in securely.</p>
-
-          <a
-            href={`${AUTHELIA_URL}/?rd=${rd}`}
-            className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 transition-colors"
-          >
-            Sign In
-          </a>
-
-          <p className="text-sm text-gray-500 mt-6 text-center">
-            Need an account?{' '}
-            <Link to="/register" className="text-amber-600 hover:text-amber-700 font-semibold">
-              Register
-            </Link>
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
