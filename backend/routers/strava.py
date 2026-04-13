@@ -121,8 +121,8 @@ async def strava_callback(
         resp = await client.post(
             f"{STRAVA_OAUTH_BASE}/oauth/token",
             json={
-                "client_secret": _strava_client_secret(),
                 "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
                 "code": code,
                 "grant_type": "authorization_code",
             },
@@ -168,8 +168,8 @@ async def strava_refresh(
         resp = await client.post(
             f"{STRAVA_OAUTH_BASE}/oauth/token",
             json={
-                "client_secret": _strava_client_secret(),
                 "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
                 "refresh_token": body.refresh_token,
                 "grant_type": "refresh_token",
             },
