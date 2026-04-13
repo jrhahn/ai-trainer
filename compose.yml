@@ -35,6 +35,15 @@ services:
       - letsencrypt_data:/letsencrypt
     labels:
       - traefik.enable=true
+      - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth
+      - traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
+      # authelia-api uses the AuthRequest implementation which returns 401 (not 302) for
+      # unauthenticated requests, preventing cross-origin redirects that cause CORS errors
+      # in JavaScript fetch() calls.
+      - traefik.http.middlewares.authelia-api.forwardauth.address=http://authelia:9091/api/authz/auth-request
+      - traefik.http.middlewares.authelia-api.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia-api.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
       - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
       - traefik.http.routers.traefik-dashboard-http.entrypoints=web
       - traefik.http.routers.traefik-dashboard-http.middlewares=redirect-to-https@docker
@@ -66,6 +75,12 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
+      AUTHELIA_AUTH_ENABLED: ${AUTHELIA_AUTH_ENABLED:-true}
+      AUTHELIA_REMOTE_USER_HEADER: ${AUTHELIA_REMOTE_USER_HEADER:-Remote-User}
+      AUTHELIA_REMOTE_EMAIL_HEADER: ${AUTHELIA_REMOTE_EMAIL_HEADER:-Remote-Email}
+      AUTHELIA_REMOTE_NAME_HEADER: ${AUTHELIA_REMOTE_NAME_HEADER:-Remote-Name}
+      AUTHELIA_INTERNAL_URL: ${AUTHELIA_INTERNAL_URL:-http://authelia:9091}
+      AUTHELIA_USERS_DB_PATH: ${AUTHELIA_USERS_DB_PATH:-/authelia-config/users_database.yml}
     ports:
       - "8000:8000"
     healthcheck:
@@ -73,6 +88,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    volumes:
+      - ./authelia:/authelia-config
     labels:
       - traefik.enable=true
       - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
@@ -91,6 +108,7 @@ services:
       context: ./frontend
       args:
         VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+        VITE_AUTHELIA_URL: ${VITE_AUTHELIA_URL:-}
     restart: unless-stopped
     depends_on:
       backend:
@@ -108,6 +126,32 @@ services:
       - traefik.http.routers.frontend-https.service=frontend
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
+  authelia:
+    image: authelia/authelia:4.39
+    restart: unless-stopped
+    environment:
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:-change-this-authelia-reset-jwt-secret}
+      AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET:-change-this-authelia-session-secret}
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:-change-this-authelia-storage-encryption-key}
+    volumes:
+      - ./authelia:/config
+      - authelia_data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.authelia-http.rule=Host(`auth.trainlikea.pro`) || Host(`auth.train-like-a.pro`)
+      - traefik.http.routers.authelia-http.entrypoints=web
+      - traefik.http.routers.authelia-http.middlewares=redirect-to-https@docker
+      - traefik.http.routers.authelia-http.service=authelia
+      - traefik.http.routers.authelia-http.priority=1000
+      - traefik.http.routers.authelia-https.rule=Host(`auth.trainlikea.pro`) || Host(`auth.train-like-a.pro`)
+      - traefik.http.routers.authelia-https.entrypoints=websecure
+      - traefik.http.routers.authelia-https.tls=true
+      - traefik.http.routers.authelia-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.authelia-https.service=authelia
+      - traefik.http.routers.authelia-https.priority=1000
+      - traefik.http.services.authelia.loadbalancer.server.port=9091
+
 volumes:
   postgres_data:
   letsencrypt_data:
+  authelia_data:

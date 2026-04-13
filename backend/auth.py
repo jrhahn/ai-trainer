@@ -1,11 +1,12 @@
 """Password hashing, JWT creation/verification, and FastAPI auth dependency."""
 
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,12 @@ from database import get_db
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-me-in-production")
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "10080"))  # 7 days
+AUTHELIA_AUTH_ENABLED = os.environ.get("AUTHELIA_AUTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+AUTHELIA_REMOTE_USER_HEADER = os.environ.get("AUTHELIA_REMOTE_USER_HEADER", "Remote-User")
+AUTHELIA_REMOTE_EMAIL_HEADER = os.environ.get("AUTHELIA_REMOTE_EMAIL_HEADER", "Remote-Email")
+AUTHELIA_REMOTE_NAME_HEADER = os.environ.get("AUTHELIA_REMOTE_NAME_HEADER", "Remote-Name")
+AUTHELIA_INTERNAL_URL = os.environ.get("AUTHELIA_INTERNAL_URL", "").rstrip("/")
+AUTHELIA_USERS_DB_PATH = os.environ.get("AUTHELIA_USERS_DB_PATH", "")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -65,9 +72,15 @@ def decode_token(token: str) -> str:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> models.User:
+    if AUTHELIA_AUTH_ENABLED:
+        authelia_user = await _get_or_create_authelia_user(request, db)
+        if authelia_user is not None:
+            return authelia_user
+
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
     user_id = decode_token(credentials.credentials)
@@ -84,4 +97,49 @@ async def get_current_user(
     )
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+async def get_authelia_user(
+    request: Request,
+    db: AsyncSession,
+) -> models.User | None:
+    if not AUTHELIA_AUTH_ENABLED:
+        return None
+    return await _get_or_create_authelia_user(request, db)
+
+
+async def _get_or_create_authelia_user(
+    request: Request,
+    db: AsyncSession,
+) -> models.User | None:
+    email = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
+    if not email:
+        return None
+
+    user = await db.scalar(
+        select(models.User)
+        .options(
+            selectinload(models.User.training_plan),
+            selectinload(models.User.chat_messages),
+            selectinload(models.User.coach_memory),
+            selectinload(models.User.strava_token),
+            selectinload(models.User.rider_assessment),
+        )
+        .where(models.User.email == email)
+    )
+    if user is not None:
+        return user
+
+    remote_name = request.headers.get(AUTHELIA_REMOTE_NAME_HEADER)
+    remote_user = request.headers.get(AUTHELIA_REMOTE_USER_HEADER)
+    user = models.User(
+        email=email,
+        name=remote_name or remote_user,
+        # Authelia-managed users do not authenticate via local password login.
+        # A random one-way hash ensures no reusable local password exists.
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+    )
+    db.add(user)
+    await db.flush()
     return user

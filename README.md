@@ -25,10 +25,13 @@ This starts:
 - frontend on <http://localhost:5173>
 - backend on <http://localhost:8000>
 - traefik reverse proxy on <http://localhost> and <https://localhost>
-- postgres inside the compose network with a persistent named volume
+- postgres inside the compose network with a persistent named volume (`postgres_data`)
+- authelia for SSO/session-based user management (state persisted in `authelia/`)
 
 The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
+Before first deploy, replace the placeholder Authelia user in
+`authelia/users_database.yml` with your real admin account.
 
 ### Backend (Strava OAuth)
 
@@ -81,6 +84,7 @@ Traefik is configured as the public reverse proxy with Let's Encrypt TLS:
 
 - `trainlikea.pro` and `train-like-a.pro` (and any subdomain) route to the frontend
 - backend API routes (`/api`, `/healthz`) are proxied through the same domains
+- `auth.trainlikea.pro` and `auth.train-like-a.pro` route to Authelia
 
 DNS records must point to the server:
 

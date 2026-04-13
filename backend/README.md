@@ -101,6 +101,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port $PORT
 | Method | Path                    | Description                            |
 |--------|-------------------------|----------------------------------------|
 | GET    | `/healthz`              | Health check                           |
+| GET    | `/auth/session`         | Mint JWT from Authelia forwarded session |
 | GET    | `/auth/strava`          | Return Strava OAuth URL (auth required)|
 | GET    | `/auth/strava/callback` | Strava OAuth callback (code exchange)  |
 | POST   | `/auth/strava/refresh`  | Refresh an expired access token        |

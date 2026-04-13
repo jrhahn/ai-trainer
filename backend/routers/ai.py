@@ -1,5 +1,7 @@
 """AI routes."""
 
+import os
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,8 +14,27 @@ from services import ai_service
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+def _default_provider() -> str:
+    """Return the best available provider based on configured API keys.
+
+    Preference order: gemini (if GEMINI_API_KEY is set) → openai (if
+    OPENAI_API_KEY is set) → gemini (last resort so the error message
+    mentions the correct service).
+    """
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return "gemini"
+
+
 def _provider(user: models.User) -> str:
-    return user.ai_provider or "openai"
+    stored = user.ai_provider
+    if stored == "gemini" and os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    if stored == "openai" and os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return _default_provider()
 
 
 @router.post("/analyse-activities", response_model=schemas.RiderAssessmentSchema)

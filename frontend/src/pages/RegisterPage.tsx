@@ -21,9 +21,14 @@ export default function RegisterPage() {
     setError('')
     try {
       const token = await register(name, email, password)
-      setAuthToken(token)
-      await loadUserData(token)
-      navigate('/onboarding')
+      if (token) {
+        setAuthToken(token)
+        await loadUserData(token)
+        navigate('/onboarding')
+      } else {
+        // Authelia mode: account created, user must now sign in
+        navigate('/login')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {

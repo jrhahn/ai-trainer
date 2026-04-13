@@ -1,0 +1,8 @@
+users:
+  trainer:
+    disabled: false
+    displayname: Replace Me
+    email: replace-me@trainlikea.pro
+    password: "$2b$12$3Qw52vkJxljmA6PtyhLX4u3ZOyExPbbQPm2Wuyz6.4aXxuJBOmO.q"
+    groups:
+      - admins

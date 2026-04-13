@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bike, Target, Loader2, CheckCircle } from 'lucide-react'
+import { Bike, Target, Loader2, CheckCircle, Dumbbell } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { generateTrainingPlan } from '../services/ai'
@@ -55,7 +55,6 @@ export default function OnboardingPage() {
     setForm((f) => ({ ...f, [key]: value }))
 
   const canNext = () => {
-    if (step === 1) return form.name.trim().length > 0 && form.email.trim().length > 0
     if (step === 3 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
     return true
   }
@@ -141,32 +140,23 @@ export default function OnboardingPage() {
         </div>
 
         <div className="px-8 pb-8">
-          {/* Step 1: Name + Email */}
+          {/* Step 1: Welcome greeting */}
           {step === 1 && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome!</h2>
-              <p className="text-sm text-gray-500 mb-6">Let's set up your personal training profile.</p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => update('name', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="Your name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update('email', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="your@email.com"
-                  />
-                </div>
+            <div className="text-center py-4">
+              <div className="bg-amber-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <Dumbbell size={32} className="text-amber-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Welcome, {form.name || 'athlete'}! 👋
+              </h2>
+              <p className="text-gray-500 mb-4 text-sm leading-relaxed">
+                We're going to build your personalised <span className="font-semibold text-gray-700">28-day cycling training plan</span>.
+                We just need to ask a few quick questions about your riding style, goals, and current fitness level.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 text-left space-y-1">
+                <p>✅ Takes less than 2 minutes</p>
+                <p>✅ Plan adapts to your feedback week by week</p>
+                <p>✅ Your AI coach is here to answer questions anytime</p>
               </div>
             </div>
           )}

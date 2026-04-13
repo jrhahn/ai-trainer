@@ -82,6 +82,9 @@
         rsync_opts:
           - "--exclude=.git"
           - "--exclude=node_modules"
+          - "--exclude=authelia/users_database.yml"
+          - "--exclude=authelia/db.sqlite3"
+          - "--exclude=authelia/notification.txt"
           - "--delete"
 
     - name: Render deployment environment file
