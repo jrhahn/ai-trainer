@@ -29,7 +29,12 @@ def _default_provider() -> str:
 
 
 def _provider(user: models.User) -> str:
-    return user.ai_provider or _default_provider()
+    stored = user.ai_provider
+    if stored == "gemini" and os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    if stored == "openai" and os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return _default_provider()
 
 
 @router.post("/analyse-activities", response_model=schemas.RiderAssessmentSchema)
