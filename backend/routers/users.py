@@ -22,7 +22,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
 
     rider_assessment = None
     if user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(user.rider_assessment)
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(user.rider_assessment, from_attributes=True)
 
     return schemas.UserResponse(
         id=user.id,
