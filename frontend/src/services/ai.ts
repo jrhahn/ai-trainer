@@ -41,12 +41,16 @@ export const MAX_CONVERSATION_HISTORY = 20
 
 export async function analyseStravaActivities(
   activities: StravaActivity[],
-  authToken: string
+  authToken: string,
+  maxHeartRate?: number
 ): Promise<RiderAssessment> {
   return apiFetch<RiderAssessment>('/ai/analyse-activities', {
     token: authToken,
     method: 'POST',
-    body: { activities },
+    body: {
+      activities,
+      ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
+    },
   })
 }
 

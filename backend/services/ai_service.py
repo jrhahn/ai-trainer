@@ -19,7 +19,9 @@ from openai import AsyncOpenAI
 
 COACH_PERSONA = (
     "You are a professional cycling coach with extensive experience in "
-    "competitive road, track, and endurance cycling."
+    "competitive road, track, and endurance cycling. "
+    "Always address the athlete directly using 'you' — for example, "
+    "'You have excellent aerobic endurance' not 'The athlete has excellent aerobic endurance'."
 )
 MAX_CONVERSATION_HISTORY = 20
 OPENAI_MODEL = "gpt-4o-mini"
@@ -125,11 +127,155 @@ async def _chat_history(
     return await _openai_chat_history(system_prompt, messages, json_mode)
 
 
-async def analyse_strava_activities(activities: list[dict], provider: str = "openai") -> dict:
-    system_prompt = f"{COACH_PERSONA} Analyse the provided Strava activities and return a JSON assessment.\nReturn ONLY a valid JSON object with these fields (all keys double-quoted, numeric values must be plain numbers with no units):\n- \"estimatedFTP\": integer watts, or null if insufficient power data\n- \"estimatedThresholdHR\": integer bpm, or null if insufficient heart rate data\n- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n- \"notes\": string summarising the athlete's strengths, weaknesses, and how this was derived\n\nGuidelines for assessment:\n- FTP estimation from power: if weighted_average_watts or average_watts is available, use the best 20-min equivalent effort ≈ 95% of best 20-min avg power. Otherwise estimate from average_watts of long sustained efforts.\n- FTP estimation from HR: if only heart rate data is available, note that FTP estimation requires power data; use HR data to assess aerobic base.\n- Threshold HR: typically the average HR during a hard 20-30 min sustained effort, or ~85-90% of max HR.\n- Rider type: analyse power distribution (high peaks vs. sustained), climb tendency (elevation gain per km), and effort duration patterns.\n- timetrial: strong sustained power, low variability, long average efforts\n- sprinter: high max power, shorter efforts, high power variability\n- climber: high elevation gain per km, longer sustained efforts at moderate power\n- endurance: long rides, moderate intensity, high volume\n- allrounder: balanced across metrics"
-    user_msg = f"Last {len(activities)} Strava rides:\n{json.dumps(activities, indent=2)}\n\nAssess the rider's fitness level, estimated FTP, threshold heart rate, and rider type."
+def _best_n_min_power(
+    watts: list[float], time_stream: list[float], n_minutes: float
+) -> tuple[float | None, int, int]:
+    """Find the best average power over a contiguous n-minute window.
+
+    Uses a sliding-window over the time stream (cumulative seconds from start).
+    Returns (best_avg_power, start_index, end_index).  Both indices are
+    inclusive.  Returns (None, 0, 0) when there is insufficient data.
+    """
+    target_secs = n_minutes * 60.0
+    n = len(watts)
+    if n == 0 or len(time_stream) != n:
+        return None, 0, 0
+
+    best_power = 0.0
+    best_start = 0
+    best_end = 0
+    left = 0
+    window_sum = 0.0
+
+    for right in range(n):
+        window_sum += watts[right]
+        # Shrink the window from the left until it fits within the target duration
+        while time_stream[right] - time_stream[left] > target_secs:
+            window_sum -= watts[left]
+            left += 1
+        actual_dur = time_stream[right] - time_stream[left]
+        # Only accept windows that are at least 90 % of the target length
+        if actual_dur >= target_secs * 0.9:
+            count = right - left + 1
+            if count > 0:
+                avg = window_sum / count
+                if avg > best_power:
+                    best_power = avg
+                    best_start = left
+                    best_end = right
+
+    return (best_power if best_power > 0 else None), best_start, best_end
+
+
+def _compute_hr_zones(max_hr: int) -> dict:
+    """Compute 5 standard HR training zones based on percentage of max HR."""
+    return {
+        "zone1": {"low": 0, "high": round(max_hr * 0.60)},
+        "zone2": {"low": round(max_hr * 0.60), "high": round(max_hr * 0.70)},
+        "zone3": {"low": round(max_hr * 0.70), "high": round(max_hr * 0.80)},
+        "zone4": {"low": round(max_hr * 0.80), "high": round(max_hr * 0.90)},
+        "zone5": {"low": round(max_hr * 0.90), "high": max_hr},
+    }
+
+
+async def analyse_strava_activities(
+    activities: list[dict],
+    provider: str = "openai",
+    streams_by_id: dict[str, dict] | None = None,
+    max_heart_rate: int | None = None,
+) -> dict:
+    # --- Algorithmic computation from per-activity stream data ---
+    computed_ftp: int | None = None
+    computed_threshold_hr: int | None = None
+    computed_hr_zones: dict | None = None
+
+    if streams_by_id:
+        best_20min_powers: list[int] = []
+        threshold_hrs: list[int] = []
+        for streams in streams_by_id.values():
+            watts_data: list[float] = streams.get("watts", {}).get("data", [])
+            hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
+            time_data: list[float] = streams.get("time", {}).get("data", [])
+
+            if watts_data and time_data:
+                best20, start, end = _best_n_min_power(watts_data, time_data, 20)
+                if best20 is not None:
+                    best_20min_powers.append(round(best20 * 0.95))
+                    # Average HR during the best 20-min power segment
+                    if hr_data and len(hr_data) == len(time_data):
+                        segment_hr = hr_data[start : end + 1]
+                        if segment_hr:
+                            threshold_hrs.append(round(sum(segment_hr) / len(segment_hr)))
+
+        if best_20min_powers:
+            computed_ftp = max(best_20min_powers)
+        if threshold_hrs:
+            computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs))
+
+    if max_heart_rate:
+        computed_hr_zones = _compute_hr_zones(max_heart_rate)
+
+    # --- Build the contextual section describing computed metrics ---
+    computed_section = ""
+    if computed_ftp is not None:
+        computed_section += (
+            f"\nAlgorithmically estimated FTP from stream data: {computed_ftp} W "
+            "(95 % of best 20-min average power)"
+        )
+    if computed_threshold_hr is not None:
+        computed_section += (
+            f"\nAlgorithmically estimated threshold HR: {computed_threshold_hr} bpm "
+            "(average HR during best 20-min power effort)"
+        )
+    if max_heart_rate is not None:
+        computed_section += f"\nMax heart rate provided by athlete: {max_heart_rate} bpm"
+    if computed_hr_zones is not None:
+        zones_str = ", ".join(
+            f"Zone {i}: {z['low']}–{z['high']} bpm"
+            for i, z in enumerate(computed_hr_zones.values(), 1)
+        )
+        computed_section += f"\nHR training zones: {zones_str}"
+
+    system_prompt = (
+        f"{COACH_PERSONA} Analyse the provided Strava activities and return a JSON assessment.\n"
+        "Return ONLY a valid JSON object with these fields "
+        "(all keys double-quoted, numeric values must be plain numbers with no units):\n"
+        "- \"estimatedFTP\": integer watts — use the pre-computed value when provided, "
+        "otherwise estimate from activity summaries; null if no power data\n"
+        "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
+        "otherwise estimate from activity summaries; null if no HR data\n"
+        "- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n"
+        "- \"notes\": a concise assessment addressed directly to the athlete using 'you'. "
+        "Mention their strengths, rider type, and key observations from their rides. "
+        "Example: 'You show strong sustained power over long efforts, which marks you as a time-trial type rider. "
+        "Your aerobic base looks solid…'\n\n"
+        "Rider-type guidelines:\n"
+        "- timetrial: strong sustained power, low variability, long average efforts\n"
+        "- sprinter: high max power, shorter efforts, high power variability\n"
+        "- climber: high elevation gain per km, longer sustained efforts at moderate power\n"
+        "- endurance: long rides, moderate intensity, high volume\n"
+        "- allrounder: balanced across metrics"
+    )
+
+    user_msg = (
+        f"Last {len(activities)} Strava rides:\n{json.dumps(activities, indent=2)}"
+        f"{computed_section}\n\n"
+        "Assess my fitness. When pre-computed FTP/threshold HR values are given, "
+        "use them verbatim for estimatedFTP and estimatedThresholdHR."
+    )
+
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
-    return _parse_ai_json(raw)
+    parsed = _parse_ai_json(raw)
+
+    # Override with algorithmically derived values so the AI cannot contradict them
+    if computed_ftp is not None:
+        parsed["estimatedFTP"] = computed_ftp
+    if computed_threshold_hr is not None:
+        parsed["estimatedThresholdHR"] = computed_threshold_hr
+    if computed_hr_zones is not None:
+        parsed["hrZones"] = computed_hr_zones
+
+    return parsed
 
 
 async def generate_training_plan(

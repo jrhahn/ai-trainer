@@ -98,11 +98,25 @@ export interface StravaActivity {
   max_heartrate?: number
 }
 
+export interface HrZone {
+  low: number
+  high: number
+}
+
+export interface HrZones {
+  zone1: HrZone
+  zone2: HrZone
+  zone3: HrZone
+  zone4: HrZone
+  zone5: HrZone
+}
+
 export interface RiderAssessment {
   estimatedFTP?: number
   estimatedThresholdHR?: number
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string
+  hrZones?: HrZones
 }
 
 interface AppState {

@@ -146,6 +146,7 @@ class RiderAssessment(Base):
     estimated_threshold_hr: Mapped[int | None] = mapped_column(Integer)
     rider_type: Mapped[str] = mapped_column(String(50), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
+    hr_zones: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")

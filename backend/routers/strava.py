@@ -200,7 +200,7 @@ async def strava_refresh(
     )
 
 
-async def _ensure_fresh_token(
+async def ensure_fresh_strava_token(
     token_row: models.StravaToken,
     db: AsyncSession,
 ) -> str:
@@ -229,6 +229,25 @@ async def _ensure_fresh_token(
     return token_row.access_token
 
 
+async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
+    """Fetch per-second timeseries streams for a single Strava activity.
+
+    Returns a dict keyed by stream type (e.g. "watts", "heartrate") whose
+    values are Strava stream objects with a ``data`` list.  Returns an empty
+    dict if the activity has no stream data or the request fails.
+    """
+    keys = "watts,heartrate,cadence,velocity_smooth,altitude,time"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}/streams",
+            params={"keys": keys, "key_by_type": "true"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if not resp.is_success:
+        return {}
+    return resp.json()
+
+
 @router.get("/strava/activities")
 async def get_strava_activities(
     db: AsyncSession = Depends(get_db),
@@ -237,7 +256,7 @@ async def get_strava_activities(
     if current_user.strava_token is None:
         raise HTTPException(status_code=404, detail="Strava not connected")
 
-    access_token = await _ensure_fresh_token(current_user.strava_token, db)
+    access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
 
     async with httpx.AsyncClient() as client:
         resp = await client.get(

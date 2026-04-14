@@ -116,7 +116,11 @@ export default function OnboardingPage() {
         const activities = await getStravaActivities(authToken)
         const recentActivities = activities.slice(0, 7)
         if (recentActivities.length > 0) {
-          riderAssessment = await analyseStravaActivities(recentActivities, authToken)
+        riderAssessment = await analyseStravaActivities(
+            recentActivities,
+            authToken,
+            form.maxHeartRate ? Number(form.maxHeartRate) : undefined
+          )
           profileForPlan = {
             ...profile,
             currentFTP: profile.currentFTP ?? riderAssessment.estimatedFTP,
@@ -417,8 +421,25 @@ export default function OnboardingPage() {
                   </div>
                 )}
                 {form.assessmentMethod === 'strava' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
-                    We will analyse your last 7 rides to estimate FTP and threshold HR. Manual values can be added later.
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional but recommended</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.maxHeartRate}
+                        onChange={(e) => update('maxHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 185"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        A rough estimate: 220 minus your age (e.g. age 35 → ~185 bpm). Providing this enables precise HR training zones.
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
+                      We&apos;ll download and analyse your last 7 rides — including detailed power, HR, cadence, and speed data — to estimate your FTP and training zones.
+                    </div>
                   </div>
                 )}
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -478,7 +499,7 @@ export default function OnboardingPage() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    {form.assessmentMethod === 'strava' ? 'Analysing rides and generating plan...' : 'Generating your plan...'}
+                    {form.assessmentMethod === 'strava' ? 'Downloading rides and generating plan...' : 'Generating your plan...'}
                   </>
                 ) : (
                   <>

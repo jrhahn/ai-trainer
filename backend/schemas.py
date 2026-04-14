@@ -75,6 +75,7 @@ class RiderAssessmentSchema(CamelModel):
     estimated_threshold_hr: Optional[int] = None
     rider_type: str
     notes: str
+    hr_zones: Optional[Any] = None
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +248,7 @@ class UserProfileSchema(CamelModel):
 
 class AnalyseActivitiesRequest(CamelModel):
     activities: list[StravaActivitySchema]
+    max_heart_rate: Optional[int] = None
 
 
 class GeneratePlanRequest(CamelModel):
