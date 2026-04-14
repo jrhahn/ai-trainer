@@ -38,6 +38,29 @@ async def test_strava_auth_redirect_contains_state(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_strava_auth_uses_runtime_env_credentials(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("STRAVA_CLIENT_ID", "runtime-client-id")
+    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "runtime-client-secret")
+
+    response = await client.get("/api/v1/auth/strava", headers=auth_headers)
+
+    assert response.status_code == 200
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(response.json()["authUrl"]).query)
+    assert query["client_id"][0] == "runtime-client-id"
+
+
+@pytest.mark.asyncio
+async def test_strava_auth_shows_server_side_setup_message(client, auth_headers, monkeypatch):
+    monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+
+    response = await client.get("/api/v1/auth/strava", headers=auth_headers)
+
+    assert response.status_code == 500
+    assert "users do not need their own API keys" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_get_strava_activities_uses_stored_token(client, auth_headers, monkeypatch):
     class FakeAsyncClient:
         async def __aenter__(self):

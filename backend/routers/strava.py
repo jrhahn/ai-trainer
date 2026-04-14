@@ -15,10 +15,6 @@ import models
 import schemas
 from database import get_db
 
-STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID", "")
-STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET", "")
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 STRAVA_OAUTH_BASE = "https://www.strava.com"
 
 router = APIRouter(tags=["strava"])
@@ -40,14 +36,43 @@ class StravaAuthResponse(schemas.CamelModel):
     auth_url: str
 
 
+def _strava_client_id() -> str:
+    return os.environ.get("STRAVA_CLIENT_ID", "")
+
+
+def _strava_client_secret() -> str:
+    return os.environ.get("STRAVA_CLIENT_SECRET", "")
+
+
+def _frontend_url() -> str:
+    # FRONTEND_URL may be a comma-separated list of allowed origins; use only the first entry
+    raw = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    return raw.split(",")[0].strip().rstrip("/")
+
+
+def _backend_url() -> str:
+    server_url = os.environ.get("SERVER_URL", "").rstrip("/")
+    if server_url:
+        if "://" not in server_url:
+            server_url = f"https://{server_url}"
+        return server_url
+    return os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
+
+
 @router.get("/auth/strava")
 async def strava_auth(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> StravaAuthResponse:
-    if not STRAVA_CLIENT_ID or not STRAVA_CLIENT_SECRET:
+    strava_client_id = _strava_client_id()
+    strava_client_secret = _strava_client_secret()
+    if not strava_client_id or not strava_client_secret:
         raise HTTPException(
             status_code=500,
-            detail="Strava credentials are not configured on the server.",
+            detail=(
+                "Strava credentials are not configured on the server. "
+                "The server owner must set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET once; "
+                "users do not need their own API keys."
+            ),
         )
 
     now = time.time()
@@ -58,10 +83,10 @@ async def strava_auth(
     state = secrets.token_urlsafe(32)
     _oauth_states[state] = (current_user.id, now + STATE_TTL_SECONDS)
 
-    callback_uri = f"{BACKEND_URL}/api/v1/auth/strava/callback"
+    callback_uri = f"{_backend_url()}/api/v1/auth/strava/callback"
     params = urllib.parse.urlencode(
         {
-            "client_id": STRAVA_CLIENT_ID,
+            "client_id": strava_client_id,
             "redirect_uri": callback_uri,
             "response_type": "code",
             "approval_prompt": "force",
@@ -83,28 +108,28 @@ async def strava_callback(
         safe_error = urllib.parse.quote(
             "Strava authorisation was denied or failed. Please try again."
         )
-        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error={safe_error}")
+        return RedirectResponse(f"{_frontend_url()}/strava/callback?error={safe_error}")
 
     state_data = _oauth_states.pop(state, None)
     if state_data is None:
         return RedirectResponse(
-            f"{FRONTEND_URL}/strava/callback?error=Invalid%20or%20expired%20state"
+            f"{_frontend_url()}/strava/callback?error=Invalid%20or%20expired%20state"
         )
 
     user_id, expires_at = state_data
     if expires_at <= time.time():
-        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error=State%20expired")
+        return RedirectResponse(f"{_frontend_url()}/strava/callback?error=State%20expired")
 
     user = await db.get(models.User, user_id)
     if user is None:
-        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error=User%20not%20found")
+        return RedirectResponse(f"{_frontend_url()}/strava/callback?error=User%20not%20found")
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{STRAVA_OAUTH_BASE}/oauth/token",
             json={
-                "client_id": STRAVA_CLIENT_ID,
-                "client_secret": STRAVA_CLIENT_SECRET,
+                "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
                 "code": code,
                 "grant_type": "authorization_code",
             },
@@ -112,7 +137,7 @@ async def strava_callback(
 
     if not resp.is_success:
         msg = urllib.parse.quote("Token exchange failed. Please try again.")
-        return RedirectResponse(f"{FRONTEND_URL}/strava/callback?error={msg}")
+        return RedirectResponse(f"{_frontend_url()}/strava/callback?error={msg}")
 
     data = resp.json()
     athlete = data.get("athlete", {})
@@ -137,7 +162,7 @@ async def strava_callback(
         token_row.athlete_name = athlete_name
 
     await db.flush()
-    return RedirectResponse(f"{FRONTEND_URL}/strava/callback?success=true")
+    return RedirectResponse(f"{_frontend_url()}/strava/callback?success=true")
 
 
 @router.post("/auth/strava/refresh", response_model=RefreshResponse)
@@ -150,8 +175,8 @@ async def strava_refresh(
         resp = await client.post(
             f"{STRAVA_OAUTH_BASE}/oauth/token",
             json={
-                "client_id": STRAVA_CLIENT_ID,
-                "client_secret": STRAVA_CLIENT_SECRET,
+                "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
                 "refresh_token": body.refresh_token,
                 "grant_type": "refresh_token",
             },
@@ -175,18 +200,50 @@ async def strava_refresh(
     )
 
 
+async def _ensure_fresh_token(
+    token_row: models.StravaToken,
+    db: AsyncSession,
+) -> str:
+    """Return a valid access token, refreshing it first if expired."""
+    if token_row.expires_at >= time.time():
+        return token_row.access_token
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{STRAVA_OAUTH_BASE}/oauth/token",
+            json={
+                "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
+                "refresh_token": token_row.refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+    if not resp.is_success:
+        raise HTTPException(status_code=401, detail="Strava token expired and could not be refreshed")
+
+    data = resp.json()
+    token_row.access_token = data["access_token"]
+    token_row.refresh_token = data["refresh_token"]
+    token_row.expires_at = data["expires_at"]
+    await db.flush()
+    return token_row.access_token
+
+
 @router.get("/strava/activities")
 async def get_strava_activities(
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
     if current_user.strava_token is None:
         raise HTTPException(status_code=404, detail="Strava not connected")
 
+    access_token = await _ensure_fresh_token(current_user.strava_token, db)
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{STRAVA_OAUTH_BASE}/api/v3/athlete/activities",
             params={"per_page": 10},
-            headers={"Authorization": f"Bearer {current_user.strava_token.access_token}"},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
     if not resp.is_success:
         raise HTTPException(status_code=resp.status_code, detail="Failed to fetch Strava activities")

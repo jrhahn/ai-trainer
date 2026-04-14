@@ -39,7 +39,8 @@ cp .env.example .env
 | `STRAVA_CLIENT_ID`    | **Required.** Your Strava app's Client ID               | –                          |
 | `STRAVA_CLIENT_SECRET`| **Required.** Your Strava app's Client Secret           | –                          |
 | `FRONTEND_URL`        | URL where the React app is served                        | `http://localhost:5173`    |
-| `BACKEND_URL`         | Public URL of this backend (must match Strava's callback)| `http://localhost:8000`    |
+| `SERVER_URL`          | Bare public domain (e.g. `trainlikea.pro`); `https://` is prepended automatically to build the Strava callback URL. Takes priority over `BACKEND_URL`. | – |
+| `BACKEND_URL`         | Full public URL fallback when `SERVER_URL` is not set (local dev) | `http://localhost:8000` |
 
 ### 3. Install dependencies
 
@@ -85,8 +86,8 @@ Then restart the Vite dev server (`npm run dev`).
 ## Production deployment
 
 Deploy this server on any platform that supports Python (Render, Railway,
-Fly.io, AWS Lambda via Mangum, etc.).  Set `BACKEND_URL` to your server's
-public HTTPS URL and update the **Authorization Callback Domain** in your
+Fly.io, AWS Lambda via Mangum, etc.).  Set `SERVER_URL` to your server's
+public domain (e.g. `trainlikea.pro`) and update the **Authorization Callback Domain** in your
 Strava app settings to match.
 
 Most platforms detect `pyproject.toml` and run `uv sync` automatically.
