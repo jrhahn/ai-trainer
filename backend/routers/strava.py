@@ -200,18 +200,50 @@ async def strava_refresh(
     )
 
 
+async def _ensure_fresh_token(
+    token_row: models.StravaToken,
+    db: AsyncSession,
+) -> str:
+    """Return a valid access token, refreshing it first if expired."""
+    if token_row.expires_at > time.time():
+        return token_row.access_token
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{STRAVA_OAUTH_BASE}/oauth/token",
+            json={
+                "client_id": _strava_client_id(),
+                "client_secret": _strava_client_secret(),
+                "refresh_token": token_row.refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+    if not resp.is_success:
+        raise HTTPException(status_code=401, detail="Strava token expired and could not be refreshed")
+
+    data = resp.json()
+    token_row.access_token = data["access_token"]
+    token_row.refresh_token = data["refresh_token"]
+    token_row.expires_at = data["expires_at"]
+    await db.flush()
+    return token_row.access_token
+
+
 @router.get("/strava/activities")
 async def get_strava_activities(
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
     if current_user.strava_token is None:
         raise HTTPException(status_code=404, detail="Strava not connected")
 
+    access_token = await _ensure_fresh_token(current_user.strava_token, db)
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{STRAVA_OAUTH_BASE}/api/v3/athlete/activities",
             params={"per_page": 10},
-            headers={"Authorization": f"Bearer {current_user.strava_token.access_token}"},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
     if not resp.is_success:
         raise HTTPException(status_code=resp.status_code, detail="Failed to fetch Strava activities")
