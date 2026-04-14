@@ -205,7 +205,7 @@ async def _ensure_fresh_token(
     db: AsyncSession,
 ) -> str:
     """Return a valid access token, refreshing it first if expired."""
-    if token_row.expires_at > time.time():
+    if token_row.expires_at >= time.time():
         return token_row.access_token
 
     async with httpx.AsyncClient() as client:
