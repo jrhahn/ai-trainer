@@ -442,13 +442,6 @@ export default function OnboardingPage() {
                 We&apos;ll generate your first 14-day plan{form.assessmentMethod === 'strava' ? ' after ride analysis' : ''}.
               </p>
 
-              <div className="space-y-4 mb-5">
-                <div className="bg-blue-50 rounded-xl p-4 text-xs text-blue-700">
-                  <strong>Tip:</strong> If you do not know your max HR, a rough estimate is 220 minus your age.
-                  Resting HR is best measured in the morning before getting up.
-                </div>
-              </div>
-
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(
                   [

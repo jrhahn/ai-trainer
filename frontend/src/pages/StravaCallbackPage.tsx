@@ -28,11 +28,14 @@ export default function StravaCallbackPage() {
       return
     }
 
-    setStatus('success')
-    if (authToken) {
-      void loadUserData(authToken)
+    const finalise = async () => {
+      setStatus('success')
+      if (authToken) {
+        await loadUserData(authToken).catch(() => {})
+      }
+      navigate('/')
     }
-    setTimeout(() => navigate('/'), 1500)
+    void finalise()
   }, [authToken, loadUserData, navigate])
 
   return (

@@ -1,4 +1,26 @@
 import { create } from 'zustand'
+
+const SESSION_TOKEN_KEY = 'ai_trainer_auth_token'
+
+function readStoredToken(): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function persistToken(token: string | null): void {
+  try {
+    if (token) {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, token)
+    } else {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY)
+    }
+  } catch {
+    // sessionStorage may be unavailable in some contexts; silently ignore
+  }
+}
 import {
   fetchChatHistory,
   fetchCoachMemory,
@@ -147,9 +169,17 @@ function mergePlanWithWorkouts(
 export const useAppStore = create<AppState>()(
   (set, get) => ({
     ...initialState,
+    // Restore token from sessionStorage on app load (survives OAuth page reloads)
+    authToken: readStoredToken(),
 
-    setAuthToken: (token) => set({ authToken: token }),
-    logout: () => set(initialState),
+    setAuthToken: (token) => {
+      persistToken(token)
+      set({ authToken: token })
+    },
+    logout: () => {
+      persistToken(null)
+      set(initialState)
+    },
     setUserProfile: (profile) => set({ userProfile: profile }),
     setTrainingPlan: (plan) => set({ trainingPlan: plan }),
     logWorkout: (date, feedback) =>
@@ -170,7 +200,10 @@ export const useAppStore = create<AppState>()(
           day.date === date ? { ...day, ...updates } : day
         ),
       })),
-    resetAll: () => set(initialState),
+    resetAll: () => {
+      persistToken(null)
+      set(initialState)
+    },
     addChatMessage: (msg) =>
       set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
     setCoachMemory: (memory) => set({ coachMemory: memory }),
@@ -205,6 +238,7 @@ export const useAppStore = create<AppState>()(
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to load user data'
         if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
+          persistToken(null)
           set(initialState)
         }
         throw error
