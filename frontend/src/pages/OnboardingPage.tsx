@@ -434,7 +434,7 @@ export default function OnboardingPage() {
                         placeholder="e.g. 185"
                       />
                       <p className="text-xs text-gray-400 mt-1">
-                        A rough estimate: 220 minus your age (e.g. age 35 → ~185 bpm). Providing this enables precise HR training zones.
+                        A rough estimate: 220 minus your age (e.g. age 35 gives ~185 bpm). Providing this enables precise HR training zones.
                       </p>
                     </div>
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">

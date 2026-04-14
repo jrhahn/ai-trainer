@@ -154,7 +154,9 @@ def _best_n_min_power(
             window_sum -= watts[left]
             left += 1
         actual_dur = time_stream[right] - time_stream[left]
-        # Only accept windows that are at least 90 % of the target length
+        # Only accept windows that cover at least 90 % of the target duration.
+        # Shorter windows (e.g. due to GPS gaps at the start or end of a ride)
+        # would inflate the average power and produce an unreliable FTP estimate.
         if actual_dur >= target_secs * 0.9:
             count = right - left + 1
             if count > 0:
@@ -200,6 +202,9 @@ async def analyse_strava_activities(
             if watts_data and time_data:
                 best20, start, end = _best_n_min_power(watts_data, time_data, 20)
                 if best20 is not None:
+                    # FTP is conventionally defined as 95 % of best 20-min average power.
+                    # This scaling factor accounts for the difference between a maximal
+                    # 20-min effort and a true 60-min sustainable power output.
                     best_20min_powers.append(round(best20 * 0.95))
                     # Average HR during the best 20-min power segment
                     if hr_data and len(hr_data) == len(time_data):
