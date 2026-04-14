@@ -45,7 +45,9 @@ def _strava_client_secret() -> str:
 
 
 def _frontend_url() -> str:
-    return os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    # FRONTEND_URL may be a comma-separated list of allowed origins; use only the first entry
+    raw = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    return raw.split(",")[0].strip().rstrip("/")
 
 
 def _backend_url() -> str:
