@@ -49,6 +49,11 @@ def _frontend_url() -> str:
 
 
 def _backend_url() -> str:
+    server_url = os.environ.get("SERVER_URL", "").rstrip("/")
+    if server_url:
+        if "://" not in server_url:
+            server_url = f"https://{server_url}"
+        return server_url
     return os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 
