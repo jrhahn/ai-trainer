@@ -50,15 +50,22 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
+    const hasManualMetrics = Boolean(
+      userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate
+    )
+    if (hasManualMetrics || !stravaConnection) return 'manual'
+    return 'strava'
+  }
+
   const [form, setForm] = useState<FormData>({
     name: userProfile?.name ?? '',
     email: userProfile?.email ?? '',
     trainingGoal: userProfile?.trainingGoal ?? 'general_fitness',
     raceDate: userProfile?.raceDate ?? '',
     raceDescription: userProfile?.raceDescription ?? '',
-    assessmentMethod: userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate || !stravaConnection
-      ? 'manual'
-      : 'strava',
+    assessmentMethod: defaultAssessmentMethod(),
     weeklyHours: userProfile?.weeklyHours ?? 8,
     followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
@@ -82,6 +89,7 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
+    // Threshold HR is typically ~87% of max HR for trained cyclists.
     const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
     let riderAssessment: RiderAssessment | undefined
 
