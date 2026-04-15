@@ -58,6 +58,7 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  sessionStorage.clear()
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue(undefined)
   mockSaveTrainingPlan.mockResolvedValue([])

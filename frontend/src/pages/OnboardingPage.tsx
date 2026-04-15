@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Bike, Target, Loader2, CheckCircle, Dumbbell, Link } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
@@ -8,6 +8,32 @@ import { getStravaActivities } from '../services/strava'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 
 const TOTAL_STEPS = 5
+const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
+
+function readOnboardingProgress(): { step: number; form: FormData } | null {
+  try {
+    const raw = sessionStorage.getItem(ONBOARDING_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as { step: number; form: FormData }) : null
+  } catch {
+    return null
+  }
+}
+
+function saveOnboardingProgress(step: number, form: FormData): void {
+  try {
+    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify({ step, form }))
+  } catch {
+    // sessionStorage may be unavailable; silently ignore
+  }
+}
+
+function clearOnboardingProgress(): void {
+  try {
+    sessionStorage.removeItem(ONBOARDING_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 type FormData = {
   name: string
@@ -46,10 +72,6 @@ export default function OnboardingPage() {
     }))
   )
 
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
   const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
     const hasManualMetrics = Boolean(
       userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate
@@ -58,7 +80,7 @@ export default function OnboardingPage() {
     return 'strava'
   }
 
-  const [form, setForm] = useState<FormData>({
+  const defaultForm = (): FormData => ({
     name: userProfile?.name ?? '',
     email: userProfile?.email ?? '',
     trainingGoal: userProfile?.trainingGoal ?? 'general_fitness',
@@ -71,6 +93,18 @@ export default function OnboardingPage() {
     restingHeartRate: userProfile?.restingHeartRate ? String(userProfile.restingHeartRate) : '',
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
   })
+
+  // Restore progress saved before the Strava OAuth redirect (if any).
+  const savedProgress = readOnboardingProgress()
+  const [step, setStep] = useState(savedProgress?.step ?? 1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState<FormData>(savedProgress?.form ?? defaultForm())
+
+  // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
+  useEffect(() => {
+    saveOnboardingProgress(step, form)
+  }, [step, form])
 
   const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -143,6 +177,7 @@ export default function OnboardingPage() {
       setStravaAnalysisComplete(stravaAnalysisComplete)
       setUserProfile(profileForPlan)
       setTrainingPlan(plan)
+      clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate plan.')
