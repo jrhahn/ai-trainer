@@ -75,6 +75,7 @@ class RiderAssessmentSchema(CamelModel):
     estimated_threshold_hr: Optional[int] = None
     rider_type: str
     notes: str
+    hr_zones: Optional[Any] = None
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +103,7 @@ class UserResponse(CamelModel):
     follows_training_plan: bool = False
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
@@ -128,6 +130,7 @@ class UpdateProfileRequest(CamelModel):
     follows_training_plan: Optional[bool] = None
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
@@ -237,16 +240,18 @@ class UserProfileSchema(CamelModel):
     training_goal: str
     race_date: Optional[str] = None
     race_description: Optional[str] = None
-    weekly_hours: float
+    weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
 
 
 class AnalyseActivitiesRequest(CamelModel):
     activities: list[StravaActivitySchema]
+    max_heart_rate: Optional[int] = None
 
 
 class GeneratePlanRequest(CamelModel):
@@ -271,6 +276,7 @@ class AskTrainerRequest(CamelModel):
     profile: UserProfileSchema
     coach_memory: Optional[str] = None
     conversation_history: Optional[list[ConversationMessageSchema]] = None
+    context_workout: Optional[Any] = None
 
 
 class PlanDayUpdateSchema(CamelModel):
@@ -281,6 +287,7 @@ class PlanDayUpdateSchema(CamelModel):
     duration_minutes: Optional[int] = None
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
+    intervals: Optional[list[Any]] = None
 
 
 class AskTrainerResponse(CamelModel):

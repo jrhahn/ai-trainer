@@ -27,12 +27,7 @@ frontend/dist-ssr
 # Python backend
 backend/.venv
 backend/__pycache__
+backend/**/__pycache__
 backend/*.pyc
 backend/.env
-authelia/db.sqlite3
-authelia/notification.txt
-# uv cache (never commit the ephemeral cache dir)
-.uv-cache/
-# direnv cache
-.direnv/
-node_modules
+backend/pytest.db

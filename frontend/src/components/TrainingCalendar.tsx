@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle } from 'lucide-react'
+import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
@@ -24,8 +25,9 @@ const typeEmoji: Record<TrainingDay['workoutType'], string> = {
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-export default function TrainingCalendar({ plan }: { plan: TrainingDay[] }) {
+export default function TrainingCalendar() {
   const navigate = useNavigate()
+  const plan = useAppStore((s) => s.trainingPlan)
   const today = new Date().toISOString().split('T')[0]
 
   const firstDate = plan.length > 0 ? new Date(plan[0].date + 'T12:00:00') : new Date()

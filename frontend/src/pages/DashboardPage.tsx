@@ -7,6 +7,7 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
+import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import { getStravaActivities } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
@@ -169,6 +170,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Fitness metrics */}
+      <FitnessMetricsCard />
+
       {/* Strava */}
       <StravaConnect />
 
@@ -217,7 +221,7 @@ export default function DashboardPage() {
       {/* Calendar */}
       <div>
         <h2 className="text-base font-bold text-gray-800 mb-2">Training Calendar</h2>
-        <TrainingCalendar plan={trainingPlan} />
+        <TrainingCalendar />
       </div>
 
       {/* AI Coach Chat */}

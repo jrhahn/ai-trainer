@@ -23,6 +23,7 @@ interface BackendUserResponse {
   followsTrainingPlan: boolean
   restingHeartRate?: number
   maxHeartRate?: number
+  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -53,6 +54,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       followsTrainingPlan: user.followsTrainingPlan ?? false,
       restingHeartRate: user.restingHeartRate,
       maxHeartRate: user.maxHeartRate,
+      thresholdHeartRate: user.thresholdHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -82,6 +84,7 @@ export async function updateCurrentUser(
     followsTrainingPlan: updates.followsTrainingPlan,
     restingHeartRate: updates.restingHeartRate,
     maxHeartRate: updates.maxHeartRate,
+    thresholdHeartRate: updates.thresholdHeartRate,
     currentFTP: updates.currentFTP,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,

@@ -14,6 +14,7 @@ type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 export interface AskTrainerOptions {
   coachMemory?: string
   conversationHistory?: ConversationMessage[]
+  contextWorkout?: TrainingDay
 }
 
 export interface PlanDayUpdate {
@@ -24,6 +25,7 @@ export interface PlanDayUpdate {
   durationMinutes?: number
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
+  intervals?: TrainingDay['intervals']
 }
 
 export interface AskTrainerResult {
@@ -41,12 +43,16 @@ export const MAX_CONVERSATION_HISTORY = 20
 
 export async function analyseStravaActivities(
   activities: StravaActivity[],
-  authToken: string
+  authToken: string,
+  maxHeartRate?: number
 ): Promise<RiderAssessment> {
   return apiFetch<RiderAssessment>('/ai/analyse-activities', {
     token: authToken,
     method: 'POST',
-    body: { activities },
+    body: {
+      activities,
+      ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
+    },
   })
 }
 
@@ -91,6 +97,7 @@ export async function askTrainer(
       profile,
       coachMemory: options.coachMemory,
       conversationHistory: options.conversationHistory,
+      contextWorkout: options.contextWorkout,
     },
   })
 

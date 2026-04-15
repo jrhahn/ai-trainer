@@ -72,6 +72,7 @@ export default function AIChat({ contextWorkout }: Props) {
       const result = await askTrainer(userMsg, trainingPlan, userProfile, authToken, {
         coachMemory,
         conversationHistory: recentHistory,
+        contextWorkout,
       })
 
       let planUpdateCount = 0

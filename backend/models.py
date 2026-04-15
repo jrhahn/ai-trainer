@@ -36,6 +36,7 @@ class User(Base):
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
+    threshold_heart_rate: Mapped[int | None] = mapped_column(Integer)
     current_ftp: Mapped[int | None] = mapped_column(Integer)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
@@ -146,6 +147,7 @@ class RiderAssessment(Base):
     estimated_threshold_hr: Mapped[int | None] = mapped_column(Integer)
     rider_type: Mapped[str] = mapped_column(String(50), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
+    hr_zones: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")

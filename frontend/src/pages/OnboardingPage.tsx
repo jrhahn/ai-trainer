@@ -1,20 +1,69 @@
-import { useState } from 'react'
-import { Bike, Target, Loader2, CheckCircle, Dumbbell } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Bike, Target, Loader2, CheckCircle, Dumbbell, Link } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useAppStore, type UserProfile } from '../store/useAppStore'
-import { generateTrainingPlan } from '../services/ai'
+import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
+import StravaConnect from '../components/StravaConnect'
+import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
+import { getStravaActivities } from '../services/strava'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 
 const TOTAL_STEPS = 5
+const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
+
+// Only non-sensitive fields are persisted across the OAuth redirect.
+// Health metrics (HR, FTP) are intentionally excluded and re-populated
+// from the user profile on restore to avoid clear-text health data in storage.
+type PersistedProgress = {
+  step: number
+  trainingGoal: FormData['trainingGoal']
+  raceDate: string
+  raceDescription: string
+  assessmentMethod: FormData['assessmentMethod']
+  followsTrainingPlan: boolean
+  fitnessLevel: FormData['fitnessLevel']
+}
+
+function readOnboardingProgress(): PersistedProgress | null {
+  try {
+    const raw = sessionStorage.getItem(ONBOARDING_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as PersistedProgress) : null
+  } catch {
+    return null
+  }
+}
+
+function saveOnboardingProgress(step: number, form: FormData): void {
+  try {
+    const progress: PersistedProgress = {
+      step,
+      trainingGoal: form.trainingGoal,
+      raceDate: form.raceDate,
+      raceDescription: form.raceDescription,
+      assessmentMethod: form.assessmentMethod,
+      followsTrainingPlan: form.followsTrainingPlan,
+      fitnessLevel: form.fitnessLevel,
+    }
+    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
+  } catch {
+    // sessionStorage may be unavailable; silently ignore
+  }
+}
+
+function clearOnboardingProgress(): void {
+  try {
+    sessionStorage.removeItem(ONBOARDING_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 type FormData = {
   name: string
   email: string
-  bikeType: UserProfile['bikeType']
   trainingGoal: UserProfile['trainingGoal']
   raceDate: string
   raceDescription: string
-  weeklyHours: number
+  assessmentMethod: 'strava' | 'manual'
   followsTrainingPlan: boolean
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
@@ -23,27 +72,43 @@ type FormData = {
 }
 
 export default function OnboardingPage() {
-  const { userProfile, authToken, setUserProfile, setTrainingPlan, setOnboarded } = useAppStore(
+  const {
+    userProfile,
+    authToken,
+    stravaConnection,
+    setUserProfile,
+    setTrainingPlan,
+    setRiderAssessment,
+    setStravaAnalysisComplete,
+    setOnboarded,
+  } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       authToken: s.authToken,
+      stravaConnection: s.stravaConnection,
       setUserProfile: s.setUserProfile,
       setTrainingPlan: s.setTrainingPlan,
+      setRiderAssessment: s.setRiderAssessment,
+      setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setOnboarded: s.setOnboarded,
     }))
   )
 
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState<FormData>({
+  const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
+    const hasManualMetrics = Boolean(
+      userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate
+    )
+    if (hasManualMetrics || !stravaConnection) return 'manual'
+    return 'strava'
+  }
+
+  const defaultForm = (): FormData => ({
     name: userProfile?.name ?? '',
     email: userProfile?.email ?? '',
-    bikeType: userProfile?.bikeType ?? 'road',
     trainingGoal: userProfile?.trainingGoal ?? 'general_fitness',
     raceDate: userProfile?.raceDate ?? '',
     raceDescription: userProfile?.raceDescription ?? '',
-    weeklyHours: userProfile?.weeklyHours ?? 8,
+    assessmentMethod: defaultAssessmentMethod(),
     followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
@@ -51,11 +116,37 @@ export default function OnboardingPage() {
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
   })
 
+  // Restore progress saved before the Strava OAuth redirect (if any).
+  const savedProgress = readOnboardingProgress()
+  const [step, setStep] = useState(savedProgress?.step ?? 1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState<FormData>(() => {
+    const base = defaultForm()
+    if (!savedProgress) return base
+    // Merge persisted non-sensitive fields with health metrics from the user profile.
+    return {
+      ...base,
+      trainingGoal: savedProgress.trainingGoal,
+      raceDate: savedProgress.raceDate,
+      raceDescription: savedProgress.raceDescription,
+      assessmentMethod: savedProgress.assessmentMethod,
+      followsTrainingPlan: savedProgress.followsTrainingPlan,
+      fitnessLevel: savedProgress.fitnessLevel,
+    }
+  })
+
+  // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
+  useEffect(() => {
+    saveOnboardingProgress(step, form)
+  }, [step, form])
+
   const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
   const canNext = () => {
-    if (step === 3 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
+    if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
+    if (step === 3 && form.assessmentMethod === 'strava') return Boolean(stravaConnection)
     return true
   }
 
@@ -65,14 +156,18 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
+    // Threshold HR is typically ~87% of max HR for trained cyclists.
+    // Must stay in sync with _LTHR_RATIO in backend/services/ai_service.py.
+    const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
+    let riderAssessment: RiderAssessment | undefined
+
     const profile: UserProfile = {
       name: form.name,
       email: form.email,
-      bikeType: form.bikeType,
+      bikeType: userProfile?.bikeType ?? 'road',
       trainingGoal: form.trainingGoal,
       raceDate: form.raceDate || undefined,
       raceDescription: form.raceDescription || undefined,
-      weeklyHours: form.weeklyHours,
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
@@ -81,11 +176,43 @@ export default function OnboardingPage() {
     }
 
     try {
-      await updateCurrentUser(authToken, { ...profile, isOnboarded: true })
-      const plan = await generateTrainingPlan(profile, authToken)
+      let profileForPlan = profile
+      let stravaAnalysisComplete = false
+
+      if (form.assessmentMethod === 'strava' && stravaConnection) {
+        const activities = await getStravaActivities(authToken)
+        const recentActivities = activities.slice(0, 7)
+        if (recentActivities.length > 0) {
+        riderAssessment = await analyseStravaActivities(
+            recentActivities,
+            authToken,
+            form.maxHeartRate ? Number(form.maxHeartRate) : undefined
+          )
+          profileForPlan = {
+            ...profile,
+            currentFTP: profile.currentFTP ?? riderAssessment.estimatedFTP,
+            maxHeartRate: profile.maxHeartRate ?? (riderAssessment.estimatedThresholdHR
+              ? Math.round(riderAssessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
+              : undefined),
+          }
+          stravaAnalysisComplete = true
+        }
+      }
+
+      await updateCurrentUser(authToken, {
+        ...profileForPlan,
+        isOnboarded: true,
+        stravaAnalysisComplete,
+      })
+      const plan = await generateTrainingPlan(profileForPlan, authToken, riderAssessment)
       await saveTrainingPlan(authToken, plan)
-      setUserProfile(profile)
+      if (riderAssessment) {
+        setRiderAssessment(riderAssessment)
+      }
+      setStravaAnalysisComplete(stravaAnalysisComplete)
+      setUserProfile(profileForPlan)
       setTrainingPlan(plan)
+      clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate plan.')
@@ -94,15 +221,8 @@ export default function OnboardingPage() {
     }
   }
 
-  const bikeTypes: { value: UserProfile['bikeType']; label: string; emoji: string }[] = [
-    { value: 'road', label: 'Road', emoji: '🚴' },
-    { value: 'mtb', label: 'MTB', emoji: '🚵' },
-    { value: 'gravel', label: 'Gravel', emoji: '🛤️' },
-    { value: 'other', label: 'Other', emoji: '🚲' },
-  ]
-
   const goals: { value: UserProfile['trainingGoal']; label: string; desc: string; emoji: string }[] = [
-    { value: 'race', label: 'Race Prep', desc: 'Prepare for a specific event', emoji: '🏆' },
+    { value: 'race', label: 'Race Prep', desc: 'Be ready for a specific race', emoji: '🏆' },
     { value: 'ftp_improvement', label: 'FTP Improvement', desc: 'Build sustained power', emoji: '⚡' },
     { value: 'general_fitness', label: 'General Fitness', desc: 'Stay fit and healthy', emoji: '💪' },
     { value: 'weight_loss', label: 'Weight Loss', desc: 'Burn calories and slim down', emoji: '🔥' },
@@ -150,47 +270,22 @@ export default function OnboardingPage() {
                 Welcome, {form.name || 'athlete'}! 👋
               </h2>
               <p className="text-gray-500 mb-4 text-sm leading-relaxed">
-                We're going to build your personalised <span className="font-semibold text-gray-700">28-day cycling training plan</span>.
-                We just need to ask a few quick questions about your riding style, goals, and current fitness level.
+                We want to set up your first <span className="font-semibold text-gray-700">14-day cycling training plan</span>.
+                We just need a few quick inputs.
               </p>
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 text-left space-y-1">
-                <p>✅ Takes less than 2 minutes</p>
-                <p>✅ Plan adapts to your feedback week by week</p>
-                <p>✅ Your AI coach is here to answer questions anytime</p>
+                <p>✅ A few short questions</p>
+                <p>✅ Takes about 3 minutes</p>
+                <p>✅ You can update details later anytime</p>
               </div>
             </div>
           )}
 
-          {/* Step 2: Bike type */}
+          {/* Step 2: Training goal */}
           {step === 2 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">What do you ride?</h2>
-              <p className="text-sm text-gray-500 mb-6">Choose your primary bike type.</p>
-              <div className="grid grid-cols-2 gap-3">
-                {bikeTypes.map((b) => (
-                  <button
-                    key={b.value}
-                    type="button"
-                    onClick={() => update('bikeType', b.value)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                      form.bikeType === b.value
-                        ? 'border-amber-500 bg-amber-50'
-                        : 'border-gray-200 hover:border-amber-300'
-                    }`}
-                  >
-                    <span className="text-3xl">{b.emoji}</span>
-                    <span className="font-semibold text-sm text-gray-800">{b.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Training goal */}
-          {step === 3 && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">What's your goal?</h2>
-              <p className="text-sm text-gray-500 mb-4">This shapes your entire training plan.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">What&apos;s your goal?</h2>
+              <p className="text-sm text-gray-500 mb-4">This shapes your first training plan.</p>
               <div className="space-y-2">
                 {goals.map((g) => (
                   <button
@@ -240,41 +335,77 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 4: Fitness */}
+          {/* Step 3: Strava or manual assessment */}
+          {step === 3 && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Connect Strava for automatic analysis of your last 7 rides, or enter parameters manually.
+              </p>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => update('assessmentMethod', 'strava')}
+                  className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
+                    form.assessmentMethod === 'strava'
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-gray-200 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-900">Connect with Strava</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Works best when rides include both power and heart rate.
+                      </p>
+                    </div>
+                    {form.assessmentMethod === 'strava' && (
+                      <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update('assessmentMethod', 'manual')}
+                  className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
+                    form.assessmentMethod === 'manual'
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-gray-200 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-900">Enter fitness parameters manually</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Add FTP and heart-rate details now. Everything is optional and can be updated later.
+                      </p>
+                    </div>
+                    {form.assessmentMethod === 'manual' && (
+                      <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+              </div>
+              {form.assessmentMethod === 'strava' && (
+                <div className="mt-4 space-y-3">
+                  <StravaConnect />
+                  {!stravaConnection && (
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                      <Link size={14} className="flex-shrink-0" />
+                      Connect Strava to continue with automatic ride analysis.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Fitness and availability */}
           {step === 4 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Your Fitness</h2>
-              <p className="text-sm text-gray-500 mb-4">Helps calibrate workout intensity.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Training Inputs</h2>
+              <p className="text-sm text-gray-500 mb-4">Helps calibrate workout intensity and schedule.</p>
               <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Weekly Training Hours: <span className="text-amber-600 font-bold">{form.weeklyHours}h</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={20}
-                    value={form.weeklyHours}
-                    onChange={(e) => update('weeklyHours', Number(e.target.value))}
-                    className="w-full accent-amber-500"
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>1h</span>
-                    <span>20h</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={form.currentFTP}
-                    onChange={(e) => update('currentFTP', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="e.g. 250"
-                  />
-                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
                   <div className="space-y-2">
@@ -300,6 +431,68 @@ export default function OnboardingPage() {
                     ))}
                   </div>
                 </div>
+                {form.assessmentMethod === 'manual' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.currentFTP}
+                        onChange={(e) => update('currentFTP', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 250"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Resting Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.restingHeartRate}
+                        onChange={(e) => update('restingHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 55"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.maxHeartRate}
+                        onChange={(e) => update('maxHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 185"
+                      />
+                    </div>
+                  </div>
+                )}
+                {form.assessmentMethod === 'strava' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional but recommended</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.maxHeartRate}
+                        onChange={(e) => update('maxHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 185"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        A rough estimate: 220 minus your age (e.g. age 35 gives ~185 bpm). Providing this enables precise HR training zones.
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
+                      We&apos;ll download and analyse your last 7 rides — including detailed power, HR, cadence, and speed data — to estimate your FTP and training zones.
+                    </div>
+                  </div>
+                )}
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -317,48 +510,18 @@ export default function OnboardingPage() {
           {step === 5 && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
-              <p className="text-sm text-gray-500 mb-4">Add optional heart-rate details, review your profile, and generate your plan.</p>
-
-              <div className="space-y-4 mb-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resting Heart Rate (bpm)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.restingHeartRate}
-                    onChange={(e) => update('restingHeartRate', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="e.g. 55"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Max Heart Rate (bpm)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.maxHeartRate}
-                    onChange={(e) => update('maxHeartRate', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="e.g. 185"
-                  />
-                </div>
-                <div className="bg-blue-50 rounded-xl p-4 text-xs text-blue-700">
-                  <strong>Tip:</strong> If you do not know your max HR, a rough estimate is 220 minus your age.
-                  Resting HR is best measured in the morning before getting up.
-                </div>
-              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                We&apos;ll generate your first 14-day plan{form.assessmentMethod === 'strava' ? ' after ride analysis' : ''}.
+              </p>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(
                   [
                     ['Name', form.name],
                     ['Email', form.email],
-                    ['Bike', form.bikeType],
                     ['Goal', form.trainingGoal.replace('_', ' ')],
+                    ['Assessment', form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
                     ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
-                    ['Weekly Hours', `${form.weeklyHours}h`],
                     ['Fitness Level', form.fitnessLevel],
                     ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
                     ...(form.restingHeartRate ? [['Resting HR', `${form.restingHeartRate} bpm`]] : []),
@@ -386,12 +549,12 @@ export default function OnboardingPage() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    Generating your plan...
+                    {form.assessmentMethod === 'strava' ? 'Downloading rides and generating plan...' : 'Generating your plan...'}
                   </>
                 ) : (
                   <>
                     <Target size={18} />
-                    Generate My Training Plan
+                    Generate My 14-Day Training Plan
                   </>
                 )}
               </button>

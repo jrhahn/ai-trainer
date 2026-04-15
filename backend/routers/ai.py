@@ -9,6 +9,7 @@ import auth
 import models
 import schemas
 from database import get_db
+from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -43,9 +44,23 @@ async def analyse_activities(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RiderAssessmentSchema:
+    # Fetch per-second stream data for each activity from Strava
+    streams_by_id: dict[str, dict] = {}
+    if current_user.strava_token is not None:
+        try:
+            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
+            for activity in body.activities:
+                streams = await fetch_activity_streams(access_token, activity.id)
+                if streams:
+                    streams_by_id[str(activity.id)] = streams
+        except Exception:
+            pass  # streams are optional; fall back to summary-only analysis
+
     result = await ai_service.analyse_strava_activities(
         [activity.model_dump() for activity in body.activities],
         provider=_provider(current_user),
+        streams_by_id=streams_by_id,
+        max_heart_rate=body.max_heart_rate,
     )
     assessment = await db.get(models.RiderAssessment, current_user.id)
     if assessment is None:
@@ -55,6 +70,7 @@ async def analyse_activities(
             estimated_threshold_hr=result.get("estimatedThresholdHR"),
             rider_type=result.get("riderType", "allrounder"),
             notes=result.get("notes", ""),
+            hr_zones=result.get("hrZones"),
         )
         db.add(assessment)
     else:
@@ -62,6 +78,7 @@ async def analyse_activities(
         assessment.estimated_threshold_hr = result.get("estimatedThresholdHR")
         assessment.rider_type = result.get("riderType", assessment.rider_type)
         assessment.notes = result.get("notes", assessment.notes)
+        assessment.hr_zones = result.get("hrZones")
     current_user.strava_analysis_complete = True
     await db.flush()
     return schemas.RiderAssessmentSchema.model_validate(result)
@@ -104,6 +121,7 @@ async def ask_trainer(
         provider=_provider(current_user),
         coach_memory=body.coach_memory,
         conversation_history=[msg.model_dump() for msg in (body.conversation_history or [])],
+        context_workout=body.context_workout,
     )
     return schemas.AskTrainerResponse.model_validate(result)
 
