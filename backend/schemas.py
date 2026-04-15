@@ -238,7 +238,7 @@ class UserProfileSchema(CamelModel):
     training_goal: str
     race_date: Optional[str] = None
     race_description: Optional[str] = None
-    weekly_hours: float
+    weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None

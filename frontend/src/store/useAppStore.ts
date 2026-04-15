@@ -38,7 +38,7 @@ export interface UserProfile {
   trainingGoal: 'ftp_improvement' | 'race' | 'general_fitness' | 'weight_loss'
   raceDate?: string
   raceDescription?: string
-  weeklyHours: number
+  weeklyHours?: number
   followsTrainingPlan: boolean
   restingHeartRate?: number
   maxHeartRate?: number

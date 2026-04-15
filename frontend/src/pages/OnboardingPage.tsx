@@ -16,7 +16,6 @@ type FormData = {
   raceDate: string
   raceDescription: string
   assessmentMethod: 'strava' | 'manual'
-  weeklyHours: number
   followsTrainingPlan: boolean
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
@@ -66,7 +65,6 @@ export default function OnboardingPage() {
     raceDate: userProfile?.raceDate ?? '',
     raceDescription: userProfile?.raceDescription ?? '',
     assessmentMethod: defaultAssessmentMethod(),
-    weeklyHours: userProfile?.weeklyHours ?? 8,
     followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
@@ -90,6 +88,7 @@ export default function OnboardingPage() {
     setError('')
 
     // Threshold HR is typically ~87% of max HR for trained cyclists.
+    // Must stay in sync with _LTHR_RATIO in backend/services/ai_service.py.
     const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
     let riderAssessment: RiderAssessment | undefined
 
@@ -100,7 +99,6 @@ export default function OnboardingPage() {
       trainingGoal: form.trainingGoal,
       raceDate: form.raceDate || undefined,
       raceDescription: form.raceDescription || undefined,
-      weeklyHours: form.weeklyHours,
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
@@ -339,23 +337,6 @@ export default function OnboardingPage() {
               <p className="text-sm text-gray-500 mb-4">Helps calibrate workout intensity and schedule.</p>
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Weekly Training Hours: <span className="text-amber-600 font-bold">{form.weeklyHours}h</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={20}
-                    value={form.weeklyHours}
-                    onChange={(e) => update('weeklyHours', Number(e.target.value))}
-                    className="w-full accent-amber-500"
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>1h</span>
-                    <span>20h</span>
-                  </div>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
                   <div className="space-y-2">
                     {levels.map((l) => (
@@ -471,7 +452,6 @@ export default function OnboardingPage() {
                     ['Goal', form.trainingGoal.replace('_', ' ')],
                     ['Assessment', form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
                     ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
-                    ['Weekly Hours', `${form.weeklyHours}h`],
                     ['Fitness Level', form.fitnessLevel],
                     ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
                     ...(form.restingHeartRate ? [['Resting HR', `${form.restingHeartRate} bpm`]] : []),

@@ -154,7 +154,7 @@ def _best_n_min_power(
             window_sum -= watts[left]
             left += 1
         actual_dur = time_stream[right] - time_stream[left]
-        # Only accept windows that cover at least 90 % of the target duration.
+        # Only accept windows that cover at least 90% of the target duration.
         # Shorter windows (e.g. due to GPS gaps at the start or end of a ride)
         # would inflate the average power and produce an unreliable FTP estimate.
         if actual_dur >= target_secs * 0.9:
@@ -167,6 +167,41 @@ def _best_n_min_power(
                     best_end = right
 
     return (best_power if best_power > 0 else None), best_start, best_end
+
+
+# Fraction of max HR that corresponds to lactate threshold (LTHR).
+# 87% is a well-established estimate for trained cyclists.
+_LTHR_RATIO = 0.87
+
+
+def _hr_corrected_ftp(
+    interval_power: float,
+    interval_hr: float,
+    max_hr: int,
+) -> int | None:
+    """Estimate FTP by scaling interval power based on heart-rate headroom.
+
+    Principle: at threshold, a cyclist should be at approximately LTHR
+    (= 87% of max HR).  If the rider held `interval_power` W while their HR
+    was `interval_hr`, we scale the power proportionally so it corresponds
+    to the threshold HR.
+
+    FTP_hr ≈ interval_power × (LTHR / interval_hr)
+
+    This corrects for under- and over-pacing relative to threshold:
+    - If interval HR < LTHR the rider had headroom → actual threshold is higher.
+    - If interval HR > LTHR the rider was above threshold → scale down.
+    We only apply the correction when the interval HR is between 70% and
+    100% of max HR; outside that range the correction is unreliable.
+    """
+    if interval_hr <= 0 or max_hr <= 0:
+        return None
+    hr_fraction = interval_hr / max_hr
+    if hr_fraction < 0.70 or hr_fraction > 1.0:
+        return None
+    lthr = max_hr * _LTHR_RATIO
+    corrected = interval_power * (lthr / interval_hr)
+    return round(corrected)
 
 
 def _compute_hr_zones(max_hr: int) -> dict:
@@ -192,28 +227,48 @@ async def analyse_strava_activities(
     computed_hr_zones: dict | None = None
 
     if streams_by_id:
-        best_20min_powers: list[int] = []
+        # Candidate FTP values from different methods; we take the best (highest).
+        ftp_candidates: list[int] = []
         threshold_hrs: list[int] = []
+
         for streams in streams_by_id.values():
             watts_data: list[float] = streams.get("watts", {}).get("data", [])
             hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
             time_data: list[float] = streams.get("time", {}).get("data", [])
 
             if watts_data and time_data:
-                best20, start, end = _best_n_min_power(watts_data, time_data, 20)
+                # --- Method 1: best-20-min power × 0.95 ---
+                best20, start20, end20 = _best_n_min_power(watts_data, time_data, 20)
                 if best20 is not None:
-                    # FTP is conventionally defined as 95 % of best 20-min average power.
+                    # FTP is conventionally defined as 95% of best 20-min average power.
                     # This scaling factor accounts for the difference between a maximal
                     # 20-min effort and a true 60-min sustainable power output.
-                    best_20min_powers.append(round(best20 * 0.95))
-                    # Average HR during the best 20-min power segment
+                    ftp_candidates.append(round(best20 * 0.95))
+                    # Track average HR during that segment for threshold-HR estimation.
                     if hr_data and len(hr_data) == len(time_data):
-                        segment_hr = hr_data[start : end + 1]
+                        segment_hr = hr_data[start20 : end20 + 1]
                         if segment_hr:
                             threshold_hrs.append(round(sum(segment_hr) / len(segment_hr)))
 
-        if best_20min_powers:
-            computed_ftp = max(best_20min_powers)
+                # --- Method 2: HR-corrected FTP from 10-min and 20-min best intervals ---
+                # For each interval length, if we have both power and HR data, scale the
+                # interval power to what it would be at exactly the lactate-threshold HR.
+                # This is useful when the rider never executed a maximal 20-min effort but
+                # did push hard intervals where HR gives us a physiological reference point.
+                if hr_data and len(hr_data) == len(time_data) and max_heart_rate:
+                    for n_min in (10, 15, 20):
+                        best_n, s, e = _best_n_min_power(watts_data, time_data, n_min)
+                        if best_n is not None:
+                            seg_hr = hr_data[s : e + 1]
+                            if seg_hr:
+                                avg_interval_hr = sum(seg_hr) / len(seg_hr)
+                                ftp_hr = _hr_corrected_ftp(best_n, avg_interval_hr, max_heart_rate)
+                                if ftp_hr is not None:
+                                    ftp_candidates.append(ftp_hr)
+
+        if ftp_candidates:
+            # The best estimate is the highest plausible value across all methods.
+            computed_ftp = max(ftp_candidates)
         if threshold_hrs:
             computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs))
 
@@ -283,12 +338,55 @@ async def analyse_strava_activities(
     return parsed
 
 
+TRAINING_PLAN_PRINCIPLES = """
+Training plan scheduling rules (ALWAYS follow these):
+- Schedule long endurance and base rides on Saturday and Sunday.
+- Keep weekday sessions short (60-90 min maximum) to fit around work.
+- Do not rely on a 'weeklyHours' field; derive realistic weekly volume from the athlete's fitness level:
+  * beginner: ~3-5 hours/week, no session longer than 90 min
+  * intermediate: ~5-8 hours/week, weekend rides up to 2.5 h
+  * advanced: ~8-12 hours/week, weekend rides up to 3.5 h
+- Make intensity/volume realistic for the athlete's current fitness level and stated goal.
+- For race-prep goals: taper in the final week before the race date (reduce volume by ~40%, keep intensity).
+- Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
+- Never schedule two hard days back-to-back.
+- If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
+"""
+
+
 async def generate_training_plan(
     profile: dict, provider: str = "openai", rider_assessment: dict | None = None
 ) -> list[dict]:
-    system_prompt = f"{COACH_PERSONA} Generate a 14-day training plan as JSON.\nReturn ONLY a valid JSON object with a \"plan\" array of training days. All keys must be double-quoted. All numeric fields must be plain numbers with no units.\nEach day must have: \"date\" (ISO date string starting from today), \"workoutType\" (one of: \"rest\",\"endurance\",\"intervals\",\"tempo\",\"race\",\"recovery\",\"strength\"), \"title\" (string), \"description\" (string), \"durationMinutes\" (integer).\nOptional fields: \"targetPower\" (object with \"low\" and \"high\" integer fields in watts), \"targetHeartRate\" (object with \"low\" and \"high\" integer fields in bpm), \"intervals\" (array of objects with \"duration\" (integer seconds), \"power\" (integer watts), \"rest\" (integer seconds)).\nPrinciples:\n- Build progressive overload over 2 weeks\n- Include rest days (1-2 per week)\n- Mix workout types based on goal\n- For FTP improvement: include threshold and VO2max work\n- For race prep: include race-specific workouts\n- Duration and intensity based on fitness level and weekly hours\n- If a rider assessment is provided, use the estimated FTP and threshold HR for precise power/HR targets\n- Tailor workout types to the rider type (e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)"
-    assessment_section = f"\nRider assessment from recent Strava rides: {json.dumps(rider_assessment)}" if rider_assessment else ""
-    user_msg = f"Profile: {json.dumps(profile)}{assessment_section}\nGenerate a 14-day training plan starting from today that reflects both the athlete's goals and their actual fitness level from recent rides."
+    system_prompt = (
+        f"{COACH_PERSONA} Generate a 14-day training plan as JSON.\n"
+        "Return ONLY a valid JSON object with a \"plan\" array of training days. "
+        "All keys must be double-quoted. All numeric fields must be plain numbers with no units.\n"
+        "Each day must have: \"date\" (ISO date string starting from today), "
+        "\"workoutType\" (one of: \"rest\",\"endurance\",\"intervals\",\"tempo\",\"race\","
+        "\"recovery\",\"strength\"), \"title\" (string), \"description\" (string), "
+        "\"durationMinutes\" (integer).\n"
+        "Optional fields: \"targetPower\" (object with \"low\" and \"high\" integer fields in watts), "
+        "\"targetHeartRate\" (object with \"low\" and \"high\" integer fields in bpm), "
+        "\"intervals\" (array of objects with \"duration\" (integer seconds), "
+        "\"power\" (integer watts), \"rest\" (integer seconds)).\n"
+        f"{TRAINING_PLAN_PRINCIPLES}"
+        "Workout type guidance:\n"
+        "- For FTP improvement: include threshold and VO2max work\n"
+        "- For race prep: include race-specific workouts and a taper week\n"
+        "- For weight loss: emphasise longer aerobic sessions\n"
+        "- Tailor workout types to the rider type "
+        "(e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)"
+    )
+    assessment_section = (
+        f"\nRider assessment from recent Strava rides: {json.dumps(rider_assessment)}"
+        if rider_assessment
+        else ""
+    )
+    user_msg = (
+        f"Profile: {json.dumps(profile)}{assessment_section}\n"
+        "Generate a 14-day training plan starting from today that reflects both the athlete's "
+        "goals and their actual fitness level from recent rides."
+    )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return parsed.get("plan", [])
