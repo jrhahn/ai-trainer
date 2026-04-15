@@ -7,6 +7,7 @@ Create Date: 2026-04-15 00:00:01
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect as sa_inspect
 
 
 revision = "20260415_000001"
@@ -16,10 +17,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("threshold_heart_rate", sa.Integer(), nullable=True),
-    )
+    bind = op.get_bind()
+    inspector = sa_inspect(bind)
+    existing_columns = {c["name"] for c in inspector.get_columns("users")}
+    if "threshold_heart_rate" not in existing_columns:
+        op.add_column(
+            "users",
+            sa.Column("threshold_heart_rate", sa.Integer(), nullable=True),
+        )
 
 
 def downgrade() -> None:
