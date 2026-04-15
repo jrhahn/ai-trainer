@@ -25,6 +25,7 @@ export interface PlanDayUpdate {
   durationMinutes?: number
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
+  intervals?: TrainingDay['intervals']
 }
 
 export interface AskTrainerResult {

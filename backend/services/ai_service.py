@@ -443,7 +443,10 @@ async def ask_trainer(
             "even if the athlete did not explicitly request a change. "
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "workoutType", "title", "description", "durationMinutes", '
-            '"targetPower", "targetHeartRate". '
+            '"targetPower", "targetHeartRate", "intervals". '
+            'When the athlete asks to change interval structure (e.g. number of reps, duration, '
+            'power target), always update "intervals" as an array of objects each with '
+            '"duration" (seconds), "power" (watts), and "rest" (seconds). '
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
         )
@@ -453,7 +456,10 @@ async def ask_trainer(
             "field when the athlete explicitly asks to change, swap, skip, or reschedule a "
             'workout. Each update must include "date" (ISO string matching an existing plan '
             'date) and any fields to change: "workoutType", "title", "description", '
-            '"durationMinutes", "targetPower", "targetHeartRate". '
+            '"durationMinutes", "targetPower", "targetHeartRate", "intervals". '
+            'When the athlete asks to change interval structure (e.g. number of reps, duration, '
+            'power target), always update "intervals" as an array of objects each with '
+            '"duration" (seconds), "power" (watts), and "rest" (seconds). '
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
         )

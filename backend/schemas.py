@@ -287,6 +287,7 @@ class PlanDayUpdateSchema(CamelModel):
     duration_minutes: Optional[int] = None
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
+    intervals: Optional[list[Any]] = None
 
 
 class AskTrainerResponse(CamelModel):
