@@ -12,6 +12,7 @@ export type AiProvider = 'openai' | 'gemini'
 type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 
 export interface AskTrainerOptions {
+  riderAssessment?: RiderAssessment
   coachMemory?: string
   conversationHistory?: ConversationMessage[]
   contextWorkout?: TrainingDay
@@ -95,6 +96,7 @@ export async function askTrainer(
       question,
       plan,
       profile,
+      riderAssessment: options.riderAssessment,
       coachMemory: options.coachMemory,
       conversationHistory: options.conversationHistory,
       contextWorkout: options.contextWorkout,

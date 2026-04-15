@@ -415,6 +415,7 @@ async def ask_trainer(
     plan: list[dict],
     profile: dict,
     provider: str = "openai",
+    rider_assessment: dict | None = None,
     coach_memory: str | None = None,
     conversation_history: list[dict[str, str]] | None = None,
     context_workout: dict | None = None,
@@ -423,6 +424,25 @@ async def ask_trainer(
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
+
+    assessment_section = ""
+    if rider_assessment:
+        rider_type = rider_assessment.get("riderType", "")
+        ftp = rider_assessment.get("estimatedFTP")
+        thr = rider_assessment.get("estimatedThresholdHR")
+        notes = rider_assessment.get("notes", "")
+        assessment_lines = [f"- Rider type: {rider_type}"]
+        if ftp:
+            assessment_lines.append(f"- Estimated FTP: {ftp} W")
+        if thr:
+            assessment_lines.append(f"- Estimated threshold HR: {thr} bpm")
+        if notes:
+            assessment_lines.append(f"- Assessment notes: {notes}")
+        assessment_section = (
+            "\n\nRider assessment from recent Strava analysis:\n"
+            + "\n".join(assessment_lines)
+            + "\nUse this to give personalised advice that matches the athlete's strengths and riding style."
+        )
     workout_section = (
         f"\n\nThe athlete is currently viewing this specific workout:\n"
         f"{json.dumps(context_workout, indent=2)}"
@@ -481,6 +501,7 @@ async def ask_trainer(
         f"Athlete profile: {json.dumps(profile)}\n"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
+        f"{assessment_section}"
         f"{memory_section}"
         f"{workout_section}\n\n"
         "Always take today's date into account when answering — for example when calculating "
@@ -509,8 +530,21 @@ async def ask_trainer(
 async def update_coach_memory(
     current_memory: str, user_message: str, coach_response: str, provider: str = "openai"
 ) -> str:
-    system_prompt = f"{COACH_PERSONA} Maintain concise notes about an athlete.\nExtract any important, actionable information from this conversation exchange and update the notes.\nKeep notes under 300 words. Focus on: goals, limitations, health issues, preferences, performance achievements, recurring problems.\nReturn ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
-    user_msg = f"Existing notes:\n{current_memory or '(none)'}\n\nLatest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\nUpdate the notes with any new important information."
+    system_prompt = (
+        f"{COACH_PERSONA} Maintain concise notes about an athlete.\n"
+        "Extract any important, actionable information from this conversation exchange and update the notes.\n"
+        "Keep notes under 300 words. Focus on: goals, limitations, health issues, preferences, "
+        "performance achievements, recurring problems, FTP history (record up to the 5 most recent "
+        "FTP estimates with their approximate dates to track progress; drop the oldest when adding a new one), "
+        "rider strengths and weaknesses, and personal motivations such as "
+        "preferred terrain or event types (e.g. loves hill climbing, prefers long endurance rides).\n"
+        "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
+    )
+    user_msg = (
+        f"Existing notes:\n{current_memory or '(none)'}\n\n"
+        f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
+        "Update the notes with any new important information."
+    )
     return await _chat(provider, system_prompt, user_msg)
 
 

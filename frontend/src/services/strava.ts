@@ -14,6 +14,13 @@ export async function getStravaActivities(authToken: string): Promise<StravaActi
   return apiFetch<StravaActivity[]>('/strava/activities', { token: authToken })
 }
 
+export async function getNewStravaActivities(
+  authToken: string,
+  afterId: number
+): Promise<StravaActivity[]> {
+  return apiFetch<StravaActivity[]>(`/strava/activities?after_id=${afterId}`, { token: authToken })
+}
+
 export async function disconnectStrava(authToken: string): Promise<void> {
   await apiFetch('/strava/disconnect', { token: authToken, method: 'DELETE' })
 }

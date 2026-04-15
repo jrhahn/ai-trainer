@@ -30,6 +30,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         name=user.name,
         is_onboarded=user.is_onboarded,
         strava_analysis_complete=user.strava_analysis_complete,
+        last_strava_activity_id=user.last_strava_activity_id,
         bike_type=user.bike_type,
         training_goal=user.training_goal,
         race_date=user.race_date,

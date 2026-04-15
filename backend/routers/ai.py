@@ -80,6 +80,11 @@ async def analyse_activities(
         assessment.notes = result.get("notes", assessment.notes)
         assessment.hr_zones = result.get("hrZones")
     current_user.strava_analysis_complete = True
+    # Track the most recent activity analysed so the frontend can detect new rides.
+    if body.activities:
+        newest_id = max(a.id for a in body.activities)
+        if current_user.last_strava_activity_id is None or newest_id > current_user.last_strava_activity_id:
+            current_user.last_strava_activity_id = newest_id
     await db.flush()
     return schemas.RiderAssessmentSchema.model_validate(result)
 
@@ -119,6 +124,7 @@ async def ask_trainer(
         body.plan,
         body.profile.model_dump(by_alias=True),
         provider=_provider(current_user),
+        rider_assessment=body.rider_assessment.model_dump(by_alias=True) if body.rider_assessment else None,
         coach_memory=body.coach_memory,
         conversation_history=[msg.model_dump() for msg in (body.conversation_history or [])],
         context_workout=body.context_workout,

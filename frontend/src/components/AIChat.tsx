@@ -17,6 +17,7 @@ export default function AIChat({ contextWorkout }: Props) {
     trainingPlan,
     chatHistory,
     coachMemory,
+    riderAssessment,
     addChatMessage,
     setCoachMemory,
     clearChatHistory,
@@ -28,6 +29,7 @@ export default function AIChat({ contextWorkout }: Props) {
       trainingPlan: s.trainingPlan,
       chatHistory: s.chatHistory,
       coachMemory: s.coachMemory,
+      riderAssessment: s.riderAssessment,
       addChatMessage: s.addChatMessage,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
@@ -70,6 +72,7 @@ export default function AIChat({ contextWorkout }: Props) {
 
     try {
       const result = await askTrainer(userMsg, trainingPlan, userProfile, authToken, {
+        riderAssessment: riderAssessment ?? undefined,
         coachMemory,
         conversationHistory: recentHistory,
         contextWorkout,

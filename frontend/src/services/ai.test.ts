@@ -121,6 +121,7 @@ describe('askTrainer', () => {
         question: 'How should I train?',
         plan: [],
         profile,
+        riderAssessment: undefined,
         coachMemory: undefined,
         conversationHistory: undefined,
       },

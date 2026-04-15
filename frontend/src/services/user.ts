@@ -15,6 +15,7 @@ interface BackendUserResponse {
   name?: string
   isOnboarded: boolean
   stravaAnalysisComplete: boolean
+  lastStravaActivityId?: number | null
   bikeType?: UserProfile['bikeType']
   trainingGoal?: UserProfile['trainingGoal']
   raceDate?: string
@@ -35,6 +36,7 @@ export interface LoadedUserData {
   profile: UserProfile
   isOnboarded: boolean
   stravaAnalysisComplete: boolean
+  lastStravaActivityId: number | null
   aiProvider: AiProvider
   riderAssessment: RiderAssessment | null
   stravaConnection: StravaConnection | null
@@ -60,6 +62,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     },
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,
+    lastStravaActivityId: user.lastStravaActivityId ?? null,
     aiProvider: user.aiProvider ?? 'openai',
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,
@@ -71,6 +74,7 @@ export async function updateCurrentUser(
   updates: Partial<UserProfile> & {
     isOnboarded?: boolean
     stravaAnalysisComplete?: boolean
+    lastStravaActivityId?: number | null
     aiProvider?: AiProvider
   }
 ): Promise<LoadedUserData> {
@@ -89,6 +93,7 @@ export async function updateCurrentUser(
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,
+    lastStravaActivityId: updates.lastStravaActivityId,
     aiProvider: updates.aiProvider,
   }
   await apiFetch('/users/me', { token, method: 'PUT', body })

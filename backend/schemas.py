@@ -94,6 +94,7 @@ class UserResponse(CamelModel):
     name: Optional[str] = None
     is_onboarded: bool
     strava_analysis_complete: bool
+    last_strava_activity_id: Optional[int] = None
     # profile fields
     bike_type: Optional[str] = None
     training_goal: Optional[str] = None
@@ -136,6 +137,7 @@ class UpdateProfileRequest(CamelModel):
     ai_provider: Optional[str] = None
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
+    last_strava_activity_id: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +276,7 @@ class AskTrainerRequest(CamelModel):
     question: str
     plan: list[Any]
     profile: UserProfileSchema
+    rider_assessment: Optional[RiderAssessmentSchema] = None
     coach_memory: Optional[str] = None
     conversation_history: Optional[list[ConversationMessageSchema]] = None
     context_workout: Optional[Any] = None
