@@ -98,10 +98,13 @@ describe('OnboardingPage', () => {
     }))
     mockGetStravaActivities.mockResolvedValue(activities)
     mockAnalyseStravaActivities.mockResolvedValue({
-      estimatedFTP: 280,
-      estimatedThresholdHR: 170,
-      riderType: 'allrounder',
-      notes: 'Good sustained efforts.',
+      assessment: {
+        estimatedFTP: 280,
+        estimatedThresholdHR: 170,
+        riderType: 'allrounder',
+        notes: 'Good sustained efforts.',
+      },
+      planUpdates: [],
     })
 
     setupStore({

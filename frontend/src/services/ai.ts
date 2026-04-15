@@ -29,6 +29,17 @@ export interface PlanDayUpdate {
   intervals?: TrainingDay['intervals']
 }
 
+export interface AnalyseActivitiesResult {
+  assessment: RiderAssessment
+  planUpdates?: PlanDayUpdate[]
+}
+
+interface BackendAnalyseActivitiesResult {
+  assessment: RiderAssessment
+  planUpdates?: PlanDayUpdate[]
+  plan_updates?: PlanDayUpdate[]
+}
+
 export interface AskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
@@ -46,8 +57,8 @@ export async function analyseStravaActivities(
   activities: StravaActivity[],
   authToken: string,
   maxHeartRate?: number
-): Promise<RiderAssessment> {
-  return apiFetch<RiderAssessment>('/ai/analyse-activities', {
+): Promise<AnalyseActivitiesResult> {
+  const raw = await apiFetch<BackendAnalyseActivitiesResult>('/ai/analyse-activities', {
     token: authToken,
     method: 'POST',
     body: {
@@ -55,6 +66,10 @@ export async function analyseStravaActivities(
       ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
     },
   })
+  return {
+    assessment: raw.assessment,
+    planUpdates: raw.planUpdates ?? raw.plan_updates,
+  }
 }
 
 export async function generateTrainingPlan(

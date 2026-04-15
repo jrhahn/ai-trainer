@@ -118,6 +118,7 @@ export interface RiderAssessment {
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string
   hrZones?: HrZones
+  rideInsights?: string
 }
 
 interface AppState {

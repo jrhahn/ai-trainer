@@ -76,6 +76,7 @@ class RiderAssessmentSchema(CamelModel):
     rider_type: str
     notes: str
     hr_zones: Optional[Any] = None
+    ride_insights: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +292,18 @@ class PlanDayUpdateSchema(CamelModel):
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
+
+
+class AnalyseActivitiesResponse(CamelModel):
+    """Response for the /ai/analyse-activities endpoint.
+
+    Wraps the rider assessment together with optional plan updates so the
+    frontend can apply targeted training-plan changes immediately after a
+    new ride is analysed.
+    """
+
+    assessment: RiderAssessmentSchema
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
 class AskTrainerResponse(CamelModel):

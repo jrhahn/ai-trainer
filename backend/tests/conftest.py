@@ -72,6 +72,7 @@ def mock_ai_service(monkeypatch):
                 "estimatedThresholdHR": 172,
                 "riderType": "allrounder",
                 "notes": "Balanced rider",
+                "rideInsights": "Your last ride was an endurance effort at 68% FTP. No intervals detected.",
             }
         ),
         "generate_training_plan": AsyncMock(

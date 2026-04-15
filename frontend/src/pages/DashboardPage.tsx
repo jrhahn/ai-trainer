@@ -55,12 +55,12 @@ export default function DashboardPage() {
   // Threshold HR is typically ~87% of max HR (used to estimate max HR from threshold HR)
   const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
 
-  const runAnalysis = async (activities: StravaActivity[]) => {
+  const runAnalysis = async (activities: StravaActivity[], isIncremental = false) => {
     if (!authToken || !userProfile || activities.length === 0) return
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
-      const assessment = await analyseStravaActivities(activities, authToken, userProfile.maxHeartRate)
+      const { assessment, planUpdates } = await analyseStravaActivities(activities, authToken, userProfile.maxHeartRate)
       setRiderAssessment(assessment)
 
       const updatedProfile = {
@@ -82,9 +82,21 @@ export default function DashboardPage() {
         lastStravaActivityId: newestId,
       })
 
-      const updatedPlan = await generateTrainingPlan(updatedProfile, authToken, assessment)
-      await saveTrainingPlan(authToken, updatedPlan)
-      setTrainingPlan(updatedPlan)
+      if (isIncremental && planUpdates && planUpdates.length > 0) {
+        // For new rides, apply targeted plan updates rather than regenerating the whole plan
+        const updatesByDate = Object.fromEntries(planUpdates.map((u) => [u.date, u]))
+        const updatedPlan = trainingPlan.map((day) =>
+          updatesByDate[day.date] ? { ...day, ...updatesByDate[day.date] } : day
+        )
+        setTrainingPlan(updatedPlan)
+        // Persist the updated plan
+        await saveTrainingPlan(authToken, updatedPlan)
+      } else {
+        // First-time analysis or no targeted updates → regenerate the full plan
+        const updatedPlan = await generateTrainingPlan(updatedProfile, authToken, assessment)
+        await saveTrainingPlan(authToken, updatedPlan)
+        setTrainingPlan(updatedPlan)
+      }
 
       setStravaAnalysisComplete(true)
       setAnalysisStatus('done')
@@ -106,8 +118,8 @@ export default function DashboardPage() {
             const existingIds = new Set(prev.map((a) => a.id))
             return [...newActs.filter((a) => !existingIds.has(a.id)), ...prev]
           })
-          // Re-run analysis using only the new activities for efficiency
-          await runAnalysis(newActs)
+          // Re-run analysis using only the new activities for efficiency (incremental)
+          await runAnalysis(newActs, true)
           setNewRidesCount(0)
         }
       }
@@ -265,6 +277,14 @@ export default function DashboardPage() {
           </div>
           {riderAssessment.notes && (
             <p className="text-xs text-amber-600 mt-2 italic">{riderAssessment.notes}</p>
+          )}
+          {riderAssessment.rideInsights && (
+            <details className="mt-2">
+              <summary className="text-xs font-semibold text-amber-800 cursor-pointer select-none">
+                📊 Ride analysis &amp; recommendations ▾
+              </summary>
+              <p className="text-xs text-amber-700 mt-1 whitespace-pre-wrap">{riderAssessment.rideInsights}</p>
+            </details>
           )}
         </div>
       )}

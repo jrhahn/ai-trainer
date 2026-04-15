@@ -48,8 +48,11 @@ describe('MAX_CONVERSATION_HISTORY', () => {
 })
 
 describe('analyseStravaActivities', () => {
-  it('calls the backend analyse endpoint', async () => {
-    mockApiFetch.mockResolvedValue({ estimatedFTP: 280, riderType: 'allrounder', notes: 'Balanced rider' })
+  it('calls the backend analyse endpoint and returns {assessment, planUpdates}', async () => {
+    mockApiFetch.mockResolvedValue({
+      assessment: { estimatedFTP: 280, riderType: 'allrounder', notes: 'Balanced rider', rideInsights: 'Good endurance base.' },
+      planUpdates: [],
+    })
 
     const result = await analyseStravaActivities([
       {
@@ -64,7 +67,9 @@ describe('analyseStravaActivities', () => {
       },
     ], 'token-123')
 
-    expect(result.estimatedFTP).toBe(280)
+    expect(result.assessment.estimatedFTP).toBe(280)
+    expect(result.assessment.rideInsights).toBe('Good endurance base.')
+    expect(result.planUpdates).toEqual([])
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/analyse-activities', {
       token: 'token-123',
       method: 'POST',

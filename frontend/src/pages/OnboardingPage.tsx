@@ -183,11 +183,12 @@ export default function OnboardingPage() {
         const activities = await getStravaActivities(authToken)
         const recentActivities = activities.slice(0, 7)
         if (recentActivities.length > 0) {
-        riderAssessment = await analyseStravaActivities(
+          const analyseResult = await analyseStravaActivities(
             recentActivities,
             authToken,
             form.maxHeartRate ? Number(form.maxHeartRate) : undefined
           )
+          riderAssessment = analyseResult.assessment
           profileForPlan = {
             ...profile,
             currentFTP: profile.currentFTP ?? riderAssessment.estimatedFTP,
