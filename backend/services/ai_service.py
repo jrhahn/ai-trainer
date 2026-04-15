@@ -21,7 +21,10 @@ COACH_PERSONA = (
     "You are a professional cycling coach with extensive experience in "
     "competitive road, track, and endurance cycling. "
     "Always address the athlete directly using 'you' — for example, "
-    "'You have excellent aerobic endurance' not 'The athlete has excellent aerobic endurance'."
+    "'You have excellent aerobic endurance' not 'The athlete has excellent aerobic endurance'. "
+    "Your coaching philosophy: long-term athletic development always overrules short-term gains. "
+    "Never sacrifice recovery, health, or sustainable progression for quick wins. "
+    "When in doubt, prioritise the athlete's long-term progress over immediate performance."
 )
 MAX_CONVERSATION_HISTORY = 20
 OPENAI_MODEL = "gpt-4o-mini"
@@ -414,18 +417,26 @@ async def ask_trainer(
     provider: str = "openai",
     coach_memory: str | None = None,
     conversation_history: list[dict[str, str]] | None = None,
+    context_workout: dict | None = None,
 ) -> dict:
     today = __import__("datetime").datetime.now().date().isoformat()
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
+    workout_section = (
+        f"\n\nThe athlete is currently viewing this specific workout and may be asking about it:\n"
+        f"{json.dumps(context_workout, indent=2)}"
+        "\nWhen the athlete refers to 'this workout', 'today's session', or similar, they mean the workout above. "
+        "If you update or modify this workout, include it in planUpdates."
+    ) if context_workout else ""
     system_prompt = (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
         f"Athlete profile: {json.dumps(profile)}\n"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
-        f"{memory_section}\n\n"
+        f"{memory_section}"
+        f"{workout_section}\n\n"
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"

@@ -10,10 +10,23 @@ import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 const TOTAL_STEPS = 5
 const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
 
-function readOnboardingProgress(): { step: number; form: FormData } | null {
+// Only non-sensitive fields are persisted across the OAuth redirect.
+// Health metrics (HR, FTP) are intentionally excluded and re-populated
+// from the user profile on restore to avoid clear-text health data in storage.
+type PersistedProgress = {
+  step: number
+  trainingGoal: FormData['trainingGoal']
+  raceDate: string
+  raceDescription: string
+  assessmentMethod: FormData['assessmentMethod']
+  followsTrainingPlan: boolean
+  fitnessLevel: FormData['fitnessLevel']
+}
+
+function readOnboardingProgress(): PersistedProgress | null {
   try {
     const raw = sessionStorage.getItem(ONBOARDING_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as { step: number; form: FormData }) : null
+    return raw ? (JSON.parse(raw) as PersistedProgress) : null
   } catch {
     return null
   }
@@ -21,7 +34,16 @@ function readOnboardingProgress(): { step: number; form: FormData } | null {
 
 function saveOnboardingProgress(step: number, form: FormData): void {
   try {
-    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify({ step, form }))
+    const progress: PersistedProgress = {
+      step,
+      trainingGoal: form.trainingGoal,
+      raceDate: form.raceDate,
+      raceDescription: form.raceDescription,
+      assessmentMethod: form.assessmentMethod,
+      followsTrainingPlan: form.followsTrainingPlan,
+      fitnessLevel: form.fitnessLevel,
+    }
+    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
   } catch {
     // sessionStorage may be unavailable; silently ignore
   }
@@ -99,7 +121,20 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(savedProgress?.step ?? 1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState<FormData>(savedProgress?.form ?? defaultForm())
+  const [form, setForm] = useState<FormData>(() => {
+    const base = defaultForm()
+    if (!savedProgress) return base
+    // Merge persisted non-sensitive fields with health metrics from the user profile.
+    return {
+      ...base,
+      trainingGoal: savedProgress.trainingGoal,
+      raceDate: savedProgress.raceDate,
+      raceDescription: savedProgress.raceDescription,
+      assessmentMethod: savedProgress.assessmentMethod,
+      followsTrainingPlan: savedProgress.followsTrainingPlan,
+      fitnessLevel: savedProgress.fitnessLevel,
+    }
+  })
 
   // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
   useEffect(() => {

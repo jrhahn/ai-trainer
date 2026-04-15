@@ -14,6 +14,7 @@ type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 export interface AskTrainerOptions {
   coachMemory?: string
   conversationHistory?: ConversationMessage[]
+  contextWorkout?: TrainingDay
 }
 
 export interface PlanDayUpdate {
@@ -95,6 +96,7 @@ export async function askTrainer(
       profile,
       coachMemory: options.coachMemory,
       conversationHistory: options.conversationHistory,
+      contextWorkout: options.contextWorkout,
     },
   })
 

@@ -276,6 +276,7 @@ class AskTrainerRequest(CamelModel):
     profile: UserProfileSchema
     coach_memory: Optional[str] = None
     conversation_history: Optional[list[ConversationMessageSchema]] = None
+    context_workout: Optional[Any] = None
 
 
 class PlanDayUpdateSchema(CamelModel):

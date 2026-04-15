@@ -121,6 +121,7 @@ async def ask_trainer(
         provider=_provider(current_user),
         coach_memory=body.coach_memory,
         conversation_history=[msg.model_dump() for msg in (body.conversation_history or [])],
+        context_workout=body.context_workout,
     )
     return schemas.AskTrainerResponse.model_validate(result)
 

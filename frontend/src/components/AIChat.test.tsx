@@ -213,4 +213,31 @@ describe('AIChat', () => {
     expect(updatedDay?.workoutType).toBe('recovery')
     expect(mockSaveTrainingPlan).toHaveBeenCalled()
   })
+
+  it('passes contextWorkout to askTrainer when provided', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Good luck with the intervals!' })
+    setupStore()
+    const contextWorkout = {
+      date: '2024-01-15',
+      workoutType: 'intervals' as const,
+      title: 'VO2max Intervals',
+      description: '5x4min at 120% FTP',
+      durationMinutes: 60,
+    }
+    render(<AIChat contextWorkout={contextWorkout} />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Can you make this easier?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(mockAskTrainer).toHaveBeenCalledWith(
+        'Can you make this easier?',
+        expect.anything(),
+        expect.anything(),
+        'token-123',
+        expect.objectContaining({ contextWorkout })
+      )
+    })
+  })
 })
