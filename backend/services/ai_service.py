@@ -434,6 +434,21 @@ async def ask_trainer(
         "describe the change in text — always materialise it as a planUpdates entry."
     ) if context_workout else ""
 
+    _intervals_rule = (
+        "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
+        "or power you MUST include the full \"intervals\" array in planUpdates. "
+        "The array must contain EXACTLY the requested number of objects, one per interval rep. "
+        "Each object: {\"duration\": <seconds>, \"power\": <watts>, \"rest\": <seconds>}. "
+        "Example — athlete asks for 4×2 min at 370 W with 3 min rest: "
+        "\"intervals\": ["
+        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
+        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
+        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
+        "{\"duration\": 120, \"power\": 370, \"rest\": 180}]. "
+        "Never describe the intervals only in text and omit the array — always materialise "
+        "every rep as a separate object in the array."
+    )
+
     if context_workout:
         plan_updates_rule = (
             '- "planUpdates": an array of training day updates. '
@@ -444,11 +459,9 @@ async def ask_trainer(
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "workoutType", "title", "description", "durationMinutes", '
             '"targetPower", "targetHeartRate", "intervals". '
-            'When the athlete asks to change interval structure (e.g. number of reps, duration, '
-            'power target), always update "intervals" as an array of objects each with '
-            '"duration" (seconds), "power" (watts), and "rest" (seconds). '
-            'Always include "title" and "description" so the plan entry stays informative. '
-            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+            "Always include \"title\" and \"description\" so the plan entry stays informative. "
+            "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+            f"{_intervals_rule}"
         )
     else:
         plan_updates_rule = (
@@ -457,11 +470,9 @@ async def ask_trainer(
             'workout. Each update must include "date" (ISO string matching an existing plan '
             'date) and any fields to change: "workoutType", "title", "description", '
             '"durationMinutes", "targetPower", "targetHeartRate", "intervals". '
-            'When the athlete asks to change interval structure (e.g. number of reps, duration, '
-            'power target), always update "intervals" as an array of objects each with '
-            '"duration" (seconds), "power" (watts), and "rest" (seconds). '
-            'Always include "title" and "description" so the plan entry stays informative. '
-            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+            "Always include \"title\" and \"description\" so the plan entry stays informative. "
+            "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+            f"{_intervals_rule}"
         )
 
     system_prompt = (

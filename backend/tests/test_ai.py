@@ -390,5 +390,8 @@ async def test_ask_trainer_plan_change_reflection_in_prompt():
     assert "kind" in prompt or "encouraging" in prompt
     # Trade-off honesty instruction must be present
     assert "trade-off" in prompt or "trade-offs" in prompt
+    # CRITICAL intervals instruction and concrete example must be present
+    assert "CRITICAL" in prompt
+    assert '"duration"' in prompt and '"power"' in prompt and '"rest"' in prompt
     # Coach response must include a plan update
     assert result["plan_updates"] is not None
