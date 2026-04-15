@@ -382,7 +382,9 @@ async def generate_training_plan(
         if rider_assessment
         else ""
     )
+    today = __import__("datetime").datetime.now().date().isoformat()
     user_msg = (
+        f"Today's date: {today}\n"
         f"Profile: {json.dumps(profile)}{assessment_section}\n"
         "Generate a 14-day training plan starting from today that reflects both the athlete's "
         "goals and their actual fitness level from recent rides."
@@ -395,9 +397,10 @@ async def generate_training_plan(
 async def adapt_training_plan(
     plan: list[dict], recent_feedback: list[dict], profile: dict, provider: str = "openai"
 ) -> list[dict]:
+    today = __import__("datetime").datetime.now().date().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
     system_prompt = f"{COACH_PERSONA} Adapt the remaining training plan based on recent workout feedback.\nReturn ONLY a valid JSON object with an \"updatedDays\" array. All keys must be double-quoted. All numeric fields must be plain numbers with no units. Keep the same date fields.\nEach updated day must include all required TrainingDay fields: \"date\", \"workoutType\", \"title\", \"description\", \"durationMinutes\"."
-    user_msg = f"Profile: {json.dumps(profile)}\nRecent feedback: {json.dumps(recent_feedback)}\nRemaining plan days: {json.dumps(incomplete_days)}\nAdapt the remaining days based on the feedback. Return the full updated days array."
+    user_msg = f"Today's date: {today}\nProfile: {json.dumps(profile)}\nRecent feedback: {json.dumps(recent_feedback)}\nRemaining plan days: {json.dumps(incomplete_days)}\nAdapt the remaining days based on the feedback. Return the full updated days array."
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     updated_days = {day["date"]: day for day in parsed.get("updatedDays", [])}
@@ -416,7 +419,24 @@ async def ask_trainer(
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
-    system_prompt = f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\nAthlete profile: {json.dumps(profile)}\nLast 7 days of training: {json.dumps(last_7_days)}\nUpcoming plan (next 14 days): {json.dumps(next_14_days)}{memory_section}\n\nALWAYS respond with a valid JSON object containing exactly these fields:\n- \"response\": your natural language answer as a string (required)\n- \"planUpdates\": an array of training day updates (optional). Only include this field when the athlete explicitly asks to change, swap, skip, or reschedule a workout. Each update must include \"date\" (ISO string matching an existing plan date) and any fields to change: \"workoutType\", \"title\", \"description\", \"durationMinutes\", \"targetPower\", \"targetHeartRate\". When modifying a day, always include \"title\" and \"description\" so the plan entry stays informative. For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0."
+    system_prompt = (
+        f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
+        f"Today's date: {today}\n"
+        f"Athlete profile: {json.dumps(profile)}\n"
+        f"Last 7 days of training: {json.dumps(last_7_days)}\n"
+        f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
+        f"{memory_section}\n\n"
+        "Always take today's date into account when answering — for example when calculating "
+        "days until a race, suggesting which workout is next, or referencing past sessions.\n"
+        "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
+        '- "response": your natural language answer as a string (required)\n'
+        '- "planUpdates": an array of training day updates (optional). Only include this field when '
+        "the athlete explicitly asks to change, swap, skip, or reschedule a workout. Each update must "
+        'include "date" (ISO string matching an existing plan date) and any fields to change: '
+        '"workoutType", "title", "description", "durationMinutes", "targetPower", "targetHeartRate". '
+        "When modifying a day, always include \"title\" and \"description\" so the plan entry stays informative. "
+        'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+    )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
     raw = await _chat_history(provider, system_prompt, messages, json_mode=True)
