@@ -1,4 +1,9 @@
+import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
+
+import services.ai_service as ai_service
 
 
 PROFILE = {
@@ -112,3 +117,135 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     )
     assert rate_response.status_code == 200
     assert rate_response.json()["feedback"] == "Strong execution overall."
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for ask_trainer context_workout prompt branching
+# ---------------------------------------------------------------------------
+
+PLAN = [
+    {
+        "date": "2026-04-16",
+        "workoutType": "intervals",
+        "title": "VO2 Intervals",
+        "description": "5×4 min at 110% FTP",
+        "durationMinutes": 60,
+    }
+]
+
+CONTEXT_WORKOUT = {
+    "date": "2026-04-16",
+    "workoutType": "intervals",
+    "title": "VO2 Intervals",
+    "description": "5×4 min at 110% FTP",
+    "durationMinutes": 60,
+}
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_without_context_workout_uses_explicit_only_rule():
+    """Without context_workout the prompt must use the 'explicit request only' planUpdates rule."""
+    captured_prompt: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_prompt.append(system_prompt)
+        return json.dumps({"response": "Looks good.", "planUpdates": []})
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="How is my plan looking?",
+            plan=PLAN,
+            profile=PROFILE,
+            context_workout=None,
+        )
+
+    assert result["response"] == "Looks good."
+    prompt = captured_prompt[0]
+    # Explicit-only wording must appear
+    assert "Only include this" in prompt or "explicitly asks" in prompt
+    # Context workout section must NOT appear
+    assert "currently viewing this specific workout" not in prompt
+    # Implicit-change instruction must NOT appear
+    assert "proposes ANY change" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_with_context_workout_uses_implicit_change_rule():
+    """With context_workout the prompt must allow planUpdates for implicit coaching changes."""
+    captured_prompt: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_prompt.append(system_prompt)
+        return json.dumps(
+            {
+                "response": "Reduce to 3 reps to manage fatigue.",
+                "planUpdates": [
+                    {
+                        "date": "2026-04-16",
+                        "workoutType": "intervals",
+                        "title": "VO2 Intervals (adjusted)",
+                        "description": "3×4 min at 110% FTP",
+                        "durationMinutes": 45,
+                    }
+                ],
+            }
+        )
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="Is this workout appropriate given my fatigue?",
+            plan=PLAN,
+            profile=PROFILE,
+            context_workout=CONTEXT_WORKOUT,
+        )
+
+    assert "adjusted" in result["response"] or "fatigue" in result["response"].lower() or result["plan_updates"]
+    prompt = captured_prompt[0]
+    # Context workout JSON must be embedded in the prompt
+    assert "currently viewing this specific workout" in prompt
+    assert "VO2 Intervals" in prompt
+    # Implicit-change instruction must be present
+    assert "proposes ANY change" in prompt
+    # planUpdates must include the updated workout
+    assert result["plan_updates"] is not None
+    assert result["plan_updates"][0]["date"] == "2026-04-16"
+    assert result["plan_updates"][0]["durationMinutes"] == 45
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_with_context_workout_forwards_plan_updates(
+    client, auth_headers, mock_ai_service
+):
+    """HTTP endpoint must pass contextWorkout through and return planUpdates from the service."""
+    # Override ask_trainer mock to return a plan update for the context workout
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Shorten the workout.",
+        "plan_updates": [
+            {
+                "date": "2026-04-16",
+                "workoutType": "intervals",
+                "title": "VO2 Intervals (shortened)",
+                "description": "3 reps only",
+                "durationMinutes": 40,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={
+            "question": "Is this too hard today?",
+            "plan": PLAN,
+            "profile": PROFILE,
+            "contextWorkout": CONTEXT_WORKOUT,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["response"] == "Shorten the workout."
+    assert body["planUpdates"][0]["durationMinutes"] == 40
+    # Verify context_workout was forwarded to the service
+    call_kwargs = mock_ai_service["ask_trainer"].call_args.kwargs
+    assert call_kwargs["context_workout"] == CONTEXT_WORKOUT
