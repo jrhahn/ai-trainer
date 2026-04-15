@@ -424,11 +424,40 @@ async def ask_trainer(
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
     workout_section = (
-        f"\n\nThe athlete is currently viewing this specific workout and may be asking about it:\n"
+        f"\n\nThe athlete is currently viewing this specific workout:\n"
         f"{json.dumps(context_workout, indent=2)}"
-        "\nWhen the athlete refers to 'this workout', 'today's session', or similar, they mean the workout above. "
-        "If you update or modify this workout, include it in planUpdates."
+        "\nWhen the athlete refers to 'this workout', 'today's session', or similar, "
+        "they mean the workout above. "
+        "IMPORTANT: whenever your coaching response proposes ANY change or adjustment to this "
+        "workout (e.g. shorter duration, lower intensity, different structure), you MUST include "
+        "the updated workout in planUpdates so the card is immediately refreshed. Do not merely "
+        "describe the change in text — always materialise it as a planUpdates entry."
     ) if context_workout else ""
+
+    if context_workout:
+        plan_updates_rule = (
+            '- "planUpdates": an array of training day updates. '
+            "Include this field in two cases: "
+            "(1) The athlete explicitly asks to change, swap, skip, or reschedule any workout. "
+            "(2) You propose a coaching change to the currently-viewed workout (see above) — "
+            "even if the athlete did not explicitly request a change. "
+            'Each update must include "date" (ISO string matching an existing plan date) and any '
+            'fields to change: "workoutType", "title", "description", "durationMinutes", '
+            '"targetPower", "targetHeartRate". '
+            'Always include "title" and "description" so the plan entry stays informative. '
+            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+        )
+    else:
+        plan_updates_rule = (
+            '- "planUpdates": an array of training day updates (optional). Only include this '
+            "field when the athlete explicitly asks to change, swap, skip, or reschedule a "
+            'workout. Each update must include "date" (ISO string matching an existing plan '
+            'date) and any fields to change: "workoutType", "title", "description", '
+            '"durationMinutes", "targetPower", "targetHeartRate". '
+            'Always include "title" and "description" so the plan entry stays informative. '
+            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+        )
+
     system_prompt = (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
@@ -441,12 +470,7 @@ async def ask_trainer(
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
         '- "response": your natural language answer as a string (required)\n'
-        '- "planUpdates": an array of training day updates (optional). Only include this field when '
-        "the athlete explicitly asks to change, swap, skip, or reschedule a workout. Each update must "
-        'include "date" (ISO string matching an existing plan date) and any fields to change: '
-        '"workoutType", "title", "description", "durationMinutes", "targetPower", "targetHeartRate". '
-        "When modifying a day, always include \"title\" and \"description\" so the plan entry stays informative. "
-        'For a skipped/rest day set workoutType to "rest", durationMinutes to 0.'
+        f"{plan_updates_rule}"
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
