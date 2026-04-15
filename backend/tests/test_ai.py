@@ -346,3 +346,49 @@ async def test_ask_trainer_intervals_forwarded_through_http_endpoint(
     assert len(returned_intervals) == 4
     assert returned_intervals[0]["power"] == 370
     assert returned_intervals[0]["duration"] == 120
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_plan_change_reflection_in_prompt():
+    """When a plan change is requested, the prompt must include honest-reflection instructions."""
+    captured_prompt: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_prompt.append(system_prompt)
+        return json.dumps(
+            {
+                "response": (
+                    "Great initiative! Dropping to 3 intervals will reduce your training load "
+                    "slightly which could help with recovery, though you'll get a bit less VO2 "
+                    "stimulus. If you're feeling fresh, 4 is ideal — but 3 is a solid choice "
+                    "when fatigue is a factor. I've updated the plan for you!"
+                ),
+                "planUpdates": [
+                    {
+                        "date": "2026-04-16",
+                        "workoutType": "intervals",
+                        "title": "VO2 Intervals (adjusted)",
+                        "description": "3×4 min at 110% FTP",
+                        "durationMinutes": 45,
+                    }
+                ],
+            }
+        )
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="Change the VO2 intervals to only 3 reps",
+            plan=PLAN,
+            profile=PROFILE,
+            context_workout=CONTEXT_WORKOUT,
+        )
+
+    prompt = captured_prompt[0]
+    # Reflection instruction must be present
+    assert "reflect on whether the change is a good idea" in prompt
+    assert "honest" in prompt
+    assert "kind" in prompt or "encouraging" in prompt
+    # Trade-off honesty instruction must be present
+    assert "trade-off" in prompt or "trade-offs" in prompt
+    # Coach response must include a plan update
+    assert result["plan_updates"] is not None

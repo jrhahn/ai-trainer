@@ -474,6 +474,13 @@ async def ask_trainer(
         f"{workout_section}\n\n"
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
+        "Whenever the athlete requests a change to the training plan, your response MUST briefly "
+        "reflect on whether the change is a good idea: acknowledge their preference warmly, give "
+        "an honest assessment of the training impact (e.g. how it affects load, intensity, "
+        "progression, or recovery), and explain any trade-offs. "
+        "Always be kind, supportive, and encouraging — but never withhold honest coaching "
+        "advice. If a change could harm progress or recovery, say so clearly yet tactfully, "
+        "and still apply the change if the athlete wants it.\n"
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
         '- "response": your natural language answer as a string (required)\n'
         f"{plan_updates_rule}"
