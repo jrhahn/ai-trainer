@@ -42,6 +42,7 @@ export interface UserProfile {
   followsTrainingPlan: boolean
   restingHeartRate?: number
   maxHeartRate?: number
+  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }

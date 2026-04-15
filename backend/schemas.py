@@ -103,6 +103,7 @@ class UserResponse(CamelModel):
     follows_training_plan: bool = False
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
@@ -129,6 +130,7 @@ class UpdateProfileRequest(CamelModel):
     follows_training_plan: Optional[bool] = None
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
@@ -242,6 +244,7 @@ class UserProfileSchema(CamelModel):
     follows_training_plan: bool = False
     resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
+    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
 

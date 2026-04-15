@@ -36,6 +36,7 @@ class User(Base):
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
+    threshold_heart_rate: Mapped[int | None] = mapped_column(Integer)
     current_ftp: Mapped[int | None] = mapped_column(Integer)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")

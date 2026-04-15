@@ -38,6 +38,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         follows_training_plan=user.follows_training_plan,
         resting_heart_rate=user.resting_heart_rate,
         max_heart_rate=user.max_heart_rate,
+        threshold_heart_rate=user.threshold_heart_rate,
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
