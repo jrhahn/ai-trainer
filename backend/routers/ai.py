@@ -72,6 +72,7 @@ async def analyse_activities(
             notes=result.get("notes", ""),
             hr_zones=result.get("hrZones"),
             ride_insights=result.get("rideInsights"),
+            last_ride_feedback=result.get("lastRideFeedback"),
         )
         db.add(assessment)
     else:
@@ -81,6 +82,8 @@ async def analyse_activities(
         assessment.notes = result.get("notes", assessment.notes)
         assessment.hr_zones = result.get("hrZones")
         assessment.ride_insights = result.get("rideInsights")
+        if result.get("lastRideFeedback"):
+            assessment.last_ride_feedback = result.get("lastRideFeedback")
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:

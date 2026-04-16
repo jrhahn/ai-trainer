@@ -245,6 +245,14 @@ export default function DashboardPage() {
       {/* Strava */}
       <StravaConnect />
 
+      {/* Last ride feedback — shown whenever stored, updated on each new ride */}
+      {riderAssessment?.lastRideFeedback && (
+        <div className="bg-white border border-blue-100 rounded-xl shadow-sm px-4 py-3">
+          <p className="text-sm font-semibold text-blue-800 mb-1">🚴 Last Ride Feedback</p>
+          <p className="text-sm text-gray-700 leading-relaxed">{riderAssessment.lastRideFeedback}</p>
+        </div>
+      )}
+
       {/* Strava analysis status */}
       {newRidesCount > 0 && analysisStatus !== 'analysing' && (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">

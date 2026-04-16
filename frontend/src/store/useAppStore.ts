@@ -119,6 +119,7 @@ export interface RiderAssessment {
   notes: string
   hrZones?: HrZones
   rideInsights?: string
+  lastRideFeedback?: string
 }
 
 interface AppState {

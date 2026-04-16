@@ -73,6 +73,7 @@ def mock_ai_service(monkeypatch):
                 "riderType": "allrounder",
                 "notes": "Balanced rider",
                 "rideInsights": "Your last ride was an endurance effort at 68% FTP. No intervals detected.",
+                "lastRideFeedback": "Great endurance ride! You held 188W avg (68% FTP) for 90 minutes with stable HR. Next session, try adding 2×20 min at 85% FTP to build your tempo base.",
             }
         ),
         "generate_training_plan": AsyncMock(

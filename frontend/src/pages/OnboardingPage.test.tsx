@@ -103,6 +103,7 @@ describe('OnboardingPage', () => {
         estimatedThresholdHR: 170,
         riderType: 'allrounder',
         notes: 'Good sustained efforts.',
+        lastRideFeedback: 'Solid endurance ride. Keep it up!',
       },
       planUpdates: [],
     })

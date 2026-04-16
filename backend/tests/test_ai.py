@@ -42,6 +42,7 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     body = analyse_response.json()
     assert body["assessment"]["estimatedFTP"] == 280
     assert body["assessment"]["rideInsights"] is not None
+    assert body["assessment"]["lastRideFeedback"] is not None
 
     generate_response = await client.post(
         "/api/v1/ai/generate-plan",
@@ -553,4 +554,5 @@ async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_s
     assert "assessment" in body
     assert body["assessment"]["estimatedFTP"] == 280
     assert body["assessment"]["rideInsights"] is not None
+    assert body["assessment"]["lastRideFeedback"] is not None
     assert "planUpdates" in body

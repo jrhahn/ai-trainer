@@ -77,6 +77,7 @@ class RiderAssessmentSchema(CamelModel):
     notes: str
     hr_zones: Optional[Any] = None
     ride_insights: Optional[str] = None
+    last_ride_feedback: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
