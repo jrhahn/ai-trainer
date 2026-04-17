@@ -14,9 +14,13 @@ import crud
 import models
 from database import get_db
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "change-me-in-production")
+_JWT_SECRET_DEFAULT = "change-me-in-production"
+_DEV_ENVS = {"development", "dev", "local", "test", "testing"}
+
+JWT_SECRET = os.environ.get("JWT_SECRET", _JWT_SECRET_DEFAULT)
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "10080"))  # 7 days
+APP_ENV = os.environ.get("APP_ENV", "development")
 AUTHELIA_AUTH_ENABLED = os.environ.get("AUTHELIA_AUTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 AUTHELIA_REMOTE_USER_HEADER = os.environ.get("AUTHELIA_REMOTE_USER_HEADER", "Remote-User")
 AUTHELIA_REMOTE_EMAIL_HEADER = os.environ.get("AUTHELIA_REMOTE_EMAIL_HEADER", "Remote-Email")
@@ -25,6 +29,16 @@ AUTHELIA_INTERNAL_URL = os.environ.get("AUTHELIA_INTERNAL_URL", "").rstrip("/")
 AUTHELIA_USERS_DB_PATH = os.environ.get("AUTHELIA_USERS_DB_PATH", "")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def validate_jwt_secret() -> None:
+    """Raise RuntimeError if JWT_SECRET is the insecure default in a non-dev environment."""
+    if JWT_SECRET == _JWT_SECRET_DEFAULT and APP_ENV.lower() not in _DEV_ENVS:
+        raise RuntimeError(
+            f"JWT_SECRET is set to the insecure default value '{_JWT_SECRET_DEFAULT}'. "
+            "Set a strong, random JWT_SECRET environment variable before starting the app. "
+            f"(APP_ENV={APP_ENV!r})"
+        )
 
 
 # ---------------------------------------------------------------------------
