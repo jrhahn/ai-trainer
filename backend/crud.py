@@ -1,0 +1,325 @@
+"""CRUD / data-access helpers.
+
+All raw SQLAlchemy queries are isolated here so that routers stay thin and
+tests can patch a single module instead of mocking low-level session methods.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+import models
+
+# ---------------------------------------------------------------------------
+# User
+# ---------------------------------------------------------------------------
+
+_USER_EAGER_OPTIONS = [
+    selectinload(models.User.training_plan),
+    selectinload(models.User.chat_messages),
+    selectinload(models.User.coach_memory),
+    selectinload(models.User.strava_token),
+    selectinload(models.User.rider_assessment),
+]
+
+
+async def get_user_by_id(db: AsyncSession, user_id: str) -> models.User | None:
+    """Return a User with all relationships eagerly loaded, or None."""
+    return await db.scalar(
+        select(models.User).options(*_USER_EAGER_OPTIONS).where(models.User.id == user_id)
+    )
+
+
+async def get_user_by_email(db: AsyncSession, email: str) -> models.User | None:
+    """Return a User by email with all relationships eagerly loaded, or None."""
+    return await db.scalar(
+        select(models.User).options(*_USER_EAGER_OPTIONS).where(models.User.email == email)
+    )
+
+
+async def get_user_by_email_simple(db: AsyncSession, email: str) -> models.User | None:
+    """Return a User by email without loading relationships, or None."""
+    return await db.scalar(select(models.User).where(models.User.email == email))
+
+
+async def create_user(
+    db: AsyncSession,
+    *,
+    email: str,
+    name: str | None,
+    hashed_password: str,
+) -> models.User:
+    """Create a new User, flush, and return the persisted instance."""
+    user = models.User(email=email, name=name, hashed_password=hashed_password)
+    db.add(user)
+    await db.flush()
+    return user
+
+
+# ---------------------------------------------------------------------------
+# TrainingPlan
+# ---------------------------------------------------------------------------
+
+
+async def get_training_plan(db: AsyncSession, user_id: str) -> models.TrainingPlan | None:
+    """Return the TrainingPlan for a user, or None."""
+    return await db.scalar(
+        select(models.TrainingPlan).where(models.TrainingPlan.user_id == user_id)
+    )
+
+
+async def upsert_training_plan(
+    db: AsyncSession, user_id: str, plan: Any
+) -> models.TrainingPlan:
+    """Create or replace the training plan for a user and flush."""
+    existing = await get_training_plan(db, user_id)
+    if existing is None:
+        existing = models.TrainingPlan(user_id=user_id, plan=plan)
+        db.add(existing)
+    else:
+        existing.plan = plan
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
+# WorkoutLog
+# ---------------------------------------------------------------------------
+
+
+async def get_workout_logs(db: AsyncSession, user_id: str) -> list[models.WorkoutLog]:
+    """Return all WorkoutLog rows for a user."""
+    result = await db.scalars(
+        select(models.WorkoutLog).where(models.WorkoutLog.user_id == user_id)
+    )
+    return list(result)
+
+
+async def get_workout_log_by_date(
+    db: AsyncSession, user_id: str, date: str
+) -> models.WorkoutLog | None:
+    """Return the WorkoutLog for a specific user/date, or None."""
+    return await db.scalar(
+        select(models.WorkoutLog).where(
+            models.WorkoutLog.user_id == user_id,
+            models.WorkoutLog.date == date,
+        )
+    )
+
+
+async def upsert_workout_log(
+    db: AsyncSession,
+    user_id: str,
+    date: str,
+    *,
+    actual_duration_minutes: int,
+    average_power: int | None,
+    average_heart_rate: int | None,
+    peak_power: int | None,
+    perceived_effort: int,
+    notes: str,
+    completed_at: str,
+) -> models.WorkoutLog:
+    """Create or update a WorkoutLog for a user/date and flush."""
+    existing = await get_workout_log_by_date(db, user_id, date)
+    if existing is None:
+        existing = models.WorkoutLog(
+            user_id=user_id,
+            date=date,
+            actual_duration_minutes=actual_duration_minutes,
+            average_power=average_power,
+            average_heart_rate=average_heart_rate,
+            peak_power=peak_power,
+            perceived_effort=perceived_effort,
+            notes=notes,
+            completed_at=completed_at,
+        )
+        db.add(existing)
+    else:
+        existing.actual_duration_minutes = actual_duration_minutes
+        existing.average_power = average_power
+        existing.average_heart_rate = average_heart_rate
+        existing.peak_power = peak_power
+        existing.perceived_effort = perceived_effort
+        existing.notes = notes
+        existing.completed_at = completed_at
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
+# ChatMessage
+# ---------------------------------------------------------------------------
+
+
+async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatMessage]:
+    """Return all ChatMessages for a user ordered by timestamp."""
+    result = await db.scalars(
+        select(models.ChatMessage)
+        .where(models.ChatMessage.user_id == user_id)
+        .order_by(models.ChatMessage.timestamp)
+    )
+    return list(result)
+
+
+async def create_chat_message(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    role: str,
+    content: str,
+    timestamp: str,
+    plan_update_count: int | None = None,
+) -> models.ChatMessage:
+    """Create a ChatMessage, flush, and return the persisted instance."""
+    message = models.ChatMessage(
+        user_id=user_id,
+        role=role,
+        content=content,
+        timestamp=timestamp,
+        plan_update_count=plan_update_count,
+    )
+    db.add(message)
+    await db.flush()
+    return message
+
+
+async def delete_chat_messages(db: AsyncSession, user_id: str) -> None:
+    """Delete all ChatMessages for a user."""
+    await db.execute(delete(models.ChatMessage).where(models.ChatMessage.user_id == user_id))
+
+
+# ---------------------------------------------------------------------------
+# CoachMemory
+# ---------------------------------------------------------------------------
+
+
+async def get_coach_memory(db: AsyncSession, user_id: str) -> models.CoachMemory | None:
+    """Return the CoachMemory for a user, or None."""
+    return await db.get(models.CoachMemory, user_id)
+
+
+async def upsert_coach_memory(
+    db: AsyncSession, user_id: str, memory: str
+) -> models.CoachMemory:
+    """Create or update the CoachMemory for a user and flush."""
+    existing = await get_coach_memory(db, user_id)
+    if existing is None:
+        existing = models.CoachMemory(user_id=user_id, memory=memory)
+        db.add(existing)
+    else:
+        existing.memory = memory
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
+# StravaToken
+# ---------------------------------------------------------------------------
+
+
+async def get_strava_token(db: AsyncSession, user_id: str) -> models.StravaToken | None:
+    """Return the StravaToken for a user, or None."""
+    return await db.get(models.StravaToken, user_id)
+
+
+async def upsert_strava_token(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    access_token: str,
+    refresh_token: str,
+    expires_at: int,
+    athlete_id: int,
+    athlete_name: str,
+) -> models.StravaToken:
+    """Create or update the StravaToken for a user and flush."""
+    existing = await get_strava_token(db, user_id)
+    if existing is None:
+        existing = models.StravaToken(
+            user_id=user_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            athlete_id=athlete_id,
+            athlete_name=athlete_name,
+        )
+        db.add(existing)
+    else:
+        existing.access_token = access_token
+        existing.refresh_token = refresh_token
+        existing.expires_at = expires_at
+        existing.athlete_id = athlete_id
+        existing.athlete_name = athlete_name
+    await db.flush()
+    return existing
+
+
+async def delete_strava_token(db: AsyncSession, user_id: str) -> None:
+    """Delete the StravaToken for a user if it exists and flush."""
+    token_row = await get_strava_token(db, user_id)
+    if token_row is not None:
+        await db.delete(token_row)
+        await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# RiderAssessment
+# ---------------------------------------------------------------------------
+
+
+async def get_rider_assessment(
+    db: AsyncSession, user_id: str
+) -> models.RiderAssessment | None:
+    """Return the RiderAssessment for a user, or None."""
+    return await db.get(models.RiderAssessment, user_id)
+
+
+async def upsert_rider_assessment(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    estimated_ftp: int | None,
+    estimated_threshold_hr: int | None,
+    rider_type: str | None = None,
+    notes: str | None = None,
+    hr_zones: Any | None = None,
+    ride_insights: str | None = None,
+    last_ride_feedback: str | None = None,
+) -> models.RiderAssessment:
+    """Create or update the RiderAssessment for a user and flush.
+
+    For updates, ``rider_type`` and ``notes`` fall back to the existing values
+    when *None* is passed.  ``last_ride_feedback`` is only written when the
+    caller provides a non-empty value.
+    """
+    assessment = await get_rider_assessment(db, user_id)
+    if assessment is None:
+        assessment = models.RiderAssessment(
+            user_id=user_id,
+            estimated_ftp=estimated_ftp,
+            estimated_threshold_hr=estimated_threshold_hr,
+            rider_type=rider_type if rider_type is not None else "allrounder",
+            notes=notes if notes is not None else "",
+            hr_zones=hr_zones,
+            ride_insights=ride_insights,
+            last_ride_feedback=last_ride_feedback,
+        )
+        db.add(assessment)
+    else:
+        assessment.estimated_ftp = estimated_ftp
+        assessment.estimated_threshold_hr = estimated_threshold_hr
+        if rider_type is not None:
+            assessment.rider_type = rider_type
+        if notes is not None:
+            assessment.notes = notes
+        assessment.hr_zones = hr_zones
+        assessment.ride_insights = ride_insights
+        if last_ride_feedback:
+            assessment.last_ride_feedback = last_ride_feedback
+    await db.flush()
+    return assessment

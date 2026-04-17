@@ -10,11 +10,10 @@ from typing import Any
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
-import models
+import crud
 import schemas
 from database import get_db
 
@@ -87,7 +86,7 @@ async def register(
                 detail="User registration is not configured on this server.",
             )
 
-        existing = await db.scalar(select(models.User).where(models.User.email == body.email))
+        existing = await crud.get_user_by_email_simple(db, body.email)
         if existing is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
@@ -98,26 +97,24 @@ async def register(
         except RuntimeError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
-        user = models.User(
+        await crud.create_user(
+            db,
             email=body.email,
             name=body.name,
             hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
         )
-        db.add(user)
-        await db.flush()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    existing = await db.scalar(select(models.User).where(models.User.email == body.email))
+    existing = await crud.get_user_by_email_simple(db, body.email)
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    user = models.User(
+    user = await crud.create_user(
+        db,
         email=body.email,
         name=body.name,
         hashed_password=auth.hash_password(body.password),
     )
-    db.add(user)
-    await db.flush()
 
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)
@@ -173,20 +170,19 @@ async def login(
             )
 
         # Find or auto-create the app user for this Authelia account
-        user = await db.scalar(select(models.User).where(models.User.email == body.email))
+        user = await crud.get_user_by_email_simple(db, body.email)
         if user is None:
-            user = models.User(
+            user = await crud.create_user(
+                db,
                 email=body.email,
                 name=body.email.split("@")[0],
                 hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
             )
-            db.add(user)
-            await db.flush()
 
         token = auth.create_access_token(user.id)
         return schemas.TokenResponse(access_token=token)
 
-    user = await db.scalar(select(models.User).where(models.User.email == body.email))
+    user = await crud.get_user_by_email_simple(db, body.email)
     if user is None or not auth.verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 

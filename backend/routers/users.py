@@ -1,10 +1,10 @@
 """User profile, plan, workout, chat, and coach-memory routes."""
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
+import crud
 import models
 import schemas
 from database import get_db
@@ -83,7 +83,7 @@ async def get_plan(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
-    plan = await db.scalar(select(models.TrainingPlan).where(models.TrainingPlan.user_id == current_user.id))
+    plan = await crud.get_training_plan(db, current_user.id)
     return schemas.PlanResponse(plan=plan.plan if plan is not None else [])
 
 
@@ -93,13 +93,7 @@ async def save_plan(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
-    plan = await db.scalar(select(models.TrainingPlan).where(models.TrainingPlan.user_id == current_user.id))
-    if plan is None:
-        plan = models.TrainingPlan(user_id=current_user.id, plan=body.plan)
-        db.add(plan)
-    else:
-        plan.plan = body.plan
-    await db.flush()
+    plan = await crud.upsert_training_plan(db, current_user.id, body.plan)
     return schemas.PlanResponse(plan=plan.plan)
 
 
@@ -108,7 +102,7 @@ async def get_workouts(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict[str, dict]:
-    logs = await db.scalars(select(models.WorkoutLog).where(models.WorkoutLog.user_id == current_user.id))
+    logs = await crud.get_workout_logs(db, current_user.id)
     result: dict[str, dict] = {}
     for log in logs:
         result[log.date] = {
@@ -130,35 +124,19 @@ async def save_workout(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    existing = await db.scalar(
-        select(models.WorkoutLog).where(
-            models.WorkoutLog.user_id == current_user.id,
-            models.WorkoutLog.date == date,
-        )
-    )
     feedback = body.feedback
-    if existing is None:
-        existing = models.WorkoutLog(
-            user_id=current_user.id,
-            date=date,
-            actual_duration_minutes=feedback.actual_duration_minutes,
-            average_power=feedback.average_power,
-            average_heart_rate=feedback.average_heart_rate,
-            peak_power=feedback.peak_power,
-            perceived_effort=feedback.perceived_effort,
-            notes=feedback.notes,
-            completed_at=feedback.completed_at,
-        )
-        db.add(existing)
-    else:
-        existing.actual_duration_minutes = feedback.actual_duration_minutes
-        existing.average_power = feedback.average_power
-        existing.average_heart_rate = feedback.average_heart_rate
-        existing.peak_power = feedback.peak_power
-        existing.perceived_effort = feedback.perceived_effort
-        existing.notes = feedback.notes
-        existing.completed_at = feedback.completed_at
-    await db.flush()
+    await crud.upsert_workout_log(
+        db,
+        current_user.id,
+        date,
+        actual_duration_minutes=feedback.actual_duration_minutes,
+        average_power=feedback.average_power,
+        average_heart_rate=feedback.average_heart_rate,
+        peak_power=feedback.peak_power,
+        perceived_effort=feedback.perceived_effort,
+        notes=feedback.notes,
+        completed_at=feedback.completed_at,
+    )
     return {"status": "ok"}
 
 
@@ -167,11 +145,7 @@ async def get_chat(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ChatHistoryResponse:
-    messages = await db.scalars(
-        select(models.ChatMessage)
-        .where(models.ChatMessage.user_id == current_user.id)
-        .order_by(models.ChatMessage.timestamp)
-    )
+    messages = await crud.get_chat_messages(db, current_user.id)
     return schemas.ChatHistoryResponse(
         messages=[schemas.ChatMessageSchema.model_validate(m, from_attributes=True) for m in messages]
     )
@@ -183,15 +157,14 @@ async def add_chat_message(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ChatMessageSchema:
-    message = models.ChatMessage(
-        user_id=current_user.id,
+    message = await crud.create_chat_message(
+        db,
+        current_user.id,
         role=body.role,
         content=body.content,
         timestamp=body.timestamp,
         plan_update_count=body.plan_update_count,
     )
-    db.add(message)
-    await db.flush()
     return schemas.ChatMessageSchema.model_validate(message, from_attributes=True)
 
 
@@ -200,7 +173,7 @@ async def clear_chat(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    await db.execute(delete(models.ChatMessage).where(models.ChatMessage.user_id == current_user.id))
+    await crud.delete_chat_messages(db, current_user.id)
     return {"status": "deleted"}
 
 
@@ -209,7 +182,7 @@ async def get_coach_memory(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.CoachMemoryResponse:
-    memory = await db.get(models.CoachMemory, current_user.id)
+    memory = await crud.get_coach_memory(db, current_user.id)
     return schemas.CoachMemoryResponse(memory=memory.memory if memory is not None else "")
 
 
@@ -219,11 +192,5 @@ async def save_coach_memory(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.CoachMemoryResponse:
-    memory = await db.get(models.CoachMemory, current_user.id)
-    if memory is None:
-        memory = models.CoachMemory(user_id=current_user.id, memory=body.memory)
-        db.add(memory)
-    else:
-        memory.memory = body.memory
-    await db.flush()
+    memory = await crud.upsert_coach_memory(db, current_user.id, body.memory)
     return schemas.CoachMemoryResponse(memory=memory.memory)

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
+import crud
 import models
 import schemas
 from database import get_db
@@ -62,28 +63,17 @@ async def analyse_activities(
         streams_by_id=streams_by_id,
         max_heart_rate=body.max_heart_rate,
     )
-    assessment = await db.get(models.RiderAssessment, current_user.id)
-    if assessment is None:
-        assessment = models.RiderAssessment(
-            user_id=current_user.id,
-            estimated_ftp=result.get("estimatedFTP"),
-            estimated_threshold_hr=result.get("estimatedThresholdHR"),
-            rider_type=result.get("riderType", "allrounder"),
-            notes=result.get("notes", ""),
-            hr_zones=result.get("hrZones"),
-            ride_insights=result.get("rideInsights"),
-            last_ride_feedback=result.get("lastRideFeedback"),
-        )
-        db.add(assessment)
-    else:
-        assessment.estimated_ftp = result.get("estimatedFTP")
-        assessment.estimated_threshold_hr = result.get("estimatedThresholdHR")
-        assessment.rider_type = result.get("riderType", assessment.rider_type)
-        assessment.notes = result.get("notes", assessment.notes)
-        assessment.hr_zones = result.get("hrZones")
-        assessment.ride_insights = result.get("rideInsights")
-        if result.get("lastRideFeedback"):
-            assessment.last_ride_feedback = result.get("lastRideFeedback")
+    await crud.upsert_rider_assessment(
+        db,
+        current_user.id,
+        estimated_ftp=result.get("estimatedFTP"),
+        estimated_threshold_hr=result.get("estimatedThresholdHR"),
+        rider_type=result.get("riderType"),
+        notes=result.get("notes"),
+        hr_zones=result.get("hrZones"),
+        ride_insights=result.get("rideInsights"),
+        last_ride_feedback=result.get("lastRideFeedback"),
+    )
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:

@@ -8,10 +8,9 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+import crud
 import models
 from database import get_db
 
@@ -84,17 +83,7 @@ async def get_current_user(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
     user_id = decode_token(credentials.credentials)
-    user = await db.scalar(
-        select(models.User)
-        .options(
-            selectinload(models.User.training_plan),
-            selectinload(models.User.chat_messages),
-            selectinload(models.User.coach_memory),
-            selectinload(models.User.strava_token),
-            selectinload(models.User.rider_assessment),
-        )
-        .where(models.User.id == user_id)
-    )
+    user = await crud.get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
@@ -117,29 +106,17 @@ async def _get_or_create_authelia_user(
     if not email:
         return None
 
-    user = await db.scalar(
-        select(models.User)
-        .options(
-            selectinload(models.User.training_plan),
-            selectinload(models.User.chat_messages),
-            selectinload(models.User.coach_memory),
-            selectinload(models.User.strava_token),
-            selectinload(models.User.rider_assessment),
-        )
-        .where(models.User.email == email)
-    )
+    user = await crud.get_user_by_email(db, email)
     if user is not None:
         return user
 
     remote_name = request.headers.get(AUTHELIA_REMOTE_NAME_HEADER)
     remote_user = request.headers.get(AUTHELIA_REMOTE_USER_HEADER)
-    user = models.User(
+    return await crud.create_user(
+        db,
         email=email,
         name=remote_name or remote_user,
         # Authelia-managed users do not authenticate via local password login.
         # A random one-way hash ensures no reusable local password exists.
         hashed_password=hash_password(secrets.token_urlsafe(32)),
     )
-    db.add(user)
-    await db.flush()
-    return user

@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
+import crud
 import models
 import schemas
 from database import get_db
@@ -120,7 +121,7 @@ async def strava_callback(
     if expires_at <= time.time():
         return RedirectResponse(f"{_frontend_url()}/strava/callback?error=State%20expired")
 
-    user = await db.get(models.User, user_id)
+    user = await crud.get_user_by_id(db, user_id)
     if user is None:
         return RedirectResponse(f"{_frontend_url()}/strava/callback?error=User%20not%20found")
 
@@ -143,24 +144,15 @@ async def strava_callback(
     athlete = data.get("athlete", {})
     athlete_name = f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip()
 
-    token_row = await db.get(models.StravaToken, user.id)
-    if token_row is None:
-        token_row = models.StravaToken(
-            user_id=user.id,
-            access_token=data["access_token"],
-            refresh_token=data["refresh_token"],
-            expires_at=data["expires_at"],
-            athlete_id=athlete.get("id", 0),
-            athlete_name=athlete_name,
-        )
-        db.add(token_row)
-    else:
-        token_row.access_token = data["access_token"]
-        token_row.refresh_token = data["refresh_token"]
-        token_row.expires_at = data["expires_at"]
-        token_row.athlete_id = athlete.get("id", 0)
-        token_row.athlete_name = athlete_name
-
+    await crud.upsert_strava_token(
+        db,
+        user.id,
+        access_token=data["access_token"],
+        refresh_token=data["refresh_token"],
+        expires_at=data["expires_at"],
+        athlete_id=athlete.get("id", 0),
+        athlete_name=athlete_name,
+    )
     await db.flush()
     return RedirectResponse(f"{_frontend_url()}/strava/callback?success=true")
 
@@ -186,7 +178,7 @@ async def strava_refresh(
         raise HTTPException(status_code=400, detail="Failed to refresh Strava token")
 
     data = resp.json()
-    token_row = await db.get(models.StravaToken, current_user.id)
+    token_row = await crud.get_strava_token(db, current_user.id)
     if token_row is not None:
         token_row.access_token = data["access_token"]
         token_row.refresh_token = data["refresh_token"]
@@ -278,8 +270,5 @@ async def disconnect_strava(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    token_row = await db.get(models.StravaToken, current_user.id)
-    if token_row is not None:
-        await db.delete(token_row)
-        await db.flush()
+    await crud.delete_strava_token(db, current_user.id)
     return {"status": "disconnected"}
