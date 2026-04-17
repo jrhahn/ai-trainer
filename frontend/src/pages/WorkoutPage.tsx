@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
+import { useMutation } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout } from '../services/ai'
 import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
-import type { WorkoutFeedback } from '../store/useAppStore'
+import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -32,7 +33,17 @@ export default function WorkoutPage() {
     }))
   )
   const [showForm, setShowForm] = useState(false)
-  const [ratingLoading, setRatingLoading] = useState(false)
+
+  const rateWorkoutMutation = useMutation({
+    mutationFn: ({ dayWithFeedback, profile }: { dayWithFeedback: TrainingDay; profile: NonNullable<typeof userProfile> }) =>
+      rateCompletedWorkout(dayWithFeedback, profile, authToken!),
+    onSuccess: async (coachFeedback) => {
+      if (coachFeedback) {
+        updateTrainingDay(day!.date, { coachFeedback })
+        await saveTrainingPlan(authToken!, useAppStore.getState().trainingPlan)
+      }
+    },
+  })
 
   const day = trainingPlan.find((d) => d.date === date)
 
@@ -60,19 +71,8 @@ export default function WorkoutPage() {
     }
 
     if (authToken && userProfile) {
-      setRatingLoading(true)
-      try {
-        const dayWithFeedback = { ...day, completed: true, feedback }
-        const coachFeedback = await rateCompletedWorkout(dayWithFeedback, userProfile, authToken)
-        if (coachFeedback) {
-          updateTrainingDay(day.date, { coachFeedback })
-          await saveTrainingPlan(authToken, useAppStore.getState().trainingPlan)
-        }
-      } catch {
-        // silently fail – rating is a nice-to-have
-      } finally {
-        setRatingLoading(false)
-      }
+      const dayWithFeedback = { ...day, completed: true, feedback }
+      rateWorkoutMutation.mutate({ dayWithFeedback, profile: userProfile })
     }
   }
 
@@ -194,13 +194,13 @@ export default function WorkoutPage() {
               <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
             )}
             {/* Coach rating */}
-            {ratingLoading && (
+            {rateWorkoutMutation.isPending && (
               <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
                 <Loader2 size={13} className="animate-spin" />
                 Coach is reviewing your session…
               </div>
             )}
-            {!ratingLoading && day.coachFeedback && (
+            {!rateWorkoutMutation.isPending && day.coachFeedback && (
               <div className="mt-3 border-t border-green-200 pt-3">
                 <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
                   <Bot size={12} /> Coach's Feedback

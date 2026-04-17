@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RegisterPage from './RegisterPage'
 import { useAppStore } from '../store/useAppStore'
 
@@ -18,12 +19,18 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
+function createTestQueryClient() {
+  return new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+}
+
 function setup() {
   useAppStore.getState().loadUserData = mockLoadUserData
   render(
-    <MemoryRouter>
-      <RegisterPage />
-    </MemoryRouter>
+    <QueryClientProvider client={createTestQueryClient()}>
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bike, Loader2 } from 'lucide-react'
+import { useMutation } from '@tanstack/react-query'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 
@@ -12,28 +13,29 @@ export default function RegisterPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setLoading(true)
-    setError('')
-    try {
+  const registerMutation = useMutation({
+    mutationFn: async () => {
       const token = await register(name, email, password)
       if (token) {
         setAuthToken(token)
         await loadUserData(token)
+      }
+      return token
+    },
+    onSuccess: (token) => {
+      if (token) {
         navigate('/onboarding')
       } else {
         // Authelia mode: account created, user must now sign in
         navigate('/login')
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
-    } finally {
-      setLoading(false)
-    }
+    },
+  })
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    registerMutation.mutate()
   }
 
   return (
@@ -85,18 +87,18 @@ export default function RegisterPage() {
             />
           </div>
 
-          {error && (
+          {registerMutation.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
+              {registerMutation.error instanceof Error ? registerMutation.error.message : 'Registration failed'}
             </div>
           )}
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={registerMutation.isPending}
             className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
           >
-            {loading ? (
+            {registerMutation.isPending ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
                 Creating account...

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { useStravaSync } from './useStravaSync'
 
@@ -76,10 +78,18 @@ beforeEach(() => {
   mockAnalyseStravaActivities.mockResolvedValue({ assessment: mockAssessment, planUpdates: undefined })
 })
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children)
+}
+
 describe('useStravaSync', () => {
   it('returns idle status when there is no Strava connection', () => {
     useAppStore.setState({ authToken: 'tok', userProfile: baseProfile, stravaConnection: null })
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     expect(result.current.analysisStatus).toBe('idle')
     expect(result.current.stravaActivities).toEqual([])
@@ -88,7 +98,7 @@ describe('useStravaSync', () => {
 
   it('returns idle status when there is no auth token', () => {
     useAppStore.setState({ authToken: null, userProfile: baseProfile, stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' } })
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     expect(result.current.analysisStatus).toBe('idle')
     expect(mockGetStravaActivities).not.toHaveBeenCalled()
@@ -103,7 +113,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: true,
     })
 
-    renderHook(() => useStravaSync())
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(mockGetStravaActivities).toHaveBeenCalledWith('tok')
@@ -119,7 +129,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: false,
     })
 
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(mockActivities, 'tok', undefined)
@@ -136,7 +146,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: true,
     })
 
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(result.current.stravaActivities).toEqual(mockActivities)
@@ -152,7 +162,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: false,
     })
 
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(result.current.analysisStatus).toBe('error')
@@ -170,7 +180,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: false,
     })
 
-    const { result } = renderHook(() => useStravaSync())
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(result.current.analysisStatus).toBe('error')
@@ -187,7 +197,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: false,
     })
 
-    renderHook(() => useStravaSync())
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       const { riderAssessment, userProfile } = useAppStore.getState()
@@ -205,7 +215,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: true,
     })
 
-    renderHook(() => useStravaSync())
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(mockGetStravaActivities).toHaveBeenCalled()
@@ -222,7 +232,7 @@ describe('useStravaSync', () => {
       stravaAnalysisComplete: false,
     })
 
-    renderHook(() => useStravaSync())
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       const { lastStravaActivityId } = useAppStore.getState()
