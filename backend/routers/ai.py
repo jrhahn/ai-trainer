@@ -1,5 +1,6 @@
 """AI routes."""
 
+import logging
 import os
 
 from fastapi import APIRouter, Depends
@@ -14,6 +15,8 @@ from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+logger = logging.getLogger(__name__)
 
 
 def _default_provider() -> str:
@@ -55,7 +58,10 @@ async def analyse_activities(
                 if streams:
                     streams_by_id[str(activity.id)] = streams
         except Exception:
-            pass  # streams are optional; fall back to summary-only analysis
+            logger.warning(
+                "Failed to fetch Strava streams; falling back to summary-only analysis",
+                exc_info=True,
+            )
 
     result = await ai_service.analyse_strava_activities(
         [activity.model_dump() for activity in body.activities],
