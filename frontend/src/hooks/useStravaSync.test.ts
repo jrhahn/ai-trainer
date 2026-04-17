@@ -87,7 +87,7 @@ describe('useStravaSync', () => {
   })
 
   it('returns idle status when there is no auth token', () => {
-    useAppStore.setState({ authToken: null, userProfile: baseProfile, stravaConnection: { accessToken: 'strava-tok', athleteId: 1 } })
+    useAppStore.setState({ authToken: null, userProfile: baseProfile, stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' } })
     const { result } = renderHook(() => useStravaSync())
 
     expect(result.current.analysisStatus).toBe('idle')
@@ -99,7 +99,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
 
@@ -115,7 +115,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
 
@@ -132,7 +132,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
 
@@ -148,7 +148,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
 
@@ -166,7 +166,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
 
@@ -183,7 +183,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
 
@@ -201,7 +201,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
 
@@ -218,7 +218,7 @@ describe('useStravaSync', () => {
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
-      stravaConnection: { accessToken: 'strava-tok', athleteId: 1 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
 
