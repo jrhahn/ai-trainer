@@ -6,7 +6,6 @@ vi.stubGlobal('fetch', mockFetch)
 import { apiFetch } from './api'
 
 function makeResponse(status: number, body: unknown): Response {
-  const jsonStr = JSON.stringify(body)
   return {
     ok: status >= 200 && status < 300,
     status,
