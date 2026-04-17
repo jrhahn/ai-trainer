@@ -1,7 +1,47 @@
 import { create } from 'zustand'
 
+/**
+ * Storage key for the JWT auth token.
+ *
+ * ## Why sessionStorage instead of localStorage?
+ *
+ * `sessionStorage` is intentionally chosen over `localStorage` for the
+ * following security and functional reasons:
+ *
+ * - **OAuth / page-reload survival**: OAuth flows (e.g. Strava, Authelia)
+ *   redirect the browser away and back. `sessionStorage` persists across
+ *   same-tab page reloads and cross-origin redirects within the same tab,
+ *   so the token survives the round-trip without requiring the user to log
+ *   in again.
+ *
+ * - **Automatic session scoping**: Each browser tab gets its own independent
+ *   `sessionStorage`. When the tab (or window) is closed the storage is
+ *   cleared automatically — no explicit logout required.
+ *
+ * - **Reduced XSS blast radius compared to localStorage**: `localStorage` is
+ *   shared across all tabs for the same origin and persists indefinitely,
+ *   meaning a stolen token remains usable even after the user walks away
+ *   from their machine. `sessionStorage` limits exposure to the lifetime of
+ *   the active tab.
+ *
+ * ### Known tradeoff
+ * Unlike `localStorage`, `sessionStorage` does **not** survive opening a new
+ * tab or a fresh browser window. Users who open the app in a new tab will
+ * need to re-authenticate. This is an accepted UX cost in exchange for the
+ * security benefits above.
+ *
+ * Note: both storage APIs are equally accessible to JavaScript running on the
+ * page, so neither provides protection against a successful XSS attack. The
+ * primary mitigation for XSS is Content Security Policy, input sanitisation,
+ * and React's built-in output escaping.
+ */
 const SESSION_TOKEN_KEY = 'ai_trainer_auth_token'
 
+/**
+ * Reads the persisted JWT from sessionStorage on app start-up.
+ * Returns `null` if the key is absent or if sessionStorage is unavailable
+ * (e.g. in privacy/incognito modes that block storage access).
+ */
 function readStoredToken(): string | null {
   try {
     return sessionStorage.getItem(SESSION_TOKEN_KEY)
@@ -10,6 +50,13 @@ function readStoredToken(): string | null {
   }
 }
 
+/**
+ * Writes or removes the JWT in sessionStorage.
+ * Pass `null` to clear the token (e.g. on logout or auth error).
+ * Errors are swallowed silently — sessionStorage may be unavailable in some
+ * browser contexts (private-mode restrictions, embedded iframes with
+ * restrictive sandbox attributes, etc.).
+ */
 function persistToken(token: string | null): void {
   try {
     if (token) {
@@ -189,7 +236,10 @@ function mergePlanWithWorkouts(
 export const useAppStore = create<AppState>()(
   (set, get) => ({
     ...initialState,
-    // Restore token from sessionStorage on app load (survives OAuth page reloads)
+    // Hydrate authToken from sessionStorage on app load.
+    // sessionStorage persists across same-tab page reloads (including OAuth
+    // redirect round-trips) but is cleared when the tab is closed.
+    // See the SESSION_TOKEN_KEY comment above for the full security rationale.
     authToken: readStoredToken(),
 
     setAuthToken: (token) => {
