@@ -51,12 +51,3 @@ def healthz() -> dict:
         "frontend_url": ALLOWED_ORIGINS,
     }
 
-    if not resp.is_success:
-        raise HTTPException(status_code=400, detail="Failed to refresh Strava token.")
-
-    data = resp.json()
-    return RefreshResponse(
-        access_token=data["access_token"],
-        refresh_token=data["refresh_token"],
-        expires_at=data["expires_at"],
-    )
