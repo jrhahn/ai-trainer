@@ -3,19 +3,13 @@ import type {
   RiderAssessment,
   StravaActivity,
   TrainingDay,
-  UserProfile,
   WorkoutFeedback,
 } from '../store/useAppStore'
 import { apiFetch } from './api'
 
 export type { AiProvider }
 
-type ConversationMessage = { role: 'user' | 'assistant'; content: string }
-
 export interface AskTrainerOptions {
-  riderAssessment?: RiderAssessment
-  coachMemory?: string
-  conversationHistory?: ConversationMessage[]
   contextWorkout?: TrainingDay
 }
 
@@ -73,35 +67,27 @@ export async function analyseStravaActivities(
   }
 }
 
-export async function generateTrainingPlan(
-  profile: UserProfile,
-  authToken: string,
-  riderAssessment?: RiderAssessment
-): Promise<TrainingDay[]> {
+export async function generateTrainingPlan(authToken: string): Promise<TrainingDay[]> {
   return apiFetch<TrainingDay[]>('/ai/generate-plan', {
     token: authToken,
     method: 'POST',
-    body: { profile, riderAssessment },
+    body: {},
   })
 }
 
 export async function adaptTrainingPlan(
-  plan: TrainingDay[],
   recentFeedback: WorkoutFeedback[],
-  profile: UserProfile,
   authToken: string
 ): Promise<TrainingDay[]> {
   return apiFetch<TrainingDay[]>('/ai/adapt-plan', {
     token: authToken,
     method: 'POST',
-    body: { plan, recentFeedback, profile },
+    body: { recentFeedback },
   })
 }
 
 export async function askTrainer(
   question: string,
-  plan: TrainingDay[],
-  profile: UserProfile,
   authToken: string,
   options: AskTrainerOptions = {}
 ): Promise<AskTrainerResult> {
@@ -110,11 +96,6 @@ export async function askTrainer(
     method: 'POST',
     body: {
       question,
-      plan,
-      profile,
-      riderAssessment: options.riderAssessment,
-      coachMemory: options.coachMemory,
-      conversationHistory: options.conversationHistory,
       contextWorkout: options.contextWorkout,
     },
   })
@@ -125,29 +106,14 @@ export async function askTrainer(
   }
 }
 
-export async function updateCoachMemory(
-  currentMemory: string,
-  userMessage: string,
-  coachResponse: string,
-  authToken: string
-): Promise<string> {
-  const result = await apiFetch<{ memory: string }>('/ai/update-coach-memory', {
-    token: authToken,
-    method: 'POST',
-    body: { currentMemory, userMessage, coachResponse },
-  })
-  return result.memory
-}
-
 export async function rateCompletedWorkout(
   day: TrainingDay,
-  profile: UserProfile,
   authToken: string
 ): Promise<string> {
   const result = await apiFetch<{ feedback: string }>('/ai/rate-workout', {
     token: authToken,
     method: 'POST',
-    body: { day, profile },
+    body: { day },
   })
   return result.feedback
 }

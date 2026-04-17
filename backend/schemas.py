@@ -259,28 +259,15 @@ class AnalyseActivitiesRequest(CamelModel):
 
 
 class GeneratePlanRequest(CamelModel):
-    profile: UserProfileSchema
-    rider_assessment: Optional[RiderAssessmentSchema] = None
+    pass
 
 
 class AdaptPlanRequest(CamelModel):
-    plan: list[Any]
     recent_feedback: list[WorkoutFeedbackSchema]
-    profile: UserProfileSchema
-
-
-class ConversationMessageSchema(CamelModel):
-    role: str
-    content: str
 
 
 class AskTrainerRequest(CamelModel):
     question: str
-    plan: list[Any]
-    profile: UserProfileSchema
-    rider_assessment: Optional[RiderAssessmentSchema] = None
-    coach_memory: Optional[str] = None
-    conversation_history: Optional[list[ConversationMessageSchema]] = None
     context_workout: Optional[Any] = None
 
 
@@ -312,16 +299,6 @@ class AskTrainerResponse(CamelModel):
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
-class UpdateCoachMemoryRequest(CamelModel):
-    current_memory: str
-    user_message: str
-    coach_response: str
-
-
-class UpdateCoachMemoryResponse(BaseModel):
-    memory: str
-
-
 class TrainingDaySchema(CamelModel):
     """Enough structure to pass to rateCompletedWorkout; rest stored as opaque JSON."""
 
@@ -340,7 +317,6 @@ class TrainingDaySchema(CamelModel):
 
 class RateWorkoutRequest(CamelModel):
     day: TrainingDaySchema
-    profile: UserProfileSchema
 
 
 class RateWorkoutResponse(BaseModel):

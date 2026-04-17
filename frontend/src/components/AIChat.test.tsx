@@ -7,18 +7,12 @@ import type { UserProfile } from '../store/useAppStore'
 
 const {
   mockAskTrainer,
-  mockUpdateCoachMemory,
-  mockSaveChatMessage,
+  mockFetchCoachMemory,
   mockClearChatHistoryRemote,
-  mockSaveCoachMemoryRemote,
-  mockSaveTrainingPlan,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
-  mockUpdateCoachMemory: vi.fn(),
-  mockSaveChatMessage: vi.fn(),
+  mockFetchCoachMemory: vi.fn(),
   mockClearChatHistoryRemote: vi.fn(),
-  mockSaveCoachMemoryRemote: vi.fn(),
-  mockSaveTrainingPlan: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -26,15 +20,12 @@ vi.mock('../services/ai', async (importOriginal) => {
   return {
     ...original,
     askTrainer: mockAskTrainer,
-    updateCoachMemory: mockUpdateCoachMemory,
   }
 })
 
 vi.mock('../services/user', () => ({
-  saveChatMessage: mockSaveChatMessage,
+  fetchCoachMemory: mockFetchCoachMemory,
   clearChatHistoryRemote: mockClearChatHistoryRemote,
-  saveCoachMemoryRemote: mockSaveCoachMemoryRemote,
-  saveTrainingPlan: mockSaveTrainingPlan,
 }))
 
 const baseProfile: UserProfile = {
@@ -62,11 +53,8 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
-  mockUpdateCoachMemory.mockResolvedValue('')
-  mockSaveChatMessage.mockResolvedValue(undefined)
+  mockFetchCoachMemory.mockResolvedValue('')
   mockClearChatHistoryRemote.mockResolvedValue(undefined)
-  mockSaveCoachMemoryRemote.mockResolvedValue(undefined)
-  mockSaveTrainingPlan.mockResolvedValue([])
 })
 
 describe('AIChat', () => {
@@ -105,7 +93,6 @@ describe('AIChat', () => {
       expect(screen.getByText('What cadence should I target?')).toBeInTheDocument()
       expect(screen.getByText('Cadence of 90 rpm is ideal.')).toBeInTheDocument()
     })
-    expect(mockSaveChatMessage).toHaveBeenCalled()
   })
 
   it('clears the input field after sending', async () => {
@@ -164,9 +151,9 @@ describe('AIChat', () => {
     expect(screen.queryByText(/Coach's notes about you/)).not.toBeInTheDocument()
   })
 
-  it('calls updateCoachMemory in background after a successful exchange', async () => {
+  it('re-fetches coach memory after a successful exchange', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Great question!' })
-    mockUpdateCoachMemory.mockResolvedValue('Updated memory')
+    mockFetchCoachMemory.mockResolvedValue('Updated memory')
     setupStore()
     render(<AIChat />)
 
@@ -175,14 +162,11 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(mockUpdateCoachMemory).toHaveBeenCalledWith(
-        '',
-        'How do I improve?',
-        'Great question!',
-        'token-123'
-      )
+      expect(mockFetchCoachMemory).toHaveBeenCalledWith('token-123')
     })
-    expect(mockSaveCoachMemoryRemote).toHaveBeenCalledWith('token-123', 'Updated memory')
+    await waitFor(() => {
+      expect(useAppStore.getState().coachMemory).toBe('Updated memory')
+    })
   })
 
   it('shows a plan-updated badge when the AI returns planUpdates', async () => {
@@ -211,7 +195,6 @@ describe('AIChat', () => {
     const state = useAppStore.getState()
     const updatedDay = state.trainingPlan.find((d) => d.date === tomorrow)
     expect(updatedDay?.workoutType).toBe('recovery')
-    expect(mockSaveTrainingPlan).toHaveBeenCalled()
   })
 
   it('passes contextWorkout to askTrainer when provided', async () => {
@@ -233,8 +216,6 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(mockAskTrainer).toHaveBeenCalledWith(
         'Can you make this easier?',
-        expect.anything(),
-        expect.anything(),
         'token-123',
         expect.objectContaining({ contextWorkout })
       )

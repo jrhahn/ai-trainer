@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Brain, Trash2, CalendarCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { askTrainer, updateCoachMemory, MAX_CONVERSATION_HISTORY } from '../services/ai'
-import { clearChatHistoryRemote, saveChatMessage, saveCoachMemoryRemote, saveTrainingPlan } from '../services/user'
+import { askTrainer } from '../services/ai'
+import { clearChatHistoryRemote, fetchCoachMemory } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
 interface Props {
@@ -14,10 +14,8 @@ export default function AIChat({ contextWorkout }: Props) {
   const {
     authToken,
     userProfile,
-    trainingPlan,
     chatHistory,
     coachMemory,
-    riderAssessment,
     addChatMessage,
     setCoachMemory,
     clearChatHistory,
@@ -26,10 +24,8 @@ export default function AIChat({ contextWorkout }: Props) {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      trainingPlan: s.trainingPlan,
       chatHistory: s.chatHistory,
       coachMemory: s.coachMemory,
-      riderAssessment: s.riderAssessment,
       addChatMessage: s.addChatMessage,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
@@ -64,19 +60,11 @@ export default function AIChat({ contextWorkout }: Props) {
 
     if (!userProfile || !authToken) return
 
-    const recentHistory = chatHistory.slice(-MAX_CONVERSATION_HISTORY).map((m) => ({ role: m.role, content: m.content }))
-
     addChatMessage({ role: 'user', content: userMsg, timestamp })
-    void saveChatMessage(authToken, { role: 'user', content: userMsg, timestamp })
     setLoading(true)
 
     try {
-      const result = await askTrainer(userMsg, trainingPlan, userProfile, authToken, {
-        riderAssessment: riderAssessment ?? undefined,
-        coachMemory,
-        conversationHistory: recentHistory,
-        contextWorkout,
-      })
+      const result = await askTrainer(userMsg, authToken, { contextWorkout })
 
       let planUpdateCount = 0
       if (result.planUpdates && result.planUpdates.length > 0) {
@@ -85,32 +73,19 @@ export default function AIChat({ contextWorkout }: Props) {
           updateTrainingDay(date, fields)
         }
         planUpdateCount = result.planUpdates.length
-        await saveTrainingPlan(authToken, useAppStore.getState().trainingPlan)
-      }
-
-      const assistantMessage = {
-        role: 'assistant' as const,
-        content: result.response,
-        timestamp: new Date().toISOString(),
-        planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
       }
 
       addChatMessage({
-        ...assistantMessage,
+        role: 'assistant',
+        content: result.response,
+        timestamp: new Date().toISOString(),
+        planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
       })
-      void saveChatMessage(authToken, assistantMessage)
 
-      updateCoachMemory(coachMemory, userMsg, result.response, authToken)
-        .then((updated) => {
-          if (updated && updated !== coachMemory) {
-            setCoachMemory(updated)
-            return saveCoachMemoryRemote(authToken, updated)
-          }
-          return undefined
-        })
-        .catch((err) => {
-          console.warn('Coach memory update failed:', err)
-        })
+      // Re-sync coach memory from server (backend updated it inside ask_trainer)
+      fetchCoachMemory(authToken)
+        .then((memory) => setCoachMemory(memory))
+        .catch((err) => console.warn('Failed to re-fetch coach memory:', err))
     } catch {
       addChatMessage({
         role: 'assistant',

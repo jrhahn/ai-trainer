@@ -205,7 +205,7 @@ export default function OnboardingPage() {
         isOnboarded: true,
         stravaAnalysisComplete,
       })
-      const plan = await generateTrainingPlan(profileForPlan, authToken, riderAssessment)
+      const plan = await generateTrainingPlan(authToken)
       await saveTrainingPlan(authToken, plan)
       if (riderAssessment) {
         setRiderAssessment(riderAssessment)
