@@ -151,20 +151,22 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Process new activities returned by the poll query. Structural sharing in
   // TanStack Query ensures this effect only re-runs when the data actually changes.
-  const processedNewActivitiesRef = useRef<number | null>(null)
+  const processedNewActivitiesRef = useRef<Set<number>>(new Set())
   useEffect(() => {
     if (!polledNewActivities || polledNewActivities.length === 0) return
-    const latestId = Math.max(...polledNewActivities.map((a) => a.id))
-    if (processedNewActivitiesRef.current === latestId) return
-    processedNewActivitiesRef.current = latestId
+    const unprocessed = polledNewActivities.filter(
+      (a) => !processedNewActivitiesRef.current.has(a.id)
+    )
+    if (unprocessed.length === 0) return
+    unprocessed.forEach((a) => processedNewActivitiesRef.current.add(a.id))
 
-    setNewRidesCount(polledNewActivities.length)
+    setNewRidesCount(unprocessed.length)
     // Merge new activities into the main query cache
     queryClient.setQueryData<StravaActivity[]>(['stravaActivities', authToken], (prev = []) => {
       const existingIds = new Set(prev.map((a) => a.id))
-      return [...polledNewActivities.filter((a) => !existingIds.has(a.id)), ...prev]
+      return [...unprocessed.filter((a) => !existingIds.has(a.id)), ...prev]
     })
-    void runAnalysis(polledNewActivities, true).then(() => setNewRidesCount(0))
+    void runAnalysis(unprocessed, true).then(() => setNewRidesCount(0))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polledNewActivities])
 
