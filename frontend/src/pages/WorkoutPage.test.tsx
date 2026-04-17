@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
@@ -35,11 +36,13 @@ const mockDay: TrainingDay = {
 
 function renderWorkoutPage(date: string) {
   return render(
-    <MemoryRouter initialEntries={[`/workout/${date}`]}>
-      <Routes>
-        <Route path="/workout/:date" element={<WorkoutPage />} />
-      </Routes>
-    </MemoryRouter>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>
+      <MemoryRouter initialEntries={[`/workout/${date}`]}>
+        <Routes>
+          <Route path="/workout/:date" element={<WorkoutPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 

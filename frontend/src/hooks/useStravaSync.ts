@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
@@ -48,11 +49,10 @@ export function useStravaSync(): UseStravaSyncResult {
     }))
   )
 
-  const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([])
+  const queryClient = useQueryClient()
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState('')
   const [newRidesCount, setNewRidesCount] = useState(0)
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const runAnalysis = async (activities: StravaActivity[], isIncremental = false) => {
     if (!authToken || !userProfile || activities.length === 0) return
@@ -105,64 +105,68 @@ export function useStravaSync(): UseStravaSyncResult {
     }
   }
 
-  const checkForNewActivities = async () => {
-    if (!authToken || !stravaConnection) return
-    try {
-      if (lastStravaActivityId !== null) {
-        const newActs = await getNewStravaActivities(authToken, lastStravaActivityId)
-        if (newActs.length > 0) {
-          setNewRidesCount(newActs.length)
-          // Merge new activities with existing for display
-          setStravaActivities((prev) => {
-            const existingIds = new Set(prev.map((a) => a.id))
-            return [...newActs.filter((a) => !existingIds.has(a.id)), ...prev]
-          })
-          // Re-run analysis using only the new activities for efficiency (incremental)
-          await runAnalysis(newActs, true)
-          setNewRidesCount(0)
-        }
-      }
-    } catch {
-      // Polling errors are silent — don't disrupt the user
-    }
-  }
+  // Fetch all Strava activities. TanStack Query handles caching so the list
+  // is not re-requested on every re-render or page navigation.
+  const activitiesQueryEnabled = !!stravaConnection && !!authToken && !!userProfile
+  const {
+    data: stravaActivities = [],
+    isError: isActivitiesError,
+  } = useQuery({
+    queryKey: ['stravaActivities', authToken],
+    queryFn: () => getStravaActivities(authToken!),
+    enabled: activitiesQueryEnabled,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
 
+  // Trigger initial analysis when activities are first loaded
   useEffect(() => {
     if (!stravaConnection || !authToken || !userProfile) return
-
-    const fetchActivities = async () => {
-      try {
-        const acts = await getStravaActivities(authToken)
-        setStravaActivities(acts)
-
-        if (!stravaAnalysisComplete && acts.length > 0) {
-          await runAnalysis(acts)
-        }
-      } catch {
-        setAnalysisStatus('error')
-        setAnalysisError('Failed to fetch Strava activities')
-      }
+    if (stravaActivities.length > 0 && !stravaAnalysisComplete) {
+      void runAnalysis(stravaActivities)
     }
-    void fetchActivities()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, stravaConnection, stravaAnalysisComplete, userProfile?.email])
+  }, [authToken, stravaConnection, stravaAnalysisComplete, userProfile?.email, stravaActivities])
 
-  // Polling: check for new Strava activities every 5 minutes
+  // Propagate fetch errors to the analysis status
   useEffect(() => {
-    if (!stravaConnection || !authToken || !stravaAnalysisComplete) return
+    if (isActivitiesError) {
+      setAnalysisStatus('error')
+      setAnalysisError('Failed to fetch Strava activities')
+    }
+  }, [isActivitiesError])
 
-    const schedule = () => {
-      pollTimerRef.current = setTimeout(async () => {
-        await checkForNewActivities()
-        schedule()
-      }, POLL_INTERVAL_MS)
-    }
-    schedule()
-    return () => {
-      if (pollTimerRef.current !== null) clearTimeout(pollTimerRef.current)
-    }
+  // Poll for new Strava activities every 5 minutes. TanStack Query's
+  // refetchInterval replaces the manual setTimeout polling loop.
+  const { data: polledNewActivities } = useQuery({
+    queryKey: ['newStravaActivities', authToken, lastStravaActivityId],
+    queryFn: () => getNewStravaActivities(authToken!, lastStravaActivityId!),
+    enabled: !!stravaConnection && !!authToken && stravaAnalysisComplete && lastStravaActivityId !== null,
+    refetchInterval: POLL_INTERVAL_MS,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+
+  // Process new activities returned by the poll query. Structural sharing in
+  // TanStack Query ensures this effect only re-runs when the data actually changes.
+  const processedNewActivitiesRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!polledNewActivities || polledNewActivities.length === 0) return
+    const latestId = Math.max(...polledNewActivities.map((a) => a.id))
+    if (processedNewActivitiesRef.current === latestId) return
+    processedNewActivitiesRef.current = latestId
+
+    setNewRidesCount(polledNewActivities.length)
+    // Merge new activities into the main query cache
+    queryClient.setQueryData<StravaActivity[]>(['stravaActivities', authToken], (prev = []) => {
+      const existingIds = new Set(prev.map((a) => a.id))
+      return [...polledNewActivities.filter((a) => !existingIds.has(a.id)), ...prev]
+    })
+    void runAnalysis(polledNewActivities, true).then(() => setNewRidesCount(0))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, stravaConnection, stravaAnalysisComplete, lastStravaActivityId])
+  }, [polledNewActivities])
 
   return { stravaActivities, analysisStatus, analysisError, newRidesCount }
 }
