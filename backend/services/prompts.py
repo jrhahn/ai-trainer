@@ -175,7 +175,7 @@ def adapt_plan_user(
 # ---------------------------------------------------------------------------
 
 
-def ask_trainer_assessment_section(rider_assessment: dict) -> str:
+def ask_trainer_assessment_section(rider_assessment: dict | None) -> str:
     """Build the rider-assessment section string. Returns '' when falsy."""
     if not rider_assessment:
         return ""

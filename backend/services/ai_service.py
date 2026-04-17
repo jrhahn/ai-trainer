@@ -614,7 +614,7 @@ async def ask_trainer(
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
 
-    assessment_section = ask_trainer_assessment_section(rider_assessment or {})
+    assessment_section = ask_trainer_assessment_section(rider_assessment)
     workout_section = ask_trainer_workout_section(context_workout)
     plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
 
