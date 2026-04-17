@@ -72,3 +72,10 @@ jobs:
 
       - name: Run pytest
         run: uv run pytest --cov --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false
