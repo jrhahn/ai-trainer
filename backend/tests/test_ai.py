@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -556,3 +557,70 @@ async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_s
     assert body["assessment"]["rideInsights"] is not None
     assert body["assessment"]["lastRideFeedback"] is not None
     assert "planUpdates" in body
+
+
+# ---------------------------------------------------------------------------
+# Strava stream error logging
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_logs_warning_on_stream_error(
+    client, auth_headers, mock_ai_service, caplog
+):
+    """Strava stream fetch errors must be logged as warnings, not silently swallowed."""
+    import crud
+    import models
+    from database import async_session_maker
+
+    # Give the test user a fake Strava token so the stream-fetch path is exercised.
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        user.strava_token = models.StravaToken(
+            user_id=user.id,
+            access_token="fake-access-token",
+            refresh_token="fake-refresh-token",
+            expires_at=9999999999,
+            athlete_id=12345,
+        )
+        await db.commit()
+
+    with (
+        patch("routers.ai.ensure_fresh_strava_token", new=AsyncMock(return_value="fake-token")),
+        patch(
+            "routers.ai.fetch_activity_streams",
+            new=AsyncMock(side_effect=RuntimeError("Strava API unavailable")),
+        ),
+        caplog.at_level(logging.WARNING, logger="routers.ai"),
+    ):
+        resp = await client.post(
+            "/api/v1/ai/analyse-activities",
+            headers=auth_headers,
+            json={
+                "activities": [
+                    {
+                        "id": 1,
+                        "name": "Morning Ride",
+                        "type": "Ride",
+                        "distance": 50000,
+                        "movingTime": 3600,
+                        "elapsedTime": 3700,
+                        "totalElevationGain": 500,
+                        "startDate": "2026-04-10T08:00:00Z",
+                        "averageWatts": 220,
+                    }
+                ]
+            },
+        )
+
+    # The endpoint must still succeed (streams are optional).
+    assert resp.status_code == 200
+    # A warning must have been emitted with the full exception traceback attached.
+    warning_records = [
+        r for r in caplog.records if "Strava" in r.message and r.levelno == logging.WARNING
+    ]
+    assert warning_records, "Expected a WARNING log mentioning Strava stream failure"
+    assert all(
+        r.exc_info is not None and r.exc_info[0] is RuntimeError
+        for r in warning_records
+    ), "Warning log must include exc_info so the traceback is visible"
