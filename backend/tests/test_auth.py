@@ -99,3 +99,40 @@ async def test_authelia_mode_returns_503_when_not_configured(client, monkeypatch
         json={"email": "rider@example.com", "password": "hunter2xx"},
     )
     assert login_response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# validate_jwt_secret
+# ---------------------------------------------------------------------------
+
+
+def test_validate_jwt_secret_raises_in_production_with_default(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", auth._JWT_SECRET_DEFAULT)
+    monkeypatch.setattr(auth, "APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="insecure default"):
+        auth.validate_jwt_secret()
+
+
+def test_validate_jwt_secret_raises_in_staging_with_default(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", auth._JWT_SECRET_DEFAULT)
+    monkeypatch.setattr(auth, "APP_ENV", "staging")
+    with pytest.raises(RuntimeError, match="insecure default"):
+        auth.validate_jwt_secret()
+
+
+def test_validate_jwt_secret_allowed_in_development_with_default(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", auth._JWT_SECRET_DEFAULT)
+    monkeypatch.setattr(auth, "APP_ENV", "development")
+    auth.validate_jwt_secret()  # should not raise
+
+
+def test_validate_jwt_secret_allowed_in_test_env_with_default(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", auth._JWT_SECRET_DEFAULT)
+    monkeypatch.setattr(auth, "APP_ENV", "test")
+    auth.validate_jwt_secret()  # should not raise
+
+
+def test_validate_jwt_secret_allowed_in_production_with_custom_secret(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", "a-strong-custom-secret-that-is-not-the-default")
+    monkeypatch.setattr(auth, "APP_ENV", "production")
+    auth.validate_jwt_secret()  # should not raise

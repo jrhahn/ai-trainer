@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
 from routers import ai, auth_router, strava, users
+import auth as _auth
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ FRONTEND_URL = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "http://localhost:5173
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _auth.validate_jwt_secret()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
