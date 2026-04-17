@@ -1,4 +1,5 @@
 import type {
+  AiProvider,
   RiderAssessment,
   StravaActivity,
   TrainingDay,
@@ -7,7 +8,7 @@ import type {
 } from '../store/useAppStore'
 import { apiFetch } from './api'
 
-export type AiProvider = 'openai' | 'gemini'
+export type { AiProvider }
 
 type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 
