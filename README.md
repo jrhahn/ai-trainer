@@ -1,6 +1,8 @@
 # AI Trainer — Smart Cycling Coach
 
+[![Frontend Coverage](https://codecov.io/gh/jrhahn/ai-trainer/graph/badge.svg)](https://codecov.io/gh/jrhahn/ai-trainer)
 [![Backend Coverage](https://codecov.io/gh/jrhahn/ai-trainer/graph/badge.svg?flag=backend)](https://codecov.io/gh/jrhahn/ai-trainer)
+
 A smart cycling training app powered by AI (OpenAI or Google Gemini) with Strava integration.
 
 ## Repository structure
