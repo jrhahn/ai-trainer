@@ -252,6 +252,7 @@ async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
 async def get_strava_activities(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
+    after_id: int | None = None,
 ) -> list[dict]:
     if current_user.strava_token is None:
         raise HTTPException(status_code=404, detail="Strava not connected")
@@ -266,7 +267,10 @@ async def get_strava_activities(
         )
     if not resp.is_success:
         raise HTTPException(status_code=resp.status_code, detail="Failed to fetch Strava activities")
-    return resp.json()
+    activities: list[dict] = resp.json()
+    if after_id is not None:
+        activities = [a for a in activities if isinstance(a.get("id"), int) and a["id"] > after_id]
+    return activities
 
 
 @router.delete("/strava/disconnect")

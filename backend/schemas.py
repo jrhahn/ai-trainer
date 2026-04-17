@@ -76,6 +76,8 @@ class RiderAssessmentSchema(CamelModel):
     rider_type: str
     notes: str
     hr_zones: Optional[Any] = None
+    ride_insights: Optional[str] = None
+    last_ride_feedback: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +96,7 @@ class UserResponse(CamelModel):
     name: Optional[str] = None
     is_onboarded: bool
     strava_analysis_complete: bool
+    last_strava_activity_id: Optional[int] = None
     # profile fields
     bike_type: Optional[str] = None
     training_goal: Optional[str] = None
@@ -136,6 +139,7 @@ class UpdateProfileRequest(CamelModel):
     ai_provider: Optional[str] = None
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
+    last_strava_activity_id: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +278,7 @@ class AskTrainerRequest(CamelModel):
     question: str
     plan: list[Any]
     profile: UserProfileSchema
+    rider_assessment: Optional[RiderAssessmentSchema] = None
     coach_memory: Optional[str] = None
     conversation_history: Optional[list[ConversationMessageSchema]] = None
     context_workout: Optional[Any] = None
@@ -288,6 +293,18 @@ class PlanDayUpdateSchema(CamelModel):
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
+
+
+class AnalyseActivitiesResponse(CamelModel):
+    """Response for the /ai/analyse-activities endpoint.
+
+    Wraps the rider assessment together with optional plan updates so the
+    frontend can apply targeted training-plan changes immediately after a
+    new ride is analysed.
+    """
+
+    assessment: RiderAssessmentSchema
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
 class AskTrainerResponse(CamelModel):

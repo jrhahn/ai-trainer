@@ -118,6 +118,8 @@ export interface RiderAssessment {
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string
   hrZones?: HrZones
+  rideInsights?: string
+  lastRideFeedback?: string
 }
 
 interface AppState {
@@ -129,6 +131,7 @@ interface AppState {
   stravaConnection: StravaConnection | null
   riderAssessment: RiderAssessment | null
   stravaAnalysisComplete: boolean
+  lastStravaActivityId: number | null
   aiProvider: AiProvider
   isOnboarded: boolean
   chatHistory: ChatMessage[]
@@ -143,6 +146,7 @@ interface AppState {
   setStravaConnection: (connection: StravaConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
   setStravaAnalysisComplete: (v: boolean) => void
+  setLastStravaActivityId: (id: number | null) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
@@ -159,6 +163,7 @@ const dataState = {
   stravaConnection: null as StravaConnection | null,
   riderAssessment: null as RiderAssessment | null,
   stravaAnalysisComplete: false,
+  lastStravaActivityId: null as number | null,
   aiProvider: 'openai' as AiProvider,
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
@@ -207,6 +212,7 @@ export const useAppStore = create<AppState>()(
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
     setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
+    setLastStravaActivityId: (id) => set({ lastStravaActivityId: id }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
     updateTrainingDay: (date, updates) =>
@@ -245,6 +251,7 @@ export const useAppStore = create<AppState>()(
           stravaConnection: user.stravaConnection,
           riderAssessment: user.riderAssessment,
           stravaAnalysisComplete: user.stravaAnalysisComplete,
+          lastStravaActivityId: user.lastStravaActivityId ?? null,
           aiProvider: user.aiProvider,
           isOnboarded: user.isOnboarded,
           chatHistory,

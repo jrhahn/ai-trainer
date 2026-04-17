@@ -12,6 +12,7 @@ export type AiProvider = 'openai' | 'gemini'
 type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 
 export interface AskTrainerOptions {
+  riderAssessment?: RiderAssessment
   coachMemory?: string
   conversationHistory?: ConversationMessage[]
   contextWorkout?: TrainingDay
@@ -26,6 +27,17 @@ export interface PlanDayUpdate {
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
   intervals?: TrainingDay['intervals']
+}
+
+export interface AnalyseActivitiesResult {
+  assessment: RiderAssessment
+  planUpdates?: PlanDayUpdate[]
+}
+
+interface BackendAnalyseActivitiesResult {
+  assessment: RiderAssessment
+  planUpdates?: PlanDayUpdate[]
+  plan_updates?: PlanDayUpdate[]
 }
 
 export interface AskTrainerResult {
@@ -45,8 +57,8 @@ export async function analyseStravaActivities(
   activities: StravaActivity[],
   authToken: string,
   maxHeartRate?: number
-): Promise<RiderAssessment> {
-  return apiFetch<RiderAssessment>('/ai/analyse-activities', {
+): Promise<AnalyseActivitiesResult> {
+  const raw = await apiFetch<BackendAnalyseActivitiesResult>('/ai/analyse-activities', {
     token: authToken,
     method: 'POST',
     body: {
@@ -54,6 +66,10 @@ export async function analyseStravaActivities(
       ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
     },
   })
+  return {
+    assessment: raw.assessment,
+    planUpdates: raw.planUpdates ?? raw.plan_updates,
+  }
 }
 
 export async function generateTrainingPlan(
@@ -95,6 +111,7 @@ export async function askTrainer(
       question,
       plan,
       profile,
+      riderAssessment: options.riderAssessment,
       coachMemory: options.coachMemory,
       conversationHistory: options.conversationHistory,
       contextWorkout: options.contextWorkout,

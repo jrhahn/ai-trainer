@@ -176,6 +176,16 @@ def _best_n_min_power(
 # 87% is a well-established estimate for trained cyclists.
 _LTHR_RATIO = 0.87
 
+# Average-power threshold that separates endurance from tempo zones (~76 % FTP).
+# Below this level a sustained ride is aerobic/endurance; at or above it the
+# effort is in the tempo/sweet-spot band.
+_TEMPO_THRESHOLD_PCT = 0.76
+
+# Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
+# true FTP is typically ~75 % of their raw average power across all recent rides
+# (accounting for the mix of easy and hard sessions that make up their history).
+_AVG_POWER_TO_FTP_RATIO = 0.75
+
 
 def _hr_corrected_ftp(
     interval_power: float,
@@ -218,6 +228,212 @@ def _compute_hr_zones(max_hr: int) -> dict:
     }
 
 
+def _detect_intervals(
+    watts: list[float],
+    time_stream: list[float],
+    ftp: float,
+    work_threshold_pct: float = 0.85,
+    min_interval_secs: float = 30.0,
+    recovery_gap_secs: float = 30.0,
+) -> list[dict]:
+    """Detect interval blocks in a power stream relative to FTP.
+
+    An interval is a contiguous block where average power exceeds
+    ``work_threshold_pct × ftp``.  Short recoveries (< ``recovery_gap_secs``)
+    between high-power blocks are merged into the preceding interval so noisy
+    one-second dips do not split a single effort into many fragments.
+
+    Returns a list of dicts, each with:
+        ``start_idx``, ``end_idx``, ``duration_secs``,
+        ``avg_power``, ``peak_power``.
+    """
+    if not watts or not time_stream or len(watts) != len(time_stream) or ftp <= 0:
+        return []
+
+    threshold = ftp * work_threshold_pct
+    n = len(watts)
+
+    # --- Phase 1: build raw on/off blocks ---
+    blocks: list[tuple[int, int]] = []  # (start, end) inclusive
+    in_block = False
+    block_start = 0
+
+    for i in range(n):
+        above = watts[i] >= threshold
+        if above and not in_block:
+            in_block = True
+            block_start = i
+        elif not above and in_block:
+            blocks.append((block_start, i - 1))
+            in_block = False
+    if in_block:
+        blocks.append((block_start, n - 1))
+
+    # --- Phase 2: merge blocks separated by a short recovery gap ---
+    merged: list[tuple[int, int]] = []
+    for block in blocks:
+        if merged and (time_stream[block[0]] - time_stream[merged[-1][1]]) <= recovery_gap_secs:
+            merged[-1] = (merged[-1][0], block[1])
+        else:
+            merged.append(block)
+
+    # --- Phase 3: filter out blocks shorter than the minimum duration ---
+    result: list[dict] = []
+    for start, end in merged:
+        dur = time_stream[end] - time_stream[start]
+        if dur < min_interval_secs:
+            continue
+        seg_watts = watts[start : end + 1]
+        result.append(
+            {
+                "start_idx": start,
+                "end_idx": end,
+                "duration_secs": round(dur),
+                "avg_power": round(sum(seg_watts) / len(seg_watts)),
+                "peak_power": round(max(seg_watts)),
+            }
+        )
+    return result
+
+
+def _compute_hr_drift(hr_segment: list[float]) -> float | None:
+    """Return the linear-regression slope (bpm per sample) of HR over a segment.
+
+    A positive slope indicates cardiac drift (HR rising while effort is
+    sustained).  Returns ``None`` when the segment is too short (<= 2 points).
+    """
+    n = len(hr_segment)
+    if n <= 2:
+        return None
+    xs = list(range(n))
+    mean_x = (n - 1) / 2.0
+    mean_y = sum(hr_segment) / n
+    num = sum((xs[i] - mean_x) * (hr_segment[i] - mean_y) for i in range(n))
+    den = sum((xs[i] - mean_x) ** 2 for i in range(n))
+    return num / den if den != 0 else 0.0
+
+
+def _classify_ride_purpose(
+    watts: list[float],
+    time_stream: list[float],
+    ftp: float,
+) -> str:
+    """Classify the overall purpose/category of a ride.
+
+    Categories (aligned with problem statement):
+    - ``recovery``            : avg power < 60 % FTP
+    - ``endurance``           : avg power 60–75 % FTP, no hard intervals
+    - ``tempo``               : avg power ~76–85 % FTP, no distinct intervals
+    - ``interval_sweetspot``  : detected intervals lasting 10–20 min at 88–95 % FTP
+    - ``interval_threshold``  : detected intervals ~5–12 min at 95–105 % FTP
+    - ``interval_vo2max``     : detected intervals 2–5 min at 106–130 % FTP
+    - ``interval_sprints``    : detected intervals < 2 min at > 130 % FTP
+    - ``mixed``               : multiple distinct interval types detected
+    """
+    if not watts or ftp <= 0:
+        return "endurance"
+
+    total_time = time_stream[-1] - time_stream[0] if len(time_stream) > 1 else len(watts)
+    avg_power = sum(watts) / len(watts)
+    avg_pct = avg_power / ftp
+
+    # Detect intervals at 85 % threshold
+    intervals = _detect_intervals(watts, time_stream, ftp, work_threshold_pct=0.85)
+
+    if not intervals:
+        # No distinct interval blocks — classify by average power
+        if avg_pct < 0.60:
+            return "recovery"
+        if avg_pct < _TEMPO_THRESHOLD_PCT:
+            return "endurance"
+        return "tempo"
+
+    # Classify each detected interval by its relative power and duration
+    interval_types: list[str] = []
+    for iv in intervals:
+        dur_min = iv["duration_secs"] / 60.0
+        pct = iv["avg_power"] / ftp
+        if pct > 1.30 and dur_min < 2:
+            interval_types.append("sprint")
+        elif pct > 1.05 and dur_min <= 5:
+            interval_types.append("vo2max")
+        elif 0.95 <= pct <= 1.05 and dur_min <= 12:
+            interval_types.append("threshold")
+        elif 0.88 <= pct < 0.95 and 10 <= dur_min <= 20:
+            interval_types.append("sweetspot")
+        elif pct > 0.85:
+            # Catch-all for other hard efforts
+            if dur_min < 2:
+                interval_types.append("sprint")
+            elif dur_min <= 5:
+                interval_types.append("vo2max")
+            else:
+                interval_types.append("threshold")
+
+    unique_types = set(interval_types)
+    if not unique_types:
+        # Intervals detected but all fell below the classification thresholds
+        return "endurance" if avg_pct < _TEMPO_THRESHOLD_PCT else "tempo"
+    if len(unique_types) > 1:
+        return "mixed"
+    sole_type = next(iter(unique_types))
+    return {
+        "sprint": "interval_sprints",
+        "vo2max": "interval_vo2max",
+        "threshold": "interval_threshold",
+        "sweetspot": "interval_sweetspot",
+    }.get(sole_type, "endurance")
+
+
+def _build_ride_analysis(
+    streams: dict,
+    ftp: float,
+) -> dict:
+    """Compute a structured analysis of a single ride from its stream data.
+
+    Returns a dict suitable for embedding into the AI prompt.
+    """
+    watts: list[float] = streams.get("watts", {}).get("data", [])
+    hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
+    time_data: list[float] = streams.get("time", {}).get("data", [])
+
+    if not watts or not time_data:
+        return {}
+
+    ride_category = _classify_ride_purpose(watts, time_data, ftp)
+    intervals = _detect_intervals(watts, time_data, ftp)
+
+    # Annotate each interval with HR data and drift
+    annotated: list[dict] = []
+    for iv in intervals:
+        s, e = iv["start_idx"], iv["end_idx"]
+        annotated_iv = {
+            "duration_secs": iv["duration_secs"],
+            "avg_power_w": iv["avg_power"],
+            "peak_power_w": iv["peak_power"],
+            "power_pct_ftp": round(iv["avg_power"] / ftp * 100),
+        }
+        if hr_data and len(hr_data) == len(watts):
+            hr_seg = hr_data[s : e + 1]
+            avg_hr = sum(hr_seg) / len(hr_seg)
+            annotated_iv["avg_hr_bpm"] = round(avg_hr)
+            drift = _compute_hr_drift(hr_seg)
+            if drift is not None:
+                # Normalise drift to total HR rise across the segment
+                total_drift_bpm = drift * len(hr_seg)
+                annotated_iv["hr_drift_bpm"] = round(total_drift_bpm, 1)
+                annotated_iv["hr_drift_status"] = (
+                    "stable" if abs(total_drift_bpm) < 5 else "drifting"
+                )
+        annotated.append(annotated_iv)
+
+    return {
+        "ride_category": ride_category,
+        "avg_power_w": round(sum(watts) / len(watts)),
+        "intervals_detected": annotated,
+    }
+
+
 async def analyse_strava_activities(
     activities: list[dict],
     provider: str = "openai",
@@ -228,13 +444,14 @@ async def analyse_strava_activities(
     computed_ftp: int | None = None
     computed_threshold_hr: int | None = None
     computed_hr_zones: dict | None = None
+    ride_analyses: dict[str, dict] = {}  # activity_id → per-ride analysis
 
     if streams_by_id:
         # Candidate FTP values from different methods; we take the best (highest).
         ftp_candidates: list[int] = []
         threshold_hrs: list[int] = []
 
-        for streams in streams_by_id.values():
+        for act_id, streams in streams_by_id.items():
             watts_data: list[float] = streams.get("watts", {}).get("data", [])
             hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
             time_data: list[float] = streams.get("time", {}).get("data", [])
@@ -275,6 +492,27 @@ async def analyse_strava_activities(
         if threshold_hrs:
             computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs))
 
+        # --- Per-ride analysis: category + interval detection + HR drift ---
+        # Use the best available FTP estimate; fall back to a rough proxy from avg power
+        # if no algorithmic estimate is available yet.
+        ftp_for_analysis = float(computed_ftp) if computed_ftp else None
+        if ftp_for_analysis is None:
+            # Rough proxy: compute global average power across all activities with power data
+            all_avg_watts = [a.get("averageWatts") or a.get("average_watts") for a in activities]
+            valid = [w for w in all_avg_watts if w and w > 0]
+            if valid:
+                ftp_for_analysis = float(sum(valid) / len(valid)) * _AVG_POWER_TO_FTP_RATIO
+        if ftp_for_analysis and ftp_for_analysis > 0:
+            for act_id, streams in streams_by_id.items():
+                analysis = _build_ride_analysis(streams, ftp_for_analysis)
+                if analysis:
+                    # Find the matching activity name for context
+                    act_name = next(
+                        (a.get("name", act_id) for a in activities if str(a.get("id")) == act_id),
+                        act_id,
+                    )
+                    ride_analyses[act_name] = analysis
+
     if max_heart_rate:
         computed_hr_zones = _compute_hr_zones(max_heart_rate)
 
@@ -308,10 +546,35 @@ async def analyse_strava_activities(
         "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
         "otherwise estimate from activity summaries; null if no HR data\n"
         "- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n"
-        "- \"notes\": a concise assessment addressed directly to the athlete using 'you'. "
+        "- \"notes\": a concise overall assessment addressed directly to the athlete using 'you'. "
         "Mention their strengths, rider type, and key observations from their rides. "
         "Example: 'You show strong sustained power over long efforts, which marks you as a time-trial type rider. "
-        "Your aerobic base looks solid…'\n\n"
+        "Your aerobic base looks solid…'\n"
+        "- \"lastRideFeedback\": a standalone 3-5 sentence coach note about the SINGLE MOST RECENT ride only "
+        "(the one with the latest start_date). Write it as a card the athlete reads first thing on their dashboard. "
+        "Cover: (1) what type of ride it was (category) and key numbers, "
+        "(2) how the effort looked — power consistency and HR response or drift if data available, "
+        "(3) one concrete recommendation for the next training session. "
+        "Be warm, personal, and specific — use their actual numbers.\n"
+        "- \"rideInsights\": a per-ride narrative addressed to the athlete. "
+        "For each ride: state its category (recovery/endurance/tempo/sweet-spot/threshold/VO2max/sprints), "
+        "comment on the interval quality (power consistency, HR drift if data available), and give one "
+        "concrete takeaway. Also include 1-2 specific recommendations for the athlete's next training "
+        "session based on what you observed. Be empathetic and personal — reference their specific numbers.\n"
+        "- \"planUpdates\": optional array of training day updates for the upcoming plan based on what "
+        "you observed in the rides. Only include updates that are genuinely warranted (e.g. add recovery "
+        "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
+        "targets). Each update: {\"date\": \"<ISO date>\", \"workoutType\": \"<type>\", \"title\": "
+        "\"<string>\", \"description\": \"<string>\", \"durationMinutes\": <int>}. "
+        "If no updates are needed, omit this field or set it to [].\n\n"
+        "Ride categories:\n"
+        "- recovery: avg power < 60% FTP\n"
+        "- endurance: avg power 60–75% FTP, no distinct intervals\n"
+        "- tempo: avg power ~76–85% FTP, no distinct intervals\n"
+        "- interval_sweetspot: 10–20 min efforts at 88–95% FTP\n"
+        "- interval_threshold: ~5–12 min efforts at 95–105% FTP\n"
+        "- interval_vo2max: 2–5 min efforts at 106–130% FTP\n"
+        "- interval_sprints: < 2 min efforts at > 130% FTP\n\n"
         "Rider-type guidelines:\n"
         "- timetrial: strong sustained power, low variability, long average efforts\n"
         "- sprinter: high max power, shorter efforts, high power variability\n"
@@ -320,11 +583,21 @@ async def analyse_strava_activities(
         "- allrounder: balanced across metrics"
     )
 
+    # Build the per-ride analysis section for the AI prompt
+    ride_analyses_section = ""
+    if ride_analyses:
+        ride_analyses_str = json.dumps(ride_analyses, indent=2)
+        ride_analyses_section = (
+            f"\n\nAlgorithmic per-ride analysis (computed from stream data):\n{ride_analyses_str}"
+        )
+
     user_msg = (
         f"Last {len(activities)} Strava rides:\n{json.dumps(activities, indent=2)}"
-        f"{computed_section}\n\n"
+        f"{computed_section}"
+        f"{ride_analyses_section}\n\n"
         "Assess my fitness. When pre-computed FTP/threshold HR values are given, "
-        "use them verbatim for estimatedFTP and estimatedThresholdHR."
+        "use them verbatim for estimatedFTP and estimatedThresholdHR. "
+        "Use the per-ride analyses above to write accurate rideInsights and appropriate planUpdates."
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
@@ -415,6 +688,7 @@ async def ask_trainer(
     plan: list[dict],
     profile: dict,
     provider: str = "openai",
+    rider_assessment: dict | None = None,
     coach_memory: str | None = None,
     conversation_history: list[dict[str, str]] | None = None,
     context_workout: dict | None = None,
@@ -423,6 +697,25 @@ async def ask_trainer(
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
+
+    assessment_section = ""
+    if rider_assessment:
+        rider_type = rider_assessment.get("riderType", "")
+        ftp = rider_assessment.get("estimatedFTP")
+        thr = rider_assessment.get("estimatedThresholdHR")
+        notes = rider_assessment.get("notes", "")
+        assessment_lines = [f"- Rider type: {rider_type}"]
+        if ftp:
+            assessment_lines.append(f"- Estimated FTP: {ftp} W")
+        if thr:
+            assessment_lines.append(f"- Estimated threshold HR: {thr} bpm")
+        if notes:
+            assessment_lines.append(f"- Assessment notes: {notes}")
+        assessment_section = (
+            "\n\nRider assessment from recent Strava analysis:\n"
+            + "\n".join(assessment_lines)
+            + "\nUse this to give personalised advice that matches the athlete's strengths and riding style."
+        )
     workout_section = (
         f"\n\nThe athlete is currently viewing this specific workout:\n"
         f"{json.dumps(context_workout, indent=2)}"
@@ -481,6 +774,7 @@ async def ask_trainer(
         f"Athlete profile: {json.dumps(profile)}\n"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
+        f"{assessment_section}"
         f"{memory_section}"
         f"{workout_section}\n\n"
         "Always take today's date into account when answering — for example when calculating "
@@ -509,8 +803,21 @@ async def ask_trainer(
 async def update_coach_memory(
     current_memory: str, user_message: str, coach_response: str, provider: str = "openai"
 ) -> str:
-    system_prompt = f"{COACH_PERSONA} Maintain concise notes about an athlete.\nExtract any important, actionable information from this conversation exchange and update the notes.\nKeep notes under 300 words. Focus on: goals, limitations, health issues, preferences, performance achievements, recurring problems.\nReturn ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
-    user_msg = f"Existing notes:\n{current_memory or '(none)'}\n\nLatest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\nUpdate the notes with any new important information."
+    system_prompt = (
+        f"{COACH_PERSONA} Maintain concise notes about an athlete.\n"
+        "Extract any important, actionable information from this conversation exchange and update the notes.\n"
+        "Keep notes under 300 words. Focus on: goals, limitations, health issues, preferences, "
+        "performance achievements, recurring problems, FTP history (record up to the 5 most recent "
+        "FTP estimates with their approximate dates to track progress; drop the oldest when adding a new one), "
+        "rider strengths and weaknesses, and personal motivations such as "
+        "preferred terrain or event types (e.g. loves hill climbing, prefers long endurance rides).\n"
+        "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
+    )
+    user_msg = (
+        f"Existing notes:\n{current_memory or '(none)'}\n\n"
+        f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
+        "Update the notes with any new important information."
+    )
     return await _chat(provider, system_prompt, user_msg)
 
 

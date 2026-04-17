@@ -39,7 +39,10 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
         },
     )
     assert analyse_response.status_code == 200
-    assert analyse_response.json()["estimatedFTP"] == 280
+    body = analyse_response.json()
+    assert body["assessment"]["estimatedFTP"] == 280
+    assert body["assessment"]["rideInsights"] is not None
+    assert body["assessment"]["lastRideFeedback"] is not None
 
     generate_response = await client.post(
         "/api/v1/ai/generate-plan",
@@ -395,3 +398,161 @@ async def test_ask_trainer_plan_change_reflection_in_prompt():
     assert '"duration"' in prompt and '"power"' in prompt and '"rest"' in prompt
     # Coach response must include a plan update
     assert result["plan_updates"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for algorithmic ride analysis functions
+# ---------------------------------------------------------------------------
+
+
+def make_flat_stream(power: float, duration_secs: int) -> tuple[list[float], list[float]]:
+    """Return (watts, time_stream) for a constant-power ride."""
+    return [power] * duration_secs, list(range(duration_secs))
+
+
+def test_classify_ride_purpose_recovery():
+    watts, ts = make_flat_stream(140, 3600)  # 140W @ FTP 250 = 56%
+    assert ai_service._classify_ride_purpose(watts, ts, 250) == "recovery"
+
+
+def test_classify_ride_purpose_endurance():
+    watts, ts = make_flat_stream(165, 3600)  # 66% FTP
+    assert ai_service._classify_ride_purpose(watts, ts, 250) == "endurance"
+
+
+def test_classify_ride_purpose_tempo():
+    watts, ts = make_flat_stream(200, 3600)  # 80% FTP
+    assert ai_service._classify_ride_purpose(watts, ts, 250) == "tempo"
+
+
+def test_classify_ride_purpose_vo2max_intervals():
+    """A ride with repeated 3-min blocks at 115% FTP should be classified as vo2max."""
+    ftp = 250
+    work = round(ftp * 1.15)  # 287 W
+    rest = round(ftp * 0.50)  # 125 W
+    # 5 x (3 min work + 3 min rest)
+    watts: list[float] = []
+    for _ in range(5):
+        watts.extend([work] * 180)
+        watts.extend([rest] * 180)
+    ts = list(range(len(watts)))
+    category = ai_service._classify_ride_purpose(watts, ts, ftp)
+    assert category == "interval_vo2max"
+
+
+def test_classify_ride_purpose_sprint_intervals():
+    """Sub-2-min efforts above 130% FTP -> sprint."""
+    ftp = 250
+    sprint_power = round(ftp * 1.40)  # 350 W
+    rest_power = round(ftp * 0.45)    # 112 W
+    # 8 x (1 min sprint + 4 min rest)
+    watts: list[float] = []
+    for _ in range(8):
+        watts.extend([sprint_power] * 60)
+        watts.extend([rest_power] * 240)
+    ts = list(range(len(watts)))
+    category = ai_service._classify_ride_purpose(watts, ts, ftp)
+    assert category == "interval_sprints"
+
+
+def test_detect_intervals_basic():
+    """Should detect 3 interval blocks separated by recovery."""
+    ftp = 250
+    work = round(ftp * 1.10)  # 275 W
+    rest = round(ftp * 0.50)  # 125 W
+    watts: list[float] = []
+    for _ in range(3):
+        watts.extend([work] * 300)  # 5 min
+        watts.extend([rest] * 180)  # 3 min rest
+    ts = list(range(len(watts)))
+    intervals = ai_service._detect_intervals(watts, ts, ftp)
+    assert len(intervals) == 3
+    for iv in intervals:
+        assert iv["duration_secs"] >= 270  # at least 4.5 min (90 % of 5 min)
+        assert iv["avg_power"] >= work * 0.95
+
+
+def test_detect_intervals_no_hard_efforts():
+    """A pure endurance ride should return no detected intervals."""
+    watts, ts = make_flat_stream(180, 3600)  # 72% of 250 FTP
+    intervals = ai_service._detect_intervals(watts, ts, 250)
+    assert intervals == []
+
+
+def test_compute_hr_drift_rising():
+    # HR climbs steadily from 140 to 160 -> positive slope (drifting)
+    hr = [140 + i * (20 / 119) for i in range(120)]
+    drift = ai_service._compute_hr_drift(hr)
+    assert drift is not None and drift > 0
+
+
+def test_compute_hr_drift_stable():
+    hr = [150.0] * 120
+    drift = ai_service._compute_hr_drift(hr)
+    assert drift is not None and abs(drift) < 0.01
+
+
+def test_build_ride_analysis_returns_category():
+    ftp = 250
+    work = round(ftp * 1.15)
+    rest = round(ftp * 0.50)
+    watts: list[float] = []
+    for _ in range(5):
+        watts.extend([work] * 180)
+        watts.extend([rest] * 180)
+    ts = list(range(len(watts)))
+    streams = {"watts": {"data": watts}, "time": {"data": ts}}
+    analysis = ai_service._build_ride_analysis(streams, float(ftp))
+    assert analysis["ride_category"] == "interval_vo2max"
+    assert len(analysis["intervals_detected"]) == 5
+    assert "avg_power_w" in analysis
+
+
+def test_build_ride_analysis_with_hr_drift():
+    ftp = 250
+    watts = [250.0] * 600  # 10 min at FTP
+    # HR rises from 160 to 185 (drifting)
+    hr = [160 + i * (25 / 599) for i in range(600)]
+    ts = list(range(600))
+    streams = {
+        "watts": {"data": watts},
+        "heartrate": {"data": hr},
+        "time": {"data": ts},
+    }
+    analysis = ai_service._build_ride_analysis(streams, float(ftp))
+    assert len(analysis["intervals_detected"]) >= 1
+    iv = analysis["intervals_detected"][0]
+    assert "hr_drift_bpm" in iv
+    # Total drift should be roughly 25 bpm
+    assert iv["hr_drift_bpm"] > 5
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_service):
+    """The analyse-activities endpoint must return the new shape: {assessment, planUpdates}."""
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 99,
+                    "name": "Test Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-04-15T08:00:00Z",
+                    "averageWatts": 200,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "assessment" in body
+    assert body["assessment"]["estimatedFTP"] == 280
+    assert body["assessment"]["rideInsights"] is not None
+    assert body["assessment"]["lastRideFeedback"] is not None
+    assert "planUpdates" in body

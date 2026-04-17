@@ -38,12 +38,12 @@ def _provider(user: models.User) -> str:
     return _default_provider()
 
 
-@router.post("/analyse-activities", response_model=schemas.RiderAssessmentSchema)
+@router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
 async def analyse_activities(
     body: schemas.AnalyseActivitiesRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
-) -> schemas.RiderAssessmentSchema:
+) -> schemas.AnalyseActivitiesResponse:
     # Fetch per-second stream data for each activity from Strava
     streams_by_id: dict[str, dict] = {}
     if current_user.strava_token is not None:
@@ -71,6 +71,8 @@ async def analyse_activities(
             rider_type=result.get("riderType", "allrounder"),
             notes=result.get("notes", ""),
             hr_zones=result.get("hrZones"),
+            ride_insights=result.get("rideInsights"),
+            last_ride_feedback=result.get("lastRideFeedback"),
         )
         db.add(assessment)
     else:
@@ -79,9 +81,21 @@ async def analyse_activities(
         assessment.rider_type = result.get("riderType", assessment.rider_type)
         assessment.notes = result.get("notes", assessment.notes)
         assessment.hr_zones = result.get("hrZones")
+        assessment.ride_insights = result.get("rideInsights")
+        if result.get("lastRideFeedback"):
+            assessment.last_ride_feedback = result.get("lastRideFeedback")
     current_user.strava_analysis_complete = True
+    # Track the most recent activity analysed so the frontend can detect new rides.
+    if body.activities:
+        newest_id = max(a.id for a in body.activities)
+        if current_user.last_strava_activity_id is None or newest_id > current_user.last_strava_activity_id:
+            current_user.last_strava_activity_id = newest_id
     await db.flush()
-    return schemas.RiderAssessmentSchema.model_validate(result)
+
+    assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
+    raw_updates = result.get("planUpdates") or []
+    plan_updates = [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_updates] if raw_updates else None
+    return schemas.AnalyseActivitiesResponse(assessment=assessment_schema, plan_updates=plan_updates)
 
 
 @router.post("/generate-plan")
@@ -119,6 +133,7 @@ async def ask_trainer(
         body.plan,
         body.profile.model_dump(by_alias=True),
         provider=_provider(current_user),
+        rider_assessment=body.rider_assessment.model_dump(by_alias=True) if body.rider_assessment else None,
         coach_memory=body.coach_memory,
         conversation_history=[msg.model_dump() for msg in (body.conversation_history or [])],
         context_workout=body.context_workout,

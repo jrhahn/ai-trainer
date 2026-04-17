@@ -42,6 +42,7 @@ class User(Base):
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
 
     strava_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_strava_activity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
@@ -148,6 +149,8 @@ class RiderAssessment(Base):
     rider_type: Mapped[str] = mapped_column(String(50), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     hr_zones: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    ride_insights: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_ride_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")

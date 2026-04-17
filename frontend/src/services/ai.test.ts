@@ -48,8 +48,17 @@ describe('MAX_CONVERSATION_HISTORY', () => {
 })
 
 describe('analyseStravaActivities', () => {
-  it('calls the backend analyse endpoint', async () => {
-    mockApiFetch.mockResolvedValue({ estimatedFTP: 280, riderType: 'allrounder', notes: 'Balanced rider' })
+  it('calls the backend analyse endpoint and returns {assessment, planUpdates}', async () => {
+    mockApiFetch.mockResolvedValue({
+      assessment: {
+        estimatedFTP: 280,
+        riderType: 'allrounder',
+        notes: 'Balanced rider',
+        rideInsights: 'Good endurance base.',
+        lastRideFeedback: 'Great ride! You held 188W for 90 min. Next session try some tempo work.',
+      },
+      planUpdates: [],
+    })
 
     const result = await analyseStravaActivities([
       {
@@ -64,7 +73,10 @@ describe('analyseStravaActivities', () => {
       },
     ], 'token-123')
 
-    expect(result.estimatedFTP).toBe(280)
+    expect(result.assessment.estimatedFTP).toBe(280)
+    expect(result.assessment.rideInsights).toBe('Good endurance base.')
+    expect(result.assessment.lastRideFeedback).toBe('Great ride! You held 188W for 90 min. Next session try some tempo work.')
+    expect(result.planUpdates).toEqual([])
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/analyse-activities', {
       token: 'token-123',
       method: 'POST',
@@ -121,6 +133,7 @@ describe('askTrainer', () => {
         question: 'How should I train?',
         plan: [],
         profile,
+        riderAssessment: undefined,
         coachMemory: undefined,
         conversationHistory: undefined,
       },
