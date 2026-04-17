@@ -31,3 +31,7 @@ backend/**/__pycache__
 backend/*.pyc
 backend/.env
 backend/pytest.db
+backend/ci-test.db
+backend/.coverage
+backend/coverage.xml
+backend/coverage_test*.db
