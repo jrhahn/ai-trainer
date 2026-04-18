@@ -151,7 +151,10 @@ def adapt_plan_system() -> str:
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units. "
         "Keep the same date fields.\n"
         "Each updated day must include all required TrainingDay fields: "
-        "\"date\", \"workoutType\", \"title\", \"description\", \"durationMinutes\"."
+        "\"date\", \"workoutType\", \"title\", \"description\", \"durationMinutes\".\n"
+        f"{TRAINING_PLAN_PRINCIPLES}"
+        "Use TSB to guide adaptation: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
+        "TSB > +10 before a key workout suggests freshness, intensity can be increased."
     )
 
 
@@ -160,10 +163,21 @@ def adapt_plan_user(
     today: str,
     recent_feedback: list[dict],
     incomplete_days: list[dict],
+    rider_assessment: dict | None = None,
+    training_load: dict | None = None,
 ) -> str:
+    assessment_section = (
+        f"\nRider assessment: {json.dumps(rider_assessment)}" if rider_assessment else ""
+    )
+    load_section = ""
+    if training_load:
+        load_section = (
+            f"\nTraining load (from plan): CTL={training_load.get('ctl')} "
+            f"ATL={training_load.get('atl')} TSB={training_load.get('tsb')}"
+        )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         "Adapt the remaining days based on the feedback. Return the full updated days array."
@@ -265,12 +279,32 @@ def ask_trainer_system(
     workout_section: str,
     plan_updates_rule: str,
     science_context: str = "",
+    training_load: dict | None = None,
+    classification: dict | None = None,
 ) -> str:
     science_section = (
         f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
         f"{science_context}"
         "\nWhen citing these sources, include the title in your response."
     ) if science_context else ""
+
+    training_load_section = ""
+    if training_load:
+        training_load_section = (
+            f"\n\nCurrent training load: "
+            f"CTL (fitness)={training_load.get('ctl')} "
+            f"ATL (fatigue)={training_load.get('atl')} "
+            f"TSB (form)={training_load.get('tsb')}\n"
+            "Use TSB to guide your advice: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
+            "TSB > +10 before a key workout suggests freshness, intensity can be increased."
+        )
+
+    classification_section = ""
+    if classification:
+        classification_section = (
+            f"\n\nQuestion classification: category={classification.get('category')} "
+            f"needs_science_rag={classification.get('needs_science_rag')}"
+        )
 
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
@@ -279,9 +313,17 @@ def ask_trainer_system(
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
         f"{assessment_section}"
+        f"{training_load_section}"
         f"{memory_section}"
         f"{workout_section}"
+        f"{classification_section}"
         f"{science_section}\n\n"
+        "Before writing your response, reason through: "
+        "(1) what the athlete is really asking, "
+        "(2) what their current CTL/ATL/TSB suggests about their fatigue state, "
+        "(3) whether the request conflicts with training principles, "
+        "(4) the most helpful coaching answer. "
+        "Put this reasoning in a \"thinking\" field — it will not be shown to the athlete.\n"
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "Whenever the athlete requests a change to the training plan, your response MUST briefly "
@@ -292,6 +334,7 @@ def ask_trainer_system(
         "advice. If a change could harm progress or recovery, say so clearly yet tactfully, "
         "and still apply the change if the athlete wants it.\n"
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
+        '- "thinking": your internal reasoning (required, but never shown to the athlete)\n'
         '- "response": your natural language answer as a string (required)\n'
         '- "sources": an array of source titles you referenced from the science research section '
         "(omit or use [] if no research was cited)\n"
@@ -335,7 +378,12 @@ def rate_workout_system() -> str:
         f"{COACH_PERSONA} Review a completed training session. "
         "Compare the actual workout against the planned one and provide brief, encouraging feedback "
         "in 2-4 sentences. Note how well the athlete followed the plan, highlight any significant "
-        "deviations, and explain what it means for their training progress."
+        "deviations, and explain what it means for their training progress.\n"
+        "Return ONLY a valid JSON object with these fields:\n"
+        '- "feedback": your 2-4 sentence coaching response as a string\n'
+        '- "flag_for_adaptation": true when the athlete should adapt their upcoming plan '
+        "(perceived effort ≫ planned intensity, actual duration significantly shorter than "
+        "planned, or athlete notes indicate fatigue/illness/pain); otherwise false"
     )
 
 
@@ -375,3 +423,29 @@ def rate_workout_user(day: dict, feedback: dict, profile: dict | None = None) ->
         f"{profile_section}\n\n"
         f"Rate how well this workout matched the plan and give brief feedback."
     )
+
+
+# ---------------------------------------------------------------------------
+# ask_trainer classification prompts (Task 5)
+# ---------------------------------------------------------------------------
+
+
+def ask_trainer_classify_system() -> str:
+    return (
+        "You are a routing assistant for a cycling coach chatbot. "
+        "Classify the athlete's question into one of the following categories:\n"
+        "- \"plan_query\": asking about their training plan, schedule, or specific workouts\n"
+        "- \"workout_modification\": requesting a change, swap, or skip of a workout\n"
+        "- \"performance_question\": asking about their performance, FTP, progress, or race results\n"
+        "- \"science_question\": asking about training physiology, nutrition, recovery science, or methodology\n"
+        "- \"general_coaching\": general coaching advice, motivation, or strategy\n"
+        "Return ONLY a valid JSON object with these fields:\n"
+        '- "category": one of the categories above\n'
+        '- "needs_science_rag": true when the question would benefit from cycling science research '
+        "(science_question or a detailed physiology/methodology question); false for simple plan "
+        "queries, workout swaps, and schedule questions"
+    )
+
+
+def ask_trainer_classify_user(question: str) -> str:
+    return f"Classify this athlete question: {question}"

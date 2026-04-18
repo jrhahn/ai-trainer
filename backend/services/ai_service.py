@@ -24,6 +24,7 @@ from .analysis import (
     _classify_ride_purpose,
     _compute_hr_drift,
     _compute_hr_zones,
+    _compute_training_load,
     _detect_intervals,
     _hr_corrected_ftp,
     _LTHR_RATIO,
@@ -37,6 +38,8 @@ from .prompts import (
     adapt_plan_system,
     adapt_plan_user,
     ask_trainer_assessment_section,
+    ask_trainer_classify_system,
+    ask_trainer_classify_user,
     ask_trainer_workout_section,
     ask_trainer_plan_updates_rule,
     ask_trainer_system,
@@ -295,16 +298,48 @@ async def generate_training_plan(
 
 
 async def adapt_training_plan(
-    plan: list[dict], recent_feedback: list[dict], profile: dict, provider: str = "openai"
+    plan: list[dict],
+    recent_feedback: list[dict],
+    profile: dict,
+    provider: str = "openai",
+    rider_assessment: dict | None = None,
 ) -> list[dict]:
     today = __import__("datetime").datetime.now().date().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
+    ftp = float(
+        (rider_assessment or {}).get("estimatedFTP")
+        or profile.get("currentFTP")
+        or 0
+    )
+    training_load = _compute_training_load(plan, ftp) if ftp > 0 else None
     system_prompt = adapt_plan_system()
-    user_msg = adapt_plan_user(profile, today, recent_feedback, incomplete_days)
+    user_msg = adapt_plan_user(
+        profile,
+        today,
+        recent_feedback,
+        incomplete_days,
+        rider_assessment=rider_assessment,
+        training_load=training_load,
+    )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     updated_days = {day["date"]: day for day in parsed.get("updatedDays", [])}
     return [day if day.get("completed") else updated_days.get(day["date"], day) for day in plan]
+
+
+async def classify_question(question: str) -> dict:
+    """Classify an athlete question using a lightweight model (gpt-4o-mini).
+
+    Returns a dict with ``category`` and ``needs_science_rag``.
+    On failure returns a safe default (needs_science_rag=False).
+    """
+    try:
+        classify_sys = ask_trainer_classify_system()
+        classify_user = ask_trainer_classify_user(question)
+        classify_raw = await _openai_chat(classify_sys, classify_user, json_mode=True)
+        return _parse_ai_json(classify_raw)
+    except Exception:
+        return {"category": "general_coaching", "needs_science_rag": False}
 
 
 async def ask_trainer(
@@ -317,6 +352,7 @@ async def ask_trainer(
     conversation_history: list[dict[str, str]] | None = None,
     context_workout: dict | None = None,
     science_context: str | None = None,
+    classification: dict | None = None,
 ) -> dict:
     today = __import__("datetime").datetime.now().date().isoformat()
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
@@ -326,6 +362,14 @@ async def ask_trainer(
     assessment_section = ask_trainer_assessment_section(rider_assessment)
     workout_section = ask_trainer_workout_section(context_workout)
     plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
+
+    # --- Task 1: Compute training load from the plan ---
+    ftp = float(
+        (rider_assessment or {}).get("estimatedFTP")
+        or profile.get("currentFTP")
+        or 0
+    )
+    training_load = _compute_training_load(plan, ftp) if ftp > 0 and plan else None
 
     system_prompt = ask_trainer_system(
         profile,
@@ -337,11 +381,17 @@ async def ask_trainer(
         workout_section,
         plan_updates_rule,
         science_context=science_context or "",
+        training_load=training_load,
+        classification=classification,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
     raw = await _chat_history(provider, system_prompt, messages, json_mode=True)
     parsed = _parse_ai_json(raw)
+
+    # --- Task 2: Strip "thinking" — never expose internal reasoning to the frontend ---
+    parsed.pop("thinking", None)
+
     return {
         "response": parsed.get("response", ""),
         "plan_updates": parsed.get("planUpdates"),
@@ -357,11 +407,16 @@ async def update_coach_memory(
     return await _chat(provider, system_prompt, user_msg)
 
 
-async def rate_completed_workout(day: dict, profile: dict, provider: str = "openai") -> str:
+async def rate_completed_workout(day: dict, profile: dict, provider: str = "openai") -> dict:
     feedback = day.get("feedback")
     if not feedback:
-        return ""
+        return {"feedback": "", "flag_for_adaptation": False}
 
     system_prompt = rate_workout_system()
     user_msg = rate_workout_user(day, feedback, profile)
-    return await _chat(provider, system_prompt, user_msg)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+    return {
+        "feedback": parsed.get("feedback", ""),
+        "flag_for_adaptation": bool(parsed.get("flag_for_adaptation", False)),
+    }

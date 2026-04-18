@@ -115,6 +115,12 @@ async def test_ask_trainer_response_includes_sources_when_rag_returns_results(
         {"title": "Power Zones", "sourceType": "seed", "similarity": 0.92},
     ]
 
+    # Override classify_question to request RAG so retrieve_cycling_context is called
+    mock_ai_service["classify_question"].return_value = {
+        "category": "science_question",
+        "needs_science_rag": True,
+    }
+
     with patch("routers.ai.retrieve_cycling_context", new_callable=AsyncMock) as mock_rag:
         mock_rag.return_value = ("Zone 2 is endurance.", rag_sources)
 
@@ -159,6 +165,12 @@ async def test_ask_trainer_science_context_forwarded_to_ai_service(
 ):
     """science_context returned by RAG must be forwarded to ai_service.ask_trainer."""
     science_ctx = "Polarized training improves VO2max by 11%."
+
+    # Override classify_question to request RAG
+    mock_ai_service["classify_question"].return_value = {
+        "category": "science_question",
+        "needs_science_rag": True,
+    }
 
     with patch("routers.ai.retrieve_cycling_context", new_callable=AsyncMock) as mock_rag:
         mock_rag.return_value = (science_ctx, [])

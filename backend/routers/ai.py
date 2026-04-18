@@ -146,11 +146,17 @@ async def adapt_plan(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
     profile = _user_to_profile_dict(current_user)
+    rider_assessment = None
+    if current_user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
     updated_plan = await ai_service.adapt_training_plan(
         plan,
         [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
         profile,
         provider=_provider(current_user),
+        rider_assessment=rider_assessment,
     )
     await crud.upsert_training_plan(db, current_user.id, updated_plan)
     return updated_plan
@@ -179,8 +185,12 @@ async def ask_trainer(
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
     ]
 
-    # Retrieve relevant cycling science context from the knowledge base.
-    science_context, rag_sources = await retrieve_cycling_context(db, body.question)
+    # --- Task 5: Classify question first, then conditionally retrieve RAG context ---
+    classification = await ai_service.classify_question(body.question)
+    science_context = ""
+    rag_sources: list = []
+    if classification.get("needs_science_rag", False):
+        science_context, rag_sources = await retrieve_cycling_context(db, body.question)
 
     result = await ai_service.ask_trainer(
         body.question,
@@ -192,6 +202,7 @@ async def ask_trainer(
         conversation_history=conversation_history,
         context_workout=body.context_workout,
         science_context=science_context,
+        classification=classification,
     )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -243,15 +254,51 @@ async def ask_trainer(
 @router.post("/rate-workout", response_model=schemas.RateWorkoutResponse)
 async def rate_workout(
     body: schemas.RateWorkoutRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
     profile = _user_to_profile_dict(current_user)
-    feedback = await ai_service.rate_completed_workout(
+    result = await ai_service.rate_completed_workout(
         body.day.model_dump(by_alias=True),
         profile,
         provider=_provider(current_user),
     )
-    return schemas.RateWorkoutResponse(feedback=feedback)
+
+    if result.get("flag_for_adaptation"):
+        # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
+        rider_assessment = None
+        if current_user.rider_assessment is not None:
+            rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+                current_user.rider_assessment, from_attributes=True
+            ).model_dump(by_alias=True)
+        existing_plan = await crud.get_training_plan(db, current_user.id)
+        plan = existing_plan.plan if existing_plan is not None else []
+        # Build a feedback entry from the completed day so the adapter has context
+        day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
+        auto_feedback = [
+            {
+                "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
+                "perceivedEffort": day_feedback.get("perceivedEffort"),
+                "notes": day_feedback.get("notes", "Auto-triggered by high effort rating"),
+                "completedAt": day_feedback.get("completedAt"),
+            }
+        ]
+        try:
+            updated_plan = await ai_service.adapt_training_plan(
+                plan,
+                auto_feedback,
+                profile,
+                provider=_provider(current_user),
+                rider_assessment=rider_assessment,
+            )
+            await crud.upsert_training_plan(db, current_user.id, updated_plan)
+        except Exception:
+            logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
+
+    return schemas.RateWorkoutResponse(
+        feedback=result.get("feedback", ""),
+        flag_for_adaptation=result.get("flag_for_adaptation", False),
+    )
 
 
 async def _run_knowledge_refresh() -> None:
