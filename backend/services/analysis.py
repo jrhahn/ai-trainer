@@ -8,22 +8,24 @@ and provider wiring.
 
 from __future__ import annotations
 
+import math
+
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
 # 87% is a well-established estimate for trained cyclists.
-_LTHR_RATIO = 0.87
+LTHR_RATIO = 0.87
 
 # Average-power threshold that separates endurance from tempo zones (~76 % FTP).
 # Below this level a sustained ride is aerobic/endurance; at or above it the
 # effort is in the tempo/sweet-spot band.
-_TEMPO_THRESHOLD_PCT = 0.76
+TEMPO_THRESHOLD_PCT = 0.76
 
 # Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
 # true FTP is typically ~75 % of their raw average power across all recent rides
 # (accounting for the mix of easy and hard sessions that make up their history).
-_AVG_POWER_TO_FTP_RATIO = 0.75
+AVG_POWER_TO_FTP_RATIO = 0.75
 
 
-def _best_n_min_power(
+def best_n_min_power(
     watts: list[float], time_stream: list[float], n_minutes: float
 ) -> tuple[float | None, int, int]:
     """Find the best average power over a contiguous n-minute window.
@@ -65,7 +67,7 @@ def _best_n_min_power(
     return (best_power if best_power > 0 else None), best_start, best_end
 
 
-def _hr_corrected_ftp(
+def hr_corrected_ftp(
     interval_power: float,
     interval_hr: float,
     max_hr: int,
@@ -90,12 +92,12 @@ def _hr_corrected_ftp(
     hr_fraction = interval_hr / max_hr
     if hr_fraction < 0.70 or hr_fraction > 1.0:
         return None
-    lthr = max_hr * _LTHR_RATIO
+    lthr = max_hr * LTHR_RATIO
     corrected = interval_power * (lthr / interval_hr)
     return round(corrected)
 
 
-def _compute_hr_zones(max_hr: int) -> dict:
+def compute_hr_zones(max_hr: int) -> dict:
     """Compute 5 standard HR training zones based on percentage of max HR."""
     return {
         "zone1": {"low": 0, "high": round(max_hr * 0.60)},
@@ -106,7 +108,7 @@ def _compute_hr_zones(max_hr: int) -> dict:
     }
 
 
-def _detect_intervals(
+def detect_intervals(
     watts: list[float],
     time_stream: list[float],
     ftp: float,
@@ -174,7 +176,7 @@ def _detect_intervals(
     return result
 
 
-def _compute_hr_drift(hr_segment: list[float]) -> float | None:
+def compute_hr_drift(hr_segment: list[float]) -> float | None:
     """Return the linear-regression slope (bpm per sample) of HR over a segment.
 
     A positive slope indicates cardiac drift (HR rising while effort is
@@ -191,7 +193,7 @@ def _compute_hr_drift(hr_segment: list[float]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
-def _classify_ride_purpose(
+def classify_ride_purpose(
     watts: list[float],
     time_stream: list[float],
     ftp: float,
@@ -211,18 +213,17 @@ def _classify_ride_purpose(
     if not watts or ftp <= 0:
         return "endurance"
 
-    total_time = time_stream[-1] - time_stream[0] if len(time_stream) > 1 else len(watts)
     avg_power = sum(watts) / len(watts)
     avg_pct = avg_power / ftp
 
     # Detect intervals at 85 % threshold
-    intervals = _detect_intervals(watts, time_stream, ftp, work_threshold_pct=0.85)
+    intervals = detect_intervals(watts, time_stream, ftp, work_threshold_pct=0.85)
 
     if not intervals:
         # No distinct interval blocks — classify by average power
         if avg_pct < 0.60:
             return "recovery"
-        if avg_pct < _TEMPO_THRESHOLD_PCT:
+        if avg_pct < TEMPO_THRESHOLD_PCT:
             return "endurance"
         return "tempo"
 
@@ -251,7 +252,7 @@ def _classify_ride_purpose(
     unique_types = set(interval_types)
     if not unique_types:
         # Intervals detected but all fell below the classification thresholds
-        return "endurance" if avg_pct < _TEMPO_THRESHOLD_PCT else "tempo"
+        return "endurance" if avg_pct < TEMPO_THRESHOLD_PCT else "tempo"
     if len(unique_types) > 1:
         return "mixed"
     sole_type = next(iter(unique_types))
@@ -263,7 +264,7 @@ def _classify_ride_purpose(
     }.get(sole_type, "endurance")
 
 
-def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
+def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     """Compute CTL, ATL, and TSB training load metrics from plan days.
 
     Uses an approximation of TSS per day from ``durationMinutes`` and
@@ -334,8 +335,6 @@ def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     # --- Compute CTL and ATL via exponential weighted averages ---
     # CTL: 42-day time constant → smoothing factor α = 1 - exp(-1/42)
     # ATL: 7-day time constant  → smoothing factor α = 1 - exp(-1/7)
-    import math
-
     alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
     alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
 
@@ -354,7 +353,7 @@ def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     }
 
 
-def _build_ride_analysis(
+def build_ride_analysis(
     streams: dict,
     ftp: float,
 ) -> dict:
@@ -369,8 +368,8 @@ def _build_ride_analysis(
     if not watts or not time_data:
         return {}
 
-    ride_category = _classify_ride_purpose(watts, time_data, ftp)
-    intervals = _detect_intervals(watts, time_data, ftp)
+    ride_category = classify_ride_purpose(watts, time_data, ftp)
+    intervals = detect_intervals(watts, time_data, ftp)
 
     # Annotate each interval with HR data and drift
     annotated: list[dict] = []
@@ -386,7 +385,7 @@ def _build_ride_analysis(
             hr_seg = hr_data[s : e + 1]
             avg_hr = sum(hr_seg) / len(hr_seg)
             annotated_iv["avg_hr_bpm"] = round(avg_hr)
-            drift = _compute_hr_drift(hr_seg)
+            drift = compute_hr_drift(hr_seg)
             if drift is not None:
                 # Normalise drift to total HR rise across the segment
                 total_drift_bpm = drift * len(hr_seg)
@@ -401,3 +400,62 @@ def _build_ride_analysis(
         "avg_power_w": round(sum(watts) / len(watts)),
         "intervals_detected": annotated,
     }
+
+
+def compute_ftp_from_streams(
+    streams_by_id: dict[str, dict],
+    max_heart_rate: int | None = None,
+) -> tuple[int | None, int | None]:
+    """Estimate FTP and threshold HR from activity stream data.
+
+    Uses two methods per activity and returns the best (highest) FTP estimate:
+    - Method 1: 95 % of best 20-min average power.
+    - Method 2: HR-corrected FTP derived from 10-, 15-, and 20-min best
+      intervals when heart-rate data and ``max_heart_rate`` are available.
+
+    Returns ``(computed_ftp, computed_threshold_hr)``.  Both are ``None`` when
+    insufficient data is available.
+    """
+    ftp_candidates: list[int] = []
+    threshold_hrs: list[int] = []
+
+    for _act_id, streams in streams_by_id.items():
+        watts_data: list[float] = streams.get("watts", {}).get("data", [])
+        hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
+        time_data: list[float] = streams.get("time", {}).get("data", [])
+
+        if not watts_data or not time_data:
+            continue
+
+        # --- Method 1: best-20-min power × 0.95 ---
+        best20, start20, end20 = best_n_min_power(watts_data, time_data, 20)
+        if best20 is not None:
+            # FTP is conventionally defined as 95% of best 20-min average power.
+            # This scaling factor accounts for the difference between a maximal
+            # 20-min effort and a true 60-min sustainable power output.
+            ftp_candidates.append(round(best20 * 0.95))
+            # Track average HR during that segment for threshold-HR estimation.
+            if hr_data and len(hr_data) == len(time_data):
+                segment_hr = hr_data[start20 : end20 + 1]
+                if segment_hr:
+                    threshold_hrs.append(round(sum(segment_hr) / len(segment_hr)))
+
+        # --- Method 2: HR-corrected FTP from 10-min and 20-min best intervals ---
+        # For each interval length, if we have both power and HR data, scale the
+        # interval power to what it would be at exactly the lactate-threshold HR.
+        # This is useful when the rider never executed a maximal 20-min effort but
+        # did push hard intervals where HR gives us a physiological reference point.
+        if hr_data and len(hr_data) == len(time_data) and max_heart_rate:
+            for n_min in (10, 15, 20):
+                best_n, s, e = best_n_min_power(watts_data, time_data, n_min)
+                if best_n is not None:
+                    seg_hr = hr_data[s : e + 1]
+                    if seg_hr:
+                        avg_interval_hr = sum(seg_hr) / len(seg_hr)
+                        ftp_hr = hr_corrected_ftp(best_n, avg_interval_hr, max_heart_rate)
+                        if ftp_hr is not None:
+                            ftp_candidates.append(ftp_hr)
+
+    computed_ftp = max(ftp_candidates) if ftp_candidates else None
+    computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs)) if threshold_hrs else None
+    return computed_ftp, computed_threshold_hr

@@ -186,7 +186,7 @@ async def ask_trainer(
     ]
 
     # --- Task 5: Classify question first, then conditionally retrieve RAG context ---
-    classification = await ai_service.classify_question(body.question)
+    classification = await ai_service.classify_question(body.question, provider=_provider(current_user))
     science_context = ""
     rag_sources: list = []
     if classification.get("needs_science_rag", False):
