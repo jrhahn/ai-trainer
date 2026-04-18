@@ -354,6 +354,248 @@ def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     }
 
 
+def _normalized_power(watts: list[float], time_stream: list[float]) -> float | None:
+    """Compute Normalized Power (NP) from a power stream.
+
+    Uses the standard algorithm: compute a 30-second rolling average, raise
+    each value to the 4th power, average those values, then take the 4th root.
+    Returns ``None`` when there is insufficient data (< 30 seconds of riding).
+    """
+    if len(watts) < 2 or not time_stream or len(watts) != len(time_stream):
+        return None
+    total_time = time_stream[-1] - time_stream[0]
+    if total_time < 30:
+        return None
+
+    rolling_avgs: list[float] = []
+    left = 0
+    window_sum = 0.0
+
+    for right in range(len(watts)):
+        window_sum += watts[right]
+        while time_stream[right] - time_stream[left] > 30.0:
+            window_sum -= watts[left]
+            left += 1
+        count = right - left + 1
+        rolling_avgs.append(window_sum / count)
+
+    if not rolling_avgs:
+        return None
+    mean_fourth = sum(v**4 for v in rolling_avgs) / len(rolling_avgs)
+    return mean_fourth**0.25
+
+
+def _time_in_power_zones(
+    watts: list[float], time_stream: list[float], ftp: float
+) -> dict:
+    """Compute time spent (in seconds) in each of the 7 standard power training zones.
+
+    Zone boundaries (as % FTP):
+    - Z1: < 55 %  (Active Recovery)
+    - Z2: 55–75 % (Endurance)
+    - Z3: 75–90 % (Tempo)
+    - Z4: 90–105 % (Threshold)
+    - Z5: 105–120 % (VO2max)
+    - Z6: 120–150 % (Anaerobic Capacity)
+    - Z7: > 150 %  (Neuromuscular Power)
+    """
+    zones: dict[str, float] = {f"z{i}_secs": 0.0 for i in range(1, 8)}
+    if not watts or not time_stream or len(watts) != len(time_stream) or ftp <= 0:
+        return {k: round(v) for k, v in zones.items()}
+
+    boundaries = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50]
+
+    for i in range(len(watts)):
+        pct = watts[i] / ftp
+        dt = (time_stream[i + 1] - time_stream[i]) if i < len(watts) - 1 else 1.0
+        if pct < boundaries[0]:
+            zones["z1_secs"] += dt
+        elif pct < boundaries[1]:
+            zones["z2_secs"] += dt
+        elif pct < boundaries[2]:
+            zones["z3_secs"] += dt
+        elif pct < boundaries[3]:
+            zones["z4_secs"] += dt
+        elif pct < boundaries[4]:
+            zones["z5_secs"] += dt
+        elif pct < boundaries[5]:
+            zones["z6_secs"] += dt
+        else:
+            zones["z7_secs"] += dt
+
+    return {k: round(v) for k, v in zones.items()}
+
+
+def _detect_intensity_spikes(
+    watts: list[float],
+    time_stream: list[float],
+    target_power: float,
+    spike_threshold_pct: float = 10.0,
+    window_secs: float = 900.0,
+) -> list[dict]:
+    """Detect non-overlapping windows where average power exceeded ``target_power``
+    by more than ``spike_threshold_pct`` percent.
+
+    Returns a list of dicts with ``start_min``, ``end_min``,
+    ``avg_power_w``, and ``pct_over_target``.
+    """
+    if not watts or not time_stream or target_power <= 0:
+        return []
+    if len(watts) != len(time_stream):
+        return []
+
+    spikes: list[dict] = []
+    window_start_idx = 0
+
+    while window_start_idx < len(watts):
+        window_end_time = time_stream[window_start_idx] + window_secs
+        window_end_idx = window_start_idx
+        while window_end_idx < len(watts) and time_stream[window_end_idx] < window_end_time:
+            window_end_idx += 1
+
+        if window_end_idx <= window_start_idx:
+            break
+
+        seg = watts[window_start_idx:window_end_idx]
+        avg = sum(seg) / len(seg)
+        pct_over = (avg - target_power) / target_power * 100.0
+        if pct_over > spike_threshold_pct:
+            start_min = round((time_stream[window_start_idx] - time_stream[0]) / 60.0, 1)
+            end_min = round((time_stream[window_end_idx - 1] - time_stream[0]) / 60.0, 1)
+            spikes.append(
+                {
+                    "start_min": start_min,
+                    "end_min": end_min,
+                    "avg_power_w": round(avg),
+                    "pct_over_target": round(pct_over, 1),
+                }
+            )
+
+        if window_end_idx >= len(watts):
+            break
+        window_start_idx = window_end_idx
+
+    return spikes
+
+
+def compare_planned_vs_actual(
+    planned: dict,
+    streams: dict,
+    ftp: float | None = None,
+) -> dict:
+    """Compare planned workout targets against actual Strava stream data.
+
+    Args:
+        planned: A training-day dict with ``targetPower``, ``targetHeartRate``,
+            ``durationMinutes``, and ``workoutType`` keys (camelCase).
+        streams: The raw Strava streams dict keyed by type (``watts``,
+            ``heartrate``, ``time``).
+        ftp: The athlete's current FTP in watts (used for time-in-zone
+            and zone-relative delta calculations).  When ``None`` the
+            time-in-zones field is omitted.
+
+    Returns:
+        A dict with the following keys (all optional — only present when the
+        relevant stream data is available):
+
+        ``avg_power_w``
+            Actual average power from the stream.
+        ``normalized_power_w``
+            NP calculated from the 30-second rolling average.
+        ``target_power_low`` / ``target_power_high``
+            Planned power targets from the day schema.
+        ``avg_power_delta_pct``
+            Percentage deviation of actual avg power from the target midpoint
+            (positive = over target, negative = under).
+        ``normalized_power_delta_pct``
+            Same but using NP instead of avg power.
+        ``time_in_zones``
+            Dict of ``z1_secs`` … ``z7_secs`` — time spent in each power zone.
+        ``avg_hr_bpm``
+            Actual average HR from the stream.
+        ``target_hr_low`` / ``target_hr_high``
+            Planned HR targets from the day schema.
+        ``avg_hr_delta_pct``
+            Percentage deviation of actual avg HR from the target HR midpoint.
+        ``hr_drift_bpm``
+            Total HR drift (linear regression slope × n samples) across the
+            session.  Positive = HR rising while effort is sustained (cardiac
+            drift).
+        ``intensity_spikes``
+            List of 15-min windows where avg power exceeded the target midpoint
+            by more than 10 %.  Each entry has ``start_min``, ``end_min``,
+            ``avg_power_w``, ``pct_over_target``.
+    """
+    watts: list[float] = streams.get("watts", {}).get("data", [])
+    hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
+    time_data: list[float] = streams.get("time", {}).get("data", [])
+
+    if not watts or not time_data:
+        return {}
+
+    result: dict = {}
+
+    # --- Average power ---
+    avg_power = sum(watts) / len(watts)
+    result["avg_power_w"] = round(avg_power)
+
+    # --- Normalized Power ---
+    np_value = _normalized_power(watts, time_data)
+    if np_value is not None:
+        result["normalized_power_w"] = round(np_value)
+
+    # --- Target power delta ---
+    target_power = planned.get("targetPower")
+    target_mid: float | None = None
+    if target_power and isinstance(target_power, dict):
+        low = target_power.get("low") or 0
+        high = target_power.get("high") or 0
+        if low > 0 and high > 0:
+            result["target_power_low"] = low
+            result["target_power_high"] = high
+            target_mid = (low + high) / 2.0
+            result["avg_power_delta_pct"] = round(
+                (avg_power - target_mid) / target_mid * 100.0, 1
+            )
+            np_for_delta = np_value if np_value is not None else avg_power
+            result["normalized_power_delta_pct"] = round(
+                (np_for_delta - target_mid) / target_mid * 100.0, 1
+            )
+
+    # --- Time in power zones ---
+    if ftp and ftp > 0:
+        result["time_in_zones"] = _time_in_power_zones(watts, time_data, ftp)
+
+    # --- HR metrics ---
+    if hr_data and len(hr_data) == len(watts):
+        avg_hr = sum(hr_data) / len(hr_data)
+        result["avg_hr_bpm"] = round(avg_hr)
+
+        drift = _compute_hr_drift(hr_data)
+        if drift is not None:
+            result["hr_drift_bpm"] = round(drift * len(hr_data), 1)
+
+        target_hr = planned.get("targetHeartRate")
+        if target_hr and isinstance(target_hr, dict):
+            hr_low = target_hr.get("low") or 0
+            hr_high = target_hr.get("high") or 0
+            if hr_low > 0 and hr_high > 0:
+                result["target_hr_low"] = hr_low
+                result["target_hr_high"] = hr_high
+                hr_mid = (hr_low + hr_high) / 2.0
+                result["avg_hr_delta_pct"] = round(
+                    (avg_hr - hr_mid) / hr_mid * 100.0, 1
+                )
+
+    # --- Intensity spikes ---
+    if target_mid is not None:
+        spikes = _detect_intensity_spikes(watts, time_data, target_mid)
+        if spikes:
+            result["intensity_spikes"] = spikes
+
+    return result
+
+
 def _build_ride_analysis(
     streams: dict,
     ftp: float,
