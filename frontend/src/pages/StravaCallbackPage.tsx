@@ -17,13 +17,17 @@ export default function StravaCallbackPage() {
     const success = params.get('success')
 
     if (error) {
-      setErrorMsg(decodeURIComponent(error))
+      const decoded = decodeURIComponent(error)
+      console.error('[StravaCallback] Connection failed:', decoded)
+      setErrorMsg(decoded)
       setStatus('error')
       return
     }
 
     if (!success) {
-      setErrorMsg('No success confirmation received. Please try again.')
+      const msg = 'No success confirmation received. Please try again.'
+      console.error('[StravaCallback] Connection failed:', msg)
+      setErrorMsg(msg)
       setStatus('error')
       return
     }
