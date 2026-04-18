@@ -264,7 +264,14 @@ def ask_trainer_system(
     memory_section: str,
     workout_section: str,
     plan_updates_rule: str,
+    science_context: str = "",
 ) -> str:
+    science_section = (
+        f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
+        f"{science_context}"
+        "\nWhen citing these sources, include the title in your response."
+    ) if science_context else ""
+
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
@@ -273,7 +280,8 @@ def ask_trainer_system(
         f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
         f"{assessment_section}"
         f"{memory_section}"
-        f"{workout_section}\n\n"
+        f"{workout_section}"
+        f"{science_section}\n\n"
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "Whenever the athlete requests a change to the training plan, your response MUST briefly "
@@ -285,6 +293,8 @@ def ask_trainer_system(
         "and still apply the change if the athlete wants it.\n"
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
         '- "response": your natural language answer as a string (required)\n'
+        '- "sources": an array of source titles you referenced from the science research section '
+        "(omit or use [] if no research was cited)\n"
         f"{plan_updates_rule}"
     )
 

@@ -297,6 +297,7 @@ class AnalyseActivitiesResponse(CamelModel):
 class AskTrainerResponse(CamelModel):
     response: str
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
+    sources: Optional[list[Any]] = None
 
 
 class TrainingDaySchema(CamelModel):

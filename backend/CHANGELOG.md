@@ -5,6 +5,37 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-18
+
+### Added
+
+- **Cycling science RAG** — retrieval-augmented generation layer that grounds `ask_trainer` responses in peer-reviewed cycling science:
+  - `services/rag.py`: `retrieve_cycling_context(db, query, k=5)` embeds the athlete's question with `text-embedding-3-small` and runs cosine-similarity search against the `knowledge_chunks` table using pgvector. Returns `("", [])` gracefully when pgvector is unavailable (e.g. SQLite in tests).
+  - `/ai/ask-trainer` now calls `retrieve_cycling_context` on every request and injects the retrieved science context into the system prompt; retrieved source metadata is returned in the response as `sources`.
+  - `AskTrainerResponse` schema gains an optional `sources: list` field so callers can surface citations.
+  - `services/prompts.py`: `ask_trainer_system` accepts a `science_context` parameter; the system prompt instructs the AI to cite retrieved sources in its JSON response.
+  - `services/ai_service.ask_trainer` accepts a `science_context` parameter and returns `sources[]` in the result dict.
+- **`knowledge_chunks` table** (Alembic migration `20260418_000001`):
+  - Columns: `id`, `source_id`, `chunk_index`, `title`, `content`, `source_type`, `doi`, `url`, `embedding vector(1536)`, `created_at`.
+  - Unique constraint on `(source_id, chunk_index)` for idempotent upserts.
+  - HNSW index (`vector_cosine_ops`) for fast approximate nearest-neighbour search.
+  - SQLite fallback (stores embedding as text) so the test suite continues to run without PostgreSQL.
+- **pgvector Postgres image** — `compose.yml` now uses `pgvector/pgvector:pg17` instead of `postgres:17-alpine`; no new service is added.
+- **Seed knowledge corpus** (`backend/knowledge/`) — five hand-written markdown files covering the required cycling science topics:
+  - `power_zones.md` — Coggan 7-zone model, FTP definitions, zone training guidelines
+  - `polarized_training.md` — Seiler 80/20 model, physiological basis, implementation
+  - `sweet_spot_training.md` — 88–95% FTP training, classic workouts, SST vs polarized comparison
+  - `periodization.md` — macrocycle/mesocycle/microcycle structure, annual planning, taper protocols
+  - `recovery.md` — post-exercise nutrition, sleep science, HRV monitoring, overtraining prevention
+- **Ingestion script** (`backend/scripts/ingest_cycling_science.py`):
+  - Processes `backend/knowledge/*.md` seed files and queries the Semantic Scholar API (8 cycling-science topics, 10 papers each).
+  - Chunks text ~500 tokens / 50-token overlap via tiktoken (character-based fallback when tiktoken is unavailable).
+  - Embeds chunks using `text-embedding-3-small` via the existing `AsyncOpenAI` client.
+  - Idempotent upsert on `(source_id, chunk_index)`; respects the 1 req/s unauthenticated S2 rate limit.
+  - Uses `SEMANTIC_SCHOLAR_API_KEY` env var if set to raise the rate limit to 10 req/s.
+- **New dependencies**: `pgvector>=0.3.0`, `tiktoken>=0.7.0`.
+- **7 new pytest tests** in `backend/tests/test_rag.py` covering retrieval, graceful fallback, source formatting, and HTTP endpoint integration (175 total).
+
 ## [0.2.0] - 2026-04-18
 
 ### Changed

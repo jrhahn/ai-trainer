@@ -110,6 +110,7 @@ def mock_ai_service(monkeypatch):
                         "durationMinutes": 0,
                     }
                 ],
+                "sources": [],
             }
         ),
         "update_coach_memory": AsyncMock(return_value="Prefers morning workouts."),
