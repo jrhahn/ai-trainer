@@ -177,16 +177,15 @@ export default function ProgressionChart() {
 
   const snapshots: AthleteMetricSnapshot[] = metricsHistory
 
-  const ftpData = snapshots.map((s) => s.ftp ?? 0).filter((_, i) => snapshots[i].ftp != null)
-  const ftpLabels = snapshots
-    .filter((s) => s.ftp != null)
-    .map((s) => {
-      try {
-        return format(new Date(s.recordedAt), 'MMM d')
-      } catch {
-        return ''
-      }
-    })
+  const ftpSnapshots = snapshots.filter((s) => s.ftp != null)
+  const ftpData = ftpSnapshots.map((s) => s.ftp as number)
+  const ftpLabels = ftpSnapshots.map((s) => {
+    try {
+      return format(new Date(s.recordedAt), 'MMM d')
+    } catch {
+      return ''
+    }
+  })
 
   const thrHrData = snapshots
     .filter((s) => s.thresholdHR != null)

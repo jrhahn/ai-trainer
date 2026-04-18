@@ -111,15 +111,22 @@ async def analyse_activities(
         existing_plan = await crud.get_training_plan(db, current_user.id)
         plan_days = existing_plan.plan if existing_plan is not None else []
         ftp_for_load = ftp_value or current_user.current_ftp or 0
-        training_load = _compute_training_load(plan_days, ftp_for_load)
+        ctl: float | None = None
+        atl: float | None = None
+        tsb: float | None = None
+        if ftp_for_load > 0 and plan_days:
+            training_load = _compute_training_load(plan_days, ftp_for_load)
+            ctl = training_load.get("ctl")
+            atl = training_load.get("atl")
+            tsb = training_load.get("tsb")
         await crud.create_athlete_metric_snapshot(
             db,
             current_user.id,
             ftp=ftp_value,
             threshold_hr=threshold_hr_value,
-            ctl=training_load.get("ctl"),
-            atl=training_load.get("atl"),
-            tsb=training_load.get("tsb"),
+            ctl=ctl,
+            atl=atl,
+            tsb=tsb,
             source="strava_analysis",
         )
 
