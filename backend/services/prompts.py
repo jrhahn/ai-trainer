@@ -114,8 +114,21 @@ def generate_plan_system() -> str:
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units.\n"
         "Each day must have: \"date\" (ISO date string starting from today), "
         "\"workoutType\" (one of: \"rest\",\"endurance\",\"intervals\",\"tempo\",\"race\","
-        "\"recovery\",\"strength\"), \"title\" (string), \"description\" (string), "
-        "\"durationMinutes\" (integer).\n"
+        "\"recovery\",\"strength\"), \"title\" (string), "
+        "\"description\" (a 2-4 sentence summary of the session using the athlete's actual FTP and "
+        "threshold HR values to state exact power/HR targets — never write percentages alone, always "
+        "translate them to absolute numbers, e.g. 'Ride for 90 min at 195–220 W (Zone 2, 75–85% of "
+        "your 260 W FTP). Keep HR under 148 bpm. The goal is fat oxidation and aerobic base building "
+        "— you should be able to hold a conversation throughout.'), "
+        "\"durationMinutes\" (integer), "
+        "\"workoutPurpose\" (1-2 sentences describing the physiological goal of this session and why "
+        "it is placed here in the plan — e.g. 'This tempo block raises your lactate threshold by "
+        "training your body to clear lactate more efficiently. It follows yesterday's recovery ride "
+        "to take advantage of residual fatigue adaptation.'), "
+        "\"keyFocusPoints\" (array of 3-5 short coaching-cue strings, each beginning with an action "
+        "verb — e.g. [\"Keep cadence between 88-95 rpm throughout\", \"HR must stay below 158 bpm "
+        "(Zone 3); back off if it creeps higher\", \"Breathe rhythmically — aim for a 3-in/2-out "
+        "pattern on climbs\"]).\n"
         "Optional fields: \"targetPower\" (object with \"low\" and \"high\" integer fields in watts), "
         "\"targetHeartRate\" (object with \"low\" and \"high\" integer fields in bpm), "
         "\"intervals\" (array of objects with \"duration\" (integer seconds), "
@@ -151,7 +164,13 @@ def adapt_plan_system() -> str:
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units. "
         "Keep the same date fields.\n"
         "Each updated day must include all required TrainingDay fields: "
-        "\"date\", \"workoutType\", \"title\", \"description\", \"durationMinutes\".\n"
+        "\"date\", \"workoutType\", \"title\", \"durationMinutes\".\n"
+        "Each updated day must also include: "
+        "\"description\" (a 2-4 sentence summary using the athlete's actual FTP and threshold HR to "
+        "state exact power/HR targets — always translate percentages to absolute numbers), "
+        "\"workoutPurpose\" (1-2 sentences on the physiological goal of the session and why it is "
+        "placed here in the adapted plan), "
+        "\"keyFocusPoints\" (array of 3-5 coaching-cue strings, each starting with an action verb).\n"
         f"{TRAINING_PLAN_PRINCIPLES}"
         "Use TSB to guide adaptation: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
         "TSB > +10 before a key workout suggests freshness, intensity can be increased."
@@ -243,6 +262,13 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "Never describe the intervals only in text and omit the array — always materialise "
         "every rep as a separate object in the array."
     )
+    _rich_description_rule = (
+        "Whenever you include a planUpdates entry, always include \"workoutPurpose\" "
+        "(1-2 sentences on the physiological goal) and \"keyFocusPoints\" (array of 3-5 "
+        "coaching-cue strings starting with an action verb). "
+        "Also write \"description\" using the athlete's actual FTP/threshold HR to state "
+        "exact power/HR targets — never write percentages alone."
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
@@ -252,9 +278,10 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             "even if the athlete did not explicitly request a change. "
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "workoutType", "title", "description", "durationMinutes", '
-            '"targetPower", "targetHeartRate", "intervals". '
+            '"targetPower", "targetHeartRate", "intervals", "workoutPurpose", "keyFocusPoints". '
             "Always include \"title\" and \"description\" so the plan entry stays informative. "
             "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+            f"{_rich_description_rule} "
             f"{_intervals_rule}"
         )
     return (
@@ -262,9 +289,11 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "field when the athlete explicitly asks to change, swap, skip, or reschedule a "
         'workout. Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "workoutType", "title", "description", '
-        '"durationMinutes", "targetPower", "targetHeartRate", "intervals". '
+        '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
+        '"workoutPurpose", "keyFocusPoints". '
         "Always include \"title\" and \"description\" so the plan entry stays informative. "
         "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+        f"{_rich_description_rule} "
         f"{_intervals_rule}"
     )
 
