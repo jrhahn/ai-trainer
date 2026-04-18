@@ -5,6 +5,20 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-18
+
+### Added
+
+- **`workoutPurpose` and `keyFocusPoints` fields** — `TrainingDaySchema` and `PlanDayUpdateSchema` gain two new optional fields:
+  - `workout_purpose: Optional[str]` — 1–2 sentences describing the physiological goal of the session and why it is placed at this point in the plan
+  - `key_focus_points: Optional[list[str]]` — 3–5 action-verb coaching cues for the athlete to focus on during execution
+
+### Changed
+
+- **`generate_plan_system()`** (`services/prompts.py`) — now instructs the AI to populate `workoutPurpose` and `keyFocusPoints` on every plan day; strengthens the `description` instruction to state **exact** power/HR targets derived from the athlete's FTP and threshold HR (percentages must always be translated to absolute watts/bpm)
+- **`adapt_plan_system()`** (`services/prompts.py`) — same requirements applied to adapted days: `workoutPurpose`, `keyFocusPoints`, and number-grounded `description` are mandatory in every returned day
+- **`ask_trainer_plan_updates_rule()`** (`services/prompts.py`) — any `planUpdates` entry emitted by the AI coach must now include `workoutPurpose`, `keyFocusPoints`, and a description with exact targets; the field list in both the context-workout and general rule branches is updated accordingly
+
 ## [0.4.0] - 2026-04-18
 
 ### Added

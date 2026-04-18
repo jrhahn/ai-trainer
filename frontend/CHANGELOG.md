@@ -5,6 +5,18 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-18
+
+### Added
+
+- **Structured workout coaching detail** — `WorkoutPage` now displays three sections below the title/badges:
+  - **Session description** — the existing `description` field, now generated with exact power/HR numbers (e.g. "Ride 90 min at 195–220 W (Zone 2, 75–85% of your 260 W FTP). Keep HR under 148 bpm.")
+  - **"Why this workout"** (amber card) — `workoutPurpose`: 1–2 sentences explaining the physiological goal and placement in the plan (e.g. "This tempo block raises your lactate threshold by training your body to clear lactate more efficiently.")
+  - **"Key Focus Points"** (blue card, bulleted list) — `keyFocusPoints`: 3–5 action-verb coaching cues (e.g. "Keep cadence between 88–95 rpm throughout", "HR must stay below 158 bpm (Zone 3); back off if it creeps higher")
+- **"Regenerate plan" nudge** — when `workoutPurpose` is absent (plans generated before this release), a notice is shown on the workout card prompting the athlete to regenerate their plan to unlock coaching cues
+- `workoutPurpose?: string` and `keyFocusPoints?: string[]` optional fields added to the `TrainingDay` interface in `useAppStore.ts`
+- `workoutPurpose` and `keyFocusPoints` added to the `PlanDayUpdate` interface in `services/ai.ts` so coach-chat plan updates also carry coaching detail
+
 ## [0.3.0] - 2026-04-18
 
 ### Added
