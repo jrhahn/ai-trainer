@@ -8,6 +8,7 @@ switch to backend fetches without semantic changes.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -52,6 +53,7 @@ MAX_CONVERSATION_HISTORY = 20
 OPENAI_MODEL = "gpt-4o-mini"
 GEMINI_MODEL = "gemini-2.0-flash"
 
+logger = logging.getLogger(__name__)
 
 def _make_openai() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
@@ -339,6 +341,7 @@ async def classify_question(question: str) -> dict:
         classify_raw = await _openai_chat(classify_sys, classify_user, json_mode=True)
         return _parse_ai_json(classify_raw)
     except Exception:
+        logger.warning("Question classification failed; defaulting to no-RAG", exc_info=True)
         return {"category": "general_coaching", "needs_science_rag": False}
 
 

@@ -279,7 +279,7 @@ async def rate_workout(
             {
                 "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
                 "perceivedEffort": day_feedback.get("perceivedEffort"),
-                "notes": day_feedback.get("notes", "Auto-triggered by high effort rating"),
+                "notes": day_feedback.get("notes", "Auto-triggered due to workout feedback"),
                 "completedAt": day_feedback.get("completedAt"),
             }
         ]

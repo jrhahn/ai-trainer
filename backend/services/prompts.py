@@ -320,8 +320,12 @@ def ask_trainer_system(
         f"{science_section}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
-        "(2) what their current CTL/ATL/TSB suggests about their fatigue state, "
-        "(3) whether the request conflicts with training principles, "
+        + (
+            "(2) what their current CTL/ATL/TSB suggests about their fatigue state, "
+            if training_load_section else
+            "(2) what their recent training history suggests about their fatigue state, "
+        )
+        + "(3) whether the request conflicts with training principles, "
         "(4) the most helpful coaching answer. "
         "Put this reasoning in a \"thinking\" field — it will not be shown to the athlete.\n"
         "Always take today's date into account when answering — for example when calculating "
