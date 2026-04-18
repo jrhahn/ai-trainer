@@ -24,6 +24,9 @@ dependencies = [
     # RAG
     "pgvector>=0.3.0",
     "tiktoken>=0.7.0",
+    # .fit file parsing
+    "fitparse>=1.2.0",
+    "python-multipart>=0.0.22",
 ]
 
 [dependency-groups]

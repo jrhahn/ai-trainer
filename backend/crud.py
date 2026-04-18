@@ -123,6 +123,7 @@ async def upsert_workout_log(
     perceived_effort: int,
     notes: str,
     completed_at: str,
+    sport_type: str = "cycling",
 ) -> models.WorkoutLog:
     """Create or update a WorkoutLog for a user/date and flush."""
     existing = await get_workout_log_by_date(db, user_id, date)
@@ -137,6 +138,7 @@ async def upsert_workout_log(
             perceived_effort=perceived_effort,
             notes=notes,
             completed_at=completed_at,
+            sport_type=sport_type,
         )
         db.add(existing)
     else:
@@ -147,6 +149,7 @@ async def upsert_workout_log(
         existing.perceived_effort = perceived_effort
         existing.notes = notes
         existing.completed_at = completed_at
+        existing.sport_type = sport_type
     await db.flush()
     return existing
 
@@ -323,3 +326,43 @@ async def upsert_rider_assessment(
             assessment.last_ride_feedback = last_ride_feedback
     await db.flush()
     return assessment
+
+
+# ---------------------------------------------------------------------------
+# FitnessSnapshot
+# ---------------------------------------------------------------------------
+
+
+async def create_fitness_snapshot(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    ftp: int | None,
+    threshold_hr: int | None,
+    source: str = "strava_analysis",
+) -> models.FitnessSnapshot:
+    """Insert a new FitnessSnapshot row and flush."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    snapshot = models.FitnessSnapshot(
+        user_id=user_id,
+        measured_at=datetime.now(timezone.utc),
+        ftp=ftp,
+        threshold_hr=threshold_hr,
+        source=source,
+    )
+    db.add(snapshot)
+    await db.flush()
+    return snapshot
+
+
+async def get_fitness_snapshots(
+    db: AsyncSession, user_id: str
+) -> list[models.FitnessSnapshot]:
+    """Return all FitnessSnapshot rows for a user, oldest first."""
+    result = await db.scalars(
+        select(models.FitnessSnapshot)
+        .where(models.FitnessSnapshot.user_id == user_id)
+        .order_by(models.FitnessSnapshot.measured_at)
+    )
+    return list(result)

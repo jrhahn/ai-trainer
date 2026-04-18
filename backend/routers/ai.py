@@ -102,6 +102,15 @@ async def analyse_activities(
         ride_insights=result.get("rideInsights"),
         last_ride_feedback=result.get("lastRideFeedback"),
     )
+    # Persist a time-series snapshot so FTP/HR history is never overwritten.
+    if result.get("estimatedFTP") or result.get("estimatedThresholdHR"):
+        await crud.create_fitness_snapshot(
+            db,
+            current_user.id,
+            ftp=result.get("estimatedFTP"),
+            threshold_hr=result.get("estimatedThresholdHR"),
+            source="strava_analysis",
+        )
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:

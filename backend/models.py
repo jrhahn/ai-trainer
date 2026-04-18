@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -64,6 +64,9 @@ class User(Base):
     rider_assessment: Mapped["RiderAssessment | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    fitness_snapshots: Mapped[list["FitnessSnapshot"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", order_by="FitnessSnapshot.measured_at"
+    )
 
 
 class TrainingPlan(Base):
@@ -94,6 +97,7 @@ class WorkoutLog(Base):
     perceived_effort: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     completed_at: Mapped[str] = mapped_column(String(50), nullable=False)
+    sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
 
@@ -154,3 +158,21 @@ class RiderAssessment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")
+
+
+class FitnessSnapshot(Base):
+    """Time-series record of FTP / threshold HR estimates from each analysis run."""
+
+    __tablename__ = "fitness_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "measured_at", name="uq_fitness_snapshot_user_time"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    threshold_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="strava_analysis")
+
+    user: Mapped["User"] = relationship(back_populates="fitness_snapshots")

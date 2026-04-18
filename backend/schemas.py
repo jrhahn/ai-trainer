@@ -332,3 +332,36 @@ class RateWorkoutResponse(BaseModel):
 class RefreshKnowledgeResponse(BaseModel):
     status: str
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Fitness history
+# ---------------------------------------------------------------------------
+
+
+class FitnessSnapshotSchema(CamelModel):
+    """A single FTP/threshold-HR data point in the user's fitness history."""
+
+    id: str
+    measured_at: str
+    ftp: Optional[int] = None
+    threshold_hr: Optional[int] = None
+    source: str
+
+
+class FitnessHistoryResponse(BaseModel):
+    snapshots: list[FitnessSnapshotSchema]
+
+
+# ---------------------------------------------------------------------------
+# .fit file upload
+# ---------------------------------------------------------------------------
+
+
+class FitUploadResponse(BaseModel):
+    status: str
+    activity_id: str
+    sport_type: str
+    duration_minutes: int
+    average_power: Optional[int] = None
+    average_heart_rate: Optional[int] = None

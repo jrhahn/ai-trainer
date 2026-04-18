@@ -7,6 +7,8 @@ import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
+import FitnessHistoryChart from '../components/FitnessHistoryChart'
+import FitFileUpload from '../components/FitFileUpload'
 import { useStravaSync } from '../hooks/useStravaSync'
 
 export default function DashboardPage() {
@@ -97,6 +99,12 @@ export default function DashboardPage() {
 
       {/* Fitness metrics */}
       <FitnessMetricsCard />
+
+      {/* FTP progression chart */}
+      <FitnessHistoryChart />
+
+      {/* .fit file upload */}
+      <FitFileUpload />
 
       {/* Strava */}
       <StravaConnect />
