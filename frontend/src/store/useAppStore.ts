@@ -123,6 +123,7 @@ export interface ChatMessage {
   content: string
   timestamp: string
   planUpdateCount?: number
+  sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
 }
 
 export interface StravaConnection {

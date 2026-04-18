@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -252,3 +252,39 @@ async def rate_workout(
         provider=_provider(current_user),
     )
     return schemas.RateWorkoutResponse(feedback=feedback)
+
+
+async def _run_knowledge_refresh() -> None:
+    """Background task: run the cycling science knowledge base ingestion."""
+    try:
+        # Import is deferred to avoid loading heavy ingestion dependencies
+        # (httpx, tiktoken, etc.) at server startup for all requests.
+        from scripts.ingest_cycling_science import main as ingest_main  # noqa: PLC0415
+
+        await ingest_main()
+        logger.info("Knowledge base refresh completed successfully")
+    except Exception:
+        logger.exception("Knowledge base refresh failed")
+
+
+@router.post("/refresh-knowledge", response_model=schemas.RefreshKnowledgeResponse)
+async def refresh_knowledge(
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RefreshKnowledgeResponse:
+    """Queue a background refresh of the cycling science knowledge base.
+
+    Runs the ingestion script (seed corpus + Semantic Scholar API) as a
+    background task and returns immediately.  Requires ``OPENAI_API_KEY`` to
+    be set in the environment; returns HTTP 503 if it is absent.
+    """
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OPENAI_API_KEY is not configured; cannot refresh knowledge base",
+        )
+    background_tasks.add_task(_run_knowledge_refresh)
+    return schemas.RefreshKnowledgeResponse(
+        status="started",
+        message="Knowledge base refresh has been queued and will run in the background",
+    )

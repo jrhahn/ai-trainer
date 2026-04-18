@@ -322,3 +322,8 @@ class RateWorkoutRequest(CamelModel):
 
 class RateWorkoutResponse(BaseModel):
     feedback: str
+
+
+class RefreshKnowledgeResponse(BaseModel):
+    status: str
+    message: str
