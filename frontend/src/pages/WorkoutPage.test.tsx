@@ -140,4 +140,70 @@ describe('WorkoutPage', () => {
     expect(screen.getByText('Really tough session')).toBeInTheDocument()
     expect(screen.getByText(/Excellent effort/)).toBeInTheDocument()
   })
+
+  it('renders workoutPurpose section when the field is present', () => {
+    const dayWithPurpose: TrainingDay = {
+      ...mockDay,
+      workoutPurpose: 'Raises VO2max by stressing the cardiovascular system.',
+    }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithPurpose] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText('Why this workout')).toBeInTheDocument()
+    expect(screen.getByText('Raises VO2max by stressing the cardiovascular system.')).toBeInTheDocument()
+  })
+
+  it('does not render workoutPurpose section when the field is absent', () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.queryByText('Why this workout')).not.toBeInTheDocument()
+  })
+
+  it('renders keyFocusPoints section when the field is present', () => {
+    const dayWithFocus: TrainingDay = {
+      ...mockDay,
+      keyFocusPoints: ['Keep cadence above 90 rpm', 'HR must stay below 158 bpm', 'Breathe rhythmically'],
+    }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithFocus] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText('Key Focus Points')).toBeInTheDocument()
+    expect(screen.getByText('Keep cadence above 90 rpm')).toBeInTheDocument()
+    expect(screen.getByText('HR must stay below 158 bpm')).toBeInTheDocument()
+    expect(screen.getByText('Breathe rhythmically')).toBeInTheDocument()
+  })
+
+  it('does not render keyFocusPoints section when the field is absent', () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.queryByText('Key Focus Points')).not.toBeInTheDocument()
+  })
+
+  it('shows the regenerate plan nudge when workoutPurpose is absent for a non-rest day', () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText(/Regenerate your plan/i)).toBeInTheDocument()
+  })
+
+  it('does not show the regenerate plan nudge when workoutPurpose is present', () => {
+    const dayWithPurpose: TrainingDay = {
+      ...mockDay,
+      workoutPurpose: 'Builds aerobic base.',
+    }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithPurpose] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.queryByText(/Regenerate your plan/i)).not.toBeInTheDocument()
+  })
+
+  it('does not show the regenerate plan nudge for rest days', () => {
+    const restDay: TrainingDay = { ...mockDay, workoutType: 'rest', title: 'Rest Day' }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [restDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.queryByText(/Regenerate your plan/i)).not.toBeInTheDocument()
+  })
 })
