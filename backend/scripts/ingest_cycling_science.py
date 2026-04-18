@@ -51,8 +51,9 @@ S2_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIM = 1536
 
-# Chunk parameters (measured in characters; tiktoken is used for a precise
-# token count but characters give a reasonable approximation for chunking).
+# Chunk parameters in tokens (cl100k_base encoding).
+# When tiktoken is unavailable, a character-based approximation is used instead
+# (1 token ≈ 4 characters), so these values also drive the character fallback.
 CHUNK_SIZE_TOKENS = 500
 CHUNK_OVERLAP_TOKENS = 50
 
@@ -78,29 +79,32 @@ PAPERS_PER_QUERY = 10
 # ---------------------------------------------------------------------------
 
 
-def _token_count(text_input: str) -> int:
-    """Count tokens in *text_input* using tiktoken (cl100k_base encoding)."""
+def _get_encoder():
+    """Return the cl100k_base tiktoken encoder, or None if tiktoken is unavailable."""
     try:
         import tiktoken
 
-        enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(text_input))
+        return tiktoken.get_encoding("cl100k_base")
     except Exception:
-        # Rough fallback: 1 token ≈ 4 characters
-        return len(text_input) // 4
+        return None
+
+
+def _token_count(text_input: str) -> int:
+    """Count tokens in *text_input* using tiktoken (cl100k_base encoding)."""
+    enc = _get_encoder()
+    if enc is not None:
+        return len(enc.encode(text_input))
+    # Rough fallback: 1 token ≈ 4 characters
+    return len(text_input) // 4
 
 
 def _chunk_text(text_input: str) -> list[str]:
     """Split *text_input* into overlapping chunks of ~CHUNK_SIZE_TOKENS tokens."""
-    try:
-        import tiktoken
+    enc = _get_encoder()
 
-        enc = tiktoken.get_encoding("cl100k_base")
-        tokens = enc.encode(text_input)
-    except Exception:
-        # Fallback: treat every 4 characters as one token
-        tokens = list(range(len(text_input)))  # dummy tokens for length
-        # Simple character-based chunking
+    if enc is None:
+        # tiktoken unavailable: fall back to character-based chunking where
+        # each character is treated as a "token" unit (1 token ≈ 4 characters).
         char_chunk = CHUNK_SIZE_TOKENS * 4
         char_overlap = CHUNK_OVERLAP_TOKENS * 4
         chunks = []
@@ -113,18 +117,13 @@ def _chunk_text(text_input: str) -> list[str]:
             start += char_chunk - char_overlap
         return chunks
 
+    tokens = enc.encode(text_input)
     chunks: list[str] = []
     start = 0
     while start < len(tokens):
         end = min(start + CHUNK_SIZE_TOKENS, len(tokens))
         chunk_tokens = tokens[start:end]
-        try:
-            import tiktoken
-
-            enc2 = tiktoken.get_encoding("cl100k_base")
-            chunks.append(enc2.decode(chunk_tokens))
-        except Exception:
-            chunks.append(text_input[start * 4 : end * 4])
+        chunks.append(enc.decode(chunk_tokens))
         if end == len(tokens):
             break
         start += CHUNK_SIZE_TOKENS - CHUNK_OVERLAP_TOKENS
