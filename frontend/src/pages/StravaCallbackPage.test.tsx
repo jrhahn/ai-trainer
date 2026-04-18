@@ -84,4 +84,26 @@ describe('StravaCallbackPage', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('/settings')
   })
+
+  it('logs the error to the console when the error query param is present', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    setup('?error=Token%20exchange%20failed')
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[StravaCallback]'),
+      expect.stringContaining('Token exchange failed'),
+    )
+    consoleSpy.mockRestore()
+  })
+
+  it('logs a message to the console when no success or error param is present', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    setup('')
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[StravaCallback]'),
+      expect.stringContaining('No success confirmation received'),
+    )
+    consoleSpy.mockRestore()
+  })
 })

@@ -102,6 +102,36 @@ describe('StravaConnect', () => {
     })
   })
 
+  it('shows an inline error banner when getting the auth URL fails', async () => {
+    mockGetStravaAuthUrl.mockRejectedValue(new Error('Strava credentials are not configured on the server'))
+    useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
+    render(<StravaConnect />)
+
+    await userEvent.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not start the Strava connection/i)).toBeInTheDocument()
+    })
+  })
+
+  it('logs a technical error to the console when getting the auth URL fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockGetStravaAuthUrl.mockRejectedValue(new Error('Strava credentials are not configured on the server'))
+    useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
+    render(<StravaConnect />)
+
+    await userEvent.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[StravaConnect]'),
+        expect.stringContaining('Strava credentials are not configured'),
+        expect.any(Error),
+      )
+    })
+    consoleSpy.mockRestore()
+  })
+
   it('does not fetch auth URL if the user is not authenticated', async () => {
     useAppStore.setState({ authToken: null, stravaConnection: null })
     render(<StravaConnect />)
