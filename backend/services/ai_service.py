@@ -7,6 +7,7 @@ switch to backend fetches without semantic changes.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
 import os
@@ -294,7 +295,7 @@ async def generate_training_plan(
         if rider_assessment
         else ""
     )
-    today = __import__("datetime").datetime.now().date().isoformat()
+    today = _dt.date.today().isoformat()
     user_msg = generate_plan_user(profile, today, assessment_section)
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
@@ -308,7 +309,6 @@ async def adapt_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
 ) -> list[dict]:
-    import datetime as _dt
     today = _dt.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
     ftp = float(
@@ -375,7 +375,7 @@ async def ask_trainer(
     science_context: str | None = None,
     classification: dict | None = None,
 ) -> dict:
-    today = __import__("datetime").datetime.now().date().isoformat()
+    today = _dt.date.today().isoformat()
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
     next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
