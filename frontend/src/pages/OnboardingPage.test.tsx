@@ -69,6 +69,67 @@ beforeEach(() => {
 })
 
 describe('OnboardingPage', () => {
+  it('completes manual onboarding flow without Strava connection', async () => {
+    const planDays = [
+      {
+        date: '2026-05-01',
+        workoutType: 'endurance',
+        title: 'Z2 Ride',
+        description: 'Easy aerobic ride',
+        durationMinutes: 90,
+      },
+    ]
+    mockGenerateTrainingPlan.mockResolvedValue(planDays)
+    mockSaveTrainingPlan.mockResolvedValue(planDays)
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    // Step 1 → 2 → 3 → 4 → 5
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      // Strava analysis must NOT run when there is no Strava connection
+      expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+      // Profile update, plan generation and plan save must all run
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+      expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
+      expect(mockSaveTrainingPlan).toHaveBeenCalledTimes(1)
+    })
+
+    // updateCurrentUser must mark the user as onboarded with stravaAnalysisComplete=false
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+    })
+
+    // saveTrainingPlan must receive the plan returned by generateTrainingPlan
+    expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
+  })
+
+  it('shows error message when plan generation fails', async () => {
+    mockGenerateTrainingPlan.mockRejectedValue(new Error('AI service unavailable'))
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('AI service unavailable')).toBeInTheDocument()
+    })
+  })
+
   it('shows manual fitness inputs when manual assessment is selected', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
