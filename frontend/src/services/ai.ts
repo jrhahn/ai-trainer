@@ -22,6 +22,8 @@ export interface PlanDayUpdate {
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
   intervals?: TrainingDay['intervals']
+  workoutPurpose?: string
+  keyFocusPoints?: string[]
 }
 
 export interface AnalyseActivitiesResult {

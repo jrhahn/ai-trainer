@@ -280,6 +280,8 @@ class PlanDayUpdateSchema(CamelModel):
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
+    workout_purpose: Optional[str] = None
+    key_focus_points: Optional[list[str]] = None
 
 
 class AnalyseActivitiesResponse(CamelModel):
@@ -314,6 +316,8 @@ class TrainingDaySchema(CamelModel):
     completed: Optional[bool] = None
     feedback: Optional[WorkoutFeedbackSchema] = None
     coach_feedback: Optional[str] = None
+    workout_purpose: Optional[str] = None
+    key_focus_points: Optional[list[str]] = None
 
 
 class RateWorkoutRequest(CamelModel):

@@ -116,6 +116,8 @@ export interface TrainingDay {
   completed?: boolean
   feedback?: WorkoutFeedback
   coachFeedback?: string
+  workoutPurpose?: string
+  keyFocusPoints?: string[]
 }
 
 export interface ChatMessage {
