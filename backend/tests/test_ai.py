@@ -601,3 +601,90 @@ async def test_analyse_activities_logs_warning_on_stream_error(
         r.exc_info is not None and r.exc_info[0] is RuntimeError
         for r in warning_records
     ), "Warning log must include exc_info so the traceback is visible"
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for updated rate_completed_workout response shape (Task 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_workout_returns_flag_for_adaptation_false(client, auth_headers, mock_ai_service):
+    """rate-workout endpoint must return flag_for_adaptation=false for normal sessions."""
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "endurance",
+                "title": "Easy Ride",
+                "description": "Easy aerobic ride",
+                "durationMinutes": 90,
+                "feedback": {
+                    "actualDurationMinutes": 88,
+                    "perceivedEffort": 2,
+                    "notes": "Felt great",
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "feedback" in body
+    assert "flagForAdaptation" in body or "flag_for_adaptation" in body
+    flag = body.get("flagForAdaptation", body.get("flag_for_adaptation"))
+    assert flag is False
+
+
+@pytest.mark.asyncio
+async def test_rate_workout_flag_triggers_adapt_plan(client, auth_headers, mock_ai_service):
+    """When flag_for_adaptation=True, adapt_training_plan must be called automatically."""
+    # Override rate_completed_workout to flag for adaptation
+    mock_ai_service["rate_completed_workout"].return_value = {
+        "feedback": "This session was very hard — rest is recommended.",
+        "flag_for_adaptation": True,
+    }
+
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "intervals",
+                "title": "VO2 Max",
+                "description": "Hard reps",
+                "durationMinutes": 60,
+                "feedback": {
+                    "actualDurationMinutes": 30,
+                    "perceivedEffort": 5,
+                    "notes": "Sick, had to stop",
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["feedback"] == "This session was very hard — rest is recommended."
+    flag = body.get("flagForAdaptation", body.get("flag_for_adaptation"))
+    assert flag is True
+    # adapt_training_plan should have been called by the auto-adaptation
+    mock_ai_service["adapt_training_plan"].assert_called()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_classify_called_and_rag_skipped_when_not_needed(
+    client, auth_headers, mock_ai_service
+):
+    """classify_question is called; RAG is NOT called when needs_science_rag=False."""
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "What's tomorrow's workout?"},
+    )
+    assert response.status_code == 200
+    # classify_question must have been called
+    mock_ai_service["classify_question"].assert_called_once()

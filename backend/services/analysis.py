@@ -263,6 +263,97 @@ def _classify_ride_purpose(
     }.get(sole_type, "endurance")
 
 
+def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
+    """Compute CTL, ATL, and TSB training load metrics from plan days.
+
+    Uses an approximation of TSS per day from ``durationMinutes`` and
+    ``targetPower`` when stream data is not available:
+
+        TSS ≈ (duration_s × NP × IF) / (FTP × 3600) × 100
+
+    where NP is approximated as ``targetPower`` mid-point (or a fraction of
+    FTP based on workout type) and IF = NP / FTP.
+
+    CTL — 42-day exponential weighted average of daily TSS (fitness).
+    ATL — 7-day exponential weighted average of daily TSS (fatigue).
+    TSB — CTL − ATL (form/freshness).
+
+    Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float]}``.
+    """
+    if ftp <= 0:
+        return {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+
+    # --- Estimate TSS per day ---
+    daily_tss: list[float] = []
+    for day in plan_days:
+        duration_min = day.get("durationMinutes") or 0
+        duration_s = duration_min * 60.0
+        if duration_s <= 0:
+            daily_tss.append(0.0)
+            continue
+
+        # Try to use targetPower mid-point as NP approximation
+        target_power = day.get("targetPower")
+        if target_power and isinstance(target_power, dict):
+            low = target_power.get("low") or 0
+            high = target_power.get("high") or 0
+            if low > 0 and high > 0:
+                np_approx = (low + high) / 2.0
+            elif high > 0:
+                np_approx = float(high)
+            elif low > 0:
+                np_approx = float(low)
+            else:
+                np_approx = None
+        else:
+            np_approx = None
+
+        # Fall back to workout-type heuristic when no power target is available
+        if np_approx is None or np_approx <= 0:
+            workout_type = (day.get("workoutType") or "").lower()
+            type_pct_map = {
+                "rest": 0.0,
+                "recovery": 0.50,
+                "endurance": 0.68,
+                "tempo": 0.80,
+                "intervals": 0.90,
+                "strength": 0.65,
+                "race": 0.95,
+            }
+            pct = type_pct_map.get(workout_type, 0.65)
+            np_approx = ftp * pct
+
+        if np_approx <= 0:
+            daily_tss.append(0.0)
+            continue
+
+        intensity_factor = np_approx / ftp
+        tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
+        daily_tss.append(round(tss, 1))
+
+    # --- Compute CTL and ATL via exponential weighted averages ---
+    # CTL: 42-day time constant → smoothing factor α = 1 - exp(-1/42)
+    # ATL: 7-day time constant  → smoothing factor α = 1 - exp(-1/7)
+    import math
+
+    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
+    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
+
+    ctl = 0.0
+    atl = 0.0
+    for tss in daily_tss:
+        ctl = ctl + alpha_ctl * (tss - ctl)
+        atl = atl + alpha_atl * (tss - atl)
+
+    tsb = ctl - atl
+    return {
+        "ctl": round(ctl, 1),
+        "atl": round(atl, 1),
+        "tsb": round(tsb, 1),
+        "daily_tss": daily_tss,
+    }
+
+
 def _build_ride_analysis(
     streams: dict,
     ftp: float,

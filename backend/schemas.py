@@ -322,6 +322,7 @@ class RateWorkoutRequest(CamelModel):
 
 class RateWorkoutResponse(BaseModel):
     feedback: str
+    flag_for_adaptation: bool = False
 
 
 class RefreshKnowledgeResponse(BaseModel):

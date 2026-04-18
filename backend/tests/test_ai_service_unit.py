@@ -557,13 +557,13 @@ async def test_update_coach_memory_calls_chat():
 
 @pytest.mark.asyncio
 async def test_rate_completed_workout_no_feedback():
-    """rate_completed_workout returns empty string when feedback is missing."""
+    """rate_completed_workout returns empty feedback dict when feedback is missing."""
     result = await ai_service.rate_completed_workout(
         day={"workoutType": "endurance", "title": "Ride", "description": "...", "durationMinutes": 60},
         profile={"fitnessLevel": "intermediate"},
         provider="openai",
     )
-    assert result == ""
+    assert result == {"feedback": "", "flag_for_adaptation": False}
 
 
 @pytest.mark.asyncio
@@ -588,12 +588,14 @@ async def test_rate_completed_workout_calls_chat():
     profile = {"fitnessLevel": "advanced"}
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
-        return "Great effort today! You nailed the power targets."
+        return json.dumps({"feedback": "Great effort today! You nailed the power targets.", "flag_for_adaptation": False})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.rate_completed_workout(day, profile, provider="openai")
 
-    assert "effort" in result.lower() or "power" in result.lower()
+    assert isinstance(result, dict)
+    assert "effort" in result["feedback"].lower() or "power" in result["feedback"].lower()
+    assert result["flag_for_adaptation"] is False
 
 
 @pytest.mark.asyncio
@@ -655,3 +657,258 @@ async def test_analyse_strava_activities_with_streams_and_hr():
     assert result["estimatedFTP"] != 999
     # HR zones should be populated
     assert result.get("hrZones") is not None
+
+
+# ---------------------------------------------------------------------------
+# _compute_training_load (Task 1)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_training_load_empty():
+    result = analysis._compute_training_load([], 250.0)
+    assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+
+
+def test_compute_training_load_zero_ftp():
+    plan = [{"durationMinutes": 60, "workoutType": "endurance"}]
+    result = analysis._compute_training_load(plan, 0.0)
+    assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+
+
+def test_compute_training_load_returns_expected_keys():
+    plan = [
+        {"durationMinutes": 90, "workoutType": "endurance"},
+        {"durationMinutes": 0, "workoutType": "rest"},
+        {"durationMinutes": 60, "workoutType": "intervals", "targetPower": {"low": 280, "high": 320}},
+    ]
+    result = analysis._compute_training_load(plan, 300.0)
+    assert "ctl" in result and "atl" in result and "tsb" in result and "daily_tss" in result
+    assert len(result["daily_tss"]) == 3
+    # Rest day should produce 0 TSS
+    assert result["daily_tss"][1] == 0.0
+    # TSB = CTL - ATL (may differ by up to 0.2 due to independent rounding)
+    assert abs(result["tsb"] - (result["ctl"] - result["atl"])) < 0.2
+
+
+def test_compute_training_load_target_power():
+    """When targetPower is given, TSS should use mid-point for IF calculation."""
+    plan = [{"durationMinutes": 60, "workoutType": "endurance", "targetPower": {"low": 240, "high": 260}}]
+    result = analysis._compute_training_load(plan, 250.0)
+    # mid-point = 250W, FTP = 250W → IF = 1.0, TSS = (3600 × 250 × 1) / (250 × 3600) × 100 = 100
+    assert abs(result["daily_tss"][0] - 100.0) < 1.0
+
+
+def test_compute_training_load_tsb_equals_ctl_minus_atl():
+    plan = [{"durationMinutes": 60, "workoutType": "tempo"}] * 10
+    result = analysis._compute_training_load(plan, 250.0)
+    # TSB = CTL - ATL (may differ by up to 0.2 due to independent rounding of each value)
+    assert abs(result["tsb"] - (result["ctl"] - result["atl"])) < 0.2
+
+
+# ---------------------------------------------------------------------------
+# ask_trainer — thinking stripped, classification mock (Tasks 2 & 5)
+# ---------------------------------------------------------------------------
+
+PLAN_FOR_LOAD_TESTS = [
+    {
+        "date": "2026-04-16",
+        "workoutType": "intervals",
+        "title": "VO2 Intervals",
+        "description": "5×4 min at 110% FTP",
+        "durationMinutes": 60,
+        "targetPower": {"low": 280, "high": 320},
+    }
+]
+
+PROFILE_WITH_FTP = {
+    "name": "Test Rider",
+    "email": "rider@example.com",
+    "bikeType": "road",
+    "trainingGoal": "ftp_improvement",
+    "fitnessLevel": "intermediate",
+    "currentFTP": 300,
+}
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_thinking_not_in_return():
+    """'thinking' must be stripped from the return value and never reach the frontend."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        return json.dumps({
+            "thinking": "The athlete is asking about tomorrow's workout...",
+            "response": "Tomorrow is an endurance ride.",
+            "planUpdates": [],
+            "sources": [],
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="What's tomorrow's workout?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert "thinking" not in result
+    assert result["response"] == "Tomorrow is an endurance ride."
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_classify_step_skips_rag_when_not_needed():
+    """When classify says needs_science_rag=False, the effective science context is empty."""
+    captured_system_prompt: list[str] = []
+
+    async def fake_classify(system_prompt, user_msg, json_mode=False):
+        return json.dumps({"category": "plan_query", "needs_science_rag": False})
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_system_prompt.append(system_prompt)
+        return json.dumps({"response": "Here's your plan.", "planUpdates": [], "sources": []})
+
+    with (
+        patch.object(ai_service, "_openai_chat", side_effect=fake_classify),
+        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
+    ):
+        result = await ai_service.ask_trainer(
+            question="What's tomorrow's workout?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+            # No science_context provided; should not be in the prompt
+        )
+
+    assert result["response"] == "Here's your plan."
+    # No science research section should appear in the prompt
+    assert "Relevant cycling science research" not in captured_system_prompt[0]
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_training_load_in_prompt():
+    """CTL/ATL/TSB should appear in the system prompt when FTP is known."""
+    captured_prompt: list[str] = []
+
+    async def fake_classify(system_prompt, user_msg, json_mode=False):
+        return json.dumps({"category": "plan_query", "needs_science_rag": False})
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_prompt.append(system_prompt)
+        return json.dumps({"response": "OK.", "planUpdates": [], "sources": []})
+
+    with (
+        patch.object(ai_service, "_openai_chat", side_effect=fake_classify),
+        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
+    ):
+        await ai_service.ask_trainer(
+            question="Am I too tired?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    prompt = captured_prompt[0]
+    assert "CTL" in prompt
+    assert "ATL" in prompt
+    assert "TSB" in prompt
+
+
+# ---------------------------------------------------------------------------
+# rate_completed_workout — structured output, flag_for_adaptation (Task 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_returns_dict():
+    """rate_completed_workout must return a dict with feedback and flag_for_adaptation."""
+    day = {
+        "workoutType": "intervals",
+        "title": "VO2",
+        "description": "Hard",
+        "durationMinutes": 60,
+        "feedback": {
+            "actualDurationMinutes": 30,
+            "perceivedEffort": 5,
+            "notes": "Felt terrible, might be sick",
+            "completedAt": "2026-04-10T10:00:00Z",
+        },
+    }
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        return json.dumps({"feedback": "Tough session.", "flag_for_adaptation": True})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(day, {}, provider="openai")
+
+    assert isinstance(result, dict)
+    assert result["feedback"] == "Tough session."
+    assert result["flag_for_adaptation"] is True
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_flag_false_for_normal_session():
+    day = {
+        "workoutType": "endurance",
+        "title": "Easy Ride",
+        "description": "Easy",
+        "durationMinutes": 90,
+        "feedback": {
+            "actualDurationMinutes": 90,
+            "perceivedEffort": 2,
+            "completedAt": "2026-04-10T10:00:00Z",
+        },
+    }
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        return json.dumps({"feedback": "Great session, well done!", "flag_for_adaptation": False})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(day, {}, provider="openai")
+
+    assert result["flag_for_adaptation"] is False
+
+
+# ---------------------------------------------------------------------------
+# adapt_plan_system includes TRAINING_PLAN_PRINCIPLES (Task 3)
+# ---------------------------------------------------------------------------
+
+
+def test_adapt_plan_system_includes_training_principles():
+    """adapt_plan_system must embed TRAINING_PLAN_PRINCIPLES like generate_plan_system does."""
+    from services.prompts import adapt_plan_system, TRAINING_PLAN_PRINCIPLES
+    system = adapt_plan_system()
+    # A key rule from TRAINING_PLAN_PRINCIPLES
+    assert "Never schedule two hard days back-to-back" in system or "back-to-back" in system
+
+
+def test_adapt_plan_system_includes_tsb_guidance():
+    from services.prompts import adapt_plan_system
+    system = adapt_plan_system()
+    assert "TSB" in system
+    assert "fatigue" in system.lower() or "recovery" in system.lower()
+
+
+# ---------------------------------------------------------------------------
+# classify_question (Task 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_classify_question_returns_default_on_failure():
+    """classify_question must return a safe default if the AI call fails."""
+    async def broken_chat(system_prompt, user_msg, json_mode=False):
+        raise RuntimeError("API unavailable")
+
+    with patch.object(ai_service, "_openai_chat", side_effect=broken_chat):
+        result = await ai_service.classify_question("What's my FTP?")
+
+    assert result["category"] == "general_coaching"
+    assert result["needs_science_rag"] is False
+
+
+@pytest.mark.asyncio
+async def test_classify_question_parses_response():
+    async def fake_chat(system_prompt, user_msg, json_mode=False):
+        return json.dumps({"category": "science_question", "needs_science_rag": True})
+
+    with patch.object(ai_service, "_openai_chat", side_effect=fake_chat):
+        result = await ai_service.classify_question("How does VO2max training work?")
+
+    assert result["category"] == "science_question"
+    assert result["needs_science_rag"] is True
