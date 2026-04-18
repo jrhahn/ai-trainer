@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck } from 'lucide-react'
+import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
@@ -80,6 +80,7 @@ export default function AIChat({ contextWorkout }: Props) {
         content: result.response,
         timestamp: new Date().toISOString(),
         planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
+        sources: result.sources?.length ? result.sources : undefined,
       })
 
       // Re-sync coach memory from server (backend updated it inside ask_trainer)
@@ -179,6 +180,35 @@ export default function AIChat({ contextWorkout }: Props) {
                 </>
               ) : (
                 msg.content
+              )}
+              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                <div className="mt-2 border-t border-gray-200 pt-2">
+                  <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
+                    <BookOpen size={11} />
+                    Sources
+                  </p>
+                  <ul className="space-y-0.5">
+                    {msg.sources.map((source, idx) => (
+                      <li key={idx} className="text-xs text-gray-500">
+                        {source.url ? (
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-amber-600 underline"
+                          >
+                            {source.title}
+                          </a>
+                        ) : (
+                          source.title
+                        )}
+                        {source.doi && (
+                          <span className="ml-1 text-gray-400">· DOI: {source.doi}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
             {msg.role === 'user' && (

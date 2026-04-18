@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
-import { CheckCircle, Link2Off } from 'lucide-react'
+import { AlertCircle, CheckCircle, Link2Off } from 'lucide-react'
 
 export default function StravaConnect() {
   const authToken = useAppStore((s) => s.authToken)
@@ -9,10 +10,17 @@ export default function StravaConnect() {
   const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
   const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
 
+  const [connectError, setConnectError] = useState<string | null>(null)
+
   const handleConnect = () => {
     if (!authToken) return
+    setConnectError(null)
     void getStravaAuthUrl(authToken).then((authUrl) => {
       window.location.href = authUrl
+    }).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[StravaConnect] Failed to get Strava auth URL:', message, err)
+      setConnectError('Could not start the Strava connection. Please try again.')
     })
   }
 
@@ -44,14 +52,22 @@ export default function StravaConnect() {
   }
 
   return (
-    <button
-      onClick={handleConnect}
-      className="flex items-center gap-2 bg-[#fc4c02] text-white rounded-xl px-5 py-3 font-semibold text-sm hover:bg-[#e03d00] transition-colors shadow-sm"
-    >
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-      </svg>
-      Connect Strava
-    </button>
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={handleConnect}
+        className="flex items-center gap-2 bg-[#fc4c02] text-white rounded-xl px-5 py-3 font-semibold text-sm hover:bg-[#e03d00] transition-colors shadow-sm"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+        </svg>
+        Connect Strava
+      </button>
+      {connectError && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          {connectError}
+        </div>
+      )}
+    </div>
   )
 }
