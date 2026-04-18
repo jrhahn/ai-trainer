@@ -5,6 +5,12 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-18
+
+### Security
+
+- **JWT secret startup guard** (`auth.py`, `main.py`) — the server now refuses to start when `JWT_SECRET` is still set to the insecure default `"change-me-in-production"` and `APP_ENV` is not a development/test environment (`development`, `dev`, `local`, `test`, `testing`). A `RuntimeError` with a clear message is raised inside the FastAPI `lifespan` handler so misconfigured production deployments fail loudly at boot rather than silently accepting forgeable tokens. Five new tests in `backend/tests/test_auth.py` cover all cases (raises in `production`/`staging` with default; passes in `development`/`test` with default; passes in `production` with a custom secret).
+
 ## [0.5.0] - 2026-04-18
 
 ### Added
