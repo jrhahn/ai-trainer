@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ import schemas
 from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
+from services.ai_service import MAX_CONVERSATION_HISTORY
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -40,6 +42,25 @@ def _provider(user: models.User) -> str:
     if stored == "openai" and os.environ.get("OPENAI_API_KEY"):
         return "openai"
     return _default_provider()
+
+
+def _user_to_profile_dict(user: models.User) -> dict:
+    """Build a camelCase profile dict from the user model (mirrors UserProfileSchema by_alias)."""
+    return {
+        "name": user.name or "",
+        "email": user.email,
+        "bikeType": user.bike_type or "",
+        "trainingGoal": user.training_goal or "",
+        "raceDate": user.race_date,
+        "raceDescription": user.race_description,
+        "weeklyHours": user.weekly_hours,
+        "followsTrainingPlan": user.follows_training_plan,
+        "restingHeartRate": user.resting_heart_rate,
+        "maxHeartRate": user.max_heart_rate,
+        "thresholdHeartRate": user.threshold_heart_rate,
+        "currentFTP": user.current_ftp,
+        "fitnessLevel": user.fitness_level or "",
+    }
 
 
 @router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
@@ -97,58 +118,115 @@ async def analyse_activities(
 @router.post("/generate-plan")
 async def generate_plan(
     body: schemas.GeneratePlanRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
-    return await ai_service.generate_training_plan(
-        body.profile.model_dump(by_alias=True),
+    profile = _user_to_profile_dict(current_user)
+    rider_assessment = None
+    if current_user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+    plan = await ai_service.generate_training_plan(
+        profile,
         provider=_provider(current_user),
-        rider_assessment=body.rider_assessment.model_dump(by_alias=True) if body.rider_assessment else None,
+        rider_assessment=rider_assessment,
     )
+    await crud.upsert_training_plan(db, current_user.id, plan)
+    return plan
 
 
 @router.post("/adapt-plan")
 async def adapt_plan(
     body: schemas.AdaptPlanRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
-    return await ai_service.adapt_training_plan(
-        body.plan,
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+    profile = _user_to_profile_dict(current_user)
+    updated_plan = await ai_service.adapt_training_plan(
+        plan,
         [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
-        body.profile.model_dump(by_alias=True),
+        profile,
         provider=_provider(current_user),
     )
+    await crud.upsert_training_plan(db, current_user.id, updated_plan)
+    return updated_plan
 
 
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)
 async def ask_trainer(
     body: schemas.AskTrainerRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AskTrainerResponse:
+    # Load state from DB
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+    profile = _user_to_profile_dict(current_user)
+    rider_assessment = None
+    if current_user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+    coach_memory_row = await crud.get_coach_memory(db, current_user.id)
+    coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+    chat_messages = await crud.get_chat_messages(db, current_user.id)
+    conversation_history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
+    ]
+
     result = await ai_service.ask_trainer(
         body.question,
-        body.plan,
-        body.profile.model_dump(by_alias=True),
+        plan,
+        profile,
         provider=_provider(current_user),
-        rider_assessment=body.rider_assessment.model_dump(by_alias=True) if body.rider_assessment else None,
-        coach_memory=body.coach_memory,
-        conversation_history=[msg.model_dump() for msg in (body.conversation_history or [])],
+        rider_assessment=rider_assessment,
+        coach_memory=coach_memory,
+        conversation_history=conversation_history,
         context_workout=body.context_workout,
     )
-    return schemas.AskTrainerResponse.model_validate(result)
 
+    now = datetime.now(timezone.utc).isoformat()
+    plan_updates = result.get("plan_updates") or []
 
-@router.post("/update-coach-memory", response_model=schemas.UpdateCoachMemoryResponse)
-async def update_coach_memory(
-    body: schemas.UpdateCoachMemoryRequest,
-    current_user: models.User = Depends(auth.get_current_user),
-) -> schemas.UpdateCoachMemoryResponse:
-    memory = await ai_service.update_coach_memory(
-        body.current_memory,
-        body.user_message,
-        body.coach_response,
+    # Persist user and assistant chat messages
+    await crud.create_chat_message(
+        db, current_user.id, role="user", content=body.question, timestamp=now,
+    )
+    await crud.create_chat_message(
+        db,
+        current_user.id,
+        role="assistant",
+        content=result["response"],
+        timestamp=now,
+        plan_update_count=len(plan_updates) if plan_updates else None,
+    )
+
+    # Update coach memory
+    updated_memory = await ai_service.update_coach_memory(
+        coach_memory,
+        body.question,
+        result["response"],
         provider=_provider(current_user),
     )
-    return schemas.UpdateCoachMemoryResponse(memory=memory)
+    if updated_memory and updated_memory != coach_memory:
+        await crud.upsert_coach_memory(db, current_user.id, updated_memory)
+
+    # Apply plan updates if any
+    if plan_updates:
+        updates_by_date = {u["date"]: u for u in plan_updates}
+        updated_plan = [
+            {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
+            if day.get("date") in updates_by_date
+            else day
+            for day in plan
+        ]
+        await crud.upsert_training_plan(db, current_user.id, updated_plan)
+
+    return schemas.AskTrainerResponse.model_validate(result)
 
 
 @router.post("/rate-workout", response_model=schemas.RateWorkoutResponse)
@@ -156,9 +234,10 @@ async def rate_workout(
     body: schemas.RateWorkoutRequest,
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
+    profile = _user_to_profile_dict(current_user)
     feedback = await ai_service.rate_completed_workout(
         body.day.model_dump(by_alias=True),
-        body.profile.model_dump(by_alias=True),
+        profile,
         provider=_provider(current_user),
     )
     return schemas.RateWorkoutResponse(feedback=feedback)

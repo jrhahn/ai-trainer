@@ -92,7 +92,7 @@ export function useStravaSync(): UseStravaSyncResult {
         await saveTrainingPlan(authToken, updatedPlan)
       } else {
         // First-time analysis or no targeted updates → regenerate the full plan
-        const updatedPlan = await generateTrainingPlan(updatedProfile, authToken, assessment)
+        const updatedPlan = await generateTrainingPlan(authToken)
         await saveTrainingPlan(authToken, updatedPlan)
         setTrainingPlan(updatedPlan)
       }

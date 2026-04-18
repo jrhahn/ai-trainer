@@ -14,7 +14,6 @@ import {
   adaptTrainingPlan,
   generateTrainingPlan,
   rateCompletedWorkout,
-  updateCoachMemory,
 } from './ai'
 
 const profile: UserProfile = {
@@ -36,6 +35,9 @@ function makeDay(date: string): TrainingDay {
     durationMinutes: 90,
   }
 }
+
+// profile is kept for other usage in the file but no longer sent to AI endpoints
+void profile
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -90,14 +92,14 @@ describe('generateTrainingPlan', () => {
     const planDay = makeDay('2024-05-01')
     mockApiFetch.mockResolvedValue([planDay])
 
-    const result = await generateTrainingPlan(profile, 'token-123')
+    const result = await generateTrainingPlan('token-123')
 
     expect(result).toHaveLength(1)
     expect(result[0].date).toBe('2024-05-01')
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/generate-plan', {
       token: 'token-123',
       method: 'POST',
-      body: { profile, riderAssessment: undefined },
+      body: {},
     })
   })
 })
@@ -107,9 +109,14 @@ describe('adaptTrainingPlan', () => {
     const updatedDay = { ...makeDay('2024-05-02'), durationMinutes: 45 }
     mockApiFetch.mockResolvedValue([updatedDay])
 
-    const result = await adaptTrainingPlan([makeDay('2024-05-02')], [], profile, 'token-123')
+    const result = await adaptTrainingPlan([], 'token-123')
 
     expect(result[0].durationMinutes).toBe(45)
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/adapt-plan', {
+      token: 'token-123',
+      method: 'POST',
+      body: { recentFeedback: [] },
+    })
   })
 })
 
@@ -122,7 +129,7 @@ describe('askTrainer', () => {
       ],
     })
 
-    const result = await askTrainer('How should I train?', [], profile, 'token-123')
+    const result = await askTrainer('How should I train?', 'token-123')
 
     expect(result.response).toBe('Try interval training twice a week.')
     expect(result.planUpdates?.[0].workoutType).toBe('rest')
@@ -131,23 +138,9 @@ describe('askTrainer', () => {
       method: 'POST',
       body: {
         question: 'How should I train?',
-        plan: [],
-        profile,
-        riderAssessment: undefined,
-        coachMemory: undefined,
-        conversationHistory: undefined,
+        contextWorkout: undefined,
       },
     })
-  })
-})
-
-describe('updateCoachMemory', () => {
-  it('returns the updated memory text from the backend', async () => {
-    mockApiFetch.mockResolvedValue({ memory: 'Athlete prefers morning rides.' })
-
-    const result = await updateCoachMemory('', 'I like riding in the morning', 'Got it!', 'token-123')
-
-    expect(result).toBe('Athlete prefers morning rides.')
   })
 })
 
@@ -167,8 +160,13 @@ describe('rateCompletedWorkout', () => {
   it('returns the backend workout rating text', async () => {
     mockApiFetch.mockResolvedValue({ feedback: 'Great session! You matched the plan well.' })
 
-    const result = await rateCompletedWorkout(completedDay, profile, 'token-123')
+    const result = await rateCompletedWorkout(completedDay, 'token-123')
 
     expect(result).toBe('Great session! You matched the plan well.')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/rate-workout', {
+      token: 'token-123',
+      method: 'POST',
+      body: { day: completedDay },
+    })
   })
 })

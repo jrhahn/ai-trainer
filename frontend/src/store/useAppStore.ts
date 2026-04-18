@@ -200,6 +200,7 @@ interface AppState {
   resetAll: () => void
   addChatMessage: (msg: ChatMessage) => void
   setCoachMemory: (memory: string) => void
+  setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
 }
 
@@ -278,6 +279,7 @@ export const useAppStore = create<AppState>()(
     addChatMessage: (msg) =>
       set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
     setCoachMemory: (memory) => set({ coachMemory: memory }),
+    setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken

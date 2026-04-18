@@ -35,8 +35,8 @@ export default function WorkoutPage() {
   const [showForm, setShowForm] = useState(false)
 
   const rateWorkoutMutation = useMutation({
-    mutationFn: ({ dayWithFeedback, profile }: { dayWithFeedback: TrainingDay; profile: NonNullable<typeof userProfile> }) =>
-      rateCompletedWorkout(dayWithFeedback, profile, authToken!),
+    mutationFn: ({ dayWithFeedback }: { dayWithFeedback: TrainingDay }) =>
+      rateCompletedWorkout(dayWithFeedback, authToken!),
     onSuccess: async (coachFeedback) => {
       if (coachFeedback) {
         updateTrainingDay(day!.date, { coachFeedback })
@@ -72,7 +72,7 @@ export default function WorkoutPage() {
 
     if (authToken && userProfile) {
       const dayWithFeedback = { ...day, completed: true, feedback }
-      rateWorkoutMutation.mutate({ dayWithFeedback, profile: userProfile })
+      rateWorkoutMutation.mutate({ dayWithFeedback })
     }
   }
 
