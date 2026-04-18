@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import date as _date
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -15,6 +16,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY
+from services.analysis import _compute_training_load, _project_training_load, compute_readiness_score
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -298,6 +300,91 @@ async def rate_workout(
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),
         flag_for_adaptation=result.get("flag_for_adaptation", False),
+    )
+
+
+@router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
+async def readiness_score(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ReadinessScoreResponse:
+    """Return the current race-day readiness score for the authenticated user.
+
+    Computes CTL/ATL/TSB from the user's training plan and their FTP, then
+    derives a 0–100 readiness score.  When a ``race_date`` is set on the user
+    profile the response also includes the number of days until the race and a
+    forward-projection of the score at race day based on future plan days.
+    """
+    # --- Load training plan ---
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+
+    # --- Resolve FTP (rider assessment takes precedence over profile) ---
+    ftp = 0.0
+    if current_user.rider_assessment is not None:
+        assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+        ftp = float(assessment.get("estimatedFTP") or 0)
+    if ftp <= 0:
+        ftp = float(current_user.current_ftp or 0)
+
+    # --- Compute current CTL/ATL/TSB (plan days up to today) ---
+    today_str = _date.today().isoformat()
+    plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
+    current_load = _compute_training_load(plan_to_today, ftp) if ftp > 0 else {
+        "ctl": 0.0, "atl": 0.0, "tsb": 0.0
+    }
+
+    # --- Compute days until race ---
+    days_until_race = 0
+    race_date_str = current_user.race_date
+    if race_date_str:
+        try:
+            rd = _date.fromisoformat(race_date_str)
+            days_until_race = max(0, (rd - _date.today()).days)
+        except ValueError:
+            race_date_str = None
+
+    # --- Current readiness score ---
+    current_result = compute_readiness_score(
+        ctl=current_load["ctl"],
+        atl=current_load["atl"],
+        tsb=current_load["tsb"],
+        days_until_race=days_until_race,
+    )
+
+    # --- Forward-projection to race day (when race_date is set and in the future) ---
+    projected_score = None
+    projected_ctl = None
+    projected_atl = None
+    projected_tsb = None
+    if race_date_str and days_until_race > 0 and ftp > 0:
+        projected_load = _project_training_load(plan, ftp, race_date_str)
+        projected_result = compute_readiness_score(
+            ctl=projected_load["ctl"],
+            atl=projected_load["atl"],
+            tsb=projected_load["tsb"],
+            days_until_race=0,
+        )
+        projected_score = projected_result["score"]
+        projected_ctl = projected_load["ctl"]
+        projected_atl = projected_load["atl"]
+        projected_tsb = projected_load["tsb"]
+
+    return schemas.ReadinessScoreResponse(
+        score=current_result["score"],
+        form_score=current_result["form_score"],
+        fitness_score=current_result["fitness_score"],
+        ctl=current_result["ctl"],
+        atl=current_result["atl"],
+        tsb=current_result["tsb"],
+        days_until_race=days_until_race,
+        race_date=race_date_str,
+        projected_score=projected_score,
+        projected_ctl=projected_ctl,
+        projected_atl=projected_atl,
+        projected_tsb=projected_tsb,
     )
 
 

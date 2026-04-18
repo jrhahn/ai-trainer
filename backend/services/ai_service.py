@@ -29,7 +29,9 @@ from .analysis import (
     _detect_intervals,
     _hr_corrected_ftp,
     _LTHR_RATIO,
+    _project_training_load,
     _TEMPO_THRESHOLD_PCT,
+    compute_readiness_score,
 )
 from .prompts import (
     analyse_activities_system,
@@ -306,7 +308,8 @@ async def adapt_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
 ) -> list[dict]:
-    today = __import__("datetime").datetime.now().date().isoformat()
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
     ftp = float(
         (rider_assessment or {}).get("estimatedFTP")
@@ -314,6 +317,20 @@ async def adapt_training_plan(
         or 0
     )
     training_load = _compute_training_load(plan, ftp) if ftp > 0 else None
+
+    # Detect taper window: if race is within 14 days, pass the remaining days
+    # so the prompt builder can inject explicit taper instructions.
+    taper_days_remaining: int | None = None
+    race_date_str = profile.get("raceDate")
+    if race_date_str:
+        try:
+            rd = _dt.date.fromisoformat(race_date_str)
+            days_left = (rd - _dt.date.today()).days
+            if 0 <= days_left <= 14:
+                taper_days_remaining = days_left
+        except ValueError:
+            pass
+
     system_prompt = adapt_plan_system()
     user_msg = adapt_plan_user(
         profile,
@@ -322,6 +339,7 @@ async def adapt_training_plan(
         incomplete_days,
         rider_assessment=rider_assessment,
         training_load=training_load,
+        taper_days_remaining=taper_days_remaining,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)

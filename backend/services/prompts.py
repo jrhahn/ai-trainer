@@ -184,6 +184,7 @@ def adapt_plan_user(
     incomplete_days: list[dict],
     rider_assessment: dict | None = None,
     training_load: dict | None = None,
+    taper_days_remaining: int | None = None,
 ) -> str:
     assessment_section = (
         f"\nRider assessment: {json.dumps(rider_assessment)}" if rider_assessment else ""
@@ -194,9 +195,19 @@ def adapt_plan_user(
             f"\nTraining load (from plan): CTL={training_load.get('ctl')} "
             f"ATL={training_load.get('atl')} TSB={training_load.get('tsb')}"
         )
+    taper_section = ""
+    if taper_days_remaining is not None:
+        taper_section = (
+            f"\n⚠️  TAPER ALERT: Race is in {taper_days_remaining} day(s). "
+            "You MUST restructure the remaining plan as a race taper: "
+            "reduce total volume by ~40% compared to the previous training week, "
+            "keep intensity (one short sharpener at race pace is fine), "
+            "add extra rest/recovery days, and ensure the athlete arrives at the start "
+            "line fresh (target TSB +5 to +15)."
+        )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         "Adapt the remaining days based on the feedback. Return the full updated days array."

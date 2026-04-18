@@ -354,6 +354,87 @@ def _compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     }
 
 
+def compute_readiness_score(
+    ctl: float,
+    atl: float,
+    tsb: float,
+    days_until_race: int,
+) -> dict:
+    """Compute a 0–100 race readiness score from training-load metrics.
+
+    The score blends two components:
+
+    **Form score (65 %)** — based on TSB (Training Stress Balance = CTL − ATL).
+    The optimal TSB window for racing is roughly +5 to +15: the athlete has
+    shed acute fatigue while preserving their fitness base.
+
+    =====================  ===========
+    TSB range              Form score
+    =====================  ===========
+    ≤ −30 (severe fatigue)       0
+    −30 → 0 (tired)        0 → 50 (linear)
+    0 → +10 (building)    50 → 100 (linear)
+    +10 → +25 (tapering)  100 → 85 (slight drop)
+    > +25 (over-tapered)  ≥ 85 → 0 (declining)
+    =====================  ===========
+
+    **Fitness score (35 %)** — based on CTL (Chronic Training Load).
+    CTL is the 42-day exponential smoothing of daily TSS.  A CTL of 100
+    represents strong fitness for a trained cyclist; values are capped at 100.
+
+    Returns a dict with ``score``, ``form_score``, ``fitness_score``,
+    ``ctl``, ``atl``, ``tsb``, and ``days_until_race``.
+    """
+    # --- Form score (TSB-based) ---
+    if tsb <= -30.0:
+        form_score = 0.0
+    elif tsb < 0.0:
+        form_score = (tsb + 30.0) / 30.0 * 50.0
+    elif tsb <= 10.0:
+        form_score = 50.0 + tsb / 10.0 * 50.0
+    elif tsb <= 25.0:
+        form_score = 100.0 - (tsb - 10.0) / 15.0 * 15.0
+    else:
+        form_score = max(0.0, 85.0 - (tsb - 25.0) * 2.0)
+    form_score = max(0.0, min(100.0, form_score))
+
+    # --- Fitness score (CTL-based, capped at 100) ---
+    fitness_score = max(0.0, min(100.0, ctl))
+
+    # --- Weighted combination ---
+    score = 0.65 * form_score + 0.35 * fitness_score
+    score = max(0.0, min(100.0, score))
+
+    return {
+        "score": round(score, 1),
+        "form_score": round(form_score, 1),
+        "fitness_score": round(fitness_score, 1),
+        "ctl": round(ctl, 1),
+        "atl": round(atl, 1),
+        "tsb": round(tsb, 1),
+        "days_until_race": days_until_race,
+    }
+
+
+def _project_training_load(
+    plan_days: list[dict],
+    ftp: float,
+    target_date_str: str,
+) -> dict:
+    """Forward-project CTL/ATL/TSB to a specific target date.
+
+    Uses only plan days whose ``date`` field is on or before ``target_date_str``
+    so we get the projected load at that point in the plan.
+
+    Returns the same shape as :func:`_compute_training_load`.
+    """
+    days_up_to_target = [
+        day for day in plan_days
+        if day.get("date", "") <= target_date_str
+    ]
+    return _compute_training_load(days_up_to_target, ftp)
+
+
 def _build_ride_analysis(
     streams: dict,
     ftp: float,
