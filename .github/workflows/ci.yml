@@ -79,3 +79,45 @@ jobs:
           files: backend/coverage.xml
           flags: backend
           fail_ci_if_error: false
+
+  integration:
+    name: Integration Tests (Frontend ↔ Backend)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run integration tests
+        working-directory: frontend
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./integration-test.db
+          JWT_SECRET: ci-integration-secret-that-is-at-least-32-bytes
+          JWT_ALGORITHM: HS256
+          JWT_EXPIRE_MINUTES: '60'
+          STRAVA_CLIENT_ID: ci-strava-id
+          STRAVA_CLIENT_SECRET: ci-strava-secret
+          FRONTEND_URL: http://localhost:5173
+          OPENAI_API_KEY: ci-openai-key
+          GEMINI_API_KEY: ci-gemini-key
+          APP_ENV: test
+          AUTHELIA_AUTH_ENABLED: 'false'
+        run: npm run test:integration

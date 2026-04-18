@@ -9,11 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Frontend/backend integration test suite** (`src/test/integration/api-contract.test.ts`) — 24 tests that call the real TypeScript service functions (no `vi.mock()`) against a live SQLite-backed FastAPI process:
+  - Covers all non-AI, non-Strava endpoints: `POST /auth/register`, `POST /auth/login`, `GET/PUT /users/me`, `DELETE /users/me`, `GET/PUT /users/me/plan`, `GET /users/me/workouts`, `POST /users/me/workouts/{date}`, `GET/POST/DELETE /users/me/chat`, `GET/PUT /users/me/coach-memory`
+  - `src/test/integration/global-setup.ts` — spawns `uvicorn` before the suite, polls `/healthz`, tears down and removes the SQLite database after the run
+  - `vitest.integration.config.ts` — separate Vitest config (`environment: 'node'`, port `18765`) so unit tests are unaffected
+- `test:integration` npm script
+- CI `integration` job (Node 20 + Python 3.12 + uv) runs `npm run test:integration` on every push
 - **Strava connection error handling** — failures when initiating the Strava OAuth flow are now surfaced in two places:
   - **Browser console**: `console.error('[StravaConnect] Failed to get Strava auth URL: …')` logs the technical error message and the raw `Error` object (with stack trace) so developers can diagnose server-side misconfigurations (e.g. missing `STRAVA_CLIENT_ID`/`STRAVA_CLIENT_SECRET`).
   - **UI**: an inline red error banner with an alert icon appears below the "Connect Strava" button: *"Could not start the Strava connection. Please try again."*
 - **Strava callback error logging** — `StravaCallbackPage` now calls `console.error('[StravaCallback] Connection failed: …')` for both the `?error=…` query-param path (OAuth denial / backend error) and the missing-success-param fallback, making callback failures visible in the browser DevTools console alongside the existing user-facing error screen.
-- **4 new Vitest tests** covering the error banner, console logging, and callback error logging (123 tests total).
+- **4 new Vitest tests** covering the error banner, console logging, and callback error logging (127 tests total).
 
 ## [0.2.0] - 2026-04-18
 
