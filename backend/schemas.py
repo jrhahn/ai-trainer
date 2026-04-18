@@ -332,3 +332,22 @@ class RateWorkoutResponse(BaseModel):
 class RefreshKnowledgeResponse(BaseModel):
     status: str
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Athlete metric history
+# ---------------------------------------------------------------------------
+
+
+class AthleteMetricSnapshotSchema(CamelModel):
+    recorded_at: str
+    ftp: Optional[int] = None
+    threshold_hr: Optional[int] = None
+    ctl: Optional[float] = None
+    atl: Optional[float] = None
+    tsb: Optional[float] = None
+    source: str = "strava_analysis"
+
+
+class MetricsHistoryResponse(BaseModel):
+    snapshots: list[AthleteMetricSnapshotSchema]

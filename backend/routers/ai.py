@@ -15,6 +15,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY
+from services.analysis import _compute_training_load
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -102,6 +103,26 @@ async def analyse_activities(
         ride_insights=result.get("rideInsights"),
         last_ride_feedback=result.get("lastRideFeedback"),
     )
+
+    # Record a time-series metric snapshot so the athlete can track progression
+    ftp_value = result.get("estimatedFTP")
+    threshold_hr_value = result.get("estimatedThresholdHR")
+    if ftp_value is not None or threshold_hr_value is not None:
+        existing_plan = await crud.get_training_plan(db, current_user.id)
+        plan_days = existing_plan.plan if existing_plan is not None else []
+        ftp_for_load = ftp_value or current_user.current_ftp or 0
+        training_load = _compute_training_load(plan_days, ftp_for_load)
+        await crud.create_athlete_metric_snapshot(
+            db,
+            current_user.id,
+            ftp=ftp_value,
+            threshold_hr=threshold_hr_value,
+            ctl=training_load.get("ctl"),
+            atl=training_load.get("atl"),
+            tsb=training_load.get("tsb"),
+            source="strava_analysis",
+        )
+
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:

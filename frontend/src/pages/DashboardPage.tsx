@@ -7,6 +7,7 @@ import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
+import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
 
 export default function DashboardPage() {
@@ -97,6 +98,9 @@ export default function DashboardPage() {
 
       {/* Fitness metrics */}
       <FitnessMetricsCard />
+
+      {/* Athlete progression chart */}
+      <ProgressionChart />
 
       {/* Strava */}
       <StravaConnect />
