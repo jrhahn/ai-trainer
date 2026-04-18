@@ -912,3 +912,77 @@ async def test_classify_question_parses_response():
 
     assert result["category"] == "science_question"
     assert result["needs_science_rag"] is True
+
+
+# ---------------------------------------------------------------------------
+# generate_training_plan — workoutPurpose and keyFocusPoints fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_plan_workout_purpose_and_focus_points_present():
+    """Every non-rest day returned by generate_training_plan must have workoutPurpose
+    (non-empty string) and keyFocusPoints (list with at least 3 entries)."""
+    profile = {
+        "bikeType": "road",
+        "trainingGoal": "ftp_improvement",
+        "fitnessLevel": "intermediate",
+        "currentFTP": 260,
+        "thresholdHeartRate": 175,
+    }
+    fake_plan = [
+        {
+            "date": "2026-04-14",
+            "workoutType": "endurance",
+            "title": "Zone 2 Endurance",
+            "description": "Ride 90 min at 195–220 W (Zone 2, 75–85% of your 260 W FTP). Keep HR under 148 bpm.",
+            "durationMinutes": 90,
+            "targetPower": {"low": 195, "high": 220},
+            "workoutPurpose": "Builds aerobic base and improves fat oxidation. Placed early in the week to accumulate low-intensity volume before harder sessions.",
+            "keyFocusPoints": [
+                "Keep cadence between 88–95 rpm throughout",
+                "HR must stay below 148 bpm; back off on any climbs if it creeps higher",
+                "Breathe comfortably — you should be able to hold a conversation",
+            ],
+        },
+        {
+            "date": "2026-04-15",
+            "workoutType": "rest",
+            "title": "Rest Day",
+            "description": "Complete rest.",
+            "durationMinutes": 0,
+        },
+        {
+            "date": "2026-04-16",
+            "workoutType": "intervals",
+            "title": "VO2max Intervals",
+            "description": "5×4 min at 312–338 W (120–130% of your 260 W FTP) with 4 min easy recovery between reps.",
+            "durationMinutes": 70,
+            "targetPower": {"low": 312, "high": 338},
+            "workoutPurpose": "Raises VO2max by stressing the cardiovascular system at near-maximal intensity. Positioned mid-week after a rest day for maximum freshness.",
+            "keyFocusPoints": [
+                "Start each interval at a rolling pace, not a standing sprint",
+                "Target 90–95 rpm cadence during the hard efforts",
+                "If HR climbs above 185 bpm before the interval ends, back off slightly",
+                "Recovery spins should stay below 130 W",
+            ],
+        },
+    ]
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        return json.dumps({"plan": fake_plan})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.generate_training_plan(profile, provider="openai")
+
+    non_rest_days = [day for day in result if day.get("workoutType") != "rest"]
+    assert len(non_rest_days) > 0, "Expected at least one non-rest day in the plan"
+    for day in non_rest_days:
+        assert day.get("workoutPurpose"), (
+            f"Day {day['date']} ({day['workoutType']}) is missing workoutPurpose"
+        )
+        focus_points = day.get("keyFocusPoints", [])
+        assert isinstance(focus_points, list) and len(focus_points) >= 3, (
+            f"Day {day['date']} ({day['workoutType']}) must have at least 3 keyFocusPoints, "
+            f"got {len(focus_points)}"
+        )
