@@ -38,12 +38,14 @@ interface BackendAnalyseActivitiesResult {
 export interface AskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
+  sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
 }
 
 interface BackendAskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
+  sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
 }
 
 export const MAX_CONVERSATION_HISTORY = 20
@@ -103,6 +105,7 @@ export async function askTrainer(
   return {
     response: result.response,
     planUpdates: result.planUpdates ?? result.plan_updates,
+    sources: result.sources,
   }
 }
 

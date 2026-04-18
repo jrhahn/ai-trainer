@@ -142,6 +142,20 @@ describe('askTrainer', () => {
       },
     })
   })
+
+  it('forwards sources returned by the backend', async () => {
+    const sources = [
+      { title: 'Polarized Training Study', doi: '10.1/test', sourceType: 'paper' },
+    ]
+    mockApiFetch.mockResolvedValue({
+      response: 'Polarized training works well.',
+      sources,
+    })
+
+    const result = await askTrainer('Tell me about polarized training', 'token-123')
+
+    expect(result.sources).toEqual(sources)
+  })
 })
 
 describe('rateCompletedWorkout', () => {

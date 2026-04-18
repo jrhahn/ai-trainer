@@ -221,4 +221,44 @@ describe('AIChat', () => {
       )
     })
   })
+
+  it('shows science sources when the AI returns them', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'Zone 2 training builds your aerobic base.',
+      sources: [
+        { title: 'Polarized Training Study', doi: '10.1/test', sourceType: 'paper' },
+        { title: 'Power Zones', sourceType: 'seed' },
+      ],
+    })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'What zone should I train in?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Zone 2 training builds your aerobic base.')).toBeInTheDocument()
+      expect(screen.getByText('Sources')).toBeInTheDocument()
+      expect(screen.getByText('Polarized Training Study')).toBeInTheDocument()
+      expect(screen.getByText('Power Zones')).toBeInTheDocument()
+    })
+  })
+
+  it('does not show sources section when no sources are returned', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'Rest up tomorrow.',
+    })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Should I rest?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Rest up tomorrow.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Sources')).not.toBeInTheDocument()
+  })
 })
