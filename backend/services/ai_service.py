@@ -316,6 +316,7 @@ async def ask_trainer(
     coach_memory: str | None = None,
     conversation_history: list[dict[str, str]] | None = None,
     context_workout: dict | None = None,
+    science_context: str | None = None,
 ) -> dict:
     today = __import__("datetime").datetime.now().date().isoformat()
     last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
@@ -335,6 +336,7 @@ async def ask_trainer(
         memory_section,
         workout_section,
         plan_updates_rule,
+        science_context=science_context or "",
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
@@ -343,6 +345,7 @@ async def ask_trainer(
     return {
         "response": parsed.get("response", ""),
         "plan_updates": parsed.get("planUpdates"),
+        "sources": parsed.get("sources") or [],
     }
 
 

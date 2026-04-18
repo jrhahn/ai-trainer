@@ -15,6 +15,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY
+from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -178,6 +179,9 @@ async def ask_trainer(
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
     ]
 
+    # Retrieve relevant cycling science context from the knowledge base.
+    science_context, rag_sources = await retrieve_cycling_context(db, body.question)
+
     result = await ai_service.ask_trainer(
         body.question,
         plan,
@@ -187,6 +191,7 @@ async def ask_trainer(
         coach_memory=coach_memory,
         conversation_history=conversation_history,
         context_workout=body.context_workout,
+        science_context=science_context,
     )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -225,6 +230,12 @@ async def ask_trainer(
             for day in plan
         ]
         await crud.upsert_training_plan(db, current_user.id, updated_plan)
+
+    # Merge RAG retrieval sources into the result.
+    # rag_sources contains the full metadata for all retrieved chunks;
+    # use them as the authoritative sources list when RAG context was retrieved.
+    if rag_sources:
+        result["sources"] = rag_sources
 
     return schemas.AskTrainerResponse.model_validate(result)
 
