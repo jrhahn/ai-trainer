@@ -6,6 +6,7 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -342,8 +343,6 @@ async def create_fitness_snapshot(
     source: str = "strava_analysis",
 ) -> models.FitnessSnapshot:
     """Insert a new FitnessSnapshot row and flush."""
-    from datetime import datetime, timezone  # noqa: PLC0415
-
     snapshot = models.FitnessSnapshot(
         user_id=user_id,
         measured_at=datetime.now(timezone.utc),
