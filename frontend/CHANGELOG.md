@@ -5,7 +5,32 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - 2026-04-19
+## [0.8.0] - 2026-04-19
+
+### Added
+
+- **`ExpertPage`** (`src/pages/ExpertPage.tsx`) — new `/expert` route containing all data-dense components moved out of the default dashboard:
+  - `TrainingCalendar` full calendar view
+  - `FitnessMetricsCard` (FTP, HR zones, edit)
+  - `ProgressionChart` (FTP / CTL / ATL / TSB history)
+  - `RaceReadinessCard` (shown when training for a race)
+  - `FitFileUpload` (.fit import)
+  - `StravaConnect` + all Strava analysis status banners (detecting, analysing, done, error)
+  - Last-ride feedback and ride-insights details
+  - Recent Strava activities list
+- **Expert nav link** added to `Layout` sidebar (`FlaskConical` icon, `/expert` route); Coach link renamed from "Dashboard"
+- **`compact` prop** on `WorkoutCard` — renders a single-line row (`date · type badge · title · duration`) suitable for the 3-day strip; clicking still navigates to the workout detail page
+- **`className` prop** on `AIChat` — lets the parent control the component's height and shadow; falls back to the previous fixed `h-[28rem] shadow-sm` when omitted
+
+### Changed
+
+- **`DashboardPage` redesigned as minimal Coach view** — all heavy components removed; now shows:
+  1. Greeting header with today's date
+  2. "Next 3 days" strip using the new compact `WorkoutCard` variant
+  3. "Ask your coach" chat panel that fills the remaining viewport height (`calc(100vh - 22rem)`)
+- **`WorkoutCard` badge palette** simplified to monochrome gray (`bg-gray-100 / bg-gray-900`) instead of the previous per-type colour set, reducing visual noise
+
+
 
 ### Added
 
