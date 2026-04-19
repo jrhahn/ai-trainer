@@ -194,3 +194,25 @@ async def save_coach_memory(
 ) -> schemas.CoachMemoryResponse:
     memory = await crud.upsert_coach_memory(db, current_user.id, body.memory)
     return schemas.CoachMemoryResponse(memory=memory.memory)
+
+
+@router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
+async def get_metrics_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.MetricsHistoryResponse:
+    snapshots = await crud.get_athlete_metric_history(db, current_user.id)
+    return schemas.MetricsHistoryResponse(
+        snapshots=[
+            schemas.AthleteMetricSnapshotSchema(
+                recorded_at=s.recorded_at.isoformat(),
+                ftp=s.ftp,
+                threshold_hr=s.threshold_hr,
+                ctl=s.ctl,
+                atl=s.atl,
+                tsb=s.tsb,
+                source=s.source,
+            )
+            for s in snapshots
+        ]
+    )

@@ -5,6 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-04-19
+
+### Added
+
+- **Athlete Long-Term Memory / Progression Model** (`models.py`, `crud.py`, `routers/users.py`, `schemas.py`, `routers/ai.py`):
+  - New `athlete_metric_snapshots` table — stores per-user time-series snapshots of `ftp`, `threshold_hr`, `ctl`, `atl`, `tsb`, `source`, and `recorded_at`; Alembic migration `20260418_000002`
+  - CRUD helpers: `create_athlete_metric_snapshot`, `get_athlete_metric_history(db, user_id, limit=90)` returning snapshots oldest-first
+  - `AthleteMetricSnapshotSchema` (camelCase via `CamelModel`) and `MetricsHistoryResponse` schemas
+  - `POST /ai/analyse-activities` now records a metric snapshot after every Strava analysis; CTL/ATL/TSB are computed from the current training plan via `compute_training_load` and only stored when a valid FTP is available
+  - `GET /users/me/metrics-history` — new authenticated endpoint returning the athlete's complete metric snapshot history
+
+### Tests
+
+- 8 new backend tests covering:
+  - `create_athlete_metric_snapshot` and `get_athlete_metric_history` (null values, ascending order, limit)
+  - `GET /users/me/metrics-history` (empty list, post-analysis snapshot, auth guard)
+
 ## [0.10.0] - 2026-04-19
 
 ### Added

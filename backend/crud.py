@@ -323,3 +323,49 @@ async def upsert_rider_assessment(
             assessment.last_ride_feedback = last_ride_feedback
     await db.flush()
     return assessment
+
+
+# ---------------------------------------------------------------------------
+# AthleteMetricSnapshot
+# ---------------------------------------------------------------------------
+
+
+async def create_athlete_metric_snapshot(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    ftp: int | None,
+    threshold_hr: int | None,
+    ctl: float | None = None,
+    atl: float | None = None,
+    tsb: float | None = None,
+    source: str = "strava_analysis",
+) -> models.AthleteMetricSnapshot:
+    """Insert a new AthleteMetricSnapshot row and flush."""
+    snapshot = models.AthleteMetricSnapshot(
+        user_id=user_id,
+        ftp=ftp,
+        threshold_hr=threshold_hr,
+        ctl=ctl,
+        atl=atl,
+        tsb=tsb,
+        source=source,
+    )
+    db.add(snapshot)
+    await db.flush()
+    return snapshot
+
+
+async def get_athlete_metric_history(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 90,
+) -> list[models.AthleteMetricSnapshot]:
+    """Return up to *limit* AthleteMetricSnapshot rows for a user, oldest first."""
+    result = await db.scalars(
+        select(models.AthleteMetricSnapshot)
+        .where(models.AthleteMetricSnapshot.user_id == user_id)
+        .order_by(models.AthleteMetricSnapshot.recorded_at.asc())
+        .limit(limit)
+    )
+    return list(result)

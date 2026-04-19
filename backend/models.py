@@ -64,6 +64,11 @@ class User(Base):
     rider_assessment: Mapped["RiderAssessment | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    athlete_metric_snapshots: Mapped[list["AthleteMetricSnapshot"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="AthleteMetricSnapshot.recorded_at",
+    )
 
 
 class TrainingPlan(Base):
@@ -154,3 +159,25 @@ class RiderAssessment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")
+
+
+class AthleteMetricSnapshot(Base):
+    """Time-series snapshot of key athlete performance metrics.
+
+    A new row is inserted each time a Strava analysis produces updated
+    estimates so the athlete can view their progression over time.
+    """
+
+    __tablename__ = "athlete_metric_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    threshold_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ctl: Mapped[float | None] = mapped_column(nullable=True)
+    atl: Mapped[float | None] = mapped_column(nullable=True)
+    tsb: Mapped[float | None] = mapped_column(nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="strava_analysis")
+
+    user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")

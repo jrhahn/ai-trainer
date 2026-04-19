@@ -5,6 +5,22 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-19
+
+### Added
+
+- **`ProgressionChart` component** (`src/components/ProgressionChart.tsx`) — SVG-based dashboard chart showing the athlete's performance progression over time:
+  - FTP history line chart (watts)
+  - Threshold HR history line chart (bpm)
+  - CTL / ATL / TSB (fitness / fatigue / form) overlaid trend lines
+  - Summary badges showing latest FTP, CTL, ATL, and TSB (TSB badge coloured green/red by sign)
+  - Renders only when ≥ 2 data points exist; no added frontend dependencies
+- **`metricsHistory` state** and `setMetricsHistory` action added to Zustand store (`useAppStore.ts`)
+- **`AthleteMetricSnapshot` interface** exported from `useAppStore.ts`
+- **`fetchMetricsHistory(authToken)`** added to `src/services/user.ts` — calls `GET /users/me/metrics-history` and returns typed snapshot list
+- **`loadUserData`** updated to fetch metrics history in parallel with other data on app startup
+- **`ProgressionChart` wired into `DashboardPage`** — rendered below `FitnessMetricsCard`
+
 ## [0.5.0] - 2026-04-19
 
 ### Added
