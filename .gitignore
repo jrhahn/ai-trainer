@@ -33,14 +33,24 @@ frontend/.env*
 .env.*
 !.env.example
 
-# Python backend
-backend/.venv
+# Python
 **/__pycache__/
 **/*.pyc
-backend/.env
+.pytest_cache/
+
+# Python backend
+backend/.venv
 backend/pytest.db
 backend/ci-test.db
 backend/integration-test.db
 backend/.coverage
 backend/coverage.xml
 backend/coverage_test*.db
+backend/htmlcov/
+backend/*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# Deploy / Ansible
+deploy/ansible/*.retry
