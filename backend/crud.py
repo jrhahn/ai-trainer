@@ -123,6 +123,7 @@ async def upsert_workout_log(
     perceived_effort: int,
     notes: str,
     completed_at: str,
+    sport_type: str = "cycling",
 ) -> models.WorkoutLog:
     """Create or update a WorkoutLog for a user/date and flush."""
     existing = await get_workout_log_by_date(db, user_id, date)
@@ -137,6 +138,7 @@ async def upsert_workout_log(
             perceived_effort=perceived_effort,
             notes=notes,
             completed_at=completed_at,
+            sport_type=sport_type,
         )
         db.add(existing)
     else:
@@ -147,6 +149,7 @@ async def upsert_workout_log(
         existing.perceived_effort = perceived_effort
         existing.notes = notes
         existing.completed_at = completed_at
+        existing.sport_type = sport_type
     await db.flush()
     return existing
 

@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-19
+
+### Added
+
+- **`FitFileUpload` component** (`src/components/FitFileUpload.tsx`) — dashboard card for importing workouts directly from `.fit` files without a Strava account:
+  - File input restricted to `.fit` extension; validated client-side before upload
+  - Sends file to `POST /users/me/upload-fit` via raw `fetch` with `FormData`
+  - Shows parsed sport type, duration, average power, and average heart rate on success
+  - Error state with human-readable server error message
+  - Supports Garmin, Wahoo, and Zwift exports equally
+- **`uploadFitFile(token, file)`** added to `src/services/user.ts` — posts to `/users/me/upload-fit` and returns typed summary object
+- **`FitFileUpload` wired into `DashboardPage`** — rendered below `RaceReadinessCard` and above `StravaConnect`
+
 ## [0.6.0] - 2026-04-19
 
 ### Added

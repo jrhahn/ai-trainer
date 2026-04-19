@@ -99,6 +99,7 @@ class WorkoutLog(Base):
     perceived_effort: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     completed_at: Mapped[str] = mapped_column(String(50), nullable=False)
+    sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
 

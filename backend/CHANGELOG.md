@@ -5,6 +5,25 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-04-19
+
+### Added
+
+- **`.fit` file upload — multi-sport / non-Strava ingest** (`routers/users.py`, `schemas.py`, `crud.py`, `models.py`):
+  - New `POST /users/me/upload-fit` endpoint — accepts a `.fit` file (Garmin / Wahoo / Zwift export), parses it with `fitparse`, normalises session/record messages into a `WorkoutLog` row, and returns summary metrics (`sport_type`, `duration_minutes`, `average_power`, `average_heart_rate`)
+  - `sport_type: str` column added to `WorkoutLog` (default `"cycling"`) — populated from the FIT `session.sport` field; enables multi-sport filtering in future
+  - `FitUploadResponse` schema added to `schemas.py`
+  - Alembic migration `20260419_000001` — adds `sport_type` column to `workout_logs`
+  - Dependencies added: `fitparse>=1.2.0`, `python-multipart>=0.0.22`
+
+### Tests
+
+- 4 new backend contract tests covering:
+  - `GET /users/me/metrics-history` empty list for new user
+  - `GET /users/me/metrics-history` snapshot populated after `analyse-activities`
+  - `POST /users/me/upload-fit` rejects non-.fit files with HTTP 422
+  - `POST /users/me/upload-fit` rejects corrupt .fit data with HTTP 422
+
 ## [0.11.0] - 2026-04-19
 
 ### Added

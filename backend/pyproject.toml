@@ -1,6 +1,6 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.11.0"
+version = "0.12.0"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
@@ -24,6 +24,9 @@ dependencies = [
     # RAG
     "pgvector>=0.3.0",
     "tiktoken>=0.7.0",
+    # .fit file parsing
+    "fitparse>=1.2.0",
+    "python-multipart>=0.0.22",
 ]
 
 [dependency-groups]

@@ -9,6 +9,7 @@ import AIChat from '../components/AIChat'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import ProgressionChart from '../components/ProgressionChart'
 import RaceReadinessCard from '../components/RaceReadinessCard'
+import FitFileUpload from '../components/FitFileUpload'
 import { useStravaSync } from '../hooks/useStravaSync'
 
 export default function DashboardPage() {
@@ -107,6 +108,9 @@ export default function DashboardPage() {
       {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate) && (
         <RaceReadinessCard />
       )}
+
+      {/* .fit file upload — import workouts from Garmin/Wahoo/Zwift without Strava */}
+      <FitFileUpload />
 
       {/* Strava */}
       <StravaConnect />

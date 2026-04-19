@@ -589,3 +589,106 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     # planUpdates is optional; when present it must be a list
     if "planUpdates" in body and body["planUpdates"] is not None:
         assert isinstance(body["planUpdates"], list)
+
+
+# ---------------------------------------------------------------------------
+# 11. Metrics history endpoint contract (replaces fitness-history)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_metrics_history_empty_for_new_user(client):
+    """GET /users/me/metrics-history returns { snapshots: [] } for a new user."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Leo", "email": "leo@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "snapshots" in body
+    assert body["snapshots"] == []
+
+
+@pytest.mark.asyncio
+async def test_metrics_history_populated_after_analysis(client, mock_ai_service):
+    """An AthleteMetricSnapshot row is created after analyse-activities and appears in history."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Mia", "email": "mia@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=headers,
+        json={
+            "activities": [
+                {
+                    "id": 1,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "moving_time": 3600,
+                    "elapsed_time": 3700,
+                    "total_elevation_gain": 500,
+                    "start_date": "2026-04-10T08:00:00Z",
+                }
+            ]
+        },
+    )
+
+    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["snapshots"]) == 1
+    snap = body["snapshots"][0]
+    assert snap["ftp"] == 280           # from mock_ai_service estimatedFTP
+    assert snap["thresholdHR"] == 172   # from mock_ai_service estimatedThresholdHR
+    assert snap["source"] == "strava_analysis"
+    assert "recordedAt" in snap
+
+
+# ---------------------------------------------------------------------------
+# 12. .fit file upload endpoint contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fit_upload_rejects_non_fit_file(client):
+    """POST /users/me/upload-fit must reject non-.fit files with 422."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Nina", "email": "nina@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/api/v1/users/me/upload-fit",
+        headers=headers,
+        files={"file": ("workout.csv", b"date,power\n2026-01-01,200", "text/csv")},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fit_upload_rejects_invalid_fit_data(client):
+    """POST /users/me/upload-fit must return 422 for a .fit file with invalid data."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Oscar", "email": "oscar@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/api/v1/users/me/upload-fit",
+        headers=headers,
+        files={"file": ("workout.fit", b"not a real fit file", "application/octet-stream")},
+    )
+    assert resp.status_code == 422

@@ -336,6 +336,7 @@ class RefreshKnowledgeResponse(BaseModel):
 
 
 
+
 # ---------------------------------------------------------------------------
 # Athlete metric history
 # ---------------------------------------------------------------------------
@@ -382,3 +383,17 @@ class ReadinessScoreResponse(BaseModel):
     """Projected ATL at race day."""
     projected_tsb: Optional[float] = None
     """Projected TSB at race day."""
+
+
+# ---------------------------------------------------------------------------
+# .fit file upload
+# ---------------------------------------------------------------------------
+
+
+class FitUploadResponse(BaseModel):
+    status: str
+    activity_id: str
+    sport_type: str
+    duration_minutes: int
+    average_power: Optional[int] = None
+    average_heart_rate: Optional[int] = None

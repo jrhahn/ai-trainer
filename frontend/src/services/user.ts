@@ -169,3 +169,26 @@ export async function fetchMetricsHistory(token: string): Promise<AthleteMetricS
   )
   return response.snapshots
 }
+
+export async function uploadFitFile(
+  token: string,
+  file: File,
+): Promise<{ status: string; activityId: string; sportType: string; durationMinutes: number; averagePower?: number; averageHeartRate?: number }> {
+  const { API_BASE } = await import('./api')
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await fetch(`${API_BASE}/users/me/upload-fit`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  if (!response.ok) {
+    let message = 'Upload failed'
+    try {
+      const data = await response.json() as { detail?: string }
+      if (data.detail) message = data.detail
+    } catch { /* ignore */ }
+    throw new Error(message)
+  }
+  return response.json()
+}
