@@ -18,6 +18,16 @@ COACH_PERSONA = (
     "When in doubt, prioritise the athlete's long-term progress over immediate performance."
 )
 
+RUNNING_COACH_PERSONA = (
+    "You are a professional running coach with extensive experience in "
+    "competitive road, track, and trail running. "
+    "Always address the athlete directly using 'you' — for example, "
+    "'You have excellent aerobic endurance' not 'The athlete has excellent aerobic endurance'. "
+    "Your coaching philosophy: long-term athletic development always overrules short-term gains. "
+    "Never sacrifice recovery, health, or sustainable progression for quick wins. "
+    "When in doubt, prioritise the athlete's long-term progress over immediate performance."
+)
+
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday.
@@ -39,51 +49,115 @@ Training plan scheduling rules (ALWAYS follow these):
 # ---------------------------------------------------------------------------
 
 
-def analyse_activities_system() -> str:
+def analyse_activities_system(sport_type: str = "cycling") -> str:
+    """Return the system prompt for activity analysis.
+
+    When *sport_type* is ``"running"`` (or any non-cycling type) a running-
+    specific prompt is returned that omits power-based FTP and uses HR-based
+    thresholds instead.
+    """
+    is_running = sport_type.lower() in ("running", "run")
+
+    if is_running:
+        persona = RUNNING_COACH_PERSONA
+        activity_noun = "run"
+        activities_noun = "runs"
+        ftp_field = (
+            "- \"estimatedFTP\": always null for running (no power data)\n"
+        )
+        threshold_hr_field = (
+            "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
+            "otherwise estimate from HR data (typically ~87% of max HR for a threshold effort); "
+            "null if no HR data\n"
+        )
+        category_section = (
+            "Run categories (use HR-based zones when power is unavailable):\n"
+            "- recovery: easy jogging, HR < 65% max HR\n"
+            "- endurance: steady aerobic run, HR 65–78% max HR\n"
+            "- tempo: comfortably hard, HR ~79–87% max HR (lactate threshold)\n"
+            "- interval_threshold: hard 5–12 min efforts at ~88–95% max HR\n"
+            "- interval_vo2max: very hard 2–5 min efforts at > 95% max HR\n"
+            "- interval_sprints: short < 2 min sprint efforts at near max HR\n\n"
+        )
+        rider_type_section = (
+            "Runner-type guidelines:\n"
+            "- timetrial: strong sustained pace, low variability, long threshold efforts\n"
+            "- sprinter: high speed over short distances, high HR variability\n"
+            "- climber: strong on elevation, longer sustained efforts\n"
+            "- endurance: long runs, moderate intensity, high volume\n"
+            "- allrounder: balanced across metrics"
+        )
+        notes_example = (
+            "Example: 'You show strong aerobic endurance with consistent HR throughout your longer runs. "
+            "Your threshold HR looks solid…'"
+        )
+        last_ride_key = "run"
+    else:
+        persona = COACH_PERSONA
+        activity_noun = "ride"
+        activities_noun = "rides"
+        ftp_field = (
+            "- \"estimatedFTP\": integer watts — use the pre-computed value when provided, "
+            "otherwise estimate from activity summaries; null if no power data\n"
+        )
+        threshold_hr_field = (
+            "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
+            "otherwise estimate from activity summaries; null if no HR data\n"
+        )
+        category_section = (
+            "Ride categories:\n"
+            "- recovery: avg power < 60% FTP\n"
+            "- endurance: avg power 60–75% FTP, no distinct intervals\n"
+            "- tempo: avg power ~76–85% FTP, no distinct intervals\n"
+            "- interval_sweetspot: 10–20 min efforts at 88–95% FTP\n"
+            "- interval_threshold: ~5–12 min efforts at 95–105% FTP\n"
+            "- interval_vo2max: 2–5 min efforts at 106–130% FTP\n"
+            "- interval_sprints: < 2 min efforts at > 130% FTP\n\n"
+        )
+        rider_type_section = (
+            "Rider-type guidelines:\n"
+            "- timetrial: strong sustained power, low variability, long average efforts\n"
+            "- sprinter: high max power, shorter efforts, high power variability\n"
+            "- climber: high elevation gain per km, longer sustained efforts at moderate power\n"
+            "- endurance: long rides, moderate intensity, high volume\n"
+            "- allrounder: balanced across metrics"
+        )
+        notes_example = (
+            "Example: 'You show strong sustained power over long efforts, which marks you as a time-trial type rider. "
+            "Your aerobic base looks solid…'"
+        )
+        last_ride_key = "ride"
+
     return (
-        f"{COACH_PERSONA} Analyse the provided Strava activities and return a JSON assessment.\n"
+        f"{persona} Analyse the provided activities and return a JSON assessment.\n"
         "Return ONLY a valid JSON object with these fields "
         "(all keys double-quoted, numeric values must be plain numbers with no units):\n"
-        "- \"estimatedFTP\": integer watts — use the pre-computed value when provided, "
-        "otherwise estimate from activity summaries; null if no power data\n"
-        "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
-        "otherwise estimate from activity summaries; null if no HR data\n"
+        f"{ftp_field}"
+        f"{threshold_hr_field}"
         "- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n"
         "- \"notes\": a concise overall assessment addressed directly to the athlete using 'you'. "
-        "Mention their strengths, rider type, and key observations from their rides. "
-        "Example: 'You show strong sustained power over long efforts, which marks you as a time-trial type rider. "
-        "Your aerobic base looks solid…'\n"
-        "- \"lastRideFeedback\": a standalone 3-5 sentence coach note about the SINGLE MOST RECENT ride only "
-        "(the one with the latest start_date). Write it as a card the athlete reads first thing on their dashboard. "
-        "Cover: (1) what type of ride it was (category) and key numbers, "
-        "(2) how the effort looked — power consistency and HR response or drift if data available, "
-        "(3) one concrete recommendation for the next training session. "
+        f"Mention their strengths, rider type, and key observations from their {activities_noun}. "
+        f"{notes_example}\n"
+        f"- \"lastRideFeedback\": a standalone 3-5 sentence coach note about the SINGLE MOST RECENT {last_ride_key} only "
+        f"(the one with the latest start_date). Write it as a card the athlete reads first thing on their dashboard. "
+        f"Cover: (1) what type of {last_ride_key} it was (category) and key numbers, "
+        "(2) how the effort looked — "
+        + ("HR response and pace consistency or drift if data available, " if is_running else "power consistency and HR response or drift if data available, ")
+        + "(3) one concrete recommendation for the next training session. "
         "Be warm, personal, and specific — use their actual numbers.\n"
-        "- \"rideInsights\": a per-ride narrative addressed to the athlete. "
-        "For each ride: state its category (recovery/endurance/tempo/sweet-spot/threshold/VO2max/sprints), "
-        "comment on the interval quality (power consistency, HR drift if data available), and give one "
+        f"- \"rideInsights\": a per-{activity_noun} narrative addressed to the athlete. "
+        f"For each {activity_noun}: state its category, "
+        "comment on the effort quality (HR drift if data available), and give one "
         "concrete takeaway. Also include 1-2 specific recommendations for the athlete's next training "
         "session based on what you observed. Be empathetic and personal — reference their specific numbers.\n"
         "- \"planUpdates\": optional array of training day updates for the upcoming plan based on what "
-        "you observed in the rides. Only include updates that are genuinely warranted (e.g. add recovery "
+        f"you observed in the {activities_noun}. Only include updates that are genuinely warranted (e.g. add recovery "
         "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
         "targets). Each update: {\"date\": \"<ISO date>\", \"workoutType\": \"<type>\", \"title\": "
         "\"<string>\", \"description\": \"<string>\", \"durationMinutes\": <int>}. "
         "If no updates are needed, omit this field or set it to [].\n\n"
-        "Ride categories:\n"
-        "- recovery: avg power < 60% FTP\n"
-        "- endurance: avg power 60–75% FTP, no distinct intervals\n"
-        "- tempo: avg power ~76–85% FTP, no distinct intervals\n"
-        "- interval_sweetspot: 10–20 min efforts at 88–95% FTP\n"
-        "- interval_threshold: ~5–12 min efforts at 95–105% FTP\n"
-        "- interval_vo2max: 2–5 min efforts at 106–130% FTP\n"
-        "- interval_sprints: < 2 min efforts at > 130% FTP\n\n"
-        "Rider-type guidelines:\n"
-        "- timetrial: strong sustained power, low variability, long average efforts\n"
-        "- sprinter: high max power, shorter efforts, high power variability\n"
-        "- climber: high elevation gain per km, longer sustained efforts at moderate power\n"
-        "- endurance: long rides, moderate intensity, high volume\n"
-        "- allrounder: balanced across metrics"
+        f"{category_section}"
+        f"{rider_type_section}"
     )
 
 
@@ -91,14 +165,23 @@ def analyse_activities_user(
     activities: list[dict],
     computed_section: str,
     ride_analyses_section: str,
+    sport_type: str = "cycling",
 ) -> str:
+    is_running = sport_type.lower() in ("running", "run")
+    activities_noun = "runs" if is_running else "Strava rides"
+    ftp_note = (
+        "When pre-computed threshold HR values are given, "
+        "use them verbatim for estimatedThresholdHR. Set estimatedFTP to null. "
+    ) if is_running else (
+        "When pre-computed FTP/threshold HR values are given, "
+        "use them verbatim for estimatedFTP and estimatedThresholdHR. "
+    )
     return (
-        f"Last {len(activities)} Strava rides:\n{json.dumps(activities, indent=2)}"
+        f"Last {len(activities)} {activities_noun}:\n{json.dumps(activities, indent=2)}"
         f"{computed_section}"
         f"{ride_analyses_section}\n\n"
-        "Assess my fitness. When pre-computed FTP/threshold HR values are given, "
-        "use them verbatim for estimatedFTP and estimatedThresholdHR. "
-        "Use the per-ride analyses above to write accurate rideInsights and appropriate planUpdates."
+        f"Assess my fitness. {ftp_note}"
+        "Use the per-activity analyses above to write accurate rideInsights and appropriate planUpdates."
     )
 
 

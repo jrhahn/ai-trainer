@@ -173,7 +173,21 @@ function LineChart({
 export default function ProgressionChart() {
   const metricsHistory = useAppStore(useShallow((s) => s.metricsHistory))
 
-  if (metricsHistory.length < 2) return null
+  if (metricsHistory.length < 2) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+            <TrendingUp size={16} className="text-purple-600" />
+          </div>
+          <h3 className="text-sm font-bold text-gray-800">Athlete Progression</h3>
+        </div>
+        <p className="text-xs text-gray-400 text-center py-4">
+          Come back after your next analysis to see your fitness progression chart.
+        </p>
+      </div>
+    )
+  }
 
   const snapshots: AthleteMetricSnapshot[] = metricsHistory
 

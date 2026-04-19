@@ -76,6 +76,16 @@ def mock_ai_service(monkeypatch):
                 "lastRideFeedback": "Great endurance ride! You held 188W avg (68% FTP) for 90 minutes with stable HR. Next session, try adding 2×20 min at 85% FTP to build your tempo base.",
             }
         ),
+        "analyse_fit_activity": AsyncMock(
+            return_value={
+                "estimatedFTP": 210,
+                "estimatedThresholdHR": 165,
+                "riderType": "endurance",
+                "notes": "Solid aerobic base from .fit upload.",
+                "rideInsights": "Steady effort across the session.",
+                "lastRideFeedback": "Good steady effort. Keep building that aerobic base.",
+            }
+        ),
         "generate_training_plan": AsyncMock(
             return_value=[
                 {

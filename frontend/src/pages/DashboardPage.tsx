@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
+import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { adaptTrainingPlan } from '../services/ai'
 
@@ -84,6 +85,9 @@ export default function DashboardPage() {
           className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
         />
       </div>
+
+      {/* Athlete progression charts */}
+      <ProgressionChart />
     </div>
   )
 }

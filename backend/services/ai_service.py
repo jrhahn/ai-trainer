@@ -21,6 +21,7 @@ from openai import AsyncOpenAI
 
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
+    LTHR_RATIO,
     build_ride_analysis,
     compute_ftp_from_streams,
     compute_hr_zones,
@@ -135,7 +136,10 @@ async def analyse_strava_activities(
     provider: str = "openai",
     streams_by_id: dict[str, dict] | None = None,
     max_heart_rate: int | None = None,
+    sport_type: str = "cycling",
 ) -> dict:
+    is_running = sport_type.lower() in ("running", "run")
+
     # --- Algorithmic computation from per-activity stream data ---
     computed_ftp: int | None = None
     computed_threshold_hr: int | None = None
@@ -143,30 +147,34 @@ async def analyse_strava_activities(
     ride_analyses: dict[str, dict] = {}  # activity_id → per-ride analysis
 
     if streams_by_id:
-        computed_ftp, computed_threshold_hr = compute_ftp_from_streams(
+        raw_ftp, raw_threshold_hr = compute_ftp_from_streams(
             streams_by_id, max_heart_rate
         )
+        # Skip power-based FTP for running — no watts stream expected
+        if not is_running:
+            computed_ftp = raw_ftp
+        computed_threshold_hr = raw_threshold_hr
 
         # --- Per-ride analysis: category + interval detection + HR drift ---
-        # Use the best available FTP estimate; fall back to a rough proxy from avg power
-        # if no algorithmic estimate is available yet.
-        ftp_for_analysis = float(computed_ftp) if computed_ftp else None
-        if ftp_for_analysis is None:
-            # Rough proxy: compute global average power across all activities with power data
-            all_avg_watts = [a.get("averageWatts") or a.get("average_watts") for a in activities]
-            valid = [w for w in all_avg_watts if w and w > 0]
-            if valid:
-                ftp_for_analysis = float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
-        if ftp_for_analysis and ftp_for_analysis > 0:
-            for act_id, streams in streams_by_id.items():
-                analysis = build_ride_analysis(streams, ftp_for_analysis)
-                if analysis:
-                    # Find the matching activity name for context
-                    act_name = next(
-                        (a.get("name", act_id) for a in activities if str(a.get("id")) == act_id),
-                        act_id,
-                    )
-                    ride_analyses[act_name] = analysis
+        # Only meaningful for cycling where power streams are available.
+        if not is_running:
+            ftp_for_analysis = float(computed_ftp) if computed_ftp else None
+            if ftp_for_analysis is None:
+                # Rough proxy: compute global average power across all activities with power data
+                all_avg_watts = [a.get("averageWatts") or a.get("average_watts") for a in activities]
+                valid = [w for w in all_avg_watts if w and w > 0]
+                if valid:
+                    ftp_for_analysis = float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
+            if ftp_for_analysis and ftp_for_analysis > 0:
+                for act_id, streams in streams_by_id.items():
+                    analysis = build_ride_analysis(streams, ftp_for_analysis)
+                    if analysis:
+                        # Find the matching activity name for context
+                        act_name = next(
+                            (a.get("name", act_id) for a in activities if str(a.get("id")) == act_id),
+                            act_id,
+                        )
+                        ride_analyses[act_name] = analysis
 
     if max_heart_rate:
         computed_hr_zones = compute_hr_zones(max_heart_rate)
@@ -176,7 +184,7 @@ async def analyse_strava_activities(
         computed_ftp, computed_threshold_hr, max_heart_rate, computed_hr_zones
     )
 
-    system_prompt = analyse_activities_system()
+    system_prompt = analyse_activities_system(sport_type=sport_type)
 
     # Build the per-ride analysis section for the AI prompt
     ride_analyses_section = ""
@@ -186,7 +194,9 @@ async def analyse_strava_activities(
             f"\n\nAlgorithmic per-ride analysis (computed from stream data):\n{ride_analyses_str}"
         )
 
-    user_msg = analyse_activities_user(activities, computed_section, ride_analyses_section)
+    user_msg = analyse_activities_user(
+        activities, computed_section, ride_analyses_section, sport_type=sport_type
+    )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
@@ -194,6 +204,130 @@ async def analyse_strava_activities(
     # Override with algorithmically derived values so the AI cannot contradict them
     if computed_ftp is not None:
         parsed["estimatedFTP"] = computed_ftp
+    elif is_running:
+        # Ensure FTP is explicitly null for running activities
+        parsed["estimatedFTP"] = None
+    if computed_threshold_hr is not None:
+        parsed["estimatedThresholdHR"] = computed_threshold_hr
+    if computed_hr_zones is not None:
+        parsed["hrZones"] = computed_hr_zones
+
+    return parsed
+
+
+async def analyse_fit_activity(
+    sport_type: str,
+    duration_minutes: int,
+    avg_power: int | None,
+    avg_hr: int | None,
+    max_heart_rate: int | None = None,
+    provider: str = "openai",
+) -> dict:
+    """Analyse a single .fit-imported activity and return a fitness assessment.
+
+    This is a lightweight version of ``analyse_strava_activities`` intended for
+    .fit uploads where only summary metrics (avg power/HR) are available rather
+    than full per-second streams.
+
+    FTP estimation:
+    - Cycling: estimated as ``avg_power × AVG_POWER_TO_FTP_RATIO`` when power
+      data is present (a rough proxy since we lack the full stream).
+    - Running: FTP is set to ``null``; threshold HR is estimated from
+      ``max_heart_rate × LTHR_RATIO`` when max HR is known.
+    """
+    is_running = sport_type.lower() in ("running", "run")
+
+    computed_ftp: int | None = None
+    computed_threshold_hr: int | None = None
+    computed_hr_zones: dict | None = None
+
+    if not is_running and avg_power and avg_power > 0:
+        computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
+
+    if avg_hr and avg_hr > 0:
+        computed_threshold_hr = avg_hr  # use avg HR as a proxy threshold HR
+
+    # Refine threshold HR using max HR if available (LTHR = max_hr × 0.87)
+    if max_heart_rate and max_heart_rate > 0:
+        computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
+        computed_hr_zones = compute_hr_zones(max_heart_rate)
+
+    activity_summary = {
+        "sport_type": sport_type,
+        "duration_minutes": duration_minutes,
+        "average_power": avg_power,
+        "average_heart_rate": avg_hr,
+    }
+
+    computed_section = analyse_activities_computed_section(
+        computed_ftp if not is_running else None,
+        computed_threshold_hr,
+        max_heart_rate,
+        computed_hr_zones,
+    )
+
+    system_prompt = analyse_activities_system(sport_type=sport_type)
+    user_msg = analyse_activities_user(
+        [activity_summary], computed_section, "", sport_type=sport_type
+    )
+
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+
+    # Override with algorithmically derived values
+    if not is_running and computed_ftp is not None:
+        parsed["estimatedFTP"] = computed_ftp
+    else:
+        parsed["estimatedFTP"] = None
+    if computed_threshold_hr is not None:
+        parsed["estimatedThresholdHR"] = computed_threshold_hr
+    if computed_hr_zones is not None:
+        parsed["hrZones"] = computed_hr_zones
+
+    return parsed
+
+    computed_ftp: int | None = None
+    computed_threshold_hr: int | None = None
+    computed_hr_zones: dict | None = None
+
+    if not is_running and avg_power and avg_power > 0:
+        computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
+
+    if avg_hr and avg_hr > 0:
+        computed_threshold_hr = avg_hr  # use avg HR as a proxy threshold HR
+
+    # Refine threshold HR using max HR if available (LTHR = max_hr × 0.87)
+    if max_heart_rate and max_heart_rate > 0:
+        computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
+        computed_hr_zones = compute_hr_zones(max_heart_rate)
+
+    activity_summary = {
+        "sport_type": sport_type,
+        "duration_minutes": duration_minutes,
+        "average_power": avg_power,
+        "average_heart_rate": avg_hr,
+    }
+
+    computed_section = analyse_activities_computed_section(
+        computed_ftp if not is_running else None,
+        computed_threshold_hr,
+        max_heart_rate,
+        computed_hr_zones,
+    )
+
+    system_prompt = analyse_activities_system(sport_type=sport_type)
+    user_msg = analyse_activities_user(
+        [activity_summary], computed_section, "", sport_type=sport_type
+    )
+
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+
+    # Override with algorithmically derived values
+    if not is_running and computed_ftp is not None:
+        parsed["estimatedFTP"] = computed_ftp
+    else:
+        parsed["estimatedFTP"] = None
     if computed_threshold_hr is not None:
         parsed["estimatedThresholdHR"] = computed_threshold_hr
     if computed_hr_zones is not None:
