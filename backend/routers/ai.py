@@ -16,7 +16,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY
-from services.analysis import _compute_training_load, _project_training_load, compute_readiness_score
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -188,7 +188,7 @@ async def ask_trainer(
     ]
 
     # --- Task 5: Classify question first, then conditionally retrieve RAG context ---
-    classification = await ai_service.classify_question(body.question)
+    classification = await ai_service.classify_question(body.question, provider=_provider(current_user))
     science_context = ""
     rag_sources: list = []
     if classification.get("needs_science_rag", False):
@@ -260,10 +260,38 @@ async def rate_workout(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
     profile = _user_to_profile_dict(current_user)
+
+    # Fetch Strava streams and compute planned-vs-actual delta when an activity ID is provided
+    stream_delta: dict | None = None
+    if body.strava_activity_id is not None and current_user.strava_token is not None:
+        try:
+            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
+            streams = await fetch_activity_streams(access_token, body.strava_activity_id)
+            if streams:
+                ftp = float(
+                    (
+                        current_user.rider_assessment
+                        and current_user.rider_assessment.estimated_ftp
+                    )
+                    or current_user.current_ftp
+                    or 0
+                ) or None
+                stream_delta = compare_planned_vs_actual(
+                    body.day.model_dump(by_alias=True),
+                    streams,
+                    ftp=ftp,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to fetch Strava streams for workout rating; continuing without stream data",
+                exc_info=True,
+            )
+
     result = await ai_service.rate_completed_workout(
         body.day.model_dump(by_alias=True),
         profile,
         provider=_provider(current_user),
+        stream_delta=stream_delta,
     )
 
     if result.get("flag_for_adaptation"):
@@ -332,7 +360,7 @@ async def readiness_score(
     # --- Compute current CTL/ATL/TSB (plan days up to today) ---
     today_str = _date.today().isoformat()
     plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
-    current_load = _compute_training_load(plan_to_today, ftp) if ftp > 0 else {
+    current_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
         "ctl": 0.0, "atl": 0.0, "tsb": 0.0
     }
 

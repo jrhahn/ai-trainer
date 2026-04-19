@@ -113,12 +113,16 @@ export async function askTrainer(
 
 export async function rateCompletedWorkout(
   day: TrainingDay,
-  authToken: string
+  authToken: string,
+  stravaActivityId?: number
 ): Promise<string> {
   const result = await apiFetch<{ feedback: string }>('/ai/rate-workout', {
     token: authToken,
     method: 'POST',
-    body: { day },
+    body: {
+      day,
+      ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
+    },
   })
   return result.feedback
 }

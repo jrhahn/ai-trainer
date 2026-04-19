@@ -322,6 +322,7 @@ class TrainingDaySchema(CamelModel):
 
 class RateWorkoutRequest(CamelModel):
     day: TrainingDaySchema
+    strava_activity_id: Optional[int] = None
 
 
 class RateWorkoutResponse(BaseModel):
