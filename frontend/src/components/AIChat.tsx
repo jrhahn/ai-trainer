@@ -146,6 +146,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
           placeholder="Ask your coach..."
+          aria-label="Message to coach"
           className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
         />
         <button
