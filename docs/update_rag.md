@@ -65,6 +65,19 @@ All `*.md` files in `backend/knowledge/` are chunked (≈ 500-token chunks with
 50-token overlap) and embedded.  Each file's stem becomes its `source_id`
 (e.g. `seed:power_zones`).
 
+Current seed files:
+
+| File | Topics covered |
+|------|---------------|
+| `power_zones.md` | Coggan 7-zone model, FTP |
+| `polarized_training.md` | 80/20 polarized training, Seiler model |
+| `periodization.md` | Macrocycle/mesocycle structure |
+| `recovery.md` | Rest, HRV, overreaching |
+| `sweet_spot_training.md` | Sweet-spot training (88–95% FTP) |
+| `critical_power.md` | Monod-Scherrer CP model, W′, power-duration curve |
+| `heat_altitude_adaptation.md` | Heat acclimatisation, altitude training (LHTH/LHTL) |
+| `nutrition_timing.md` | Peri-workout nutrition, carbohydrate timing, race-day strategy |
+
 To add new seed content, drop a `.md` file into `backend/knowledge/` and
 re-run ingestion.
 
@@ -85,6 +98,15 @@ heart rate variability endurance athlete
 sweet spot training cycling threshold
 periodization endurance cycling performance
 high intensity interval training VO2max
+critical power W-prime cycling power duration
+Monod Scherrer critical power anaerobic work capacity
+W prime balance reconstitution cycling exercise
+heat acclimatisation cycling endurance performance
+altitude training live high train low erythropoietin
+hypoxia altitude VO2max cycling acclimatization
+carbohydrate intake cycling performance nutrition timing
+post exercise glycogen resynthesis protein recovery
+multiple transportable carbohydrates cycling endurance
 ```
 
 To add a new topic, append a query string to the `SEARCH_QUERIES` list and
