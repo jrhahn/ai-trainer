@@ -1,17 +1,23 @@
+import { useEffect, useRef } from 'react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import { useStravaSync } from '../hooks/useStravaSync'
+import { adaptTrainingPlan } from '../services/ai'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan } = useAppStore(
+  const { userProfile, trainingPlan, authToken, setTrainingPlan } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
+      authToken: s.authToken,
+      setTrainingPlan: s.setTrainingPlan,
     }))
   )
+
+  const adaptationTriggeredRef = useRef(false)
 
   // keep sync running so analysis status updates remain active
   useStravaSync()
@@ -24,7 +30,29 @@ export default function DashboardPage() {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const next3Days = trainingPlan.slice(0, 3)
+
+  // Always show the next 3 upcoming days (today or later)
+  const next3Days = trainingPlan.filter((d) => d.date >= today).slice(0, 3)
+
+  // If there are past incomplete days the plan is stale — ask the AI coach to
+  // reschedule them so the athlete always has current upcoming sessions.
+  const hasStalePlan =
+    trainingPlan.length > 0 && trainingPlan.some((d) => d.date < today && !d.completed)
+
+  useEffect(() => {
+    if (!hasStalePlan) {
+      // Reset so a future stale state can trigger adaptation again
+      adaptationTriggeredRef.current = false
+      return
+    }
+    if (!authToken || adaptationTriggeredRef.current) return
+    adaptationTriggeredRef.current = true
+    adaptTrainingPlan([], authToken)
+      .then((updatedPlan) => setTrainingPlan(updatedPlan))
+      .catch(() => {
+        // keep existing plan on error; ref stays true to avoid infinite retries
+      })
+  }, [hasStalePlan, authToken, setTrainingPlan])
 
   return (
     <div className="space-y-5">

@@ -194,7 +194,9 @@ def adapt_plan_system() -> str:
         f"{COACH_PERSONA} Adapt the remaining training plan based on recent workout feedback.\n"
         "Return ONLY a valid JSON object with an \"updatedDays\" array. "
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units. "
-        "Keep the same date fields.\n"
+        "For future days keep the same date fields. "
+        "For any past incomplete days (date before today), reschedule them to upcoming dates "
+        "starting from today, distributing the sessions sensibly without overloading consecutive days.\n"
         "Each updated day must include all required TrainingDay fields: "
         "\"date\", \"workoutType\", \"title\", \"durationMinutes\".\n"
         "Each updated day must also include: "
@@ -237,12 +239,21 @@ def adapt_plan_user(
             "add extra rest/recovery days, and ensure the athlete arrives at the start "
             "line fresh (target TSB +5 to +15)."
         )
+    past_incomplete_count = sum(1 for d in incomplete_days if d.get("date", "") < today)
+    stale_note = (
+        f"NOTE: {past_incomplete_count} session(s) are past their scheduled date and have not "
+        "been completed. Reschedule these to upcoming dates (starting from today) so the athlete "
+        "always has current sessions ahead of them.\n"
+        if past_incomplete_count > 0
+        else ""
+    )
     return (
         f"Today's date: {today}\n"
         f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
-        "Adapt the remaining days based on the feedback. Return the full updated days array."
+        + stale_note
+        + "Adapt the remaining days based on the feedback. Return the full updated days array."
     )
 
 

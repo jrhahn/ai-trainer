@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -37,8 +37,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-
   const welcomeContent = contextWorkout
     ? `Hi! I'm your AI cycling coach. I can answer any questions about today's ${contextWorkout.title} workout or your training in general. What would you like to know?`
     : "Hi! I'm your AI cycling coach. Ask me anything about your training plan, recovery, nutrition, or technique!"
@@ -47,10 +45,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
     chatHistory.length > 0
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatHistory])
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return
@@ -154,8 +148,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Messages — flex-col-reverse renders newest at the top so no scrolling needed */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3">
         {displayMessages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
@@ -233,7 +227,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
