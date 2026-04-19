@@ -570,7 +570,7 @@ def compare_planned_vs_actual(
         avg_hr = sum(hr_data) / len(hr_data)
         result["avg_hr_bpm"] = round(avg_hr)
 
-        drift = _compute_hr_drift(hr_data)
+        drift = compute_hr_drift(hr_data)
         if drift is not None:
             result["hr_drift_bpm"] = round(drift * len(hr_data), 1)
 
