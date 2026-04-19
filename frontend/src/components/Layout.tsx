@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, FlaskConical } from 'lucide-react'
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
+  { to: '/expert', label: 'Expert', icon: FlaskConical },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

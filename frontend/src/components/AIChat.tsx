@@ -8,9 +8,10 @@ import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
 interface Props {
   contextWorkout?: TrainingDay
+  className?: string
 }
 
-export default function AIChat({ contextWorkout }: Props) {
+export default function AIChat({ contextWorkout, className }: Props) {
   const {
     authToken,
     userProfile,
@@ -109,7 +110,7 @@ export default function AIChat({ contextWorkout }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[28rem]">
+    <div className={`bg-white rounded-xl border border-gray-100 flex flex-col ${className ?? 'shadow-sm h-[28rem]'}`}>
       {/* Header */}
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
