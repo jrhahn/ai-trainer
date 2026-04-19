@@ -5,6 +5,30 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-19
+
+### Added
+
+- **Race-Day Readiness Score** (`services/analysis.py`, `routers/ai.py`, `schemas.py`):
+  - `compute_readiness_score(ctl, atl, tsb, days_until_race) -> dict` — pure Python function producing a 0–100 readiness score as a weighted blend of form (65 %, TSB-based, peaks at TSB +10) and fitness (35 %, CTL-based, capped at 100)
+  - `_project_training_load(plan_days, ftp, target_date_str) -> dict` — forward-projects CTL/ATL/TSB to any future date by evaluating only plan days on or before `target_date_str`; enables race-day projections
+  - `ReadinessScoreResponse` schema — includes `score`, `form_score`, `fitness_score`, `ctl`, `atl`, `tsb`, `days_until_race`, `race_date`, and optional `projected_score/ctl/atl/tsb` at race day
+  - `GET /ai/readiness-score` — authenticated endpoint that computes the current readiness score from plan days up to today, derives `days_until_race` from the user's `race_date`, and (when race is in the future and FTP is known) appends a forward-projected score at race day
+
+- **Auto-taper injection** (`services/ai_service.py`, `services/prompts.py`):
+  - `adapt_training_plan()` now detects `0 ≤ days_until_race ≤ 14` and passes a `taper_days_remaining` value to `adapt_plan_user()`
+  - `adapt_plan_user()` gains an optional `taper_days_remaining: int | None` parameter; when set it appends an explicit `⚠️ TAPER ALERT` block instructing the LLM to cut volume ~40%, retain intensity, and target TSB +5 to +15 — enforcing taper structurally rather than relying on a passive prompt hint
+
+### Tests
+
+- 6 new unit tests in `backend/tests/test_ai_service_unit.py` covering `compute_readiness_score`:
+  - Expected return keys
+  - Score/component scores always in 0–100 range across a range of TSB values
+  - Peak form (TSB = +10, high CTL → `form_score = 100`, `score > 80`)
+  - Severe fatigue (TSB ≤ −30 → `form_score = 0`)
+  - Zero load (CTL = ATL = TSB = 0 → `form_score = 50`, `fitness_score = 0`, `score = 32.5`)
+  - `days_until_race` preserved in return value
+
 ## [0.6.0] - 2026-04-18
 
 ### Security
