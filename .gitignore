@@ -12,6 +12,7 @@ frontend/node_modules
 frontend/dist
 frontend/dist-ssr
 frontend/coverage
+frontend/.env*
 *.local
 
 # Editor directories and files
@@ -25,15 +26,29 @@ frontend/coverage
 *.sln
 *.sw?
 
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # Python backend
 backend/.venv
-backend/__pycache__
-backend/**/__pycache__
-backend/*.pyc
-backend/.env
 backend/pytest.db
 backend/ci-test.db
 backend/integration-test.db
 backend/.coverage
 backend/coverage.xml
 backend/coverage_test*.db
+backend/htmlcov/
+backend/*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# Deploy / Ansible
+deploy/ansible/*.retry
