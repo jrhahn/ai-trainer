@@ -5,6 +5,13 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-04-19
+
+### Changed
+
+- **`adapt_plan_system` prompt** — the instruction `"Keep the same date fields"` is replaced with explicit guidance: future days keep their dates; past incomplete days must be rescheduled to upcoming dates starting from today.
+- **`adapt_plan_user` prompt** — when incomplete days with past dates are present, a `NOTE:` sentence is appended that tells the AI coach exactly how many sessions are overdue and asks it to reschedule them to current/upcoming dates.
+
 ## [0.12.0] - 2026-04-19
 
 ### Added

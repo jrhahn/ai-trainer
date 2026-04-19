@@ -5,6 +5,14 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-04-19
+
+### Changed
+
+- **"Next 3 days" always shows upcoming sessions** — `DashboardPage` now filters `trainingPlan` to only include days ≥ today, so the strip is never filled with past workouts.
+- **Stale-plan auto-adaptation** — when the training plan contains past incomplete sessions, `DashboardPage` automatically calls the `/ai/adapt-plan` endpoint so the AI coach can reschedule those sessions to upcoming dates. A subtle "Updating plan with your coach…" label is shown while the request is in flight.
+- **Chat messages inverted — latest on top** — `AIChat` now renders messages in reverse chronological order (newest at the top) using `flex-col-reverse`, eliminating the need to scroll down to see the latest exchange.
+
 ## [0.8.0] - 2026-04-19
 
 ### Added
