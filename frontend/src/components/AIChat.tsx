@@ -138,6 +138,27 @@ export default function AIChat({ contextWorkout, className }: Props) {
         </div>
       </div>
 
+      {/* Input */}
+      <div className="p-3 border-b flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+          placeholder="Ask your coach..."
+          aria-label="Message to coach"
+          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+        />
+        <button
+          onClick={sendMessage}
+          disabled={loading || !input.trim()}
+          aria-label="Send message"
+          className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+        >
+          <Send size={16} />
+        </button>
+      </div>
+
       {/* Coach memory panel */}
       {showMemory && coachMemory && (
         <div className="mx-3 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
@@ -229,25 +250,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
         )}
       </div>
 
-      {/* Input */}
-      <div className="p-3 border-t flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-          placeholder="Ask your coach..."
-          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-        />
-        <button
-          onClick={sendMessage}
-          disabled={loading || !input.trim()}
-          aria-label="Send message"
-          className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
-        >
-          <Send size={16} />
-        </button>
-      </div>
     </div>
   )
 }
