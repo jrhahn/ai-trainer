@@ -13,6 +13,8 @@ frontend/dist
 frontend/dist-ssr
 frontend/coverage
 frontend/.env*
+
+# Local env files (apply globally)
 *.local
 
 # Editor directories and files
@@ -26,14 +28,14 @@ frontend/.env*
 *.sln
 *.sw?
 
-# Environment files
+# Env files
 .env
 .env.*
 !.env.example
 
 # Python
-__pycache__/
-*.pyc
+**/__pycache__/
+**/*.pyc
 .pytest_cache/
 
 # Python backend
