@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2, Target, ListChecks, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout } from '../services/ai'
 import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
-import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
+import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -23,6 +23,7 @@ const typeColors: Record<string, string> = {
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -35,8 +36,16 @@ export default function WorkoutPage() {
   const [showForm, setShowForm] = useState(false)
 
   const rateWorkoutMutation = useMutation({
-    mutationFn: ({ dayWithFeedback }: { dayWithFeedback: TrainingDay }) =>
-      rateCompletedWorkout(dayWithFeedback, authToken!),
+    mutationFn: ({ dayWithFeedback }: { dayWithFeedback: TrainingDay }) => {
+      // Try to find a Strava activity that matches this workout date so the
+      // backend can fetch its streams for precise planned-vs-actual analysis.
+      const cachedActivities =
+        queryClient.getQueryData<StravaActivity[]>(['stravaActivities', authToken]) ?? []
+      const matchingActivity = cachedActivities.find((a) =>
+        a.start_date.startsWith(dayWithFeedback.date)
+      )
+      return rateCompletedWorkout(dayWithFeedback, authToken!, matchingActivity?.id)
+    },
     onSuccess: async (coachFeedback) => {
       if (coachFeedback) {
         updateTrainingDay(day!.date, { coachFeedback })

@@ -660,6 +660,169 @@ async def test_analyse_strava_activities_with_streams_and_hr():
 
 
 # ---------------------------------------------------------------------------
+# compare_planned_vs_actual (analysis.py)
+# ---------------------------------------------------------------------------
+
+
+def test_compare_planned_vs_actual_empty_streams():
+    """Returns empty dict when streams have no data."""
+    result = analysis.compare_planned_vs_actual(
+        planned={"workoutType": "endurance", "durationMinutes": 60},
+        streams={},
+    )
+    assert result == {}
+
+
+def test_compare_planned_vs_actual_avg_power():
+    """avg_power_w is the mean of the watts stream."""
+    watts = [200.0, 210.0, 220.0]
+    time_stream = [0.0, 1.0, 2.0]
+    result = analysis.compare_planned_vs_actual(
+        planned={},
+        streams={"watts": {"data": watts}, "time": {"data": time_stream}},
+    )
+    assert result["avg_power_w"] == round(sum(watts) / len(watts))
+
+
+def test_compare_planned_vs_actual_power_delta():
+    """avg_power_delta_pct reflects deviation from target midpoint."""
+    # Target midpoint = (190 + 220) / 2 = 205 W
+    # Actual avg = 230 W → delta = (230 - 205) / 205 * 100 ≈ +12.2 %
+    watts = [230.0] * 10
+    time_stream = list(range(10))
+    result = analysis.compare_planned_vs_actual(
+        planned={"targetPower": {"low": 190, "high": 220}},
+        streams={"watts": {"data": watts}, "time": {"data": time_stream}},
+    )
+    assert result["target_power_low"] == 190
+    assert result["target_power_high"] == 220
+    assert result["avg_power_delta_pct"] > 0  # over target
+
+
+def test_compare_planned_vs_actual_time_in_zones():
+    """time_in_zones sums to approximately total ride duration."""
+    ftp = 200.0
+    # 10 seconds each at Z1 (100W), Z2 (130W), Z3 (170W) power
+    watts = [100.0] * 10 + [130.0] * 10 + [170.0] * 10
+    time_stream = list(range(30))
+    result = analysis.compare_planned_vs_actual(
+        planned={},
+        streams={"watts": {"data": watts}, "time": {"data": time_stream}},
+        ftp=ftp,
+    )
+    tiz = result["time_in_zones"]
+    # 100W = 50% FTP → Z1; 130W = 65% FTP → Z2; 170W = 85% FTP → Z3
+    assert tiz["z1_secs"] > 0
+    assert tiz["z2_secs"] > 0
+    assert tiz["z3_secs"] > 0
+    # Total time in zones should be close to 29 seconds (30 samples, last sample uses dt=1)
+    total = sum(tiz.values())
+    assert total >= 28
+
+
+def test_compare_planned_vs_actual_hr_drift():
+    """hr_drift_bpm is positive when HR rises steadily."""
+    watts = [200.0] * 20
+    time_stream = list(range(20))
+    # HR rises from 140 to 159 bpm (steady drift)
+    hr = [140.0 + i for i in range(20)]
+    result = analysis.compare_planned_vs_actual(
+        planned={},
+        streams={
+            "watts": {"data": watts},
+            "time": {"data": time_stream},
+            "heartrate": {"data": hr},
+        },
+    )
+    assert result["avg_hr_bpm"] is not None
+    # Positive drift expected
+    assert result.get("hr_drift_bpm", 0) > 0
+
+
+def test_compare_planned_vs_actual_intensity_spikes():
+    """intensity_spikes is populated when power significantly exceeds target."""
+    target_mid = 200.0  # target 180–220 W
+    # 1000 seconds at 250W (25 % over target midpoint)
+    watts = [250.0] * 1000
+    time_stream = list(range(1000))
+    result = analysis.compare_planned_vs_actual(
+        planned={"targetPower": {"low": 180, "high": 220}},
+        streams={"watts": {"data": watts}, "time": {"data": time_stream}},
+    )
+    spikes = result.get("intensity_spikes", [])
+    assert len(spikes) > 0
+    assert spikes[0]["pct_over_target"] > 10.0
+
+
+def test_compare_planned_vs_actual_no_spikes_within_target():
+    """intensity_spikes is empty when power is within the target range."""
+    watts = [205.0] * 1000  # within 180–220 W target
+    time_stream = list(range(1000))
+    result = analysis.compare_planned_vs_actual(
+        planned={"targetPower": {"low": 180, "high": 220}},
+        streams={"watts": {"data": watts}, "time": {"data": time_stream}},
+    )
+    assert result.get("intensity_spikes", []) == []
+
+
+# ---------------------------------------------------------------------------
+# rate_completed_workout with stream_delta
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_with_stream_delta():
+    """rate_completed_workout passes stream_delta info into the user prompt."""
+    day = {
+        "workoutType": "endurance",
+        "title": "Z2 Ride",
+        "description": "Easy endurance ride",
+        "durationMinutes": 90,
+        "targetPower": {"low": 180, "high": 210},
+        "feedback": {
+            "actualDurationMinutes": 88,
+            "perceivedEffort": 3,
+            "averagePower": 225,
+            "averageHeartRate": 155,
+            "notes": "Felt strong",
+            "completedAt": "2026-04-10T10:00:00Z",
+        },
+    }
+    profile = {"fitnessLevel": "intermediate"}
+    stream_delta = {
+        "avg_power_w": 225,
+        "normalized_power_w": 232,
+        "target_power_low": 180,
+        "target_power_high": 210,
+        "avg_power_delta_pct": 16.1,
+        "normalized_power_delta_pct": 20.3,
+        "hr_drift_bpm": 12.0,
+        "intensity_spikes": [
+            {"start_min": 0.0, "end_min": 15.0, "avg_power_w": 240, "pct_over_target": 24.4}
+        ],
+    }
+
+    captured_user_msg: list[str] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        captured_user_msg.append(user_msg)
+        return json.dumps({"feedback": "You went over intensity — ease back next time.", "flag_for_adaptation": False})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(
+            day, profile, provider="openai", stream_delta=stream_delta
+        )
+
+    assert result["feedback"] != ""
+    assert result["flag_for_adaptation"] is False
+    # The stream delta data should appear in the prompt
+    assert captured_user_msg, "fake_chat was not called"
+    msg = captured_user_msg[0]
+    assert "stream data" in msg.lower() or "strava" in msg.lower() or "16.1" in msg
+
+
+
+# ---------------------------------------------------------------------------
 # _compute_training_load (Task 1)
 # ---------------------------------------------------------------------------
 

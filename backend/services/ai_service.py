@@ -333,13 +333,18 @@ async def update_coach_memory(
     return await _chat(provider, system_prompt, user_msg)
 
 
-async def rate_completed_workout(day: dict, profile: dict, provider: str = "openai") -> dict:
+async def rate_completed_workout(
+    day: dict,
+    profile: dict,
+    provider: str = "openai",
+    stream_delta: dict | None = None,
+) -> dict:
     feedback = day.get("feedback")
     if not feedback:
         return {"feedback": "", "flag_for_adaptation": False}
 
     system_prompt = rate_workout_system()
-    user_msg = rate_workout_user(day, feedback, profile)
+    user_msg = rate_workout_user(day, feedback, profile, stream_delta=stream_delta)
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return {

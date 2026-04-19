@@ -15,6 +15,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY
+from services.analysis import compare_planned_vs_actual
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -258,10 +259,38 @@ async def rate_workout(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
     profile = _user_to_profile_dict(current_user)
+
+    # Fetch Strava streams and compute planned-vs-actual delta when an activity ID is provided
+    stream_delta: dict | None = None
+    if body.strava_activity_id is not None and current_user.strava_token is not None:
+        try:
+            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
+            streams = await fetch_activity_streams(access_token, body.strava_activity_id)
+            if streams:
+                ftp = float(
+                    (
+                        current_user.rider_assessment
+                        and current_user.rider_assessment.estimated_ftp
+                    )
+                    or current_user.current_ftp
+                    or 0
+                ) or None
+                stream_delta = compare_planned_vs_actual(
+                    body.day.model_dump(by_alias=True),
+                    streams,
+                    ftp=ftp,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to fetch Strava streams for workout rating; continuing without stream data",
+                exc_info=True,
+            )
+
     result = await ai_service.rate_completed_workout(
         body.day.model_dump(by_alias=True),
         profile,
         provider=_provider(current_user),
+        stream_delta=stream_delta,
     )
 
     if result.get("flag_for_adaptation"):
