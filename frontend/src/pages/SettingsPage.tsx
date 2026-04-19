@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, AlertTriangle, Server, LogOut } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut, User } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
@@ -13,6 +13,7 @@ export default function SettingsPage() {
     userProfile,
     aiProvider,
     setAiProvider,
+    setUserProfile,
     resetAll,
     logout,
   } = useAppStore(
@@ -21,6 +22,7 @@ export default function SettingsPage() {
       userProfile: s.userProfile,
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
+      setUserProfile: s.setUserProfile,
       resetAll: s.resetAll,
       logout: s.logout,
     }))
@@ -28,6 +30,7 @@ export default function SettingsPage() {
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
+  const [nameInput, setNameInput] = useState(userProfile?.name ?? '')
 
   const saveAI = async () => {
     if (!authToken) return
@@ -35,6 +38,16 @@ export default function SettingsPage() {
     await updateCurrentUser(authToken, { aiProvider: selectedProvider })
     setAiProvider(selectedProvider)
     setSavedMsg('AI settings saved!')
+    setTimeout(() => setSavedMsg(''), 2000)
+  }
+
+  const saveName = async () => {
+    if (!authToken || !userProfile) return
+    const trimmed = nameInput.trim()
+    if (!trimmed) return
+    const updated = await updateCurrentUser(authToken, { name: trimmed })
+    setUserProfile(updated.profile)
+    setSavedMsg('Name saved!')
     setTimeout(() => setSavedMsg(''), 2000)
   }
 
@@ -116,6 +129,30 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
         <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
+
+        <div className="mb-4">
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void saveName()}
+              placeholder="Your name"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            />
+            <button
+              onClick={() => void saveName()}
+              disabled={!nameInput.trim() || nameInput.trim() === (userProfile?.name ?? '')}
+              className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+            >
+              <Save size={15} /> Save
+            </button>
+          </div>
+        </div>
+
         <button
           onClick={handleLogout}
           className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"

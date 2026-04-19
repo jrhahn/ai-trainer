@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SettingsPage from './SettingsPage'
@@ -66,7 +66,9 @@ describe('SettingsPage', () => {
     setup()
 
     await userEvent.click(screen.getByText('Google Gemini'))
-    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+    // Click the Save button inside the AI Provider section (first Save button)
+    const aiSection = screen.getByRole('heading', { name: /AI Provider/i }).closest('div')!
+    await userEvent.click(within(aiSection).getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { aiProvider: 'gemini' })
@@ -76,7 +78,8 @@ describe('SettingsPage', () => {
 
   it('shows a success confirmation after saving', async () => {
     setup()
-    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+    const aiSection = screen.getByRole('heading', { name: /AI Provider/i }).closest('div')!
+    await userEvent.click(within(aiSection).getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
       expect(screen.getByText('AI settings saved!')).toBeInTheDocument()
@@ -102,5 +105,44 @@ describe('SettingsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
 
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('renders the Display Name input with the current user name', () => {
+    setup()
+    const nameInput = screen.getByPlaceholderText('Your name')
+    expect(nameInput).toHaveValue('Alice')
+  })
+
+  it('saves the updated name when Save is clicked in the Account section', async () => {
+    mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Alice Updated' } })
+    setup()
+
+    const nameInput = screen.getByPlaceholderText('Your name')
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, 'Alice Updated')
+
+    const accountSection = screen.getByRole('heading', { name: /Account/i }).closest('div')!
+    await userEvent.click(within(accountSection).getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { name: 'Alice Updated' })
+    })
+    expect(useAppStore.getState().userProfile?.name).toBe('Alice Updated')
+  })
+
+  it('shows Name saved! confirmation after saving name', async () => {
+    mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Bob' } })
+    setup()
+
+    const nameInput = screen.getByPlaceholderText('Your name')
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, 'Bob')
+
+    const accountSection = screen.getByRole('heading', { name: /Account/i }).closest('div')!
+    await userEvent.click(within(accountSection).getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Name saved!')).toBeInTheDocument()
+    })
   })
 })
