@@ -72,6 +72,7 @@ import {
   fetchChatHistory,
   fetchCoachMemory,
   fetchCurrentUser,
+  fetchMetricsHistory,
   fetchTrainingPlan,
   fetchWorkoutLogs,
 } from '../services/user'
@@ -162,6 +163,16 @@ export interface HrZones {
   zone5: HrZone
 }
 
+export interface AthleteMetricSnapshot {
+  recordedAt: string
+  ftp?: number
+  thresholdHR?: number
+  ctl?: number
+  atl?: number
+  tsb?: number
+  source: string
+}
+
 export interface RiderAssessment {
   estimatedFTP?: number
   estimatedThresholdHR?: number
@@ -186,6 +197,7 @@ interface AppState {
   isOnboarded: boolean
   chatHistory: ChatMessage[]
   coachMemory: string
+  metricsHistory: AthleteMetricSnapshot[]
 
   setAuthToken: (token: string | null) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
@@ -205,6 +217,7 @@ interface AppState {
   setCoachMemory: (memory: string) => void
   setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
+  setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
 }
 
 const dataState = {
@@ -219,6 +232,7 @@ const dataState = {
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
   coachMemory: '',
+  metricsHistory: [] as AthleteMetricSnapshot[],
 }
 
 const initialState = {
@@ -284,18 +298,20 @@ export const useAppStore = create<AppState>()(
     setCoachMemory: (memory) => set({ coachMemory: memory }),
     setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
+    setMetricsHistory: (history) => set({ metricsHistory: history }),
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
       if (!token) return
 
       set({ isLoadingUserData: true, authToken: token })
       try {
-        const [user, plan, workoutLogs, chatHistory, coachMemory] = await Promise.all([
+        const [user, plan, workoutLogs, chatHistory, coachMemory, metricsHistory] = await Promise.all([
           fetchCurrentUser(token),
           fetchTrainingPlan(token),
           fetchWorkoutLogs(token),
           fetchChatHistory(token),
           fetchCoachMemory(token),
+          fetchMetricsHistory(token),
         ])
 
         set({
@@ -311,6 +327,7 @@ export const useAppStore = create<AppState>()(
           isOnboarded: user.isOnboarded,
           chatHistory,
           coachMemory,
+          metricsHistory,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to load user data'

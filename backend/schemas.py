@@ -322,6 +322,7 @@ class TrainingDaySchema(CamelModel):
 
 class RateWorkoutRequest(CamelModel):
     day: TrainingDaySchema
+    strava_activity_id: Optional[int] = None
 
 
 class RateWorkoutResponse(BaseModel):
@@ -334,23 +335,54 @@ class RefreshKnowledgeResponse(BaseModel):
     message: str
 
 
+
+
 # ---------------------------------------------------------------------------
-# Fitness history
+# Athlete metric history
 # ---------------------------------------------------------------------------
 
 
-class FitnessSnapshotSchema(CamelModel):
-    """A single FTP/threshold-HR data point in the user's fitness history."""
-
-    id: str
-    measured_at: str
+class AthleteMetricSnapshotSchema(CamelModel):
+    recorded_at: str
     ftp: Optional[int] = None
     threshold_hr: Optional[int] = None
-    source: str
+    ctl: Optional[float] = None
+    atl: Optional[float] = None
+    tsb: Optional[float] = None
+    source: str = "strava_analysis"
 
 
-class FitnessHistoryResponse(BaseModel):
-    snapshots: list[FitnessSnapshotSchema]
+class MetricsHistoryResponse(BaseModel):
+    snapshots: list[AthleteMetricSnapshotSchema]
+
+
+class ReadinessScoreResponse(BaseModel):
+    """Response for the GET /ai/readiness-score endpoint."""
+
+    score: float
+    """Combined readiness score (0–100). Blends form (TSB) and fitness (CTL)."""
+    form_score: float
+    """Form component of the score (0–100). Peaks at TSB +5 to +15."""
+    fitness_score: float
+    """Fitness component of the score (0–100). Based on CTL (42-day load)."""
+    ctl: float
+    """Chronic Training Load — 42-day exponential weighted average of daily TSS."""
+    atl: float
+    """Acute Training Load — 7-day exponential weighted average of daily TSS."""
+    tsb: float
+    """Training Stress Balance — CTL minus ATL (form/freshness indicator)."""
+    days_until_race: int
+    """Calendar days remaining until race_date (0 when race day or past)."""
+    race_date: Optional[str] = None
+    """ISO date string of the upcoming race, or None when not set."""
+    projected_score: Optional[float] = None
+    """Readiness score projected at race day using the current plan."""
+    projected_ctl: Optional[float] = None
+    """Projected CTL at race day."""
+    projected_atl: Optional[float] = None
+    """Projected ATL at race day."""
+    projected_tsb: Optional[float] = None
+    """Projected TSB at race day."""
 
 
 # ---------------------------------------------------------------------------

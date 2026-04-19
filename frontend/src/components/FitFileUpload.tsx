@@ -10,11 +10,9 @@ import { useRef, useState } from 'react'
 import { Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { uploadFitFile } from '../services/user'
-import { useQueryClient } from '@tanstack/react-query'
 
 export default function FitFileUpload() {
   const authToken = useAppStore((s) => s.authToken)
-  const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [result, setResult] = useState<{
@@ -40,8 +38,6 @@ export default function FitFileUpload() {
         averageHeartRate: res.averageHeartRate,
       })
       setStatus('success')
-      // Invalidate fitness history so the chart refreshes if analysis ran
-      await queryClient.invalidateQueries({ queryKey: ['fitness-history'] })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
       setStatus('error')

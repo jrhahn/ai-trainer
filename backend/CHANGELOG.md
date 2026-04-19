@@ -5,6 +5,108 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-04-19
+
+### Added
+
+- **`.fit` file upload — multi-sport / non-Strava ingest** (`routers/users.py`, `schemas.py`, `crud.py`, `models.py`):
+  - New `POST /users/me/upload-fit` endpoint — accepts a `.fit` file (Garmin / Wahoo / Zwift export), parses it with `fitparse`, normalises session/record messages into a `WorkoutLog` row, and returns summary metrics (`sport_type`, `duration_minutes`, `average_power`, `average_heart_rate`)
+  - `sport_type: str` column added to `WorkoutLog` (default `"cycling"`) — populated from the FIT `session.sport` field; enables multi-sport filtering in future
+  - `FitUploadResponse` schema added to `schemas.py`
+  - Alembic migration `20260419_000001` — adds `sport_type` column to `workout_logs`
+  - Dependencies added: `fitparse>=1.2.0`, `python-multipart>=0.0.22`
+
+### Tests
+
+- 4 new backend contract tests covering:
+  - `GET /users/me/metrics-history` empty list for new user
+  - `GET /users/me/metrics-history` snapshot populated after `analyse-activities`
+  - `POST /users/me/upload-fit` rejects non-.fit files with HTTP 422
+  - `POST /users/me/upload-fit` rejects corrupt .fit data with HTTP 422
+
+## [0.11.0] - 2026-04-19
+
+### Added
+
+- **Athlete Long-Term Memory / Progression Model** (`models.py`, `crud.py`, `routers/users.py`, `schemas.py`, `routers/ai.py`):
+  - New `athlete_metric_snapshots` table — stores per-user time-series snapshots of `ftp`, `threshold_hr`, `ctl`, `atl`, `tsb`, `source`, and `recorded_at`; Alembic migration `20260418_000002`
+  - CRUD helpers: `create_athlete_metric_snapshot`, `get_athlete_metric_history(db, user_id, limit=90)` returning snapshots oldest-first
+  - `AthleteMetricSnapshotSchema` (camelCase via `CamelModel`) and `MetricsHistoryResponse` schemas
+  - `POST /ai/analyse-activities` now records a metric snapshot after every Strava analysis; CTL/ATL/TSB are computed from the current training plan via `compute_training_load` and only stored when a valid FTP is available
+  - `GET /users/me/metrics-history` — new authenticated endpoint returning the athlete's complete metric snapshot history
+
+### Tests
+
+- 8 new backend tests covering:
+  - `create_athlete_metric_snapshot` and `get_athlete_metric_history` (null values, ascending order, limit)
+  - `GET /users/me/metrics-history` (empty list, post-analysis snapshot, auth guard)
+
+## [0.10.0] - 2026-04-19
+
+### Added
+
+- **Race-Day Readiness Score** (`services/analysis.py`, `routers/ai.py`, `schemas.py`):
+  - `compute_readiness_score(ctl, atl, tsb, days_until_race) -> dict` — pure Python function producing a 0–100 readiness score as a weighted blend of form (65 %, TSB-based, peaks at TSB +10) and fitness (35 %, CTL-based, capped at 100)
+  - `_project_training_load(plan_days, ftp, target_date_str) -> dict` — forward-projects CTL/ATL/TSB to any future date by evaluating only plan days on or before `target_date_str`; enables race-day projections
+  - `ReadinessScoreResponse` schema — includes `score`, `form_score`, `fitness_score`, `ctl`, `atl`, `tsb`, `days_until_race`, `race_date`, and optional `projected_score/ctl/atl/tsb` at race day
+  - `GET /ai/readiness-score` — authenticated endpoint that computes the current readiness score from plan days up to today, derives `days_until_race` from the user's `race_date`, and (when race is in the future and FTP is known) appends a forward-projected score at race day
+
+- **Auto-taper injection** (`services/ai_service.py`, `services/prompts.py`):
+  - `adapt_training_plan()` now detects `0 ≤ days_until_race ≤ 14` and passes a `taper_days_remaining` value to `adapt_plan_user()`
+  - `adapt_plan_user()` gains an optional `taper_days_remaining: int | None` parameter; when set it appends an explicit `⚠️ TAPER ALERT` block instructing the LLM to cut volume ~40%, retain intensity, and target TSB +5 to +15 — enforcing taper structurally rather than relying on a passive prompt hint
+
+### Tests
+
+- 6 new unit tests in `backend/tests/test_ai_service_unit.py` covering `compute_readiness_score`:
+  - Expected return keys
+  - Score/component scores always in 0–100 range across a range of TSB values
+  - Peak form (TSB = +10, high CTL → `form_score = 100`, `score > 80`)
+  - Severe fatigue (TSB ≤ −30 → `form_score = 0`)
+  - Zero load (CTL = ATL = TSB = 0 → `form_score = 50`, `fitness_score = 0`, `score = 32.5`)
+  - `days_until_race` preserved in return value
+
+## [0.9.0] - 2026-04-19
+
+### Added
+
+- **Expanded RAG knowledge base** — three new structured seed files added to `backend/knowledge/`:
+  - `critical_power.md` — Monod-Scherrer two-parameter critical-power (CP) model, W′ (anaerobic work capacity), power-duration curve equation, field-test protocols (3-min all-out, multiple time-trials), W′ balance reconstitution modelling (Skiba et al., 2012), CP vs FTP distinction, and training implications for raising CP and expanding W′
+  - `heat_altitude_adaptation.md` — acute heat-stress physiology, 10–14 day heat acclimatisation protocol with adaptation timeline (plasma volume, sweat rate, core temperature, HR), pre-cooling strategies (ice vest, ice slurry, cold-water immersion), hydration targets; altitude performance decrements by elevation (1500–4000 m), LHTH/LHTL/IHE strategies, practical altitude camp planning, iron status guidance, AMS prevention
+  - `nutrition_timing.md` — carbohydrate loading (8–12 g/kg/day × 3 days), pre-race meal windows (3–4 h, 1–2 h, 15–30 min), on-bike intake by duration (0–120 g/h), multiple-transporter carbohydrates (2:1 glucose:fructose, gut training), post-exercise glycogen resynthesis window, MPS protein dosing (20–40 g), bedtime casein, caffeine ergogenic evidence (3–6 mg/kg), stage-race daily CHO targets
+- **9 new Semantic Scholar search queries** in `backend/scripts/ingest_cycling_science.py` — covers critical power/W′, heat acclimatisation, altitude training, and nutrition timing; total queries raised from 8 to 17
+
+### Changed
+
+- `docs/update_rag.md` — updated to enumerate all 8 seed files with topic summaries and list all 17 Semantic Scholar search queries
+
+## [0.8.0] - 2026-04-19
+
+### Changed
+
+- **AI service layer clean-up** — resolved several code-quality issues:
+  - Stripped `_` prefix from all exported symbols in `analysis.py` (11 symbols, e.g. `_best_n_min_power` → `best_n_min_power`, `_AVG_POWER_TO_FTP_RATIO` → `AVG_POWER_TO_FTP_RATIO`)
+  - Moved inline `import math` to module level in `analysis.py`; removed unused `total_time` variable in `classify_ride_purpose`
+  - Extracted the FTP-estimation loop (~45 lines) from `ai_service.py` into a new `compute_ftp_from_streams(streams_by_id, max_heart_rate) → (ftp, threshold_hr)` function in `analysis.py`
+  - Added `analyse_activities_computed_section()` to `prompts.py` — prompt text that was previously built inline in `ai_service.py`
+  - Replaced three `__import__("datetime").datetime.now().date().isoformat()` calls with a top-level `import datetime` and `datetime.date.today().isoformat()`
+  - Eliminated `_openai_chat`, `_openai_chat_history`, `_gemini_chat`, `_gemini_chat_history` — provider dispatch inlined directly into `_chat` / `_chat_history`
+  - `classify_question` now accepts `provider: str = "openai"` and routes through `_chat(provider, ...)` instead of hardcoding OpenAI
+  - `routers/ai.py` passes `provider=_provider(current_user)` to `classify_question` so Gemini callers are no longer silently routed to OpenAI for classification
+
+### Added
+
+- **Workout execution feedback loop with Strava stream analysis** (`services/analysis.py`, `schemas.py`, `routers/ai.py`, `services/ai_service.py`, `services/prompts.py`) — `rate_completed_workout` now optionally fetches per-second Strava stream data and computes an objective planned-vs-actual delta before calling the AI coach:
+  - `RateWorkoutRequest` gains an optional `strava_activity_id: int | None` field; when provided the router fetches the activity's streams (watts/HR/cadence/time) from Strava, computes the delta, and forwards it to the prompt. Failures are caught and logged as warnings so the rating always completes.
+  - Four new pure-Python functions in `analysis.py`:
+    - `_normalized_power()` — standard 30-second rolling-average NP
+    - `_time_in_power_zones()` — seconds spent in each of the 7 standard power zones (Z1 < 55 % FTP … Z7 > 150 % FTP)
+    - `_detect_intensity_spikes()` — identifies non-overlapping 15-minute windows where average power exceeded the planned target midpoint by more than 10 %
+    - `compare_planned_vs_actual(planned, streams, ftp)` — orchestrates the above to produce a structured delta dict: avg/NP power vs target (absolute watts + percentage), time-in-zones, HR drift (linear-regression slope across the session), HR vs target, and a list of intensity spikes
+  - `rate_completed_workout()` in `ai_service.py` gains a `stream_delta: dict | None` keyword argument and forwards it to `rate_workout_user()`
+  - `rate_workout_system()` instructs the AI to use stream data for precise, actionable language (e.g. *"you went 15 % over Z2 intensity in the first 30 min, which erodes your aerobic base and costs recovery"*)
+  - `rate_workout_user()` renders a structured *"Objective stream data (from Strava)"* section in the prompt when `stream_delta` is present, including avg/NP delta lines, per-zone time breakdown, HR drift direction, and per-spike annotations
+- **Frontend wiring** (`frontend/src/services/ai.ts`, `frontend/src/pages/WorkoutPage.tsx`) — `rateCompletedWorkout()` accepts an optional `stravaActivityId`; `WorkoutPage` reads the matching Strava activity from the React Query cache (keyed on `start_date` date prefix) and passes its ID automatically
+
 ## [0.6.0] - 2026-04-18
 
 ### Security

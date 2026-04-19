@@ -113,12 +113,64 @@ export async function askTrainer(
 
 export async function rateCompletedWorkout(
   day: TrainingDay,
-  authToken: string
+  authToken: string,
+  stravaActivityId?: number
 ): Promise<string> {
   const result = await apiFetch<{ feedback: string }>('/ai/rate-workout', {
     token: authToken,
     method: 'POST',
-    body: { day },
+    body: {
+      day,
+      ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
+    },
   })
   return result.feedback
+}
+
+export interface ReadinessScore {
+  score: number
+  formScore: number
+  fitnessScore: number
+  ctl: number
+  atl: number
+  tsb: number
+  daysUntilRace: number
+  raceDate?: string | null
+  projectedScore?: number | null
+  projectedCtl?: number | null
+  projectedAtl?: number | null
+  projectedTsb?: number | null
+}
+
+interface BackendReadinessScore {
+  score: number
+  form_score: number
+  fitness_score: number
+  ctl: number
+  atl: number
+  tsb: number
+  days_until_race: number
+  race_date?: string | null
+  projected_score?: number | null
+  projected_ctl?: number | null
+  projected_atl?: number | null
+  projected_tsb?: number | null
+}
+
+export async function fetchReadinessScore(authToken: string): Promise<ReadinessScore> {
+  const raw = await apiFetch<BackendReadinessScore>('/ai/readiness-score', { token: authToken })
+  return {
+    score: raw.score,
+    formScore: raw.form_score,
+    fitnessScore: raw.fitness_score,
+    ctl: raw.ctl,
+    atl: raw.atl,
+    tsb: raw.tsb,
+    daysUntilRace: raw.days_until_race,
+    raceDate: raw.race_date,
+    projectedScore: raw.projected_score,
+    projectedCtl: raw.projected_ctl,
+    projectedAtl: raw.projected_atl,
+    projectedTsb: raw.projected_tsb,
+  }
 }

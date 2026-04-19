@@ -202,19 +202,21 @@ async def save_coach_memory(
     return schemas.CoachMemoryResponse(memory=memory.memory)
 
 
-@router.get("/fitness-history", response_model=schemas.FitnessHistoryResponse)
-async def get_fitness_history(
+@router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
+async def get_metrics_history(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
-) -> schemas.FitnessHistoryResponse:
-    snapshots = await crud.get_fitness_snapshots(db, current_user.id)
-    return schemas.FitnessHistoryResponse(
+) -> schemas.MetricsHistoryResponse:
+    snapshots = await crud.get_athlete_metric_history(db, current_user.id)
+    return schemas.MetricsHistoryResponse(
         snapshots=[
-            schemas.FitnessSnapshotSchema(
-                id=s.id,
-                measured_at=s.measured_at.isoformat(),
+            schemas.AthleteMetricSnapshotSchema(
+                recorded_at=s.recorded_at.isoformat(),
                 ftp=s.ftp,
                 threshold_hr=s.threshold_hr,
+                ctl=s.ctl,
+                atl=s.atl,
+                tsb=s.tsb,
                 source=s.source,
             )
             for s in snapshots

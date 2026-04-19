@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -64,8 +64,10 @@ class User(Base):
     rider_assessment: Mapped["RiderAssessment | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    fitness_snapshots: Mapped[list["FitnessSnapshot"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", order_by="FitnessSnapshot.measured_at"
+    athlete_metric_snapshots: Mapped[list["AthleteMetricSnapshot"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="AthleteMetricSnapshot.recorded_at",
     )
 
 
@@ -160,19 +162,23 @@ class RiderAssessment(Base):
     user: Mapped["User"] = relationship(back_populates="rider_assessment")
 
 
-class FitnessSnapshot(Base):
-    """Time-series record of FTP / threshold HR estimates from each analysis run."""
+class AthleteMetricSnapshot(Base):
+    """Time-series snapshot of key athlete performance metrics.
 
-    __tablename__ = "fitness_snapshots"
-    __table_args__ = (
-        UniqueConstraint("user_id", "measured_at", name="uq_fitness_snapshot_user_time"),
-    )
+    A new row is inserted each time a Strava analysis produces updated
+    estimates so the athlete can view their progression over time.
+    """
+
+    __tablename__ = "athlete_metric_snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
     threshold_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source: Mapped[str] = mapped_column(String(50), nullable=False, default="strava_analysis")
+    ctl: Mapped[float | None] = mapped_column(nullable=True)
+    atl: Mapped[float | None] = mapped_column(nullable=True)
+    tsb: Mapped[float | None] = mapped_column(nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="strava_analysis")
 
-    user: Mapped["User"] = relationship(back_populates="fitness_snapshots")
+    user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")

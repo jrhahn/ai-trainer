@@ -405,3 +405,79 @@ async def test_upsert_rider_assessment_only_updates_last_ride_feedback_when_trut
         last_ride_feedback=None,  # should NOT overwrite
     )
     assert updated.last_ride_feedback == "Original feedback"
+
+
+# ---------------------------------------------------------------------------
+# AthleteMetricSnapshot
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_athlete_metric_snapshot(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    snapshot = await crud.create_athlete_metric_snapshot(
+        db,
+        user.id,
+        ftp=285,
+        threshold_hr=172,
+        ctl=45.3,
+        atl=52.1,
+        tsb=-6.8,
+        source="strava_analysis",
+    )
+    assert snapshot.ftp == 285
+    assert snapshot.threshold_hr == 172
+    assert snapshot.ctl == 45.3
+    assert snapshot.atl == 52.1
+    assert snapshot.tsb == -6.8
+    assert snapshot.source == "strava_analysis"
+    assert snapshot.user_id == user.id
+    assert snapshot.id is not None
+    assert snapshot.recorded_at is not None
+
+
+@pytest.mark.asyncio
+async def test_create_athlete_metric_snapshot_nulls(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    snapshot = await crud.create_athlete_metric_snapshot(
+        db,
+        user.id,
+        ftp=None,
+        threshold_hr=None,
+    )
+    assert snapshot.ftp is None
+    assert snapshot.threshold_hr is None
+    assert snapshot.ctl is None
+    assert snapshot.atl is None
+    assert snapshot.tsb is None
+
+
+@pytest.mark.asyncio
+async def test_get_athlete_metric_history_empty(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    history = await crud.get_athlete_metric_history(db, user.id)
+    assert history == []
+
+
+@pytest.mark.asyncio
+async def test_get_athlete_metric_history_ordered_ascending(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=250, threshold_hr=160)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=265, threshold_hr=163)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=280, threshold_hr=167)
+
+    history = await crud.get_athlete_metric_history(db, user.id)
+    assert len(history) == 3
+    # Should be ordered oldest → newest (recorded_at ascending)
+    ftps = [s.ftp for s in history]
+    assert ftps == [250, 265, 280]
+
+
+@pytest.mark.asyncio
+async def test_get_athlete_metric_history_limit(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    for ftp in range(100, 200, 5):  # 20 snapshots
+        await crud.create_athlete_metric_snapshot(db, user.id, ftp=ftp, threshold_hr=None)
+
+    history = await crud.get_athlete_metric_history(db, user.id, limit=5)
+    assert len(history) == 5

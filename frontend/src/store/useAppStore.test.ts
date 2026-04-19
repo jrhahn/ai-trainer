@@ -6,12 +6,14 @@ const {
   mockFetchWorkoutLogs,
   mockFetchChatHistory,
   mockFetchCoachMemory,
+  mockFetchMetricsHistory,
 } = vi.hoisted(() => ({
   mockFetchCurrentUser: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
   mockFetchWorkoutLogs: vi.fn(),
   mockFetchChatHistory: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
+  mockFetchMetricsHistory: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
@@ -20,6 +22,7 @@ vi.mock('../services/user', () => ({
   fetchWorkoutLogs: mockFetchWorkoutLogs,
   fetchChatHistory: mockFetchChatHistory,
   fetchCoachMemory: mockFetchCoachMemory,
+  fetchMetricsHistory: mockFetchMetricsHistory,
 }))
 
 import { useAppStore } from './useAppStore'
@@ -137,6 +140,9 @@ describe('loadUserData', () => {
     mockFetchWorkoutLogs.mockResolvedValue({ '2024-01-15': mockFeedback })
     mockFetchChatHistory.mockResolvedValue([{ role: 'assistant', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }])
     mockFetchCoachMemory.mockResolvedValue('Prefers morning rides.')
+    mockFetchMetricsHistory.mockResolvedValue([
+      { recordedAt: '2024-01-10T10:00:00Z', ftp: 260, thresholdHR: 168, source: 'strava_analysis' },
+    ])
 
     await useAppStore.getState().loadUserData('token-123')
 
@@ -148,5 +154,7 @@ describe('loadUserData', () => {
     expect(state.chatHistory).toHaveLength(1)
     expect(state.coachMemory).toBe('Prefers morning rides.')
     expect(state.stravaConnection?.athleteName).toBe('Alice Rider')
+    expect(state.metricsHistory).toHaveLength(1)
+    expect(state.metricsHistory[0].ftp).toBe(260)
   })
 })

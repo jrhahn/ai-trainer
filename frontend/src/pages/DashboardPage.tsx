@@ -7,7 +7,8 @@ import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
-import FitnessHistoryChart from '../components/FitnessHistoryChart'
+import ProgressionChart from '../components/ProgressionChart'
+import RaceReadinessCard from '../components/RaceReadinessCard'
 import FitFileUpload from '../components/FitFileUpload'
 import { useStravaSync } from '../hooks/useStravaSync'
 
@@ -100,10 +101,15 @@ export default function DashboardPage() {
       {/* Fitness metrics */}
       <FitnessMetricsCard />
 
-      {/* FTP progression chart */}
-      <FitnessHistoryChart />
+      {/* Athlete progression chart */}
+      <ProgressionChart />
 
-      {/* .fit file upload */}
+      {/* Race-day readiness — shown when training for a race or a race date is set */}
+      {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate) && (
+        <RaceReadinessCard />
+      )}
+
+      {/* .fit file upload — import workouts from Garmin/Wahoo/Zwift without Strava */}
       <FitFileUpload />
 
       {/* Strava */}

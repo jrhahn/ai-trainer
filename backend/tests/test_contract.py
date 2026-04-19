@@ -592,13 +592,13 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
 
 
 # ---------------------------------------------------------------------------
-# 11. Fitness history endpoint contract
+# 11. Metrics history endpoint contract (replaces fitness-history)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_fitness_history_empty_for_new_user(client):
-    """GET /users/me/fitness-history returns { snapshots: [] } for a new user."""
+async def test_metrics_history_empty_for_new_user(client):
+    """GET /users/me/metrics-history returns { snapshots: [] } for a new user."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={"name": "Leo", "email": "leo@example.com", "password": "password1"},
@@ -606,7 +606,7 @@ async def test_fitness_history_empty_for_new_user(client):
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    resp = await client.get("/api/v1/users/me/fitness-history", headers=headers)
+    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
     assert "snapshots" in body
@@ -614,8 +614,8 @@ async def test_fitness_history_empty_for_new_user(client):
 
 
 @pytest.mark.asyncio
-async def test_fitness_history_populated_after_analysis(client, mock_ai_service):
-    """A FitnessSnapshot row is created after analyse-activities and appears in the history."""
+async def test_metrics_history_populated_after_analysis(client, mock_ai_service):
+    """An AthleteMetricSnapshot row is created after analyse-activities and appears in history."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={"name": "Mia", "email": "mia@example.com", "password": "password1"},
@@ -642,7 +642,7 @@ async def test_fitness_history_populated_after_analysis(client, mock_ai_service)
         },
     )
 
-    resp = await client.get("/api/v1/users/me/fitness-history", headers=headers)
+    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["snapshots"]) == 1
@@ -650,8 +650,7 @@ async def test_fitness_history_populated_after_analysis(client, mock_ai_service)
     assert snap["ftp"] == 280           # from mock_ai_service estimatedFTP
     assert snap["thresholdHR"] == 172   # from mock_ai_service estimatedThresholdHR
     assert snap["source"] == "strava_analysis"
-    assert "measuredAt" in snap
-    assert "id" in snap
+    assert "recordedAt" in snap
 
 
 # ---------------------------------------------------------------------------

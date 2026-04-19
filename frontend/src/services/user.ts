@@ -1,5 +1,6 @@
 import type {
   AiProvider,
+  AthleteMetricSnapshot,
   ChatMessage,
   RiderAssessment,
   StravaConnection,
@@ -161,18 +162,11 @@ export async function saveCoachMemoryRemote(token: string, memory: string): Prom
   return response.memory
 }
 
-export interface FitnessSnapshot {
-  id: string
-  measuredAt: string
-  ftp?: number | null
-  thresholdHR?: number | null
-  source: string
-}
-
-export async function fetchFitnessHistory(token: string): Promise<FitnessSnapshot[]> {
-  const response = await apiFetch<{ snapshots: FitnessSnapshot[] }>('/users/me/fitness-history', {
-    token,
-  })
+export async function fetchMetricsHistory(token: string): Promise<AthleteMetricSnapshot[]> {
+  const response = await apiFetch<{ snapshots: AthleteMetricSnapshot[] }>(
+    '/users/me/metrics-history',
+    { token }
+  )
   return response.snapshots
 }
 
