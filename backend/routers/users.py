@@ -13,6 +13,7 @@ import models
 import schemas
 from database import get_db
 from services import ai_service
+from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -372,12 +373,10 @@ async def upload_fit_file(
 
     # For cycling without AI: fall back to avg_power-based FTP estimate
     if ftp_value is None and sport_type.lower() not in ("running", "run") and avg_power:
-        from services.analysis import AVG_POWER_TO_FTP_RATIO  # noqa: PLC0415
         ftp_value = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
     # For any sport without AI: fall back to LTHR estimate if max HR is known
     if threshold_hr_value is None and max_hr:
-        from services.analysis import LTHR_RATIO  # noqa: PLC0415
         threshold_hr_value = round(max_hr * LTHR_RATIO)
 
     if ftp_value is not None or threshold_hr_value is not None:

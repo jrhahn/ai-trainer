@@ -244,10 +244,8 @@ async def analyse_fit_activity(
     if not is_running and avg_power and avg_power > 0:
         computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
-    if avg_hr and avg_hr > 0:
-        computed_threshold_hr = avg_hr  # use avg HR as a proxy threshold HR
-
-    # Refine threshold HR using max HR if available (LTHR = max_hr × 0.87)
+    # Estimate threshold HR only when max HR is provided (LTHR = max_hr × LTHR_RATIO).
+    # Average HR from a single activity is not a reliable threshold proxy.
     if max_heart_rate and max_heart_rate > 0:
         computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
         computed_hr_zones = compute_hr_zones(max_heart_rate)
