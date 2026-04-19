@@ -5,6 +5,21 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-19
+
+### Added
+
+- **`RaceReadinessCard` component** (`src/components/RaceReadinessCard.tsx`) — dashboard card that fetches and displays the race-day readiness score:
+  - Animated SVG score ring colour-coded by score range (green ≥ 75 / amber ≥ 50 / orange ≥ 25 / red below)
+  - Status label (`Peak Form`, `Race Ready`, `Building`, `Fatigued`, `Rest Needed`)
+  - Days-to-race countdown badge and race-day indicator
+  - CTL / ATL / TSB / form-score metrics grid
+  - Race-day projection section (projected score + CTL/TSB at race day) when `raceDate` is set and lies in the future
+  - Data fetched via `@tanstack/react-query` with a 5-minute stale time; handles loading and error states
+- **`fetchReadinessScore(authToken)`** added to `src/services/ai.ts` — calls `GET /ai/readiness-score` and maps the snake_case response to the camelCase `ReadinessScore` interface
+- **`ReadinessScore` interface** exported from `src/services/ai.ts`
+- **`RaceReadinessCard` wired into `DashboardPage`** — rendered below `FitnessMetricsCard` when the user's `trainingGoal === 'race'` or `raceDate` is set
+
 ## [0.4.0] - 2026-04-18
 
 ### Added

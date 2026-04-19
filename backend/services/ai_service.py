@@ -233,6 +233,20 @@ async def adapt_training_plan(
         or 0
     )
     training_load = compute_training_load(plan, ftp) if ftp > 0 else None
+
+    # Detect taper window: if race is within 14 days, pass the remaining days
+    # so the prompt builder can inject explicit taper instructions.
+    taper_days_remaining: int | None = None
+    race_date_str = profile.get("raceDate")
+    if race_date_str:
+        try:
+            rd = datetime.date.fromisoformat(race_date_str)
+            days_left = (rd - datetime.date.today()).days
+            if 0 <= days_left <= 14:
+                taper_days_remaining = days_left
+        except ValueError:
+            pass
+
     system_prompt = adapt_plan_system()
     user_msg = adapt_plan_user(
         profile,
@@ -241,6 +255,7 @@ async def adapt_training_plan(
         incomplete_days,
         rider_assessment=rider_assessment,
         training_load=training_load,
+        taper_days_remaining=taper_days_remaining,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)

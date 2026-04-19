@@ -7,6 +7,7 @@ import WorkoutCard from '../components/WorkoutCard'
 import StravaConnect from '../components/StravaConnect'
 import AIChat from '../components/AIChat'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
+import RaceReadinessCard from '../components/RaceReadinessCard'
 import { useStravaSync } from '../hooks/useStravaSync'
 
 export default function DashboardPage() {
@@ -97,6 +98,11 @@ export default function DashboardPage() {
 
       {/* Fitness metrics */}
       <FitnessMetricsCard />
+
+      {/* Race-day readiness — shown when training for a race or a race date is set */}
+      {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate) && (
+        <RaceReadinessCard />
+      )}
 
       {/* Strava */}
       <StravaConnect />

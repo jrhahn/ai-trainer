@@ -869,6 +869,53 @@ def test_compute_training_load_tsb_equals_ctl_minus_atl():
 
 
 # ---------------------------------------------------------------------------
+# compute_readiness_score
+# ---------------------------------------------------------------------------
+
+
+def test_readiness_score_returns_expected_keys():
+    result = analysis.compute_readiness_score(ctl=50.0, atl=60.0, tsb=-10.0, days_until_race=7)
+    for key in ("score", "form_score", "fitness_score", "ctl", "atl", "tsb", "days_until_race"):
+        assert key in result
+
+
+def test_readiness_score_range():
+    """Score and component scores must be in [0, 100]."""
+    for tsb in (-40, -20, 0, 10, 25, 50):
+        result = analysis.compute_readiness_score(ctl=60.0, atl=70.0, tsb=float(tsb), days_until_race=0)
+        assert 0.0 <= result["score"] <= 100.0
+        assert 0.0 <= result["form_score"] <= 100.0
+        assert 0.0 <= result["fitness_score"] <= 100.0
+
+
+def test_readiness_score_peak_form():
+    """TSB near +10 with high CTL should produce a high score."""
+    result = analysis.compute_readiness_score(ctl=80.0, atl=70.0, tsb=10.0, days_until_race=0)
+    assert result["form_score"] == 100.0
+    assert result["score"] > 80.0
+
+
+def test_readiness_score_severe_fatigue():
+    """TSB ≤ -30 should give form_score 0."""
+    result = analysis.compute_readiness_score(ctl=50.0, atl=80.0, tsb=-30.0, days_until_race=14)
+    assert result["form_score"] == 0.0
+    assert result["score"] < 40.0
+
+
+def test_readiness_score_zero_ctl():
+    """Zero CTL and zero ATL (TSB=0) → form_score=50, fitness_score=0, score=32.5."""
+    result = analysis.compute_readiness_score(ctl=0.0, atl=0.0, tsb=0.0, days_until_race=0)
+    assert result["form_score"] == 50.0
+    assert result["fitness_score"] == 0.0
+    assert result["score"] == 32.5
+
+
+def test_readiness_score_days_until_race_preserved():
+    result = analysis.compute_readiness_score(ctl=60.0, atl=55.0, tsb=5.0, days_until_race=21)
+    assert result["days_until_race"] == 21
+
+
+# ---------------------------------------------------------------------------
 # ask_trainer — thinking stripped, classification mock (Tasks 2 & 5)
 # ---------------------------------------------------------------------------
 
