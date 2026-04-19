@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import services.ai_service as ai_service
+import services.analysis as analysis
 
 
 PROFILE = {
@@ -390,17 +391,17 @@ def make_flat_stream(power: float, duration_secs: int) -> tuple[list[float], lis
 
 def test_classify_ride_purpose_recovery():
     watts, ts = make_flat_stream(140, 3600)  # 140W @ FTP 250 = 56%
-    assert ai_service._classify_ride_purpose(watts, ts, 250) == "recovery"
+    assert analysis.classify_ride_purpose(watts, ts, 250) == "recovery"
 
 
 def test_classify_ride_purpose_endurance():
     watts, ts = make_flat_stream(165, 3600)  # 66% FTP
-    assert ai_service._classify_ride_purpose(watts, ts, 250) == "endurance"
+    assert analysis.classify_ride_purpose(watts, ts, 250) == "endurance"
 
 
 def test_classify_ride_purpose_tempo():
     watts, ts = make_flat_stream(200, 3600)  # 80% FTP
-    assert ai_service._classify_ride_purpose(watts, ts, 250) == "tempo"
+    assert analysis.classify_ride_purpose(watts, ts, 250) == "tempo"
 
 
 def test_classify_ride_purpose_vo2max_intervals():
@@ -414,7 +415,7 @@ def test_classify_ride_purpose_vo2max_intervals():
         watts.extend([work] * 180)
         watts.extend([rest] * 180)
     ts = list(range(len(watts)))
-    category = ai_service._classify_ride_purpose(watts, ts, ftp)
+    category = analysis.classify_ride_purpose(watts, ts, ftp)
     assert category == "interval_vo2max"
 
 
@@ -429,7 +430,7 @@ def test_classify_ride_purpose_sprint_intervals():
         watts.extend([sprint_power] * 60)
         watts.extend([rest_power] * 240)
     ts = list(range(len(watts)))
-    category = ai_service._classify_ride_purpose(watts, ts, ftp)
+    category = analysis.classify_ride_purpose(watts, ts, ftp)
     assert category == "interval_sprints"
 
 
@@ -443,7 +444,7 @@ def test_detect_intervals_basic():
         watts.extend([work] * 300)  # 5 min
         watts.extend([rest] * 180)  # 3 min rest
     ts = list(range(len(watts)))
-    intervals = ai_service._detect_intervals(watts, ts, ftp)
+    intervals = analysis.detect_intervals(watts, ts, ftp)
     assert len(intervals) == 3
     for iv in intervals:
         assert iv["duration_secs"] >= 270  # at least 4.5 min (90 % of 5 min)
@@ -453,20 +454,20 @@ def test_detect_intervals_basic():
 def test_detect_intervals_no_hard_efforts():
     """A pure endurance ride should return no detected intervals."""
     watts, ts = make_flat_stream(180, 3600)  # 72% of 250 FTP
-    intervals = ai_service._detect_intervals(watts, ts, 250)
+    intervals = analysis.detect_intervals(watts, ts, 250)
     assert intervals == []
 
 
 def test_compute_hr_drift_rising():
     # HR climbs steadily from 140 to 160 -> positive slope (drifting)
     hr = [140 + i * (20 / 119) for i in range(120)]
-    drift = ai_service._compute_hr_drift(hr)
+    drift = analysis.compute_hr_drift(hr)
     assert drift is not None and drift > 0
 
 
 def test_compute_hr_drift_stable():
     hr = [150.0] * 120
-    drift = ai_service._compute_hr_drift(hr)
+    drift = analysis.compute_hr_drift(hr)
     assert drift is not None and abs(drift) < 0.01
 
 
@@ -480,10 +481,10 @@ def test_build_ride_analysis_returns_category():
         watts.extend([rest] * 180)
     ts = list(range(len(watts)))
     streams = {"watts": {"data": watts}, "time": {"data": ts}}
-    analysis = ai_service._build_ride_analysis(streams, float(ftp))
-    assert analysis["ride_category"] == "interval_vo2max"
-    assert len(analysis["intervals_detected"]) == 5
-    assert "avg_power_w" in analysis
+    ride_result = analysis.build_ride_analysis(streams, float(ftp))
+    assert ride_result["ride_category"] == "interval_vo2max"
+    assert len(ride_result["intervals_detected"]) == 5
+    assert "avg_power_w" in ride_result
 
 
 def test_build_ride_analysis_with_hr_drift():
@@ -497,9 +498,9 @@ def test_build_ride_analysis_with_hr_drift():
         "heartrate": {"data": hr},
         "time": {"data": ts},
     }
-    analysis = ai_service._build_ride_analysis(streams, float(ftp))
-    assert len(analysis["intervals_detected"]) >= 1
-    iv = analysis["intervals_detected"][0]
+    ride_result = analysis.build_ride_analysis(streams, float(ftp))
+    assert len(ride_result["intervals_detected"]) >= 1
+    iv = ride_result["intervals_detected"][0]
     assert "hr_drift_bpm" in iv
     # Total drift should be roughly 25 bpm
     assert iv["hr_drift_bpm"] > 5

@@ -102,6 +102,38 @@ def analyse_activities_user(
     )
 
 
+def analyse_activities_computed_section(
+    computed_ftp: int | None,
+    computed_threshold_hr: int | None,
+    max_heart_rate: int | None,
+    computed_hr_zones: dict | None,
+) -> str:
+    """Build the contextual block describing algorithmically derived metrics.
+
+    Returns an empty string when no metrics are available.
+    """
+    section = ""
+    if computed_ftp is not None:
+        section += (
+            f"\nAlgorithmically estimated FTP from stream data: {computed_ftp} W "
+            "(95 % of best 20-min average power)"
+        )
+    if computed_threshold_hr is not None:
+        section += (
+            f"\nAlgorithmically estimated threshold HR: {computed_threshold_hr} bpm "
+            "(average HR during best 20-min power effort)"
+        )
+    if max_heart_rate is not None:
+        section += f"\nMax heart rate provided by athlete: {max_heart_rate} bpm"
+    if computed_hr_zones is not None:
+        zones_str = ", ".join(
+            f"Zone {i}: {z['low']}–{z['high']} bpm"
+            for i, z in enumerate(computed_hr_zones.values(), 1)
+        )
+        section += f"\nHR training zones: {zones_str}"
+    return section
+
+
 # ---------------------------------------------------------------------------
 # generate_training_plan prompts
 # ---------------------------------------------------------------------------

@@ -48,13 +48,13 @@ def test_parse_ai_json_repairs_trailing_comma():
 
 
 def test_best_n_min_power_empty():
-    result, s, e = analysis._best_n_min_power([], [], 20)
+    result, s, e = analysis.best_n_min_power([], [], 20)
     assert result is None
     assert s == 0 and e == 0
 
 
 def test_best_n_min_power_mismatched_lengths():
-    result, s, e = analysis._best_n_min_power([200.0, 210.0], [0], 20)
+    result, s, e = analysis.best_n_min_power([200.0, 210.0], [0], 20)
     assert result is None
 
 
@@ -62,7 +62,7 @@ def test_best_n_min_power_window_too_short():
     # Only 5 seconds of data — can't fill a 20-min window (1200 s × 90% = 1080 s needed)
     watts = [300.0] * 5
     time_stream = list(range(5))
-    result, s, e = analysis._best_n_min_power(watts, time_stream, 20)
+    result, s, e = analysis.best_n_min_power(watts, time_stream, 20)
     assert result is None
 
 
@@ -70,7 +70,7 @@ def test_best_n_min_power_exact_window():
     # 20 minutes of data at constant 300 W — best 20-min should equal 300
     watts = [300.0] * 1200
     time_stream = list(range(1200))
-    result, s, e = analysis._best_n_min_power(watts, time_stream, 20)
+    result, s, e = analysis.best_n_min_power(watts, time_stream, 20)
     assert result is not None
     assert abs(result - 300.0) < 1.0
 
@@ -82,7 +82,7 @@ def test_best_n_min_power_finds_peak():
     rest = [200.0] * 600
     watts = baseline + peak + rest
     time_stream = list(range(len(watts)))
-    result, s, e = analysis._best_n_min_power(watts, time_stream, 20)
+    result, s, e = analysis.best_n_min_power(watts, time_stream, 20)
     assert result is not None
     assert result >= 290.0  # should be close to the peak block
 
@@ -93,35 +93,35 @@ def test_best_n_min_power_finds_peak():
 
 
 def test_hr_corrected_ftp_zero_hr():
-    assert analysis._hr_corrected_ftp(300.0, 0.0, 190) is None
+    assert analysis.hr_corrected_ftp(300.0, 0.0, 190) is None
 
 
 def test_hr_corrected_ftp_zero_max_hr():
-    assert analysis._hr_corrected_ftp(300.0, 160.0, 0) is None
+    assert analysis.hr_corrected_ftp(300.0, 160.0, 0) is None
 
 
 def test_hr_corrected_ftp_below_70pct():
     # interval_hr = 100 bpm, max_hr = 190 → hr_fraction = 0.526 → < 0.70
-    assert analysis._hr_corrected_ftp(300.0, 100.0, 190) is None
+    assert analysis.hr_corrected_ftp(300.0, 100.0, 190) is None
 
 
 def test_hr_corrected_ftp_above_100pct():
     # interval_hr > max_hr → hr_fraction > 1.0
-    assert analysis._hr_corrected_ftp(300.0, 200.0, 190) is None
+    assert analysis.hr_corrected_ftp(300.0, 200.0, 190) is None
 
 
 def test_hr_corrected_ftp_at_lthr():
     # interval_hr exactly at LTHR (0.87 × max_hr) → correction factor = 1.0
     max_hr = 190
-    lthr = round(max_hr * analysis._LTHR_RATIO)
-    result = analysis._hr_corrected_ftp(300.0, float(lthr), max_hr)
+    lthr = round(max_hr * analysis.LTHR_RATIO)
+    result = analysis.hr_corrected_ftp(300.0, float(lthr), max_hr)
     assert result is not None
     assert abs(result - 300) <= 2  # should be ~300 W
 
 
 def test_hr_corrected_ftp_below_lthr():
     # Interval HR below LTHR → rider had headroom → corrected FTP > interval power
-    result = analysis._hr_corrected_ftp(280.0, 150.0, 190)
+    result = analysis.hr_corrected_ftp(280.0, 150.0, 190)
     assert result is not None
     assert result > 280
 
@@ -132,7 +132,7 @@ def test_hr_corrected_ftp_below_lthr():
 
 
 def test_compute_hr_zones_structure():
-    zones = analysis._compute_hr_zones(200)
+    zones = analysis.compute_hr_zones(200)
     assert set(zones.keys()) == {"zone1", "zone2", "zone3", "zone4", "zone5"}
     for zone in zones.values():
         assert "low" in zone and "high" in zone
@@ -140,7 +140,7 @@ def test_compute_hr_zones_structure():
 
 def test_compute_hr_zones_boundaries():
     max_hr = 200
-    zones = analysis._compute_hr_zones(max_hr)
+    zones = analysis.compute_hr_zones(max_hr)
     # Zone 1 low should be 0, zone 5 high should be max_hr
     assert zones["zone1"]["low"] == 0
     assert zones["zone5"]["high"] == max_hr
@@ -156,7 +156,7 @@ def test_compute_hr_zones_boundaries():
 
 
 def test_compute_hr_zones_values():
-    zones = analysis._compute_hr_zones(180)
+    zones = analysis.compute_hr_zones(180)
     assert zones["zone1"]["high"] == round(180 * 0.60)
     assert zones["zone2"]["low"] == round(180 * 0.60)
     assert zones["zone2"]["high"] == round(180 * 0.70)
@@ -170,14 +170,14 @@ def test_compute_hr_zones_values():
 
 def test_classify_ride_purpose_empty_watts():
     # Should not raise; returns "endurance" as a safe default
-    result = analysis._classify_ride_purpose([], [], 250)
+    result = analysis.classify_ride_purpose([], [], 250)
     assert result == "endurance"
 
 
 def test_classify_ride_purpose_zero_ftp():
     watts = [200.0] * 600
     ts = list(range(600))
-    result = analysis._classify_ride_purpose(watts, ts, 0)
+    result = analysis.classify_ride_purpose(watts, ts, 0)
     assert result == "endurance"
 
 
@@ -192,7 +192,7 @@ def test_classify_ride_purpose_sweetspot():
         watts.extend([work] * 900)  # 15 min
         watts.extend([rest] * 300)  # 5 min rest
     ts = list(range(len(watts)))
-    result = analysis._classify_ride_purpose(watts, ts, ftp)
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
     assert result == "interval_sweetspot"
 
 
@@ -207,7 +207,7 @@ def test_classify_ride_purpose_threshold():
         watts.extend([work] * 480)  # 8 min
         watts.extend([rest] * 240)  # 4 min rest
     ts = list(range(len(watts)))
-    result = analysis._classify_ride_purpose(watts, ts, ftp)
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
     assert result == "interval_threshold"
 
 
@@ -227,7 +227,7 @@ def test_classify_ride_purpose_mixed():
         watts.extend([sprint_power] * 90)
         watts.extend([rest] * 240)
     ts = list(range(len(watts)))
-    result = analysis._classify_ride_purpose(watts, ts, ftp)
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
     assert result == "mixed"
 
 
@@ -244,7 +244,7 @@ def test_classify_ride_purpose_intervals_below_thresholds():
         watts.extend([work] * 60)   # 60 s effort (< 2 min)
         watts.extend([rest] * 120)  # 2 min rest
     ts = list(range(len(watts)))
-    result = analysis._classify_ride_purpose(watts, ts, ftp)
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
     # Catch-all branch: pct=0.86>0.85 and dur_min<2 → "sprint" → "interval_sprints"
     assert result == "interval_sprints"
 
@@ -255,13 +255,13 @@ def test_classify_ride_purpose_intervals_below_thresholds():
 
 
 def test_detect_intervals_empty():
-    assert analysis._detect_intervals([], [], 250) == []
+    assert analysis.detect_intervals([], [], 250) == []
 
 
 def test_detect_intervals_zero_ftp():
     watts = [300.0] * 600
     ts = list(range(600))
-    assert analysis._detect_intervals(watts, ts, 0) == []
+    assert analysis.detect_intervals(watts, ts, 0) == []
 
 
 def test_detect_intervals_merges_short_gaps():
@@ -272,7 +272,7 @@ def test_detect_intervals_merges_short_gaps():
     # 5 min work, 20 s rest (< recovery_gap_secs=30), 5 min work
     watts: list[float] = [work] * 300 + [rest] * 20 + [work] * 300
     ts = list(range(len(watts)))
-    intervals = analysis._detect_intervals(watts, ts, ftp)
+    intervals = analysis.detect_intervals(watts, ts, ftp)
     # The two efforts should be merged into one
     assert len(intervals) == 1
 
@@ -284,7 +284,7 @@ def test_detect_intervals_ends_in_high_power():
     rest = round(ftp * 0.40)
     watts: list[float] = [rest] * 300 + [work] * 300
     ts = list(range(len(watts)))
-    intervals = analysis._detect_intervals(watts, ts, ftp)
+    intervals = analysis.detect_intervals(watts, ts, ftp)
     assert len(intervals) == 1
     assert intervals[0]["duration_secs"] >= 270
 
@@ -295,13 +295,13 @@ def test_detect_intervals_ends_in_high_power():
 
 
 def test_build_ride_analysis_empty_streams():
-    result = analysis._build_ride_analysis({}, 250.0)
+    result = analysis.build_ride_analysis({}, 250.0)
     assert result == {}
 
 
 def test_build_ride_analysis_no_time_data():
     streams = {"watts": {"data": [200.0] * 600}}
-    result = analysis._build_ride_analysis(streams, 250.0)
+    result = analysis.build_ride_analysis(streams, 250.0)
     assert result == {}
 
 
@@ -311,7 +311,7 @@ def test_build_ride_analysis_no_hr_data():
     watts = [ftp * 0.70] * 3600
     ts = list(range(3600))
     streams = {"watts": {"data": watts}, "time": {"data": ts}}
-    result = analysis._build_ride_analysis(streams, ftp)
+    result = analysis.build_ride_analysis(streams, ftp)
     assert "ride_category" in result
     assert result["ride_category"] == "endurance"
 
@@ -322,13 +322,13 @@ def test_build_ride_analysis_no_hr_data():
 
 
 def test_compute_hr_drift_too_short():
-    assert analysis._compute_hr_drift([150.0, 155.0]) is None
+    assert analysis.compute_hr_drift([150.0, 155.0]) is None
 
 
 def test_compute_hr_drift_flat():
     # Exactly flat HR — slope should be ~0
     hr = [150.0] * 100
-    drift = analysis._compute_hr_drift(hr)
+    drift = analysis.compute_hr_drift(hr)
     assert drift is not None
     assert abs(drift) < 0.001
 
@@ -828,13 +828,13 @@ async def test_rate_completed_workout_with_stream_delta():
 
 
 def test_compute_training_load_empty():
-    result = analysis._compute_training_load([], 250.0)
+    result = analysis.compute_training_load([], 250.0)
     assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
 
 
 def test_compute_training_load_zero_ftp():
     plan = [{"durationMinutes": 60, "workoutType": "endurance"}]
-    result = analysis._compute_training_load(plan, 0.0)
+    result = analysis.compute_training_load(plan, 0.0)
     assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
 
 
@@ -844,7 +844,7 @@ def test_compute_training_load_returns_expected_keys():
         {"durationMinutes": 0, "workoutType": "rest"},
         {"durationMinutes": 60, "workoutType": "intervals", "targetPower": {"low": 280, "high": 320}},
     ]
-    result = analysis._compute_training_load(plan, 300.0)
+    result = analysis.compute_training_load(plan, 300.0)
     assert "ctl" in result and "atl" in result and "tsb" in result and "daily_tss" in result
     assert len(result["daily_tss"]) == 3
     # Rest day should produce 0 TSS
@@ -856,14 +856,14 @@ def test_compute_training_load_returns_expected_keys():
 def test_compute_training_load_target_power():
     """When targetPower is given, TSS should use mid-point for IF calculation."""
     plan = [{"durationMinutes": 60, "workoutType": "endurance", "targetPower": {"low": 240, "high": 260}}]
-    result = analysis._compute_training_load(plan, 250.0)
+    result = analysis.compute_training_load(plan, 250.0)
     # mid-point = 250W, FTP = 250W → IF = 1.0, TSS = (3600 × 250 × 1) / (250 × 3600) × 100 = 100
     assert abs(result["daily_tss"][0] - 100.0) < 1.0
 
 
 def test_compute_training_load_tsb_equals_ctl_minus_atl():
     plan = [{"durationMinutes": 60, "workoutType": "tempo"}] * 10
-    result = analysis._compute_training_load(plan, 250.0)
+    result = analysis.compute_training_load(plan, 250.0)
     # TSB = CTL - ATL (may differ by up to 0.2 due to independent rounding of each value)
     assert abs(result["tsb"] - (result["ctl"] - result["atl"])) < 0.2
 
@@ -921,17 +921,11 @@ async def test_ask_trainer_classify_step_skips_rag_when_not_needed():
     """When classify says needs_science_rag=False, the effective science context is empty."""
     captured_system_prompt: list[str] = []
 
-    async def fake_classify(system_prompt, user_msg, json_mode=False):
-        return json.dumps({"category": "plan_query", "needs_science_rag": False})
-
     async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
         captured_system_prompt.append(system_prompt)
         return json.dumps({"response": "Here's your plan.", "planUpdates": [], "sources": []})
 
-    with (
-        patch.object(ai_service, "_openai_chat", side_effect=fake_classify),
-        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
-    ):
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
             question="What's tomorrow's workout?",
             plan=PLAN_FOR_LOAD_TESTS,
@@ -949,17 +943,11 @@ async def test_ask_trainer_training_load_in_prompt():
     """CTL/ATL/TSB should appear in the system prompt when FTP is known."""
     captured_prompt: list[str] = []
 
-    async def fake_classify(system_prompt, user_msg, json_mode=False):
-        return json.dumps({"category": "plan_query", "needs_science_rag": False})
-
     async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "OK.", "planUpdates": [], "sources": []})
 
-    with (
-        patch.object(ai_service, "_openai_chat", side_effect=fake_classify),
-        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
-    ):
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         await ai_service.ask_trainer(
             question="Am I too tired?",
             plan=PLAN_FOR_LOAD_TESTS,
@@ -1055,10 +1043,10 @@ def test_adapt_plan_system_includes_tsb_guidance():
 @pytest.mark.asyncio
 async def test_classify_question_returns_default_on_failure():
     """classify_question must return a safe default if the AI call fails."""
-    async def broken_chat(system_prompt, user_msg, json_mode=False):
+    async def broken_chat(provider, system_prompt, user_msg, json_mode=False):
         raise RuntimeError("API unavailable")
 
-    with patch.object(ai_service, "_openai_chat", side_effect=broken_chat):
+    with patch.object(ai_service, "_chat", side_effect=broken_chat):
         result = await ai_service.classify_question("What's my FTP?")
 
     assert result["category"] == "general_coaching"
@@ -1067,10 +1055,10 @@ async def test_classify_question_returns_default_on_failure():
 
 @pytest.mark.asyncio
 async def test_classify_question_parses_response():
-    async def fake_chat(system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
         return json.dumps({"category": "science_question", "needs_science_rag": True})
 
-    with patch.object(ai_service, "_openai_chat", side_effect=fake_chat):
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.classify_question("How does VO2max training work?")
 
     assert result["category"] == "science_question"
