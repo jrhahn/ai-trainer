@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
+import ExpertPage from './pages/ExpertPage'
 import WorkoutPage from './pages/WorkoutPage'
 import StravaCallbackPage from './pages/StravaCallbackPage'
 import SettingsPage from './pages/SettingsPage'
@@ -52,6 +53,7 @@ export default function App() {
         ) : (
           <Route element={<Layout />}>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/expert" element={<ExpertPage />} />
             <Route path="/workout/:date" element={<WorkoutPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

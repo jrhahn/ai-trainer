@@ -3,17 +3,55 @@ import { CheckCircle, Clock, Zap, Heart } from 'lucide-react'
 import type { TrainingDay } from '../store/useAppStore'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
-  rest: 'bg-gray-200 text-gray-600',
-  endurance: 'bg-blue-100 text-blue-700',
-  intervals: 'bg-red-100 text-red-700',
-  tempo: 'bg-orange-100 text-orange-700',
-  race: 'bg-purple-100 text-purple-700',
-  recovery: 'bg-green-100 text-green-700',
-  strength: 'bg-teal-100 text-teal-700',
+  rest: 'bg-gray-100 text-gray-600',
+  endurance: 'bg-gray-100 text-gray-700',
+  intervals: 'bg-gray-900 text-white',
+  tempo: 'bg-gray-800 text-white',
+  race: 'bg-gray-900 text-white',
+  recovery: 'bg-gray-100 text-gray-600',
+  strength: 'bg-gray-200 text-gray-700',
 }
 
-export default function WorkoutCard({ day, showDate }: { day: TrainingDay; showDate?: boolean }) {
+export default function WorkoutCard({
+  day,
+  showDate,
+  compact,
+}: {
+  day: TrainingDay
+  showDate?: boolean
+  compact?: boolean
+}) {
   const navigate = useNavigate()
+
+  if (compact) {
+    return (
+      <div
+        onClick={() => navigate(`/workout/${day.date}`)}
+        className="flex items-center gap-2 bg-white rounded-lg border border-gray-100 px-3 py-2 cursor-pointer hover:border-gray-300 transition-colors"
+      >
+        <p className="text-xs text-gray-400 flex-shrink-0 w-16">
+          {new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })}
+        </p>
+        <span
+          className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${
+            typeColors[day.workoutType]
+          }`}
+        >
+          {day.workoutType}
+        </span>
+        <span className="text-xs text-gray-700 font-medium flex-1 truncate">{day.title}</span>
+        <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+          <Clock size={11} />
+          {day.durationMinutes} min
+        </span>
+        {day.completed && <CheckCircle size={14} className="text-green-500 flex-shrink-0" />}
+      </div>
+    )
+  }
 
   return (
     <div
