@@ -286,55 +286,6 @@ async def analyse_fit_activity(
 
     return parsed
 
-    computed_ftp: int | None = None
-    computed_threshold_hr: int | None = None
-    computed_hr_zones: dict | None = None
-
-    if not is_running and avg_power and avg_power > 0:
-        computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
-
-    if avg_hr and avg_hr > 0:
-        computed_threshold_hr = avg_hr  # use avg HR as a proxy threshold HR
-
-    # Refine threshold HR using max HR if available (LTHR = max_hr × 0.87)
-    if max_heart_rate and max_heart_rate > 0:
-        computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
-        computed_hr_zones = compute_hr_zones(max_heart_rate)
-
-    activity_summary = {
-        "sport_type": sport_type,
-        "duration_minutes": duration_minutes,
-        "average_power": avg_power,
-        "average_heart_rate": avg_hr,
-    }
-
-    computed_section = analyse_activities_computed_section(
-        computed_ftp if not is_running else None,
-        computed_threshold_hr,
-        max_heart_rate,
-        computed_hr_zones,
-    )
-
-    system_prompt = analyse_activities_system(sport_type=sport_type)
-    user_msg = analyse_activities_user(
-        [activity_summary], computed_section, "", sport_type=sport_type
-    )
-
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
-    parsed = _parse_ai_json(raw)
-
-    # Override with algorithmically derived values
-    if not is_running and computed_ftp is not None:
-        parsed["estimatedFTP"] = computed_ftp
-    else:
-        parsed["estimatedFTP"] = None
-    if computed_threshold_hr is not None:
-        parsed["estimatedThresholdHR"] = computed_threshold_hr
-    if computed_hr_zones is not None:
-        parsed["hrZones"] = computed_hr_zones
-
-    return parsed
-
 
 async def generate_training_plan(
     profile: dict, provider: str = "openai", rider_assessment: dict | None = None
