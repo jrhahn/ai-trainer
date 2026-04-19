@@ -12,6 +12,9 @@ frontend/node_modules
 frontend/dist
 frontend/dist-ssr
 frontend/coverage
+frontend/.env*
+
+# Local env files (apply globally)
 *.local
 
 # Editor directories and files
@@ -25,11 +28,15 @@ frontend/coverage
 *.sln
 *.sw?
 
+# Env files
+.env
+.env.*
+!.env.example
+
 # Python backend
 backend/.venv
-backend/__pycache__
-backend/**/__pycache__
-backend/*.pyc
+**/__pycache__/
+**/*.pyc
 backend/.env
 backend/pytest.db
 backend/ci-test.db
