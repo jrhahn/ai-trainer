@@ -102,6 +102,38 @@ def analyse_activities_user(
     )
 
 
+def analyse_activities_computed_section(
+    computed_ftp: int | None,
+    computed_threshold_hr: int | None,
+    max_heart_rate: int | None,
+    computed_hr_zones: dict | None,
+) -> str:
+    """Build the contextual block describing algorithmically derived metrics.
+
+    Returns an empty string when no metrics are available.
+    """
+    section = ""
+    if computed_ftp is not None:
+        section += (
+            f"\nAlgorithmically estimated FTP from stream data: {computed_ftp} W "
+            "(95 % of best 20-min average power)"
+        )
+    if computed_threshold_hr is not None:
+        section += (
+            f"\nAlgorithmically estimated threshold HR: {computed_threshold_hr} bpm "
+            "(average HR during best 20-min power effort)"
+        )
+    if max_heart_rate is not None:
+        section += f"\nMax heart rate provided by athlete: {max_heart_rate} bpm"
+    if computed_hr_zones is not None:
+        zones_str = ", ".join(
+            f"Zone {i}: {z['low']}–{z['high']} bpm"
+            for i, z in enumerate(computed_hr_zones.values(), 1)
+        )
+        section += f"\nHR training zones: {zones_str}"
+    return section
+
+
 # ---------------------------------------------------------------------------
 # generate_training_plan prompts
 # ---------------------------------------------------------------------------
@@ -411,7 +443,10 @@ def rate_workout_system() -> str:
         f"{COACH_PERSONA} Review a completed training session. "
         "Compare the actual workout against the planned one and provide brief, encouraging feedback "
         "in 2-4 sentences. Note how well the athlete followed the plan, highlight any significant "
-        "deviations, and explain what it means for their training progress.\n"
+        "deviations, and explain what it means for their training progress. "
+        "When objective stream data is available (power, HR, time-in-zone), use it to give "
+        "precise, actionable insights — e.g. 'You went 15 % over Z2 intensity in the first 30 min, "
+        "which erodes your aerobic base and costs recovery'. Otherwise use the hand-entered metrics.\n"
         "Return ONLY a valid JSON object with these fields:\n"
         '- "feedback": your 2-4 sentence coaching response as a string\n'
         '- "flag_for_adaptation": true when the athlete should adapt their upcoming plan '
@@ -420,7 +455,12 @@ def rate_workout_system() -> str:
     )
 
 
-def rate_workout_user(day: dict, feedback: dict, profile: dict | None = None) -> str:
+def rate_workout_user(
+    day: dict,
+    feedback: dict,
+    profile: dict | None = None,
+    stream_delta: dict | None = None,
+) -> str:
     planned_power = ""
     if day.get("targetPower"):
         planned_power = f"\n- Target power: {day['targetPower']['low']}–{day['targetPower']['high']}W"
@@ -442,6 +482,80 @@ def rate_workout_user(day: dict, feedback: dict, profile: dict | None = None) ->
 
     profile_section = f"\n\nAthlete profile: {json.dumps(profile)}" if profile else ""
 
+    # --- Strava stream delta section ---
+    delta_section = ""
+    if stream_delta:
+        lines: list[str] = ["\n\nObjective stream data (from Strava):"]
+
+        # Power
+        if stream_delta.get("avg_power_w") is not None:
+            lines.append(f"- Actual avg power: {stream_delta['avg_power_w']}W")
+        if stream_delta.get("normalized_power_w") is not None:
+            lines.append(f"- Normalized power (NP): {stream_delta['normalized_power_w']}W")
+        if stream_delta.get("target_power_low") is not None:
+            lines.append(
+                f"- Target power: {stream_delta['target_power_low']}–{stream_delta['target_power_high']}W"
+            )
+        if stream_delta.get("avg_power_delta_pct") is not None:
+            sign = "+" if stream_delta["avg_power_delta_pct"] >= 0 else ""
+            lines.append(
+                f"- Avg power vs target midpoint: {sign}{stream_delta['avg_power_delta_pct']} %"
+            )
+        if stream_delta.get("normalized_power_delta_pct") is not None:
+            sign = "+" if stream_delta["normalized_power_delta_pct"] >= 0 else ""
+            lines.append(
+                f"- NP vs target midpoint: {sign}{stream_delta['normalized_power_delta_pct']} %"
+            )
+
+        # Time in zones
+        tiz = stream_delta.get("time_in_zones")
+        if tiz:
+            zone_labels = {
+                "z1_secs": "Z1 (<55 % FTP)",
+                "z2_secs": "Z2 (55–75 % FTP)",
+                "z3_secs": "Z3 (75–90 % FTP)",
+                "z4_secs": "Z4 (90–105 % FTP)",
+                "z5_secs": "Z5 (105–120 % FTP)",
+                "z6_secs": "Z6 (120–150 % FTP)",
+                "z7_secs": "Z7 (>150 % FTP)",
+            }
+            tiz_parts = [
+                f"{label}: {round(tiz[key] / 60)} min"
+                for key, label in zone_labels.items()
+                if tiz.get(key, 0) > 0
+            ]
+            if tiz_parts:
+                lines.append(f"- Time in zones: {', '.join(tiz_parts)}")
+
+        # HR
+        if stream_delta.get("avg_hr_bpm") is not None:
+            lines.append(f"- Actual avg HR: {stream_delta['avg_hr_bpm']} bpm")
+        if stream_delta.get("target_hr_low") is not None:
+            lines.append(
+                f"- Target HR: {stream_delta['target_hr_low']}–{stream_delta['target_hr_high']} bpm"
+            )
+        if stream_delta.get("avg_hr_delta_pct") is not None:
+            sign = "+" if stream_delta["avg_hr_delta_pct"] >= 0 else ""
+            lines.append(
+                f"- Avg HR vs target midpoint: {sign}{stream_delta['avg_hr_delta_pct']} %"
+            )
+        if stream_delta.get("hr_drift_bpm") is not None:
+            drift = stream_delta["hr_drift_bpm"]
+            direction = "rising" if drift > 0 else "falling"
+            lines.append(
+                f"- HR drift across session: {abs(drift):.1f} bpm ({direction})"
+            )
+
+        # Intensity spikes
+        spikes = stream_delta.get("intensity_spikes") or []
+        for spike in spikes:
+            lines.append(
+                f"- Intensity spike {spike['start_min']}–{spike['end_min']} min: "
+                f"{spike['avg_power_w']}W avg ({spike['pct_over_target']:+.1f} % over target)"
+            )
+
+        delta_section = "\n".join(lines)
+
     return (
         f"Planned workout:\n"
         f"- Type: {day['workoutType']}\n"
@@ -453,6 +567,7 @@ def rate_workout_user(day: dict, feedback: dict, profile: dict | None = None) ->
         f"- Duration: {feedback['actualDurationMinutes']} min\n"
         f"- Perceived effort: {feedback['perceivedEffort']}/5 ({effort_labels.get(feedback['perceivedEffort'], '')})"
         f"{actual_power}{actual_peak}{actual_hr}{notes}"
+        f"{delta_section}"
         f"{profile_section}\n\n"
         f"Rate how well this workout matched the plan and give brief feedback."
     )
