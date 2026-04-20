@@ -336,6 +336,10 @@ class RefreshKnowledgeResponse(BaseModel):
     message: str
 
 
+class RefreshLoginSummaryResponse(CamelModel):
+    login_summary: str
+
+
 
 
 # ---------------------------------------------------------------------------

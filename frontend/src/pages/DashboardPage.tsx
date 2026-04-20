@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -6,20 +6,23 @@ import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
-import { adaptTrainingPlan } from '../services/ai'
+import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, setTrainingPlan, riderAssessment } = useAppStore(
+  const { userProfile, trainingPlan, authToken, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       setTrainingPlan: s.setTrainingPlan,
       riderAssessment: s.riderAssessment,
+      setRiderAssessment: s.setRiderAssessment,
     }))
   )
 
   const adaptationTriggeredRef = useRef(false)
+  const summaryTriggeredRef = useRef(false)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   // keep sync running so analysis status updates remain active
   useStravaSync()
@@ -56,6 +59,23 @@ export default function DashboardPage() {
       })
   }, [hasStalePlan, authToken, setTrainingPlan])
 
+  // Auto-generate loginSummary once if the user has a riderAssessment but no summary yet
+  useEffect(() => {
+    if (!authToken || !riderAssessment || riderAssessment.loginSummary || summaryTriggeredRef.current) return
+    summaryTriggeredRef.current = true
+    setSummaryLoading(true)
+    refreshLoginSummary(authToken)
+      .then((summary) => {
+        if (summary) {
+          setRiderAssessment({ ...riderAssessment, loginSummary: summary })
+        }
+      })
+      .catch(() => {
+        // silently ignore — the card simply won't show
+      })
+      .finally(() => setSummaryLoading(false))
+  }, [authToken, riderAssessment, setRiderAssessment])
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -67,14 +87,18 @@ export default function DashboardPage() {
       </div>
 
       {/* Post-login ride summary */}
-      {riderAssessment?.loginSummary && (
+      {(riderAssessment?.loginSummary || summaryLoading) && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
             📊 Your Recent Training Summary
           </p>
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {riderAssessment.loginSummary}
-          </p>
+          {summaryLoading ? (
+            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
+          ) : (
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {riderAssessment!.loginSummary}
+            </p>
+          )}
         </div>
       )}
 

@@ -725,3 +725,57 @@ def ask_trainer_classify_system() -> str:
 
 def ask_trainer_classify_user(question: str) -> str:
     return f"Classify this athlete question: {question}"
+
+
+# ---------------------------------------------------------------------------
+# refresh_login_summary prompts
+# ---------------------------------------------------------------------------
+
+
+def refresh_login_summary_system() -> str:
+    """Return the system prompt for generating a login summary from existing assessment data."""
+    return (
+        f"{COACH_PERSONA} Generate a concise post-login training summary for an athlete.\n"
+        "You will receive their existing ride insights, most recent ride feedback, overall assessment "
+        "notes, and optionally their training plan. "
+        "Return ONLY a valid JSON object with a single field:\n"
+        '- "loginSummary": a structured 4-part coach summary addressed directly to the athlete. '
+        "Write it as flowing prose (not bullet points), 5-8 sentences total. Include:\n"
+        "  (1) WHAT YOU DID: Brief overview of recent activity — volume, types, highlights, "
+        "and anything that could be improved.\n"
+        "  (2) FTP & FITNESS INSIGHTS: Any FTP trends or fitness observations. Is training volume "
+        "too low, too high, or about right? Any signs of fatigue or fitness gains?\n"
+        "  (3) PLAN ALIGNMENT: If plan context is provided, assess how well recent training "
+        "matched the plan. If no plan context is available, note it briefly.\n"
+        "  (4) CONCLUSIONS: 1-2 concrete, actionable recommendations for upcoming sessions.\n"
+        "Be specific, warm, and encouraging — reference actual numbers from the data."
+    )
+
+
+def refresh_login_summary_user(
+    ride_insights: str | None,
+    last_ride_feedback: str | None,
+    notes: str | None,
+    estimated_ftp: int | None,
+    training_plan: list[dict] | None,
+) -> str:
+    """Build the user message for login summary generation from existing assessment data."""
+    parts: list[str] = []
+    if estimated_ftp:
+        parts.append(f"Current estimated FTP: {estimated_ftp} W")
+    if notes:
+        parts.append(f"Overall assessment notes:\n{notes}")
+    if last_ride_feedback:
+        parts.append(f"Most recent ride feedback:\n{last_ride_feedback}")
+    if ride_insights:
+        parts.append(f"Per-ride analysis narrative:\n{ride_insights}")
+    if training_plan:
+        parts.append(
+            f"Current training plan (for plan alignment):\n{json.dumps(training_plan, indent=2)}"
+        )
+    if not parts:
+        parts.append("No prior ride data available.")
+    return (
+        "\n\n".join(parts)
+        + "\n\nGenerate a loginSummary JSON object based on the above."
+    )

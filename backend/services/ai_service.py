@@ -45,6 +45,8 @@ from .prompts import (
     update_memory_user,
     rate_workout_system,
     rate_workout_user,
+    refresh_login_summary_system,
+    refresh_login_summary_user,
 )
 MAX_CONVERSATION_HISTORY = 20
 OPENAI_MODEL = "gpt-4o-mini"
@@ -451,3 +453,30 @@ async def rate_completed_workout(
         "feedback": parsed.get("feedback", ""),
         "flag_for_adaptation": bool(parsed.get("flag_for_adaptation", False)),
     }
+
+
+async def generate_login_summary(
+    ride_insights: str | None,
+    last_ride_feedback: str | None,
+    notes: str | None,
+    estimated_ftp: int | None,
+    training_plan: list[dict] | None = None,
+    provider: str = "openai",
+) -> str:
+    """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
+
+    Used when a user already has a ``RiderAssessment`` but ``login_summary`` is
+    ``None`` — e.g. because the column was added after their last Strava sync.
+    Returns the summary string, or an empty string on failure.
+    """
+    system_prompt = refresh_login_summary_system()
+    user_msg = refresh_login_summary_user(
+        ride_insights=ride_insights,
+        last_ride_feedback=last_ride_feedback,
+        notes=notes,
+        estimated_ftp=estimated_ftp,
+        training_plan=training_plan,
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+    return parsed.get("loginSummary") or ""

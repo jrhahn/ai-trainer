@@ -481,3 +481,45 @@ async def refresh_knowledge(
         status="started",
         message="Knowledge base refresh has been queued and will run in the background",
     )
+
+
+@router.post("/refresh-login-summary", response_model=schemas.RefreshLoginSummaryResponse)
+async def refresh_login_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RefreshLoginSummaryResponse:
+    """Generate a loginSummary from existing assessment data (no new rides needed).
+
+    Called by the frontend when the user has a ``RiderAssessment`` but
+    ``login_summary`` is ``None`` — e.g. because the column was added after
+    their last Strava sync.  The summary is persisted and returned.
+    """
+    assessment = current_user.rider_assessment
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No rider assessment found — please complete a Strava analysis first",
+        )
+
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    training_plan = existing_plan.plan if existing_plan is not None else None
+
+    login_summary = await ai_service.generate_login_summary(
+        ride_insights=assessment.ride_insights,
+        last_ride_feedback=assessment.last_ride_feedback,
+        notes=assessment.notes,
+        estimated_ftp=assessment.estimated_ftp,
+        training_plan=training_plan or None,
+        provider=_provider(current_user),
+    )
+
+    if login_summary:
+        await crud.upsert_rider_assessment(
+            db,
+            current_user.id,
+            estimated_ftp=assessment.estimated_ftp,
+            estimated_threshold_hr=assessment.estimated_threshold_hr,
+            login_summary=login_summary,
+        )
+
+    return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
