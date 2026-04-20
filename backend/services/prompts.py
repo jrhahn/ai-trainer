@@ -150,6 +150,21 @@ def analyse_activities_system(sport_type: str = "cycling") -> str:
         "comment on the effort quality (HR drift if data available), and give one "
         "concrete takeaway. Also include 1-2 specific recommendations for the athlete's next training "
         "session based on what you observed. Be empathetic and personal — reference their specific numbers.\n"
+        "- \"loginSummary\": a structured 4-part coach summary of all the provided activities for display "
+        "on the athlete's dashboard immediately after login. Write it as flowing prose (not bullet points), "
+        "addressed directly to the athlete. Include exactly these four parts in order:\n"
+        "  (1) WHAT YOU DID: Briefly summarise the volume, types, and key numbers from the recent "
+        f"{activities_noun} — total time, any highlights, what was strong. "
+        "Also flag what could be improved.\n"
+        "  (2) FTP & FITNESS INSIGHTS: Comment on any FTP changes or trends visible across the "
+        f"{activities_noun}. Is volume too low, too high, or about right? Any signs of fatigue or "
+        "fitness gains?\n"
+        "  (3) PLAN ALIGNMENT: If a training plan is provided, assess how well the recent "
+        f"{activities_noun} matched the planned sessions — were targets hit, sessions skipped, or "
+        "intensity off? If no plan is provided, note that no plan context is available.\n"
+        "  (4) CONCLUSIONS: What does this mean for upcoming training? Give 1-2 concrete, actionable "
+        "recommendations the athlete should follow in their next sessions.\n"
+        "Keep the total loginSummary to 5-8 sentences. Be specific, warm, and encouraging.\n"
         "- \"planUpdates\": optional array of training day updates for the upcoming plan based on what "
         f"you observed in the {activities_noun}. Only include updates that are genuinely warranted (e.g. add recovery "
         "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
@@ -166,6 +181,7 @@ def analyse_activities_user(
     computed_section: str,
     ride_analyses_section: str,
     sport_type: str = "cycling",
+    training_plan: list[dict] | None = None,
 ) -> str:
     is_running = sport_type.lower() in ("running", "run")
     activities_noun = "runs" if is_running else "Strava rides"
@@ -176,10 +192,17 @@ def analyse_activities_user(
         "When pre-computed FTP/threshold HR values are given, "
         "use them verbatim for estimatedFTP and estimatedThresholdHR. "
     )
+    plan_section = ""
+    if training_plan:
+        plan_section = (
+            f"\n\nCurrent training plan (use for plan alignment in loginSummary):\n"
+            f"{json.dumps(training_plan, indent=2)}"
+        )
     return (
         f"Last {len(activities)} {activities_noun}:\n{json.dumps(activities, indent=2)}"
         f"{computed_section}"
-        f"{ride_analyses_section}\n\n"
+        f"{ride_analyses_section}"
+        f"{plan_section}\n\n"
         f"Assess my fitness. {ftp_note}"
         "Use the per-activity analyses above to write accurate rideInsights and appropriate planUpdates."
     )

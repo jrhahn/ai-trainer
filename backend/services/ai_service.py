@@ -137,6 +137,7 @@ async def analyse_strava_activities(
     streams_by_id: dict[str, dict] | None = None,
     max_heart_rate: int | None = None,
     sport_type: str = "cycling",
+    training_plan: list[dict] | None = None,
 ) -> dict:
     is_running = sport_type.lower() in ("running", "run")
 
@@ -195,7 +196,8 @@ async def analyse_strava_activities(
         )
 
     user_msg = analyse_activities_user(
-        activities, computed_section, ride_analyses_section, sport_type=sport_type
+        activities, computed_section, ride_analyses_section, sport_type=sport_type,
+        training_plan=training_plan,
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)

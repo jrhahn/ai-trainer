@@ -87,11 +87,15 @@ async def analyse_activities(
                 exc_info=True,
             )
 
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    training_plan = existing_plan.plan if existing_plan is not None else []
+
     result = await ai_service.analyse_strava_activities(
         [activity.model_dump() for activity in body.activities],
         provider=_provider(current_user),
         streams_by_id=streams_by_id,
         max_heart_rate=body.max_heart_rate,
+        training_plan=training_plan or None,
     )
     await crud.upsert_rider_assessment(
         db,
@@ -103,14 +107,14 @@ async def analyse_activities(
         hr_zones=result.get("hrZones"),
         ride_insights=result.get("rideInsights"),
         last_ride_feedback=result.get("lastRideFeedback"),
+        login_summary=result.get("loginSummary"),
     )
 
     # Record a time-series metric snapshot so the athlete can track progression
     ftp_value = result.get("estimatedFTP")
     threshold_hr_value = result.get("estimatedThresholdHR")
     if ftp_value is not None or threshold_hr_value is not None:
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        plan_days = existing_plan.plan if existing_plan is not None else []
+        plan_days = training_plan
         ftp_for_load = ftp_value or current_user.current_ftp or 0
         ctl: float | None = None
         atl: float | None = None

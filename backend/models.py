@@ -157,6 +157,7 @@ class RiderAssessment(Base):
     hr_zones: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     ride_insights: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_ride_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    login_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")

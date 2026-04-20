@@ -9,12 +9,13 @@ import { useStravaSync } from '../hooks/useStravaSync'
 import { adaptTrainingPlan } from '../services/ai'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, setTrainingPlan } = useAppStore(
+  const { userProfile, trainingPlan, authToken, setTrainingPlan, riderAssessment } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       setTrainingPlan: s.setTrainingPlan,
+      riderAssessment: s.riderAssessment,
     }))
   )
 
@@ -64,6 +65,18 @@ export default function DashboardPage() {
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {/* Post-login ride summary */}
+      {riderAssessment?.loginSummary && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+            📊 Your Recent Training Summary
+          </p>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {riderAssessment.loginSummary}
+          </p>
+        </div>
+      )}
 
       {/* Next 3 days */}
       {next3Days.length > 0 && (
