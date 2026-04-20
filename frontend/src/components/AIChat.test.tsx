@@ -61,7 +61,7 @@ describe('AIChat', () => {
   it('shows a welcome message when there is no chat history', () => {
     setupStore()
     render(<AIChat />)
-    expect(screen.getByText(/Hi! I'm your AI cycling coach/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hey! 👋 I'm your coach/i)).toBeInTheDocument()
   })
 
   it('shows a workout-specific welcome message when contextWorkout is provided', () => {
