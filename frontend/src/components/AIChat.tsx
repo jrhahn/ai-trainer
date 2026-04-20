@@ -38,8 +38,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const welcomeContent = contextWorkout
-    ? `Hi! I'm your AI cycling coach. I can answer any questions about today's ${contextWorkout.title} workout or your training in general. What would you like to know?`
-    : "Hi! I'm your AI cycling coach. Ask me anything about your training plan, recovery, nutrition, or technique!"
+    ? `Hey! 👋 Great to see you here. I'm your coach and I'm genuinely excited to help you nail today's ${contextWorkout.title} session. Got any questions about it, or anything else on your mind?`
+    : "Hey! 👋 I'm your coach — think of me as that friend who's always happy to chat training. Ask me anything: your plan, recovery, nutrition, technique… I'm here for it! 😊"
 
   const displayMessages: ChatMessage[] =
     chatHistory.length > 0
