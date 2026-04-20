@@ -5,7 +5,17 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2026-04-19
+## [0.10.0] - 2026-04-20
+
+### Added
+
+- **`ProgressionChart` on the default Dashboard** (`src/pages/DashboardPage.tsx`) — rendered below the AI chat panel so athletes can track FTP / CTL / ATL / TSB history without navigating to the Expert page; `metricsHistory` is already loaded on login so no extra fetch is required
+
+### Changed
+
+- **`ProgressionChart` empty-state** (`src/components/ProgressionChart.tsx`) — instead of rendering `null` when fewer than 2 metric snapshots exist, the component now shows a styled card with the message *"Come back after your next analysis to see your fitness progression chart."* This improves the first-run experience for new users
+
+
 
 ### Changed
 

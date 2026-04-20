@@ -692,3 +692,71 @@ async def test_fit_upload_rejects_invalid_fit_data(client):
         files={"file": ("workout.fit", b"not a real fit file", "application/octet-stream")},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkeypatch):
+    """A successful .fit upload must create an AthleteMetricSnapshot row (source='fit_upload')."""
+    # Build a minimal mock FitFile that returns avg_power + avg_hr from session messages
+    class _MockDataField:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class _MockRecord:
+        def __init__(self, fields):
+            self._fields = fields
+
+        def __iter__(self):
+            return iter(self._fields)
+
+    session_record = _MockRecord([
+        _MockDataField("sport", "cycling"),
+        _MockDataField("total_elapsed_time", 3600),
+        _MockDataField("avg_power", 200),
+        _MockDataField("avg_heart_rate", 155),
+        _MockDataField("start_time", None),
+    ])
+
+    class _MockFitFile:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def parse(self):
+            pass
+
+        def get_messages(self, msg_type):
+            if msg_type == "session":
+                return [session_record]
+            return []
+
+    import fitparse as _fitparse_mod
+    monkeypatch.setattr(_fitparse_mod, "FitFile", _MockFitFile)
+
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Pat", "email": "pat@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    upload_resp = await client.post(
+        "/api/v1/users/me/upload-fit",
+        headers=headers,
+        files={"file": ("workout.fit", b"\x0e\x10\xd9\x07", "application/octet-stream")},
+    )
+    assert upload_resp.status_code == 200
+    body = upload_resp.json()
+    assert body["status"] == "ok"
+    assert body["sport_type"] == "cycling"
+
+    # Metric snapshot should now appear in history
+    hist_resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
+    assert hist_resp.status_code == 200
+    hist = hist_resp.json()
+    assert len(hist["snapshots"]) >= 1
+    snap = hist["snapshots"][0]
+    # Mock AI service returns estimatedFTP=210, estimatedThresholdHR=165
+    assert snap["ftp"] == 210
+    assert snap["thresholdHR"] == 165
+    assert snap["source"] == "fit_upload"

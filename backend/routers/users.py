@@ -12,6 +12,8 @@ import crud
 import models
 import schemas
 from database import get_db
+from services import ai_service
+from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -331,6 +333,65 @@ async def upload_fit_file(
         completed_at=completed_at,
         sport_type=sport_type,
     )
+
+    # --- Run analysis and write a metric snapshot ---
+    # Determine provider from user profile
+    provider = current_user.ai_provider or "openai"
+    max_hr = current_user.max_heart_rate
+
+    # Trigger AI analysis in the background (best-effort; don't fail the upload if AI is down)
+    ai_result: dict | None = None
+    try:
+        ai_result = await ai_service.analyse_fit_activity(
+            sport_type=sport_type,
+            duration_minutes=duration_minutes,
+            avg_power=avg_power,
+            avg_hr=avg_hr,
+            max_heart_rate=max_hr,
+            provider=provider,
+        )
+    except Exception:
+        logger.warning("AI analysis failed for .fit upload; skipping feedback", exc_info=True)
+
+    # Save rider assessment feedback if AI succeeded
+    if ai_result:
+        await crud.upsert_rider_assessment(
+            db,
+            current_user.id,
+            estimated_ftp=ai_result.get("estimatedFTP"),
+            estimated_threshold_hr=ai_result.get("estimatedThresholdHR"),
+            rider_type=ai_result.get("riderType"),
+            notes=ai_result.get("notes"),
+            hr_zones=ai_result.get("hrZones"),
+            ride_insights=ai_result.get("rideInsights"),
+            last_ride_feedback=ai_result.get("lastRideFeedback"),
+        )
+
+    # Write a time-series metric snapshot regardless of AI result
+    ftp_value = ai_result.get("estimatedFTP") if ai_result else None
+    threshold_hr_value = ai_result.get("estimatedThresholdHR") if ai_result else None
+
+    # For cycling without AI: fall back to avg_power-based FTP estimate
+    if ftp_value is None and sport_type.lower() not in ("running", "run") and avg_power:
+        ftp_value = round(avg_power * AVG_POWER_TO_FTP_RATIO)
+
+    # For any sport without AI: fall back to LTHR estimate if max HR is known
+    if threshold_hr_value is None and max_hr:
+        threshold_hr_value = round(max_hr * LTHR_RATIO)
+
+    if ftp_value is not None or threshold_hr_value is not None:
+        try:
+            await crud.create_athlete_metric_snapshot(
+                db,
+                current_user.id,
+                ftp=ftp_value,
+                threshold_hr=threshold_hr_value,
+                source="fit_upload",
+            )
+        except Exception:
+            logger.warning("Failed to write metric snapshot for .fit upload", exc_info=True)
+
+    await db.flush()
 
     return schemas.FitUploadResponse(
         status="ok",

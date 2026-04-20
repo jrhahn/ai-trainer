@@ -5,7 +5,33 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.13.0] - 2026-04-19
+## [0.14.0] - 2026-04-20
+
+### Added
+
+- **`analyse_fit_activity` AI function** (`services/ai_service.py`) — lightweight analysis path for `.fit` imports where only summary metrics are available (no per-second streams):
+  - Cycling: FTP estimated as `avg_power × AVG_POWER_TO_FTP_RATIO`
+  - Running: `estimatedFTP` forced to `null`; threshold HR estimated via `max_heart_rate × LTHR_RATIO` when max HR is provided
+  - Returns the same shape as `analyse_strava_activities` so `upsert_rider_assessment` can consume it unchanged
+
+- **`.fit` uploads now trigger AI analysis and write a metric snapshot** (`routers/users.py`):
+  - After saving the `WorkoutLog` row, calls `analyse_fit_activity` (best-effort — the upload response is never blocked on AI errors)
+  - AI result is persisted to `rider_assessment` via `crud.upsert_rider_assessment`, giving non-Strava users last-ride feedback and ride insights on their dashboard
+  - `crud.create_athlete_metric_snapshot` is called with `source="fit_upload"` so the athlete's FTP/HR history chart is populated; falls back to algorithmic estimates when AI is unavailable
+
+- **Sport-type-aware AI prompts** (`services/prompts.py`):
+  - `RUNNING_COACH_PERSONA` constant — mirrors `COACH_PERSONA` but with a running background
+  - `analyse_activities_system(sport_type)` branches on `sport_type`: running activities receive HR-zone categories, running vocabulary (run/runs), and no references to watts or FTP; cycling retains the previous prompt unchanged
+  - `analyse_activities_user(sport_type)` adjusts the instruction note — for running, the AI is explicitly told to set `estimatedFTP` to `null` and use pre-computed threshold HR verbatim
+
+- **`analyse_strava_activities` now accepts `sport_type`** (`services/ai_service.py`) — power-based FTP computation and per-ride interval analysis are skipped when `sport_type` is `"running"` or `"run"`, preventing nonsensical cycling analysis for runners
+
+### Tests
+
+- `analyse_fit_activity` mock added to `conftest.py` `mock_ai_service` fixture
+- New contract test `test_fit_upload_writes_metric_snapshot` — uploads a mocked `.fit` file and asserts that an `AthleteMetricSnapshot` row with `source="fit_upload"` appears in `GET /users/me/metrics-history`
+
+
 
 ### Changed
 
