@@ -293,6 +293,7 @@ async def upsert_rider_assessment(
     hr_zones: Any | None = None,
     ride_insights: str | None = None,
     last_ride_feedback: str | None = None,
+    login_summary: str | None = None,
 ) -> models.RiderAssessment:
     """Create or update the RiderAssessment for a user and flush.
 
@@ -311,6 +312,7 @@ async def upsert_rider_assessment(
             hr_zones=hr_zones,
             ride_insights=ride_insights,
             last_ride_feedback=last_ride_feedback,
+            login_summary=login_summary,
         )
         db.add(assessment)
     else:
@@ -324,6 +326,8 @@ async def upsert_rider_assessment(
         assessment.ride_insights = ride_insights
         if last_ride_feedback:
             assessment.last_ride_feedback = last_ride_feedback
+        if login_summary:
+            assessment.login_summary = login_summary
     await db.flush()
     return assessment
 

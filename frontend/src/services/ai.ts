@@ -174,3 +174,11 @@ export async function fetchReadinessScore(authToken: string): Promise<ReadinessS
     projectedTsb: raw.projected_tsb,
   }
 }
+
+export async function refreshLoginSummary(authToken: string): Promise<string> {
+  const raw = await apiFetch<{ loginSummary: string }>('/ai/refresh-login-summary', {
+    token: authToken,
+    method: 'POST',
+  })
+  return raw.loginSummary ?? ''
+}

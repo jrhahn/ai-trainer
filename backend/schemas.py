@@ -78,6 +78,7 @@ class RiderAssessmentSchema(CamelModel):
     hr_zones: Optional[Any] = None
     ride_insights: Optional[str] = None
     last_ride_feedback: Optional[str] = None
+    login_summary: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +334,10 @@ class RateWorkoutResponse(BaseModel):
 class RefreshKnowledgeResponse(BaseModel):
     status: str
     message: str
+
+
+class RefreshLoginSummaryResponse(CamelModel):
+    login_summary: str
 
 
 

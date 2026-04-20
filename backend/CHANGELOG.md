@@ -5,6 +5,24 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-04-20
+
+### Added
+
+- **Post-login ride summary (`loginSummary`)** — the `analyse-activities` endpoint now generates a structured 4-part coach summary covering: (1) what the athlete did and what was strong/improvable, (2) FTP and fitness insights, (3) training plan alignment (how recent rides matched the plan), and (4) actionable conclusions for upcoming sessions. Stored in the new `rider_assessments.login_summary` column.
+
+- **Training plan context in activity analysis** — `analyse_strava_activities` now accepts an optional `training_plan` parameter. When a plan exists the prompt receives it so the AI can compare actual rides against planned sessions and produce an accurate plan-alignment section in `loginSummary`.
+
+- **`loginSummary` field added to `RiderAssessmentSchema`** (`schemas.py`) — the field is serialised as `loginSummary` (camelCase) for the frontend.
+
+- **`login_summary` column added to `rider_assessments`** (`models.py`) — nullable `Text` column; Alembic migration `20260420_000001`.
+
+### Changed
+
+- **`analyse_activities_user` prompt helper** (`services/prompts.py`) — accepts optional `training_plan` list; when provided, appends the plan JSON to the user message so the AI can assess alignment for `loginSummary`.
+
+- **`analyse_activities` router** (`routers/ai.py`) — fetches the training plan once and reuses it for both the AI call (plan-alignment context) and the training-load computation (no extra DB round-trip).
+
 ## [0.14.0] - 2026-04-20
 
 ### Added

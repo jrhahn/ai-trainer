@@ -5,6 +5,14 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-04-20
+
+### Added
+
+- **Post-login ride summary card on Dashboard** (`src/pages/DashboardPage.tsx`) — a blue-tinted summary card is rendered below the greeting when `riderAssessment.loginSummary` is available. It displays the AI coach's structured 4-part analysis (what the athlete did, FTP insights, plan alignment, and training conclusions) so athletes get immediate context every time they open the app after a ride.
+
+- **`loginSummary` field in `RiderAssessment` interface** (`src/store/useAppStore.ts`) — mirrors the new backend field; populated automatically when `analyseStravaActivities` completes.
+
 ## [0.10.0] - 2026-04-20
 
 ### Added
