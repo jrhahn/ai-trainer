@@ -689,3 +689,111 @@ async def test_ask_trainer_classify_called_and_rag_skipped_when_not_needed(
     assert response.status_code == 200
     # classify_question must have been called
     mock_ai_service["classify_question"].assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests for 429 / rate-limit error handling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_raises_ai_rate_limit_error_on_gemini_429():
+    """_chat must convert a Gemini ClientError(429) into AIRateLimitError."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from google.genai import errors as genai_errors
+    from services.ai_service import AIRateLimitError
+
+    client_error = genai_errors.ClientError(429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, MagicMock())
+
+    fake_client = MagicMock()
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=False)
+    fake_client.models.generate_content = AsyncMock(side_effect=client_error)
+
+    with patch.object(ai_service, "_make_gemini") as mock_make:
+        mock_make.return_value.aio = fake_client
+        with pytest.raises(AIRateLimitError):
+            await ai_service._chat("gemini", "system", "hello")
+
+
+@pytest.mark.asyncio
+async def test_chat_history_raises_ai_rate_limit_error_on_gemini_429():
+    """_chat_history must convert a Gemini ClientError(429) into AIRateLimitError."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from google.genai import errors as genai_errors
+    from services.ai_service import AIRateLimitError
+
+    client_error = genai_errors.ClientError(429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, MagicMock())
+
+    fake_client = MagicMock()
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=False)
+    fake_client.models.generate_content = AsyncMock(side_effect=client_error)
+
+    with patch.object(ai_service, "_make_gemini") as mock_make:
+        mock_make.return_value.aio = fake_client
+        with pytest.raises(AIRateLimitError):
+            await ai_service._chat_history(
+                "gemini", "system", [{"role": "user", "content": "hi"}]
+            )
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_endpoint_returns_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
+    """The /ask-trainer endpoint must return HTTP 503 when AIRateLimitError is raised."""
+    from services.ai_service import AIRateLimitError
+
+    mock_ai_service["ask_trainer"].side_effect = AIRateLimitError("rate limited")
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "How am I doing?"},
+    )
+
+    assert response.status_code == 503
+    assert "rate" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_endpoint_returns_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
+    """The /analyse-activities endpoint must return HTTP 503 when AIRateLimitError is raised."""
+    from services.ai_service import AIRateLimitError
+
+    mock_ai_service["analyse_strava_activities"].side_effect = AIRateLimitError("rate limited")
+
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={"activities": [{"id": 1, "name": "Ride", "type": "Ride",
+                              "distance": 50000, "movingTime": 3600,
+                              "elapsedTime": 3700, "totalElevationGain": 500,
+                              "startDate": "2026-04-10T08:00:00Z"}]},
+    )
+
+    assert response.status_code == 503
+    assert "rate" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_plan_endpoint_returns_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
+    """The /generate-plan endpoint must return HTTP 503 when AIRateLimitError is raised."""
+    from services.ai_service import AIRateLimitError
+
+    mock_ai_service["generate_training_plan"].side_effect = AIRateLimitError("rate limited")
+
+    response = await client.post(
+        "/api/v1/ai/generate-plan",
+        headers=auth_headers,
+        json={},
+    )
+
+    assert response.status_code == 503
+    assert "rate" in response.json()["detail"].lower()
+

@@ -15,13 +15,18 @@ import schemas
 from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
-from services.ai_service import MAX_CONVERSATION_HISTORY
+from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 logger = logging.getLogger(__name__)
+
+_RATE_LIMIT_DETAIL = (
+    "The AI service is temporarily unavailable due to rate limiting. "
+    "Please try again in a few minutes."
+)
 
 
 def _default_provider() -> str:
@@ -90,13 +95,18 @@ async def analyse_activities(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
 
-    result = await ai_service.analyse_strava_activities(
-        [activity.model_dump() for activity in body.activities],
-        provider=_provider(current_user),
-        streams_by_id=streams_by_id,
-        max_heart_rate=body.max_heart_rate,
-        training_plan=training_plan or None,
-    )
+    try:
+        result = await ai_service.analyse_strava_activities(
+            [activity.model_dump() for activity in body.activities],
+            provider=_provider(current_user),
+            streams_by_id=streams_by_id,
+            max_heart_rate=body.max_heart_rate,
+            training_plan=training_plan or None,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
     await crud.upsert_rider_assessment(
         db,
         current_user.id,
@@ -161,11 +171,16 @@ async def generate_plan(
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
-    plan = await ai_service.generate_training_plan(
-        profile,
-        provider=_provider(current_user),
-        rider_assessment=rider_assessment,
-    )
+    try:
+        plan = await ai_service.generate_training_plan(
+            profile,
+            provider=_provider(current_user),
+            rider_assessment=rider_assessment,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
     await crud.upsert_training_plan(db, current_user.id, plan)
     return plan
 
@@ -184,13 +199,18 @@ async def adapt_plan(
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
-    updated_plan = await ai_service.adapt_training_plan(
-        plan,
-        [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
-        profile,
-        provider=_provider(current_user),
-        rider_assessment=rider_assessment,
-    )
+    try:
+        updated_plan = await ai_service.adapt_training_plan(
+            plan,
+            [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
+            profile,
+            provider=_provider(current_user),
+            rider_assessment=rider_assessment,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
     await crud.upsert_training_plan(db, current_user.id, updated_plan)
     return updated_plan
 
@@ -225,18 +245,23 @@ async def ask_trainer(
     if classification.get("needs_science_rag", False):
         science_context, rag_sources = await retrieve_cycling_context(db, body.question)
 
-    result = await ai_service.ask_trainer(
-        body.question,
-        plan,
-        profile,
-        provider=_provider(current_user),
-        rider_assessment=rider_assessment,
-        coach_memory=coach_memory,
-        conversation_history=conversation_history,
-        context_workout=body.context_workout,
-        science_context=science_context,
-        classification=classification,
-    )
+    try:
+        result = await ai_service.ask_trainer(
+            body.question,
+            plan,
+            profile,
+            provider=_provider(current_user),
+            rider_assessment=rider_assessment,
+            coach_memory=coach_memory,
+            conversation_history=conversation_history,
+            context_workout=body.context_workout,
+            science_context=science_context,
+            classification=classification,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     plan_updates = result.get("plan_updates") or []
@@ -254,13 +279,17 @@ async def ask_trainer(
         plan_update_count=len(plan_updates) if plan_updates else None,
     )
 
-    # Update coach memory
-    updated_memory = await ai_service.update_coach_memory(
-        coach_memory,
-        body.question,
-        result["response"],
-        provider=_provider(current_user),
-    )
+    # Update coach memory (best-effort — rate-limit errors are logged, not surfaced)
+    try:
+        updated_memory = await ai_service.update_coach_memory(
+            coach_memory,
+            body.question,
+            result["response"],
+            provider=_provider(current_user),
+        )
+    except AIRateLimitError:
+        logger.warning("Coach memory update skipped due to AI rate limit", exc_info=True)
+        updated_memory = coach_memory
     if updated_memory and updated_memory != coach_memory:
         await crud.upsert_coach_memory(db, current_user.id, updated_memory)
 
@@ -318,12 +347,17 @@ async def rate_workout(
                 exc_info=True,
             )
 
-    result = await ai_service.rate_completed_workout(
-        body.day.model_dump(by_alias=True),
-        profile,
-        provider=_provider(current_user),
-        stream_delta=stream_delta,
-    )
+    try:
+        result = await ai_service.rate_completed_workout(
+            body.day.model_dump(by_alias=True),
+            profile,
+            provider=_provider(current_user),
+            stream_delta=stream_delta,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
 
     if result.get("flag_for_adaptation"):
         # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
@@ -504,14 +538,19 @@ async def refresh_login_summary(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
-    login_summary = await ai_service.generate_login_summary(
-        ride_insights=assessment.ride_insights,
-        last_ride_feedback=assessment.last_ride_feedback,
-        notes=assessment.notes,
-        estimated_ftp=assessment.estimated_ftp,
-        training_plan=training_plan or None,
-        provider=_provider(current_user),
-    )
+    try:
+        login_summary = await ai_service.generate_login_summary(
+            ride_insights=assessment.ride_insights,
+            last_ride_feedback=assessment.last_ride_feedback,
+            notes=assessment.notes,
+            estimated_ftp=assessment.estimated_ftp,
+            training_plan=training_plan or None,
+            provider=_provider(current_user),
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
 
     if login_summary:
         await crud.upsert_rider_assessment(

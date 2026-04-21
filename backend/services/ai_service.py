@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 from json_repair import repair_json
 from openai import AsyncOpenAI
@@ -54,6 +55,10 @@ GEMINI_MODEL = "gemini-2.0-flash"
 
 logger = logging.getLogger(__name__)
 
+
+class AIRateLimitError(Exception):
+    """Raised when the AI provider returns a rate-limit (429) response."""
+
 def _make_openai() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
@@ -77,12 +82,17 @@ async def _chat(provider: str, system_prompt: str, user_msg: str, json_mode: boo
             system_instruction=system_prompt,
             response_mime_type="application/json" if json_mode else None,
         )
-        async with _make_gemini().aio as client:
-            response = await client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=user_msg,
-                config=config,
-            )
+        try:
+            async with _make_gemini().aio as client:
+                response = await client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=user_msg,
+                    config=config,
+                )
+        except genai_errors.ClientError as exc:
+            if exc.code == 429:
+                raise AIRateLimitError(str(exc)) from exc
+            raise
         return response.text or ""
     client = _make_openai()
     kwargs: dict[str, Any] = {}
@@ -114,12 +124,17 @@ async def _chat_history(
             )
             for msg in messages
         ]
-        async with _make_gemini().aio as client:
-            response = await client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=contents,
-                config=config,
-            )
+        try:
+            async with _make_gemini().aio as client:
+                response = await client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=contents,
+                    config=config,
+                )
+        except genai_errors.ClientError as exc:
+            if exc.code == 429:
+                raise AIRateLimitError(str(exc)) from exc
+            raise
         return response.text or ""
     client = _make_openai()
     kwargs: dict[str, Any] = {}
