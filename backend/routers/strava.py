@@ -16,7 +16,7 @@ import auth
 import crud
 import models
 import schemas
-from database import get_db
+from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
 
 STRAVA_OAUTH_BASE = "https://www.strava.com"
@@ -241,9 +241,11 @@ async def _run_import_background(
     access_token: str,
     ftp: float,
     after_ts: int,
-    db: AsyncSession,
 ) -> None:
-    """Fetch Strava activities and build the ride-metrics chain in the background."""
+    """Fetch Strava activities and build the ride-metrics chain in the background.
+
+    Opens its own DB session so it is not tied to the request lifecycle.
+    """
     _import_progress[user_id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
     try:
         # --- Paginate activity list ---
@@ -310,9 +312,10 @@ async def _run_import_background(
 
         # --- Build chain and persist ---
         metrics_chain = build_ride_metrics_chain(rides, ftp, initial_ctl=0.0, initial_atl=0.0)
-        for m in metrics_chain:
-            await crud.upsert_ride_metric(db, user_id, **m)
-        await db.commit()
+        async with async_session_maker() as db:
+            for m in metrics_chain:
+                await crud.upsert_ride_metric(db, user_id, **m)
+            await db.commit()
 
         _import_progress[user_id] = {
             "status": "done",
@@ -419,7 +422,6 @@ async def import_strava_history(
         access_token=access_token,
         ftp=ftp,
         after_ts=after_ts,
-        db=db,
     )
 
     return {"status": "started"}

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -403,29 +404,7 @@ async def upsert_ride_metric(
     summary: str | None = None,
 ) -> models.RideMetric:
     """Insert or update a RideMetric row identified by (user_id, strava_activity_id)."""
-    existing = await db.scalar(
-        select(models.RideMetric).where(
-            models.RideMetric.user_id == user_id,
-            models.RideMetric.strava_activity_id == strava_activity_id,
-        )
-    )
-    if existing is not None:
-        existing.activity_date = activity_date
-        existing.sport_type = sport_type
-        existing.duration_seconds = duration_seconds
-        existing.avg_power_w = avg_power_w
-        existing.normalized_power_w = normalized_power_w
-        existing.intensity_factor = intensity_factor
-        existing.tss = tss
-        existing.ftp_used = ftp_used
-        existing.ctl_after = ctl_after
-        existing.atl_after = atl_after
-        existing.tsb_after = tsb_after
-        existing.ride_purpose = ride_purpose
-        existing.summary = summary
-        return existing
-
-    row = models.RideMetric(
+    values = dict(
         user_id=user_id,
         strava_activity_id=strava_activity_id,
         activity_date=activity_date,
@@ -442,8 +421,17 @@ async def upsert_ride_metric(
         ride_purpose=ride_purpose,
         summary=summary,
     )
-    db.add(row)
-    return row
+    stmt = (
+        pg_insert(models.RideMetric)
+        .values(**values, id=str(__import__("uuid").uuid4()))
+        .on_conflict_do_update(
+            index_elements=["user_id", "strava_activity_id"],
+            set_={k: v for k, v in values.items() if k not in ("user_id", "strava_activity_id")},
+        )
+        .returning(models.RideMetric)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one()
 
 
 async def get_ride_metrics_history(
