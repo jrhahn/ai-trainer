@@ -6,6 +6,7 @@ import StravaConnect from '../components/StravaConnect'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
 import { deleteCurrentUser, updateCurrentUser } from '../services/user'
+import { useImportProgress } from '../hooks/useImportProgress'
 
 export default function SettingsPage() {
   const {
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
   const [nameInput, setNameInput] = useState(userProfile?.name ?? '')
+
+  const importProgress = useImportProgress()
 
   const saveAI = async () => {
     if (!authToken) return
@@ -177,6 +180,41 @@ export default function SettingsPage() {
         </div>
 
         <StravaConnect />
+
+        {importProgress.status !== 'idle' && (
+          <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-700 mb-2">Ride history import</p>
+            {importProgress.status === 'running' && (() => {
+              const pct = importProgress.total > 0
+                ? Math.round((importProgress.processed / importProgress.total) * 100)
+                : null
+              return (
+                <>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                    <div
+                      className="bg-amber-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: pct !== null ? `${pct}%` : '10%' }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {pct !== null
+                      ? `${importProgress.processed} / ${importProgress.total} rides (${pct}%)`
+                      : 'Fetching ride list…'}
+                  </p>
+                </>
+              )
+            })()}
+            {importProgress.status === 'done' && (
+              <p className="text-xs text-green-700">
+                ✓ {importProgress.processed} ride{importProgress.processed !== 1 ? 's' : ''} imported
+                {importProgress.skipped > 0 ? `, ${importProgress.skipped} skipped` : ''}
+              </p>
+            )}
+            {importProgress.status === 'error' && (
+              <p className="text-xs text-red-600">Import failed: {importProgress.error || 'unknown error'}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Danger zone */}

@@ -5,6 +5,54 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-04-21
+
+### Added
+
+- **Per-ride time-series metrics pipeline** — a structured `ride_metrics` table now stores TSS,
+  normalised power, intensity factor, CTL/ATL/TSB, FTP used, ride purpose, rule-based summary,
+  and coach/user notes for every ride. This replaces plan-estimate-based fitness tracking with
+  values derived from actual completed rides.
+  - `models.py` — new `RideMetric` ORM model; `User` now has a `ride_metrics` relationship.
+  - `alembic/versions/20260421_000001_add_ride_metrics.py` — idempotent migration creating the
+    `ride_metrics` table with a unique index on `(user_id, strava_activity_id)`.
+  - `services/analysis.py` — four new pure functions: `compute_ride_tss()`,
+    `apply_ctl_atl_decay()` (exponential weighted average with multi-day gap handling),
+    `build_rule_based_summary()`, and `build_ride_metrics_chain()`.
+  - `crud.py` — five new async functions: `upsert_ride_metric()`, `get_ride_metrics_history()`,
+    `get_latest_ride_metric()`, `update_ride_metric_notes()`, `get_ride_metric_by_date()`.
+  - `schemas.py` — `RideMetricSchema` and `ImportHistoryResponse` schemas.
+
+- **Historical Strava import endpoint** (`POST /strava/import-history`) — fetches up to 6 months
+  of Strava activities (configurable via `?months=` query param, clamped 1–24), computes the full
+  CTL/ATL/TSB chain, and bulk-upserts ride metrics. Safe to call repeatedly; does not overwrite
+  existing coach or user notes.
+
+- **Ride metrics context injected into all AI prompts** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`) — `ride_metrics_context_section()` renders the 30
+  most recent rides as a compact table (date | purpose | TSS | NP | CTL | ATL | TSB | summary +
+  notes). This section is passed to `generate-plan`, `adapt-plan`, and `ask-trainer` so the LLM
+  reads pre-computed structured data instead of re-processing raw activities.
+
+- **Coach auto-rating at ingestion** — when `POST /ai/analyse-activities` processes a ride that
+  matches a plan day, `rate_completed_workout()` is called automatically and the result is stored
+  as `coach_note` on the `RideMetric` row.
+
+- **User feedback inference via chat** (`routers/ai.py`) — the `ask-trainer` endpoint now
+  extracts a `ride_note_update` field from the LLM response. If the user mentions how a ride felt
+  in conversation, the inferred note is persisted as `user_note` on the matching `RideMetric` row
+  without any extra user action.
+
+### Changed
+
+- **`POST /strava/import-history` defaults to 6 months** — the `after` timestamp is sent directly
+  to Strava's API so only recent activities are downloaded; no full-history pagination needed.
+- **`rate_completed_workout()` guard fix** (`services/ai_service.py`) — changed early-return
+  condition from `if not feedback` to `if not feedback and not stream_delta` so the coach can
+  auto-rate from stream data alone without requiring user-entered feedback.
+- **`rate_workout` endpoint cleanup** (`routers/ai.py`) — inline auto-adapt block replaced with
+  the shared `_auto_adapt_plan()` helper.
+
 ## [0.16.3] - 2026-04-21
 
 ### Changed

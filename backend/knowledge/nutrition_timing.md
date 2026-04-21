@@ -2,182 +2,215 @@
 
 ## Overview
 
-The timing of carbohydrate, protein, and fluid intake relative to training and
-racing has a measurable impact on performance, recovery, and adaptation. This
-file summarises evidence-based guidelines for peri-workout and race-day nutrition.
+Nutrition timing — when and what a cyclist eats relative to training — is
+as important as total daily caloric and macronutrient intake. The right fuelling
+strategy optimises training quality, recovery, and adaptation.
 
 ---
 
-## Pre-Exercise Nutrition
+## Pre-Ride Fuelling
 
-### Goals
-1. Top up liver and muscle glycogen stores.
-2. Maintain blood glucose stability throughout the warm-up.
-3. Avoid gastrointestinal (GI) distress.
+### 2–4 Hours Before
 
-### Carbohydrate Loading (for events > 90 min)
+The pre-ride meal establishes glycogen stores and blood glucose for the session:
+- **Carbohydrates**: 1–3 g/kg body weight; choose low-fibre, moderate-GI sources
+  (oats, rice, banana, white bread with jam) to maximise glycogen without GI
+  distress during the ride
+- **Protein**: 20–30 g to begin the pre-exercise anabolic environment and reduce
+  muscle protein breakdown
+- **Fat**: keep low (< 15 g) — fat slows gastric emptying and provides no
+  additional benefit for performance
+- **Fluid**: 500–700 ml of water with the meal; check urine is pale yellow before
+  starting
 
-Muscle glycogen can be elevated ~20–40% above resting levels by a 48–72 h
-protocol of reduced training combined with high carbohydrate intake:
+### 30–60 Minutes Before
 
-- **Target**: 8–12 g carbohydrate per kg body mass per day for 2–3 days
-- **Timing**: Begin carbohydrate loading 3 days before the race/event
+A smaller "top-up" carbohydrate snack is useful if the gap since the last meal
+exceeds 3 hours, or before high-intensity sessions:
+- 20–40 g fast-digesting carbs (gel, banana, white rice cake)
+- Avoid if prone to reactive hypoglycaemia (the initial insulin spike can briefly
+  lower blood glucose at the onset of exercise — most athletes habituate to this)
 
-Evidence supports improved time-trial performance (3–5%) and endurance capacity
-for events of 90+ minutes (Burke et al., 2011).
+### Fasted Training
 
-### Pre-Race Meal
-
-| Timing before start | Carbohydrate | Key considerations |
-|---------------------|--------------|-------------------|
-| 3–4 h | 3–4 g/kg BM | Full meal; fat and fibre limited to reduce GI risk |
-| 1–2 h | 1–2 g/kg BM | Smaller meal or liquid carbohydrate |
-| 15–30 min | 0.3–0.5 g/kg BM | "Top-up" snack; low GI minimises reactive hypoglycaemia risk; some athletes prefer high GI immediately before |
-
-**Reactive hypoglycaemia**: Some cyclists experience a blood glucose dip when
-consuming carbohydrate 30–60 min before exercise. If susceptible, consume
-the pre-race snack ≤ 15 min before the start or rely on the 3–4 h meal only.
-
----
-
-## During Exercise
-
-### Carbohydrate Intake on the Bike
-
-The gut's capacity to absorb glucose is rate-limited by intestinal glucose
-transporters (SGLT1):
-
-| Duration | Recommended intake | Rationale |
-|----------|-------------------|-----------|
-| < 60 min | 0–30 g/h (or mouth rinse) | Glycogen reserves sufficient; mouth rinse alone can improve performance |
-| 60–90 min | 30–60 g/h | Single carbohydrate source (e.g., glucose, maltodextrin) |
-| > 90 min | 60–90 g/h | Multiple transportable carbohydrates needed |
-| Sportives/gran fondos > 3 h | 80–120 g/h (trained gut) | Requires gut training; 2:1 glucose:fructose ratio |
-
-### Multiple Transportable Carbohydrates
-
-Combining glucose and fructose (which use different intestinal transporters —
-SGLT1 and GLUT5) allows oxidation rates of 1.5–1.75 g/min (90–105 g/h) vs.
-~1 g/min for glucose alone. Products using a 2:1 or 1:0.8 glucose:fructose
-ratio (Jeukendrup, 2010):
-- 2:1 maltodextrin:fructose
-- Sports gels and drinks formulated for dual-transporter delivery
-
-**Gut training**: The gut adapts to high carbohydrate intake with consistent
-practice. Athletes aiming to absorb > 60 g/h should practise intake during
-training over 4–8 weeks to upregulate SGLT1 expression and reduce GI symptoms.
-
-### Hydration Strategy During Exercise
-
-See also heat_altitude_adaptation.md for hot-weather specifics.
-
-- Drink to thirst in most training rides (≤ 2 h).
-- For events > 90 min or in heat, drink ~500–750 mL/h (adjust for sweat rate).
-- Include sodium (500–1000 mg/L) in bottles for efforts > 90 min to maintain
-  plasma osmolality and stimulate drinking.
+Low-intensity aerobic rides (Zone 1–2) can be performed in the fasted state
+(overnight fast, no carbs before) to enhance fat oxidation adaptations:
+- Stimulates mitochondrial biogenesis via PGC-1α and AMPK signalling
+- Increases fat oxidation rates at submaximal intensities
+- **Only appropriate at Zone 1–2 intensity**: performance at higher intensities
+  is meaningfully impaired by glycogen depletion
+- Limit fasted sessions to ≤ 90 min; consume sufficient carbohydrates post-ride
+  to restore glycogen and support recovery
+- Not recommended for high-intensity days, long rides, or during peak training
 
 ---
 
-## Post-Exercise Nutrition (Recovery)
+## During-Ride Fuelling
+
+### General Guidelines
+
+| Ride Duration | Fuelling Need | Target (g carbs/h) |
+|--------------|--------------|-------------------|
+| < 60 min | None (may rinse mouth) | 0 |
+| 60–90 min | Small carb intake | 30–40 |
+| 90 min–2.5 h | Moderate fuelling | 60 |
+| > 2.5 h | Aggressive fuelling | 80–120 |
+
+**Mouth rinse**: For efforts < 60 min, simply rinsing the mouth with a
+carbohydrate solution (no swallowing needed) activates reward centres in the
+brain and improves performance by ~2–3% via a neural rather than metabolic
+mechanism.
+
+### Multiple Transportable Carbohydrates (MTCs)
+
+The intestine absorbs glucose via the SGLT1 transporter (maximal rate ~60 g/h)
+and fructose via GLUT5 (~30 g/h). Combining both saturates both transporters
+simultaneously, allowing total oxidation rates of up to **90–120 g/h** — a
+40–50% increase versus glucose alone (Jeukendrup, 2010).
+
+Optimal **glucose:fructose ratio** is 1:0.8 to 2:1:
+- Commercial gels and drinks: check labels for maltodextrin + fructose or
+  glucose + fructose blends
+- DIY: rice cakes with honey, date balls, white rice + maple syrup
+
+### Practical On-Bike Sources (per 30 g carbohydrate)
+
+| Food | Approx. 30 g carbs |
+|------|-------------------|
+| Energy gel (standard) | 1 gel (30–40 g) |
+| Banana (medium) | 1 banana |
+| Medjool date (2–3) | 2–3 dates |
+| White rice cake | 1–2 cakes |
+| Sports drink (6–8%) | 400–500 ml |
+| Chews / blocks | 4–6 pieces |
+
+### Sodium and Electrolytes
+
+Sodium is the primary electrolyte lost in sweat (500–1,500 mg/L depending on
+individual sweat rate and sweat salt concentration). For rides > 90 min:
+- Target 500–700 mg sodium/hour in hot conditions
+- Low-sodium fuelling during long events risks hyponatraemia — a potentially
+  fatal dilution of blood sodium — particularly when fluid intake is high
+
+---
+
+## Post-Ride Recovery Nutrition
 
 ### The Recovery Window
 
-The post-exercise period is metabolically privileged for glycogen resynthesis:
-muscle glucose uptake is enhanced via insulin-independent GLUT4 translocation
-for 30–60 min after exercise ends.
+Glycogen resynthesis is fastest in the first 30–60 minutes after exercise:
+- Insulin sensitivity is elevated post-exercise; muscles are primed to absorb
+  glucose
+- Delaying carbohydrate intake by 2 hours reduces glycogen resynthesis rate
+  by ~50% (Ivy et al., 1988)
+- **When two sessions are planned within 8 hours** (doubles, multi-day stage
+  races), rapid post-ride recovery nutrition is essential; otherwise, the window
+  matters less for athletes eating adequate total daily carbohydrates
 
-### Carbohydrate for Glycogen Resynthesis
+### Recovery Meal Composition
 
-- **Optimal rate**: 1–1.5 g/kg BM per hour for 4–6 hours post-exercise achieves
-  near-maximal glycogen synthesis (~5–7 mmol/kg wet wt/h).
-- **Practical first hit**: 0.8–1.0 g/kg BM within 30 min of finishing (when next
-  session is < 8 h away). If recovery time > 24 h, total daily intake matters
-  more than precise timing.
+| Nutrient | Target | Rationale |
+|---------|--------|-----------|
+| Carbohydrates | 1–1.2 g/kg body weight | Glycogen restoration |
+| Protein | 20–40 g (0.3–0.4 g/kg) | Muscle protein synthesis |
+| Fluid | 150% of sweat losses | Rehydration |
+| Sodium | 500–1,000 mg | Fluid retention |
 
-### Protein for Muscle Repair and Adaptation
+The classic **3:1 or 4:1 carbohydrate-to-protein ratio** (e.g., chocolate milk,
+rice + chicken, smoothie with fruit and Greek yoghurt) simultaneously maximises
+glycogen resynthesis and muscle protein synthesis.
 
-- **Dose**: 20–40 g high-quality protein (leucine-rich) within 1–2 h of exercise
-  stimulates maximal muscle protein synthesis (MPS). Doses beyond 40 g provide
-  marginal additional benefit for most athletes.
-- **Source**: Whey protein is rapidly digested and highly leucine-rich; casein is
-  slower-digesting and preferable before sleep. Plant proteins are effective when
-  consumed at slightly higher doses (~30–40 g) due to lower leucine density.
-- **Bedtime protein**: 40 g casein or a high-protein food 30–60 min before sleep
-  supports overnight MPS and recovery from heavy training days (Res et al., 2012).
+**Leucine** is the key amino acid trigger for muscle protein synthesis: ensure at
+least 2–3 g leucine in the recovery meal. High-leucine sources include whey
+protein, dairy, eggs, and chicken.
 
-### Co-ingestion of Carbohydrate and Protein
+### Sleep Nutrition
 
-Combining carbohydrate and protein post-exercise:
-- Enhances glycogen resynthesis when carbohydrate intake is suboptimal
-  (< 0.8 g/kg/h) by stimulating insulin secretion.
-- Reduces muscle protein breakdown.
-- Practical ratio: 3–4:1 carbohydrate:protein by mass in the recovery meal.
-
----
-
-## Race-Day and Multi-Stage Event Nutrition
-
-### Stage Races
-
-In multi-day events (e.g., gran fondos, stage races), daily carbohydrate intake
-should match training load:
-
-| Training day | Daily CHO target |
-|-------------|-----------------|
-| Rest / very easy | 3–5 g/kg BM |
-| Moderate (2–3 h) | 5–7 g/kg BM |
-| Heavy (3–5 h) | 8–10 g/kg BM |
-| Very heavy (> 5 h) | 10–12 g/kg BM |
-
-### Caffeine
-
-Caffeine is one of the most evidence-supported ergogenic aids in endurance sport:
-
-- **Dose**: 3–6 mg/kg BM taken 45–60 min before exercise.
-- **Mechanism**: Adenosine receptor antagonism reduces perceived effort (RPE)
-  and delays fatigue.
-- **Performance benefit**: 2–4% improvement in sustained endurance and time-trial
-  performance (Spriet, 2014).
-- **During exercise**: Lower "top-up" doses (1–2 mg/kg) from gels or cola in the
-  final 30–60 min of long events can sustain the effect.
-- **Tolerance and washout**: Regular consumers show attenuated effects. A 3–7 day
-  caffeine washout period before key events may restore sensitivity, though
-  evidence is mixed.
-
-### Sodium and Electrolytes in Long Events
-
-- Hyponatraemia (blood sodium < 135 mmol/L) is rare but serious; more common
-  in slow athletes who over-drink plain water.
-- Use electrolyte drinks or salt capsules for events > 4 h.
-- Target sodium intake: 500–1500 mg/h in hot, sweaty conditions.
+For sessions completed within 3 hours of bedtime:
+- A **casein-rich** pre-sleep snack (30–40 g protein from cottage cheese, Greek
+  yoghurt, or casein powder) sustains elevated amino acid availability overnight
+- Studies (Res et al., 2012) show pre-sleep protein intake increases overnight
+  muscle protein synthesis by ~22%
 
 ---
 
-## Practical Summary Table
+## Caffeine for Performance
 
-| Phase | Carbohydrate | Protein | Fluids |
-|-------|-------------|---------|--------|
-| 3–4 h pre | 3–4 g/kg | Moderate | 5–7 mL/kg |
-| 15–30 min pre | 0.3–0.5 g/kg | — | 250–500 mL |
-| During (< 60 min) | 30 g/h or mouth rinse | — | To thirst |
-| During (60–150 min) | 60 g/h | — | 500–750 mL/h |
-| During (> 150 min) | 80–90 g/h (2:1 CHO) | — | 600–900 mL/h + Na⁺ |
-| Within 30 min post | 0.8–1.0 g/kg | 20–40 g | 125–150% of fluid deficit |
-| Bedtime (heavy day) | 30–50 g | 40 g casein | — |
+Caffeine is the most evidence-based ergogenic aid available to cyclists:
+- **Dose**: 3–6 mg/kg body weight (e.g., 210–420 mg for a 70 kg cyclist)
+- **Timing**: 45–60 minutes before effort (peak plasma concentration)
+- **Effect**: ~3–5% improvement in time-trial performance; delays fatigue by
+  blocking adenosine receptors; lowers RPE at given workload
+- **Habitual use**: daily caffeine users see attenuated effects; a 3–5 day
+  withdrawal before a key race can restore sensitivity
+- **During long rides**: caffeine in late-ride gels (last 30–60 min) provides a
+  late-race "hit" when glycogen is low and fatigue is high
+- Avoid > 9 mg/kg — not only does performance plateau but GI distress and
+  anxiety increase
+
+---
+
+## Hydration Strategy
+
+### Pre-Hydration Assessment
+
+- **Urine colour**: pale straw = well hydrated; dark yellow = dehydrated
+- **Body weight**: dehydration of > 2% body mass significantly impairs
+  time-trial performance (~2–5% power reduction)
+
+### Sweat Rate Estimation
+
+    Sweat rate (ml/h) = (pre-ride weight − post-ride weight) × 1000 / duration (h)
+                        + fluid consumed (ml) / duration (h)
+
+Individual sweat rates range from 500–2,500 ml/h. Athletes should measure their
+personal sweat rate in representative conditions and match fluid intake accordingly.
+
+### During-Ride Guidelines
+
+- **Rate**: 400–800 ml/h in moderate conditions; up to 1,200 ml/h in extreme heat
+- **Avoid over-drinking**: match intake to thirst in recreational riding; use
+  sweat rate measurements for precision in competition
+- **Cold fluid**: ingesting cold (4 °C) beverages lowers core temperature more
+  efficiently than ambient-temperature drinks — a marginal but real advantage
+  in heat
+
+---
+
+## Special Situations
+
+### Altitude Training
+
+Altitude increases resting metabolic rate by 5–10% and appetite is often
+suppressed. Practical guidance:
+- Increase total daily carbohydrate intake by ~10–15% to offset elevated
+  caloric expenditure and maintain glycogen stores
+- Increase iron-rich food intake (red meat, legumes, dark leafy greens) to
+  support increased EPO-driven red blood cell production
+- Increase hydration: altitude accelerates respiratory water loss
+
+### Multi-Day Racing / Cycling Holidays
+
+For stage races or back-to-back training days:
+- Never skip the post-ride carbohydrate window — each night's glycogen
+  restoration determines the next day's performance
+- Target 7–10 g/kg/day total carbohydrate during high-load periods
+- Fat intake can be temporarily deprioritised during peak load weeks
 
 ---
 
 ## References
 
-- Burke LM et al. (2011). Carbohydrates for training and competition.
-  *Journal of Sports Sciences*, 29(Suppl 1), S17–S27.
-- Jeukendrup AE (2010). Carbohydrate and exercise performance: the role of
-  multiple transportable carbohydrates. *Current Opinion in Clinical Nutrition
-  & Metabolic Care*, 13(4), 452–457.
-- Res PT et al. (2012). Protein ingestion before sleep improves postexercise
-  overnight recovery. *Medicine & Science in Sports & Exercise*, 44(8), 1560–1569.
-- Spriet LL (2014). Exercise and sport performance with low doses of caffeine.
-  *Sports Medicine*, 44(Suppl 2), 175–184.
-- Thomas DT, Erdman KA, Burke LM (2016). American College of Sports Medicine
-  joint position statement: nutrition and athletic performance. *Medicine &
-  Science in Sports & Exercise*, 48(3), 543–568.
+- Jeukendrup AE. (2010). Carbohydrate and exercise performance: the role of
+  multiple transportable carbohydrates. *Current Opinion in Clinical Nutrition &
+  Metabolic Care*, 13(4), 452–457.
+- Ivy JL, Katz AL, Cutler CL, Sherman WM, Coyle EF. (1988). Muscle glycogen
+  synthesis after exercise: effect of time of carbohydrate ingestion.
+  *Journal of Applied Physiology*, 64(4), 1480–1485.
+- Res PT, Groen B, Pennings B, et al. (2012). Protein ingestion before sleep
+  improves postexercise overnight recovery. *Medicine & Science in Sports &
+  Exercise*, 44(8), 1560–1569.
+- Burke LM, van Loon LJC, Hawley JA. (2017). Carbohydrate loading for competitive
+  cycling. *Journal of Sports Sciences*, 35(24), 2449–2455.
+- Graham TE. (2001). Caffeine and exercise: metabolism, endurance and performance.
+  *Sports Medicine*, 31(11), 785–807.

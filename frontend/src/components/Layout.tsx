@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike, FlaskConical } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, FlaskConical, CheckCircle } from 'lucide-react'
+import { useImportProgress } from '../hooks/useImportProgress'
 
 const navItems = [
   { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
@@ -10,6 +11,20 @@ const navItems = [
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const importProgress = useImportProgress()
+  const prevStatusRef = useRef(importProgress.status)
+  const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (prevStatusRef.current === 'running' && importProgress.status === 'done') {
+      const n = importProgress.processed
+      setToast(`Ride history imported — ${n} ride${n !== 1 ? 's' : ''} processed`)
+      const id = setTimeout(() => setToast(null), 5000)
+      return () => clearTimeout(id)
+    }
+    prevStatusRef.current = importProgress.status
+  }, [importProgress.status, importProgress.processed])
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <nav className="flex flex-col gap-1 mt-6">
@@ -83,6 +98,19 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Import complete toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg animate-fade-in">
+          <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+          {toast}
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 text-gray-400 hover:text-white text-xs"
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
     </div>
   )
 }

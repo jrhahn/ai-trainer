@@ -376,3 +376,147 @@ async def get_athlete_metric_history(
         .limit(limit)
     )
     return list(result)
+
+
+# ---------------------------------------------------------------------------
+# Ride metrics
+# ---------------------------------------------------------------------------
+
+
+async def upsert_ride_metric(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    strava_activity_id: int,
+    activity_date: str,
+    sport_type: str = "cycling",
+    duration_seconds: int | None = None,
+    avg_power_w: int | None = None,
+    normalized_power_w: int | None = None,
+    intensity_factor: float | None = None,
+    tss: float | None = None,
+    ftp_used: int | None = None,
+    ctl_after: float | None = None,
+    atl_after: float | None = None,
+    tsb_after: float | None = None,
+    ride_purpose: str | None = None,
+    summary: str | None = None,
+) -> models.RideMetric:
+    """Insert or update a RideMetric row identified by (user_id, strava_activity_id)."""
+    existing = await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id == strava_activity_id,
+        )
+    )
+    if existing is not None:
+        existing.activity_date = activity_date
+        existing.sport_type = sport_type
+        existing.duration_seconds = duration_seconds
+        existing.avg_power_w = avg_power_w
+        existing.normalized_power_w = normalized_power_w
+        existing.intensity_factor = intensity_factor
+        existing.tss = tss
+        existing.ftp_used = ftp_used
+        existing.ctl_after = ctl_after
+        existing.atl_after = atl_after
+        existing.tsb_after = tsb_after
+        existing.ride_purpose = ride_purpose
+        existing.summary = summary
+        return existing
+
+    row = models.RideMetric(
+        user_id=user_id,
+        strava_activity_id=strava_activity_id,
+        activity_date=activity_date,
+        sport_type=sport_type,
+        duration_seconds=duration_seconds,
+        avg_power_w=avg_power_w,
+        normalized_power_w=normalized_power_w,
+        intensity_factor=intensity_factor,
+        tss=tss,
+        ftp_used=ftp_used,
+        ctl_after=ctl_after,
+        atl_after=atl_after,
+        tsb_after=tsb_after,
+        ride_purpose=ride_purpose,
+        summary=summary,
+    )
+    db.add(row)
+    return row
+
+
+async def get_ride_metrics_history(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 60,
+) -> list[models.RideMetric]:
+    """Return the most recent *limit* RideMetric rows for a user, newest first."""
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(models.RideMetric.user_id == user_id)
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(limit)
+    )
+    return list(result)
+
+
+async def get_latest_ride_metric(
+    db: AsyncSession,
+    user_id: str,
+) -> models.RideMetric | None:
+    """Return the single most recent RideMetric for a user.
+
+    Used to seed CTL/ATL for incremental chain continuation.
+    """
+    return await db.scalar(
+        select(models.RideMetric)
+        .where(models.RideMetric.user_id == user_id)
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(1)
+    )
+
+
+async def update_ride_metric_notes(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+    *,
+    coach_note: str | None = None,
+    user_note: str | None = None,
+) -> models.RideMetric | None:
+    """Partially update coach_note and/or user_note on a RideMetric row.
+
+    Only overwrites fields whose values are explicitly provided (not None).
+    Returns the updated row, or None if not found.
+    """
+    row = await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id == strava_activity_id,
+        )
+    )
+    if row is None:
+        return None
+    if coach_note is not None:
+        row.coach_note = coach_note
+    if user_note is not None:
+        row.user_note = user_note
+    return row
+
+
+async def get_ride_metric_by_date(
+    db: AsyncSession,
+    user_id: str,
+    activity_date: str,
+) -> models.RideMetric | None:
+    """Return the RideMetric whose activity_date matches the given ISO date string.
+
+    Used to resolve chat-inferred user feedback to a specific ride.
+    """
+    return await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_date == activity_date,
+        )
+    )

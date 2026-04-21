@@ -402,3 +402,40 @@ class FitUploadResponse(BaseModel):
     duration_minutes: int
     average_power: Optional[int] = None
     average_heart_rate: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# Ride metrics
+# ---------------------------------------------------------------------------
+
+
+class RideMetricSchema(CamelModel):
+    strava_activity_id: int
+    activity_date: str
+    sport_type: str
+    duration_seconds: Optional[int] = None
+    avg_power_w: Optional[int] = None
+    normalized_power_w: Optional[int] = None
+    intensity_factor: Optional[float] = None
+    tss: Optional[float] = None
+    ftp_used: Optional[int] = None
+    ctl_after: Optional[float] = None
+    atl_after: Optional[float] = None
+    tsb_after: Optional[float] = None
+    ride_purpose: Optional[str] = None
+    summary: Optional[str] = None
+    coach_note: Optional[str] = None
+    user_note: Optional[str] = None
+
+
+class ImportHistoryResponse(BaseModel):
+    processed: int
+    skipped: int
+
+
+class ImportProgressResponse(BaseModel):
+    status: str = "idle"  # idle | running | done | error
+    total: int = 0
+    processed: int = 0
+    skipped: int = 0
+    error: str = ""

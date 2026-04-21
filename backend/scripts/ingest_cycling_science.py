@@ -68,18 +68,19 @@ SEARCH_QUERIES = [
     "sweet spot training cycling threshold",
     "periodization endurance cycling performance",
     "high intensity interval training VO2max",
-    # Critical power / W-prime
-    "critical power W-prime cycling power duration",
-    "Monod Scherrer critical power anaerobic work capacity",
-    "W prime balance reconstitution cycling exercise",
+    # Critical power / power-duration model
+    "critical power W-prime cycling Monod Scherrer",
+    "power duration curve cycling anaerobic capacity",
+    "W prime reconstitution severe intensity exercise",
     # Heat and altitude adaptation
-    "heat acclimatisation cycling endurance performance",
-    "altitude training live high train low erythropoietin",
-    "hypoxia altitude VO2max cycling acclimatization",
+    "heat acclimatisation cycling performance plasma volume",
+    "altitude training live high train low haemoglobin",
+    "heat stress endurance performance sauna post exercise",
     # Nutrition timing
-    "carbohydrate intake cycling performance nutrition timing",
-    "post exercise glycogen resynthesis protein recovery",
-    "multiple transportable carbohydrates cycling endurance",
+    "carbohydrate intake during cycling performance fuelling",
+    "multiple transportable carbohydrates fructose glucose oxidation",
+    "post exercise nutrition glycogen resynthesis protein synthesis",
+    "caffeine ergogenic aid cycling time trial",
 ]
 
 S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
