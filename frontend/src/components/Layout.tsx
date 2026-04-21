@@ -42,7 +42,7 @@ export default function Layout() {
           <div className="bg-amber-500 rounded-lg p-1.5">
             <Bike size={20} className="text-white" />
           </div>
-          <span className="font-bold text-lg tracking-tight">AI Trainer</span>
+          <span className="font-bold text-lg tracking-tight">Train Like a Pro!</span>
         </div>
         <NavLinks />
       </aside>
@@ -53,7 +53,7 @@ export default function Layout() {
           <div className="bg-amber-500 rounded-lg p-1">
             <Bike size={18} className="text-white" />
           </div>
-          <span className="font-bold text-base tracking-tight">AI Trainer</span>
+          <span className="font-bold text-base tracking-tight">Train Like a Pro!</span>
         </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
