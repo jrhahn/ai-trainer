@@ -5,6 +5,60 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.3] - 2026-04-21
+
+### Changed
+
+- **Token-usage compaction** (`services/ai_service.py`, `services/prompts.py`) — reduces the
+  number of tokens sent per `ask-trainer` request to lower the risk of hitting per-minute TPM
+  limits:
+  - `MAX_CONVERSATION_HISTORY` reduced from 20 → **10** messages (saves ~1.5–3k tokens).
+  - Upcoming plan context reduced from 14 → **7 days** ahead (saves ~700–2.8k tokens).
+  - Plan entries sent to the model are now **slimmed** via `_slim_plan_entry()` — verbose fields
+    (`description`, `intervals`, `keyFocusPoints`, `coachFeedback`) are stripped; only scheduling
+    fields (`date`, `workoutType`, `durationMinutes`, `title`, `targetPower`, `completed`) are kept.
+    This cuts per-entry token cost by ~50–70%.
+  - Coach memory is **capped at 800 characters** (most recent notes), preventing unbounded growth
+    from inflating the system prompt.
+
+## [0.16.2] - 2026-04-21
+
+### Changed
+
+- **Gemini model upgrade** (`services/ai_service.py`) — switched `GEMINI_MODEL` from
+  `gemini-2.0-flash` to `gemini-2.5-flash` (Gemini Flash 3). The 2.5 generation has higher
+  per-minute token throughput limits on paid tiers, reducing the likelihood of 429
+  RESOURCE_EXHAUSTED errors observed with 2.0-flash at low monthly spend.
+
+## [0.16.1] - 2026-04-21
+
+### Fixed
+
+- **Gemini 429 RESOURCE_EXHAUSTED** (`services/ai_service.py`, `routers/ai.py`) — when the Gemini
+  API returns an HTTP 429 rate-limit error the backend previously let the raw exception propagate,
+  producing an opaque `500 Internal Server Error`. The fix adds a dedicated `AIRateLimitError`
+  exception: both `_chat()` and `_chat_history()` now catch `google.genai.errors.ClientError` with
+  `code == 429` and raise `AIRateLimitError` instead. All AI endpoints (`analyse-activities`,
+  `generate-plan`, `adapt-plan`, `ask-trainer`, `rate-workout`, `refresh-login-summary`) convert
+  this into an HTTP **503 Service Unavailable** with a user-friendly message. The
+  `update_coach_memory` call inside `ask-trainer` is treated as best-effort: a rate-limit there is
+  logged at `INFO` level and does not block the response.
+
+  The Gemini free-tier 429 is a **per-minute / per-day token-quota** error rather than a billing
+  limit. Common triggers even at low spend: very long conversation histories, large system prompts
+  (training plan + RAG context + coach notes all included in every request), or Gemini's own
+  per-region capacity limits. The 503 response lets the frontend show a clear retry message instead
+  of a generic server crash.
+
+### Tests
+
+- `test_chat_raises_ai_rate_limit_error_on_gemini_429` — `_chat` raises `AIRateLimitError` on a
+  mocked 429 `ClientError`.
+- `test_chat_history_raises_ai_rate_limit_error_on_gemini_429` — same for `_chat_history`.
+- `test_ask_trainer_endpoint_returns_503_on_rate_limit` — `/ask-trainer` returns 503.
+- `test_analyse_activities_endpoint_returns_503_on_rate_limit` — `/analyse-activities` returns 503.
+- `test_generate_plan_endpoint_returns_503_on_rate_limit` — `/generate-plan` returns 503.
+
 ## [0.16.0] - 2026-04-20
 
 ### Changed
