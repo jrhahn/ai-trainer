@@ -1,5 +1,6 @@
 """AI routes."""
 
+import json
 import logging
 import os
 from datetime import date as _date
@@ -157,6 +158,13 @@ async def analyse_activities(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
+
+    # Normalise rideInsights: the LLM may return a list of dicts or a string.
+    # The DB column and Pydantic schema both expect a plain string.
+    _ri = result.get("rideInsights")
+    if _ri is not None and not isinstance(_ri, str):
+        result["rideInsights"] = json.dumps(_ri)
+
     await crud.upsert_rider_assessment(
         db,
         current_user.id,

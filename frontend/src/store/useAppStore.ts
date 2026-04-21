@@ -187,6 +187,7 @@ export interface RiderAssessment {
 interface AppState {
   authToken: string | null
   isLoadingUserData: boolean
+  loadingStep: number
   userProfile: UserProfile | null
   trainingPlan: TrainingDay[]
   workoutLogs: Record<string, WorkoutFeedback>
@@ -239,6 +240,7 @@ const dataState = {
 const initialState = {
   authToken: null as string | null,
   isLoadingUserData: false,
+  loadingStep: 0,
   ...dataState,
 }
 
@@ -304,15 +306,17 @@ export const useAppStore = create<AppState>()(
       const token = tokenOverride ?? get().authToken
       if (!token) return
 
-      set({ isLoadingUserData: true, authToken: token })
+      set({ isLoadingUserData: true, loadingStep: 0, authToken: token })
+      const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
       try {
+        const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
         const [user, plan, workoutLogs, chatHistory, coachMemory, metricsHistory] = await Promise.all([
-          fetchCurrentUser(token),
-          fetchTrainingPlan(token),
-          fetchWorkoutLogs(token),
-          fetchChatHistory(token),
-          fetchCoachMemory(token),
-          fetchMetricsHistory(token),
+          track(fetchCurrentUser(token)),
+          track(fetchTrainingPlan(token)),
+          track(fetchWorkoutLogs(token)),
+          track(fetchChatHistory(token)),
+          track(fetchCoachMemory(token)),
+          track(fetchMetricsHistory(token)),
         ])
 
         set({
@@ -338,7 +342,7 @@ export const useAppStore = create<AppState>()(
         }
         throw error
       } finally {
-        set({ isLoadingUserData: false })
+        set({ isLoadingUserData: false, loadingStep: 0 })
       }
     },
   })
