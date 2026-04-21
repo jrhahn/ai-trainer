@@ -37,7 +37,7 @@ export default function LoginPage() {
           <div className="bg-amber-500 rounded-lg p-1.5">
             <Bike size={22} className="text-white" />
           </div>
-          <span className="font-bold text-xl text-gray-900">AI Cycling Trainer</span>
+          <span className="font-bold text-xl text-gray-900">Train Like a Pro!</span>
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h1>

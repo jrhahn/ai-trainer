@@ -244,7 +244,7 @@ export default function OnboardingPage() {
             <div className="bg-amber-500 rounded-lg p-1.5">
               <Bike size={22} className="text-white" />
             </div>
-            <span className="font-bold text-xl text-gray-900">AI Cycling Trainer</span>
+            <span className="font-bold text-xl text-gray-900">Train Like a Pro!</span>
           </div>
           <div className="mb-2">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
