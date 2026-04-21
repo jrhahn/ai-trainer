@@ -1184,3 +1184,103 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
             f"Day {day['date']} ({day['workoutType']}) must have at least 3 keyFocusPoints, "
             f"got {len(focus_points)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# COACH_PERSONA / RUNNING_COACH_PERSONA — friendly talking style
+# ---------------------------------------------------------------------------
+
+
+def test_coach_persona_is_friend_framed():
+    """COACH_PERSONA must position the coach as a friend, not a clinical professional."""
+    from services.prompts import COACH_PERSONA
+
+    assert "friend" in COACH_PERSONA.lower(), "COACH_PERSONA must describe the coach as a friend"
+    assert "cycling" in COACH_PERSONA.lower(), "COACH_PERSONA must mention cycling"
+    # Should not fall back to the old stiff framing
+    assert "professional cycling coach" not in COACH_PERSONA.lower()
+
+
+def test_running_coach_persona_is_friend_framed():
+    """RUNNING_COACH_PERSONA must use the same friendly framing as COACH_PERSONA."""
+    from services.prompts import RUNNING_COACH_PERSONA
+
+    assert "friend" in RUNNING_COACH_PERSONA.lower()
+    assert "running" in RUNNING_COACH_PERSONA.lower()
+    assert "professional running coach" not in RUNNING_COACH_PERSONA.lower()
+
+
+def test_personas_are_sport_distinct():
+    """The two personas must be distinct and each reference their own sport."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    assert COACH_PERSONA != RUNNING_COACH_PERSONA
+    assert "cycling" in COACH_PERSONA and "cycling" not in RUNNING_COACH_PERSONA
+    assert "running" in RUNNING_COACH_PERSONA and "running" not in COACH_PERSONA
+
+
+def test_coach_persona_empathy_traits():
+    """COACH_PERSONA must instruct the AI to show empathy and avoid judgement."""
+    from services.prompts import COACH_PERSONA
+
+    text = COACH_PERSONA.lower()
+    assert "empathy" in text or "empathetic" in text or "compassion" in text
+    assert "judged" in text or "judgment" in text or "judge" in text
+
+
+def test_coach_persona_encourages_direct_address():
+    """Both personas must instruct the AI to address the athlete directly with 'you'."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        assert "address the athlete directly" in persona.lower() or "'you'" in persona
+
+
+def test_coach_persona_retains_long_term_philosophy():
+    """Both personas must still communicate the long-term development philosophy."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        assert "long-term" in persona.lower()
+        assert "recovery" in persona.lower()
+
+
+def test_analyse_activities_system_uses_correct_persona():
+    """analyse_activities_system must embed the sport-appropriate persona."""
+    from services.prompts import analyse_activities_system, COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    cycling_system = analyse_activities_system("cycling")
+    running_system = analyse_activities_system("running")
+
+    # Each system prompt must start with the matching persona
+    assert cycling_system.startswith(COACH_PERSONA)
+    assert running_system.startswith(RUNNING_COACH_PERSONA)
+    # And must not bleed into the wrong sport
+    assert "You are a knowledgeable cycling coach" not in running_system
+    assert "You are a knowledgeable running coach" not in cycling_system
+
+
+def test_generate_plan_system_uses_coach_persona():
+    """generate_plan_system must embed COACH_PERSONA (cycling plans only)."""
+    from services.prompts import generate_plan_system, COACH_PERSONA
+
+    system = generate_plan_system()
+    assert system.startswith(COACH_PERSONA)
+
+
+def test_rate_workout_system_uses_coach_persona():
+    """rate_workout_system must embed COACH_PERSONA."""
+    from services.prompts import rate_workout_system, COACH_PERSONA
+
+    system = rate_workout_system()
+    assert system.startswith(COACH_PERSONA)
+
+
+def test_friend_coach_traits_template_interpolation():
+    """_FRIEND_COACH_TRAITS must resolve without placeholders for known sport names."""
+    from services.prompts import _FRIEND_COACH_TRAITS
+
+    for sport in ("cycling", "running"):
+        resolved = _FRIEND_COACH_TRAITS.format(sport=sport)
+        assert sport in resolved
+        assert "{sport}" not in resolved

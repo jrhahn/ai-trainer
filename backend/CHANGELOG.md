@@ -5,7 +5,38 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] - 2026-04-20
+## [0.16.0] - 2026-04-20
+
+### Changed
+
+- **Coach talking style** (`services/prompts.py`) — `COACH_PERSONA` and `RUNNING_COACH_PERSONA`
+  are rewritten to give the AI a warm, empathic, friend-like voice:
+  - The coach is framed as *"a great friend who happens to know a lot about [sport]"* — casual and
+    approachable, never stiff or clinical.
+  - The AI is instructed to use the athlete's first name, celebrate wins enthusiastically,
+    acknowledge struggles with compassion, and never make the athlete feel judged for missing a
+    session or falling short.
+  - Honest feedback is preserved but framed with kindness: *"like a great friend who tells you the
+    truth because they care about you."*
+  - A shared `_FRIEND_COACH_TRAITS` template eliminates duplication between the cycling and running
+    personas.
+
+### Tests
+
+- New section `COACH_PERSONA / RUNNING_COACH_PERSONA — friendly talking style` in
+  `tests/test_ai_service_unit.py` (10 assertions across 9 test functions):
+  - `test_coach_persona_is_friend_framed` — verifies friend framing and sport specificity
+  - `test_running_coach_persona_is_friend_framed` — mirrors the above for running
+  - `test_personas_are_sport_distinct` — asserts the two personas are unique and non-overlapping
+  - `test_coach_persona_empathy_traits` — checks for compassion/no-judgement language
+  - `test_coach_persona_encourages_direct_address` — verifies "address the athlete directly"
+  - `test_coach_persona_retains_long_term_philosophy` — guards against losing the development ethos
+  - `test_analyse_activities_system_uses_correct_persona` — ensures routing to the right persona by sport type
+  - `test_generate_plan_system_uses_coach_persona` — checks persona is embedded in plan generation
+  - `test_rate_workout_system_uses_coach_persona` — checks persona is embedded in workout rating
+  - `test_friend_coach_traits_template_interpolation` — validates `{sport}` placeholder is always resolved
+
+
 
 ### Added
 
