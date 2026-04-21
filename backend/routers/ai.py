@@ -288,7 +288,7 @@ async def ask_trainer(
             provider=_provider(current_user),
         )
     except AIRateLimitError:
-        logger.warning("Coach memory update skipped due to AI rate limit", exc_info=True)
+        logger.info("Coach memory update skipped due to AI rate limit")
         updated_memory = coach_memory
     if updated_memory and updated_memory != coach_memory:
         await crud.upsert_coach_memory(db, current_user.id, updated_memory)
