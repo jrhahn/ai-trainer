@@ -49,11 +49,25 @@ from .prompts import (
     refresh_login_summary_system,
     refresh_login_summary_user,
 )
-MAX_CONVERSATION_HISTORY = 20
+MAX_CONVERSATION_HISTORY = 10
+MAX_PLAN_DAYS_PAST = 7
+MAX_PLAN_DAYS_AHEAD = 7
+MAX_COACH_MEMORY_CHARS = 800
 OPENAI_MODEL = "gpt-4o-mini"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 logger = logging.getLogger(__name__)
+
+_SLIM_PLAN_KEEP = {"date", "workoutType", "workout_type", "title", "durationMinutes", "duration_minutes", "targetPower", "target_power", "completed"}
+
+
+def _slim_plan_entry(entry: dict) -> dict:
+    """Return a compact version of a plan day with only fields needed for chat context.
+
+    Verbose fields like ``description``, ``intervals``, ``keyFocusPoints``, and
+    ``coachFeedback`` are omitted to reduce the token footprint of the system prompt.
+    """
+    return {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
 
 
 class AIRateLimitError(Exception):
@@ -398,9 +412,10 @@ async def ask_trainer(
     classification: dict | None = None,
 ) -> dict:
     today = datetime.date.today().isoformat()
-    last_7_days = [day for day in plan if day.get("date", "") <= today][-7:]
-    next_14_days = [day for day in plan if day.get("date", "") >= today][:14]
-    memory_section = f"\n\nCoach notes about this athlete (remember these):\n{coach_memory}" if coach_memory else ""
+    last_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") <= today][-MAX_PLAN_DAYS_PAST:]
+    next_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") >= today][:MAX_PLAN_DAYS_AHEAD]
+    trimmed_memory = (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
+    memory_section = f"\n\nCoach notes about this athlete (remember these):\n{trimmed_memory}" if trimmed_memory else ""
 
     assessment_section = ask_trainer_assessment_section(rider_assessment)
     workout_section = ask_trainer_workout_section(context_workout)
@@ -418,7 +433,7 @@ async def ask_trainer(
         profile,
         today,
         last_7_days,
-        next_14_days,
+        next_7_days,
         assessment_section,
         memory_section,
         workout_section,

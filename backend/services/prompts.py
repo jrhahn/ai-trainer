@@ -468,7 +468,7 @@ def ask_trainer_system(
     profile: dict,
     today: str,
     last_7_days: list[dict],
-    next_14_days: list[dict],
+    next_n_days: list[dict],
     assessment_section: str,
     memory_section: str,
     workout_section: str,
@@ -506,7 +506,7 @@ def ask_trainer_system(
         f"Today's date: {today}\n"
         f"Athlete profile: {json.dumps(profile)}\n"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
-        f"Upcoming plan (next 14 days): {json.dumps(next_14_days)}"
+        f"Upcoming plan (next {len(next_n_days)} days): {json.dumps(next_n_days)}"
         f"{assessment_section}"
         f"{training_load_section}"
         f"{memory_section}"

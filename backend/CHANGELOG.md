@@ -5,6 +5,22 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.3] - 2026-04-21
+
+### Changed
+
+- **Token-usage compaction** (`services/ai_service.py`, `services/prompts.py`) — reduces the
+  number of tokens sent per `ask-trainer` request to lower the risk of hitting per-minute TPM
+  limits:
+  - `MAX_CONVERSATION_HISTORY` reduced from 20 → **10** messages (saves ~1.5–3k tokens).
+  - Upcoming plan context reduced from 14 → **7 days** ahead (saves ~700–2.8k tokens).
+  - Plan entries sent to the model are now **slimmed** via `_slim_plan_entry()` — verbose fields
+    (`description`, `intervals`, `keyFocusPoints`, `coachFeedback`) are stripped; only scheduling
+    fields (`date`, `workoutType`, `durationMinutes`, `title`, `targetPower`, `completed`) are kept.
+    This cuts per-entry token cost by ~50–70%.
+  - Coach memory is **capped at 800 characters** (most recent notes), preventing unbounded growth
+    from inflating the system prompt.
+
 ## [0.16.2] - 2026-04-21
 
 ### Changed
