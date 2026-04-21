@@ -51,7 +51,7 @@ from .prompts import (
 )
 MAX_CONVERSATION_HISTORY = 20
 OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 logger = logging.getLogger(__name__)
 

@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.2] - 2026-04-21
+
+### Changed
+
+- **Gemini model upgrade** (`services/ai_service.py`) — switched `GEMINI_MODEL` from
+  `gemini-2.0-flash` to `gemini-2.5-flash` (Gemini Flash 3). The 2.5 generation has higher
+  per-minute token throughput limits on paid tiers, reducing the likelihood of 429
+  RESOURCE_EXHAUSTED errors observed with 2.0-flash at low monthly spend.
+
 ## [0.16.1] - 2026-04-21
 
 ### Fixed
