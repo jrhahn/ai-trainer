@@ -421,17 +421,38 @@ async def upsert_ride_metric(
         ride_purpose=ride_purpose,
         summary=summary,
     )
-    stmt = (
-        pg_insert(models.RideMetric)
-        .values(**values, id=str(__import__("uuid").uuid4()))
-        .on_conflict_do_update(
-            index_elements=["user_id", "strava_activity_id"],
-            set_={k: v for k, v in values.items() if k not in ("user_id", "strava_activity_id")},
+
+    conn = await db.connection()
+    if conn.dialect.name == "postgresql":
+        stmt = (
+            pg_insert(models.RideMetric)
+            .values(**values, id=str(__import__("uuid").uuid4()))
+            .on_conflict_do_update(
+                index_elements=["user_id", "strava_activity_id"],
+                set_={k: v for k, v in values.items() if k not in ("user_id", "strava_activity_id")},
+            )
+            .returning(models.RideMetric)
         )
-        .returning(models.RideMetric)
+        result = await db.execute(stmt)
+        return result.scalar_one()
+
+    # SQLite (tests) — SELECT + update/insert; flush immediately to avoid autoflush issues
+    existing = await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id == strava_activity_id,
+        )
     )
-    result = await db.execute(stmt)
-    return result.scalar_one()
+    if existing is not None:
+        for attr, val in values.items():
+            setattr(existing, attr, val)
+        await db.flush()
+        return existing
+
+    row = models.RideMetric(id=str(__import__("uuid").uuid4()), **values)
+    db.add(row)
+    await db.flush()
+    return row
 
 
 async def get_ride_metrics_history(
