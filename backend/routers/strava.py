@@ -310,12 +310,14 @@ async def _run_import_background(
                 })
                 _import_progress[user_id]["processed"] = idx + 1
 
-        # --- Build chain and persist ---
+        # --- Build chain and persist in batches to avoid holding a connection indefinitely ---
         metrics_chain = build_ride_metrics_chain(rides, ftp, initial_ctl=0.0, initial_atl=0.0)
-        async with async_session_maker() as db:
-            for m in metrics_chain:
-                await crud.upsert_ride_metric(db, user_id, **m)
-            await db.commit()
+        BATCH = 50
+        for i in range(0, len(metrics_chain), BATCH):
+            async with async_session_maker() as db:
+                for m in metrics_chain[i : i + BATCH]:
+                    await crud.upsert_ride_metric(db, user_id, **m)
+                await db.commit()
 
         _import_progress[user_id] = {
             "status": "done",
@@ -412,6 +414,11 @@ async def import_strava_history(
 
     months = max(1, min(months, 24))
     after_ts = int((datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp())
+
+    # Prevent stacking duplicate background tasks: if one is already running, bail out.
+    current_progress = _import_progress.get(current_user.id, {})
+    if current_progress.get("status") == "running":
+        return {"status": "already_running"}
 
     # Mark started immediately so the progress endpoint sees "running" right away
     _import_progress[current_user.id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}

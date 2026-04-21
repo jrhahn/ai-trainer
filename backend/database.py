@@ -9,7 +9,13 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+asyncpg://localhost/aitrainer"
 )
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True,
+)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
 
