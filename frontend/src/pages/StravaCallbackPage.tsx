@@ -40,8 +40,15 @@ export default function StravaCallbackPage() {
         await loadUserData(authToken).catch(() => {})
       }
       setStep('importing')
-      // Fire-and-forget — backend responds 202 immediately
-      apiFetch('/strava/import-history', { method: 'POST', token: authToken }).catch(() => {})
+      // Fire-and-forget — backend responds 202 immediately.
+      // If the POST itself fails (network error, not connected), fall back to done.
+      apiFetch('/strava/import-history', { method: 'POST', token: authToken }).catch(() => {
+        if (!redirectScheduled.current) {
+          redirectScheduled.current = true
+          setStep('done')
+          setTimeout(() => navigate('/'), 2000)
+        }
+      })
     }
     void finalise()
   }, [authToken, loadUserData]) // eslint-disable-line react-hooks/exhaustive-deps

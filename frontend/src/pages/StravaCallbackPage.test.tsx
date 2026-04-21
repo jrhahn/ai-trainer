@@ -37,8 +37,15 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockLoadUserData.mockResolvedValue(undefined)
-  mockApiFetch.mockResolvedValue({ processed: 42, skipped: 0 })
   mockNavigate.mockReset()
+
+  // Default: POST starts the import, GET returns done with 42 rides
+  mockApiFetch.mockImplementation((path: string) => {
+    if (path === '/strava/import-progress') {
+      return Promise.resolve({ status: 'done', total: 42, processed: 42, skipped: 0, error: '' })
+    }
+    return Promise.resolve({ status: 'started' })
+  })
 })
 
 describe('StravaCallbackPage', () => {
@@ -55,8 +62,13 @@ describe('StravaCallbackPage', () => {
   })
 
   it('shows the importing step while the API call is in flight', async () => {
-    // Never resolves — keeps the component in the importing state
-    mockApiFetch.mockReturnValue(new Promise(() => {}))
+    // Progress stays at 'running' — component stays in importing step
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/strava/import-progress') {
+        return Promise.resolve({ status: 'running', total: 50, processed: 10, skipped: 0, error: '' })
+      }
+      return new Promise(() => {}) // POST never resolves
+    })
     setup('?success=1')
 
     await waitFor(() => {
@@ -76,7 +88,12 @@ describe('StravaCallbackPage', () => {
   })
 
   it('still reaches done and redirects even when import fails', async () => {
-    mockApiFetch.mockRejectedValue(new Error('network error'))
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/strava/import-progress') {
+        return Promise.resolve({ status: 'idle', total: 0, processed: 0, skipped: 0, error: '' })
+      }
+      return Promise.reject(new Error('network error'))
+    })
     setup('?success=1')
 
     await waitFor(() => expect(screen.getByText(/All set/i)).toBeInTheDocument())
