@@ -5,7 +5,44 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.17.0] - 2026-04-21
+## [0.18.0] - 2026-04-22
+
+### Added
+
+- **FTP estimation over time** (`services/analysis.py`) — new `estimate_ftp_over_time()`
+  function identifies rides with steady-state power intervals (coefficient of variation < 15 %),
+  estimates FTP for each using the existing HR-corrected formula (or a power-only fallback), then
+  applies an exponential weighted moving average (42-day time constant) so that the resulting FTP
+  series changes gradually.  Returns a list of `{date, ftp, raw_ftp}` dicts ordered by ride date.
+
+- **FTP estimation during activity ingestion** — `estimate_ftp_over_time` is now called inside
+  `POST /ai/analyse-activities` and the Strava background import task (`_run_import_background`).
+  Per-ride smoothed FTP estimates are persisted as `AthleteMetricSnapshot` rows with
+  `source = "ftp_estimation"` and `recorded_at` set to the ride date so they appear correctly
+  on the Athlete Progression chart.
+
+- **`POST /users/me/recalculate-metrics`** — new endpoint that rebuilds the full TSS / CTL / ATL /
+  TSB chain for all stored rides using a given FTP value.  Accepts an optional `ftp_override`
+  (watts); if omitted, the user's current FTP is used.  Clears all previous
+  `athlete_metric_snapshots` and writes a fresh summary snapshot.  Used by the new Settings UI.
+
+- **`crud.delete_athlete_metric_snapshots()`** — deletes all AthleteMetricSnapshot rows for a
+  user, used before rebuilding the metric history.
+
+- **`crud.get_all_ride_metrics_ordered()`** — returns all RideMetric rows for a user sorted
+  ascending by date, used during full-chain recalculation.
+
+- **`crud.create_athlete_metric_snapshot()` — `recorded_at` parameter** — the existing function
+  now accepts an optional `recorded_at: datetime` argument so back-dated FTP-estimation snapshots
+  can be inserted with the correct ride date.
+
+### Changed
+
+- `strava._run_import_background` now accepts `max_heart_rate` and `resting_heart_rate` from the
+  user profile and passes them to `estimate_ftp_over_time` so HR-based correction is applied when
+  the athlete's max HR is on record.
+
+
 
 ### Added
 

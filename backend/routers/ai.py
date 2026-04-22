@@ -17,7 +17,7 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 
@@ -239,6 +239,29 @@ async def analyse_activities(
             metrics_chain = build_ride_metrics_chain(rides_input, ftp_for_chain, seed_ctl, seed_atl)
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
+
+            # --- Phase 5b: Estimate FTP over time from steady intervals ---
+            ftp_series = estimate_ftp_over_time(
+                rides_input,
+                max_heart_rate=current_user.max_heart_rate,
+                resting_heart_rate=current_user.resting_heart_rate,
+            )
+            for point in ftp_series:
+                try:
+                    from datetime import datetime as _datetime
+                    from datetime import timezone as _tz
+                    ride_dt = _datetime.fromisoformat(point["date"]).replace(tzinfo=_tz.utc)
+                except ValueError:
+                    from datetime import datetime as _datetime, timezone as _tz
+                    ride_dt = _datetime.now(_tz.utc)
+                await crud.create_athlete_metric_snapshot(
+                    db,
+                    current_user.id,
+                    ftp=point["ftp"],
+                    threshold_hr=None,
+                    source="ftp_estimation",
+                    recorded_at=ride_dt,
+                )
 
             # --- Phase 6: Auto-rate rides that have a matching plan day ---
             profile_for_rating = _user_to_profile_dict(current_user)

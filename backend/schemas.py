@@ -439,3 +439,26 @@ class ImportProgressResponse(BaseModel):
     processed: int = 0
     skipped: int = 0
     error: str = ""
+
+
+# ---------------------------------------------------------------------------
+# FTP recalculation
+# ---------------------------------------------------------------------------
+
+
+class RecalculateMetricsRequest(CamelModel):
+    """Request body for POST /users/me/recalculate-metrics."""
+
+    ftp_override: Optional[int] = None
+    """New FTP value in watts.  When provided, the user's ``current_ftp`` is
+    updated before recomputing all ride metrics.  When omitted the existing
+    FTP stored on the user profile is used."""
+
+
+class RecalculateMetricsResponse(BaseModel):
+    """Response for POST /users/me/recalculate-metrics."""
+
+    updated: int
+    """Number of ride-metric rows that were recomputed."""
+    ftp_used: int
+    """The FTP value (watts) that was used for all calculations."""

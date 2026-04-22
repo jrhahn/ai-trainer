@@ -1284,3 +1284,96 @@ def test_friend_coach_traits_template_interpolation():
         resolved = _FRIEND_COACH_TRAITS.format(sport=sport)
         assert sport in resolved
         assert "{sport}" not in resolved
+
+
+# ---------------------------------------------------------------------------
+# estimate_ftp_over_time
+# ---------------------------------------------------------------------------
+
+
+def _make_steady_streams(duration_seconds: int, power_w: float, hr_bpm: float) -> dict:
+    """Build minimal Strava-style streams for a steady-effort ride."""
+    n = duration_seconds
+    return {
+        "watts": {"data": [power_w] * n},
+        "heartrate": {"data": [hr_bpm] * n},
+        "time": {"data": list(range(n))},
+    }
+
+
+def test_estimate_ftp_over_time_empty():
+    result = analysis.estimate_ftp_over_time([])
+    assert result == []
+
+
+def test_estimate_ftp_over_time_no_streams():
+    rides = [{"activity_date": "2026-01-10", "streams": {}}]
+    result = analysis.estimate_ftp_over_time(rides)
+    assert result == []
+
+
+def test_estimate_ftp_over_time_single_steady_ride_no_hr():
+    """Power-only fallback: steady 300 W → FTP ≈ 300 × 0.95 = 285 W."""
+    streams = _make_steady_streams(900, 300.0, 0.0)  # 15 min at 300 W
+    rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    result = analysis.estimate_ftp_over_time(rides)
+    assert len(result) == 1
+    assert result[0]["date"] == "2026-04-01"
+    assert abs(result[0]["ftp"] - round(300 * 0.95)) <= 2
+    assert result[0]["raw_ftp"] == round(300 * 0.95)
+
+
+def test_estimate_ftp_over_time_with_hr():
+    """HR-corrected method: power at LTHR → FTP ≈ interval power."""
+    max_hr = 190
+    lthr = round(max_hr * analysis.LTHR_RATIO)
+    # Ride at 250 W exactly at LTHR — correction factor = 1 → FTP ≈ 250 W
+    streams = _make_steady_streams(900, 250.0, float(lthr))
+    rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
+    assert len(result) == 1
+    # HR exactly at LTHR → raw_ftp ≈ 250 W (within rounding tolerance)
+    assert abs(result[0]["raw_ftp"] - 250) <= 2
+
+
+def test_estimate_ftp_over_time_smoothing():
+    """EWMA smoothing: first point seeds the value; subsequent points converge."""
+    max_hr = 190
+    lthr = float(round(max_hr * analysis.LTHR_RATIO))
+    # Two rides 1 week apart: first at 250 W, second at 300 W
+    r1 = {"activity_date": "2026-01-01", "streams": _make_steady_streams(900, 250.0, lthr)}
+    r2 = {"activity_date": "2026-01-08", "streams": _make_steady_streams(900, 300.0, lthr)}
+    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=42)
+    assert len(result) == 2
+    # First point seeded at raw value
+    assert result[0]["ftp"] == result[0]["raw_ftp"]
+    # Second point should be between the two raw values (EWMA)
+    assert result[0]["ftp"] <= result[1]["ftp"] <= result[1]["raw_ftp"]
+
+
+def test_estimate_ftp_over_time_high_variance_rejected():
+    """Variable power ride should NOT produce an estimate (CV > 15%)."""
+    n = 900
+    # Alternating 100 W / 400 W — high variance, CV ≫ 15 %
+    watts = [100.0 if i % 2 == 0 else 400.0 for i in range(n)]
+    streams = {
+        "watts": {"data": watts},
+        "time": {"data": list(range(n))},
+    }
+    rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    result = analysis.estimate_ftp_over_time(rides)
+    assert result == []
+
+
+def test_estimate_ftp_over_time_sorted_by_date():
+    """Results must be sorted ascending by activity_date."""
+    max_hr = 190
+    lthr = float(round(max_hr * analysis.LTHR_RATIO))
+    rides = [
+        {"activity_date": "2026-03-15", "streams": _make_steady_streams(900, 260.0, lthr)},
+        {"activity_date": "2026-02-01", "streams": _make_steady_streams(900, 240.0, lthr)},
+        {"activity_date": "2026-04-01", "streams": _make_steady_streams(900, 280.0, lthr)},
+    ]
+    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
+    dates = [r["date"] for r in result]
+    assert dates == sorted(dates)

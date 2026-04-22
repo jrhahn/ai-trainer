@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Save, Trash2, AlertTriangle, Server, LogOut, User } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
-import { deleteCurrentUser, updateCurrentUser } from '../services/user'
+import { deleteCurrentUser, recalculateMetrics, updateCurrentUser } from '../services/user'
 import { useImportProgress } from '../hooks/useImportProgress'
 
 export default function SettingsPage() {
@@ -33,6 +33,12 @@ export default function SettingsPage() {
   const [savedMsg, setSavedMsg] = useState('')
   const [nameInput, setNameInput] = useState(userProfile?.name ?? '')
 
+  // FTP override state
+  const [ftpInput, setFtpInput] = useState('')
+  const [ftpSaving, setFtpSaving] = useState(false)
+  const [recalcWorking, setRecalcWorking] = useState(false)
+  const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   const importProgress = useImportProgress()
 
   const saveAI = async () => {
@@ -52,6 +58,63 @@ export default function SettingsPage() {
     setUserProfile(updated.profile)
     setSavedMsg('Name saved!')
     setTimeout(() => setSavedMsg(''), 2000)
+  }
+
+  const saveFTP = async () => {
+    if (!authToken || !userProfile) return
+    const parsed = parseInt(ftpInput, 10)
+    if (isNaN(parsed) || parsed <= 0) {
+      setFtpMsg({ type: 'error', text: 'Please enter a valid positive FTP value in watts.' })
+      return
+    }
+    setFtpSaving(true)
+    setFtpMsg(null)
+    try {
+      const updated = await updateCurrentUser(authToken, { currentFTP: parsed })
+      setUserProfile(updated.profile)
+      setFtpInput('')
+      setFtpMsg({ type: 'success', text: `FTP updated to ${parsed} W.` })
+      setTimeout(() => setFtpMsg(null), 3000)
+    } catch {
+      setFtpMsg({ type: 'error', text: 'Failed to save FTP. Please try again.' })
+    } finally {
+      setFtpSaving(false)
+    }
+  }
+
+  const handleRecalculate = async () => {
+    if (!authToken) return
+    const parsed = ftpInput.trim() ? parseInt(ftpInput, 10) : undefined
+    if (parsed !== undefined && (isNaN(parsed) || parsed <= 0)) {
+      setFtpMsg({ type: 'error', text: 'Please enter a valid positive FTP value in watts.' })
+      return
+    }
+    const confirmed = window.confirm(
+      '⚠️ Recalculate TSS, ATL, CTL for all rides?\n\n' +
+        'This will overwrite all historical training stress values using ' +
+        (parsed ? `${parsed} W` : 'your current FTP') +
+        ' as the reference. This operation cannot be reversed.\n\nContinue?'
+    )
+    if (!confirmed) return
+
+    setRecalcWorking(true)
+    setFtpMsg(null)
+    try {
+      const result = await recalculateMetrics(authToken, parsed)
+      if (parsed !== undefined && userProfile) {
+        setUserProfile({ ...userProfile, currentFTP: parsed })
+        setFtpInput('')
+      }
+      setFtpMsg({
+        type: 'success',
+        text: `Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
+      })
+      setTimeout(() => setFtpMsg(null), 5000)
+    } catch {
+      setFtpMsg({ type: 'error', text: 'Recalculation failed. Please try again.' })
+    } finally {
+      setRecalcWorking(false)
+    }
   }
 
   const handleReset = async () => {
@@ -162,6 +225,80 @@ export default function SettingsPage() {
         >
           <LogOut size={15} /> Sign Out
         </button>
+      </div>
+
+      {/* FTP Management */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-base font-bold text-gray-900 mb-1">FTP Management</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Override your current FTP value and optionally recalculate all historical training-stress metrics
+          (TSS, ATL, CTL, TSB) using the new value.
+          {userProfile?.currentFTP != null && (
+            <span className="ml-1 font-medium text-gray-700">
+              Current FTP: <span className="text-purple-700">{userProfile.currentFTP} W</span>
+            </span>
+          )}
+        </p>
+
+        {ftpMsg && (
+          <div
+            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+              ftpMsg.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {ftpMsg.text}
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-4">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <Zap size={14} />
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={ftpInput}
+              onChange={(e) => setFtpInput(e.target.value)}
+              placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
+              className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
+          </div>
+          <button
+            onClick={() => void saveFTP()}
+            disabled={ftpSaving || !ftpInput.trim()}
+            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+          >
+            <Save size={15} /> {ftpSaving ? 'Saving…' : 'Save FTP'}
+          </button>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs text-gray-500 mb-3">
+            <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
+            TSB for every stored ride using the FTP entered above (or your current FTP if no value is
+            entered). FTP estimates derived automatically from ride data are shown in the Athlete
+            Progression chart on your dashboard.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
+            <AlertTriangle size={15} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-yellow-700">
+              This operation <strong>cannot be reversed</strong>. All historical training-stress values
+              will be overwritten. A confirmation dialog will appear before any data is changed.
+            </p>
+          </div>
+          <button
+            onClick={() => void handleRecalculate()}
+            disabled={recalcWorking}
+            className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={recalcWorking ? 'animate-spin' : ''} />
+            {recalcWorking ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
+          </button>
+        </div>
       </div>
 
       {/* Strava */}

@@ -3,6 +3,7 @@
 import io
 import json
 import logging
+import math
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -14,7 +15,7 @@ import models
 import schemas
 from database import get_db
 from services import ai_service
-from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO
+from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO, apply_ctl_atl_decay, compute_ride_tss
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -225,6 +226,110 @@ async def get_metrics_history(
             for s in snapshots
         ]
     )
+
+
+@router.post("/recalculate-metrics", response_model=schemas.RecalculateMetricsResponse)
+async def recalculate_metrics(
+    body: schemas.RecalculateMetricsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RecalculateMetricsResponse:
+    """Recompute TSS, CTL, ATL, and TSB for all stored rides using a given FTP.
+
+    When ``ftp_override`` is supplied the user's ``current_ftp`` profile field
+    is updated before the recalculation so subsequent analyses use the new
+    value automatically.
+
+    The operation rebuilds the entire CTL/ATL/TSB chain from the oldest stored
+    ride forward, using the normalised-power values already stored in the
+    ``ride_metrics`` table (no Strava API calls required).
+
+    All existing ``athlete_metric_snapshots`` are deleted and replaced with a
+    single new snapshot that reflects the final CTL/ATL/TSB after the rebuild.
+    """
+    # Determine FTP to use
+    ftp_value: int | None = body.ftp_override
+    if ftp_value is None:
+        if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
+            ftp_value = current_user.rider_assessment.estimated_ftp
+        elif current_user.current_ftp:
+            ftp_value = current_user.current_ftp
+
+    if not ftp_value or ftp_value <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No FTP value available. Provide ftp_override or set current_ftp first.",
+        )
+
+    # Persist FTP override on the user profile
+    if body.ftp_override is not None:
+        current_user.current_ftp = body.ftp_override
+
+    # Fetch all ride metrics sorted chronologically
+    all_metrics = await crud.get_all_ride_metrics_ordered(db, current_user.id)
+
+    if not all_metrics:
+        await db.flush()
+        return schemas.RecalculateMetricsResponse(updated=0, ftp_used=ftp_value)
+
+    ftp_float = float(ftp_value)
+    ctl = 0.0
+    atl = 0.0
+    prev_date_str: str | None = None
+    updated = 0
+
+    import datetime as _dt
+
+    for metric in all_metrics:
+        # Re-derive TSS from stored normalised power and new FTP
+        np_w = metric.normalized_power_w
+        duration_s = metric.duration_seconds or 0
+        new_tss: float | None = None
+        new_if: float | None = None
+
+        if np_w and duration_s > 0:
+            new_tss = compute_ride_tss(float(duration_s), float(np_w), ftp_float)
+            new_if = round(float(np_w) / ftp_float, 3)
+
+        # Determine gap since last ride for CTL/ATL decay
+        gap_days = 1
+        if prev_date_str is not None:
+            try:
+                prev_d = _dt.date.fromisoformat(prev_date_str)
+                curr_d = _dt.date.fromisoformat(metric.activity_date)
+                gap_days = max(1, (curr_d - prev_d).days)
+            except ValueError:
+                gap_days = 1
+
+        ride_tss = new_tss if new_tss is not None else 0.0
+        ctl, atl = apply_ctl_atl_decay(ctl, atl, ride_tss, gap_days=gap_days)
+        tsb = ctl - atl
+        prev_date_str = metric.activity_date
+
+        # Persist updated values
+        metric.tss = round(new_tss, 1) if new_tss is not None else None
+        metric.intensity_factor = new_if
+        metric.ftp_used = ftp_value
+        metric.ctl_after = round(ctl, 2)
+        metric.atl_after = round(atl, 2)
+        metric.tsb_after = round(tsb, 2)
+        updated += 1
+
+    # Replace all metric snapshots with a fresh single snapshot
+    await crud.delete_athlete_metric_snapshots(db, current_user.id)
+    await crud.create_athlete_metric_snapshot(
+        db,
+        current_user.id,
+        ftp=ftp_value,
+        threshold_hr=current_user.threshold_heart_rate,
+        ctl=round(ctl, 1),
+        atl=round(atl, 1),
+        tsb=round(ctl - atl, 1),
+        source="manual_recalculate",
+    )
+
+    await db.flush()
+    return schemas.RecalculateMetricsResponse(updated=updated, ftp_used=ftp_value)
 
 
 @router.post("/upload-fit", response_model=schemas.FitUploadResponse)

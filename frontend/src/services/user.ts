@@ -170,6 +170,17 @@ export async function fetchMetricsHistory(token: string): Promise<AthleteMetricS
   return response.snapshots
 }
 
+export async function recalculateMetrics(
+  token: string,
+  ftpOverride?: number,
+): Promise<{ updated: number; ftpUsed: number }> {
+  return apiFetch<{ updated: number; ftpUsed: number }>('/users/me/recalculate-metrics', {
+    token,
+    method: 'POST',
+    body: { ftpOverride: ftpOverride ?? null },
+  })
+}
+
 export async function uploadFitFile(
   token: string,
   file: File,
