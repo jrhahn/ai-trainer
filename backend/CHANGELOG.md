@@ -5,7 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.19.0] - 2026-04-22
+## [0.20.0] - 2026-04-22
+
+### Added
+
+- **`GET /users/me/ride-metrics-history`** — new endpoint that returns the most recent
+  90 per-ride CTL/ATL/TSB records in chronological (oldest-first) order, sourced from
+  the `ride_metrics` table.  Unlike the sparse `AthleteMetricSnapshot` data (one point
+  per analysis run), this gives one data point per ride so expert users can see the full
+  time series of how their training load develops.
+
+- **`RideMetricHistoryResponse` schema** (`schemas.py`) — wraps a list of existing
+  `RideMetricSchema` objects (`rides: list[RideMetricSchema]`).
+
+- **Backend tests** (`tests/test_users.py`): three new test cases for the new endpoint —
+  empty list for a new user; populated list with CTL/ATL/TSB after analyse-activities;
+  unauthenticated access rejected with HTTP 401.
+
 
 ### Added
 

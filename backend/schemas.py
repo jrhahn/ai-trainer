@@ -428,6 +428,10 @@ class RideMetricSchema(CamelModel):
     user_note: Optional[str] = None
 
 
+class RideMetricHistoryResponse(BaseModel):
+    rides: list[RideMetricSchema]
+
+
 class ImportHistoryResponse(BaseModel):
     processed: int
     skipped: int

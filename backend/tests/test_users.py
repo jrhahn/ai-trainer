@@ -165,3 +165,55 @@ async def test_estimate_ftp_requires_auth(client):
         json={"maxHeartRate": 185},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ride_metrics_history_empty(client, auth_headers):
+    """GET /ride-metrics-history returns an empty list for a new user."""
+    response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert "rides" in body
+    assert body["rides"] == []
+
+
+@pytest.mark.asyncio
+async def test_ride_metrics_history_after_analyse_activities(client, auth_headers, mock_ai_service):
+    """After analyse-activities, ride-metrics-history should include per-ride CTL/ATL/TSB."""
+    analyse_response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 2001,
+                    "name": "Morning Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-04-15T08:00:00Z",
+                    "averageWatts": 200,
+                }
+            ]
+        },
+    )
+    assert analyse_response.status_code == 200
+
+    response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert "rides" in body
+    assert len(body["rides"]) == 1
+    ride = body["rides"][0]
+    assert ride["activityDate"] == "2026-04-15"
+    assert ride["ctlAfter"] is not None
+    assert ride["atlAfter"] is not None
+    assert ride["tsbAfter"] is not None
+
+
+@pytest.mark.asyncio
+async def test_ride_metrics_history_requires_auth(client):
+    response = await client.get("/api/v1/users/me/ride-metrics-history")
+    assert response.status_code == 401

@@ -73,6 +73,7 @@ import {
   fetchCoachMemory,
   fetchCurrentUser,
   fetchMetricsHistory,
+  fetchRideMetricsHistory,
   fetchTrainingPlan,
   fetchWorkoutLogs,
 } from '../services/user'
@@ -173,6 +174,18 @@ export interface AthleteMetricSnapshot {
   source: string
 }
 
+export interface RideMetricPoint {
+  activityDate: string
+  sportType: string
+  tss?: number
+  ctlAfter?: number
+  atlAfter?: number
+  tsbAfter?: number
+  durationSeconds?: number
+  avgPowerW?: number
+  normalizedPowerW?: number
+}
+
 export interface RiderAssessment {
   estimatedFTP?: number
   estimatedThresholdHR?: number
@@ -200,6 +213,7 @@ interface AppState {
   chatHistory: ChatMessage[]
   coachMemory: string
   metricsHistory: AthleteMetricSnapshot[]
+  rideMetricsHistory: RideMetricPoint[]
 
   setAuthToken: (token: string | null) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
@@ -220,6 +234,7 @@ interface AppState {
   setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
+  setRideMetricsHistory: (history: RideMetricPoint[]) => void
 }
 
 const dataState = {
@@ -235,6 +250,7 @@ const dataState = {
   chatHistory: [] as ChatMessage[],
   coachMemory: '',
   metricsHistory: [] as AthleteMetricSnapshot[],
+  rideMetricsHistory: [] as RideMetricPoint[],
 }
 
 const initialState = {
@@ -302,6 +318,7 @@ export const useAppStore = create<AppState>()(
     setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
+    setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
       if (!token) return
@@ -310,13 +327,14 @@ export const useAppStore = create<AppState>()(
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
       try {
         const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
-        const [user, plan, workoutLogs, chatHistory, coachMemory, metricsHistory] = await Promise.all([
+        const [user, plan, workoutLogs, chatHistory, coachMemory, metricsHistory, rideMetricsHistory] = await Promise.all([
           track(fetchCurrentUser(token)),
           track(fetchTrainingPlan(token)),
           track(fetchWorkoutLogs(token)),
           track(fetchChatHistory(token)),
           track(fetchCoachMemory(token)),
           track(fetchMetricsHistory(token)),
+          track(fetchRideMetricsHistory(token)),
         ])
 
         set({
@@ -333,6 +351,7 @@ export const useAppStore = create<AppState>()(
           chatHistory,
           coachMemory,
           metricsHistory,
+          rideMetricsHistory,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to load user data'
