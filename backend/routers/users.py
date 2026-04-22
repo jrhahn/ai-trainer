@@ -229,6 +229,27 @@ async def get_metrics_history(
     )
 
 
+@router.get("/ride-metrics-history", response_model=schemas.RideMetricHistoryResponse)
+async def get_ride_metrics_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RideMetricHistoryResponse:
+    """Return the most recent 90 per-ride CTL/ATL/TSB records in chronological order.
+
+    Used by the expert-mode time-series charts to show how training load metrics
+    develop over time with one data point per ride.
+    """
+    rides = await crud.get_ride_metrics_history(db, current_user.id, limit=90)
+    # get_ride_metrics_history returns newest-first; reverse for chronological charting
+    rides = list(reversed(rides))
+    return schemas.RideMetricHistoryResponse(
+        rides=[
+            schemas.RideMetricSchema.model_validate(r, from_attributes=True)
+            for r in rides
+        ]
+    )
+
+
 @router.post("/recalculate-metrics", response_model=schemas.RecalculateMetricsResponse)
 async def recalculate_metrics(
     body: schemas.RecalculateMetricsRequest,

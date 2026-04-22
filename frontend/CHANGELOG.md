@@ -5,7 +5,42 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.16.0] - 2026-04-22
+## [0.17.0] - 2026-04-22
+
+### Added
+
+- **`TrainingLoadChart` component** (`src/components/TrainingLoadChart.tsx`) — new expert-mode
+  time-series chart that shows how training load metrics develop ride-by-ride using the
+  granular per-ride data from the backend (one data point per ride):
+  - **CTL** (Fitness) — 42-day exponential weighted average, blue line chart
+  - **ATL** (Fatigue) — 7-day exponential weighted average, orange line chart
+  - **TSB** (Form) — CTL minus ATL with a dashed zero reference line so positive/negative
+    form is immediately visible; green line chart
+  - **Daily TSS** — training stress score per ride, purple line chart
+  - Summary badges showing the latest CTL, ATL, TSB, and most recent TSS
+  - Empty-state card when no ride data has been synced yet
+
+- **`TrainingLoadChart` on `ExpertPage`** (`src/pages/ExpertPage.tsx`) — rendered below the
+  existing `ProgressionChart` so expert users can see both the high-level FTP progression
+  (from sparse analysis snapshots) and the detailed per-ride CTL/ATL/TSB time series.
+
+- **`RideMetricPoint` interface** exported from `src/store/useAppStore.ts` — camelCase
+  representation of a per-ride metric row: `activityDate`, `sportType`, `tss`, `ctlAfter`,
+  `atlAfter`, `tsbAfter`, `durationSeconds`, `avgPowerW`, `normalizedPowerW`.
+
+- **`rideMetricsHistory` state** and `setRideMetricsHistory` action added to Zustand store
+  (`useAppStore.ts`).
+
+- **`fetchRideMetricsHistory(authToken)`** added to `src/services/user.ts` — calls
+  `GET /users/me/ride-metrics-history` and returns a typed `RideMetricPoint[]`.
+
+- **`loadUserData`** updated to fetch ride metrics history in parallel with all other data
+  on app startup (no extra round-trips).
+
+- **Tests** (`src/store/useAppStore.test.ts`) — updated mock for `../services/user` to
+  include `fetchRideMetricsHistory`, and extended the `loadUserData` hydration test to
+  assert that `rideMetricsHistory` is correctly stored in the Zustand store.
+
 
 ### Added
 

@@ -5,6 +5,7 @@ import { useAppStore } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import ProgressionChart from '../components/ProgressionChart'
+import TrainingLoadChart from '../components/TrainingLoadChart'
 import RaceReadinessCard from '../components/RaceReadinessCard'
 import FitFileUpload from '../components/FitFileUpload'
 import StravaConnect from '../components/StravaConnect'
@@ -47,6 +48,9 @@ export default function ExpertPage() {
 
       {/* Athlete progression chart */}
       <ProgressionChart />
+
+      {/* Per-ride training load time series */}
+      <TrainingLoadChart />
 
       {/* Race-day readiness */}
       {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate) && (

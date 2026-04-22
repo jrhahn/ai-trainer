@@ -3,6 +3,7 @@ import type {
   AthleteMetricSnapshot,
   ChatMessage,
   RiderAssessment,
+  RideMetricPoint,
   StravaConnection,
   TrainingDay,
   UserProfile,
@@ -168,6 +169,14 @@ export async function fetchMetricsHistory(token: string): Promise<AthleteMetricS
     { token }
   )
   return response.snapshots
+}
+
+export async function fetchRideMetricsHistory(token: string): Promise<RideMetricPoint[]> {
+  const response = await apiFetch<{ rides: RideMetricPoint[] }>(
+    '/users/me/ride-metrics-history',
+    { token }
+  )
+  return response.rides
 }
 
 export async function recalculateMetrics(
