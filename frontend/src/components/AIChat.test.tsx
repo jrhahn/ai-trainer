@@ -261,4 +261,35 @@ describe('AIChat', () => {
     })
     expect(screen.queryByText('Sources')).not.toBeInTheDocument()
   })
+
+  it('inserts a new line on Shift+Enter without sending the message', async () => {
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'First line')
+    await userEvent.keyboard('{Shift>}{Enter}{/Shift}')
+    await userEvent.type(input, 'Second line')
+
+    expect(input).toHaveValue('First line\nSecond line')
+    expect(mockAskTrainer).not.toHaveBeenCalled()
+  })
+
+  it('renders bold and italic markdown in assistant messages', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Try **harder** or *easier* next time.' })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'How hard?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('harder')).toBeInTheDocument()
+      expect(screen.getByText('easier')).toBeInTheDocument()
+    })
+    // Bold text should be wrapped in <strong>, italic in <em>
+    expect(document.querySelector('strong')?.textContent).toBe('harder')
+    expect(document.querySelector('em')?.textContent).toBe('easier')
+  })
 })

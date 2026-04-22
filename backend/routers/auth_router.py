@@ -116,6 +116,12 @@ async def register(
         hashed_password=auth.hash_password(body.password),
     )
 
+    # Commit before issuing the token so the user row is visible to subsequent
+    # requests that arrive immediately after registration (e.g. in integration
+    # tests).  FastAPI's generator dependency (`get_db`) commits after the
+    # response is sent, which creates a race window; an explicit commit here
+    # closes it.
+    await db.commit()
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)
 

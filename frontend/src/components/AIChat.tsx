@@ -1,10 +1,22 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
+import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { clearChatHistoryRemote, fetchCoachMemory } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
+
+// Render headings as plain paragraphs so the chat uses a uniform font size
+const MARKDOWN_COMPONENTS: Components = {
+  h1: 'p',
+  h2: 'p',
+  h3: 'p',
+  h4: 'p',
+  h5: 'p',
+  h6: 'p',
+}
 
 interface Props {
   contextWorkout?: TrainingDay
@@ -37,6 +49,17 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow the textarea as the user types
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (ta) {
+      ta.style.height = 'auto'
+      ta.style.height = `${Math.min(ta.scrollHeight, 128)}px`
+    }
+  }, [input])
+
   const welcomeContent = contextWorkout
     ? `Hey! 👋 Great to see you here. I'm your coach and I'm genuinely excited to help you nail today's ${contextWorkout.title} session. Got any questions about it, or anything else on your mind?`
     : "Hey! 👋 I'm your coach — think of me as that friend who's always happy to chat training. Ask me anything: your plan, recovery, nutrition, technique… I'm here for it! 😊"
@@ -140,14 +163,20 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
       {/* Input */}
       <div className="p-3 border-b flex gap-2">
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void sendMessage()
+            }
+          }}
           placeholder="Ask your coach..."
           aria-label="Message to coach"
-          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+          rows={1}
+          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
         <button
           onClick={sendMessage}
@@ -187,15 +216,21 @@ export default function AIChat({ contextWorkout, className }: Props) {
             >
               {msg.planUpdateCount ? (
                 <>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.role === 'assistant' ? (
+                    <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
                   <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
                     <CalendarCheck size={12} />
                     Training plan updated:{' '}
                     {msg.planUpdateCount === 1 ? '1 day modified.' : `${msg.planUpdateCount} days modified.`}
                   </p>
                 </>
+              ) : msg.role === 'assistant' ? (
+                <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
               ) : (
-                msg.content
+                <span className="whitespace-pre-wrap">{msg.content}</span>
               )}
               {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
                 <div className="mt-2 border-t border-gray-200 pt-2">
