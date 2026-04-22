@@ -6,14 +6,18 @@ import SettingsPage from './SettingsPage'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 
-const { mockUpdateCurrentUser, mockDeleteCurrentUser } = vi.hoisted(() => ({
+const { mockUpdateCurrentUser, mockDeleteCurrentUser, mockEstimateFTP, mockRecalculateMetrics } = vi.hoisted(() => ({
   mockUpdateCurrentUser: vi.fn(),
   mockDeleteCurrentUser: vi.fn(),
+  mockEstimateFTP: vi.fn(),
+  mockRecalculateMetrics: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   deleteCurrentUser: mockDeleteCurrentUser,
+  estimateFTP: mockEstimateFTP,
+  recalculateMetrics: mockRecalculateMetrics,
 }))
 
 // StravaConnect uses strava services; stub the component
@@ -47,6 +51,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue({})
   mockDeleteCurrentUser.mockResolvedValue(undefined)
+  mockEstimateFTP.mockResolvedValue({ estimatedFTP: null, source: 'none' })
+  mockRecalculateMetrics.mockResolvedValue({ updated: 10, ftpUsed: 250 })
 })
 
 describe('SettingsPage', () => {
@@ -143,6 +149,80 @@ describe('SettingsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Name saved!')).toBeInTheDocument()
+    })
+  })
+
+  it('renders the Heart Rate Settings section', () => {
+    setup()
+    expect(screen.getByRole('heading', { name: /Heart Rate Settings/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save & Estimate FTP/i })).toBeInTheDocument()
+  })
+
+  it('Save & Estimate FTP is disabled when no HR inputs are filled', () => {
+    setup()
+    const btn = screen.getByRole('button', { name: /Save & Estimate FTP/i })
+    expect(btn).toBeDisabled()
+  })
+
+  it('Save & Estimate FTP becomes enabled when Max HR is entered', async () => {
+    setup()
+    const input = screen.getByPlaceholderText(/185/)
+    await userEvent.type(input, '188')
+    const btn = screen.getByRole('button', { name: /Save & Estimate FTP/i })
+    expect(btn).not.toBeDisabled()
+  })
+
+  it('calls estimateFTP with entered HR values and shows estimate panel when FTP is found', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+
+    await waitFor(() => {
+      expect(mockEstimateFTP).toHaveBeenCalledWith('tok-123', {
+        maxHeartRate: 185,
+        restingHeartRate: undefined,
+      })
+      // FTP confirmation panel should appear
+      expect(screen.getByText(/Step 2/i)).toBeInTheDocument()
+      expect(screen.getByText(/248 W/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows success message when no FTP estimate is available yet', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: null, source: 'none' })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Heart rate values saved/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Step 2/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('calls recalculateMetrics with the confirmed FTP and clears the panel', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 260, source: 'ftp_estimation' })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    setup()
+
+    // Step 1 – trigger estimate
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+
+    // Wait for confirmation panel
+    await waitFor(() => expect(screen.getByText(/Step 2/i)).toBeInTheDocument())
+
+    // Step 2 – confirm FTP
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/i }))
+
+    await waitFor(() => {
+      expect(mockRecalculateMetrics).toHaveBeenCalledWith('tok-123', 260)
+      // Panel should be gone after recalculation
+      expect(screen.queryByText(/Step 2/i)).not.toBeInTheDocument()
     })
   })
 })

@@ -5,7 +5,30 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.18.1] - 2026-04-22
+## [0.19.0] - 2026-04-22
+
+### Added
+
+- **`POST /users/me/estimate-ftp`** — new endpoint that saves `max_heart_rate` and/or
+  `resting_heart_rate` to the user profile and returns the best available FTP estimate.
+  Priority order: most recent `AthleteMetricSnapshot` → `RiderAssessment.estimated_ftp` →
+  `User.current_ftp` → `null`.  When `resting_heart_rate` has never been set it is
+  automatically defaulted to 60 bpm.  Response includes a `source` field
+  (`"ftp_estimation"`, `"strava_analysis"`, `"rider_assessment"`, `"profile"`, or `"none"`)
+  so the frontend can give the user meaningful context.
+
+- **`EstimateFTPRequest` / `EstimateFTPResponse` schemas** (`schemas.py`) — both fields of
+  the request (`max_heart_rate`, `resting_heart_rate`) are optional.  The response carries
+  `estimated_ftp` (nullable int) and a `source` string.
+
+- **Backend tests** (`tests/test_users.py`): four new test cases covering the new endpoint:
+  - no data returns `null` FTP with source `"none"`;
+  - HR values are persisted on the user profile;
+  - missing `resting_heart_rate` is defaulted to 60;
+  - existing `AthleteMetricSnapshot` FTP is returned correctly;
+  - unauthenticated requests are rejected with HTTP 401.
+
+
 
 ### Changed
 
