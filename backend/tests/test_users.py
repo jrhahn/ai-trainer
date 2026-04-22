@@ -168,6 +168,83 @@ async def test_estimate_ftp_requires_auth(client):
 
 
 @pytest.mark.asyncio
+async def test_estimate_ftp_saves_threshold_hr(client, auth_headers):
+    """estimate-ftp should persist threshold_heart_rate on the user profile when provided."""
+    response = await client.post(
+        "/api/v1/users/me/estimate-ftp",
+        headers=auth_headers,
+        json={"maxHeartRate": 185, "restingHeartRate": 55, "thresholdHeartRate": 162},
+    )
+    assert response.status_code == 200
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["maxHeartRate"] == 185
+    assert me.json()["restingHeartRate"] == 55
+    assert me.json()["thresholdHeartRate"] == 162
+
+
+@pytest.mark.asyncio
+async def test_recalculate_metrics_creates_per_ride_snapshots(client, auth_headers, mock_ai_service):
+    """recalculate-metrics should create one AthleteMetricSnapshot per ride, not just one final snapshot."""
+    # Create two rides via analyse-activities.
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 3001,
+                    "name": "Ride A",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 200,
+                    "startDate": "2026-03-01T09:00:00Z",
+                    "averageWatts": 200,
+                },
+                {
+                    "id": 3002,
+                    "name": "Ride B",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 5400,
+                    "elapsedTime": 5500,
+                    "totalElevationGain": 400,
+                    "startDate": "2026-03-10T09:00:00Z",
+                    "averageWatts": 220,
+                },
+            ]
+        },
+    )
+
+    # Trigger a manual recalculation with an FTP override.
+    recalc_response = await client.post(
+        "/api/v1/users/me/recalculate-metrics",
+        headers=auth_headers,
+        json={"ftpOverride": 260},
+    )
+    assert recalc_response.status_code == 200
+    assert recalc_response.json()["updated"] == 2
+
+    # Metrics history should now contain one snapshot per ride, not just one.
+    history_response = await client.get(
+        "/api/v1/users/me/metrics-history", headers=auth_headers
+    )
+    assert history_response.status_code == 200
+    snapshots = history_response.json()["snapshots"]
+    assert len(snapshots) == 2, (
+        f"Expected 2 per-ride snapshots after recalculate, got {len(snapshots)}"
+    )
+    # All snapshots should use the override FTP.
+    for snap in snapshots:
+        assert snap["ftp"] == 260
+        assert snap["source"] == "manual_recalculate"
+        # CTL value should be present (may be 0.0 when no power data)
+        assert snap["ctl"] is not None
+
+
+@pytest.mark.asyncio
 async def test_ride_metrics_history_empty(client, auth_headers):
     """GET /ride-metrics-history returns an empty list for a new user."""
     response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)

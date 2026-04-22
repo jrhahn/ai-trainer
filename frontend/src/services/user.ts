@@ -192,7 +192,7 @@ export async function recalculateMetrics(
 
 export async function estimateFTP(
   token: string,
-  opts: { maxHeartRate?: number; restingHeartRate?: number },
+  opts: { maxHeartRate?: number; restingHeartRate?: number; thresholdHeartRate?: number },
 ): Promise<{ estimatedFTP: number | null; source: string }> {
   return apiFetch<{ estimatedFTP: number | null; source: string }>('/users/me/estimate-ftp', {
     token,
@@ -200,6 +200,7 @@ export async function estimateFTP(
     body: {
       maxHeartRate: opts.maxHeartRate ?? null,
       restingHeartRate: opts.restingHeartRate ?? null,
+      thresholdHeartRate: opts.thresholdHeartRate ?? null,
     },
   })
 }
