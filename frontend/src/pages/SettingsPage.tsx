@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
-import { deleteCurrentUser, recalculateMetrics, updateCurrentUser } from '../services/user'
+import { deleteCurrentUser, estimateFTP, recalculateMetrics, updateCurrentUser } from '../services/user'
 import { useImportProgress } from '../hooks/useImportProgress'
 
 export default function SettingsPage() {
@@ -38,6 +38,17 @@ export default function SettingsPage() {
   const [ftpSaving, setFtpSaving] = useState(false)
   const [recalcWorking, setRecalcWorking] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Heart Rate settings state
+  const [maxHrInput, setMaxHrInput] = useState('')
+  const [restingHrInput, setRestingHrInput] = useState('')
+  const [ageInput, setAgeInput] = useState('')
+  const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [hrWorking, setHrWorking] = useState(false)
+  // Two-step FTP confirmation after HR save
+  const [ftpEstimate, setFtpEstimate] = useState<number | null>(null)
+  const [ftpConfirmInput, setFtpConfirmInput] = useState('')
+  const [confirmWorking, setConfirmWorking] = useState(false)
 
   const importProgress = useImportProgress()
 
@@ -122,6 +133,106 @@ export default function SettingsPage() {
     if (window.confirm('Are you sure? This will delete all your data and training plan.')) {
       await deleteCurrentUser(authToken)
       resetAll()
+    }
+  }
+
+  // Step 1: Save new HR values and retrieve best FTP estimate.
+  const handleSaveHR = async () => {
+    if (!authToken || !userProfile) return
+
+    // Resolve Max HR from direct input or age estimate.
+    const parsedMaxHr = maxHrInput.trim() ? parseInt(maxHrInput, 10) : undefined
+    const parsedAge = ageInput.trim() ? parseInt(ageInput, 10) : undefined
+    const resolvedMaxHr: number | undefined =
+      parsedMaxHr ?? (parsedAge ? Math.max(100, 220 - parsedAge) : undefined)
+
+    const parsedRestingHr = restingHrInput.trim() ? parseInt(restingHrInput, 10) : undefined
+
+    if (
+      (parsedMaxHr !== undefined && (isNaN(parsedMaxHr) || parsedMaxHr <= 0)) ||
+      (parsedRestingHr !== undefined && (isNaN(parsedRestingHr) || parsedRestingHr <= 0)) ||
+      (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge <= 0))
+    ) {
+      setHrMsg({ type: 'error', text: 'Please enter valid positive values.' })
+      return
+    }
+
+    if (!resolvedMaxHr && !parsedRestingHr) {
+      setHrMsg({ type: 'error', text: 'Please enter at least one heart rate value (or your age).' })
+      return
+    }
+
+    setHrWorking(true)
+    setHrMsg(null)
+    setFtpEstimate(null)
+    setFtpConfirmInput('')
+    try {
+      const result = await estimateFTP(authToken, {
+        maxHeartRate: resolvedMaxHr,
+        restingHeartRate: parsedRestingHr,
+      })
+      // Update local profile state with new HR values.
+      setUserProfile({
+        ...userProfile,
+        ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
+        ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
+      })
+      if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
+        setFtpEstimate(result.estimatedFTP)
+        setFtpConfirmInput(String(result.estimatedFTP))
+        setHrMsg({
+          type: 'success',
+          text: 'Heart rate values saved. Review your estimated FTP below and confirm to rebuild metrics.',
+        })
+      } else {
+        setHrMsg({
+          type: 'success',
+          text: 'Heart rate values saved. No ride data available yet to estimate FTP — sync Strava first.',
+        })
+      }
+    } catch {
+      setHrMsg({ type: 'error', text: 'Failed to save heart rate values. Please try again.' })
+    } finally {
+      setHrWorking(false)
+    }
+  }
+
+  // Step 2: Confirm the FTP and trigger a full metrics recalculation.
+  const handleConfirmFTP = async () => {
+    if (!authToken) return
+    const parsed = parseInt(ftpConfirmInput, 10)
+    if (isNaN(parsed) || parsed <= 0) {
+      setHrMsg({ type: 'error', text: 'Please enter a valid positive FTP value in watts.' })
+      return
+    }
+    const confirmed = window.confirm(
+      '⚠️ Recalculate TSS, ATL, CTL for all rides?\n\n' +
+        `This will overwrite all historical training stress values using ${parsed} W as the reference. ` +
+        'This operation cannot be reversed.\n\nContinue?'
+    )
+    if (!confirmed) return
+
+    setConfirmWorking(true)
+    setHrMsg(null)
+    try {
+      const result = await recalculateMetrics(authToken, parsed)
+      if (userProfile) {
+        setUserProfile({ ...userProfile, currentFTP: parsed })
+      }
+      setFtpEstimate(null)
+      setFtpConfirmInput('')
+      setMaxHrInput('')
+      setRestingHrInput('')
+      setAgeInput('')
+      setHrMsg({
+        type: 'success',
+        text: `Done! Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
+      })
+      setTimeout(() => setHrMsg(null), 6000)
+    } catch {
+      setHrMsg({ type: 'error', text: 'Metrics recalculation failed. Please try again.' })
+    } finally {
+      setConfirmWorking(false)
     }
   }
 
@@ -299,6 +410,138 @@ export default function SettingsPage() {
             {recalcWorking ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
           </button>
         </div>
+      </div>
+
+      {/* Heart Rate Settings */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
+        <p className="text-xs text-gray-500 mb-1">
+          Max HR and resting HR are used for HR-based FTP estimation and training zones.
+        </p>
+        {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null) && (
+          <p className="text-xs text-gray-500 mb-4">
+            Current:{' '}
+            {userProfile.maxHeartRate != null && (
+              <span className="font-medium text-gray-700 mr-2">Max HR: <span className="text-red-600">{userProfile.maxHeartRate} bpm</span></span>
+            )}
+            {userProfile.restingHeartRate != null && (
+              <span className="font-medium text-gray-700">Resting HR: <span className="text-blue-600">{userProfile.restingHeartRate} bpm</span></span>
+            )}
+          </p>
+        )}
+
+        {hrMsg && (
+          <div
+            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+              hrMsg.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {hrMsg.text}
+          </div>
+        )}
+
+        <div className="space-y-3 mb-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              <span className="flex items-center gap-1"><Heart size={13} /> Max Heart Rate (bpm)</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={maxHrInput}
+              onChange={(e) => setMaxHrInput(e.target.value)}
+              placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            />
+            {!maxHrInput && (
+              <div className="mt-2">
+                <label className="block text-xs text-gray-500 mb-1">
+                  Or enter your age to estimate Max HR (220 − age):
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={ageInput}
+                  onChange={(e) => setAgeInput(e.target.value)}
+                  placeholder="e.g. 35"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+                {ageInput && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Estimated Max HR: {Math.max(100, 220 - parseInt(ageInput, 10))} bpm
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              <span className="flex items-center gap-1"><Heart size={13} /> Resting Heart Rate (bpm)</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={restingHrInput}
+              onChange={(e) => setRestingHrInput(e.target.value)}
+              placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={() => void handleSaveHR()}
+          disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim())}
+          className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+        >
+          <Heart size={15} className={hrWorking ? 'animate-pulse' : ''} />
+          {hrWorking ? 'Saving…' : 'Save & Estimate FTP'}
+        </button>
+
+        {/* Step 2: FTP confirmation panel */}
+        {ftpEstimate !== null && (
+          <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-800">
+              Step 2 — Confirm FTP before rebuilding metrics
+            </p>
+            <p className="text-xs text-gray-600">
+              Based on your ride history, your estimated FTP is{' '}
+              <strong className="text-purple-700">{ftpEstimate} W</strong>. You can adjust this value
+              before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <Zap size={14} />
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  value={ftpConfirmInput}
+                  onChange={(e) => setFtpConfirmInput(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
+              </div>
+              <button
+                onClick={() => void handleConfirmFTP()}
+                disabled={confirmWorking || !ftpConfirmInput.trim()}
+                className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+              >
+                <RefreshCw size={15} className={confirmWorking ? 'animate-spin' : ''} />
+                {confirmWorking ? 'Recalculating…' : 'Confirm & Recalculate'}
+              </button>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
+              <AlertTriangle size={14} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-yellow-700">
+                This will overwrite all historical training-stress values and <strong>cannot be reversed</strong>.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Strava */}

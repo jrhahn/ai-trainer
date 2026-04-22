@@ -331,6 +331,66 @@ async def recalculate_metrics(
     return schemas.RecalculateMetricsResponse(updated=updated, ftp_used=ftp_value)
 
 
+@router.post("/estimate-ftp", response_model=schemas.EstimateFTPResponse)
+async def estimate_ftp(
+    body: schemas.EstimateFTPRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.EstimateFTPResponse:
+    """Save updated heart-rate values and return the best available FTP estimate.
+
+    Persists ``max_heart_rate`` and/or ``resting_heart_rate`` to the user
+    profile when supplied so that subsequent Strava imports and analyses
+    automatically use the new values.
+
+    The FTP returned is sourced from (in priority order):
+
+    1. Most recent ``AthleteMetricSnapshot`` with a non-null FTP.
+    2. ``RiderAssessment.estimated_ftp``.
+    3. ``User.current_ftp`` set manually on the profile.
+
+    The caller is expected to present this value to the user, allow an
+    override, and then call ``POST /users/me/recalculate-metrics`` with the
+    confirmed FTP to rebuild TSS / CTL / ATL / TSB.
+    """
+    # --- Persist new HR values when provided ---
+    if body.max_heart_rate is not None:
+        current_user.max_heart_rate = body.max_heart_rate
+    if body.resting_heart_rate is not None:
+        current_user.resting_heart_rate = body.resting_heart_rate
+    elif current_user.resting_heart_rate is None:
+        # Default resting HR to 60 when the user has never set one.
+        current_user.resting_heart_rate = 60
+    await db.flush()
+
+    # --- Find best available FTP estimate ---
+    # 1. Most recent AthleteMetricSnapshot with a non-null FTP
+    snapshots = await crud.get_athlete_metric_history(db, current_user.id)
+    # snapshots are oldest-first; iterate in reverse to find the most recent
+    for snap in reversed(snapshots):
+        if snap.ftp is not None:
+            return schemas.EstimateFTPResponse(
+                estimated_ftp=snap.ftp,
+                source=snap.source or "ftp_estimation",
+            )
+
+    # 2. RiderAssessment.estimated_ftp
+    if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
+        return schemas.EstimateFTPResponse(
+            estimated_ftp=current_user.rider_assessment.estimated_ftp,
+            source="rider_assessment",
+        )
+
+    # 3. Manually set profile FTP
+    if current_user.current_ftp:
+        return schemas.EstimateFTPResponse(
+            estimated_ftp=current_user.current_ftp,
+            source="profile",
+        )
+
+    return schemas.EstimateFTPResponse(estimated_ftp=None, source="none")
+
+
 @router.post("/upload-fit", response_model=schemas.FitUploadResponse)
 async def upload_fit_file(
     file: UploadFile,

@@ -69,6 +69,7 @@ type FormData = {
   fitnessLevel: UserProfile['fitnessLevel']
   restingHeartRate: string
   maxHeartRate: string
+  age: string
 }
 
 export default function OnboardingPage() {
@@ -114,6 +115,7 @@ export default function OnboardingPage() {
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
     restingHeartRate: userProfile?.restingHeartRate ? String(userProfile.restingHeartRate) : '',
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
+    age: '',
   })
 
   // Restore progress saved before the Strava OAuth redirect (if any).
@@ -161,6 +163,16 @@ export default function OnboardingPage() {
     const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
     let riderAssessment: RiderAssessment | undefined
 
+    // Resolve Max HR: use explicitly entered value, or estimate from age (220 − age).
+    const resolvedMaxHR: number | undefined = form.maxHeartRate
+      ? Number(form.maxHeartRate)
+      : form.age
+      ? Math.max(100, 220 - Number(form.age))
+      : undefined
+
+    // Default resting HR to 60 when not provided.
+    const resolvedRestingHR: number = form.restingHeartRate ? Number(form.restingHeartRate) : 60
+
     const profile: UserProfile = {
       name: form.name,
       email: form.email,
@@ -171,8 +183,8 @@ export default function OnboardingPage() {
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
-      restingHeartRate: form.restingHeartRate ? Number(form.restingHeartRate) : undefined,
-      maxHeartRate: form.maxHeartRate ? Number(form.maxHeartRate) : undefined,
+      restingHeartRate: resolvedRestingHR,
+      maxHeartRate: resolvedMaxHR,
     }
 
     try {
@@ -186,7 +198,7 @@ export default function OnboardingPage() {
           const analyseResult = await analyseStravaActivities(
             recentActivities,
             authToken,
-            form.maxHeartRate ? Number(form.maxHeartRate) : undefined
+            resolvedMaxHR,
           )
           riderAssessment = analyseResult.assessment
           profileForPlan = {
@@ -388,7 +400,55 @@ export default function OnboardingPage() {
                 </button>
               </div>
               {form.assessmentMethod === 'strava' && (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-4">
+                  {/* HR inputs collected BEFORE Strava connection so they're
+                      available for the FTP estimation that runs during analysis. */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Heart Rate (bpm)
+                      </label>
+                      <input
+                        type="number"
+                        value={form.maxHeartRate}
+                        onChange={(e) => update('maxHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 185"
+                      />
+                      {!form.maxHeartRate && (
+                        <div className="mt-2">
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Or enter your age — we&apos;ll estimate Max HR as 220 − age.
+                          </label>
+                          <input
+                            type="number"
+                            value={form.age}
+                            onChange={(e) => update('age', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                            placeholder="e.g. 35"
+                          />
+                          {form.age && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              Estimated Max HR: {Math.max(100, 220 - Number(form.age))} bpm
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Resting Heart Rate (bpm){' '}
+                        <span className="text-gray-400 font-normal">default 60 if left blank</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.restingHeartRate}
+                        onChange={(e) => update('restingHeartRate', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 55"
+                      />
+                    </div>
+                  </div>
                   <StravaConnect />
                   {!stravaConnection && (
                     <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
@@ -448,19 +508,20 @@ export default function OnboardingPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Resting Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                        Resting Heart Rate (bpm){' '}
+                        <span className="text-gray-400 font-normal">default 60 if left blank</span>
                       </label>
                       <input
                         type="number"
                         value={form.restingHeartRate}
                         onChange={(e) => update('restingHeartRate', e.target.value)}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 55"
+                        placeholder="e.g. 55 (default: 60)"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                        Max Heart Rate (bpm)
                       </label>
                       <input
                         type="number"
@@ -469,29 +530,31 @@ export default function OnboardingPage() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                         placeholder="e.g. 185"
                       />
+                      {!form.maxHeartRate && (
+                        <div className="mt-2">
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Or enter your age — we&apos;ll estimate Max HR as 220 − age.
+                          </label>
+                          <input
+                            type="number"
+                            value={form.age}
+                            onChange={(e) => update('age', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                            placeholder="e.g. 35"
+                          />
+                          {form.age && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              Estimated Max HR: {Math.max(100, 220 - Number(form.age))} bpm
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
                 {form.assessmentMethod === 'strava' && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional but recommended</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={form.maxHeartRate}
-                        onChange={(e) => update('maxHeartRate', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 185"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        A rough estimate: 220 minus your age (e.g. age 35 gives ~185 bpm). Providing this enables precise HR training zones.
-                      </p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
-                      We&apos;ll download and analyse your last 7 rides — including detailed power, HR, cadence, and speed data — to estimate your FTP and training zones.
-                    </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
+                    We&apos;ll download and analyse your last 7 rides — including detailed power, HR, cadence, and speed data — to estimate your FTP and training zones.
                   </div>
                 )}
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -516,24 +579,34 @@ export default function OnboardingPage() {
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
-                {(
-                  [
-                    ['Name', form.name],
-                    ['Email', form.email],
-                    ['Goal', form.trainingGoal.replace('_', ' ')],
-                    ['Assessment', form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
-                    ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
-                    ['Fitness Level', form.fitnessLevel],
-                    ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
-                    ...(form.restingHeartRate ? [['Resting HR', `${form.restingHeartRate} bpm`]] : []),
-                    ...(form.maxHeartRate ? [['Max HR', `${form.maxHeartRate} bpm`]] : []),
-                  ] as [string, string][]
-                ).map(([label, value]) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="font-medium text-gray-900 capitalize">{value}</span>
-                  </div>
-                ))}
+                {(() => {
+                  const displayMaxHR = form.maxHeartRate
+                    ? `${form.maxHeartRate} bpm`
+                    : form.age
+                    ? `${Math.max(100, 220 - Number(form.age))} bpm (estimated from age)`
+                    : null
+                  const displayRestingHR = form.restingHeartRate
+                    ? `${form.restingHeartRate} bpm`
+                    : '60 bpm (default)'
+                  return (
+                    [
+                      ['Name', form.name],
+                      ['Email', form.email],
+                      ['Goal', form.trainingGoal.replace('_', ' ')],
+                      ['Assessment', form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
+                      ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
+                      ['Fitness Level', form.fitnessLevel],
+                      ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
+                      ['Resting HR', displayRestingHR],
+                      ...(displayMaxHR ? [['Max HR', displayMaxHR]] : []),
+                    ] as [string, string][]
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex justify-between">
+                      <span className="text-gray-500">{label}</span>
+                      <span className="font-medium text-gray-900 capitalize">{value}</span>
+                    </div>
+                  ))
+                })()}
               </div>
 
               {error && (

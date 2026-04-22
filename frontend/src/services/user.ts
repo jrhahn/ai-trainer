@@ -181,6 +181,20 @@ export async function recalculateMetrics(
   })
 }
 
+export async function estimateFTP(
+  token: string,
+  opts: { maxHeartRate?: number; restingHeartRate?: number },
+): Promise<{ estimatedFTP: number | null; source: string }> {
+  return apiFetch<{ estimatedFTP: number | null; source: string }>('/users/me/estimate-ftp', {
+    token,
+    method: 'POST',
+    body: {
+      maxHeartRate: opts.maxHeartRate ?? null,
+      restingHeartRate: opts.restingHeartRate ?? null,
+    },
+  })
+}
+
 export async function uploadFitFile(
   token: string,
   file: File,
