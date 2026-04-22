@@ -5,6 +5,21 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-04-22
+
+### Added
+
+- **Markdown rendering in coach chat** (`src/components/AIChat.tsx`) — assistant messages are now
+  rendered with `react-markdown`. Inline formatting such as **bold** (`**text**`) and *italic*
+  (`*text*`) is displayed correctly. Headings (`#`, `##`, …) are remapped to plain paragraphs so
+  the chat stays at a uniform font size throughout.
+
+### Changed
+
+- **Multi-line chat input** (`src/components/AIChat.tsx`) — the single-line `<input type="text">`
+  has been replaced with an auto-growing `<textarea>`. Pressing **Shift+Enter** inserts a new line;
+  pressing **Enter** alone (or clicking the send button) submits the message as before.
+
 ## [0.13.0] - 2026-04-21
 
 ### Changed
