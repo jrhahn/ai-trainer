@@ -5,6 +5,45 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-04-22
+
+### Added
+
+- **`threshold_heart_rate` in `POST /users/me/estimate-ftp`** — the endpoint now accepts an
+  optional `threshold_heart_rate` (bpm) alongside `max_heart_rate` and `resting_heart_rate`.
+  When provided the value is immediately persisted to the user profile so subsequent FTP
+  estimation and metric snapshots include the athlete's lactate-threshold HR.  The
+  `EstimateFTPRequest` schema (`schemas.py`) has been updated accordingly.
+
+- **Threshold HR input in Settings page** (`frontend/src/pages/SettingsPage.tsx`) — a third
+  heart-rate field ("Threshold Heart Rate") is now shown in the HR Settings section, with a
+  helper note explaining it as the lactate-threshold HR (~87 % of max HR).  The current stored
+  value is displayed alongside max and resting HR.  The "Save & Estimate FTP" button is enabled
+  when any of the three HR fields (or age) contains a value.
+
+- **Metrics history refresh after recalculate** (`frontend/src/pages/SettingsPage.tsx`) — after
+  `handleConfirmFTP()` and `handleRecalculate()` complete successfully, `fetchMetricsHistory()`
+  is called and the result written to the Zustand store.  This means the FTP progression chart on
+  the Dashboard updates immediately without requiring a page reload.
+
+### Changed
+
+- **`POST /users/me/recalculate-metrics` — per-ride `AthleteMetricSnapshot` creation** — previously
+  the endpoint deleted all historical metric snapshots and replaced them with a single final
+  snapshot (CTL/ATL/TSB/FTP values at the end of the last ride).  It now creates **one back-dated
+  snapshot per ride** (`source = "manual_recalculate"`, `recorded_at` set to the ride date).  This
+  preserves a full time-series for the FTP/CTL/ATL progression chart after any manual
+  recalculation.
+
+- **`estimateFTP()` frontend service** (`frontend/src/services/user.ts`) — now forwards
+  `thresholdHeartRate` to the backend in the request body.
+
+### Fixed
+
+- A `ValueError` when parsing a malformed `activity_date` inside `recalculate_metrics()` now
+  emits a warning log entry (including the activity ID) instead of silently using the current
+  timestamp without any diagnostic information.
+
 ## [0.20.0] - 2026-04-22
 
 ### Added
