@@ -84,3 +84,84 @@ async def test_metrics_history_after_analyse_activities(client, auth_headers, mo
 async def test_metrics_history_requires_auth(client):
     response = await client.get("/api/v1/users/me/metrics-history")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_estimate_ftp_no_data(client, auth_headers):
+    """estimate-ftp on a brand-new account with no rides returns null FTP."""
+    response = await client.post(
+        "/api/v1/users/me/estimate-ftp",
+        headers=auth_headers,
+        json={"maxHeartRate": 185, "restingHeartRate": 55},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estimatedFTP"] is None
+    assert body["source"] == "none"
+
+    # Verify HR values were persisted on the user profile.
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["maxHeartRate"] == 185
+    assert me.json()["restingHeartRate"] == 55
+
+
+@pytest.mark.asyncio
+async def test_estimate_ftp_defaults_resting_hr(client, auth_headers):
+    """estimate-ftp should default resting HR to 60 when it was never set."""
+    # Ensure the user profile has no resting HR initially.
+    me_before = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me_before.json()["restingHeartRate"] is None
+
+    await client.post(
+        "/api/v1/users/me/estimate-ftp",
+        headers=auth_headers,
+        json={"maxHeartRate": 190},
+    )
+
+    me_after = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me_after.json()["maxHeartRate"] == 190
+    assert me_after.json()["restingHeartRate"] == 60
+
+
+@pytest.mark.asyncio
+async def test_estimate_ftp_returns_snapshot_ftp(client, auth_headers, mock_ai_service):
+    """estimate-ftp returns FTP from the most recent AthleteMetricSnapshot."""
+    # Create a snapshot via analyse-activities (uses mock FTP = 280 W).
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 1001,
+                    "name": "Hard Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 4500,
+                    "elapsedTime": 4600,
+                    "totalElevationGain": 500,
+                    "startDate": "2026-04-20T09:00:00Z",
+                    "averageWatts": 240,
+                }
+            ]
+        },
+    )
+
+    response = await client.post(
+        "/api/v1/users/me/estimate-ftp",
+        headers=auth_headers,
+        json={"maxHeartRate": 185},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estimatedFTP"] == 280  # from mock_ai_service
+    assert body["source"] == "strava_analysis"
+
+
+@pytest.mark.asyncio
+async def test_estimate_ftp_requires_auth(client):
+    response = await client.post(
+        "/api/v1/users/me/estimate-ftp",
+        json={"maxHeartRate": 185},
+    )
+    assert response.status_code == 401

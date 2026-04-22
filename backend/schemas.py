@@ -462,3 +462,40 @@ class RecalculateMetricsResponse(BaseModel):
     """Number of ride-metric rows that were recomputed."""
     ftp_used: int
     """The FTP value (watts) that was used for all calculations."""
+
+
+# ---------------------------------------------------------------------------
+# FTP estimation
+# ---------------------------------------------------------------------------
+
+
+class EstimateFTPRequest(CamelModel):
+    """Request body for POST /users/me/estimate-ftp.
+
+    Both fields are optional.  When provided they are saved to the user
+    profile so subsequent analyses (e.g. Strava import) automatically use the
+    updated values.
+    """
+
+    max_heart_rate: Optional[int] = None
+    """Athlete's maximum heart rate in bpm."""
+
+    resting_heart_rate: Optional[int] = None
+    """Athlete's resting heart rate in bpm.  Defaults to 60 when absent."""
+
+
+class EstimateFTPResponse(CamelModel):
+    """Response for POST /users/me/estimate-ftp."""
+
+    estimated_ftp: Optional[int] = None
+    """Best available FTP estimate in watts, or ``null`` when no data is
+    available yet (e.g. brand-new account with no rides)."""
+
+    source: str = "none"
+    """Provenance of the returned estimate:
+    - ``"ftp_estimation"`` – most recent snapshot from the over-time estimator.
+    - ``"strava_analysis"`` – snapshot produced by a full Strava analysis.
+    - ``"rider_assessment"`` – value stored in the rider assessment record.
+    - ``"profile"`` – value manually set on the user profile.
+    - ``"none"`` – no estimate available.
+    """

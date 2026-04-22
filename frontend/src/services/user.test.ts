@@ -15,6 +15,8 @@ import {
   fetchCoachMemory,
   saveCoachMemoryRemote,
   deleteCurrentUser,
+  recalculateMetrics,
+  estimateFTP,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -228,3 +230,73 @@ describe('deleteCurrentUser', () => {
     })
   })
 })
+
+describe('recalculateMetrics', () => {
+  it('posts to /users/me/recalculate-metrics without an FTP override', async () => {
+    mockApiFetch.mockResolvedValue({ updated: 15, ftpUsed: 250 })
+
+    const result = await recalculateMetrics('tok-123')
+
+    expect(result).toEqual({ updated: 15, ftpUsed: 250 })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/recalculate-metrics', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { ftpOverride: null },
+    })
+  })
+
+  it('includes the FTP override when provided', async () => {
+    mockApiFetch.mockResolvedValue({ updated: 20, ftpUsed: 270 })
+
+    const result = await recalculateMetrics('tok-123', 270)
+
+    expect(result).toEqual({ updated: 20, ftpUsed: 270 })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/recalculate-metrics', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { ftpOverride: 270 },
+    })
+  })
+})
+
+describe('estimateFTP', () => {
+  it('posts max and resting HR and returns the estimate', async () => {
+    mockApiFetch.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+
+    const result = await estimateFTP('tok-123', { maxHeartRate: 185, restingHeartRate: 55 })
+
+    expect(result).toEqual({ estimatedFTP: 248, source: 'ftp_estimation' })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { maxHeartRate: 185, restingHeartRate: 55 },
+    })
+  })
+
+  it('sends null for omitted HR fields', async () => {
+    mockApiFetch.mockResolvedValue({ estimatedFTP: null, source: 'none' })
+
+    const result = await estimateFTP('tok-123', {})
+
+    expect(result.estimatedFTP).toBeNull()
+    expect(result.source).toBe('none')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { maxHeartRate: null, restingHeartRate: null },
+    })
+  })
+
+  it('sends only maxHeartRate when restingHeartRate is omitted', async () => {
+    mockApiFetch.mockResolvedValue({ estimatedFTP: 260, source: 'profile' })
+
+    await estimateFTP('tok-123', { maxHeartRate: 190 })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { maxHeartRate: 190, restingHeartRate: null },
+    })
+  })
+})
+

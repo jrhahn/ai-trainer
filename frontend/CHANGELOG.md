@@ -5,7 +5,51 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] - 2026-04-22
+## [0.16.0] - 2026-04-22
+
+### Added
+
+- **Heart Rate Settings section in Settings** (`src/pages/SettingsPage.tsx`) — a new card that
+  lets users update Max HR and Resting HR at any time, with a two-step FTP re-estimation
+  workflow:
+
+  1. **Save & Estimate FTP** — persists the entered HR values via
+     `POST /users/me/estimate-ftp`.  If an FTP estimate is available it is shown in an inline
+     confirmation panel.
+  2. **Confirm & Recalculate** — the user can review or adjust the estimated FTP, then click
+     this button to trigger a full `POST /users/me/recalculate-metrics` rebuild of all
+     TSS / CTL / ATL / TSB values for every stored ride.  A `window.confirm` guard and an
+     irreversibility warning banner are shown before any data is changed.
+
+  An *age* field is provided as a fallback when the athlete doesn't know their Max HR — the
+  app estimates it as `220 − age` (minimum age 10 to avoid unrealistic values) and shows a
+  live preview.
+
+- **`estimateFTP()` API helper** (`src/services/user.ts`) — thin wrapper around
+  `POST /users/me/estimate-ftp` that accepts optional `maxHeartRate` and `restingHeartRate`
+  and returns `{ estimatedFTP, source }`.
+
+- **Onboarding — Max HR and Resting HR collected before Strava OAuth** (`src/pages/OnboardingPage.tsx`):
+
+  - In **Step 3** (Strava flow) Max HR + Resting HR inputs now appear *before* the Strava
+    Connect button so the values are captured before the OAuth redirect.
+  - An **age** field is shown when Max HR is blank.  The estimated Max HR (`220 − age`,
+    min age 10) is computed live and used transparently during onboarding — no manual
+    calculation needed.
+  - **Resting HR defaults to 60** at plan-generation time when the field is left blank,
+    removing a common source of missing data.
+
+- **Tests** (`src/services/user.test.ts`, `src/pages/SettingsPage.test.tsx`,
+  `src/pages/OnboardingPage.test.tsx`):
+  - `user.test.ts`: two new describe blocks for `recalculateMetrics()` (no-override and
+    with-override cases) and `estimateFTP()` (full HR, empty opts, max-only).
+  - `SettingsPage.test.tsx`: six new tests covering the Heart Rate Settings card — button
+    disabled state, `estimateFTP` call arguments, FTP confirmation panel lifecycle, and
+    `recalculateMetrics` invocation after confirmation.
+  - `OnboardingPage.test.tsx`: two new tests — age-based Max HR derivation (220 − 35 = 185)
+    and default resting HR = 60 when the field is left blank.
+
+
 
 ### Added
 
