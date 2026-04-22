@@ -17,7 +17,7 @@ import crud
 import models
 import schemas
 from database import async_session_maker, get_db
-from services.analysis import build_ride_metrics_chain
+from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
 
 STRAVA_OAUTH_BASE = "https://www.strava.com"
 
@@ -241,10 +241,15 @@ async def _run_import_background(
     access_token: str,
     ftp: float,
     after_ts: int,
+    max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
 ) -> None:
     """Fetch Strava activities and build the ride-metrics chain in the background.
 
     Opens its own DB session so it is not tied to the request lifecycle.
+    After building the ride-metrics chain, runs ``estimate_ftp_over_time`` on
+    the fetched stream data and persists per-ride FTP estimates as
+    ``AthleteMetricSnapshot`` rows (source = ``"ftp_estimation"``).
     """
     _import_progress[user_id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
     try:
@@ -310,7 +315,7 @@ async def _run_import_background(
                 })
                 _import_progress[user_id]["processed"] = idx + 1
 
-        # --- Build chain and persist in batches to avoid holding a connection indefinitely ---
+        # --- Build chain and persist in batches ---
         metrics_chain = build_ride_metrics_chain(rides, ftp, initial_ctl=0.0, initial_atl=0.0)
         BATCH = 50
         for i in range(0, len(metrics_chain), BATCH):
@@ -318,6 +323,32 @@ async def _run_import_background(
                 for m in metrics_chain[i : i + BATCH]:
                     await crud.upsert_ride_metric(db, user_id, **m)
                 await db.commit()
+
+        # --- Estimate FTP over time from steady intervals ---
+        ftp_series = estimate_ftp_over_time(
+            rides,
+            max_heart_rate=max_heart_rate,
+            resting_heart_rate=resting_heart_rate,
+        )
+        if ftp_series:
+            for i in range(0, len(ftp_series), BATCH):
+                async with async_session_maker() as db:
+                    for point in ftp_series[i : i + BATCH]:
+                        try:
+                            ride_dt = datetime.fromisoformat(point["date"]).replace(
+                                tzinfo=timezone.utc
+                            )
+                        except ValueError:
+                            ride_dt = datetime.now(timezone.utc)
+                        await crud.create_athlete_metric_snapshot(
+                            db,
+                            user_id,
+                            ftp=point["ftp"],
+                            threshold_hr=None,
+                            source="ftp_estimation",
+                            recorded_at=ride_dt,
+                        )
+                    await db.commit()
 
         _import_progress[user_id] = {
             "status": "done",
@@ -429,6 +460,8 @@ async def import_strava_history(
         access_token=access_token,
         ftp=ftp,
         after_ts=after_ts,
+        max_heart_rate=current_user.max_heart_rate,
+        resting_heart_rate=current_user.resting_heart_rate,
     )
 
     return {"status": "started"}

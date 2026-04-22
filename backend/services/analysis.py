@@ -789,6 +789,183 @@ def compute_ftp_from_streams(
 # ---------------------------------------------------------------------------
 
 
+def estimate_ftp_over_time(
+    rides: list[dict],
+    max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
+    smoothing_days: int = 21,
+) -> list[dict]:
+    """Estimate FTP at different points in time using rides with steady-state power.
+
+    For each ride the algorithm produces one raw FTP estimate:
+
+    **HR-corrected method** (preferred — requires ``max_heart_rate``):
+
+    1. Scans the power stream using a sliding 5-minute window.
+    2. Accepts windows whose coefficient of variation (CV = std / mean) is
+       below 15 % as *steady* efforts.
+    3. For each accepted window, scales the observed power to what the athlete
+       could sustain at exactly lactate-threshold HR::
+
+           FTP_est = avg_power × (LTHR / avg_hr),   LTHR = 87 % × max_HR
+
+    4. Takes the **best** (highest) estimate across all steady windows in the
+       ride.
+
+    **Power-only fallback** (used when no HR data or ``max_heart_rate`` is
+    absent):
+
+    Uses the standard FTP-test protocol: best-20-min average power × 0.95.
+    This is meaningful only for rides that contain a maximal 20-minute effort;
+    rides shorter than 20 minutes are skipped in this path.
+
+    After collecting per-ride raw estimates, the **smoothed** FTP for each
+    point is the **maximum raw estimate across all rides in the preceding
+    ``smoothing_days`` days** (inclusive).  The sliding-window max correctly
+    reflects current capability: a single strong performance propagates for
+    the full window while easy / recovery rides — which would produce low
+    estimates — do not drag the series down.
+
+    Args:
+        rides: List of dicts each containing:
+
+            - ``activity_date`` (str, ISO date YYYY-MM-DD)
+            - ``streams`` (dict of Strava stream objects with ``watts``,
+              ``heartrate``, and ``time`` keys)
+
+        max_heart_rate: Athlete's max heart rate in bpm.  Required for the
+            HR-based correction; falls back to the power-only method when not
+            provided.
+        resting_heart_rate: Resting HR in bpm.  Reserved for future use; not
+            used in the current formula.
+        smoothing_days: Size of the sliding window (days) used to take the
+            max over recent raw estimates.  Default 21 (3 weeks) — long enough
+            to smooth noise while still tracking gradual FTP changes.
+
+    Returns:
+        List of ``{"date": str, "ftp": int, "raw_ftp": int}`` dicts ordered
+        by date.  Returns an empty list when no valid FTP estimates can be
+        produced.
+    """
+    import datetime as _dt
+    import statistics as _statistics
+
+    STEADY_CV_THRESHOLD = 0.15  # power CV below this → steady interval
+    WINDOW_MINUTES = 5.0        # minimum steady window length (minutes)
+    MIN_POWER_WATTS = 50.0      # ignore near-zero wattage windows
+
+    raw_estimates: list[tuple[str, int]] = []  # (activity_date, raw_ftp_watts)
+
+    for ride in rides:
+        activity_date = ride.get("activity_date", "")
+        if not activity_date:
+            continue
+
+        streams = ride.get("streams", {})
+        watts: list[float] = streams.get("watts", {}).get("data", [])
+        hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
+        time_data: list[float] = streams.get("time", {}).get("data", [])
+
+        if not watts or not time_data or len(watts) != len(time_data):
+            continue
+
+        target_secs = WINDOW_MINUTES * 60.0
+        n = len(watts)
+        best_ftp_for_ride: int | None = None
+
+        if hr_data and len(hr_data) == len(watts) and max_heart_rate:
+            # --- HR-corrected method: scan 5-min steady windows ---
+            left = 0
+            for right in range(n):
+                # Slide left boundary so window fits within target duration
+                while time_data[right] - time_data[left] > target_secs:
+                    left += 1
+
+                actual_dur = time_data[right] - time_data[left]
+                if actual_dur < target_secs * 0.9:
+                    continue  # window too short
+
+                seg = watts[left : right + 1]
+                if not seg:
+                    continue
+                mean_power = sum(seg) / len(seg)
+                if mean_power < MIN_POWER_WATTS:
+                    continue
+
+                # Reject noisy / variable segments
+                try:
+                    stdev = _statistics.stdev(seg)
+                except _statistics.StatisticsError:
+                    continue
+                cv = stdev / mean_power
+                if cv > STEADY_CV_THRESHOLD:
+                    continue
+
+                seg_hr = hr_data[left : right + 1]
+                if seg_hr:
+                    avg_hr = sum(seg_hr) / len(seg_hr)
+                    ftp_est = hr_corrected_ftp(mean_power, avg_hr, max_heart_rate)
+                    if ftp_est is not None and ftp_est > 0:
+                        if best_ftp_for_ride is None or ftp_est > best_ftp_for_ride:
+                            best_ftp_for_ride = ftp_est
+        else:
+            # --- Power-only fallback: best 20-min power × 0.95 ---
+            # This is the standard field-test protocol (Coggan/Allen).  It is
+            # only meaningful when the rider has produced a maximal 20-min
+            # effort; rides shorter than 20 min are skipped.
+            best_20, _, _ = best_n_min_power(watts, time_data, 20.0)
+            if best_20 is not None and best_20 >= MIN_POWER_WATTS:
+                best_ftp_for_ride = round(best_20 * 0.95)
+
+        if best_ftp_for_ride is not None:
+            raw_estimates.append((activity_date, best_ftp_for_ride))
+
+    if not raw_estimates:
+        return []
+
+    # Sort raw estimates by date ascending.
+    raw_estimates.sort(key=lambda x: x[0])
+
+    # --- Sliding-window max smoothing ---
+    # For each estimate on date D, the smoothed FTP is the maximum raw estimate
+    # from any ride within the preceding ``smoothing_days`` days (inclusive of D).
+    # Taking the max (rather than an average / EWMA) means a single strong ride
+    # correctly propagates while easy rides do not drag the series down.
+    window = _dt.timedelta(days=max(1, smoothing_days))
+
+    result: list[dict] = []
+    for i, (date_str, raw_ftp) in enumerate(raw_estimates):
+        try:
+            end_date = _dt.date.fromisoformat(date_str)
+        except ValueError:
+            end_date = None
+
+        if end_date is None:
+            result.append({"date": date_str, "ftp": raw_ftp, "raw_ftp": raw_ftp})
+            continue
+
+        start_date = end_date - window
+        smoothed_ftp = max(
+            est
+            for d_str, est in raw_estimates[: i + 1]
+            if _in_window(d_str, start_date, end_date)
+        )
+        result.append({"date": date_str, "ftp": smoothed_ftp, "raw_ftp": raw_ftp})
+
+    return result
+
+
+def _in_window(date_str: str, start: object, end: object) -> bool:
+    """Return True when ``date_str`` falls in the closed interval [start, end]."""
+    import datetime as _dt
+
+    try:
+        d = _dt.date.fromisoformat(date_str)
+    except ValueError:
+        return False
+    return start <= d <= end  # type: ignore[operator]
+
+
 def compute_ride_tss(duration_seconds: float, normalized_power: float, ftp: float) -> float | None:
     """Compute Training Stress Score for a single ride.
 

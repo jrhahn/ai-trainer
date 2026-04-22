@@ -5,6 +5,31 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-04-22
+
+### Added
+
+- **FTP Management section in Settings** (`src/pages/SettingsPage.tsx`) — a new card between
+  Account and Strava Integration exposes three actions:
+
+  1. **Save FTP** — override `current_ftp` on the user profile with a manually entered value.
+  2. **Recalculate TSS / ATL / CTL** — calls the new `POST /users/me/recalculate-metrics` backend
+     endpoint with an optional FTP value, rebuilding the full training-stress chain for every
+     stored ride.  A warning banner explains the operation is irreversible, and a `window.confirm`
+     dialog is shown before any data is sent.
+  3. Displays the current stored FTP next to the card heading for quick reference.
+
+- **`recalculateMetrics()` API helper** (`src/services/user.ts`) — thin wrapper around
+  `POST /users/me/recalculate-metrics` that returns `{ updated, ftpUsed }`.
+
+### Changed
+
+- **Strava callback — automatic ride history import** (`src/pages/StravaCallbackPage.tsx`) — after
+  a successful OAuth connection the page now calls `POST /strava/import-history` before redirecting
+  to the dashboard. The user sees a three-step progress indicator: *Connecting → Importing ride
+  history (last 6 months) → All set! N rides imported*. Import errors are non-fatal; the user
+  is redirected to the dashboard regardless.
+
 ## [0.14.0] - 2026-04-22
 
 ### Added
@@ -19,16 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-line chat input** (`src/components/AIChat.tsx`) — the single-line `<input type="text">`
   has been replaced with an auto-growing `<textarea>`. Pressing **Shift+Enter** inserts a new line;
   pressing **Enter** alone (or clicking the send button) submits the message as before.
-
-## [0.13.0] - 2026-04-21
-
-### Changed
-
-- **Strava callback — automatic ride history import** (`src/pages/StravaCallbackPage.tsx`) — after
-  a successful OAuth connection the page now calls `POST /strava/import-history` before redirecting
-  to the dashboard. The user sees a three-step progress indicator: *Connecting → Importing ride
-  history (last 6 months) → All set! N rides imported*. Import errors are non-fatal; the user
-  is redirected to the dashboard regardless.
 
 ## [0.12.0] - 2026-04-20
 

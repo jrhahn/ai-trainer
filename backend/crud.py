@@ -6,6 +6,7 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -348,9 +349,14 @@ async def create_athlete_metric_snapshot(
     atl: float | None = None,
     tsb: float | None = None,
     source: str = "strava_analysis",
+    recorded_at: datetime | None = None,
 ) -> models.AthleteMetricSnapshot:
-    """Insert a new AthleteMetricSnapshot row and flush."""
-    snapshot = models.AthleteMetricSnapshot(
+    """Insert a new AthleteMetricSnapshot row and flush.
+
+    ``recorded_at`` defaults to the current UTC time when not provided.  Pass
+    an explicit value to back-date a snapshot to the originating ride date.
+    """
+    kwargs: dict = dict(
         user_id=user_id,
         ftp=ftp,
         threshold_hr=threshold_hr,
@@ -359,6 +365,9 @@ async def create_athlete_metric_snapshot(
         tsb=tsb,
         source=source,
     )
+    if recorded_at is not None:
+        kwargs["recorded_at"] = recorded_at
+    snapshot = models.AthleteMetricSnapshot(**kwargs)
     db.add(snapshot)
     await db.flush()
     return snapshot
@@ -379,9 +388,39 @@ async def get_athlete_metric_history(
     return list(result)
 
 
+async def delete_athlete_metric_snapshots(db: AsyncSession, user_id: str) -> None:
+    """Delete all AthleteMetricSnapshot rows for a user and flush.
+
+    Used when rebuilding the full metric history after an FTP recalculation so
+    stale snapshots do not pollute the progression chart.
+    """
+    await db.execute(
+        delete(models.AthleteMetricSnapshot).where(
+            models.AthleteMetricSnapshot.user_id == user_id
+        )
+    )
+    await db.flush()
+
+
 # ---------------------------------------------------------------------------
 # Ride metrics
 # ---------------------------------------------------------------------------
+
+
+async def get_all_ride_metrics_ordered(
+    db: AsyncSession,
+    user_id: str,
+) -> list[models.RideMetric]:
+    """Return all RideMetric rows for a user sorted by activity_date ascending.
+
+    Used when rebuilding the full CTL/ATL/TSB chain after an FTP change.
+    """
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(models.RideMetric.user_id == user_id)
+        .order_by(models.RideMetric.activity_date.asc())
+    )
+    return list(result)
 
 
 async def upsert_ride_metric(
