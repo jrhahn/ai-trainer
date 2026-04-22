@@ -331,17 +331,15 @@ async def _run_import_background(
             resting_heart_rate=resting_heart_rate,
         )
         if ftp_series:
-            from datetime import datetime, timezone as _tz
-
             for i in range(0, len(ftp_series), BATCH):
                 async with async_session_maker() as db:
                     for point in ftp_series[i : i + BATCH]:
                         try:
                             ride_dt = datetime.fromisoformat(point["date"]).replace(
-                                tzinfo=_tz.utc
+                                tzinfo=timezone.utc
                             )
                         except ValueError:
-                            ride_dt = datetime.now(_tz.utc)
+                            ride_dt = datetime.now(timezone.utc)
                         await crud.create_athlete_metric_snapshot(
                             db,
                             user_id,

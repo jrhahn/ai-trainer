@@ -248,12 +248,9 @@ async def analyse_activities(
             )
             for point in ftp_series:
                 try:
-                    from datetime import datetime as _datetime
-                    from datetime import timezone as _tz
-                    ride_dt = _datetime.fromisoformat(point["date"]).replace(tzinfo=_tz.utc)
+                    ride_dt = datetime.fromisoformat(point["date"]).replace(tzinfo=timezone.utc)
                 except ValueError:
-                    from datetime import datetime as _datetime, timezone as _tz
-                    ride_dt = _datetime.now(_tz.utc)
+                    ride_dt = datetime.now(timezone.utc)
                 await crud.create_athlete_metric_snapshot(
                     db,
                     current_user.id,

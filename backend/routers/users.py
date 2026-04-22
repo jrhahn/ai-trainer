@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import math
+from datetime import date as _date
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -278,8 +279,6 @@ async def recalculate_metrics(
     prev_date_str: str | None = None
     updated = 0
 
-    import datetime as _dt
-
     for metric in all_metrics:
         # Re-derive TSS from stored normalised power and new FTP
         np_w = metric.normalized_power_w
@@ -295,8 +294,8 @@ async def recalculate_metrics(
         gap_days = 1
         if prev_date_str is not None:
             try:
-                prev_d = _dt.date.fromisoformat(prev_date_str)
-                curr_d = _dt.date.fromisoformat(metric.activity_date)
+                prev_d = _date.fromisoformat(prev_date_str)
+                curr_d = _date.fromisoformat(metric.activity_date)
                 gap_days = max(1, (curr_d - prev_d).days)
             except ValueError:
                 gap_days = 1
