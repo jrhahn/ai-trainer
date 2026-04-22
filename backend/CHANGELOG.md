@@ -5,6 +5,26 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2026-04-22
+
+### Changed
+
+- **`estimate_ftp_over_time()` — improved algorithm** (`services/analysis.py`):
+
+  - **Power-only fallback fixed** — replaced the incorrect `0.95 × steady_5-min_segment_power`
+    formula (which could wildly underestimate FTP for sub-threshold efforts) with the standard
+    FTP-test protocol: `best_20_min_power × 0.95`.  Rides shorter than 20 minutes are skipped
+    in this path since a meaningful 20-min max effort cannot be produced from them.
+
+  - **Smoothing changed from EWMA to 3-week sliding-window max** — for each date point the
+    smoothed FTP is now the *maximum* raw estimate from any ride in the preceding 21 days
+    (``smoothing_days`` default changed from 42 to 21).  Taking the max rather than an
+    exponential average means a single strong ride correctly propagates while easy / recovery
+    rides — which produce lower estimates — no longer drag the series down.  FTP reflects
+    current capability, not an average of all recent efforts.
+
+  - New private helper `_in_window(date_str, start, end)` used by the sliding-window loop.
+
 ## [0.18.0] - 2026-04-22
 
 ### Added

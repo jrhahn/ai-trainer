@@ -1313,14 +1313,28 @@ def test_estimate_ftp_over_time_no_streams():
 
 
 def test_estimate_ftp_over_time_single_steady_ride_no_hr():
-    """Power-only fallback: steady 300 W → FTP ≈ 300 × 0.95 = 285 W."""
-    streams = _make_steady_streams(900, 300.0, 0.0)  # 15 min at 300 W
+    """Power-only fallback uses best-20-min × 0.95.
+
+    15-min ride at steady 300 W → best 20-min power cannot be computed
+    (too short) → no estimate produced.
+    """
+    streams = _make_steady_streams(900, 300.0, 0.0)  # 15 min at 300 W, no HR
+    rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    result = analysis.estimate_ftp_over_time(rides)
+    # 15 min < 20 min required for the best-20-min fallback → no estimate
+    assert result == []
+
+
+def test_estimate_ftp_over_time_no_hr_20min_ride():
+    """Power-only fallback: 25-min ride at steady 300 W → best-20-min ≈ 300 W → FTP ≈ 285."""
+    streams = _make_steady_streams(1500, 300.0, 0.0)  # 25 min, no HR
     rides = [{"activity_date": "2026-04-01", "streams": streams}]
     result = analysis.estimate_ftp_over_time(rides)
     assert len(result) == 1
     assert result[0]["date"] == "2026-04-01"
-    assert abs(result[0]["ftp"] - round(300 * 0.95)) <= 2
-    assert result[0]["raw_ftp"] == round(300 * 0.95)
+    # best 20-min of a constant-300W ride is 300 W; FTP = round(300 × 0.95) = 285
+    assert abs(result[0]["raw_ftp"] - round(300 * 0.95)) <= 2
+    assert result[0]["ftp"] == result[0]["raw_ftp"]  # single ride → window max = raw
 
 
 def test_estimate_ftp_over_time_with_hr():
@@ -1336,19 +1350,33 @@ def test_estimate_ftp_over_time_with_hr():
     assert abs(result[0]["raw_ftp"] - 250) <= 2
 
 
-def test_estimate_ftp_over_time_smoothing():
-    """EWMA smoothing: first point seeds the value; subsequent points converge."""
+def test_estimate_ftp_over_time_window_max_smoothing():
+    """3-week sliding-window max: second point takes max of both rides in window."""
     max_hr = 190
     lthr = float(round(max_hr * analysis.LTHR_RATIO))
-    # Two rides 1 week apart: first at 250 W, second at 300 W
+    # Two rides 1 week apart — both within the 21-day default window
     r1 = {"activity_date": "2026-01-01", "streams": _make_steady_streams(900, 250.0, lthr)}
     r2 = {"activity_date": "2026-01-08", "streams": _make_steady_streams(900, 300.0, lthr)}
-    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=42)
+    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=21)
     assert len(result) == 2
-    # First point seeded at raw value
+    # First point: only one ride in window → smoothed == raw
     assert result[0]["ftp"] == result[0]["raw_ftp"]
-    # Second point should be between the two raw values (EWMA)
-    assert result[0]["ftp"] <= result[1]["ftp"] <= result[1]["raw_ftp"]
+    # Second point: both rides are within 21 days → smoothed = max(raw1, raw2) = raw2
+    assert result[1]["ftp"] == result[1]["raw_ftp"]
+
+
+def test_estimate_ftp_over_time_old_ride_outside_window():
+    """Rides outside the window do not inflate the smoothed FTP."""
+    max_hr = 190
+    lthr = float(round(max_hr * analysis.LTHR_RATIO))
+    # Ride 1 is 30 days before ride 2 — outside the default 21-day window
+    r1 = {"activity_date": "2026-01-01", "streams": _make_steady_streams(900, 350.0, lthr)}
+    r2 = {"activity_date": "2026-01-31", "streams": _make_steady_streams(900, 260.0, lthr)}
+    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=21)
+    assert len(result) == 2
+    # Ride 2 smoothed FTP should equal its own raw value (ride 1 is outside window)
+    assert result[1]["ftp"] == result[1]["raw_ftp"]
+    assert result[1]["ftp"] < result[0]["raw_ftp"]  # lower than the old peak
 
 
 def test_estimate_ftp_over_time_high_variance_rejected():
@@ -1361,6 +1389,7 @@ def test_estimate_ftp_over_time_high_variance_rejected():
         "time": {"data": list(range(n))},
     }
     rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    # No HR → power-only path; but 15-min ride < 20 min required
     result = analysis.estimate_ftp_over_time(rides)
     assert result == []
 
