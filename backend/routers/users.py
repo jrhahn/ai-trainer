@@ -344,6 +344,12 @@ async def recalculate_metrics(
             try:
                 ride_dt = datetime.fromisoformat(metric.activity_date).replace(tzinfo=timezone.utc)
             except ValueError:
+                logger.warning(
+                    "Could not parse activity_date %r for ride metric %s; "
+                    "snapshot will use current timestamp.",
+                    metric.activity_date,
+                    getattr(metric, "strava_activity_id", "unknown"),
+                )
                 ride_dt = datetime.now(timezone.utc)
         else:
             ride_dt = datetime.now(timezone.utc)
