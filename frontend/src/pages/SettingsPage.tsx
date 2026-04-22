@@ -140,20 +140,20 @@ export default function SettingsPage() {
   const handleSaveHR = async () => {
     if (!authToken || !userProfile) return
 
-    // Resolve Max HR from direct input or age estimate.
+    // Resolve Max HR from direct input or age estimate (min age 10 to avoid unrealistic values).
     const parsedMaxHr = maxHrInput.trim() ? parseInt(maxHrInput, 10) : undefined
     const parsedAge = ageInput.trim() ? parseInt(ageInput, 10) : undefined
     const resolvedMaxHr: number | undefined =
-      parsedMaxHr ?? (parsedAge ? Math.max(100, 220 - parsedAge) : undefined)
+      parsedMaxHr ?? (parsedAge !== undefined && parsedAge >= 10 ? Math.max(100, 220 - parsedAge) : undefined)
 
     const parsedRestingHr = restingHrInput.trim() ? parseInt(restingHrInput, 10) : undefined
 
     if (
       (parsedMaxHr !== undefined && (isNaN(parsedMaxHr) || parsedMaxHr <= 0)) ||
       (parsedRestingHr !== undefined && (isNaN(parsedRestingHr) || parsedRestingHr <= 0)) ||
-      (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge <= 0))
+      (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge < 10))
     ) {
-      setHrMsg({ type: 'error', text: 'Please enter valid positive values.' })
+      setHrMsg({ type: 'error', text: 'Please enter valid values (age must be at least 10).' })
       return
     }
 
@@ -468,11 +468,17 @@ export default function SettingsPage() {
                   placeholder="e.g. 35"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
-                {ageInput && (
-                  <p className="text-xs text-amber-700 mt-1">
-                    Estimated Max HR: {Math.max(100, 220 - parseInt(ageInput, 10))} bpm
-                  </p>
-                )}
+                {ageInput && (() => {
+                  const parsedAge = parseInt(ageInput, 10)
+                  const est = Number.isFinite(parsedAge) && parsedAge >= 10
+                    ? Math.max(100, 220 - parsedAge)
+                    : undefined
+                  return est !== undefined ? (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Estimated Max HR: {est} bpm
+                    </p>
+                  ) : null
+                })()}
               </div>
             )}
           </div>

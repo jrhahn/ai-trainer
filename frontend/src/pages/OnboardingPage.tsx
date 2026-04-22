@@ -57,6 +57,16 @@ function clearOnboardingProgress(): void {
   }
 }
 
+/** Estimate maximum heart rate from age using the 220 − age formula.
+ *  Age is clamped to a minimum of 10 to avoid physiologically unrealistic
+ *  values for very young inputs.  Returns undefined when age is not a valid
+ *  positive number.
+ */
+function estimateMaxHRFromAge(age: number): number | undefined {
+  if (!Number.isFinite(age) || age < 10) return undefined
+  return Math.max(100, 220 - age)
+}
+
 type FormData = {
   name: string
   email: string
@@ -167,7 +177,7 @@ export default function OnboardingPage() {
     const resolvedMaxHR: number | undefined = form.maxHeartRate
       ? Number(form.maxHeartRate)
       : form.age
-      ? Math.max(100, 220 - Number(form.age))
+      ? estimateMaxHRFromAge(Number(form.age))
       : undefined
 
     // Default resting HR to 60 when not provided.
@@ -427,9 +437,9 @@ export default function OnboardingPage() {
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                             placeholder="e.g. 35"
                           />
-                          {form.age && (
+                          {form.age && estimateMaxHRFromAge(Number(form.age)) !== undefined && (
                             <p className="text-xs text-amber-700 mt-1">
-                              Estimated Max HR: {Math.max(100, 220 - Number(form.age))} bpm
+                              Estimated Max HR: {estimateMaxHRFromAge(Number(form.age))} bpm
                             </p>
                           )}
                         </div>
@@ -542,9 +552,9 @@ export default function OnboardingPage() {
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                             placeholder="e.g. 35"
                           />
-                          {form.age && (
+                          {form.age && estimateMaxHRFromAge(Number(form.age)) !== undefined && (
                             <p className="text-xs text-amber-700 mt-1">
-                              Estimated Max HR: {Math.max(100, 220 - Number(form.age))} bpm
+                              Estimated Max HR: {estimateMaxHRFromAge(Number(form.age))} bpm
                             </p>
                           )}
                         </div>
@@ -580,10 +590,11 @@ export default function OnboardingPage() {
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(() => {
+                  const estimatedHR = form.age ? estimateMaxHRFromAge(Number(form.age)) : undefined
                   const displayMaxHR = form.maxHeartRate
                     ? `${form.maxHeartRate} bpm`
-                    : form.age
-                    ? `${Math.max(100, 220 - Number(form.age))} bpm (estimated from age)`
+                    : estimatedHR !== undefined
+                    ? `${estimatedHR} bpm (estimated from age)`
                     : null
                   const displayRestingHR = form.restingHeartRate
                     ? `${form.restingHeartRate} bpm`
