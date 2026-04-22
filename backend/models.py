@@ -69,6 +69,11 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="AthleteMetricSnapshot.recorded_at",
     )
+    ride_metrics: Mapped[list["RideMetric"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="RideMetric.activity_date",
+    )
 
 
 class TrainingPlan(Base):
@@ -183,3 +188,36 @@ class AthleteMetricSnapshot(Base):
     source: Mapped[str] = mapped_column(String(50), default="strava_analysis")
 
     user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")
+
+
+class RideMetric(Base):
+    """Per-ride time-series record with pre-computed training metrics.
+
+    One row per Strava activity per user.  Serves as the structured context
+    fed to every LLM call so the AI never needs to re-process raw streams.
+    CTL/ATL/TSB here are derived from actual ride TSS (not plan estimates).
+    """
+
+    __tablename__ = "ride_metrics"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    strava_activity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    activity_date: Mapped[str] = mapped_column(String(20), nullable=False)
+    sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    normalized_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    intensity_factor: Mapped[float | None] = mapped_column(nullable=True)
+    tss: Mapped[float | None] = mapped_column(nullable=True)
+    ftp_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ctl_after: Mapped[float | None] = mapped_column(nullable=True)
+    atl_after: Mapped[float | None] = mapped_column(nullable=True)
+    tsb_after: Mapped[float | None] = mapped_column(nullable=True)
+    ride_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="ride_metrics")

@@ -782,3 +782,214 @@ def compute_ftp_from_streams(
     computed_ftp = max(ftp_candidates) if ftp_candidates else None
     computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs)) if threshold_hrs else None
     return computed_ftp, computed_threshold_hr
+
+
+# ---------------------------------------------------------------------------
+# Ride-metrics chain computation
+# ---------------------------------------------------------------------------
+
+
+def compute_ride_tss(duration_seconds: float, normalized_power: float, ftp: float) -> float | None:
+    """Compute Training Stress Score for a single ride.
+
+    TSS = (duration_s × NP²) / (FTP² × 3600) × 100
+
+    Returns ``None`` when any input is ≤ 0.
+    """
+    if duration_seconds <= 0 or normalized_power <= 0 or ftp <= 0:
+        return None
+    intensity_factor = normalized_power / ftp
+    tss = (duration_seconds * normalized_power * intensity_factor) / (ftp * 3600.0) * 100.0
+    return round(tss, 1)
+
+
+def apply_ctl_atl_decay(
+    prev_ctl: float,
+    prev_atl: float,
+    tss: float,
+    gap_days: int = 1,
+) -> tuple[float, float]:
+    """Advance CTL/ATL by ``gap_days``, applying zero-TSS decay for silent days
+    then ``tss`` on the final (ride) day.
+
+    ``gap_days=1`` means the ride is on the very next day — no silent days.
+    ``gap_days=3`` means 2 rest days then the ride day.
+
+    Uses standard exponential smoothing constants:
+    - CTL: 42-day time constant  → α = 1 − exp(−1/42)
+    - ATL: 7-day time constant   → α = 1 − exp(−1/7)
+    """
+    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
+    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
+
+    # Decay through silent days (TSS = 0 each day before the ride)
+    silent_days = max(0, gap_days - 1)
+    if silent_days > 0:
+        # Compounded zero-TSS decay: CTL_n = CTL_0 * (1 - α)^n
+        decay_ctl = (1.0 - alpha_ctl) ** silent_days
+        decay_atl = (1.0 - alpha_atl) ** silent_days
+        prev_ctl = prev_ctl * decay_ctl
+        prev_atl = prev_atl * decay_atl
+
+    # Apply ride TSS on the ride day
+    new_ctl = prev_ctl + alpha_ctl * (tss - prev_ctl)
+    new_atl = prev_atl + alpha_atl * (tss - prev_atl)
+    return new_ctl, new_atl
+
+
+def build_rule_based_summary(
+    ride_purpose: str,
+    duration_seconds: float,
+    normalized_power: float | None,
+    tss: float | None,
+    intervals: list[dict],
+) -> str:
+    """Build a short deterministic 1-line ride summary — no LLM required.
+
+    Examples:
+    - "Threshold intervals: 3×10 min @ 275 W · TSS 94 · 1h20m"
+    - "Endurance: NP 198 W · TSS 61 · 2h05m"
+    - "Recovery: 45 min"
+    """
+    h = int(duration_seconds // 3600)
+    m = int((duration_seconds % 3600) // 60)
+    duration_str = f"{h}h{m:02d}m" if h > 0 else f"{m}m"
+
+    label_map = {
+        "recovery": "Recovery",
+        "endurance": "Endurance",
+        "tempo": "Tempo",
+        "interval_sweetspot": "Sweet-spot intervals",
+        "interval_threshold": "Threshold intervals",
+        "interval_vo2max": "VO2max intervals",
+        "interval_sprints": "Sprint intervals",
+        "mixed": "Mixed intervals",
+    }
+    label = label_map.get(ride_purpose, ride_purpose.replace("_", " ").capitalize())
+
+    parts = [label]
+
+    # Interval summary: count × duration @ avg_power
+    if intervals and ride_purpose not in ("recovery", "endurance", "tempo"):
+        reps = len(intervals)
+        avg_dur_min = round(sum(iv["duration_secs"] for iv in intervals) / reps / 60)
+        avg_power = round(sum(iv["avg_power"] for iv in intervals) / reps)
+        parts[0] = f"{label}: {reps}×{avg_dur_min} min @ {avg_power} W"
+    elif normalized_power:
+        parts.append(f"NP {round(normalized_power)} W")
+
+    if tss is not None:
+        parts.append(f"TSS {round(tss)}")
+
+    parts.append(duration_str)
+    return " · ".join(parts)
+
+
+def build_ride_metrics_chain(
+    rides: list[dict],
+    ftp: float,
+    initial_ctl: float = 0.0,
+    initial_atl: float = 0.0,
+) -> list[dict]:
+    """Compute per-ride metrics and the rolling CTL/ATL/TSB chain.
+
+    Args:
+        rides: List of ride dicts, each containing:
+            - ``strava_activity_id`` (int)
+            - ``activity_date`` (str, ISO date YYYY-MM-DD)
+            - ``sport_type`` (str)
+            - ``duration_seconds`` (int)
+            - ``streams`` (dict of Strava stream objects keyed by type)
+        ftp: Current FTP in watts. Used for all rides (single snapshot).
+        initial_ctl: Starting CTL value (0.0 for full historical rebuild).
+        initial_atl: Starting ATL value (0.0 for full historical rebuild).
+
+    Returns:
+        List of metric dicts (same order as input) ready for DB upsert.
+        Each dict matches the ``RideMetric`` columns (excluding id/user_id/created_at).
+    """
+    import datetime as _dt  # local import to avoid circular deps at module level
+
+    if not rides:
+        return []
+
+    # Sort by date ascending to build the chain correctly
+    sorted_rides = sorted(rides, key=lambda r: r["activity_date"])
+
+    ctl = initial_ctl
+    atl = initial_atl
+    prev_date_str: str | None = None
+    result: list[dict] = []
+
+    for ride in sorted_rides:
+        streams = ride.get("streams", {})
+        watts: list[float] = streams.get("watts", {}).get("data", [])
+        time_data: list[float] = streams.get("time", {}).get("data", [])
+
+        # --- Per-ride metrics ---
+        avg_power: int | None = None
+        np_value: int | None = None
+        intensity_factor: float | None = None
+        tss: float | None = None
+        ride_purpose: str | None = None
+        intervals: list[dict] = []
+
+        if watts and time_data:
+            avg_power = round(sum(watts) / len(watts))
+            np_raw = _normalized_power(watts, time_data)
+            if np_raw is not None:
+                np_value = round(np_raw)
+                if ftp > 0:
+                    intensity_factor = round(np_raw / ftp, 3)
+                    tss = compute_ride_tss(ride["duration_seconds"], np_raw, ftp)
+            if ftp > 0:
+                ride_purpose = classify_ride_purpose(watts, time_data, ftp)
+                intervals = detect_intervals(watts, time_data, ftp)
+        elif ftp <= 0:
+            # No power streams and no FTP — skip TSS computation
+            pass
+
+        # --- CTL/ATL decay and update ---
+        activity_date_str = ride["activity_date"]
+        gap_days = 1
+        if prev_date_str is not None:
+            try:
+                prev_date = _dt.date.fromisoformat(prev_date_str)
+                curr_date = _dt.date.fromisoformat(activity_date_str)
+                gap_days = max(1, (curr_date - prev_date).days)
+            except ValueError:
+                gap_days = 1
+
+        ride_tss = tss if tss is not None else 0.0
+        ctl, atl = apply_ctl_atl_decay(ctl, atl, ride_tss, gap_days=gap_days)
+        tsb = ctl - atl
+        prev_date_str = activity_date_str
+
+        # --- Rule-based summary ---
+        duration_s = ride.get("duration_seconds") or 0
+        summary = build_rule_based_summary(
+            ride_purpose or ride.get("sport_type", "ride"),
+            duration_s,
+            float(np_value) if np_value else None,
+            tss,
+            intervals,
+        )
+
+        result.append({
+            "strava_activity_id": ride["strava_activity_id"],
+            "activity_date": activity_date_str,
+            "sport_type": ride.get("sport_type", "cycling"),
+            "duration_seconds": ride.get("duration_seconds"),
+            "avg_power_w": avg_power,
+            "normalized_power_w": np_value,
+            "intensity_factor": intensity_factor,
+            "tss": tss,
+            "ftp_used": round(ftp) if ftp > 0 else None,
+            "ctl_after": round(ctl, 2),
+            "atl_after": round(atl, 2),
+            "tsb_after": round(tsb, 2),
+            "ride_purpose": ride_purpose,
+            "summary": summary,
+        })
+
+    return result

@@ -319,7 +319,10 @@ async def analyse_fit_activity(
 
 
 async def generate_training_plan(
-    profile: dict, provider: str = "openai", rider_assessment: dict | None = None
+    profile: dict,
+    provider: str = "openai",
+    rider_assessment: dict | None = None,
+    metrics_history_section: str = "",
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
@@ -328,7 +331,7 @@ async def generate_training_plan(
         else ""
     )
     today = datetime.date.today().isoformat()
-    user_msg = generate_plan_user(profile, today, assessment_section)
+    user_msg = generate_plan_user(profile, today, assessment_section, metrics_history_section=metrics_history_section)
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return parsed.get("plan", [])
@@ -340,6 +343,7 @@ async def adapt_training_plan(
     profile: dict,
     provider: str = "openai",
     rider_assessment: dict | None = None,
+    metrics_history_section: str = "",
 ) -> list[dict]:
     today = datetime.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
@@ -372,6 +376,7 @@ async def adapt_training_plan(
         rider_assessment=rider_assessment,
         training_load=training_load,
         taper_days_remaining=taper_days_remaining,
+        metrics_history_section=metrics_history_section,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
@@ -410,6 +415,7 @@ async def ask_trainer(
     context_workout: dict | None = None,
     science_context: str | None = None,
     classification: dict | None = None,
+    metrics_history_section: str = "",
 ) -> dict:
     today = datetime.date.today().isoformat()
     last_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") <= today][-MAX_PLAN_DAYS_PAST:]
@@ -441,6 +447,7 @@ async def ask_trainer(
         science_context=science_context or "",
         training_load=training_load,
         classification=classification,
+        metrics_history_section=metrics_history_section,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
@@ -454,6 +461,7 @@ async def ask_trainer(
         "response": parsed.get("response", ""),
         "plan_updates": parsed.get("planUpdates"),
         "sources": parsed.get("sources") or [],
+        "ride_note_update": parsed.get("ride_note_update"),
     }
 
 
@@ -472,7 +480,7 @@ async def rate_completed_workout(
     stream_delta: dict | None = None,
 ) -> dict:
     feedback = day.get("feedback")
-    if not feedback:
+    if not feedback and not stream_delta:
         return {"feedback": "", "flag_for_adaptation": False}
 
     system_prompt = rate_workout_system()

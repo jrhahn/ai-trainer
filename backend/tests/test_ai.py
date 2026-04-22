@@ -538,6 +538,66 @@ async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_s
 
 
 # ---------------------------------------------------------------------------
+# rideInsights serialisation regression (list vs str)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_ride_insights_as_list_is_persisted(
+    client, auth_headers, mock_ai_service
+):
+    """When the LLM returns rideInsights as a list of dicts the endpoint must not
+    raise a DB error — the list must be JSON-serialised before the INSERT.
+    Regression for: asyncpg.DataError 'expected str, got list'
+    """
+    import crud
+    from database import async_session_maker
+
+    mock_ai_service["analyse_strava_activities"].return_value = {
+        "estimatedFTP": 290,
+        "estimatedThresholdHR": 170,
+        "riderType": "climber",
+        "notes": "Good climber.",
+        "rideInsights": [
+            {"id": 18187434054, "name": "Afternoon Ride", "category": "mixed", "comment": "Strong effort."},
+            {"id": 18187434055, "name": "Morning Ride", "category": "endurance", "comment": "Easy spin."},
+        ],
+        "lastRideFeedback": "Nice ride.",
+    }
+
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 101,
+                    "name": "Afternoon Ride",
+                    "type": "Ride",
+                    "distance": 60000,
+                    "movingTime": 5400,
+                    "elapsedTime": 5500,
+                    "totalElevationGain": 800,
+                    "startDate": "2026-04-21T10:00:00Z",
+                    "averageWatts": 250,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Verify the value was serialised and round-trips correctly from the DB
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        await db.refresh(user, ["rider_assessment"])
+        stored = user.rider_assessment.ride_insights
+        assert isinstance(stored, str), "ride_insights must be stored as a string in the DB"
+        parsed = json.loads(stored)
+        assert isinstance(parsed, list)
+        assert parsed[0]["name"] == "Afternoon Ride"
+
+
+# ---------------------------------------------------------------------------
 # Strava stream error logging
 # ---------------------------------------------------------------------------
 

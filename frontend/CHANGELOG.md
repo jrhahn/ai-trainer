@@ -5,6 +5,16 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-04-21
+
+### Changed
+
+- **Strava callback — automatic ride history import** (`src/pages/StravaCallbackPage.tsx`) — after
+  a successful OAuth connection the page now calls `POST /strava/import-history` before redirecting
+  to the dashboard. The user sees a three-step progress indicator: *Connecting → Importing ride
+  history (last 6 months) → All set! N rides imported*. Import errors are non-fatal; the user
+  is redirected to the dashboard regardless.
+
 ## [0.12.0] - 2026-04-20
 
 ### Changed

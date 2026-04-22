@@ -1,5 +1,6 @@
 """AI routes."""
 
+import json
 import logging
 import os
 from datetime import date as _date
@@ -16,7 +17,8 @@ from database import get_db
 from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain
+from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -71,6 +73,55 @@ def _user_to_profile_dict(user: models.User) -> dict:
     }
 
 
+async def _auto_rate_ride(
+    plan_day: dict,
+    streams: dict,
+    ftp: float | None,
+    profile: dict,
+    provider: str,
+) -> str | None:
+    """Generate a coach note for a completed ride by comparing it against the plan.
+
+    Returns the coach note string, or None when there is insufficient data.
+    """
+    try:
+        stream_delta = compare_planned_vs_actual(plan_day, streams, ftp=ftp)
+        result = await ai_service.rate_completed_workout(
+            plan_day, profile, provider=provider, stream_delta=stream_delta
+        )
+        feedback_text = result.get("feedback", "")
+        return feedback_text or None
+    except Exception:
+        logger.warning("Auto-rate ride failed", exc_info=True)
+        return None
+
+
+async def _auto_adapt_plan(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    feedback_entry: dict,
+    provider: str,
+) -> None:
+    """Trigger automatic plan adaptation when a workout signals fatigue/illness."""
+    rider_assessment = None
+    if user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+    try:
+        updated_plan = await ai_service.adapt_training_plan(
+            plan,
+            [feedback_entry],
+            _user_to_profile_dict(user),
+            provider=provider,
+            rider_assessment=rider_assessment,
+        )
+        await crud.upsert_training_plan(db, user.id, updated_plan)
+    except Exception:
+        logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
+
+
 @router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
 async def analyse_activities(
     body: schemas.AnalyseActivitiesRequest,
@@ -107,6 +158,13 @@ async def analyse_activities(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
+
+    # Normalise rideInsights: the LLM may return a list of dicts or a string.
+    # The DB column and Pydantic schema both expect a plain string.
+    _ri = result.get("rideInsights")
+    if _ri is not None and not isinstance(_ri, str):
+        result["rideInsights"] = json.dumps(_ri)
+
     await crud.upsert_rider_assessment(
         db,
         current_user.id,
@@ -151,6 +209,62 @@ async def analyse_activities(
         newest_id = max(a.id for a in body.activities)
         if current_user.last_strava_activity_id is None or newest_id > current_user.last_strava_activity_id:
             current_user.last_strava_activity_id = newest_id
+
+    # --- Incremental ride-metrics chain ---
+    ftp_for_chain = float(ftp_value or current_user.current_ftp or 0)
+    if body.activities and ftp_for_chain > 0:
+        latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
+        seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
+        seed_atl = latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
+        rides_input = []
+        for activity in body.activities:
+            a_dict = activity.model_dump()
+            start_date: str = a_dict.get("startDate") or a_dict.get("start_date") or ""
+            activity_date = start_date[:10] if start_date else ""
+            if not activity_date:
+                continue
+            sport_type = a_dict.get("sportType") or a_dict.get("sport_type") or "cycling"
+            duration_seconds = int(
+                a_dict.get("elapsedTime") or a_dict.get("elapsed_time")
+                or a_dict.get("movingTime") or a_dict.get("moving_time") or 0
+            )
+            rides_input.append({
+                "strava_activity_id": activity.id,
+                "activity_date": activity_date,
+                "sport_type": sport_type,
+                "duration_seconds": duration_seconds,
+                "streams": streams_by_id.get(str(activity.id), {}),
+            })
+        if rides_input:
+            metrics_chain = build_ride_metrics_chain(rides_input, ftp_for_chain, seed_ctl, seed_atl)
+            for m in metrics_chain:
+                await crud.upsert_ride_metric(db, current_user.id, **m)
+
+            # --- Phase 6: Auto-rate rides that have a matching plan day ---
+            profile_for_rating = _user_to_profile_dict(current_user)
+            for ride_input, metric in zip(rides_input, metrics_chain):
+                activity_date = ride_input["activity_date"]
+                # Find matching plan day
+                matching_plan_day = next(
+                    (day for day in training_plan if day.get("date") == activity_date),
+                    None,
+                )
+                if matching_plan_day and ride_input["streams"]:
+                    coach_note = await _auto_rate_ride(
+                        matching_plan_day,
+                        ride_input["streams"],
+                        ftp_for_chain,
+                        profile_for_rating,
+                        _provider(current_user),
+                    )
+                    if coach_note:
+                        await crud.update_ride_metric_notes(
+                            db,
+                            current_user.id,
+                            ride_input["strava_activity_id"],
+                            coach_note=coach_note,
+                        )
+
     await db.flush()
 
     assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
@@ -171,11 +285,14 @@ async def generate_plan(
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+    metrics_section = ride_metrics_context_section(recent_metrics)
     try:
         plan = await ai_service.generate_training_plan(
             profile,
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
+            metrics_history_section=metrics_section,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -199,6 +316,8 @@ async def adapt_plan(
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+    metrics_section = ride_metrics_context_section(recent_metrics)
     try:
         updated_plan = await ai_service.adapt_training_plan(
             plan,
@@ -206,6 +325,7 @@ async def adapt_plan(
             profile,
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
+            metrics_history_section=metrics_section,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -238,6 +358,10 @@ async def ask_trainer(
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
     ]
 
+    # --- Fetch ride metrics history for structured LLM context ---
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+    metrics_section = ride_metrics_context_section(recent_metrics)
+
     # --- Task 5: Classify question first, then conditionally retrieve RAG context ---
     classification = await ai_service.classify_question(body.question, provider=_provider(current_user))
     science_context = ""
@@ -257,6 +381,7 @@ async def ask_trainer(
             context_workout=body.context_workout,
             science_context=science_context,
             classification=classification,
+            metrics_history_section=metrics_section,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -265,6 +390,21 @@ async def ask_trainer(
 
     now = datetime.now(timezone.utc).isoformat()
     plan_updates = result.get("plan_updates") or []
+
+    # --- Phase 7: Persist inferred user ride feedback ---
+    ride_note_update = result.pop("ride_note_update", None)
+    if ride_note_update and isinstance(ride_note_update, dict):
+        note_date = ride_note_update.get("activity_date")
+        note_text = ride_note_update.get("note")
+        if note_date and note_text:
+            target_metric = await crud.get_ride_metric_by_date(db, current_user.id, note_date)
+            if target_metric is not None:
+                await crud.update_ride_metric_notes(
+                    db,
+                    current_user.id,
+                    target_metric.strava_activity_id,
+                    user_note=note_text,
+                )
 
     # Persist user and assistant chat messages
     await crud.create_chat_message(
@@ -361,34 +501,16 @@ async def rate_workout(
 
     if result.get("flag_for_adaptation"):
         # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
-        rider_assessment = None
-        if current_user.rider_assessment is not None:
-            rider_assessment = schemas.RiderAssessmentSchema.model_validate(
-                current_user.rider_assessment, from_attributes=True
-            ).model_dump(by_alias=True)
         existing_plan = await crud.get_training_plan(db, current_user.id)
         plan = existing_plan.plan if existing_plan is not None else []
-        # Build a feedback entry from the completed day so the adapter has context
         day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
-        auto_feedback = [
-            {
-                "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
-                "perceivedEffort": day_feedback.get("perceivedEffort"),
-                "notes": day_feedback.get("notes", "Auto-triggered due to workout feedback"),
-                "completedAt": day_feedback.get("completedAt"),
-            }
-        ]
-        try:
-            updated_plan = await ai_service.adapt_training_plan(
-                plan,
-                auto_feedback,
-                profile,
-                provider=_provider(current_user),
-                rider_assessment=rider_assessment,
-            )
-            await crud.upsert_training_plan(db, current_user.id, updated_plan)
-        except Exception:
-            logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
+        auto_feedback = {
+            "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
+            "perceivedEffort": day_feedback.get("perceivedEffort"),
+            "notes": day_feedback.get("notes", "Auto-triggered due to workout feedback"),
+            "completedAt": day_feedback.get("completedAt"),
+        }
+        await _auto_adapt_plan(db, current_user, plan, auto_feedback, _provider(current_user))
 
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),

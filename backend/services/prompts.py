@@ -287,10 +287,11 @@ def generate_plan_system() -> str:
     )
 
 
-def generate_plan_user(profile: dict, today: str, assessment_section: str) -> str:
+def generate_plan_user(profile: dict, today: str, assessment_section: str, metrics_history_section: str = "") -> str:
+    metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{metrics_section}\n"
         "Generate a 14-day training plan starting from today that reflects both the athlete's "
         "goals and their actual fitness level from recent rides."
     )
@@ -331,6 +332,7 @@ def adapt_plan_user(
     rider_assessment: dict | None = None,
     training_load: dict | None = None,
     taper_days_remaining: int | None = None,
+    metrics_history_section: str = "",
 ) -> str:
     assessment_section = (
         f"\nRider assessment: {json.dumps(rider_assessment)}" if rider_assessment else ""
@@ -341,6 +343,7 @@ def adapt_plan_user(
             f"\nTraining load (from plan): CTL={training_load.get('ctl')} "
             f"ATL={training_load.get('atl')} TSB={training_load.get('tsb')}"
         )
+    metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     taper_section = ""
     if taper_days_remaining is not None:
         taper_section = (
@@ -361,7 +364,7 @@ def adapt_plan_user(
     )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{taper_section}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{metrics_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         + stale_note
@@ -476,6 +479,7 @@ def ask_trainer_system(
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
+    metrics_history_section: str = "",
 ) -> str:
     science_section = (
         f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
@@ -484,15 +488,18 @@ def ask_trainer_system(
     ) if science_context else ""
 
     training_load_section = ""
-    if training_load:
+    if training_load and not metrics_history_section:
+        # Fall back to plan-derived CTL/ATL/TSB only when no actual-ride metrics are available
         training_load_section = (
-            f"\n\nCurrent training load: "
+            f"\n\nCurrent training load (estimated from plan): "
             f"CTL (fitness)={training_load.get('ctl')} "
             f"ATL (fatigue)={training_load.get('atl')} "
             f"TSB (form)={training_load.get('tsb')}\n"
             "Use TSB to guide your advice: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
             "TSB > +10 before a key workout suggests freshness, intensity can be increased."
         )
+
+    metrics_section = f"\n\n{metrics_history_section}" if metrics_history_section else ""
 
     classification_section = ""
     if classification:
@@ -501,6 +508,16 @@ def ask_trainer_system(
             f"needs_science_rag={classification.get('needs_science_rag')}"
         )
 
+    # Proactive solicitation and structured feedback extraction instructions
+    feedback_instructions = (
+        "\n\nRide feedback rules:\n"
+        "- If any ride in the recent ride history (last 3 days) has no user note, "
+        "proactively ask the athlete how it felt — briefly and naturally woven into your response.\n"
+        "- When the athlete describes how a specific ride felt, populate "
+        "\"ride_note_update\": {\"activity_date\": \"YYYY-MM-DD\", \"note\": \"1-2 sentence summary\"} "
+        "in your JSON response. Omit \"ride_note_update\" entirely when no ride is being described."
+    )
+
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
@@ -508,16 +525,18 @@ def ask_trainer_system(
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next {len(next_n_days)} days): {json.dumps(next_n_days)}"
         f"{assessment_section}"
+        f"{metrics_section}"
         f"{training_load_section}"
         f"{memory_section}"
         f"{workout_section}"
         f"{classification_section}"
-        f"{science_section}\n\n"
+        f"{science_section}"
+        f"{feedback_instructions}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
         + (
-            "(2) what their current CTL/ATL/TSB suggests about their fatigue state, "
-            if training_load_section else
+            "(2) what their current CTL/ATL/TSB from actual rides suggests about their fatigue state, "
+            if metrics_history_section else
             "(2) what their recent training history suggests about their fatigue state, "
         )
         + "(3) whether the request conflicts with training principles, "
@@ -537,6 +556,7 @@ def ask_trainer_system(
         '- "response": your natural language answer as a string (required)\n'
         '- "sources": an array of source titles you referenced from the science research section '
         "(omit or use [] if no research was cited)\n"
+        '- "ride_note_update": optional object — only include when the athlete is describing a specific ride\n'
         f"{plan_updates_rule}"
     )
 
@@ -785,3 +805,85 @@ def refresh_login_summary_user(
         "\n\n".join(parts)
         + "\n\nGenerate a loginSummary JSON object based on the above."
     )
+
+
+# ---------------------------------------------------------------------------
+# Ride-metrics context section
+# ---------------------------------------------------------------------------
+
+
+def ride_metrics_context_section(metrics: list) -> str:
+    """Build a compact structured-text block from a list of RideMetric ORM objects.
+
+    Designed to fit into any LLM prompt without bloating the token count.
+    Most recent rides appear first.  Returns an empty string when *metrics* is empty.
+
+    Example output line:
+        2026-04-18 | threshold_intervals | TSS 98 | NP 268W | CTL 62.3 | ATL 71.4 | TSB -9.1 | "4×8 min @ FTP"
+          Coach: "Good effort, slightly over target power in intervals 3-4."
+          User: "Legs felt heavy but pushed through." [consider asking for feedback]
+    """
+    if not metrics:
+        return ""
+
+    from datetime import date as _date
+    today_str = str(_date.today())
+
+    lines: list[str] = ["Recent ride history (actual rides, newest first):"]
+    for m in metrics:
+        parts: list[str] = []
+
+        # Date
+        parts.append(str(getattr(m, "activity_date", "??")))
+
+        # Ride purpose
+        purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+        parts.append(str(purpose))
+
+        # TSS
+        tss = getattr(m, "tss", None)
+        if tss is not None:
+            parts.append(f"TSS {round(tss)}")
+
+        # Normalised power
+        np_val = getattr(m, "normalized_power_w", None)
+        if np_val is not None:
+            parts.append(f"NP {np_val}W")
+
+        # CTL / ATL / TSB
+        ctl = getattr(m, "ctl_after", None)
+        atl = getattr(m, "atl_after", None)
+        tsb = getattr(m, "tsb_after", None)
+        if ctl is not None:
+            parts.append(f"CTL {round(ctl, 1)}")
+        if atl is not None:
+            parts.append(f"ATL {round(atl, 1)}")
+        if tsb is not None:
+            parts.append(f"TSB {round(tsb, 1)}")
+
+        # Rule-based summary
+        summary = getattr(m, "summary", None)
+        if summary:
+            parts.append(f'"{summary}"')
+
+        line = " | ".join(parts)
+        lines.append(f"  {line}")
+
+        # Coach note
+        coach_note = getattr(m, "coach_note", None)
+        if coach_note:
+            lines.append(f'    Coach: "{coach_note}"')
+
+        # User note — flag if missing and the ride was recent (last 3 days)
+        user_note = getattr(m, "user_note", None)
+        activity_date_str = str(getattr(m, "activity_date", ""))
+        try:
+            days_ago = (_date.today() - _date.fromisoformat(activity_date_str)).days
+        except ValueError:
+            days_ago = 99
+        if user_note:
+            lines.append(f'    Athlete: "{user_note}"')
+        elif days_ago <= 3:
+            lines.append("    [no athlete feedback — consider asking how this ride felt]")
+
+    return "\n".join(lines)

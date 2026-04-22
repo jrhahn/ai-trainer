@@ -1,6 +1,7 @@
 """User profile, plan, workout, chat, and coach-memory routes."""
 
 import io
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -355,6 +356,11 @@ async def upload_fit_file(
 
     # Save rider assessment feedback if AI succeeded
     if ai_result:
+        # Normalise rideInsights: LLM may return list or string; column expects string.
+        _ri = ai_result.get("rideInsights")
+        if _ri is not None and not isinstance(_ri, str):
+            ai_result["rideInsights"] = json.dumps(_ri)
+
         await crud.upsert_rider_assessment(
             db,
             current_user.id,
