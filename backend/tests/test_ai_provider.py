@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 import models
@@ -16,26 +14,30 @@ from routers.ai import _default_provider, _provider
 
 
 def test_default_provider_prefers_gemini_when_both_set(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "gemini-key")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "openai-key")
     assert _default_provider() == "gemini"
 
 
 def test_default_provider_uses_openai_when_no_gemini(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "openai-key")
     assert _default_provider() == "openai"
 
 
 def test_default_provider_returns_gemini_when_neither_set(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "")
     assert _default_provider() == "gemini"
 
 
 def test_default_provider_uses_gemini_when_only_gemini_set(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "gemini-key")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "")
     assert _default_provider() == "gemini"
 
 
@@ -53,22 +55,25 @@ def _make_user(ai_provider: str):
 
 
 def test_provider_respects_gemini_preference(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "gemini-key")
     user = _make_user("gemini")
     assert _provider(user) == "gemini"
 
 
 def test_provider_respects_openai_preference(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "openai-key")
     user = _make_user("openai")
     assert _provider(user) == "openai"
 
 
 def test_provider_falls_back_when_gemini_key_missing(monkeypatch):
-    """User prefers gemini but GEMINI_API_KEY is not set → fall back to default."""
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    """User prefers gemini but gemini_api_key is not set → fall back to default."""
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "openai-key")
     user = _make_user("gemini")
     result = _provider(user)
     # Should fall back to openai since gemini key is absent
@@ -76,9 +81,10 @@ def test_provider_falls_back_when_gemini_key_missing(monkeypatch):
 
 
 def test_provider_falls_back_when_openai_key_missing(monkeypatch):
-    """User prefers openai but OPENAI_API_KEY is not set → fall back to default."""
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    """User prefers openai but openai_api_key is not set → fall back to default."""
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "gemini-key")
     user = _make_user("openai")
     result = _provider(user)
     # Should fall back to gemini since openai key is absent
@@ -86,17 +92,15 @@ def test_provider_falls_back_when_openai_key_missing(monkeypatch):
 
 
 def test_provider_falls_back_when_neither_key_set(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import routers.ai as ai_router
+    monkeypatch.setattr(ai_router.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_router.settings, "openai_api_key", "")
     user = _make_user("openai")
     result = _provider(user)
     # Falls back to _default_provider() which returns "gemini" as last resort
     assert result == "gemini"
 
 
-# ---------------------------------------------------------------------------
-# HTTP — provider is used by AI endpoints (integration smoke-test)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

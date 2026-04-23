@@ -1,7 +1,6 @@
 """Strava OAuth and activity proxy routes."""
 
 import asyncio
-import os
 import secrets
 import time
 import urllib.parse
@@ -16,10 +15,14 @@ import auth
 import crud
 import models
 import schemas
+from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
-
-STRAVA_OAUTH_BASE = "https://www.strava.com"
+from services.strava_service import (
+    STRAVA_OAUTH_BASE,
+    ensure_fresh_strava_token,
+    fetch_activity_streams,
+)
 
 router = APIRouter(tags=["strava"])
 STATE_TTL_SECONDS = 600
@@ -44,26 +47,19 @@ class StravaAuthResponse(schemas.CamelModel):
 
 
 def _strava_client_id() -> str:
-    return os.environ.get("STRAVA_CLIENT_ID", "")
+    return settings.strava_client_id
 
 
 def _strava_client_secret() -> str:
-    return os.environ.get("STRAVA_CLIENT_SECRET", "")
+    return settings.strava_client_secret
 
 
 def _frontend_url() -> str:
-    # FRONTEND_URL may be a comma-separated list of allowed origins; use only the first entry
-    raw = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-    return raw.split(",")[0].strip().rstrip("/")
+    return settings.primary_frontend_url
 
 
 def _backend_url() -> str:
-    server_url = os.environ.get("SERVER_URL", "").rstrip("/")
-    if server_url:
-        if "://" not in server_url:
-            server_url = f"https://{server_url}"
-        return server_url
-    return os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
+    return settings.effective_backend_url
 
 
 @router.get("/auth/strava")
@@ -196,35 +192,6 @@ async def strava_refresh(
         refresh_token=data["refresh_token"],
         expires_at=data["expires_at"],
     )
-
-
-async def ensure_fresh_strava_token(
-    token_row: models.StravaToken,
-    db: AsyncSession,
-) -> str:
-    """Return a valid access token, refreshing it first if expired."""
-    if token_row.expires_at >= time.time():
-        return token_row.access_token
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{STRAVA_OAUTH_BASE}/oauth/token",
-            json={
-                "client_id": _strava_client_id(),
-                "client_secret": _strava_client_secret(),
-                "refresh_token": token_row.refresh_token,
-                "grant_type": "refresh_token",
-            },
-        )
-    if not resp.is_success:
-        raise HTTPException(status_code=401, detail="Strava token expired and could not be refreshed")
-
-    data = resp.json()
-    token_row.access_token = data["access_token"]
-    token_row.refresh_token = data["refresh_token"]
-    token_row.expires_at = data["expires_at"]
-    await db.flush()
-    return token_row.access_token
 
 
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
@@ -366,25 +333,6 @@ async def _run_import_background(
             "skipped": prev.get("skipped", 0),
             "error": str(exc),
         }
-
-
-async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
-    """Fetch per-second timeseries streams for a single Strava activity.
-
-    Returns a dict keyed by stream type (e.g. "watts", "heartrate") whose
-    values are Strava stream objects with a ``data`` list.  Returns an empty
-    dict if the activity has no stream data or the request fails.
-    """
-    keys = "watts,heartrate,cadence,velocity_smooth,altitude,time"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}/streams",
-            params={"keys": keys, "key_by_type": "true"},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-    if not resp.is_success:
-        return {}
-    return resp.json()
 
 
 @router.get("/strava/activities")

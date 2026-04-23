@@ -10,15 +10,10 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import os
 import re
 from typing import Any
 
-from google import genai
-from google.genai import errors as genai_errors
-from google.genai import types
 from json_repair import repair_json
-from openai import AsyncOpenAI
 
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -28,6 +23,7 @@ from .analysis import (
     compute_hr_zones,
     compute_training_load,
 )
+from .llm import AIRateLimitError, get_provider  # re-exported for backward compat
 from .prompts import (
     analyse_activities_computed_section,
     analyse_activities_system,
@@ -49,12 +45,11 @@ from .prompts import (
     refresh_login_summary_system,
     refresh_login_summary_user,
 )
+
 MAX_CONVERSATION_HISTORY = 10
 MAX_PLAN_DAYS_PAST = 7
 MAX_PLAN_DAYS_AHEAD = 7
 MAX_COACH_MEMORY_CHARS = 800
-OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-2.5-flash"
 
 logger = logging.getLogger(__name__)
 
@@ -62,24 +57,8 @@ _SLIM_PLAN_KEEP = {"date", "workoutType", "workout_type", "title", "durationMinu
 
 
 def _slim_plan_entry(entry: dict) -> dict:
-    """Return a compact version of a plan day with only fields needed for chat context.
-
-    Verbose fields like ``description``, ``intervals``, ``keyFocusPoints``, and
-    ``coachFeedback`` are omitted to reduce the token footprint of the system prompt.
-    """
+    """Return a compact version of a plan day with only fields needed for chat context."""
     return {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
-
-
-class AIRateLimitError(Exception):
-    """Raised when the AI provider returns a rate-limit (429) response."""
-
-def _make_openai() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
-
-
-def _make_gemini() -> genai.Client:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    return genai.Client(api_key=api_key)
 
 
 def _parse_ai_json(text: str) -> Any:
@@ -91,75 +70,13 @@ def _parse_ai_json(text: str) -> Any:
 
 
 async def _chat(provider: str, system_prompt: str, user_msg: str, json_mode: bool = False) -> str:
-    if provider == "gemini":
-        config = types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            response_mime_type="application/json" if json_mode else None,
-        )
-        try:
-            async with _make_gemini().aio as client:
-                response = await client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=user_msg,
-                    config=config,
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
-        return response.text or ""
-    client = _make_openai()
-    kwargs: dict[str, Any] = {}
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-    response = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        **kwargs,
-    )
-    return response.choices[0].message.content or ""
+    return await get_provider(provider).chat(system_prompt, user_msg, json_mode=json_mode)
 
 
 async def _chat_history(
     provider: str, system_prompt: str, messages: list[dict[str, str]], json_mode: bool = False
 ) -> str:
-    if provider == "gemini":
-        config = types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            response_mime_type="application/json" if json_mode else None,
-        )
-        contents = [
-            types.Content(
-                role="model" if msg["role"] == "assistant" else "user",
-                parts=[types.Part.from_text(text=msg["content"])],
-            )
-            for msg in messages
-        ]
-        try:
-            async with _make_gemini().aio as client:
-                response = await client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=contents,
-                    config=config,
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
-        return response.text or ""
-    client = _make_openai()
-    kwargs: dict[str, Any] = {}
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-    response = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role": "system", "content": system_prompt}, *messages],
-        **kwargs,
-    )
-    return response.choices[0].message.content or ""
+    return await get_provider(provider).chat_history(system_prompt, messages, json_mode=json_mode)
 
 
 async def analyse_strava_activities(

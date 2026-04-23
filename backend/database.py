@@ -1,16 +1,12 @@
 """Async SQLAlchemy engine and session dependency."""
 
-import os
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql+asyncpg://localhost/aitrainer"
-)
+from config import settings
 
 engine = create_async_engine(
-    DATABASE_URL,
+    settings.database_url,
     echo=False,
     pool_size=20,
     max_overflow=10,

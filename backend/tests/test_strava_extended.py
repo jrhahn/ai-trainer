@@ -50,20 +50,20 @@ class FakeAsyncHttpClient:
 
 
 def test_backend_url_uses_server_url(monkeypatch):
-    monkeypatch.setenv("SERVER_URL", "trainlikea.pro")
+    monkeypatch.setattr(strava_router.settings, "server_url", "trainlikea.pro")
     result = strava_router._backend_url()
     assert result == "https://trainlikea.pro"
 
 
 def test_backend_url_falls_back_to_backend_url(monkeypatch):
-    monkeypatch.delenv("SERVER_URL", raising=False)
-    monkeypatch.setenv("BACKEND_URL", "http://localhost:8000")
+    monkeypatch.setattr(strava_router.settings, "server_url", "")
+    monkeypatch.setattr(strava_router.settings, "backend_url", "http://localhost:8000")
     result = strava_router._backend_url()
     assert result == "http://localhost:8000"
 
 
 def test_backend_url_strips_trailing_slash(monkeypatch):
-    monkeypatch.setenv("SERVER_URL", "example.com/")
+    monkeypatch.setattr(strava_router.settings, "server_url", "example.com/")
     result = strava_router._backend_url()
     assert not result.endswith("/")
 
