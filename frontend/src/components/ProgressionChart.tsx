@@ -1,8 +1,11 @@
-import { TrendingUp } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { TrendingUp, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { AthleteMetricSnapshot } from '../store/useAppStore'
+import { triggerStravaHistoryImport, getStravaImportProgress } from '../services/strava'
+import { recalculateMetrics, fetchMetricsHistory } from '../services/user'
 
 // ---------------------------------------------------------------------------
 // Tiny reusable SVG line-chart
@@ -171,7 +174,89 @@ function LineChart({
 // ---------------------------------------------------------------------------
 
 export default function ProgressionChart() {
-  const metricsHistory = useAppStore(useShallow((s) => s.metricsHistory))
+  const { metricsHistory, authToken, stravaConnection, setMetricsHistory } = useAppStore(
+    useShallow((s) => ({
+      metricsHistory: s.metricsHistory,
+      authToken: s.authToken,
+      stravaConnection: s.stravaConnection,
+      setMetricsHistory: s.setMetricsHistory,
+    }))
+  )
+
+  type RecalcStatus = 'idle' | 'importing' | 'recalculating' | 'done' | 'error'
+  const [recalcStatus, setRecalcStatus] = useState<RecalcStatus>('idle')
+  const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
+  const [recalcError, setRecalcError] = useState('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  const handleRecalculate = async () => {
+    if (!authToken || recalcStatus === 'importing' || recalcStatus === 'recalculating') return
+    setRecalcStatus('idle')
+    setRecalcError('')
+    setImportProgress({ processed: 0, total: 0 })
+
+    try {
+      if (stravaConnection) {
+        // Step 1: kick off a full Strava history import (up to 24 months)
+        setRecalcStatus('importing')
+        await triggerStravaHistoryImport(authToken, 24)
+
+        // Step 2: poll until the background import finishes
+        await new Promise<void>((resolve, reject) => {
+          pollRef.current = setInterval(async () => {
+            try {
+              const progress = await getStravaImportProgress(authToken)
+              setImportProgress({ processed: progress.processed, total: progress.total })
+              if (progress.status === 'done') {
+                stopPolling()
+                resolve()
+              } else if (progress.status === 'error') {
+                stopPolling()
+                reject(new Error(progress.error || 'Import failed'))
+              }
+            } catch (e) {
+              stopPolling()
+              reject(e)
+            }
+          }, 2000)
+        })
+      }
+
+      // Step 3: rebuild CTL/ATL/TSB per-ride snapshots
+      setRecalcStatus('recalculating')
+      await recalculateMetrics(authToken)
+
+      // Step 4: refresh the metrics history in the store
+      const snapshots = await fetchMetricsHistory(authToken)
+      setMetricsHistory(snapshots)
+      setRecalcStatus('done')
+      setTimeout(() => setRecalcStatus('idle'), 3000)
+    } catch (e) {
+      stopPolling()
+      setRecalcError(e instanceof Error ? e.message : 'Recalculation failed')
+      setRecalcStatus('error')
+    }
+  }
+
+  const recalcLabel = () => {
+    if (recalcStatus === 'importing') {
+      return importProgress.total > 0
+        ? `Downloading… ${importProgress.processed}/${importProgress.total}`
+        : 'Downloading rides…'
+    }
+    if (recalcStatus === 'recalculating') return 'Recalculating…'
+    if (recalcStatus === 'done') return 'Done!'
+    return 'Recalculate'
+  }
+
+  const isRecalcBusy = recalcStatus === 'importing' || recalcStatus === 'recalculating'
 
   if (metricsHistory.length < 2) {
     return (
@@ -185,15 +270,31 @@ export default function ProgressionChart() {
         <p className="text-xs text-gray-400 text-center py-4">
           Come back after your next analysis to see your fitness progression chart.
         </p>
+        <div className="flex flex-col items-center gap-1">
+          <button
+            onClick={handleRecalculate}
+            disabled={isRecalcBusy}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw size={12} className={isRecalcBusy ? 'animate-spin' : ''} />
+            {recalcLabel()}
+          </button>
+          {recalcStatus === 'error' && (
+            <p className="text-xs text-red-500">{recalcError}</p>
+          )}
+        </div>
       </div>
     )
   }
 
   const snapshots: AthleteMetricSnapshot[] = metricsHistory
 
-  const ftpSnapshots = snapshots.filter((s) => s.ftp != null)
-  const ftpData = ftpSnapshots.map((s) => s.ftp as number)
-  const ftpLabels = ftpSnapshots.map((s) => {
+  // CTL / ATL / TSB — the canonical "full riding history" timeline
+  const ctlSnapshots = snapshots.filter((s) => s.ctl != null)
+  const ctlData = ctlSnapshots.map((s) => s.ctl as number)
+  const atlData = ctlSnapshots.map((s) => s.atl as number)
+  const tsbData = ctlSnapshots.map((s) => s.tsb as number)
+  const loadLabels = ctlSnapshots.map((s) => {
     try {
       return format(new Date(s.recordedAt), 'MMM d')
     } catch {
@@ -201,24 +302,25 @@ export default function ProgressionChart() {
     }
   })
 
+  // FTP — forward-fill the last known FTP across the full CTL timeline so the
+  // chart spans the entire riding history (same x-axis as CTL / ATL).
+  let runningFtp: number | null = null
+  let firstFtpIdx = -1
+  const ftpAligned = ctlSnapshots.map((s, i) => {
+    if (s.ftp != null) {
+      if (firstFtpIdx === -1) firstFtpIdx = i
+      runningFtp = s.ftp
+    }
+    return runningFtp
+  })
+  const ftpData = firstFtpIdx >= 0 ? (ftpAligned.slice(firstFtpIdx) as number[]) : []
+  const ftpLabels = firstFtpIdx >= 0 ? loadLabels.slice(firstFtpIdx) : []
+
   const thrHrData = snapshots
     .filter((s) => s.thresholdHR != null)
     .map((s) => s.thresholdHR as number)
   const thrHrLabels = snapshots
     .filter((s) => s.thresholdHR != null)
-    .map((s) => {
-      try {
-        return format(new Date(s.recordedAt), 'MMM d')
-      } catch {
-        return ''
-      }
-    })
-
-  const ctlData = snapshots.filter((s) => s.ctl != null).map((s) => s.ctl as number)
-  const atlData = snapshots.filter((s) => s.atl != null).map((s) => s.atl as number)
-  const tsbData = snapshots.filter((s) => s.tsb != null).map((s) => s.tsb as number)
-  const loadLabels = snapshots
-    .filter((s) => s.ctl != null)
     .map((s) => {
       try {
         return format(new Date(s.recordedAt), 'MMM d')
@@ -350,6 +452,21 @@ export default function ProgressionChart() {
       <p className="text-xs text-gray-400">
         Updated after each Strava ride analysis. CTL = fitness (42-day avg), ATL = fatigue (7-day avg), TSB = form (CTL − ATL).
       </p>
+
+      {/* Recalculate button */}
+      <div className="flex flex-col items-start gap-1 pt-1">
+        <button
+          onClick={handleRecalculate}
+          disabled={isRecalcBusy}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <RefreshCw size={12} className={isRecalcBusy ? 'animate-spin' : ''} />
+          {recalcLabel()}
+        </button>
+        {recalcStatus === 'error' && (
+          <p className="text-xs text-red-500">{recalcError}</p>
+        )}
+      </div>
     </div>
   )
 }

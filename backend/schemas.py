@@ -476,7 +476,7 @@ class RecalculateMetricsResponse(BaseModel):
 class EstimateFTPRequest(CamelModel):
     """Request body for POST /users/me/estimate-ftp.
 
-    Both fields are optional.  When provided they are saved to the user
+    All fields are optional.  When provided they are saved to the user
     profile so subsequent analyses (e.g. Strava import) automatically use the
     updated values.
     """
@@ -486,6 +486,10 @@ class EstimateFTPRequest(CamelModel):
 
     resting_heart_rate: Optional[int] = None
     """Athlete's resting heart rate in bpm.  Defaults to 60 when absent."""
+
+    threshold_heart_rate: Optional[int] = None
+    """Athlete's lactate-threshold heart rate in bpm.  When provided, saved to
+    the user profile and included in subsequent metric snapshots."""
 
 
 class EstimateFTPResponse(CamelModel):

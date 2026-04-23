@@ -335,18 +335,35 @@ async def recalculate_metrics(
         metric.tsb_after = round(tsb, 2)
         updated += 1
 
-    # Replace all metric snapshots with a fresh single snapshot
+    # Replace all metric snapshots with per-ride snapshots for time-series visualisation.
+    # One snapshot per ride (back-dated to the ride date) gives the FTP / CTL / ATL / TSB
+    # progression chart enough data points to render a meaningful trend line.
     await crud.delete_athlete_metric_snapshots(db, current_user.id)
-    await crud.create_athlete_metric_snapshot(
-        db,
-        current_user.id,
-        ftp=ftp_value,
-        threshold_hr=current_user.threshold_heart_rate,
-        ctl=round(ctl, 1),
-        atl=round(atl, 1),
-        tsb=round(ctl - atl, 1),
-        source="manual_recalculate",
-    )
+    for metric in all_metrics:
+        if metric.activity_date:
+            try:
+                ride_dt = datetime.fromisoformat(metric.activity_date).replace(tzinfo=timezone.utc)
+            except ValueError:
+                logger.warning(
+                    "Could not parse activity_date %r for ride metric %s; "
+                    "snapshot will use current timestamp.",
+                    metric.activity_date,
+                    getattr(metric, "strava_activity_id", "unknown"),
+                )
+                ride_dt = datetime.now(timezone.utc)
+        else:
+            ride_dt = datetime.now(timezone.utc)
+        await crud.create_athlete_metric_snapshot(
+            db,
+            current_user.id,
+            ftp=ftp_value,
+            threshold_hr=current_user.threshold_heart_rate,
+            ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
+            atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
+            tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,
+            source="manual_recalculate",
+            recorded_at=ride_dt,
+        )
 
     await db.flush()
     return schemas.RecalculateMetricsResponse(updated=updated, ftp_used=ftp_value)
@@ -382,6 +399,8 @@ async def estimate_ftp(
     elif current_user.resting_heart_rate is None:
         # Default resting HR to 60 when the user has never set one.
         current_user.resting_heart_rate = 60
+    if body.threshold_heart_rate is not None:
+        current_user.threshold_heart_rate = body.threshold_heart_rate
     await db.flush()
 
     # --- Find best available FTP estimate ---
