@@ -24,3 +24,25 @@ export async function getNewStravaActivities(
 export async function disconnectStrava(authToken: string): Promise<void> {
   await apiFetch('/strava/disconnect', { token: authToken, method: 'DELETE' })
 }
+
+export interface ImportProgress {
+  status: 'idle' | 'running' | 'done' | 'error'
+  total: number
+  processed: number
+  skipped: number
+  error: string
+}
+
+export async function triggerStravaHistoryImport(
+  authToken: string,
+  months = 24,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/strava/import-history?months=${months}`, {
+    token: authToken,
+    method: 'POST',
+  })
+}
+
+export async function getStravaImportProgress(authToken: string): Promise<ImportProgress> {
+  return apiFetch<ImportProgress>('/strava/import-progress', { token: authToken })
+}
