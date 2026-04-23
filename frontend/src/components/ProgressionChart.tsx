@@ -191,9 +191,12 @@ export default function ProgressionChart() {
 
   const snapshots: AthleteMetricSnapshot[] = metricsHistory
 
-  const ftpSnapshots = snapshots.filter((s) => s.ftp != null)
-  const ftpData = ftpSnapshots.map((s) => s.ftp as number)
-  const ftpLabels = ftpSnapshots.map((s) => {
+  // CTL / ATL / TSB — the canonical "full riding history" timeline
+  const ctlSnapshots = snapshots.filter((s) => s.ctl != null)
+  const ctlData = ctlSnapshots.map((s) => s.ctl as number)
+  const atlData = ctlSnapshots.map((s) => s.atl as number)
+  const tsbData = ctlSnapshots.map((s) => s.tsb as number)
+  const loadLabels = ctlSnapshots.map((s) => {
     try {
       return format(new Date(s.recordedAt), 'MMM d')
     } catch {
@@ -201,24 +204,25 @@ export default function ProgressionChart() {
     }
   })
 
+  // FTP — forward-fill the last known FTP across the full CTL timeline so the
+  // chart spans the entire riding history (same x-axis as CTL / ATL).
+  let runningFtp: number | null = null
+  let firstFtpIdx = -1
+  const ftpAligned = ctlSnapshots.map((s, i) => {
+    if (s.ftp != null) {
+      if (firstFtpIdx === -1) firstFtpIdx = i
+      runningFtp = s.ftp
+    }
+    return runningFtp
+  })
+  const ftpData = firstFtpIdx >= 0 ? (ftpAligned.slice(firstFtpIdx) as number[]) : []
+  const ftpLabels = firstFtpIdx >= 0 ? loadLabels.slice(firstFtpIdx) : []
+
   const thrHrData = snapshots
     .filter((s) => s.thresholdHR != null)
     .map((s) => s.thresholdHR as number)
   const thrHrLabels = snapshots
     .filter((s) => s.thresholdHR != null)
-    .map((s) => {
-      try {
-        return format(new Date(s.recordedAt), 'MMM d')
-      } catch {
-        return ''
-      }
-    })
-
-  const ctlData = snapshots.filter((s) => s.ctl != null).map((s) => s.ctl as number)
-  const atlData = snapshots.filter((s) => s.atl != null).map((s) => s.atl as number)
-  const tsbData = snapshots.filter((s) => s.tsb != null).map((s) => s.tsb as number)
-  const loadLabels = snapshots
-    .filter((s) => s.ctl != null)
     .map((s) => {
       try {
         return format(new Date(s.recordedAt), 'MMM d')
