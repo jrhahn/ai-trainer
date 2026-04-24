@@ -10,7 +10,6 @@ import {
   saveTrainingPlan,
   saveWorkoutLog,
   fetchChatHistory,
-  saveChatMessage,
   clearChatHistoryRemote,
   fetchCoachMemory,
   saveCoachMemoryRemote,
@@ -161,22 +160,6 @@ describe('fetchChatHistory', () => {
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toBe('Hello')
-  })
-})
-
-describe('saveChatMessage', () => {
-  it('posts the message and returns the saved message', async () => {
-    const msg = { role: 'user' as const, content: 'Hi coach', timestamp: '2024-05-01T09:00:00Z' }
-    mockApiFetch.mockResolvedValue(msg)
-
-    const result = await saveChatMessage('tok-123', msg)
-
-    expect(result.content).toBe('Hi coach')
-    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/chat', {
-      token: 'tok-123',
-      method: 'POST',
-      body: msg,
-    })
   })
 })
 

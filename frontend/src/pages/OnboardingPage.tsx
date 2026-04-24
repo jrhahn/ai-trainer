@@ -6,6 +6,7 @@ import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { getStravaActivities } from '../services/strava'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
+import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const TOTAL_STEPS = 5
 const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
@@ -170,7 +171,6 @@ export default function OnboardingPage() {
 
     // Threshold HR is typically ~87% of max HR for trained cyclists.
     // Must stay in sync with _LTHR_RATIO in backend/services/ai_service.py.
-    const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
     let riderAssessment: RiderAssessment | undefined
 
     // Resolve Max HR: use explicitly entered value, or estimate from age (220 − age).

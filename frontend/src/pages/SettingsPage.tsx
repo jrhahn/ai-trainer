@@ -5,7 +5,8 @@ import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
-import { deleteCurrentUser, estimateFTP, fetchMetricsHistory, recalculateMetrics, updateCurrentUser } from '../services/user'
+import { deleteCurrentUser, estimateFTP, updateCurrentUser } from '../services/user'
+import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
 import { useImportProgress } from '../hooks/useImportProgress'
 
 export default function SettingsPage() {
@@ -15,7 +16,6 @@ export default function SettingsPage() {
     aiProvider,
     setAiProvider,
     setUserProfile,
-    setMetricsHistory,
     resetAll,
     logout,
   } = useAppStore(
@@ -25,11 +25,12 @@ export default function SettingsPage() {
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
-      setMetricsHistory: s.setMetricsHistory,
       resetAll: s.resetAll,
       logout: s.logout,
     }))
   )
+
+  const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
@@ -38,7 +39,6 @@ export default function SettingsPage() {
   // FTP override state
   const [ftpInput, setFtpInput] = useState('')
   const [ftpSaving, setFtpSaving] = useState(false)
-  const [recalcWorking, setRecalcWorking] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Heart Rate settings state
@@ -51,7 +51,6 @@ export default function SettingsPage() {
   // Two-step FTP confirmation after HR save
   const [ftpEstimate, setFtpEstimate] = useState<number | null>(null)
   const [ftpConfirmInput, setFtpConfirmInput] = useState('')
-  const [confirmWorking, setConfirmWorking] = useState(false)
 
   const importProgress = useImportProgress()
 
@@ -111,28 +110,19 @@ export default function SettingsPage() {
     )
     if (!confirmed) return
 
-    setRecalcWorking(true)
     setFtpMsg(null)
     try {
-      const result = await recalculateMetrics(authToken, parsed)
-      if (parsed !== undefined && userProfile) {
-        setUserProfile({ ...userProfile, currentFTP: parsed })
-        setFtpInput('')
-      }
-      // Refresh metrics history so the progression chart reflects the rebuilt data.
-      try {
-        const updatedHistory = await fetchMetricsHistory(authToken)
-        setMetricsHistory(updatedHistory)
-      } catch { /* best-effort */ }
+      const result = parsed !== undefined
+        ? await updateMetrics({ currentFTP: parsed })
+        : await recalculateAll()
+      if (parsed !== undefined) setFtpInput('')
       setFtpMsg({
         type: 'success',
         text: `Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
       })
       setTimeout(() => setFtpMsg(null), 5000)
-    } catch {
-      setFtpMsg({ type: 'error', text: 'Recalculation failed. Please try again.' })
-    } finally {
-      setRecalcWorking(false)
+    } catch (e) {
+      setFtpMsg({ type: 'error', text: e instanceof Error ? e.message : 'Recalculation failed. Please try again.' })
     }
   }
 
@@ -177,10 +167,11 @@ export default function SettingsPage() {
     setFtpEstimate(null)
     setFtpConfirmInput('')
     try {
-      const result = await estimateFTP(authToken, {
-        maxHeartRate: resolvedMaxHr,
-        restingHeartRate: parsedRestingHr,
-        thresholdHeartRate: parsedThresholdHr,
+      // Explicitly persist the new HR values to the backend before estimating FTP.
+      await updateCurrentUser(authToken, {
+        ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
+        ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
+        ...(parsedThresholdHr !== undefined ? { thresholdHeartRate: parsedThresholdHr } : {}),
       })
       // Update local profile state with new HR values.
       setUserProfile({
@@ -188,6 +179,11 @@ export default function SettingsPage() {
         ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
         ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
         ...(parsedThresholdHr !== undefined ? { thresholdHeartRate: parsedThresholdHr } : {}),
+      })
+      const result = await estimateFTP(authToken, {
+        maxHeartRate: resolvedMaxHr,
+        restingHeartRate: parsedRestingHr,
+        thresholdHeartRate: parsedThresholdHr,
       })
       if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
         setFtpEstimate(result.estimatedFTP)
@@ -224,33 +220,22 @@ export default function SettingsPage() {
     )
     if (!confirmed) return
 
-    setConfirmWorking(true)
     setHrMsg(null)
     try {
-      const result = await recalculateMetrics(authToken, parsed)
-      if (userProfile) {
-        setUserProfile({ ...userProfile, currentFTP: parsed })
-      }
+      const result = await updateMetrics({ currentFTP: parsed })
       setFtpEstimate(null)
       setFtpConfirmInput('')
       setMaxHrInput('')
       setRestingHrInput('')
       setThresholdHrInput('')
       setAgeInput('')
-      // Refresh metrics history so the progression chart reflects the rebuilt data.
-      try {
-        const updatedHistory = await fetchMetricsHistory(authToken)
-        setMetricsHistory(updatedHistory)
-      } catch { /* best-effort */ }
       setHrMsg({
         type: 'success',
         text: `Done! Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
       })
       setTimeout(() => setHrMsg(null), 6000)
-    } catch {
-      setHrMsg({ type: 'error', text: 'Metrics recalculation failed. Please try again.' })
-    } finally {
-      setConfirmWorking(false)
+    } catch (e) {
+      setHrMsg({ type: 'error', text: e instanceof Error ? e.message : 'Metrics recalculation failed. Please try again.' })
     }
   }
 
@@ -421,11 +406,11 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => void handleRecalculate()}
-            disabled={recalcWorking}
+            disabled={isPipelinePending}
             className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
           >
-            <RefreshCw size={15} className={recalcWorking ? 'animate-spin' : ''} />
-            {recalcWorking ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
+            <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
+            {isPipelinePending ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
           </button>
         </div>
       </div>
@@ -570,11 +555,11 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={() => void handleConfirmFTP()}
-                disabled={confirmWorking || !ftpConfirmInput.trim()}
+                disabled={isPipelinePending || !ftpConfirmInput.trim()}
                 className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
               >
-                <RefreshCw size={15} className={confirmWorking ? 'animate-spin' : ''} />
-                {confirmWorking ? 'Recalculating…' : 'Confirm & Recalculate'}
+                <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
+                {isPipelinePending ? 'Recalculating…' : 'Confirm & Recalculate'}
               </button>
             </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">

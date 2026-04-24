@@ -137,7 +137,10 @@ export async function fetchChatHistory(token: string): Promise<ChatMessage[]> {
   return response.messages
 }
 
-export async function saveChatMessage(token: string, message: ChatMessage): Promise<ChatMessage> {
+export async function saveChatMessage(
+  token: string,
+  message: Pick<ChatMessage, 'role' | 'content' | 'timestamp'>,
+): Promise<ChatMessage> {
   return apiFetch<ChatMessage>('/users/me/chat', {
     token,
     method: 'POST',

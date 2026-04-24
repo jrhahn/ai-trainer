@@ -5,6 +5,70 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-04-24
+
+### Added
+
+- **`useMetricsPipeline` hook** (`src/hooks/useMetricsPipeline.ts`) — central orchestrator for
+  all metric recalculation. Any profile change (FTP, HR zones) flows through this single hook
+  rather than being scattered across call sites:
+  - `updateMetrics(updates)` — persists profile changes via `PUT /users/me`, then calls
+    `POST /users/me/recalculate-metrics` and refreshes both `metricsHistory` and
+    `rideMetricsHistory` in the Zustand store in one atomic step.
+  - `recalculateAll(ftpOverride?)` — triggers a full recalculation without changing the
+    profile (used after Strava import and on manual recalculate requests).
+  - Single shared `isPending` flag consumed by all call sites.
+
+- **`src/utils/constants.ts`** — single source of truth for shared frontend constants.
+  `THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87` replaces five identical local declarations.
+
+- **`src/utils/workout.ts`** — `parseLocalDate(dateStr)` helper that appends `T12:00:00` to
+  date strings before constructing a `Date`, preventing timezone off-by-one errors. Replaces
+  inline copies in `TrainingCalendar`, `WorkoutCard`, and `WorkoutPage`.
+
+- **`src/components/charts/LineChart.tsx`** — shared SVG line-chart component extracted from
+  the two identical private implementations that existed in `ProgressionChart` and
+  `TrainingLoadChart`. Supports up to three series (solid, dashed, dotted) and an optional
+  zero-reference line.
+
+### Changed
+
+- **`FitnessMetricsCard`** (`src/components/FitnessMetricsCard.tsx`) — `save()` now routes
+  through `useMetricsPipeline.updateMetrics()` instead of calling `updateCurrentUser` and
+  `setUserProfile` directly. The local `LTHR_RATIO` constant is removed in favour of
+  `THRESHOLD_HR_TO_MAX_HR_RATIO` from `utils/constants`.
+
+- **`SettingsPage`** (`src/pages/SettingsPage.tsx`) — `handleRecalculate` and
+  `handleConfirmFTP` both use the pipeline. `handleSaveHR` now explicitly persists HR values
+  to the backend via `PUT /users/me` *before* calling `POST /users/me/estimate-ftp`, closing
+  a gap where HR updates were sent to the estimate endpoint but not saved to the profile.
+
+- **`useStravaSync`** (`src/hooks/useStravaSync.ts`) — calls `recalculateAll()` after every
+  Strava analysis run so that all historical rides are kept in sync with the latest profile
+  metrics without requiring a manual recalculate step.
+
+- **`ProgressionChart`** (`src/components/ProgressionChart.tsx`) — private `LineChart`
+  function removed; now imports the shared component from `components/charts/LineChart`.
+  `handleRecalculate` uses `useMetricsPipeline.recalculateAll()` instead of calling
+  `recalculateMetrics` + `fetchMetricsHistory` + `setMetricsHistory` inline.
+
+- **`TrainingLoadChart`** (`src/components/TrainingLoadChart.tsx`) — private `LineChart`
+  function removed; now imports the shared component from `components/charts/LineChart`.
+
+- **`RaceReadinessCard`** (`src/components/RaceReadinessCard.tsx`) — replaced unnecessary
+  `useShallow` wrapper (single-field selector) with a plain `useAppStore` selector.
+
+- **`StravaCallbackPage`** (`src/pages/StravaCallbackPage.tsx`) — replaced inline `apiFetch`
+  call with `triggerStravaHistoryImport` from `services/strava`.
+
+- **`useImportProgress`** (`src/hooks/useImportProgress.ts`) — removed duplicate local
+  `ImportProgress` interface; re-exports the canonical type from `services/strava`.
+
+### Removed
+
+- Dead `saveChatMessage` function from `src/services/user.ts` was **restored** — it was
+  removed in error; `POST /users/me/chat` is still exercised by integration tests.
+
 ## [0.17.0] - 2026-04-22
 
 ### Added

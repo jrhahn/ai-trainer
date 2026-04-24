@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { Target, TrendingUp, Zap, Calendar } from 'lucide-react'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
 import type { ReadinessScore } from '../services/ai'
@@ -171,7 +170,7 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
 }
 
 export default function RaceReadinessCard() {
-  const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
+  const authToken = useAppStore((s) => s.authToken)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['readiness-score', authToken],
