@@ -15,8 +15,6 @@ import {
   saveCoachMemoryRemote,
   deleteCurrentUser,
   recalculateMetrics,
-  fetchMetricsHistory,
-  fetchRideMetricsHistory,
   estimateFTP,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
