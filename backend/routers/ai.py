@@ -2,10 +2,10 @@
 
 import json
 import logging
-import os
 from datetime import date as _date
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,13 +13,14 @@ import auth
 import crud
 import models
 import schemas
+from config import settings
 from database import get_db
-from routers.strava import ensure_fresh_strava_token, fetch_activity_streams
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
+from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -32,45 +33,21 @@ _RATE_LIMIT_DETAIL = (
 
 
 def _default_provider() -> str:
-    """Return the best available provider based on configured API keys.
-
-    Preference order: gemini (if GEMINI_API_KEY is set) → openai (if
-    OPENAI_API_KEY is set) → gemini (last resort so the error message
-    mentions the correct service).
-    """
-    if os.environ.get("GEMINI_API_KEY"):
+    """Return the best available provider based on configured API keys."""
+    if settings.gemini_api_key:
         return "gemini"
-    if os.environ.get("OPENAI_API_KEY"):
+    if settings.openai_api_key:
         return "openai"
     return "gemini"
 
 
 def _provider(user: models.User) -> str:
     stored = user.ai_provider
-    if stored == "gemini" and os.environ.get("GEMINI_API_KEY"):
+    if stored == "gemini" and settings.gemini_api_key:
         return "gemini"
-    if stored == "openai" and os.environ.get("OPENAI_API_KEY"):
+    if stored == "openai" and settings.openai_api_key:
         return "openai"
     return _default_provider()
-
-
-def _user_to_profile_dict(user: models.User) -> dict:
-    """Build a camelCase profile dict from the user model (mirrors UserProfileSchema by_alias)."""
-    return {
-        "name": user.name or "",
-        "email": user.email,
-        "bikeType": user.bike_type or "",
-        "trainingGoal": user.training_goal or "",
-        "raceDate": user.race_date,
-        "raceDescription": user.race_description,
-        "weeklyHours": user.weekly_hours,
-        "followsTrainingPlan": user.follows_training_plan,
-        "restingHeartRate": user.resting_heart_rate,
-        "maxHeartRate": user.max_heart_rate,
-        "thresholdHeartRate": user.threshold_heart_rate,
-        "currentFTP": user.current_ftp,
-        "fitnessLevel": user.fitness_level or "",
-    }
 
 
 async def _auto_rate_ride(
@@ -113,7 +90,7 @@ async def _auto_adapt_plan(
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [feedback_entry],
-            _user_to_profile_dict(user),
+            schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
             provider=provider,
             rider_assessment=rider_assessment,
         )
@@ -137,9 +114,19 @@ async def analyse_activities(
                 streams = await fetch_activity_streams(access_token, activity.id)
                 if streams:
                     streams_by_id[str(activity.id)] = streams
+        except HTTPException as exc:
+            logger.warning(
+                "Strava auth failed (status=%s) fetching streams; falling back to summary-only analysis",
+                exc.status_code,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "Strava network error fetching streams (%s); falling back to summary-only analysis",
+                exc,
+            )
         except Exception:
             logger.warning(
-                "Failed to fetch Strava streams; falling back to summary-only analysis",
+                "Unexpected error fetching Strava streams; falling back to summary-only analysis",
                 exc_info=True,
             )
 
@@ -261,7 +248,7 @@ async def analyse_activities(
                 )
 
             # --- Phase 6: Auto-rate rides that have a matching plan day ---
-            profile_for_rating = _user_to_profile_dict(current_user)
+            profile_for_rating = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
             for ride_input, metric in zip(rides_input, metrics_chain):
                 activity_date = ride_input["activity_date"]
                 # Find matching plan day
@@ -299,7 +286,7 @@ async def generate_plan(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
-    profile = _user_to_profile_dict(current_user)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -330,7 +317,7 @@ async def adapt_plan(
 ) -> list[dict]:
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = _user_to_profile_dict(current_user)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -364,7 +351,7 @@ async def ask_trainer(
     # Load state from DB
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = _user_to_profile_dict(current_user)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -479,7 +466,7 @@ async def rate_workout(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
-    profile = _user_to_profile_dict(current_user)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
 
     # Fetch Strava streams and compute planned-vs-actual delta when an activity ID is provided
     stream_delta: dict | None = None
@@ -501,9 +488,19 @@ async def rate_workout(
                     streams,
                     ftp=ftp,
                 )
+        except HTTPException as exc:
+            logger.warning(
+                "Strava auth error fetching workout streams (status=%s); continuing without stream data",
+                exc.status_code,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "Strava network error fetching workout streams (%s); continuing without stream data",
+                exc,
+            )
         except Exception:
             logger.warning(
-                "Failed to fetch Strava streams for workout rating; continuing without stream data",
+                "Unexpected error fetching Strava streams for workout rating; continuing without stream data",
                 exc_info=True,
             )
 
@@ -647,7 +644,7 @@ async def refresh_knowledge(
     background task and returns immediately.  Requires ``OPENAI_API_KEY`` to
     be set in the environment; returns HTTP 503 if it is absent.
     """
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not settings.openai_api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OPENAI_API_KEY is not configured; cannot refresh knowledge base",

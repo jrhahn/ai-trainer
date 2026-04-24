@@ -21,9 +21,6 @@ import models
 # ---------------------------------------------------------------------------
 
 _USER_EAGER_OPTIONS = [
-    selectinload(models.User.training_plan),
-    selectinload(models.User.chat_messages),
-    selectinload(models.User.coach_memory),
     selectinload(models.User.strava_token),
     selectinload(models.User.rider_assessment),
 ]

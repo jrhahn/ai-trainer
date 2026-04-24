@@ -1,22 +1,15 @@
-import os
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import auth as _auth
+from config import settings
 from database import Base, engine
 from routers import ai, auth_router, strava, users
-import auth as _auth
 
-load_dotenv()
-
-_frontend_url_raw = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-# Support a comma-separated list of origins so that deployments accessible from
-# multiple hostnames / IP addresses (e.g. domain + raw IP during initial setup)
-# can all be permitted without wildcard CORS.
-ALLOWED_ORIGINS = [u.strip().rstrip("/") for u in _frontend_url_raw.split(",") if u.strip()]
-FRONTEND_URL = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "http://localhost:5173"
+ALLOWED_ORIGINS = settings.allowed_origins
+FRONTEND_URL = settings.primary_frontend_url
 
 
 @asynccontextmanager

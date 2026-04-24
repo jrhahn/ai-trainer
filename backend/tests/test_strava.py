@@ -58,8 +58,8 @@ async def test_strava_auth_redirect_contains_state(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_strava_auth_uses_runtime_env_credentials(client, auth_headers, monkeypatch):
-    monkeypatch.setenv("STRAVA_CLIENT_ID", "runtime-client-id")
-    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "runtime-client-secret")
+    monkeypatch.setattr(strava_router.settings, "strava_client_id", "runtime-client-id")
+    monkeypatch.setattr(strava_router.settings, "strava_client_secret", "runtime-client-secret")
 
     response = await client.get("/api/v1/auth/strava", headers=auth_headers)
 
@@ -70,8 +70,8 @@ async def test_strava_auth_uses_runtime_env_credentials(client, auth_headers, mo
 
 @pytest.mark.asyncio
 async def test_strava_auth_shows_server_side_setup_message(client, auth_headers, monkeypatch):
-    monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
-    monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+    monkeypatch.setattr(strava_router.settings, "strava_client_id", "")
+    monkeypatch.setattr(strava_router.settings, "strava_client_secret", "")
 
     response = await client.get("/api/v1/auth/strava", headers=auth_headers)
 

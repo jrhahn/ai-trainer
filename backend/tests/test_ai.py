@@ -758,40 +758,30 @@ async def test_ask_trainer_classify_called_and_rag_skipped_when_not_needed(
 
 @pytest.mark.asyncio
 async def test_chat_raises_ai_rate_limit_error_on_gemini_429():
-    """_chat must convert a Gemini ClientError(429) into AIRateLimitError."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-    from google.genai import errors as genai_errors
+    """_chat must propagate AIRateLimitError raised by the LLM provider."""
+    from unittest.mock import AsyncMock, patch
     from services.ai_service import AIRateLimitError
+    from services import llm as llm_module
 
-    client_error = genai_errors.ClientError(429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, MagicMock())
+    mock_provider = AsyncMock()
+    mock_provider.chat = AsyncMock(side_effect=AIRateLimitError("rate limited"))
 
-    fake_client = MagicMock()
-    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-    fake_client.__aexit__ = AsyncMock(return_value=False)
-    fake_client.models.generate_content = AsyncMock(side_effect=client_error)
-
-    with patch.object(ai_service, "_make_gemini") as mock_make:
-        mock_make.return_value.aio = fake_client
+    with patch.object(ai_service, "get_provider", return_value=mock_provider):
         with pytest.raises(AIRateLimitError):
             await ai_service._chat("gemini", "system", "hello")
 
 
 @pytest.mark.asyncio
 async def test_chat_history_raises_ai_rate_limit_error_on_gemini_429():
-    """_chat_history must convert a Gemini ClientError(429) into AIRateLimitError."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-    from google.genai import errors as genai_errors
+    """_chat_history must propagate AIRateLimitError raised by the LLM provider."""
+    from unittest.mock import AsyncMock, patch
     from services.ai_service import AIRateLimitError
+    from services import llm as llm_module
 
-    client_error = genai_errors.ClientError(429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, MagicMock())
+    mock_provider = AsyncMock()
+    mock_provider.chat_history = AsyncMock(side_effect=AIRateLimitError("rate limited"))
 
-    fake_client = MagicMock()
-    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-    fake_client.__aexit__ = AsyncMock(return_value=False)
-    fake_client.models.generate_content = AsyncMock(side_effect=client_error)
-
-    with patch.object(ai_service, "_make_gemini") as mock_make:
-        mock_make.return_value.aio = fake_client
+    with patch.object(ai_service, "get_provider", return_value=mock_provider):
         with pytest.raises(AIRateLimitError):
             await ai_service._chat_history(
                 "gemini", "system", [{"role": "user", "content": "hi"}]

@@ -194,7 +194,8 @@ async def test_ask_trainer_science_context_forwarded_to_ai_service(
 async def test_refresh_knowledge_queues_background_task(client, auth_headers):
     """Authenticated request must queue the ingestion background task and return 200."""
     with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock) as mock_refresh:
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+        with patch("routers.ai.settings") as mock_settings:
+            mock_settings.openai_api_key = "test-key"
             response = await client.post(
                 "/api/v1/ai/refresh-knowledge",
                 headers=auth_headers,
@@ -218,8 +219,8 @@ async def test_refresh_knowledge_returns_503_when_no_openai_key(client, auth_hea
     """When OPENAI_API_KEY is absent the endpoint must return HTTP 503."""
     import os
 
-    env_without_key = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
-    with patch.dict("os.environ", env_without_key, clear=True):
+    with patch("routers.ai.settings") as mock_settings:
+        mock_settings.openai_api_key = ""
         response = await client.post(
             "/api/v1/ai/refresh-knowledge",
             headers=auth_headers,

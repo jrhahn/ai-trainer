@@ -1,6 +1,5 @@
 """Password hashing, JWT creation/verification, and FastAPI auth dependency."""
 
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -12,21 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from config import settings
 from database import get_db
 
 _JWT_SECRET_DEFAULT = "change-me-in-production"
 _DEV_ENVS = {"development", "dev", "local", "test", "testing"}
 
-JWT_SECRET = os.environ.get("JWT_SECRET", _JWT_SECRET_DEFAULT)
-JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
-JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "10080"))  # 7 days
-APP_ENV = os.environ.get("APP_ENV", "development")
-AUTHELIA_AUTH_ENABLED = os.environ.get("AUTHELIA_AUTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
-AUTHELIA_REMOTE_USER_HEADER = os.environ.get("AUTHELIA_REMOTE_USER_HEADER", "Remote-User")
-AUTHELIA_REMOTE_EMAIL_HEADER = os.environ.get("AUTHELIA_REMOTE_EMAIL_HEADER", "Remote-Email")
-AUTHELIA_REMOTE_NAME_HEADER = os.environ.get("AUTHELIA_REMOTE_NAME_HEADER", "Remote-Name")
-AUTHELIA_INTERNAL_URL = os.environ.get("AUTHELIA_INTERNAL_URL", "").rstrip("/")
-AUTHELIA_USERS_DB_PATH = os.environ.get("AUTHELIA_USERS_DB_PATH", "")
+JWT_SECRET = settings.jwt_secret
+JWT_ALGORITHM = settings.jwt_algorithm
+JWT_EXPIRE_MINUTES = settings.jwt_expire_minutes
+APP_ENV = settings.app_env
+AUTHELIA_AUTH_ENABLED = settings.authelia_auth_enabled
+AUTHELIA_REMOTE_USER_HEADER = settings.authelia_remote_user_header
+AUTHELIA_REMOTE_EMAIL_HEADER = settings.authelia_remote_email_header
+AUTHELIA_REMOTE_NAME_HEADER = settings.authelia_remote_name_header
+AUTHELIA_INTERNAL_URL = settings.authelia_internal_url.rstrip("/")
+AUTHELIA_USERS_DB_PATH = settings.authelia_users_db_path
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 

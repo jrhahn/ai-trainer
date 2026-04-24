@@ -4,8 +4,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from database import Base
 
@@ -16,6 +18,47 @@ def _utcnow() -> datetime:
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+class EncryptedString(TypeDecorator):
+    """Transparently encrypts/decrypts string values using Fernet symmetric encryption.
+
+    When ``STRAVA_ENCRYPTION_KEY`` is not set the value is stored as plaintext,
+    allowing dev/test environments to operate without a key while production
+    always stores ciphertext.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def _get_fernet(self) -> Fernet | None:
+        from config import settings  # local import avoids circular dependency at module load
+
+        key = settings.strava_encryption_key
+        if not key:
+            return None
+        raw = key.encode() if isinstance(key, str) else key
+        return Fernet(raw)
+
+    def process_bind_param(self, value: str | None, dialect) -> str | None:
+        if value is None:
+            return value
+        f = self._get_fernet()
+        if f is None:
+            return value
+        return f.encrypt(value.encode()).decode()
+
+    def process_result_value(self, value: str | None, dialect) -> str | None:
+        if value is None:
+            return value
+        f = self._get_fernet()
+        if f is None:
+            return value
+        try:
+            return f.decrypt(value.encode()).decode()
+        except (InvalidToken, Exception):
+            # Graceful fallback for plaintext values stored before encryption was enabled.
+            return value
 
 
 class User(Base):
@@ -140,8 +183,8 @@ class StravaToken(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), primary_key=True
     )
-    access_token: Mapped[str] = mapped_column(String(255), nullable=False)
-    refresh_token: Mapped[str] = mapped_column(String(255), nullable=False)
+    access_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    refresh_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
     expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     athlete_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     athlete_name: Mapped[str] = mapped_column(String(255), default="")

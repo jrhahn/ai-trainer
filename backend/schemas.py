@@ -7,9 +7,12 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+
+if TYPE_CHECKING:
+    import models
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +242,12 @@ class StravaActivitySchema(CamelModel):
 class UserProfileSchema(CamelModel):
     """Mirrors the TypeScript UserProfile interface."""
 
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
     name: str
     email: str
     bike_type: str
@@ -252,6 +261,25 @@ class UserProfileSchema(CamelModel):
     threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
+
+    @classmethod
+    def from_user(cls, user: "models.User") -> "UserProfileSchema":
+        """Build a ``UserProfileSchema`` from an ORM ``User`` instance."""
+        return cls(
+            name=user.name or "",
+            email=user.email,
+            bike_type=user.bike_type or "",
+            training_goal=user.training_goal or "",
+            race_date=user.race_date,
+            race_description=user.race_description,
+            weekly_hours=user.weekly_hours,
+            follows_training_plan=user.follows_training_plan,
+            resting_heart_rate=user.resting_heart_rate,
+            max_heart_rate=user.max_heart_rate,
+            threshold_heart_rate=user.threshold_heart_rate,
+            current_ftp=user.current_ftp,
+            fitness_level=user.fitness_level or "",
+        )
 
 
 class AnalyseActivitiesRequest(CamelModel):
