@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { apiFetch } from '../services/api'
+import { triggerStravaHistoryImport } from '../services/strava'
 import { useImportProgress } from '../hooks/useImportProgress'
 
 type Step = 'connecting' | 'importing' | 'done' | 'error'
@@ -42,7 +42,7 @@ export default function StravaCallbackPage() {
       setStep('importing')
       // Fire-and-forget — backend responds 202 immediately.
       // If the POST itself fails (network error, not connected), fall back to done.
-      apiFetch('/strava/import-history', { method: 'POST', token: authToken }).catch(() => {
+      triggerStravaHistoryImport(authToken ?? '').catch(() => {
         if (!redirectScheduled.current) {
           redirectScheduled.current = true
           setStep('done')

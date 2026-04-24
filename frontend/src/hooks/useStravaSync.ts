@@ -5,11 +5,10 @@ import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
+import { useMetricsPipeline } from './useMetricsPipeline'
+import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
-
-// Threshold HR is typically ~87% of max HR (used to estimate max HR from threshold HR)
-const THRESHOLD_HR_TO_MAX_HR_RATIO = 0.87
 
 export type AnalysisStatus = 'idle' | 'analysing' | 'done' | 'error'
 
@@ -50,6 +49,7 @@ export function useStravaSync(): UseStravaSyncResult {
   )
 
   const queryClient = useQueryClient()
+  const { recalculateAll } = useMetricsPipeline()
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState('')
   const [newRidesCount, setNewRidesCount] = useState(0)
@@ -80,6 +80,9 @@ export function useStravaSync(): UseStravaSyncResult {
         stravaAnalysisComplete: true,
         lastStravaActivityId: newestId,
       })
+
+      // Recompute all historical TSS/CTL/ATL/TSB with the (potentially updated) FTP.
+      await recalculateAll(updatedProfile.currentFTP).catch(() => { /* best-effort */ })
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
         // For new rides, apply targeted plan updates rather than regenerating the whole plan

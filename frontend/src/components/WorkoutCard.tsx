@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Clock, Zap, Heart } from 'lucide-react'
 import type { TrainingDay } from '../store/useAppStore'
+import { parseLocalDate } from '../utils/workout'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -30,7 +31,7 @@ export default function WorkoutCard({
         className="flex items-center gap-2 bg-white rounded-lg border border-gray-100 px-3 py-2 cursor-pointer hover:border-gray-300 transition-colors"
       >
         <p className="text-xs text-gray-400 flex-shrink-0 w-16">
-          {new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, {
+          {parseLocalDate(day.date).toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
             day: 'numeric',
@@ -65,7 +66,7 @@ export default function WorkoutCard({
       )}
       {showDate && (
         <p className="text-xs text-gray-400 mb-1">
-          {new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, {
+          {parseLocalDate(day.date).toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
             day: 'numeric',

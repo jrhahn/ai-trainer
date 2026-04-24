@@ -8,6 +8,7 @@ import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout } from '../services/ai'
 import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
+import { parseLocalDate } from '../utils/workout'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
@@ -111,7 +112,7 @@ export default function WorkoutPage() {
             </span>
             <h1 className="text-xl font-bold text-gray-900">{day.title}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, {
+              {parseLocalDate(day.date).toLocaleDateString(undefined, {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',

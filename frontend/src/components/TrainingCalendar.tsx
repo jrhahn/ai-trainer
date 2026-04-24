@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
+import { parseLocalDate } from '../utils/workout'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-400 border-gray-200',
@@ -30,7 +31,7 @@ export default function TrainingCalendar() {
   const plan = useAppStore((s) => s.trainingPlan)
   const today = new Date().toISOString().split('T')[0]
 
-  const firstDate = plan.length > 0 ? new Date(plan[0].date + 'T12:00:00') : new Date()
+  const firstDate = plan.length > 0 ? parseLocalDate(plan[0].date) : new Date()
   const dayOfWeek = firstDate.getDay()
   const monday = new Date(firstDate)
   monday.setDate(firstDate.getDate() - ((dayOfWeek + 6) % 7))
@@ -76,7 +77,7 @@ export default function TrainingCalendar() {
               >
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-xs font-bold">
-                    {new Date(day.date + 'T12:00:00').getDate()}
+                    {parseLocalDate(day.date).getDate()}
                   </span>
                   {day.completed && (
                     <CheckCircle size={12} className="text-green-500 flex-shrink-0" />

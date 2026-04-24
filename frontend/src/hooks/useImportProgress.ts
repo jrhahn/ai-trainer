@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { apiFetch } from '../services/api'
+import type { ImportProgress } from '../services/strava'
 
-export interface ImportProgress {
-  status: 'idle' | 'running' | 'done' | 'error'
-  total: number
-  processed: number
-  skipped: number
-  error: string
-}
+export type { ImportProgress }
 
 const POLL_MS = 1500
 

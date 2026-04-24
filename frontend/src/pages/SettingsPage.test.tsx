@@ -6,18 +6,27 @@ import SettingsPage from './SettingsPage'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 
-const { mockUpdateCurrentUser, mockDeleteCurrentUser, mockEstimateFTP, mockRecalculateMetrics } = vi.hoisted(() => ({
+const { mockUpdateCurrentUser, mockDeleteCurrentUser, mockEstimateFTP, mockUpdateMetrics, mockRecalculateAll } = vi.hoisted(() => ({
   mockUpdateCurrentUser: vi.fn(),
   mockDeleteCurrentUser: vi.fn(),
   mockEstimateFTP: vi.fn(),
-  mockRecalculateMetrics: vi.fn(),
+  mockUpdateMetrics: vi.fn(),
+  mockRecalculateAll: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   deleteCurrentUser: mockDeleteCurrentUser,
   estimateFTP: mockEstimateFTP,
-  recalculateMetrics: mockRecalculateMetrics,
+}))
+
+vi.mock('../hooks/useMetricsPipeline', () => ({
+  useMetricsPipeline: () => ({
+    updateMetrics: mockUpdateMetrics,
+    recalculateAll: mockRecalculateAll,
+    isPending: false,
+    error: null,
+  }),
 }))
 
 // StravaConnect uses strava services; stub the component
@@ -52,7 +61,8 @@ beforeEach(() => {
   mockUpdateCurrentUser.mockResolvedValue({})
   mockDeleteCurrentUser.mockResolvedValue(undefined)
   mockEstimateFTP.mockResolvedValue({ estimatedFTP: null, source: 'none' })
-  mockRecalculateMetrics.mockResolvedValue({ updated: 10, ftpUsed: 250 })
+  mockUpdateMetrics.mockResolvedValue({ updated: 10, ftpUsed: 250 })
+  mockRecalculateAll.mockResolvedValue({ updated: 10, ftpUsed: 250 })
 })
 
 describe('SettingsPage', () => {
@@ -204,8 +214,9 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('calls recalculateMetrics with the confirmed FTP and clears the panel', async () => {
+  it('calls updateMetrics with the confirmed FTP and clears the panel', async () => {
     mockEstimateFTP.mockResolvedValue({ estimatedFTP: 260, source: 'ftp_estimation' })
+    mockUpdateMetrics.mockResolvedValue({ updated: 8, ftpUsed: 260 })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     setup()
 
@@ -220,7 +231,7 @@ describe('SettingsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/i }))
 
     await waitFor(() => {
-      expect(mockRecalculateMetrics).toHaveBeenCalledWith('tok-123', 260)
+      expect(mockUpdateMetrics).toHaveBeenCalledWith({ currentFTP: 260 })
       // Panel should be gone after recalculation
       expect(screen.queryByText(/Step 2/i)).not.toBeInTheDocument()
     })

@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { Pencil, Check, X, Zap, Heart, Activity, HeartPulse } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { updateCurrentUser } from '../services/user'
-
-// LTHR ≈ 87 % of max HR — must stay in sync with _LTHR_RATIO in backend/services/ai_service.py
-const LTHR_RATIO = 0.87
+import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
+import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const DEFAULT_FTP: Record<string, number> = {
   beginner: 150,
@@ -28,7 +26,7 @@ function buildDefaults(fitnessLevel: string, maxHR: number | undefined) {
     defaultFTP: DEFAULT_FTP[fitnessLevel] ?? 220,
     defaultMaxHR: 185,
     defaultRestingHR: 60,
-    derivedThresholdHR: maxHR ? Math.round(maxHR * LTHR_RATIO) : Math.round(185 * LTHR_RATIO),
+    derivedThresholdHR: maxHR ? Math.round(maxHR * THRESHOLD_HR_TO_MAX_HR_RATIO) : Math.round(185 * THRESHOLD_HR_TO_MAX_HR_RATIO),
   }
 }
 
@@ -70,16 +68,15 @@ const METRICS: MetricField[] = [
 ]
 
 export default function FitnessMetricsCard() {
-  const { authToken, userProfile, setUserProfile } = useAppStore(
+  const { authToken, userProfile } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      setUserProfile: s.setUserProfile,
     }))
   )
+  const { updateMetrics, isPending } = useMetricsPipeline()
 
   const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState({
     currentFTP: '',
@@ -125,16 +122,12 @@ export default function FitnessMetricsCard() {
       return
     }
 
-    setSaving(true)
     setError('')
     try {
-      await updateCurrentUser(authToken, updates)
-      setUserProfile({ ...userProfile, ...updates })
+      await updateMetrics(updates)
       setEditing(false)
     } catch {
       setError('Failed to save. Please try again.')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -159,7 +152,7 @@ export default function FitnessMetricsCard() {
           <div className="flex items-center gap-2">
             <button
               onClick={cancel}
-              disabled={saving}
+              disabled={isPending}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg px-2 py-1 transition-colors"
             >
               <X size={12} />
@@ -167,11 +160,11 @@ export default function FitnessMetricsCard() {
             </button>
             <button
               onClick={save}
-              disabled={saving}
+              disabled={isPending}
               className="flex items-center gap-1 text-xs text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 rounded-lg px-2 py-1 transition-colors"
             >
               <Check size={12} />
-              {saving ? 'Saving…' : 'Save'}
+              {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
         )}
