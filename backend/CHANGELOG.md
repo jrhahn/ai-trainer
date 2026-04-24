@@ -5,6 +5,24 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-04-24
+
+### Changed
+
+- **`POST /ai/ask-trainer` — reduced response latency** — two optimisations cut the
+  number of sequential LLM round trips the user waits for:
+
+  1. **`classify_question` parallelised with DB fetches** — the question-classification
+     call now runs concurrently with the `get_ride_metrics_history` database query instead
+     of after it, hiding the 1–2 s classification latency behind an already-necessary DB
+     operation.
+
+  2. **`update_coach_memory` moved to a `BackgroundTask`** — coach-memory updates are
+     now written after the HTTP response is sent rather than before it.  A dedicated
+     `_update_memory_bg` helper manages its own database session via `async_session_maker`
+     and swallows all errors gracefully (rate-limit and general exceptions are logged but
+     never surfaced to the caller), preserving the existing best-effort semantics.
+
 ## [0.21.0] - 2026-04-22
 
 ### Added

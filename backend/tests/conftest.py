@@ -17,6 +17,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
 from database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
+import routers.ai as ai_router  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
@@ -35,6 +36,8 @@ async def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+# Redirect the background task's direct session factory to the test database
+ai_router.async_session_maker = TestSessionLocal
 
 
 @pytest_asyncio.fixture(autouse=True)
