@@ -1,5 +1,6 @@
 """AI routes."""
 
+import asyncio
 import json
 import logging
 from datetime import date as _date
@@ -14,7 +15,7 @@ import crud
 import models
 import schemas
 from config import settings
-from database import get_db
+from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time
@@ -71,6 +72,28 @@ async def _auto_rate_ride(
     except Exception:
         logger.warning("Auto-rate ride failed", exc_info=True)
         return None
+
+
+async def _update_memory_bg(
+    user_id: str,
+    question: str,
+    response: str,
+    current_memory: str,
+    provider: str,
+) -> None:
+    """Background task: update coach memory after the chat response is sent."""
+    try:
+        updated_memory = await ai_service.update_coach_memory(
+            current_memory, question, response, provider=provider
+        )
+        if updated_memory and updated_memory != current_memory:
+            async with async_session_maker() as session:
+                await crud.upsert_coach_memory(session, user_id, updated_memory)
+                await session.commit()
+    except AIRateLimitError:
+        logger.info("Coach memory update skipped due to AI rate limit")
+    except Exception:
+        logger.warning("Coach memory background update failed", exc_info=True)
 
 
 async def _auto_adapt_plan(
@@ -345,6 +368,7 @@ async def adapt_plan(
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)
 async def ask_trainer(
     body: schemas.AskTrainerRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AskTrainerResponse:
@@ -366,11 +390,15 @@ async def ask_trainer(
     ]
 
     # --- Fetch ride metrics history for structured LLM context ---
+    # Start question classification in parallel with the DB fetch (it's a pure LLM call)
+    classify_task = asyncio.ensure_future(
+        ai_service.classify_question(body.question, provider=_provider(current_user))
+    )
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     metrics_section = ride_metrics_context_section(recent_metrics)
 
-    # --- Task 5: Classify question first, then conditionally retrieve RAG context ---
-    classification = await ai_service.classify_question(body.question, provider=_provider(current_user))
+    # --- Task 5: Await classification (likely already done), then conditionally retrieve RAG context ---
+    classification = await classify_task
     science_context = ""
     rag_sources: list = []
     if classification.get("needs_science_rag", False):
@@ -426,19 +454,15 @@ async def ask_trainer(
         plan_update_count=len(plan_updates) if plan_updates else None,
     )
 
-    # Update coach memory (best-effort — rate-limit errors are logged, not surfaced)
-    try:
-        updated_memory = await ai_service.update_coach_memory(
-            coach_memory,
-            body.question,
-            result["response"],
-            provider=_provider(current_user),
-        )
-    except AIRateLimitError:
-        logger.info("Coach memory update skipped due to AI rate limit")
-        updated_memory = coach_memory
-    if updated_memory and updated_memory != coach_memory:
-        await crud.upsert_coach_memory(db, current_user.id, updated_memory)
+    # Update coach memory in the background — no need for the user to wait
+    background_tasks.add_task(
+        _update_memory_bg,
+        current_user.id,
+        body.question,
+        result["response"],
+        coach_memory,
+        _provider(current_user),
+    )
 
     # Apply plan updates if any
     if plan_updates:
