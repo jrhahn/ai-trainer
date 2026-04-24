@@ -18,7 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time, build_ride_analysis
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
@@ -64,8 +64,10 @@ async def _auto_rate_ride(
     """
     try:
         stream_delta = compare_planned_vs_actual(plan_day, streams, ftp=ftp)
+        ride_analysis = build_ride_analysis(streams, ftp) if ftp else None
         result = await ai_service.rate_completed_workout(
-            plan_day, profile, provider=provider, stream_delta=stream_delta
+            plan_day, profile, provider=provider, stream_delta=stream_delta,
+            ride_analysis=ride_analysis,
         )
         feedback_text = result.get("feedback", "")
         return feedback_text or None

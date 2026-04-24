@@ -395,13 +395,16 @@ async def rate_completed_workout(
     profile: dict,
     provider: str = "openai",
     stream_delta: dict | None = None,
+    ride_analysis: dict | None = None,
 ) -> dict:
     feedback = day.get("feedback")
     if not feedback and not stream_delta:
         return {"feedback": "", "flag_for_adaptation": False}
 
     system_prompt = rate_workout_system()
-    user_msg = rate_workout_user(day, feedback, profile, stream_delta=stream_delta)
+    user_msg = rate_workout_user(
+        day, feedback, profile, stream_delta=stream_delta, actual_ride_analysis=ride_analysis
+    )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return {

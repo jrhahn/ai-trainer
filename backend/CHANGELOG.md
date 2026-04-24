@@ -5,6 +5,34 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-04-24
+
+### Changed
+
+- **Auto-rate new rides: planned type vs actual type comparison** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`) — when a new Strava activity is downloaded and
+  matched against the training plan, the AI coach now explicitly compares what was *planned*
+  against what was *actually performed*:
+
+  - `rate_workout_system()` instructs the AI to first check whether the ride's character
+    (e.g. endurance, threshold intervals, VO2max) matches the planned type, and to call out
+    any mismatch before commenting on power/HR numbers.
+
+  - `rate_workout_user()` accepts a new `actual_ride_analysis` parameter (dict produced by
+    `build_ride_analysis`) and renders an *"Actual ride character (algorithmically derived)"*
+    section into the prompt.  The section includes the detected ride category, average power,
+    and a bullet for each detected interval block (duration, avg watts, % FTP, avg HR).
+
+  - `rate_workout_user()` now accepts `feedback=None` without crashing — auto-rate calls
+    that have no user-entered feedback are handled gracefully.
+
+  - `rate_completed_workout()` in `ai_service.py` gains a `ride_analysis: dict | None`
+    keyword argument and forwards it to `rate_workout_user()`.
+
+  - `_auto_rate_ride()` in `routers/ai.py` now calls `build_ride_analysis(streams, ftp)` and
+    passes the result as `ride_analysis` so every auto-generated coach note reflects the true
+    ride character.
+
 ## [0.22.0] - 2026-04-24
 
 ### Changed

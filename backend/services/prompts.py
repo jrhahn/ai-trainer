@@ -595,14 +595,16 @@ def update_memory_user(current_memory: str, user_message: str, coach_response: s
 def rate_workout_system() -> str:
     return (
         f"{COACH_PERSONA} Review a completed training session. "
-        "Compare the actual workout against the planned one and provide brief, encouraging feedback "
-        "in 2-4 sentences. Note how well the athlete followed the plan, highlight any significant "
-        "deviations, and explain what it means for their training progress. "
-        "When objective stream data is available (power, HR, time-in-zone), use it to give "
+        "Compare what was PLANNED against what the athlete ACTUALLY DID. "
+        "First check whether the actual ride TYPE/CHARACTER matches the planned type — for example, "
+        "if an endurance ride was planned but intervals were performed, or vice versa, call that out "
+        "explicitly and explain the training impact. Then comment on the numbers: "
+        "when objective stream data is available (power, HR, time-in-zone), use it to give "
         "precise, actionable insights — e.g. 'You went 15 % over Z2 intensity in the first 30 min, "
-        "which erodes your aerobic base and costs recovery'. Otherwise use the hand-entered metrics.\n"
+        "which erodes your aerobic base and costs recovery'. Otherwise use the hand-entered metrics. "
+        "Give the response in 3-5 sentences, warm and personal.\n"
         "Return ONLY a valid JSON object with these fields:\n"
-        '- "feedback": your 2-4 sentence coaching response as a string\n'
+        '- "feedback": your 3-5 sentence coaching response as a string\n'
         '- "flag_for_adaptation": true when the athlete should adapt their upcoming plan '
         "(perceived effort ≫ planned intensity, actual duration significantly shorter than "
         "planned, or athlete notes indicate fatigue/illness/pain); otherwise false"
@@ -611,10 +613,12 @@ def rate_workout_system() -> str:
 
 def rate_workout_user(
     day: dict,
-    feedback: dict,
+    feedback: dict | None,
     profile: dict | None = None,
     stream_delta: dict | None = None,
+    actual_ride_analysis: dict | None = None,
 ) -> str:
+    feedback = feedback or {}
     planned_power = ""
     if day.get("targetPower"):
         planned_power = f"\n- Target power: {day['targetPower']['low']}–{day['targetPower']['high']}W"
@@ -710,20 +714,53 @@ def rate_workout_user(
 
         delta_section = "\n".join(lines)
 
+    # --- Actual ride analysis section (from algorithmic stream analysis) ---
+    actual_analysis_section = ""
+    if actual_ride_analysis:
+        category = actual_ride_analysis.get("ride_category", "unknown")
+        avg_pwr = actual_ride_analysis.get("avg_power_w")
+        intervals = actual_ride_analysis.get("intervals_detected") or []
+        analysis_lines: list[str] = ["\nActual ride character (algorithmically derived):"]
+        analysis_lines.append(f"- Detected ride category: {category}")
+        if avg_pwr:
+            analysis_lines.append(f"- Average power: {avg_pwr}W")
+        if intervals:
+            analysis_lines.append(f"- {len(intervals)} interval block(s) detected:")
+            for iv in intervals[:4]:
+                dur = iv.get("duration_secs", 0) // 60
+                pwr = iv.get("avg_power_w", "?")
+                pct = iv.get("power_pct_ftp", "?")
+                hr_note = f", avg HR {iv['avg_hr_bpm']} bpm" if iv.get("avg_hr_bpm") else ""
+                analysis_lines.append(f"  • {dur} min @ {pwr}W ({pct}% FTP{hr_note})")
+        else:
+            analysis_lines.append("- No distinct interval blocks detected (steady effort)")
+        actual_analysis_section = "\n".join(analysis_lines)
+
+    actual_duration = feedback.get("actualDurationMinutes")
+    perceived_effort = feedback.get("perceivedEffort")
+    actual_duration_line = f"- Duration: {actual_duration} min\n" if actual_duration else ""
+    perceived_effort_line = (
+        f"- Perceived effort: {perceived_effort}/5 ({effort_labels.get(perceived_effort, '')})\n"
+        if perceived_effort
+        else ""
+    )
+
     return (
         f"Planned workout:\n"
-        f"- Type: {day['workoutType']}\n"
-        f"- Title: {day['title']}\n"
-        f"- Duration: {day['durationMinutes']} min\n"
-        f"- Description: {day['description']}"
+        f"- Type: {day.get('workoutType', 'unknown')}\n"
+        f"- Title: {day.get('title', '')}\n"
+        f"- Duration: {day.get('durationMinutes', '?')} min\n"
+        f"- Description: {day.get('description', '')}"
         f"{planned_power}{planned_hr}\n\n"
         f"Actual workout:\n"
-        f"- Duration: {feedback['actualDurationMinutes']} min\n"
-        f"- Perceived effort: {feedback['perceivedEffort']}/5 ({effort_labels.get(feedback['perceivedEffort'], '')})"
+        f"{actual_duration_line}"
+        f"{perceived_effort_line}"
         f"{actual_power}{actual_peak}{actual_hr}{notes}"
+        f"{actual_analysis_section}"
         f"{delta_section}"
         f"{profile_section}\n\n"
-        f"Rate how well this workout matched the plan and give brief feedback."
+        f"Compare what was planned against what was actually performed (type match, numbers, effort) "
+        f"and give feedback."
     )
 
 
