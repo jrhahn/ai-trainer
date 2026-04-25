@@ -52,6 +52,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
+        use_estimated_ftp=user.use_estimated_ftp,
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
     )
