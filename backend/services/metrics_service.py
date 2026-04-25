@@ -34,34 +34,124 @@ def get_effective_ftp(user: models.User, ftp_override: int | None = None) -> int
     return None
 
 
-async def recalculate_metrics_for_user(
+def _last_ride_recommendation(ride_purpose: str | None, tsb_after: float | None) -> str:
+    if ride_purpose == "recovery":
+        return "Keep the next session easy so the recovery intent stays intact."
+    if ride_purpose in {"interval_threshold", "interval_vo2max", "interval_sprints", "mixed"}:
+        return "Plan the next hard session only once your legs feel fresh again."
+    if ride_purpose == "interval_sweetspot":
+        return "Use the next ride to absorb the work before stacking more tempo or threshold time."
+    if tsb_after is not None and tsb_after < -10:
+        return "Fatigue is elevated after this ride, so prioritise recovery before adding intensity."
+    if tsb_after is not None and tsb_after > 10:
+        return "You are carrying good freshness, so a quality session next would be well timed."
+    return "Follow up with an aerobic ride or rest day depending on how your legs feel."
+
+
+def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
+    parts: list[str] = []
+
+    if metric.summary:
+        parts.append(f"{metric.summary}.")
+    else:
+        parts.append("Most recent ride recalculated.")
+
+    details: list[str] = []
+    if metric.avg_power_w is not None:
+        details.append(f"avg power {metric.avg_power_w} W")
+    if metric.normalized_power_w is not None:
+        details.append(f"NP {metric.normalized_power_w} W")
+    if metric.intensity_factor is not None:
+        details.append(f"IF {metric.intensity_factor:.2f}")
+    if metric.tss is not None:
+        details.append(f"TSS {round(metric.tss)}")
+
+    if details:
+        parts.append(
+            f"Recalculated with FTP {ftp_value} W, this ride now scores "
+            f"{' · '.join(details)}."
+        )
+    else:
+        parts.append(f"Recalculated with FTP {ftp_value} W.")
+
+    load_bits: list[str] = []
+    if metric.ctl_after is not None:
+        load_bits.append(f"CTL {metric.ctl_after:.1f}")
+    if metric.atl_after is not None:
+        load_bits.append(f"ATL {metric.atl_after:.1f}")
+    if metric.tsb_after is not None:
+        load_bits.append(f"TSB {metric.tsb_after:.1f}")
+    if load_bits:
+        parts.append(f"Post-ride load is {' · '.join(load_bits)}.")
+
+    parts.append(_last_ride_recommendation(metric.ride_purpose, metric.tsb_after))
+    return " ".join(parts)
+
+
+async def _rebuild_metric_snapshots(
     db: AsyncSession,
     user: models.User,
-    ftp_override: int | None = None,
-) -> tuple[int, int]:
-    """Recompute TSS/CTL/ATL/TSB for all stored rides.
+    all_metrics: list[models.RideMetric],
+    ftp_value: int,
+) -> None:
+    await crud.delete_athlete_metric_snapshots(db, user.id)
+    for metric in all_metrics:
+        if metric.activity_date:
+            try:
+                ride_dt = datetime.fromisoformat(metric.activity_date).replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                logger.warning(
+                    "Could not parse activity_date %r for ride metric %s; "
+                    "snapshot will use current timestamp.",
+                    metric.activity_date,
+                    getattr(metric, "strava_activity_id", "unknown"),
+                )
+                ride_dt = datetime.now(timezone.utc)
+        else:
+            ride_dt = datetime.now(timezone.utc)
 
-    When *ftp_override* is given the user's ``current_ftp`` profile field is
-    updated before the recalculation so subsequent analyses use the new value.
-
-    Returns ``(updated_count, ftp_used)``.
-
-    Raises ``ValueError`` when no FTP value is available.
-    """
-    ftp_value = get_effective_ftp(user, ftp_override)
-    if not ftp_value or ftp_value <= 0:
-        raise ValueError(
-            "No FTP value available. Provide ftp_override or set current_ftp first."
+        await crud.create_athlete_metric_snapshot(
+            db,
+            user.id,
+            ftp=ftp_value,
+            threshold_hr=user.threshold_heart_rate,
+            ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
+            atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
+            tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,
+            source="manual_recalculate",
+            recorded_at=ride_dt,
         )
 
-    if ftp_override is not None:
-        user.current_ftp = ftp_override
 
-    all_metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
-    if not all_metrics:
-        await db.flush()
-        return 0, ftp_value
+async def _refresh_rider_assessment_feedback(
+    db: AsyncSession,
+    user: models.User,
+    latest_metric: models.RideMetric,
+    ftp_value: int,
+) -> None:
+    if user.rider_assessment is None:
+        return
 
+    await crud.upsert_rider_assessment(
+        db,
+        user.id,
+        estimated_ftp=user.rider_assessment.estimated_ftp,
+        estimated_threshold_hr=user.rider_assessment.estimated_threshold_hr,
+        rider_type=user.rider_assessment.rider_type,
+        notes=user.rider_assessment.notes,
+        hr_zones=user.rider_assessment.hr_zones,
+        ride_insights=user.rider_assessment.ride_insights,
+        last_ride_feedback=build_last_ride_feedback(latest_metric, ftp_value),
+        login_summary=user.rider_assessment.login_summary,
+    )
+
+
+def _recalculate_metric_chain(
+    all_metrics: list[models.RideMetric],
+    ftp_value: int,
+) -> int:
     ftp_float = float(ftp_value)
     ctl = 0.0
     atl = 0.0
@@ -100,36 +190,41 @@ async def recalculate_metrics_for_user(
         metric.tsb_after = round(tsb, 2)
         updated += 1
 
-    # Replace all snapshots with per-ride snapshots for time-series visualisation.
-    await crud.delete_athlete_metric_snapshots(db, user.id)
-    for metric in all_metrics:
-        if metric.activity_date:
-            try:
-                ride_dt = datetime.fromisoformat(metric.activity_date).replace(
-                    tzinfo=timezone.utc
-                )
-            except ValueError:
-                logger.warning(
-                    "Could not parse activity_date %r for ride metric %s; "
-                    "snapshot will use current timestamp.",
-                    metric.activity_date,
-                    getattr(metric, "strava_activity_id", "unknown"),
-                )
-                ride_dt = datetime.now(timezone.utc)
-        else:
-            ride_dt = datetime.now(timezone.utc)
+    return updated
 
-        await crud.create_athlete_metric_snapshot(
-            db,
-            user.id,
-            ftp=ftp_value,
-            threshold_hr=user.threshold_heart_rate,
-            ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
-            atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
-            tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,
-            source="manual_recalculate",
-            recorded_at=ride_dt,
+
+async def recalculate_metrics_for_user(
+    db: AsyncSession,
+    user: models.User,
+    ftp_override: int | None = None,
+) -> tuple[int, int]:
+    """Recompute TSS/CTL/ATL/TSB for all stored rides.
+
+    When *ftp_override* is given the user's ``current_ftp`` profile field is
+    updated before the recalculation so subsequent analyses use the new value.
+
+    Returns ``(updated_count, ftp_used)``.
+
+    Raises ``ValueError`` when no FTP value is available.
+    """
+    ftp_value = get_effective_ftp(user, ftp_override)
+    if not ftp_value or ftp_value <= 0:
+        raise ValueError(
+            "No FTP value available. Provide ftp_override or set current_ftp first."
         )
+
+    if ftp_override is not None:
+        user.current_ftp = ftp_override
+
+    all_metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
+    if not all_metrics:
+        await db.flush()
+        return 0, ftp_value
+
+    updated = _recalculate_metric_chain(all_metrics, ftp_value)
+
+    await _rebuild_metric_snapshots(db, user, all_metrics, ftp_value)
+    await _refresh_rider_assessment_feedback(db, user, all_metrics[-1], ftp_value)
 
     await db.flush()
     return updated, ftp_value

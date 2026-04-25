@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 import {
+  fetchCurrentUser,
   fetchMetricsHistory,
   fetchRideMetricsHistory,
   recalculateMetrics,
@@ -44,12 +45,13 @@ export interface UseMetricsPipelineResult {
 }
 
 export function useMetricsPipeline(): UseMetricsPipelineResult {
-  const { authToken, userProfile, setUserProfile, setMetricsHistory, setRideMetricsHistory } =
+  const { authToken, userProfile, setUserProfile, setRiderAssessment, setMetricsHistory, setRideMetricsHistory } =
     useAppStore(
       useShallow((s) => ({
         authToken: s.authToken,
         userProfile: s.userProfile,
         setUserProfile: s.setUserProfile,
+        setRiderAssessment: s.setRiderAssessment,
         setMetricsHistory: s.setMetricsHistory,
         setRideMetricsHistory: s.setRideMetricsHistory,
       }))
@@ -62,16 +64,22 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
   // Does not manage isPending — callers own that.
   const _recalcCore = useCallback(
     async (ftpOverride?: number): Promise<RecalcResult> => {
-      const result = await recalculateMetrics(authToken!, ftpOverride)
-      const [metrics, rideMetrics] = await Promise.all([
-        fetchMetricsHistory(authToken!),
-        fetchRideMetricsHistory(authToken!),
+      const token = authToken
+      if (!token) throw new Error('Not authenticated')
+
+      const result = await recalculateMetrics(token, ftpOverride)
+      const [currentUser, metrics, rideMetrics] = await Promise.all([
+        fetchCurrentUser(token),
+        fetchMetricsHistory(token),
+        fetchRideMetricsHistory(token),
       ])
+      setUserProfile(currentUser.profile)
+      setRiderAssessment(currentUser.riderAssessment)
       setMetricsHistory(metrics)
       setRideMetricsHistory(rideMetrics)
       return result
     },
-    [authToken, setMetricsHistory, setRideMetricsHistory]
+    [authToken, setMetricsHistory, setRideMetricsHistory, setRiderAssessment, setUserProfile]
   )
 
   const recalculateAll = useCallback(
