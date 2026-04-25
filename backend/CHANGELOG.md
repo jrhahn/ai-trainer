@@ -5,6 +5,26 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-04-25
+
+### Added
+
+- **`compute_readiness_recommendations`** (`services/analysis.py`) — new function that
+  produces a list of short, actionable bullet-point tips based on the athlete's current
+  CTL, ATL, TSB, overall readiness score, and days until race. Rules cover:
+  - TSB/form bands (severe fatigue → very fresh) with specific training advice per band
+  - CTL/fitness bands with base-building vs quality-focus guidance
+  - Race-countdown phases (>21 days → build; 10–21 → taper; 3–10 → final taper; ≤3 → rest)
+  - Overall score nudge when score is below the 65-point "Race Ready" threshold
+
+- **`recommendations` field on `ReadinessScoreResponse`** (`schemas.py`) — `list[str]`
+  field (default `[]`) carrying the output of `compute_readiness_recommendations`.
+
+### Changed
+
+- **`GET /ai/readiness-score`** (`routers/ai.py`) — imports and calls
+  `compute_readiness_recommendations` and includes the result in every response.
+
 ## [0.23.0] - 2026-04-24
 
 ### Changed

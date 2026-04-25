@@ -1,6 +1,8 @@
 import { differenceInDays, format } from 'date-fns'
+import { useEffect, useRef } from 'react'
 import { Activity, Loader2, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
@@ -10,15 +12,47 @@ import RaceReadinessCard from '../components/RaceReadinessCard'
 import FitFileUpload from '../components/FitFileUpload'
 import StravaConnect from '../components/StravaConnect'
 import { useStravaSync } from '../hooks/useStravaSync'
+import { fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
+
+const REFRESH_INTERVAL_MS = 60 * 1000 // refresh all graphs once per minute
 
 export default function ExpertPage() {
-  const { userProfile, riderAssessment, stravaAnalysisComplete } = useAppStore(
+  const { userProfile, riderAssessment, stravaAnalysisComplete, authToken, setMetricsHistory, setRideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       riderAssessment: s.riderAssessment,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
+      authToken: s.authToken,
+      setMetricsHistory: s.setMetricsHistory,
+      setRideMetricsHistory: s.setRideMetricsHistory,
     }))
   )
+
+  const queryClient = useQueryClient()
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Periodically refresh metrics data and the readiness score so charts stay
+  // current as the date progresses (e.g. at midnight or after background imports).
+  useEffect(() => {
+    if (!authToken) return
+    const refresh = async () => {
+      try {
+        const [metrics, rideMetrics] = await Promise.all([
+          fetchMetricsHistory(authToken),
+          fetchRideMetricsHistory(authToken),
+        ])
+        setMetricsHistory(metrics)
+        setRideMetricsHistory(rideMetrics)
+        queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
+      } catch {
+        // silently ignore — stale data is acceptable
+      }
+    }
+    intervalRef.current = setInterval(refresh, REFRESH_INTERVAL_MS)
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
+    }
+  }, [authToken, setMetricsHistory, setRideMetricsHistory, queryClient])
 
   const { stravaActivities, analysisStatus, analysisError, newRidesCount } = useStravaSync()
 

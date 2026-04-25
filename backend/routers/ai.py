@@ -18,7 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time, build_ride_analysis
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time, build_ride_analysis
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
@@ -643,6 +643,13 @@ async def readiness_score(
         projected_ctl=projected_ctl,
         projected_atl=projected_atl,
         projected_tsb=projected_tsb,
+        recommendations=compute_readiness_recommendations(
+            ctl=current_result["ctl"],
+            atl=current_result["atl"],
+            tsb=current_result["tsb"],
+            score=current_result["score"],
+            days_until_race=days_until_race,
+        ),
     )
 
 

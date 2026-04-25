@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { TrendingUp, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import type { AthleteMetricSnapshot } from '../store/useAppStore'
 import { triggerStravaHistoryImport, getStravaImportProgress } from '../services/strava'
@@ -22,6 +23,7 @@ export default function ProgressionChart() {
   )
 
   const { recalculateAll } = useMetricsPipeline()
+  const queryClient = useQueryClient()
 
   type RecalcStatus = 'idle' | 'importing' | 'recalculating' | 'done' | 'error'
   const [recalcStatus, setRecalcStatus] = useState<RecalcStatus>('idle')
@@ -72,6 +74,8 @@ export default function ProgressionChart() {
       // Step 3: rebuild CTL/ATL/TSB per-ride snapshots and refresh store
       setRecalcStatus('recalculating')
       await recalculateAll()
+      // Invalidate the readiness score so RaceReadinessCard re-fetches with fresh data
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setRecalcStatus('done')
       setTimeout(() => setRecalcStatus('idle'), 3000)
     } catch (e) {

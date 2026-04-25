@@ -1,8 +1,32 @@
 import { useQuery } from '@tanstack/react-query'
-import { Target, TrendingUp, Zap, Calendar } from 'lucide-react'
+import { Target, TrendingUp, Zap, Calendar, Info } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
 import type { ReadinessScore } from '../services/ai'
+
+// ---------------------------------------------------------------------------
+// Explanation panel — shown to the right of the score
+// ---------------------------------------------------------------------------
+
+function ReadinessExplainer() {
+  return (
+    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-600 space-y-1.5 min-w-[180px]">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Info size={12} className="text-gray-400 flex-shrink-0" />
+        <span className="font-semibold text-gray-700">How it works</span>
+      </div>
+      <ul className="space-y-1 list-disc list-inside leading-snug">
+        <li><span className="font-medium">CTL</span> — 42-day fitness load (higher = fitter)</li>
+        <li><span className="font-medium">ATL</span> — 7-day fatigue load (lower = fresher)</li>
+        <li><span className="font-medium">TSB</span> = CTL − ATL (your &ldquo;form&rdquo;)</li>
+        <li>Score blends form (65 %) + fitness (35 %)</li>
+        <li>Optimal TSB for racing: <span className="font-medium">+5 to +15</span></li>
+        <li>Score ≥ 65 = Race Ready; ≥ 80 = Peak Form</li>
+        <li>Taper 7–14 days before race to reach peak TSB</li>
+      </ul>
+    </div>
+  )
+}
 
 function ScoreRing({ score }: { score: number }) {
   const radius = 36
@@ -165,6 +189,21 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
       <p className="text-xs text-gray-400">
         TSB &lt; −20 = fatigue · TSB +5 to +15 = peak race form
       </p>
+
+      {/* Recommendations */}
+      {data.recommendations.length > 0 && (
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-gray-500 mb-1.5">What to do next</p>
+          <ul className="space-y-1">
+            {data.recommendations.map((tip) => (
+              <li key={tip} className="flex items-start gap-1.5 text-xs text-gray-700">
+                <span className="text-purple-400 mt-0.5">•</span>
+                <span>{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -176,7 +215,8 @@ export default function RaceReadinessCard() {
     queryKey: ['readiness-score', authToken],
     queryFn: () => fetchReadinessScore(authToken!),
     enabled: !!authToken,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 60 * 1000,        // consider stale after 1 minute
+    refetchInterval: 60 * 1000,  // auto-refetch every minute
   })
 
   return (
@@ -201,7 +241,14 @@ export default function RaceReadinessCard() {
         </p>
       )}
 
-      {data && !isLoading && <ReadinessContent data={data} />}
+      {data && !isLoading && (
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 min-w-0">
+            <ReadinessContent data={data} />
+          </div>
+          <ReadinessExplainer />
+        </div>
+      )}
     </div>
   )
 }

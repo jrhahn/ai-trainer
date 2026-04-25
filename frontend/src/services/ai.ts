@@ -140,6 +140,7 @@ export interface ReadinessScore {
   projectedCtl?: number | null
   projectedAtl?: number | null
   projectedTsb?: number | null
+  recommendations: string[]
 }
 
 interface BackendReadinessScore {
@@ -155,6 +156,7 @@ interface BackendReadinessScore {
   projected_ctl?: number | null
   projected_atl?: number | null
   projected_tsb?: number | null
+  recommendations?: string[]
 }
 
 export async function fetchReadinessScore(authToken: string): Promise<ReadinessScore> {
@@ -172,6 +174,7 @@ export async function fetchReadinessScore(authToken: string): Promise<ReadinessS
     projectedCtl: raw.projected_ctl,
     projectedAtl: raw.projected_atl,
     projectedTsb: raw.projected_tsb,
+    recommendations: raw.recommendations ?? [],
   }
 }
 
