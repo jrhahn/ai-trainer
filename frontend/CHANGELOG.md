@@ -5,6 +5,42 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-04-25
+
+### Added
+
+- **`ReadinessExplainer` panel** (`src/components/RaceReadinessCard.tsx`) — a compact
+  "How it works" info box rendered to the right of the readiness score on medium+ screens.
+  Explains CTL, ATL, TSB, the scoring formula (form 65 % + fitness 35 %), the optimal TSB
+  race-day window (+5 to +15), and the taper recommendation in concise bullet points.
+
+- **"What to do next" recommendations** (`src/components/RaceReadinessCard.tsx`) — when the
+  backend returns `recommendations`, they are displayed as purple bullet points below the
+  metrics grid, giving the athlete specific, actionable next steps.
+
+- **Periodic auto-refresh on `ExpertPage`** (`src/pages/ExpertPage.tsx`) — a `useEffect`
+  with a 1-minute `setInterval` re-fetches `metricsHistory` and `rideMetricsHistory` from
+  the backend and invalidates the `readiness-score` React Query cache. This keeps the
+  Training Load chart, Athlete Progression chart, and Race Readiness card current as the
+  date progresses without requiring a page reload.
+
+### Changed
+
+- **`RaceReadinessCard`** (`src/components/RaceReadinessCard.tsx`) — `useQuery` now uses
+  `refetchInterval: 60 * 1000` (down from `staleTime: 5 * 60 * 1000`) so the readiness
+  score auto-refreshes every minute independently. Layout switches to a responsive
+  `flex-col md:flex-row` wrapper to accommodate the new explainer panel.
+
+- **`ProgressionChart` — invalidates readiness query on recalculate**
+  (`src/components/ProgressionChart.tsx`) — after `recalculateAll()` completes,
+  `queryClient.invalidateQueries({ queryKey: ['readiness-score'] })` is called so the Race
+  Readiness card immediately reflects the freshly recalculated metrics without waiting for
+  the next poll cycle. `useQueryClient` import added.
+
+- **`services/ai.ts`** — `ReadinessScore` and `BackendReadinessScore` interfaces gain a
+  `recommendations: string[]` / `recommendations?: string[]` field; `fetchReadinessScore`
+  maps it (defaulting to `[]` for backwards compatibility).
+
 ## [0.18.0] - 2026-04-24
 
 ### Added

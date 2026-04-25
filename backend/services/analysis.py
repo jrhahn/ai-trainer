@@ -415,6 +415,76 @@ def compute_readiness_score(
     }
 
 
+def compute_readiness_recommendations(
+    ctl: float,
+    atl: float,
+    tsb: float,
+    score: float,
+    days_until_race: int,
+) -> list[str]:
+    """Generate short, actionable bullet-point recommendations to improve race readiness.
+
+    Recommendations are derived from the athlete's current CTL (fitness), ATL
+    (fatigue), TSB (form), overall score, and the time left until race day.
+
+    Returns a list of short strings — each is one bullet point.
+    """
+    tips: list[str] = []
+
+    # --- TSB / form feedback ---
+    if tsb < -20:
+        tips.append("You are heavily fatigued — prioritise 2–3 easy recovery rides this week.")
+    elif tsb < -10:
+        tips.append("Fatigue is elevated — include at least one full rest day before intensity work.")
+    elif tsb < 0:
+        tips.append("Slight fatigue: balance training stress with adequate sleep and nutrition.")
+    elif tsb <= 10:
+        tips.append("Form is neutral — good time for quality interval sessions to build fitness.")
+    elif tsb <= 20:
+        tips.append("Form is optimal for racing. Maintain with short openers; avoid heavy loads.")
+    else:
+        tips.append("You are very fresh — consider adding some intensity to avoid detraining.")
+
+    # --- CTL / fitness feedback ---
+    if ctl < 30:
+        tips.append("Build your fitness base with consistent 45–90 min rides 3–4 times per week.")
+    elif ctl < 60:
+        tips.append("Add one longer endurance ride per week (2–3 h) to raise your fitness base.")
+    elif ctl < 80:
+        tips.append("Fitness is solid — focus on quality over quantity; one hard session per week.")
+    else:
+        tips.append("High fitness level — protect your CTL with consistent training and avoid gaps.")
+
+    # --- Race-specific advice ---
+    if days_until_race > 0:
+        if days_until_race > 21:
+            tips.append(
+                f"{days_until_race} days to race: now is the time to accumulate training load."
+            )
+        elif days_until_race > 10:
+            tips.append(
+                f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity."
+            )
+        elif days_until_race > 3:
+            tips.append(
+                f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep."
+            )
+        else:
+            tips.append(
+                f"{days_until_race} day{'s' if days_until_race != 1 else ''} to race: rest up, eat well, and visualise your race plan."
+            )
+    elif days_until_race == 0:
+        tips.append("Race day! Warm up well and trust your training.")
+
+    # --- Overall score nudge ---
+    if score < 40:
+        tips.append("Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days.")
+    elif score < 65:
+        tips.append("You are on track — keep consistent training and manage fatigue leading up to race day.")
+
+    return tips
+
+
 def _project_training_load(
     plan_days: list[dict],
     ftp: float,

@@ -416,6 +416,8 @@ class ReadinessScoreResponse(BaseModel):
     """Projected ATL at race day."""
     projected_tsb: Optional[float] = None
     """Projected TSB at race day."""
+    recommendations: list[str] = []
+    """Short, actionable bullet-point tips to improve race readiness."""
 
 
 # ---------------------------------------------------------------------------
