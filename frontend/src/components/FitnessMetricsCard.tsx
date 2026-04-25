@@ -68,10 +68,11 @@ const METRICS: MetricField[] = [
 ]
 
 export default function FitnessMetricsCard() {
-  const { authToken, userProfile } = useAppStore(
+  const { authToken, userProfile, riderAssessment } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
+      riderAssessment: s.riderAssessment,
     }))
   )
   const { updateMetrics, isPending } = useMetricsPipeline()
@@ -87,6 +88,9 @@ export default function FitnessMetricsCard() {
 
   const fitnessLevel = userProfile?.fitnessLevel ?? 'intermediate'
   const defaults = buildDefaults(fitnessLevel, userProfile?.maxHeartRate)
+
+  const useEstimatedFTP = userProfile?.useEstimatedFTP ?? false
+  const estimatedFTP = riderAssessment?.estimatedFTP
 
   const startEditing = () => {
     setDraft({
@@ -128,6 +132,15 @@ export default function FitnessMetricsCard() {
       setEditing(false)
     } catch {
       setError('Failed to save. Please try again.')
+    }
+  }
+
+  const handleFtpSourceToggle = async () => {
+    if (!authToken || !userProfile || isPending) return
+    try {
+      await updateMetrics({ useEstimatedFTP: !useEstimatedFTP })
+    } catch {
+      // toggle failure is non-critical; silently ignore
     }
   }
 
@@ -202,21 +215,61 @@ export default function FitnessMetricsCard() {
                   {m.hint && <p className="text-xs text-gray-400 mt-0.5">{m.hint}</p>}
                 </div>
               ) : (
-                <p className="text-sm font-bold text-gray-900">
-                  {val != null ? (
-                    <>
-                      {val}
-                      <span className="font-normal text-gray-500">{m.unit}</span>
-                    </>
-                  ) : (
-                    <span className="text-gray-400 font-normal text-xs">Not set</span>
+                <div className="space-y-0.5">
+                  <p className="text-sm font-bold text-gray-900">
+                    {val != null ? (
+                      <>
+                        {val}
+                        <span className="font-normal text-gray-500">{m.unit}</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 font-normal text-xs">Not set</span>
+                    )}
+                  </p>
+                  {/* Estimated FTP debug info — shown only for the FTP field */}
+                  {m.key === 'currentFTP' && estimatedFTP != null && (
+                    <p className="text-xs text-gray-400">
+                      (estimated FTP: {estimatedFTP}&thinsp;W)
+                    </p>
                   )}
-                </p>
+                </div>
               )}
             </div>
           )
         })}
       </div>
+
+      {/* FTP source toggle — visible outside edit mode when an estimated FTP exists */}
+      {!editing && estimatedFTP != null && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={useEstimatedFTP}
+              disabled={isPending}
+              onClick={handleFtpSourceToggle}
+              className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 disabled:opacity-50 ${
+                useEstimatedFTP ? 'bg-purple-500' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${
+                  useEstimatedFTP ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className="text-xs text-gray-600">
+              Use estimated FTP for calculations
+            </span>
+          </label>
+          <p className="text-xs text-gray-400 mt-1 ml-11">
+            {useEstimatedFTP
+              ? 'Estimated FTP is used. Toggle off to use your entered value.'
+              : 'Your entered FTP is used. Toggle on to use the estimated value instead.'}
+          </p>
+        </div>
+      )}
 
       {!editing && (
         <p className="text-xs text-gray-400 mt-3">
@@ -227,3 +280,4 @@ export default function FitnessMetricsCard() {
     </div>
   )
 }
+

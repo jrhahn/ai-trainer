@@ -5,6 +5,23 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-04-25
+
+### Added
+
+- **FTP source toggle in `FitnessMetricsCard`** (`src/components/FitnessMetricsCard.tsx`)
+  — an accessible toggle switch (visible in expert mode when an estimated FTP exists)
+  lets the user choose between their entered FTP and the AI-estimated FTP for all
+  training-load calculations. The choice is persisted on the user profile.
+
+- **Estimated FTP debug display** (`src/components/FitnessMetricsCard.tsx`) — when an
+  estimated FTP is available it is always shown below the FTP value as
+  `(estimated FTP: X W)` in muted text, regardless of which source is selected.
+
+- **`useEstimatedFTP` field** in `UserProfile` (`src/store/useAppStore.ts`),
+  `BackendUserResponse` (`src/services/user.ts`), and the user-service mapper — the
+  preference is fetched from and persisted to the backend.
+
 ## [0.19.0] - 2026-04-25
 
 ### Added

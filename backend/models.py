@@ -84,6 +84,7 @@ class User(Base):
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
 
+    use_estimated_ftp: Mapped[bool] = mapped_column(Boolean, default=False)
     strava_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     last_strava_activity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)

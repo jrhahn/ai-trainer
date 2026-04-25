@@ -195,7 +195,13 @@ async def analyse_activities(
     threshold_hr_value = result.get("estimatedThresholdHR")
     if ftp_value is not None or threshold_hr_value is not None:
         plan_days = training_plan
-        ftp_for_load = ftp_value or current_user.current_ftp or 0
+        # Respect the user's FTP source preference for training-load computations.
+        # By default use the user-entered FTP; only fall back to the estimated
+        # value when use_estimated_ftp is explicitly enabled or no manual value exists.
+        if current_user.use_estimated_ftp:
+            ftp_for_load = ftp_value or current_user.current_ftp or 0
+        else:
+            ftp_for_load = current_user.current_ftp or ftp_value or 0
         ctl: float | None = None
         atl: float | None = None
         tsb: float | None = None
@@ -223,7 +229,12 @@ async def analyse_activities(
             current_user.last_strava_activity_id = newest_id
 
     # --- Incremental ride-metrics chain ---
-    ftp_for_chain = float(ftp_value or current_user.current_ftp or 0)
+    # Prefer user-entered FTP for all ride-metric computations unless the user
+    # has explicitly opted into using the estimated value.
+    if current_user.use_estimated_ftp:
+        ftp_for_chain = float(ftp_value or current_user.current_ftp or 0)
+    else:
+        ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
     if body.activities and ftp_for_chain > 0:
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
         seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0

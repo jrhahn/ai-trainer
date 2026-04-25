@@ -264,11 +264,20 @@ async def adapt_training_plan(
 ) -> list[dict]:
     today = datetime.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
-    ftp = float(
-        (rider_assessment or {}).get("estimatedFTP")
-        or profile.get("currentFTP")
-        or 0
-    )
+    # Prefer user-entered FTP for load computation; fall back to estimated
+    # only when use_estimated_ftp is explicitly set or no manual value exists.
+    if profile.get("useEstimatedFTP"):
+        ftp = float(
+            (rider_assessment or {}).get("estimatedFTP")
+            or profile.get("currentFTP")
+            or 0
+        )
+    else:
+        ftp = float(
+            profile.get("currentFTP")
+            or (rider_assessment or {}).get("estimatedFTP")
+            or 0
+        )
     training_load = compute_training_load(plan, ftp) if ftp > 0 else None
 
     # Detect taper window: if race is within 14 days, pass the remaining days
@@ -345,11 +354,19 @@ async def ask_trainer(
     plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
 
     # --- Task 1: Compute training load from the plan ---
-    ftp = float(
-        (rider_assessment or {}).get("estimatedFTP")
-        or profile.get("currentFTP")
-        or 0
-    )
+    # Prefer user-entered FTP; only use estimated when explicitly opted in.
+    if profile.get("useEstimatedFTP"):
+        ftp = float(
+            (rider_assessment or {}).get("estimatedFTP")
+            or profile.get("currentFTP")
+            or 0
+        )
+    else:
+        ftp = float(
+            profile.get("currentFTP")
+            or (rider_assessment or {}).get("estimatedFTP")
+            or 0
+        )
     training_load = compute_training_load(plan, ftp) if ftp > 0 and plan else None
 
     system_prompt = ask_trainer_system(

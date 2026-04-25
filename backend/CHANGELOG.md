@@ -5,6 +5,33 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-04-25
+
+### Added
+
+- **`use_estimated_ftp` column on `User` model** (`models.py`) — boolean flag (default
+  `False`) controlling whether AI-estimated or user-entered FTP is used for training-load
+  computations (TSS, CTL, ATL, TSB).
+
+- **Alembic migration `20260425_000001_add_use_estimated_ftp`** — adds the column to the
+  `users` table with `server_default=false()`, backward-compatible with existing data.
+
+### Changed
+
+- **FTP priority for training-load calculations** (`routers/ai.py` `analyse_activities`)
+  — user-entered FTP (`current_ftp`) is now the default for all TSS/CTL/ATL computations.
+  Estimated FTP is only used when `use_estimated_ftp=True`. Previously estimated FTP
+  always took precedence.
+
+- **FTP priority in AI plan generation / chat** (`services/ai_service.py`) —
+  `adapt_training_plan()` and `ask_trainer()` now check `profile["useEstimatedFTP"]` to
+  decide which FTP value is passed to the AI prompt (user-entered first by default).
+
+- **User schemas** (`schemas.py`) — `UserResponse`, `UpdateProfileRequest`, and
+  `UserProfileSchema` gain `use_estimated_ftp` / `useEstimatedFTP` field.
+
+- **Users router** (`routers/users.py`) — `_user_to_response()` maps the new field.
+
 ## [0.24.0] - 2026-04-25
 
 ### Added

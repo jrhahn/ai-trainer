@@ -94,6 +94,7 @@ export interface UserProfile {
   thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
+  useEstimatedFTP?: boolean
 }
 
 export interface WorkoutFeedback {
