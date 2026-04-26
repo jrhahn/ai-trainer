@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -252,6 +252,7 @@ async def get_ride_metrics_history(
 @router.post("/recalculate-metrics", response_model=schemas.RecalculateMetricsResponse)
 async def recalculate_metrics(
     body: schemas.RecalculateMetricsRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RecalculateMetricsResponse:
@@ -261,6 +262,13 @@ async def recalculate_metrics(
             db, current_user, body.ftp_override
         )
     except ValueError as exc:
+        request_id = getattr(request.state, "request_id", None)
+        logger.warning(
+            "recalculate-metrics rejected for user %s (request_id=%s): %s",
+            current_user.id,
+            request_id,
+            exc,
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return schemas.RecalculateMetricsResponse(updated=updated, ftp_used=ftp_used)
 

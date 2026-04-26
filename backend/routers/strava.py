@@ -1,6 +1,7 @@
 """Strava OAuth and activity proxy routes."""
 
 import asyncio
+import logging
 import secrets
 import time
 import urllib.parse
@@ -27,6 +28,8 @@ from services.strava_service import (
 router = APIRouter(tags=["strava"])
 STATE_TTL_SECONDS = 600
 _oauth_states: dict[str, tuple[str, float]] = {}
+
+logger = logging.getLogger(__name__)
 
 # Per-user background import progress  {user_id: {status, total, processed, skipped, error}}
 _import_progress: dict[int, dict] = {}
@@ -326,6 +329,14 @@ async def _run_import_background(
         }
     except Exception as exc:  # noqa: BLE001
         prev = _import_progress.get(user_id, {})
+        logger.error(
+            "Background Strava import failed for user %s after processing %s/%s activities: %s",
+            user_id,
+            prev.get("processed", 0),
+            prev.get("total", 0),
+            exc,
+            exc_info=True,
+        )
         _import_progress[user_id] = {
             "status": "error",
             "total": prev.get("total", 0),
