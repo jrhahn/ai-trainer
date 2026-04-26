@@ -55,7 +55,7 @@ Training plan scheduling rules (ALWAYS follow these):
 # ---------------------------------------------------------------------------
 
 
-def analyse_activities_system(sport_type: str = "cycling") -> str:
+def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None = None) -> str:
     """Return the system prompt for activity analysis.
 
     When *sport_type* is ``"running"`` (or any non-cycling type) a running-
@@ -102,10 +102,16 @@ def analyse_activities_system(sport_type: str = "cycling") -> str:
         persona = COACH_PERSONA
         activity_noun = "ride"
         activities_noun = "rides"
-        ftp_field = (
-            "- \"estimatedFTP\": integer watts — use the pre-computed value when provided, "
-            "otherwise estimate from activity summaries; null if no power data\n"
-        )
+        if user_ftp is not None:
+            ftp_field = (
+                f'- "estimatedFTP": use the athlete\'s entered FTP ({user_ftp} W) verbatim — '
+                "do NOT estimate from activity data; regular rides are not suitable for FTP estimation\n"
+            )
+        else:
+            ftp_field = (
+                '- "estimatedFTP": integer watts — use the pre-computed value when provided, '
+                "otherwise estimate from activity summaries; null if no power data\n"
+            )
         threshold_hr_field = (
             "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
             "otherwise estimate from activity summaries; null if no HR data\n"
@@ -219,6 +225,7 @@ def analyse_activities_computed_section(
     computed_threshold_hr: int | None,
     max_heart_rate: int | None,
     computed_hr_zones: dict | None,
+    is_user_entered_ftp: bool = False,
 ) -> str:
     """Build the contextual block describing algorithmically derived metrics.
 
@@ -226,10 +233,16 @@ def analyse_activities_computed_section(
     """
     section = ""
     if computed_ftp is not None:
-        section += (
-            f"\nAlgorithmically estimated FTP from stream data: {computed_ftp} W "
-            "(95 % of best 20-min average power)"
-        )
+        if is_user_entered_ftp:
+            section += (
+                f"\nAthlete's entered FTP: {computed_ftp} W "
+                "(set directly by the athlete — use this value verbatim)"
+            )
+        else:
+            section += (
+                f"\nAlgorithmically estimated FTP from stream data: {computed_ftp} W "
+                "(95 % of best 20-min average power)"
+            )
     if computed_threshold_hr is not None:
         section += (
             f"\nAlgorithmically estimated threshold HR: {computed_threshold_hr} bpm "
