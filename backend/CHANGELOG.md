@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.25.1] - 2026-04-25
+## [0.25.2] - 2026-04-26
+
+### Added
+
+- **`X-Request-ID` middleware** (`main.py`) — every request is tagged with a correlation
+  ID read from the incoming `X-Request-ID` header (client-generated) or a fresh UUID when
+  absent; the ID is stored on `request.state.request_id` for route handlers and exception
+  handlers, and is echoed back in the response header so browser logs and server logs can
+  be correlated by ID.  CORS is updated to allow and expose the header.
+
+- **Global `HTTPException` handler with structured logging** (`main.py`) — replaces the
+  default FastAPI handler; logs method, path, status, and `request_id` at `WARNING` for
+  4xx and `ERROR` for 5xx, then returns the same `{"detail": …}` JSON body.  Any
+  `WWW-Authenticate` or other headers set by the raising code are preserved.
+
+- **`recalculate-metrics` failure log** (`routers/users.py`) — `ValueError` rejections
+  are now logged at `WARNING` with `user_id` and `request_id` before the 400 is raised.
+
+- **Background Strava import failure log** (`routers/strava.py`) — unhandled exceptions
+  in `_run_import_background` are now logged at `ERROR` with `user_id`, processed/total
+  activity counts, and a full traceback (`exc_info=True`) before updating the progress
+  state to `"error"`.
+
+## [0.25.1] - 2026-04-25
 
 ### Fixed
 

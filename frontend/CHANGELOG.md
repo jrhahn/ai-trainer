@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.20.1] - 2026-04-25
+## [0.20.2] - 2026-04-26
+
+### Added
+
+- **Structured request failure logging in `apiFetch`** (`src/services/api.ts`) — every
+  failed HTTP call now emits a `console.error('[api] Request failed', …)` object that
+  includes `method`, `path`, `status`, `contentType`, and a stable `requestId`, making
+  it easy to correlate browser console entries with backend logs.
+
+- **`X-Request-ID` correlation header** (`src/services/api.ts`) — each request is tagged
+  with a client-generated ID (format `<timestamp36>-<random6>`); the server-echoed ID is
+  preferred when available so both ends reference the same identifier.
+
+- **Parse-failure diagnostics** (`src/services/api.ts`) — when a 2xx response body cannot
+  be parsed as JSON the client logs `'[api] Failed to parse successful response as JSON'`
+  with `status`, `contentType`, `requestId`, and `parseError`, then throws
+  `'Unexpected response format from server'` instead of a raw `SyntaxError`; when a
+  non-OK body is not JSON a `parseFailReason` field is included in the error log.
+
+- **New `apiFetch` tests** (`src/services/api.test.ts`) — four new tests covering
+  `X-Request-ID` header presence, structured `console.error` on failure,
+  `parseFailReason` on non-JSON error bodies, and `console.error` + meaningful throw on
+  2xx non-JSON responses (11 tests total, all passing).
+
+## [0.20.1] - 2026-04-25
 
 ### Fixed
 
