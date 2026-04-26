@@ -165,6 +165,7 @@ async def analyse_activities(
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
             training_plan=training_plan or None,
+            user_ftp=int(current_user.current_ftp) if current_user.current_ftp else None,
         )
     except AIRateLimitError:
         raise HTTPException(

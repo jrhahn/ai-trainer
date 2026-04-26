@@ -86,6 +86,7 @@ async def analyse_strava_activities(
     max_heart_rate: int | None = None,
     sport_type: str = "cycling",
     training_plan: list[dict] | None = None,
+    user_ftp: int | None = None,
 ) -> dict:
     is_running = sport_type.lower() in ("running", "run")
 
@@ -129,11 +130,15 @@ async def analyse_strava_activities(
         computed_hr_zones = compute_hr_zones(max_heart_rate)
 
     # --- Build the contextual section describing computed metrics ---
+    # Use the user-entered FTP for the prompt context so the AI knows the correct
+    # value; computed_ftp is kept only for per-ride categorisation above.
+    ftp_for_prompt = user_ftp if user_ftp is not None else computed_ftp
     computed_section = analyse_activities_computed_section(
-        computed_ftp, computed_threshold_hr, max_heart_rate, computed_hr_zones
+        ftp_for_prompt, computed_threshold_hr, max_heart_rate, computed_hr_zones,
+        is_user_entered_ftp=(user_ftp is not None),
     )
 
-    system_prompt = analyse_activities_system(sport_type=sport_type)
+    system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
 
     # Build the per-ride analysis section for the AI prompt
     ride_analyses_section = ""
@@ -151,12 +156,19 @@ async def analyse_strava_activities(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
 
-    # Override with algorithmically derived values so the AI cannot contradict them
-    if computed_ftp is not None:
+    # Override estimatedFTP: always prefer the user-entered FTP when available.
+    # Regular rides are not suitable for FTP estimation, so the user-entered value
+    # is authoritative.  The algorithmically-derived computed_ftp is used as a
+    # fallback when no user-entered FTP exists.  When neither is present, keep
+    # whatever the AI returned (summary-only path with no streams).
+    if user_ftp is not None:
+        parsed["estimatedFTP"] = user_ftp
+    elif computed_ftp is not None and not is_running:
         parsed["estimatedFTP"] = computed_ftp
     elif is_running:
         # Ensure FTP is explicitly null for running activities
         parsed["estimatedFTP"] = None
+    # else: no user FTP, no computed FTP, non-running — preserve the AI's estimate
     if computed_threshold_hr is not None:
         parsed["estimatedThresholdHR"] = computed_threshold_hr
     if computed_hr_zones is not None:
