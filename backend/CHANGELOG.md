@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.1] - 2026-04-25
+
+### Fixed
+
+- **Manual metric recalculation refreshes persisted ride feedback** (`services/metrics_service.py`)
+  — rebuilding TSS, CTL, ATL, and TSB now also regenerates `rider_assessment.last_ride_feedback`
+  from the latest recalculated ride so coach feedback stays aligned with the new FTP-based metrics.
+
+- **Regression test for recalculation feedback refresh** (`tests/test_users.py`) — added an API
+  test that confirms `POST /users/me/recalculate-metrics` updates the stored last-ride feedback
+  after recalculation.
+
 ## [0.25.0] - 2026-04-25
 
 ### Added

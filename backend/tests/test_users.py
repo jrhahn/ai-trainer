@@ -245,6 +245,53 @@ async def test_recalculate_metrics_creates_per_ride_snapshots(client, auth_heade
 
 
 @pytest.mark.asyncio
+async def test_recalculate_metrics_refreshes_last_ride_feedback(client, auth_headers, mock_ai_service):
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 4001,
+                    "name": "Ride A",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 200,
+                    "startDate": "2026-03-01T09:00:00Z",
+                    "averageWatts": 200,
+                },
+                {
+                    "id": 4002,
+                    "name": "Ride B",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 5400,
+                    "elapsedTime": 5400,
+                    "totalElevationGain": 400,
+                    "startDate": "2026-03-10T09:00:00Z",
+                    "averageWatts": 220,
+                },
+            ]
+        },
+    )
+
+    response = await client.post(
+        "/api/v1/users/me/recalculate-metrics",
+        headers=auth_headers,
+        json={"ftpOverride": 260},
+    )
+    assert response.status_code == 200
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.status_code == 200
+    last_ride_feedback = me.json()["riderAssessment"]["lastRideFeedback"]
+    assert "Recalculated with FTP 260 W" in last_ride_feedback
+    assert "Post-ride load is" in last_ride_feedback
+
+
+@pytest.mark.asyncio
 async def test_ride_metrics_history_empty(client, auth_headers):
     """GET /ride-metrics-history returns an empty list for a new user."""
     response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)

@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-04-25
+
+### Fixed
+
+- **Recalculate flow refreshes last-ride feedback** (`src/hooks/useMetricsPipeline.ts`) — after
+  a manual metrics rebuild, the frontend now re-fetches the current user and updates the
+  Zustand `riderAssessment` slice so the latest coach note appears immediately without a
+  page reload.
+
+- **Regression coverage for recalculation refresh** (`src/hooks/useMetricsPipeline.test.ts`) —
+  added a focused hook test that verifies recalculation replaces stale `lastRideFeedback`
+  in the store with the backend-refreshed value.
+
 ## [0.20.0] - 2026-04-25
 
 ### Added
