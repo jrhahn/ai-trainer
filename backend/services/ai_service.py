@@ -158,15 +158,17 @@ async def analyse_strava_activities(
 
     # Override estimatedFTP: always prefer the user-entered FTP when available.
     # Regular rides are not suitable for FTP estimation, so the user-entered value
-    # is authoritative.  The algorithmically-derived computed_ftp is only used as
-    # a fallback when no user-entered FTP exists.
+    # is authoritative.  The algorithmically-derived computed_ftp is used as a
+    # fallback when no user-entered FTP exists.  When neither is present, keep
+    # whatever the AI returned (summary-only path with no streams).
     if user_ftp is not None:
         parsed["estimatedFTP"] = user_ftp
     elif computed_ftp is not None and not is_running:
         parsed["estimatedFTP"] = computed_ftp
-    else:
-        # Ensure FTP is explicitly null for running activities or when nothing is available
+    elif is_running:
+        # Ensure FTP is explicitly null for running activities
         parsed["estimatedFTP"] = None
+    # else: no user FTP, no computed FTP, non-running — preserve the AI's estimate
     if computed_threshold_hr is not None:
         parsed["estimatedThresholdHR"] = computed_threshold_hr
     if computed_hr_zones is not None:
