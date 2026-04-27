@@ -14,6 +14,27 @@ import math
 # 87% is a well-established estimate for trained cyclists.
 LTHR_RATIO = 0.87
 
+# Power-duration windows used for FTP inference.  The factor converts a maximal
+# mean power for that duration to an FTP-like estimate.
+FTP_POWER_DURATION_FACTORS: tuple[tuple[float, float], ...] = (
+    (10.0, 0.90),
+    (12.0, 0.92),
+    (20.0, 0.95),
+    (30.0, 0.97),
+    (40.0, 0.985),
+    (60.0, 1.00),
+)
+
+# Shorter efforts are useful for fitting a power-duration curve, but are too
+# VO2-heavy to convert directly to FTP.
+CRITICAL_POWER_DURATIONS: tuple[float, ...] = (5.0, 8.0, 12.0, 20.0, 30.0, 40.0)
+FTP_ESTIMATE_DURATIONS: tuple[float, ...] = tuple(
+    sorted(
+        {minutes for minutes, _factor in FTP_POWER_DURATION_FACTORS}
+        | set(CRITICAL_POWER_DURATIONS)
+    )
+)
+
 # Average-power threshold that separates endurance from tempo zones (~76 % FTP).
 # Below this level a sustained ride is aerobic/endurance; at or above it the
 # effort is in the tempo/sweet-spot band.
@@ -95,6 +116,157 @@ def hr_corrected_ftp(
     lthr = max_hr * LTHR_RATIO
     corrected = interval_power * (lthr / interval_hr)
     return round(corrected)
+
+
+def _segment_average(values: list[float], start: int, end: int) -> float | None:
+    segment = values[start : end + 1]
+    if not segment:
+        return None
+    return sum(segment) / len(segment)
+
+
+def _duration_hr_is_hard_enough(
+    avg_hr: float | None,
+    max_hr: int | None,
+    duration_minutes: float,
+) -> bool:
+    """Return whether HR supports treating a window as FTP evidence.
+
+    HR is deliberately used as a gate, not as a multiplier.  Low-HR windows may
+    still be good training, but they are weak evidence for threshold power.
+    """
+    if avg_hr is None or not max_hr or max_hr <= 0:
+        return True
+    hr_fraction = avg_hr / max_hr
+    if duration_minutes < 20.0:
+        return hr_fraction >= 0.84
+    if duration_minutes < 40.0:
+        return hr_fraction >= 0.82
+    return hr_fraction >= 0.80
+
+
+def _power_window_is_steady_enough(
+    watts: list[float] | None,
+    start: int,
+    end: int,
+) -> bool:
+    if watts is None or len(watts) <= end:
+        return True
+    segment = watts[start : end + 1]
+    if len(segment) < 2:
+        return False
+    mean_power = sum(segment) / len(segment)
+    if mean_power <= 0:
+        return False
+    variance = sum((value - mean_power) ** 2 for value in segment) / len(segment)
+    return (math.sqrt(variance) / mean_power) <= 0.20
+
+
+def _best_power_points(
+    watts: list[float],
+    time_stream: list[float],
+    durations_minutes: tuple[float, ...],
+) -> dict[float, tuple[float, int, int]]:
+    points: dict[float, tuple[float, int, int]] = {}
+    for minutes in durations_minutes:
+        best, start, end = best_n_min_power(watts, time_stream, minutes)
+        if best is not None and best >= 50.0:
+            points[minutes] = (best, start, end)
+    return points
+
+
+def _critical_power_from_points(points: dict[float, float]) -> int | None:
+    """Fit CP from a maximal mean power curve using work = CP × time + W'."""
+    if len(points) < 3:
+        return None
+
+    durations = sorted(points)
+    if (durations[-1] - durations[0]) < 15.0:
+        return None
+
+    shortest_power = points[durations[0]]
+    longest_power = points[durations[-1]]
+    # A flat curve usually means the ride did not expose maximal short efforts,
+    # so a CP fit would overstate threshold.
+    if shortest_power < longest_power * 1.05:
+        return None
+
+    xs = [minutes * 60.0 for minutes in durations]
+    ys = [points[minutes] * minutes * 60.0 for minutes in durations]
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    den = sum((x - mean_x) ** 2 for x in xs)
+    if den <= 0:
+        return None
+    cp = sum((xs[i] - mean_x) * (ys[i] - mean_y) for i in range(len(xs))) / den
+    if cp <= 0:
+        return None
+
+    longest_estimate = longest_power * dict(FTP_POWER_DURATION_FACTORS).get(
+        durations[-1], 0.95
+    )
+    lower_bound = longest_estimate * 0.90
+    upper_bound = min(shortest_power * 0.95, longest_estimate * 1.08)
+    if not (lower_bound <= cp <= upper_bound):
+        return None
+    return round(cp)
+
+
+def _ftp_candidates_from_power_duration_points(
+    points: dict[float, tuple[float, int, int]],
+    watts: list[float] | None = None,
+    hr_data: list[float] | None = None,
+    max_heart_rate: int | None = None,
+    require_hr_for_short_efforts: bool = True,
+) -> list[int]:
+    candidates: list[int] = []
+
+    for minutes, factor in FTP_POWER_DURATION_FACTORS:
+        point = points.get(minutes)
+        if point is None:
+            continue
+        if (
+            require_hr_for_short_efforts
+            and minutes < 20.0
+            and (hr_data is None or not max_heart_rate)
+        ):
+            continue
+        power, start, end = point
+        if not _power_window_is_steady_enough(watts, start, end):
+            continue
+        avg_hr = (
+            _segment_average(hr_data, start, end)
+            if hr_data is not None and len(hr_data) > end
+            else None
+        )
+        if _duration_hr_is_hard_enough(avg_hr, max_heart_rate, minutes):
+            candidates.append(round(power * factor))
+
+    cp_points = {
+        minutes: power
+        for minutes, (power, start, end) in points.items()
+        if minutes in CRITICAL_POWER_DURATIONS
+        and _power_window_is_steady_enough(watts, start, end)
+        and (
+            not require_hr_for_short_efforts
+            or minutes >= 20.0
+            or (hr_data is not None and max_heart_rate is not None)
+        )
+        and _duration_hr_is_hard_enough(
+            (
+                _segment_average(hr_data, start, end)
+                if hr_data is not None and len(hr_data) > end
+                else None
+            ),
+            max_heart_rate,
+            minutes,
+        )
+    }
+    cp = _critical_power_from_points(cp_points)
+    if cp is not None:
+        candidates.append(cp)
+
+    return candidates
 
 
 def compute_hr_zones(max_hr: int) -> dict:
@@ -801,16 +973,16 @@ def compute_ftp_from_streams(
 ) -> tuple[int | None, int | None]:
     """Estimate FTP and threshold HR from activity stream data.
 
-    Uses two methods per activity and returns the best (highest) FTP estimate:
-    - Method 1: 95 % of best 20-min average power.
-    - Method 2: HR-corrected FTP derived from 10-, 15-, and 20-min best
-      intervals when heart-rate data and ``max_heart_rate`` are available.
+    Uses demonstrated power-duration evidence and returns the best FTP-like
+    estimate.  HR, when available, is only used to reject low-intensity windows;
+    it is not used to scale power into FTP.
 
     Returns ``(computed_ftp, computed_threshold_hr)``.  Both are ``None`` when
     insufficient data is available.
     """
     ftp_candidates: list[int] = []
     threshold_hrs: list[int] = []
+    envelope_points: dict[float, tuple[float, int, int]] = {}
 
     for _act_id, streams in streams_by_id.items():
         watts_data: list[float] = streams.get("watts", {}).get("data", [])
@@ -820,35 +992,53 @@ def compute_ftp_from_streams(
         if not watts_data or not time_data:
             continue
 
-        # --- Method 1: best-20-min power × 0.95 ---
-        best20, start20, end20 = best_n_min_power(watts_data, time_data, 20)
-        if best20 is not None:
-            # FTP is conventionally defined as 95% of best 20-min average power.
-            # This scaling factor accounts for the difference between a maximal
-            # 20-min effort and a true 60-min sustainable power output.
-            ftp_candidates.append(round(best20 * 0.95))
-            # Track average HR during that segment for threshold-HR estimation.
-            if hr_data and len(hr_data) == len(time_data):
-                segment_hr = hr_data[start20 : end20 + 1]
-                if segment_hr:
-                    threshold_hrs.append(round(sum(segment_hr) / len(segment_hr)))
+        points = _best_power_points(
+            watts_data,
+            time_data,
+            FTP_ESTIMATE_DURATIONS,
+        )
+        usable_hr = hr_data if hr_data and len(hr_data) == len(time_data) else None
+        ftp_candidates.extend(
+            _ftp_candidates_from_power_duration_points(
+                points,
+                watts_data,
+                usable_hr,
+                max_heart_rate,
+            )
+        )
+        for minutes, point in points.items():
+            if minutes < 20.0 and (usable_hr is None or not max_heart_rate):
+                continue
+            power, start, end = point
+            if not _power_window_is_steady_enough(watts_data, start, end):
+                continue
+            avg_hr = (
+                _segment_average(usable_hr, start, end)
+                if usable_hr is not None and len(usable_hr) > end
+                else None
+            )
+            if not _duration_hr_is_hard_enough(avg_hr, max_heart_rate, minutes):
+                continue
+            current = envelope_points.get(minutes)
+            if current is None or power > current[0]:
+                envelope_points[minutes] = point
 
-        # --- Method 2: HR-corrected FTP from 10-min and 20-min best intervals ---
-        # For each interval length, if we have both power and HR data, scale the
-        # interval power to what it would be at exactly the lactate-threshold HR.
-        # This is useful when the rider never executed a maximal 20-min effort but
-        # did push hard intervals where HR gives us a physiological reference point.
-        if hr_data and len(hr_data) == len(time_data) and max_heart_rate:
-            for n_min in (10, 15, 20):
-                best_n, s, e = best_n_min_power(watts_data, time_data, n_min)
-                if best_n is not None:
-                    seg_hr = hr_data[s : e + 1]
-                    if seg_hr:
-                        avg_interval_hr = sum(seg_hr) / len(seg_hr)
-                        ftp_hr = hr_corrected_ftp(best_n, avg_interval_hr, max_heart_rate)
-                        if ftp_hr is not None:
-                            ftp_candidates.append(ftp_hr)
+        best20 = points.get(20.0)
+        if best20 is not None and usable_hr:
+            _, start20, end20 = best20
+            avg_hr = _segment_average(usable_hr, start20, end20)
+            if (
+                avg_hr is not None
+                and _duration_hr_is_hard_enough(avg_hr, max_heart_rate, 20.0)
+            ):
+                threshold_hrs.append(round(avg_hr))
 
+    ftp_candidates.extend(
+        _ftp_candidates_from_power_duration_points(
+            envelope_points,
+            require_hr_for_short_efforts=False,
+        )
+    )
     computed_ftp = max(ftp_candidates) if ftp_candidates else None
     computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs)) if threshold_hrs else None
     return computed_ftp, computed_threshold_hr
@@ -865,36 +1055,18 @@ def estimate_ftp_over_time(
     resting_heart_rate: int | None = None,
     smoothing_days: int = 21,
 ) -> list[dict]:
-    """Estimate FTP at different points in time using rides with steady-state power.
+    """Estimate FTP over time from a rolling power-duration envelope.
 
-    For each ride the algorithm produces one raw FTP estimate:
+    Each ride contributes best-power points for standard durations.  FTP is
+    estimated from the strongest recent power-duration curve, using direct
+    duration factors and an optional critical-power fit.  HR, when present, is
+    only used to reject low-intensity windows; it is never used to scale power.
 
-    **HR-corrected method** (preferred — requires ``max_heart_rate``):
-
-    1. Scans the power stream using a sliding 5-minute window.
-    2. Accepts windows whose coefficient of variation (CV = std / mean) is
-       below 15 % as *steady* efforts.
-    3. For each accepted window, scales the observed power to what the athlete
-       could sustain at exactly lactate-threshold HR::
-
-           FTP_est = avg_power × (LTHR / avg_hr),   LTHR = 87 % × max_HR
-
-    4. Takes the **best** (highest) estimate across all steady windows in the
-       ride.
-
-    **Power-only fallback** (used when no HR data or ``max_heart_rate`` is
-    absent):
-
-    Uses the standard FTP-test protocol: best-20-min average power × 0.95.
-    This is meaningful only for rides that contain a maximal 20-minute effort;
-    rides shorter than 20 minutes are skipped in this path.
-
-    After collecting per-ride raw estimates, the **smoothed** FTP for each
-    point is the **maximum raw estimate across all rides in the preceding
-    ``smoothing_days`` days** (inclusive).  The sliding-window max correctly
-    reflects current capability: a single strong performance propagates for
-    the full window while easy / recovery rides — which would produce low
-    estimates — do not drag the series down.
+    For each date, ``raw_ftp`` is the estimate from that ride alone and ``ftp``
+    is recomputed from the best power-duration points across all rides in the
+    preceding ``smoothing_days`` days.  This behaves like a rolling capability
+    envelope: strong rides establish recent ability, while easy rides usually
+    contribute no FTP evidence instead of dragging the estimate down.
 
     Args:
         rides: List of dicts each containing:
@@ -903,14 +1075,14 @@ def estimate_ftp_over_time(
             - ``streams`` (dict of Strava stream objects with ``watts``,
               ``heartrate``, and ``time`` keys)
 
-        max_heart_rate: Athlete's max heart rate in bpm.  Required for the
-            HR-based correction; falls back to the power-only method when not
-            provided.
+        max_heart_rate: Athlete's max heart rate in bpm.  Used only to filter
+            low-intensity HR windows; power-only estimates require longer
+            sustained efforts when not provided.
         resting_heart_rate: Resting HR in bpm.  Reserved for future use; not
             used in the current formula.
         smoothing_days: Size of the sliding window (days) used to take the
-            max over recent raw estimates.  Default 21 (3 weeks) — long enough
-            to smooth noise while still tracking gradual FTP changes.
+            recent power-duration envelope.  Default 21 (3 weeks) — long
+            enough to smooth noise while still tracking gradual FTP changes.
 
     Returns:
         List of ``{"date": str, "ftp": int, "raw_ftp": int}`` dicts ordered
@@ -918,13 +1090,11 @@ def estimate_ftp_over_time(
         produced.
     """
     import datetime as _dt
-    import statistics as _statistics
 
-    STEADY_CV_THRESHOLD = 0.15  # power CV below this → steady interval
-    WINDOW_MINUTES = 5.0        # minimum steady window length (minutes)
-    MIN_POWER_WATTS = 50.0      # ignore near-zero wattage windows
-
-    raw_estimates: list[tuple[str, int]] = []  # (activity_date, raw_ftp_watts)
+    ride_points: list[
+        tuple[str, dict[float, tuple[float, int, int]], list[float], list[float] | None]
+    ] = []
+    raw_estimates: list[tuple[str, int]] = []
 
     for ride in rides:
         activity_date = ride.get("activity_date", "")
@@ -939,55 +1109,18 @@ def estimate_ftp_over_time(
         if not watts or not time_data or len(watts) != len(time_data):
             continue
 
-        target_secs = WINDOW_MINUTES * 60.0
-        n = len(watts)
-        best_ftp_for_ride: int | None = None
-
-        if hr_data and len(hr_data) == len(watts) and max_heart_rate:
-            # --- HR-corrected method: scan 5-min steady windows ---
-            left = 0
-            for right in range(n):
-                # Slide left boundary so window fits within target duration
-                while time_data[right] - time_data[left] > target_secs:
-                    left += 1
-
-                actual_dur = time_data[right] - time_data[left]
-                if actual_dur < target_secs * 0.9:
-                    continue  # window too short
-
-                seg = watts[left : right + 1]
-                if not seg:
-                    continue
-                mean_power = sum(seg) / len(seg)
-                if mean_power < MIN_POWER_WATTS:
-                    continue
-
-                # Reject noisy / variable segments
-                try:
-                    stdev = _statistics.stdev(seg)
-                except _statistics.StatisticsError:
-                    continue
-                cv = stdev / mean_power
-                if cv > STEADY_CV_THRESHOLD:
-                    continue
-
-                seg_hr = hr_data[left : right + 1]
-                if seg_hr:
-                    avg_hr = sum(seg_hr) / len(seg_hr)
-                    ftp_est = hr_corrected_ftp(mean_power, avg_hr, max_heart_rate)
-                    if ftp_est is not None and ftp_est > 0:
-                        if best_ftp_for_ride is None or ftp_est > best_ftp_for_ride:
-                            best_ftp_for_ride = ftp_est
-        else:
-            # --- Power-only fallback: best 20-min power × 0.95 ---
-            # This is the standard field-test protocol (Coggan/Allen).  It is
-            # only meaningful when the rider has produced a maximal 20-min
-            # effort; rides shorter than 20 min are skipped.
-            best_20, _, _ = best_n_min_power(watts, time_data, 20.0)
-            if best_20 is not None and best_20 >= MIN_POWER_WATTS:
-                best_ftp_for_ride = round(best_20 * 0.95)
+        points = _best_power_points(watts, time_data, FTP_ESTIMATE_DURATIONS)
+        usable_hr = hr_data if hr_data and len(hr_data) == len(watts) else None
+        candidates = _ftp_candidates_from_power_duration_points(
+            points,
+            watts,
+            usable_hr,
+            max_heart_rate,
+        )
+        best_ftp_for_ride = max(candidates) if candidates else None
 
         if best_ftp_for_ride is not None:
+            ride_points.append((activity_date, points, watts, usable_hr))
             raw_estimates.append((activity_date, best_ftp_for_ride))
 
     if not raw_estimates:
@@ -995,12 +1128,8 @@ def estimate_ftp_over_time(
 
     # Sort raw estimates by date ascending.
     raw_estimates.sort(key=lambda x: x[0])
+    ride_points.sort(key=lambda x: x[0])
 
-    # --- Sliding-window max smoothing ---
-    # For each estimate on date D, the smoothed FTP is the maximum raw estimate
-    # from any ride within the preceding ``smoothing_days`` days (inclusive of D).
-    # Taking the max (rather than an average / EWMA) means a single strong ride
-    # correctly propagates while easy rides do not drag the series down.
     window = _dt.timedelta(days=max(1, smoothing_days))
 
     result: list[dict] = []
@@ -1015,11 +1144,32 @@ def estimate_ftp_over_time(
             continue
 
         start_date = end_date - window
-        smoothed_ftp = max(
-            est
-            for d_str, est in raw_estimates[: i + 1]
-            if _in_window(d_str, start_date, end_date)
+        envelope_points: dict[float, tuple[float, int, int]] = {}
+        for d_str, points, point_watts, _hr in ride_points:
+            if not _in_window(d_str, start_date, end_date):
+                continue
+            for minutes, point in points.items():
+                if minutes < 20.0 and (_hr is None or not max_heart_rate):
+                    continue
+                power, point_start, point_end = point
+                if not _power_window_is_steady_enough(point_watts, point_start, point_end):
+                    continue
+                avg_hr = (
+                    _segment_average(_hr, point_start, point_end)
+                    if _hr is not None and len(_hr) > point_end
+                    else None
+                )
+                if not _duration_hr_is_hard_enough(avg_hr, max_heart_rate, minutes):
+                    continue
+                current = envelope_points.get(minutes)
+                if current is None or power > current[0]:
+                    envelope_points[minutes] = point
+
+        envelope_candidates = _ftp_candidates_from_power_duration_points(
+            envelope_points,
+            require_hr_for_short_efforts=False,
         )
+        smoothed_ftp = max(envelope_candidates) if envelope_candidates else raw_ftp
         result.append({"date": date_str, "ftp": smoothed_ftp, "raw_ftp": raw_ftp})
 
     return result
