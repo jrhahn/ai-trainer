@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import { apiFetch } from '../services/api'
-import type { ImportProgress } from '../services/strava'
+import { getStravaImportProgress, type ImportProgress } from '../services/strava'
 
 export type { ImportProgress }
 
@@ -13,7 +12,9 @@ export function useImportProgress() {
     status: 'idle',
     total: 0,
     processed: 0,
+    imported: 0,
     skipped: 0,
+    failedActivities: [],
     error: '',
   })
 
@@ -24,7 +25,7 @@ export function useImportProgress() {
     const poll = async () => {
       if (cancelled) return
       try {
-        const data = await apiFetch<ImportProgress>('/strava/import-progress', { token: authToken })
+        const data = await getStravaImportProgress(authToken)
         if (!cancelled) setProgress(data)
       } catch {
         // silently ignore network errors during polling

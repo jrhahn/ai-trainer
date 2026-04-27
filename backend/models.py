@@ -118,6 +118,11 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="RideMetric.activity_date",
     )
+    strava_import_jobs: Mapped[list["StravaImportJob"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="StravaImportJob.started_at",
+    )
 
 
 class TrainingPlan(Base):
@@ -191,6 +196,25 @@ class StravaToken(Base):
     athlete_name: Mapped[str] = mapped_column(String(255), default="")
 
     user: Mapped["User"] = relationship(back_populates="strava_token")
+
+
+class StravaImportJob(Base):
+    __tablename__ = "strava_import_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
+    total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    imported: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_activities: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    error: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="strava_import_jobs")
 
 
 class RiderAssessment(Base):

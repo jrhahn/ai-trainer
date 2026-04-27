@@ -48,7 +48,7 @@ export default function ProgressionChart() {
       if (stravaConnection) {
         // Step 1: kick off a full Strava history import (up to 24 months)
         setRecalcStatus('importing')
-        await triggerStravaHistoryImport(authToken, 24)
+        await triggerStravaHistoryImport(authToken, 24, true)
 
         // Step 2: poll until the background import finishes
         await new Promise<void>((resolve, reject) => {

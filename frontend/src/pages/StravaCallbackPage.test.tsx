@@ -42,22 +42,31 @@ beforeEach(() => {
   // Default: POST starts the import, GET returns done with 42 rides
   mockApiFetch.mockImplementation((path: string) => {
     if (path === '/strava/import-progress') {
-      return Promise.resolve({ status: 'done', total: 42, processed: 42, skipped: 0, error: '' })
+      return Promise.resolve({
+        jobId: 'job-1',
+        status: 'done',
+        total: 42,
+        processed: 42,
+        imported: 42,
+        skipped: 0,
+        failedActivities: [],
+        error: '',
+      })
     }
-    return Promise.resolve({ status: 'started' })
+    return Promise.resolve({ status: 'started', jobId: 'job-1' })
   })
 })
 
 describe('StravaCallbackPage', () => {
   it('shows an error when no success or error param is present', () => {
     setup('')
-    expect(screen.getByText('Connection Failed')).toBeInTheDocument()
+    expect(screen.getByText('Import Failed')).toBeInTheDocument()
     expect(screen.getByText(/No success confirmation received/)).toBeInTheDocument()
   })
 
   it('shows an error when the error query param is present', () => {
     setup('?error=access_denied')
-    expect(screen.getByText('Connection Failed')).toBeInTheDocument()
+    expect(screen.getByText('Import Failed')).toBeInTheDocument()
     expect(screen.getByText('access_denied')).toBeInTheDocument()
   })
 
@@ -65,7 +74,15 @@ describe('StravaCallbackPage', () => {
     // Progress stays at 'running' — component stays in importing step
     mockApiFetch.mockImplementation((path: string) => {
       if (path === '/strava/import-progress') {
-        return Promise.resolve({ status: 'running', total: 50, processed: 10, skipped: 0, error: '' })
+        return Promise.resolve({
+          status: 'running',
+          total: 50,
+          processed: 10,
+          imported: 0,
+          skipped: 0,
+          failedActivities: [],
+          error: '',
+        })
       }
       return new Promise(() => {}) // POST never resolves
     })
@@ -80,24 +97,69 @@ describe('StravaCallbackPage', () => {
     setup('?success=1')
 
     await waitFor(() => {
-      expect(screen.getByText(/All set/i)).toBeInTheDocument()
+      expect(screen.getByText(/Import complete/i)).toBeInTheDocument()
       expect(screen.getByText(/42 rides imported/i)).toBeInTheDocument()
+      expect(screen.getByText(/All processed activities imported successfully/i)).toBeInTheDocument()
     })
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'), { timeout: 3000 })
   })
 
-  it('still reaches done and redirects even when import fails', async () => {
+  it('shows skipped activity details without treating them as fatal', async () => {
     mockApiFetch.mockImplementation((path: string) => {
       if (path === '/strava/import-progress') {
-        return Promise.resolve({ status: 'idle', total: 0, processed: 0, skipped: 0, error: '' })
+        return Promise.resolve({
+          jobId: 'job-1',
+          status: 'done',
+          total: 2,
+          processed: 2,
+          imported: 1,
+          skipped: 1,
+          failedActivities: [
+            {
+              activityId: 222,
+              activityName: 'Broken ride',
+              activityDate: '2026-04-02',
+              reason: 'Stream download failed',
+            },
+          ],
+          error: '',
+        })
       }
-      return Promise.reject(new Error('network error'))
+      return Promise.resolve({ status: 'started', jobId: 'job-1' })
     })
     setup('?success=1')
 
-    await waitFor(() => expect(screen.getByText(/All set/i)).toBeInTheDocument())
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'), { timeout: 3000 })
+    await waitFor(() => {
+      expect(screen.getByText(/Import complete/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 ride imported, 1 skipped/i)).toBeInTheDocument()
+      expect(screen.getByText(/Broken ride/i)).toBeInTheDocument()
+      expect(screen.getByText(/Stream download failed/i)).toBeInTheDocument()
+    })
+    expect(mockNavigate).not.toHaveBeenCalledWith('/')
+  })
+
+  it('shows fatal import errors instead of a success report', async () => {
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/strava/import-progress') {
+        return Promise.resolve({
+          status: 'error',
+          total: 0,
+          processed: 0,
+          imported: 0,
+          skipped: 0,
+          failedActivities: [],
+          error: 'Strava list error 500',
+        })
+      }
+      return Promise.resolve({ status: 'started', jobId: 'job-1' })
+    })
+    setup('?success=1')
+
+    await waitFor(() => {
+      expect(screen.getByText(/Import Failed/i)).toBeInTheDocument()
+      expect(screen.getByText(/Strava list error 500/i)).toBeInTheDocument()
+    })
   })
 
   it('navigates to /settings when the Go to Settings button is clicked on the error screen', async () => {
