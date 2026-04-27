@@ -209,6 +209,7 @@ export default function OnboardingPage() {
             recentActivities,
             authToken,
             resolvedMaxHR,
+            profile.currentFTP,
           )
           riderAssessment = analyseResult.assessment
           profileForPlan = {
@@ -414,6 +415,18 @@ export default function OnboardingPage() {
                   {/* HR inputs collected BEFORE Strava connection so they're
                       available for the FTP estimation that runs during analysis. */}
                   <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.currentFTP}
+                        onChange={(e) => update('currentFTP', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                        placeholder="e.g. 250"
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Max Heart Rate (bpm)

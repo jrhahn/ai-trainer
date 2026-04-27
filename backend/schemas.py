@@ -289,6 +289,7 @@ class UserProfileSchema(CamelModel):
 class AnalyseActivitiesRequest(CamelModel):
     activities: list[StravaActivitySchema]
     max_heart_rate: Optional[int] = None
+    current_ftp: Optional[int] = None
 
 
 class GeneratePlanRequest(CamelModel):

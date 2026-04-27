@@ -165,7 +165,7 @@ async def analyse_activities(
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
             training_plan=training_plan or None,
-            user_ftp=int(current_user.current_ftp) if current_user.current_ftp else None,
+            user_ftp=body.current_ftp or (int(current_user.current_ftp) if current_user.current_ftp else None),
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -200,9 +200,9 @@ async def analyse_activities(
         # By default use the user-entered FTP; only fall back to the estimated
         # value when use_estimated_ftp is explicitly enabled or no manual value exists.
         if current_user.use_estimated_ftp:
-            ftp_for_load = ftp_value or current_user.current_ftp or 0
+            ftp_for_load = ftp_value or current_user.current_ftp or body.current_ftp or 0
         else:
-            ftp_for_load = current_user.current_ftp or ftp_value or 0
+            ftp_for_load = current_user.current_ftp or body.current_ftp or ftp_value or 0
         ctl: float | None = None
         atl: float | None = None
         tsb: float | None = None
