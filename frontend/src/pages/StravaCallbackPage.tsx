@@ -4,6 +4,7 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { triggerStravaHistoryImport } from '../services/strava'
 import { useImportProgress } from '../hooks/useImportProgress'
+import StravaImportSummary from '../components/StravaImportSummary'
 
 type Step = 'connecting' | 'importing' | 'done' | 'error'
 
@@ -17,6 +18,22 @@ export default function StravaCallbackPage() {
   const redirectScheduled = useRef(false)
 
   const progress = useImportProgress()
+
+  const startImport = async () => {
+    if (!authToken) {
+      setErrorMsg('Your session expired during the Strava redirect. Please sign in and try again.')
+      setStep('error')
+      return
+    }
+    setErrorMsg('')
+    setStep('importing')
+    try {
+      await triggerStravaHistoryImport(authToken)
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Could not start the Strava import.')
+      setStep('error')
+    }
+  }
 
   // Kick off the OAuth finalisation once
   useEffect(() => {
@@ -39,16 +56,7 @@ export default function StravaCallbackPage() {
       if (authToken) {
         await loadUserData(authToken).catch(() => {})
       }
-      setStep('importing')
-      // Fire-and-forget — backend responds 202 immediately.
-      // If the POST itself fails (network error, not connected), fall back to done.
-      triggerStravaHistoryImport(authToken ?? '').catch(() => {
-        if (!redirectScheduled.current) {
-          redirectScheduled.current = true
-          setStep('done')
-          setTimeout(() => navigate('/'), 2000)
-        }
-      })
+      await startImport()
     }
     void finalise()
   }, [authToken, loadUserData]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,10 +67,23 @@ export default function StravaCallbackPage() {
     if (progress.status !== 'done' && progress.status !== 'error') return
     if (redirectScheduled.current) return
 
-    redirectScheduled.current = true
+    if (progress.status === 'error') {
+      setErrorMsg(progress.error || 'The Strava import failed. Please try again.')
+      setStep('error')
+      return
+    }
+
     setStep('done')
-    setTimeout(() => navigate('/'), 2000)
-  }, [step, progress.status, navigate])
+    if (progress.skipped === 0 && progress.failedActivities.length === 0) {
+      redirectScheduled.current = true
+      setTimeout(() => navigate('/'), 2000)
+    }
+  }, [step, progress.status, progress.error, progress.skipped, progress.failedActivities.length, navigate])
+
+  const handleRetry = () => {
+    redirectScheduled.current = false
+    void startImport()
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -103,23 +124,37 @@ export default function StravaCallbackPage() {
         {step === 'done' && (
           <>
             <CheckCircle size={40} className="text-green-500 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-gray-900">All set!</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {progress.processed > 0
-                ? `${progress.processed} ride${progress.processed !== 1 ? 's' : ''} imported`
-                : 'Ride history imported'}
+            <h2 className="text-lg font-bold text-gray-900">Import complete</h2>
+            <p className="text-sm text-gray-500 mt-1 mb-4">
+              {progress.imported} ride{progress.imported !== 1 ? 's' : ''} imported
+              {progress.skipped > 0 ? `, ${progress.skipped} skipped` : ''}
             </p>
-            <p className="text-xs text-gray-400 mt-1">Redirecting to dashboard…</p>
+            <StravaImportSummary progress={progress} />
+            <button
+              onClick={() => navigate('/')}
+              className="mt-5 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
+            >
+              Continue to dashboard
+            </button>
+            {progress.skipped === 0 && progress.failedActivities.length === 0 && (
+              <p className="text-xs text-gray-400 mt-2">Redirecting to dashboard...</p>
+            )}
           </>
         )}
         {step === 'error' && (
           <>
             <XCircle size={40} className="text-red-500 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-gray-900">Connection Failed</h2>
+            <h2 className="text-lg font-bold text-gray-900">Import Failed</h2>
             <p className="text-sm text-gray-500 mt-2">{errorMsg}</p>
             <button
+              onClick={handleRetry}
+              className="mt-4 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
+            >
+              Retry import
+            </button>
+            <button
               onClick={() => navigate('/settings')}
-              className="mt-4 bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
+              className="mt-2 w-full border border-gray-300 text-gray-700 rounded-xl px-6 py-2 text-sm font-semibold hover:bg-gray-50"
             >
               Go to Settings
             </button>

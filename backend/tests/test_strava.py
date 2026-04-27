@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from auth import decode_token
 from database import async_session_maker
+import crud
 import models
 from routers import strava as strava_router
 
@@ -39,6 +40,68 @@ class DummyResponse:
 
     def json(self):
         return self._payload
+
+
+class ImportFlowHttpClient:
+    """AsyncClient stub for background import pagination + stream fetches."""
+
+    def __init__(self):
+        self._activity_pages = {
+            1: [
+                {
+                    "id": 111,
+                    "name": "Good ride",
+                    "start_date": "2026-04-01T08:00:00Z",
+                    "sport_type": "Ride",
+                    "elapsed_time": 3600,
+                },
+                {
+                    "id": 222,
+                    "name": "Broken ride",
+                    "start_date": "2026-04-02T08:00:00Z",
+                    "sport_type": "Ride",
+                    "elapsed_time": 3600,
+                },
+            ],
+            2: [],
+        }
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, url, params=None, headers=None):
+        if "/athlete/activities" in url:
+            page = int((params or {}).get("page", 1))
+            return DummyResponse(200, self._activity_pages.get(page, []))
+
+        if "/activities/111/streams" in url:
+            return DummyResponse(
+                200,
+                {
+                    "watts": {"data": [200, 220, 210, 230]},
+                    "time": {"data": [0, 60, 120, 180]},
+                    "heartrate": {"data": [145, 150, 152, 154]},
+                },
+            )
+
+        if "/activities/222/streams" in url:
+            raise RuntimeError("download failed for activity 222")
+
+        return DummyResponse(404, {})
+
+
+class FatalImportHttpClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, url, params=None, headers=None):
+        return DummyResponse(500, {"message": "Strava unavailable"})
 
 
 @pytest.mark.asyncio
@@ -203,3 +266,141 @@ async def test_connect_to_strava_end_to_end(client, auth_headers, monkeypatch):
     assert token_row is not None
     assert token_row.access_token == "e2e-access-token"
     assert token_row.athlete_name == "End ToEnd"
+
+
+@pytest.mark.asyncio
+async def test_import_background_continues_when_single_track_fails(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    progress = strava_router._import_progress[user_id]
+    assert progress["status"] == "done"
+    assert progress["total"] == 2
+    assert progress["skipped"] >= 1
+    assert progress["imported"] == 1
+    assert progress["failedActivities"][0]["activityId"] == 222
+    assert "Stream download failed" in progress["failedActivities"][0]["reason"]
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+        job = await crud.get_latest_strava_import_job(session, user_id)
+    assert len(rides) == 1
+    assert rides[0].strava_activity_id == 111
+    assert job is not None
+    assert job.status == "done"
+    assert job.imported == 1
+    assert job.skipped >= 1
+    assert job.failed_activities[0]["activityId"] == 222
+
+
+@pytest.mark.asyncio
+async def test_import_progress_reads_persisted_final_report(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+    strava_router._import_progress.clear()
+
+    response = await client.get("/api/v1/strava/import-progress", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "done"
+    assert body["total"] == 2
+    assert body["imported"] == 1
+    assert body["skipped"] >= 1
+    assert body["failedActivities"][0]["activityId"] == 222
+
+
+@pytest.mark.asyncio
+async def test_import_background_records_fatal_list_failure(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", FatalImportHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    async with async_session_maker() as session:
+        job = await crud.get_latest_strava_import_job(session, user_id)
+
+    assert job is not None
+    assert job.status == "error"
+    assert job.total == 0
+    assert job.imported == 0
+    assert "Strava list error 500" in job.error
+
+
+@pytest.mark.asyncio
+async def test_import_background_replace_existing_overwrites_prior_rows(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    # Seed existing rows that should be removed by replace_existing=True.
+    async with async_session_maker() as session:
+        await crud.upsert_ride_metric(
+            session,
+            user_id,
+            strava_activity_id=9999,
+            activity_date="2026-03-01",
+            sport_type="cycling",
+            duration_seconds=3600,
+            avg_power_w=180,
+            normalized_power_w=190,
+            intensity_factor=0.76,
+            tss=55.0,
+            ftp_used=250,
+            ctl_after=10.0,
+            atl_after=12.0,
+            tsb_after=-2.0,
+            ride_purpose="endurance",
+            summary="Seed ride",
+        )
+        await crud.create_athlete_metric_snapshot(
+            session,
+            user_id,
+            ftp=250,
+            threshold_hr=None,
+            ctl=10.0,
+            atl=12.0,
+            tsb=-2.0,
+            source="manual_recalculate",
+        )
+        await session.commit()
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=True,
+    )
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+        snapshots = await crud.get_athlete_metric_history(session, user_id)
+
+    assert all(r.strava_activity_id != 9999 for r in rides)
+    assert len(rides) == 1
+    assert rides[0].strava_activity_id == 111
+    assert all(s.source != "manual_recalculate" for s in snapshots)

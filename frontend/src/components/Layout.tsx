@@ -18,13 +18,16 @@ export default function Layout() {
 
   useEffect(() => {
     if (prevStatusRef.current === 'running' && importProgress.status === 'done') {
-      const n = importProgress.processed
-      setToast(`Ride history imported — ${n} ride${n !== 1 ? 's' : ''} processed`)
+      const n = importProgress.imported
+      setToast(
+        `Ride history imported — ${n} ride${n !== 1 ? 's' : ''} imported` +
+          (importProgress.skipped > 0 ? `, ${importProgress.skipped} skipped` : '')
+      )
       const id = setTimeout(() => setToast(null), 5000)
       return () => clearTimeout(id)
     }
     prevStatusRef.current = importProgress.status
-  }, [importProgress.status, importProgress.processed])
+  }, [importProgress.status, importProgress.imported, importProgress.skipped])
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <nav className="flex flex-col gap-1 mt-6">

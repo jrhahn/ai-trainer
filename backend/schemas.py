@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 if TYPE_CHECKING:
     import models
@@ -471,11 +471,21 @@ class ImportHistoryResponse(BaseModel):
     skipped: int
 
 
-class ImportProgressResponse(BaseModel):
+class ImportFailedActivitySchema(CamelModel):
+    activity_id: Optional[int] = None
+    activity_name: Optional[str] = None
+    activity_date: Optional[str] = None
+    reason: str
+
+
+class ImportProgressResponse(CamelModel):
+    job_id: Optional[str] = None
     status: str = "idle"  # idle | running | done | error
     total: int = 0
     processed: int = 0
+    imported: int = 0
     skipped: int = 0
+    failed_activities: list[ImportFailedActivitySchema] = Field(default_factory=list)
     error: str = ""
 
 
