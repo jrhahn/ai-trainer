@@ -6,7 +6,7 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -270,6 +270,83 @@ async def delete_strava_token(db: AsyncSession, user_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# StravaImportJob
+# ---------------------------------------------------------------------------
+
+
+async def create_strava_import_job(db: AsyncSession, user_id: str) -> models.StravaImportJob:
+    """Create a durable Strava import job/report and flush."""
+    job = models.StravaImportJob(
+        user_id=user_id,
+        status="running",
+        total=0,
+        processed=0,
+        imported=0,
+        skipped=0,
+        failed_activities=[],
+        error="",
+    )
+    db.add(job)
+    await db.flush()
+    return job
+
+
+async def get_strava_import_job(
+    db: AsyncSession,
+    job_id: str,
+) -> models.StravaImportJob | None:
+    """Return a StravaImportJob by ID."""
+    return await db.get(models.StravaImportJob, job_id)
+
+
+async def get_latest_strava_import_job(
+    db: AsyncSession,
+    user_id: str,
+) -> models.StravaImportJob | None:
+    """Return the latest Strava import job for a user."""
+    return await db.scalar(
+        select(models.StravaImportJob)
+        .where(models.StravaImportJob.user_id == user_id)
+        .order_by(models.StravaImportJob.started_at.desc())
+        .limit(1)
+    )
+
+
+async def get_running_strava_import_job(
+    db: AsyncSession,
+    user_id: str,
+) -> models.StravaImportJob | None:
+    """Return the current running Strava import job for a user, if any."""
+    return await db.scalar(
+        select(models.StravaImportJob)
+        .where(
+            models.StravaImportJob.user_id == user_id,
+            models.StravaImportJob.status == "running",
+        )
+        .order_by(models.StravaImportJob.started_at.desc())
+        .limit(1)
+    )
+
+
+async def update_strava_import_job(
+    db: AsyncSession,
+    job_id: str,
+    **updates: Any,
+) -> models.StravaImportJob | None:
+    """Patch a Strava import job and flush."""
+    job = await get_strava_import_job(db, job_id)
+    if job is None:
+        return None
+    for field, value in updates.items():
+        setattr(job, field, value)
+    job.updated_at = datetime.now(timezone.utc)
+    if updates.get("status") in {"done", "error"} and job.finished_at is None:
+        job.finished_at = datetime.now(timezone.utc)
+    await db.flush()
+    return job
+
+
+# ---------------------------------------------------------------------------
 # RiderAssessment
 # ---------------------------------------------------------------------------
 
@@ -418,6 +495,14 @@ async def get_all_ride_metrics_ordered(
         .order_by(models.RideMetric.activity_date.asc())
     )
     return list(result)
+
+
+async def delete_all_ride_metrics(db: AsyncSession, user_id: str) -> None:
+    """Delete all RideMetric rows for a user and flush."""
+    await db.execute(
+        delete(models.RideMetric).where(models.RideMetric.user_id == user_id)
+    )
+    await db.flush()
 
 
 async def upsert_ride_metric(

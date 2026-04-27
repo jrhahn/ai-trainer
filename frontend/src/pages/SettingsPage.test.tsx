@@ -6,12 +6,20 @@ import SettingsPage from './SettingsPage'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 
-const { mockUpdateCurrentUser, mockDeleteCurrentUser, mockEstimateFTP, mockUpdateMetrics, mockRecalculateAll } = vi.hoisted(() => ({
+const {
+  mockUpdateCurrentUser,
+  mockDeleteCurrentUser,
+  mockEstimateFTP,
+  mockUpdateMetrics,
+  mockRecalculateAll,
+  mockImportProgress,
+} = vi.hoisted(() => ({
   mockUpdateCurrentUser: vi.fn(),
   mockDeleteCurrentUser: vi.fn(),
   mockEstimateFTP: vi.fn(),
   mockUpdateMetrics: vi.fn(),
   mockRecalculateAll: vi.fn(),
+  mockImportProgress: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
@@ -27,6 +35,10 @@ vi.mock('../hooks/useMetricsPipeline', () => ({
     isPending: false,
     error: null,
   }),
+}))
+
+vi.mock('../hooks/useImportProgress', () => ({
+  useImportProgress: mockImportProgress,
 }))
 
 // StravaConnect uses strava services; stub the component
@@ -63,6 +75,15 @@ beforeEach(() => {
   mockEstimateFTP.mockResolvedValue({ estimatedFTP: null, source: 'none' })
   mockUpdateMetrics.mockResolvedValue({ updated: 10, ftpUsed: 250 })
   mockRecalculateAll.mockResolvedValue({ updated: 10, ftpUsed: 250 })
+  mockImportProgress.mockReturnValue({
+    status: 'idle',
+    total: 0,
+    processed: 0,
+    imported: 0,
+    skipped: 0,
+    failedActivities: [],
+    error: '',
+  })
 })
 
 describe('SettingsPage', () => {
@@ -235,5 +256,32 @@ describe('SettingsPage', () => {
       // Panel should be gone after recalculation
       expect(screen.queryByText(/Step 2/i)).not.toBeInTheDocument()
     })
+  })
+
+  it('shows the completed Strava import report with skipped activities', () => {
+    mockImportProgress.mockReturnValue({
+      jobId: 'job-1',
+      status: 'done',
+      total: 2,
+      processed: 2,
+      imported: 1,
+      skipped: 1,
+      failedActivities: [
+        {
+          activityId: 222,
+          activityName: 'Broken ride',
+          activityDate: '2026-04-02',
+          reason: 'Stream download failed',
+        },
+      ],
+      error: '',
+    })
+
+    setup()
+
+    expect(screen.getByText('Imported')).toBeInTheDocument()
+    expect(screen.getByText('Skipped')).toBeInTheDocument()
+    expect(screen.getByText(/Broken ride/)).toBeInTheDocument()
+    expect(screen.getByText(/Stream download failed/)).toBeInTheDocument()
   })
 })

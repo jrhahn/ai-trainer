@@ -3,6 +3,7 @@ import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Hear
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import StravaConnect from '../components/StravaConnect'
+import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
 import { deleteCurrentUser, estimateFTP, updateCurrentUser } from '../services/user'
@@ -613,10 +614,7 @@ export default function SettingsPage() {
               )
             })()}
             {importProgress.status === 'done' && (
-              <p className="text-xs text-green-700">
-                ✓ {importProgress.processed} ride{importProgress.processed !== 1 ? 's' : ''} imported
-                {importProgress.skipped > 0 ? `, ${importProgress.skipped} skipped` : ''}
-              </p>
+              <StravaImportSummary progress={importProgress} compact />
             )}
             {importProgress.status === 'error' && (
               <p className="text-xs text-red-600">Import failed: {importProgress.error || 'unknown error'}</p>

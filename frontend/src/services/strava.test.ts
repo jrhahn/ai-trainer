@@ -8,6 +8,8 @@ import {
   getStravaActivities,
   getNewStravaActivities,
   disconnectStrava,
+  triggerStravaHistoryImport,
+  getStravaImportProgress,
 } from './strava'
 
 beforeEach(() => {
@@ -69,5 +71,42 @@ describe('disconnectStrava', () => {
       token: 'tok-123',
       method: 'DELETE',
     })
+  })
+})
+
+describe('triggerStravaHistoryImport', () => {
+  it('calls import-history with overwrite flag when requested', async () => {
+    mockApiFetch.mockResolvedValue({ status: 'started' })
+
+    await triggerStravaHistoryImport('tok-123', 24, true)
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/strava/import-history?months=24&replace_existing=true',
+      {
+        token: 'tok-123',
+        method: 'POST',
+      }
+    )
+  })
+})
+
+describe('getStravaImportProgress', () => {
+  it('returns durable import report fields from the backend', async () => {
+    mockApiFetch.mockResolvedValue({
+      jobId: 'job-1',
+      status: 'done',
+      total: 2,
+      processed: 2,
+      imported: 1,
+      skipped: 1,
+      failedActivities: [{ activityId: 222, activityName: 'Broken ride', reason: 'Stream download failed' }],
+      error: '',
+    })
+
+    const result = await getStravaImportProgress('tok-123')
+
+    expect(result.imported).toBe(1)
+    expect(result.failedActivities[0].activityId).toBe(222)
+    expect(mockApiFetch).toHaveBeenCalledWith('/strava/import-progress', { token: 'tok-123' })
   })
 })
