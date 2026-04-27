@@ -45,6 +45,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Make intensity/volume realistic for the athlete's current fitness level and stated goal.
 - For race-prep goals: taper in the final week before the race date (reduce volume by ~40%, keep intensity).
 - Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
+- Never schedule two hard days back-to-back.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
 """
 
