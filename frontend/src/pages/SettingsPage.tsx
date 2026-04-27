@@ -607,7 +607,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-gray-500">
                     {pct !== null
-                      ? `${importProgress.processed} / ${importProgress.total} rides (${pct}%)`
+                      ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%)`
                       : 'Fetching ride list…'}
                   </p>
                 </>
