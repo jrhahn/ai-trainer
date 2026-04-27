@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TrendingUp, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
@@ -8,6 +8,7 @@ import type { AthleteMetricSnapshot } from '../store/useAppStore'
 import { triggerStravaHistoryImport, getStravaImportProgress } from '../services/strava'
 import { LineChart } from './charts/LineChart'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
+import { useImportProgress } from '../hooks/useImportProgress'
 
 // ---------------------------------------------------------------------------
 // Public component
@@ -24,25 +25,32 @@ export default function ProgressionChart() {
 
   const { recalculateAll } = useMetricsPipeline()
   const queryClient = useQueryClient()
+  const importProgress = useImportProgress()
 
   type RecalcStatus = 'idle' | 'importing' | 'recalculating' | 'done' | 'error'
   const [recalcStatus, setRecalcStatus] = useState<RecalcStatus>('idle')
-  const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
   const [recalcError, setRecalcError] = useState('')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const unmountedRef = useRef(false)
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const stopPolling = () => {
-    if (pollRef.current !== null) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
+  const isImportRunning = !!stravaConnection && importProgress.status === 'running'
+
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true
+      if (idleTimeoutRef.current !== null) {
+        clearTimeout(idleTimeoutRef.current)
+        idleTimeoutRef.current = null
+      }
     }
-  }
+  }, [])
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
   const handleRecalculate = async () => {
-    if (!authToken || recalcStatus === 'importing' || recalcStatus === 'recalculating') return
+    if (!authToken || isImportRunning || recalcStatus === 'importing' || recalcStatus === 'recalculating') return
     setRecalcStatus('idle')
     setRecalcError('')
-    setImportProgress({ processed: 0, total: 0 })
 
     try {
       if (stravaConnection) {
@@ -50,43 +58,37 @@ export default function ProgressionChart() {
         setRecalcStatus('importing')
         await triggerStravaHistoryImport(authToken, 24, true)
 
-        // Step 2: poll until the background import finishes
-        await new Promise<void>((resolve, reject) => {
-          pollRef.current = setInterval(async () => {
-            try {
-              const progress = await getStravaImportProgress(authToken)
-              setImportProgress({ processed: progress.processed, total: progress.total })
-              if (progress.status === 'done') {
-                stopPolling()
-                resolve()
-              } else if (progress.status === 'error') {
-                stopPolling()
-                reject(new Error(progress.error || 'Import failed'))
-              }
-            } catch (e) {
-              stopPolling()
-              reject(e)
-            }
-          }, 2000)
-        })
+        // Step 2: wait until the background import finishes.
+        while (!unmountedRef.current) {
+          const progress = await getStravaImportProgress(authToken)
+          if (progress.status === 'done') break
+          if (progress.status === 'error') {
+            throw new Error(progress.error || 'Import failed')
+          }
+          await sleep(2000)
+        }
+        if (unmountedRef.current) return
       }
 
       // Step 3: rebuild CTL/ATL/TSB per-ride snapshots and refresh store
       setRecalcStatus('recalculating')
       await recalculateAll()
+      if (unmountedRef.current) return
       // Invalidate the readiness score so RaceReadinessCard re-fetches with fresh data
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setRecalcStatus('done')
-      setTimeout(() => setRecalcStatus('idle'), 3000)
+      idleTimeoutRef.current = setTimeout(() => {
+        if (!unmountedRef.current) setRecalcStatus('idle')
+      }, 3000)
     } catch (e) {
-      stopPolling()
+      if (unmountedRef.current) return
       setRecalcError(e instanceof Error ? e.message : 'Recalculation failed')
       setRecalcStatus('error')
     }
   }
 
   const recalcLabel = () => {
-    if (recalcStatus === 'importing') {
+    if (isImportRunning || recalcStatus === 'importing') {
       return importProgress.total > 0
         ? `Downloading… ${importProgress.processed}/${importProgress.total}`
         : 'Downloading rides…'
@@ -96,7 +98,7 @@ export default function ProgressionChart() {
     return 'Recalculate'
   }
 
-  const isRecalcBusy = recalcStatus === 'importing' || recalcStatus === 'recalculating'
+  const isRecalcBusy = isImportRunning || recalcStatus === 'importing' || recalcStatus === 'recalculating'
 
   if (metricsHistory.length < 2) {
     return (
