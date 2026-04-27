@@ -600,12 +600,12 @@ async def test_rate_completed_workout_calls_chat():
 
 @pytest.mark.asyncio
 async def test_analyse_strava_activities_with_streams_and_hr():
-    """HR-corrected FTP should be computed when max_heart_rate and HR streams are present."""
+    """Power-duration FTP should be computed when HR streams are present."""
     ftp = 280
     work_power = round(ftp / 0.95)
     watts = [float(work_power)] * 1500
     time_stream = list(range(1500))
-    # HR data: constant at LTHR (87% of max_hr=190 → 165 bpm)
+    # HR data: hard enough to treat the 20-min power as FTP evidence.
     max_hr = 190
     hr = [165.0] * 1500
 
@@ -1338,20 +1338,29 @@ def test_estimate_ftp_over_time_no_hr_20min_ride():
 
 
 def test_estimate_ftp_over_time_with_hr():
-    """HR-corrected method: power at LTHR → FTP ≈ interval power."""
+    """HR gates FTP evidence without scaling power by threshold-HR ratio."""
     max_hr = 190
     lthr = round(max_hr * analysis.LTHR_RATIO)
-    # Ride at 250 W exactly at LTHR — correction factor = 1 → FTP ≈ 250 W
+    # A 15-min ride can contribute 10/12-min power-duration evidence, but not a
+    # full 20-min FTP-test estimate.
     streams = _make_steady_streams(900, 250.0, float(lthr))
     rides = [{"activity_date": "2026-04-01", "streams": streams}]
     result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
     assert len(result) == 1
-    # HR exactly at LTHR → raw_ftp ≈ 250 W (within rounding tolerance)
-    assert abs(result[0]["raw_ftp"] - 250) <= 2
+    assert abs(result[0]["raw_ftp"] - round(250 * 0.92)) <= 2
+
+
+def test_estimate_ftp_over_time_low_hr_does_not_inflate_ftp():
+    """Low-HR endurance work is not scaled upward into a fake FTP estimate."""
+    max_hr = 190
+    streams = _make_steady_streams(900, 200.0, 120.0)
+    rides = [{"activity_date": "2026-04-01", "streams": streams}]
+    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
+    assert result == []
 
 
 def test_estimate_ftp_over_time_window_max_smoothing():
-    """3-week sliding-window max: second point takes max of both rides in window."""
+    """3-week rolling envelope: second point uses the best recent power curve."""
     max_hr = 190
     lthr = float(round(max_hr * analysis.LTHR_RATIO))
     # Two rides 1 week apart — both within the 21-day default window
@@ -1361,7 +1370,7 @@ def test_estimate_ftp_over_time_window_max_smoothing():
     assert len(result) == 2
     # First point: only one ride in window → smoothed == raw
     assert result[0]["ftp"] == result[0]["raw_ftp"]
-    # Second point: both rides are within 21 days → smoothed = max(raw1, raw2) = raw2
+    # Second point: both rides are within 21 days and the second has the stronger curve.
     assert result[1]["ftp"] == result[1]["raw_ftp"]
 
 
@@ -1380,7 +1389,7 @@ def test_estimate_ftp_over_time_old_ride_outside_window():
 
 
 def test_estimate_ftp_over_time_high_variance_rejected():
-    """Variable power ride should NOT produce an estimate (CV > 15%)."""
+    """Variable power ride should NOT produce an FTP estimate."""
     n = 900
     # Alternating 100 W / 400 W — high variance, CV ≫ 15 %
     watts = [100.0 if i % 2 == 0 else 400.0 for i in range(n)]
