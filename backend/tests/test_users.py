@@ -92,7 +92,7 @@ async def test_estimate_ftp_no_data(client, auth_headers):
     response = await client.post(
         "/api/v1/users/me/estimate-ftp",
         headers=auth_headers,
-        json={"maxHeartRate": 185, "restingHeartRate": 55},
+        json={"maxHeartRate": 185},
     )
     assert response.status_code == 200
     body = response.json()
@@ -102,25 +102,6 @@ async def test_estimate_ftp_no_data(client, auth_headers):
     # Verify HR values were persisted on the user profile.
     me = await client.get("/api/v1/users/me", headers=auth_headers)
     assert me.json()["maxHeartRate"] == 185
-    assert me.json()["restingHeartRate"] == 55
-
-
-@pytest.mark.asyncio
-async def test_estimate_ftp_defaults_resting_hr(client, auth_headers):
-    """estimate-ftp should default resting HR to 60 when it was never set."""
-    # Ensure the user profile has no resting HR initially.
-    me_before = await client.get("/api/v1/users/me", headers=auth_headers)
-    assert me_before.json()["restingHeartRate"] is None
-
-    await client.post(
-        "/api/v1/users/me/estimate-ftp",
-        headers=auth_headers,
-        json={"maxHeartRate": 190},
-    )
-
-    me_after = await client.get("/api/v1/users/me", headers=auth_headers)
-    assert me_after.json()["maxHeartRate"] == 190
-    assert me_after.json()["restingHeartRate"] == 60
 
 
 @pytest.mark.asyncio
@@ -165,22 +146,6 @@ async def test_estimate_ftp_requires_auth(client):
         json={"maxHeartRate": 185},
     )
     assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_estimate_ftp_saves_threshold_hr(client, auth_headers):
-    """estimate-ftp should persist threshold_heart_rate on the user profile when provided."""
-    response = await client.post(
-        "/api/v1/users/me/estimate-ftp",
-        headers=auth_headers,
-        json={"maxHeartRate": 185, "restingHeartRate": 55, "thresholdHeartRate": 162},
-    )
-    assert response.status_code == 200
-
-    me = await client.get("/api/v1/users/me", headers=auth_headers)
-    assert me.json()["maxHeartRate"] == 185
-    assert me.json()["restingHeartRate"] == 55
-    assert me.json()["thresholdHeartRate"] == 162
 
 
 @pytest.mark.asyncio

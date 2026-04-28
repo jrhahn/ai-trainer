@@ -268,7 +268,6 @@ async def analyse_activities(
             ftp_series = estimate_ftp_over_time(
                 rides_input,
                 max_heart_rate=current_user.max_heart_rate,
-                resting_heart_rate=current_user.resting_heart_rate,
             )
             for point in ftp_series:
                 try:

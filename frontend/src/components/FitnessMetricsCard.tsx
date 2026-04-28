@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Pencil, Check, X, Zap, Heart, Activity, HeartPulse } from 'lucide-react'
+import { Pencil, Check, X, Zap, Activity } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
-import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const DEFAULT_FTP: Record<string, number> = {
   beginner: 150,
@@ -12,7 +11,7 @@ const DEFAULT_FTP: Record<string, number> = {
 }
 
 interface MetricField {
-  key: 'currentFTP' | 'maxHeartRate' | 'restingHeartRate' | 'thresholdHeartRate'
+  key: 'currentFTP' | 'maxHeartRate'
   label: string
   unit: string
   icon: React.ReactNode
@@ -21,12 +20,10 @@ interface MetricField {
   hint?: string
 }
 
-function buildDefaults(fitnessLevel: string, maxHR: number | undefined) {
+function buildDefaults(fitnessLevel: string) {
   return {
     defaultFTP: DEFAULT_FTP[fitnessLevel] ?? 220,
     defaultMaxHR: 185,
-    defaultRestingHR: 60,
-    derivedThresholdHR: maxHR ? Math.round(maxHR * THRESHOLD_HR_TO_MAX_HR_RATIO) : Math.round(185 * THRESHOLD_HR_TO_MAX_HR_RATIO),
   }
 }
 
@@ -48,23 +45,6 @@ const METRICS: MetricField[] = [
     placeholder: () => 'e.g. 185',
     hint: '220 − age',
   },
-  {
-    key: 'restingHeartRate',
-    label: 'Resting HR',
-    unit: ' bpm',
-    icon: <Heart size={18} />,
-    color: 'text-blue-600 bg-blue-50',
-    placeholder: () => 'e.g. 60',
-  },
-  {
-    key: 'thresholdHeartRate',
-    label: 'Threshold HR',
-    unit: ' bpm',
-    icon: <HeartPulse size={18} />,
-    color: 'text-orange-600 bg-orange-50',
-    placeholder: (d) => `e.g. ${d.derivedThresholdHR}`,
-    hint: '≈ 87% of Max HR',
-  },
 ]
 
 export default function FitnessMetricsCard() {
@@ -82,12 +62,10 @@ export default function FitnessMetricsCard() {
   const [draft, setDraft] = useState({
     currentFTP: '',
     maxHeartRate: '',
-    restingHeartRate: '',
-    thresholdHeartRate: '',
   })
 
   const fitnessLevel = userProfile?.fitnessLevel ?? 'intermediate'
-  const defaults = buildDefaults(fitnessLevel, userProfile?.maxHeartRate)
+  const defaults = buildDefaults(fitnessLevel)
 
   const useEstimatedFTP = userProfile?.useEstimatedFTP ?? false
   const estimatedFTP = riderAssessment?.estimatedFTP
@@ -96,10 +74,6 @@ export default function FitnessMetricsCard() {
     setDraft({
       currentFTP: userProfile?.currentFTP != null ? String(userProfile.currentFTP) : '',
       maxHeartRate: userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : '',
-      restingHeartRate:
-        userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : '',
-      thresholdHeartRate:
-        userProfile?.thresholdHeartRate != null ? String(userProfile.thresholdHeartRate) : '',
     })
     setError('')
     setEditing(true)
@@ -114,8 +88,6 @@ export default function FitnessMetricsCard() {
     const updates = {
       currentFTP: parse(draft.currentFTP),
       maxHeartRate: parse(draft.maxHeartRate),
-      restingHeartRate: parse(draft.restingHeartRate),
-      thresholdHeartRate: parse(draft.thresholdHeartRate),
     }
 
     const invalid = Object.entries(updates).find(

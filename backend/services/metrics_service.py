@@ -116,7 +116,7 @@ async def _rebuild_metric_snapshots(
             db,
             user.id,
             ftp=ftp_value,
-            threshold_hr=user.threshold_heart_rate,
+            threshold_hr=None,
             ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
             atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
             tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,

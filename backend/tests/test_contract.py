@@ -40,9 +40,7 @@ _USER_RESPONSE_OPTIONAL_KEYS = {
     "raceDate",
     "raceDescription",
     "weeklyHours",
-    "restingHeartRate",
     "maxHeartRate",
-    "thresholdHeartRate",
     "currentFTP",
     "fitnessLevel",
     "riderAssessment",
@@ -97,7 +95,6 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
             "followsTrainingPlan": False,
             "currentFTP": 250,
             "fitnessLevel": "intermediate",
-            "restingHeartRate": 55,
             "maxHeartRate": 185,
             "isOnboarded": True,
             "stravaAnalysisComplete": False,
@@ -221,9 +218,7 @@ async def test_update_profile_camelcase_fields(client):
             "raceDescription": "Local gran fondo",
             "weeklyHours": 10.5,
             "followsTrainingPlan": True,
-            "restingHeartRate": 52,
             "maxHeartRate": 190,
-            "thresholdHeartRate": 165,
             "currentFTP": 300,
             "fitnessLevel": "advanced",
             "isOnboarded": True,
@@ -239,9 +234,7 @@ async def test_update_profile_camelcase_fields(client):
     assert body["raceDate"] == "2026-09-15"
     assert body["weeklyHours"] == 10.5
     assert body["followsTrainingPlan"] is True
-    assert body["restingHeartRate"] == 52
     assert body["maxHeartRate"] == 190
-    assert body["thresholdHeartRate"] == 165
     assert body["currentFTP"] == 300
     assert body["fitnessLevel"] == "advanced"
     assert body["isOnboarded"] is True

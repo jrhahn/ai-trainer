@@ -46,9 +46,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         race_description=user.race_description,
         weekly_hours=user.weekly_hours,
         follows_training_plan=user.follows_training_plan,
-        resting_heart_rate=user.resting_heart_rate,
         max_heart_rate=user.max_heart_rate,
-        threshold_heart_rate=user.threshold_heart_rate,
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
@@ -281,9 +279,8 @@ async def estimate_ftp(
 ) -> schemas.EstimateFTPResponse:
     """Save updated heart-rate values and return the best available FTP estimate.
 
-    Persists ``max_heart_rate`` and/or ``resting_heart_rate`` to the user
-    profile when supplied so that subsequent Strava imports and analyses
-    automatically use the new values.
+    Persists ``max_heart_rate`` to the user profile when supplied so that
+    subsequent Strava imports and analyses automatically use the new values.
 
     The FTP returned is sourced from (in priority order):
 
@@ -298,13 +295,6 @@ async def estimate_ftp(
     # --- Persist new HR values when provided ---
     if body.max_heart_rate is not None:
         current_user.max_heart_rate = body.max_heart_rate
-    if body.resting_heart_rate is not None:
-        current_user.resting_heart_rate = body.resting_heart_rate
-    elif current_user.resting_heart_rate is None:
-        # Default resting HR to 60 when the user has never set one.
-        current_user.resting_heart_rate = 60
-    if body.threshold_heart_rate is not None:
-        current_user.threshold_heart_rate = body.threshold_heart_rate
     await db.flush()
 
     # --- Find best available FTP estimate ---

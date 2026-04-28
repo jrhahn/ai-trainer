@@ -24,9 +24,7 @@ interface BackendUserResponse {
   raceDescription?: string
   weeklyHours?: number
   followsTrainingPlan: boolean
-  restingHeartRate?: number
   maxHeartRate?: number
-  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -57,9 +55,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       raceDescription: user.raceDescription,
       weeklyHours: user.weeklyHours ?? 8,
       followsTrainingPlan: user.followsTrainingPlan ?? false,
-      restingHeartRate: user.restingHeartRate,
       maxHeartRate: user.maxHeartRate,
-      thresholdHeartRate: user.thresholdHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
       useEstimatedFTP: user.useEstimatedFTP ?? false,
@@ -90,9 +86,7 @@ export async function updateCurrentUser(
     raceDescription: updates.raceDescription,
     weeklyHours: updates.weeklyHours,
     followsTrainingPlan: updates.followsTrainingPlan,
-    restingHeartRate: updates.restingHeartRate,
     maxHeartRate: updates.maxHeartRate,
-    thresholdHeartRate: updates.thresholdHeartRate,
     currentFTP: updates.currentFTP,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
@@ -198,15 +192,13 @@ export async function recalculateMetrics(
 
 export async function estimateFTP(
   token: string,
-  opts: { maxHeartRate?: number; restingHeartRate?: number; thresholdHeartRate?: number },
+  opts: { maxHeartRate?: number },
 ): Promise<{ estimatedFTP: number | null; source: string }> {
   return apiFetch<{ estimatedFTP: number | null; source: string }>('/users/me/estimate-ftp', {
     token,
     method: 'POST',
     body: {
       maxHeartRate: opts.maxHeartRate ?? null,
-      restingHeartRate: opts.restingHeartRate ?? null,
-      thresholdHeartRate: opts.thresholdHeartRate ?? null,
     },
   })
 }

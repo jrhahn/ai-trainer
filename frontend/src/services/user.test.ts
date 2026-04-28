@@ -243,20 +243,20 @@ describe('recalculateMetrics', () => {
 })
 
 describe('estimateFTP', () => {
-  it('posts max and resting HR and returns the estimate', async () => {
+  it('posts maxHeartRate and returns the estimate', async () => {
     mockApiFetch.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
 
-    const result = await estimateFTP('tok-123', { maxHeartRate: 185, restingHeartRate: 55 })
+    const result = await estimateFTP('tok-123', { maxHeartRate: 185 })
 
     expect(result).toEqual({ estimatedFTP: 248, source: 'ftp_estimation' })
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
       token: 'tok-123',
       method: 'POST',
-      body: { maxHeartRate: 185, restingHeartRate: 55, thresholdHeartRate: null },
+      body: { maxHeartRate: 185 },
     })
   })
 
-  it('sends null for omitted HR fields', async () => {
+  it('sends null for omitted maxHeartRate', async () => {
     mockApiFetch.mockResolvedValue({ estimatedFTP: null, source: 'none' })
 
     const result = await estimateFTP('tok-123', {})
@@ -266,31 +266,7 @@ describe('estimateFTP', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
       token: 'tok-123',
       method: 'POST',
-      body: { maxHeartRate: null, restingHeartRate: null, thresholdHeartRate: null },
-    })
-  })
-
-  it('sends only maxHeartRate when restingHeartRate is omitted', async () => {
-    mockApiFetch.mockResolvedValue({ estimatedFTP: 260, source: 'profile' })
-
-    await estimateFTP('tok-123', { maxHeartRate: 190 })
-
-    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
-      token: 'tok-123',
-      method: 'POST',
-      body: { maxHeartRate: 190, restingHeartRate: null, thresholdHeartRate: null },
-    })
-  })
-
-  it('posts thresholdHeartRate when provided', async () => {
-    mockApiFetch.mockResolvedValue({ estimatedFTP: 255, source: 'ftp_estimation' })
-
-    await estimateFTP('tok-123', { maxHeartRate: 185, restingHeartRate: 55, thresholdHeartRate: 162 })
-
-    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
-      token: 'tok-123',
-      method: 'POST',
-      body: { maxHeartRate: 185, restingHeartRate: 55, thresholdHeartRate: 162 },
+      body: { maxHeartRate: null },
     })
   })
 })

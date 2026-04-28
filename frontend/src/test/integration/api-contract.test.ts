@@ -110,8 +110,6 @@ describe('user profile service ↔ backend', () => {
       fitnessLevel: 'advanced',
       currentFTP: 310,
       maxHeartRate: 188,
-      restingHeartRate: 50,
-      thresholdHeartRate: 163,
       followsTrainingPlan: true,
       isOnboarded: true,
       stravaAnalysisComplete: false,
@@ -121,8 +119,6 @@ describe('user profile service ↔ backend', () => {
     expect(data.profile.fitnessLevel).toBe('advanced')
     expect(data.profile.currentFTP).toBe(310)
     expect(data.profile.maxHeartRate).toBe(188)
-    expect(data.profile.restingHeartRate).toBe(50)
-    expect(data.profile.thresholdHeartRate).toBe(163)
     expect(data.profile.followsTrainingPlan).toBe(true)
     expect(data.isOnboarded).toBe(true)
   })

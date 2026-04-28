@@ -1052,7 +1052,6 @@ def compute_ftp_from_streams(
 def estimate_ftp_over_time(
     rides: list[dict],
     max_heart_rate: int | None = None,
-    resting_heart_rate: int | None = None,
     smoothing_days: int = 21,
 ) -> list[dict]:
     """Estimate FTP over time from a rolling power-duration envelope.
@@ -1078,8 +1077,6 @@ def estimate_ftp_over_time(
         max_heart_rate: Athlete's max heart rate in bpm.  Used only to filter
             low-intensity HR windows; power-only estimates require longer
             sustained efforts when not provided.
-        resting_heart_rate: Resting HR in bpm.  Reserved for future use; not
-            used in the current formula.
         smoothing_days: Size of the sliding window (days) used to take the
             recent power-duration envelope.  Default 21 (3 weeks) — long
             enough to smooth noise while still tracking gradual FTP changes.

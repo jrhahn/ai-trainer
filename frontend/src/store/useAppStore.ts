@@ -89,9 +89,7 @@ export interface UserProfile {
   raceDescription?: string
   weeklyHours?: number
   followsTrainingPlan: boolean
-  restingHeartRate?: number
   maxHeartRate?: number
-  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
   useEstimatedFTP?: boolean

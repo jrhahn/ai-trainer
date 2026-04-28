@@ -339,7 +339,6 @@ async def _run_import_background(
     after_ts: int,
     replace_existing: bool = False,
     max_heart_rate: int | None = None,
-    resting_heart_rate: int | None = None,
     job_id: str | None = None,
 ) -> None:
     """Fetch Strava activities and build the ride-metrics chain in the background.
@@ -534,7 +533,6 @@ async def _run_import_background(
             ftp_series = estimate_ftp_over_time(
                 rides,
                 max_heart_rate=max_heart_rate,
-                resting_heart_rate=resting_heart_rate,
             )
         except Exception:  # noqa: BLE001
             logger.warning(
@@ -686,7 +684,6 @@ async def import_strava_history(
         after_ts=after_ts,
         replace_existing=replace_existing,
         max_heart_rate=current_user.max_heart_rate,
-        resting_heart_rate=current_user.resting_heart_rate,
         job_id=job.id,
     )
 

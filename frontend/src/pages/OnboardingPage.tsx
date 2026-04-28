@@ -78,7 +78,6 @@ type FormData = {
   followsTrainingPlan: boolean
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
-  restingHeartRate: string
   maxHeartRate: string
   age: string
 }
@@ -108,7 +107,7 @@ export default function OnboardingPage() {
 
   const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
     const hasManualMetrics = Boolean(
-      userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate
+      userProfile?.currentFTP || userProfile?.maxHeartRate
     )
     if (hasManualMetrics || !stravaConnection) return 'manual'
     return 'strava'
@@ -124,7 +123,6 @@ export default function OnboardingPage() {
     followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
-    restingHeartRate: userProfile?.restingHeartRate ? String(userProfile.restingHeartRate) : '',
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
     age: '',
   })
@@ -197,9 +195,6 @@ export default function OnboardingPage() {
       ? estimateMaxHRFromAge(Number(form.age))
       : undefined
 
-    // Default resting HR to 60 when not provided.
-    const resolvedRestingHR: number = form.restingHeartRate ? Number(form.restingHeartRate) : 60
-
     const profile: UserProfile = {
       name: form.name,
       email: form.email,
@@ -210,7 +205,6 @@ export default function OnboardingPage() {
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
-      restingHeartRate: resolvedRestingHR,
       maxHeartRate: resolvedMaxHR,
     }
 
@@ -432,19 +426,6 @@ export default function OnboardingPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Resting Heart Rate (bpm){' '}
-                      <span className="text-gray-400 font-normal">default 60 if left blank</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={form.restingHeartRate}
-                      onChange={(e) => update('restingHeartRate', e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder="e.g. 55"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
                     </label>
                     <input
@@ -584,9 +565,6 @@ export default function OnboardingPage() {
                     : estimatedHR !== undefined
                     ? `${estimatedHR} bpm (estimated from age)`
                     : null
-                  const displayRestingHR = form.restingHeartRate
-                    ? `${form.restingHeartRate} bpm`
-                    : '60 bpm (default)'
                   return (
                     [
                       ['Name', form.name],
@@ -596,7 +574,6 @@ export default function OnboardingPage() {
                       ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
                       ['Fitness Level', form.fitnessLevel],
                       ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
-                      ['Resting HR', displayRestingHR],
                       ...(displayMaxHR ? [['Max HR', displayMaxHR]] : []),
                     ] as [string, string][]
                   ).map(([label, value]) => (

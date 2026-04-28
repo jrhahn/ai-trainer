@@ -139,7 +139,6 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByText(/Current FTP \(watts\)/i)).toBeInTheDocument()
-    expect(screen.getByText(/Resting Heart Rate \(bpm\)/i)).toBeInTheDocument()
     expect(screen.getByText(/Max Heart Rate \(bpm\)/i)).toBeInTheDocument()
   })
 
@@ -313,7 +312,7 @@ describe('OnboardingPage', () => {
     })
   })
 
-  it('defaults resting HR to 60 when not provided during onboarding', async () => {
+  it('does not send restingHeartRate during onboarding', async () => {
     mockGenerateTrainingPlan.mockResolvedValue([])
     mockSaveTrainingPlan.mockResolvedValue([])
 
@@ -330,8 +329,7 @@ describe('OnboardingPage', () => {
 
     await waitFor(() => {
       const profileArg = mockUpdateCurrentUser.mock.calls[0][1]
-      // Resting HR must default to 60 when left blank
-      expect(profileArg.restingHeartRate).toBe(60)
+      expect(profileArg.restingHeartRate).toBeUndefined()
     })
   })
 })
