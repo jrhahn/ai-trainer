@@ -447,14 +447,16 @@ async def get_athlete_metric_history(
     user_id: str,
     limit: int = 90,
 ) -> list[models.AthleteMetricSnapshot]:
-    """Return up to *limit* AthleteMetricSnapshot rows for a user, oldest first."""
-    result = await db.scalars(
+    """Return the most recent *limit* snapshots, ordered oldest -> newest."""
+    recent_result = await db.scalars(
         select(models.AthleteMetricSnapshot)
         .where(models.AthleteMetricSnapshot.user_id == user_id)
-        .order_by(models.AthleteMetricSnapshot.recorded_at.asc())
+        .order_by(models.AthleteMetricSnapshot.recorded_at.desc())
         .limit(limit)
     )
-    return list(result)
+    # Query newest-first so the limit window represents recent history,
+    # then reverse so chart consumers still receive chronological ordering.
+    return list(reversed(list(recent_result)))
 
 
 async def delete_athlete_metric_snapshots(db: AsyncSession, user_id: str) -> None:

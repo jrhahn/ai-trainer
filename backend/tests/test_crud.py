@@ -477,3 +477,5 @@ async def test_get_athlete_metric_history_limit(db: AsyncSession) -> None:
 
     history = await crud.get_athlete_metric_history(db, user.id, limit=5)
     assert len(history) == 5
+    ftps = [s.ftp for s in history]
+    assert ftps == [175, 180, 185, 190, 195]
