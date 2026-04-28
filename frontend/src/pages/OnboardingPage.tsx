@@ -57,16 +57,6 @@ function clearOnboardingProgress(): void {
   }
 }
 
-/** Estimate maximum heart rate from age using the 220 − age formula.
- *  Age is clamped to a minimum of 10 to avoid physiologically unrealistic
- *  values for very young inputs.  Returns undefined when age is not a valid
- *  positive number.
- */
-function estimateMaxHRFromAge(age: number): number | undefined {
-  if (!Number.isFinite(age) || age < 10) return undefined
-  return Math.max(100, 220 - age)
-}
-
 type FormData = {
   name: string
   email: string
@@ -78,7 +68,6 @@ type FormData = {
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
   maxHeartRate: string
-  age: string
 }
 
 export default function OnboardingPage() {
@@ -123,7 +112,6 @@ export default function OnboardingPage() {
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
-    age: '',
   })
 
   // Restore progress saved before the Strava OAuth redirect (if any).
@@ -182,8 +170,6 @@ export default function OnboardingPage() {
 
     const resolvedMaxHR: number | undefined = form.maxHeartRate
       ? Number(form.maxHeartRate)
-      : form.age
-      ? estimateMaxHRFromAge(Number(form.age))
       : undefined
 
     const updates: Partial<UserProfile> = {
@@ -206,11 +192,9 @@ export default function OnboardingPage() {
 
     let riderAssessment: RiderAssessment | undefined
 
-    // Resolve Max HR: use explicitly entered value, or estimate from age (220 − age).
+    // Resolve Max HR: use explicitly entered value.
     const resolvedMaxHR: number | undefined = form.maxHeartRate
       ? Number(form.maxHeartRate)
-      : form.age
-      ? estimateMaxHRFromAge(Number(form.age))
       : undefined
 
     const profile: UserProfile = {
@@ -451,25 +435,7 @@ export default function OnboardingPage() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                       placeholder="e.g. 185"
                     />
-                    {!form.maxHeartRate && (
-                      <div className="mt-2">
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Or enter your age — we&apos;ll estimate Max HR as 220 − age.
-                        </label>
-                        <input
-                          type="number"
-                          value={form.age}
-                          onChange={(e) => update('age', e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                          placeholder="e.g. 35"
-                        />
-                        {form.age && estimateMaxHRFromAge(Number(form.age)) !== undefined && (
-                          <p className="text-xs text-amber-700 mt-1">
-                            Estimated Max HR: {estimateMaxHRFromAge(Number(form.age))} bpm
-                          </p>
-                        )}
-                      </div>
-                    )}
+
                   </div>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -575,12 +541,7 @@ export default function OnboardingPage() {
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(() => {
-                  const estimatedHR = form.age ? estimateMaxHRFromAge(Number(form.age)) : undefined
-                  const displayMaxHR = form.maxHeartRate
-                    ? `${form.maxHeartRate} bpm`
-                    : estimatedHR !== undefined
-                    ? `${estimatedHR} bpm (estimated from age)`
-                    : null
+                  const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
                   return (
                     [
                       ['Name', form.name],

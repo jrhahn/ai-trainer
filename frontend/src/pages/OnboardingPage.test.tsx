@@ -279,36 +279,6 @@ describe('OnboardingPage', () => {
     })
   })
 
-  it('uses age-based Max HR (220 − age) when no explicit Max HR is provided', async () => {
-    mockGenerateTrainingPlan.mockResolvedValue([])
-    mockSaveTrainingPlan.mockResolvedValue([])
-
-    setupStore({ stravaConnection: null })
-    render(<OnboardingPage />)
-    const user = userEvent.setup()
-
-    // Navigate to step 3 (Training Inputs)
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 1→2
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 2→3 (Training Inputs)
-
-    // Enter age 35 — expected estimated Max HR = 220 - 35 = 185
-    const ageInputs = screen.getAllByPlaceholderText(/e\.g\. 35/)
-    await user.type(ageInputs[0], '35')
-
-    // Live preview should show estimated Max HR
-    expect(screen.getByText(/Estimated Max HR: 185 bpm/i)).toBeInTheDocument()
-
-    // Proceed through assessment step to step 5 and generate plan
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 3→4 (assessment, manual default)
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 4→5
-    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
-
-    await waitFor(() => {
-      const profileArg = mockUpdateCurrentUser.mock.calls[0][1]
-      expect(profileArg.maxHeartRate).toBe(185)
-    })
-  })
-
   it('does not send restingHeartRate during onboarding', async () => {
     mockGenerateTrainingPlan.mockResolvedValue([])
     mockSaveTrainingPlan.mockResolvedValue([])
