@@ -127,9 +127,6 @@ export default function ExpertPage() {
         <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
           <p className="text-sm font-semibold text-gray-800 mb-1">🎯 Training plan updated based on your Strava rides</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-gray-700">
-            {riderAssessment.estimatedFTP && (
-              <span>⚡ Est. FTP: <strong>{riderAssessment.estimatedFTP} W</strong></span>
-            )}
             {riderAssessment.estimatedThresholdHR && (
               <span>❤️ Threshold HR: <strong>{riderAssessment.estimatedThresholdHR} bpm</strong></span>
             )}

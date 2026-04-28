@@ -53,7 +53,6 @@ describe('analyseStravaActivities', () => {
   it('calls the backend analyse endpoint and returns {assessment, planUpdates}', async () => {
     mockApiFetch.mockResolvedValue({
       assessment: {
-        estimatedFTP: 280,
         riderType: 'allrounder',
         notes: 'Balanced rider',
         rideInsights: 'Good endurance base.',
@@ -75,7 +74,7 @@ describe('analyseStravaActivities', () => {
       },
     ], 'token-123')
 
-    expect(result.assessment.estimatedFTP).toBe(280)
+    expect(result.assessment.riderType).toBe('allrounder')
     expect(result.assessment.rideInsights).toBe('Good endurance base.')
     expect(result.assessment.lastRideFeedback).toBe('Great ride! You held 188W for 90 min. Next session try some tempo work.')
     expect(result.planUpdates).toEqual([])

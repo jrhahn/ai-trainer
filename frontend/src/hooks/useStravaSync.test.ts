@@ -59,7 +59,6 @@ const mockActivities = [
 
 const mockAssessment = {
   riderType: 'endurance' as const,
-  estimatedFTP: 220,
   estimatedThresholdHR: 160,
   notes: 'Good aerobic base.',
   rideInsights: 'Consistent power output.',
@@ -201,8 +200,8 @@ describe('useStravaSync', () => {
 
     await waitFor(() => {
       const { riderAssessment, userProfile } = useAppStore.getState()
-      expect(riderAssessment?.estimatedFTP).toBe(220)
-      expect(userProfile?.currentFTP).toBe(220)
+      expect(riderAssessment?.riderType).toBe('endurance')
+      expect(userProfile?.currentFTP).toBe(baseProfile.currentFTP)
     })
   })
 

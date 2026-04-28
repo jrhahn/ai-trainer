@@ -386,9 +386,8 @@ async def test_analyse_strava_activities_with_streams():
             activities, provider="openai", streams_by_id=streams_by_id
         )
 
-    # Algorithmic FTP should override the AI's guess
-    assert result["estimatedFTP"] != 999
-    assert result["estimatedFTP"] is not None
+    # FTP is never estimated from activity data — always null
+    assert result["estimatedFTP"] is None
     assert result["riderType"] == "allrounder"
 
 
@@ -468,7 +467,7 @@ async def test_analyse_strava_activities_no_streams():
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.analyse_strava_activities(activities, provider="openai")
 
-    assert result["estimatedFTP"] == 290
+    assert result["estimatedFTP"] is None  # FTP is always null — not estimated from rides
 
 
 @pytest.mark.asyncio
@@ -652,9 +651,8 @@ async def test_analyse_strava_activities_with_streams_and_hr():
             max_heart_rate=max_hr,
         )
 
-    # Algorithmic FTP from stream data should override the AI response
-    assert result["estimatedFTP"] is not None
-    assert result["estimatedFTP"] != 999
+    # FTP is never estimated from activity data — always null
+    assert result["estimatedFTP"] is None
     # HR zones should be populated
     assert result.get("hrZones") is not None
 
@@ -1284,134 +1282,3 @@ def test_friend_coach_traits_template_interpolation():
         resolved = _FRIEND_COACH_TRAITS.format(sport=sport)
         assert sport in resolved
         assert "{sport}" not in resolved
-
-
-# ---------------------------------------------------------------------------
-# estimate_ftp_over_time
-# ---------------------------------------------------------------------------
-
-
-def _make_steady_streams(duration_seconds: int, power_w: float, hr_bpm: float) -> dict:
-    """Build minimal Strava-style streams for a steady-effort ride."""
-    n = duration_seconds
-    return {
-        "watts": {"data": [power_w] * n},
-        "heartrate": {"data": [hr_bpm] * n},
-        "time": {"data": list(range(n))},
-    }
-
-
-def test_estimate_ftp_over_time_empty():
-    result = analysis.estimate_ftp_over_time([])
-    assert result == []
-
-
-def test_estimate_ftp_over_time_no_streams():
-    rides = [{"activity_date": "2026-01-10", "streams": {}}]
-    result = analysis.estimate_ftp_over_time(rides)
-    assert result == []
-
-
-def test_estimate_ftp_over_time_single_steady_ride_no_hr():
-    """Power-only fallback uses best-20-min × 0.95.
-
-    15-min ride at steady 300 W → best 20-min power cannot be computed
-    (too short) → no estimate produced.
-    """
-    streams = _make_steady_streams(900, 300.0, 0.0)  # 15 min at 300 W, no HR
-    rides = [{"activity_date": "2026-04-01", "streams": streams}]
-    result = analysis.estimate_ftp_over_time(rides)
-    # 15 min < 20 min required for the best-20-min fallback → no estimate
-    assert result == []
-
-
-def test_estimate_ftp_over_time_no_hr_20min_ride():
-    """Power-only fallback: 25-min ride at steady 300 W → best-20-min ≈ 300 W → FTP ≈ 285."""
-    streams = _make_steady_streams(1500, 300.0, 0.0)  # 25 min, no HR
-    rides = [{"activity_date": "2026-04-01", "streams": streams}]
-    result = analysis.estimate_ftp_over_time(rides)
-    assert len(result) == 1
-    assert result[0]["date"] == "2026-04-01"
-    # best 20-min of a constant-300W ride is 300 W; FTP = round(300 × 0.95) = 285
-    assert abs(result[0]["raw_ftp"] - round(300 * 0.95)) <= 2
-    assert result[0]["ftp"] == result[0]["raw_ftp"]  # single ride → window max = raw
-
-
-def test_estimate_ftp_over_time_with_hr():
-    """HR gates FTP evidence without scaling power by threshold-HR ratio."""
-    max_hr = 190
-    lthr = round(max_hr * analysis.LTHR_RATIO)
-    # A 15-min ride can contribute 10/12-min power-duration evidence, but not a
-    # full 20-min FTP-test estimate.
-    streams = _make_steady_streams(900, 250.0, float(lthr))
-    rides = [{"activity_date": "2026-04-01", "streams": streams}]
-    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
-    assert len(result) == 1
-    assert abs(result[0]["raw_ftp"] - round(250 * 0.92)) <= 2
-
-
-def test_estimate_ftp_over_time_low_hr_does_not_inflate_ftp():
-    """Low-HR endurance work is not scaled upward into a fake FTP estimate."""
-    max_hr = 190
-    streams = _make_steady_streams(900, 200.0, 120.0)
-    rides = [{"activity_date": "2026-04-01", "streams": streams}]
-    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
-    assert result == []
-
-
-def test_estimate_ftp_over_time_window_max_smoothing():
-    """3-week rolling envelope: second point uses the best recent power curve."""
-    max_hr = 190
-    lthr = float(round(max_hr * analysis.LTHR_RATIO))
-    # Two rides 1 week apart — both within the 21-day default window
-    r1 = {"activity_date": "2026-01-01", "streams": _make_steady_streams(900, 250.0, lthr)}
-    r2 = {"activity_date": "2026-01-08", "streams": _make_steady_streams(900, 300.0, lthr)}
-    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=21)
-    assert len(result) == 2
-    # First point: only one ride in window → smoothed == raw
-    assert result[0]["ftp"] == result[0]["raw_ftp"]
-    # Second point: both rides are within 21 days and the second has the stronger curve.
-    assert result[1]["ftp"] == result[1]["raw_ftp"]
-
-
-def test_estimate_ftp_over_time_old_ride_outside_window():
-    """Rides outside the window do not inflate the smoothed FTP."""
-    max_hr = 190
-    lthr = float(round(max_hr * analysis.LTHR_RATIO))
-    # Ride 1 is 30 days before ride 2 — outside the default 21-day window
-    r1 = {"activity_date": "2026-01-01", "streams": _make_steady_streams(900, 350.0, lthr)}
-    r2 = {"activity_date": "2026-01-31", "streams": _make_steady_streams(900, 260.0, lthr)}
-    result = analysis.estimate_ftp_over_time([r1, r2], max_heart_rate=max_hr, smoothing_days=21)
-    assert len(result) == 2
-    # Ride 2 smoothed FTP should equal its own raw value (ride 1 is outside window)
-    assert result[1]["ftp"] == result[1]["raw_ftp"]
-    assert result[1]["ftp"] < result[0]["raw_ftp"]  # lower than the old peak
-
-
-def test_estimate_ftp_over_time_high_variance_rejected():
-    """Variable power ride should NOT produce an FTP estimate."""
-    n = 900
-    # Alternating 100 W / 400 W — high variance, CV ≫ 15 %
-    watts = [100.0 if i % 2 == 0 else 400.0 for i in range(n)]
-    streams = {
-        "watts": {"data": watts},
-        "time": {"data": list(range(n))},
-    }
-    rides = [{"activity_date": "2026-04-01", "streams": streams}]
-    # No HR → power-only path; but 15-min ride < 20 min required
-    result = analysis.estimate_ftp_over_time(rides)
-    assert result == []
-
-
-def test_estimate_ftp_over_time_sorted_by_date():
-    """Results must be sorted ascending by activity_date."""
-    max_hr = 190
-    lthr = float(round(max_hr * analysis.LTHR_RATIO))
-    rides = [
-        {"activity_date": "2026-03-15", "streams": _make_steady_streams(900, 260.0, lthr)},
-        {"activity_date": "2026-02-01", "streams": _make_steady_streams(900, 240.0, lthr)},
-        {"activity_date": "2026-04-01", "streams": _make_steady_streams(900, 280.0, lthr)},
-    ]
-    result = analysis.estimate_ftp_over_time(rides, max_heart_rate=max_hr)
-    dates = [r["date"] for r in result]
-    assert dates == sorted(dates)

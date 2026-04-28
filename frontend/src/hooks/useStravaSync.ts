@@ -68,7 +68,7 @@ export function useStravaSync(): UseStravaSyncResult {
 
       const updatedProfile = {
         ...userProfile,
-        currentFTP: userProfile.currentFTP ?? assessment.estimatedFTP,
+        currentFTP: userProfile.currentFTP,
         maxHeartRate: userProfile.maxHeartRate ?? (assessment.estimatedThresholdHR
           ? Math.round(assessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
           : undefined),

@@ -225,7 +225,7 @@ export default function OnboardingPage() {
           riderAssessment = analyseResult.assessment
           profileForPlan = {
             ...profile,
-            currentFTP: profile.currentFTP ?? riderAssessment.estimatedFTP,
+            currentFTP: profile.currentFTP,
             maxHeartRate: profile.maxHeartRate ?? (riderAssessment.estimatedThresholdHR
               ? Math.round(riderAssessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
               : undefined),

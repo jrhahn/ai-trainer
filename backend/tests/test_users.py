@@ -74,7 +74,7 @@ async def test_metrics_history_after_analyse_activities(client, auth_headers, mo
     body = history_response.json()
     assert len(body["snapshots"]) == 1
     snap = body["snapshots"][0]
-    assert snap["ftp"] == 280  # matches mock_ai_service estimatedFTP
+    assert snap["ftp"] is None   # FTP is never estimated from activity data
     assert snap["thresholdHR"] == 172  # matches mock_ai_service estimatedThresholdHR
     assert snap["source"] == "strava_analysis"
     assert "recordedAt" in snap
@@ -105,27 +105,13 @@ async def test_estimate_ftp_no_data(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_estimate_ftp_returns_snapshot_ftp(client, auth_headers, mock_ai_service):
-    """estimate-ftp returns FTP from the most recent AthleteMetricSnapshot."""
-    # Create a snapshot via analyse-activities (uses mock FTP = 280 W).
-    await client.post(
-        "/api/v1/ai/analyse-activities",
+async def test_estimate_ftp_returns_profile_ftp(client, auth_headers, mock_ai_service):
+    """estimate-ftp returns FTP from the user profile (current_ftp)."""
+    # Set an FTP on the profile first.
+    await client.put(
+        "/api/v1/users/me",
         headers=auth_headers,
-        json={
-            "activities": [
-                {
-                    "id": 1001,
-                    "name": "Hard Ride",
-                    "type": "Ride",
-                    "distance": 50000,
-                    "movingTime": 4500,
-                    "elapsedTime": 4600,
-                    "totalElevationGain": 500,
-                    "startDate": "2026-04-20T09:00:00Z",
-                    "averageWatts": 240,
-                }
-            ]
-        },
+        json={"currentFTP": 280},
     )
 
     response = await client.post(
@@ -135,8 +121,8 @@ async def test_estimate_ftp_returns_snapshot_ftp(client, auth_headers, mock_ai_s
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["estimatedFTP"] == 280  # from mock_ai_service
-    assert body["source"] == "strava_analysis"
+    assert body["estimatedFTP"] == 280  # from user profile
+    assert body["source"] == "profile"
 
 
 @pytest.mark.asyncio

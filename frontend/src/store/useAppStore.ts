@@ -92,7 +92,6 @@ export interface UserProfile {
   maxHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
-  useEstimatedFTP?: boolean
 }
 
 export interface WorkoutFeedback {
@@ -186,7 +185,6 @@ export interface RideMetricPoint {
 }
 
 export interface RiderAssessment {
-  estimatedFTP?: number
   estimatedThresholdHR?: number
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string

@@ -28,7 +28,6 @@ interface BackendUserResponse {
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
-  useEstimatedFTP?: boolean
   riderAssessment?: RiderAssessment | null
   stravaConnection?: StravaConnection | null
 }
@@ -58,7 +57,6 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       maxHeartRate: user.maxHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
-      useEstimatedFTP: user.useEstimatedFTP ?? false,
     },
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,
@@ -93,7 +91,6 @@ export async function updateCurrentUser(
     stravaAnalysisComplete: updates.stravaAnalysisComplete,
     lastStravaActivityId: updates.lastStravaActivityId,
     aiProvider: updates.aiProvider,
-    useEstimatedFTP: updates.useEstimatedFTP,
   }
   await apiFetch('/users/me', { token, method: 'PUT', body })
   return fetchCurrentUser(token)

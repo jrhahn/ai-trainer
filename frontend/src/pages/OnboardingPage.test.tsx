@@ -158,7 +158,6 @@ describe('OnboardingPage', () => {
     mockGetStravaActivities.mockResolvedValue(activities)
     mockAnalyseStravaActivities.mockResolvedValue({
       assessment: {
-        estimatedFTP: 280,
         estimatedThresholdHR: 170,
         riderType: 'allrounder',
         notes: 'Good sustained efforts.',
@@ -191,7 +190,6 @@ describe('OnboardingPage', () => {
 
     expect(mockAnalyseStravaActivities.mock.calls[0][0]).toHaveLength(7)
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
-      currentFTP: 280,
       maxHeartRate: 195,
       isOnboarded: true,
       stravaAnalysisComplete: true,

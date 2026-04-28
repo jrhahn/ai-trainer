@@ -74,7 +74,6 @@ class TokenResponse(BaseModel):
 
 
 class RiderAssessmentSchema(CamelModel):
-    estimated_ftp: Optional[int] = None
     estimated_threshold_hr: Optional[int] = None
     rider_type: str
     notes: str
@@ -112,7 +111,6 @@ class UserResponse(CamelModel):
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
-    use_estimated_ftp: bool = False
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
@@ -138,7 +136,6 @@ class UpdateProfileRequest(CamelModel):
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
-    use_estimated_ftp: Optional[bool] = None
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
@@ -257,7 +254,6 @@ class UserProfileSchema(CamelModel):
     max_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
-    use_estimated_ftp: bool = False
 
     @classmethod
     def from_user(cls, user: "models.User") -> "UserProfileSchema":
@@ -274,7 +270,6 @@ class UserProfileSchema(CamelModel):
             max_heart_rate=user.max_heart_rate,
             current_ftp=user.current_ftp,
             fitness_level=user.fitness_level or "",
-            use_estimated_ftp=user.use_estimated_ftp,
         )
 
 

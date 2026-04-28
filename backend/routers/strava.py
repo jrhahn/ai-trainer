@@ -18,7 +18,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
+from services.analysis import build_ride_metrics_chain
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
@@ -527,39 +527,6 @@ async def _run_import_background(
                 for m in metrics_chain[i : i + BATCH]:
                     await crud.upsert_ride_metric(db, user_id, **m)
                 await db.commit()
-
-        # --- Estimate FTP over time from steady intervals ---
-        try:
-            ftp_series = estimate_ftp_over_time(
-                rides,
-                max_heart_rate=max_heart_rate,
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "FTP-over-time estimation failed during Strava import for user %s",
-                user_id,
-                exc_info=True,
-            )
-            ftp_series = []
-        if ftp_series:
-            for i in range(0, len(ftp_series), BATCH):
-                async with async_session_maker() as db:
-                    for point in ftp_series[i : i + BATCH]:
-                        try:
-                            ride_dt = datetime.fromisoformat(point["date"]).replace(
-                                tzinfo=timezone.utc
-                            )
-                        except ValueError:
-                            ride_dt = datetime.now(timezone.utc)
-                        await crud.create_athlete_metric_snapshot(
-                            db,
-                            user_id,
-                            ftp=point["ftp"],
-                            threshold_hr=None,
-                            source="ftp_estimation",
-                            recorded_at=ride_dt,
-                        )
-                    await db.commit()
 
         await _update_import_job(
             user_id,

@@ -284,7 +284,8 @@ async def test_strava_activities_snake_case_fields_accepted(client, mock_ai_serv
     assert resp.status_code == 200
     body = resp.json()
     assert "assessment" in body
-    assert body["assessment"]["estimatedFTP"] == 280
+    assert "riderType" in body["assessment"]
+    assert "notes" in body["assessment"]
 
 
 @pytest.mark.asyncio
@@ -575,7 +576,7 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     assert "riderType" in assessment
     assert "notes" in assessment
     # Optional fields may or may not be present
-    for optional_key in ("estimatedFTP", "estimatedThresholdHR", "rideInsights", "lastRideFeedback"):
+    for optional_key in ("estimatedThresholdHR", "rideInsights", "lastRideFeedback"):
         if optional_key in assessment:
             assert assessment[optional_key] is not None or assessment[optional_key] is None
 
@@ -640,7 +641,7 @@ async def test_metrics_history_populated_after_analysis(client, mock_ai_service)
     body = resp.json()
     assert len(body["snapshots"]) == 1
     snap = body["snapshots"][0]
-    assert snap["ftp"] == 280           # from mock_ai_service estimatedFTP
+    assert snap["ftp"] is None          # FTP is never estimated from activity data
     assert snap["thresholdHR"] == 172   # from mock_ai_service estimatedThresholdHR
     assert snap["source"] == "strava_analysis"
     assert "recordedAt" in snap
