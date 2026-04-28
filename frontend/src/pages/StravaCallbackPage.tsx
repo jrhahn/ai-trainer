@@ -11,11 +11,13 @@ type Step = 'connecting' | 'importing' | 'done' | 'error'
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
   const authToken = useAppStore((s) => s.authToken)
-  const loadUserData = useAppStore((s) => s.loadUserData)
+  const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
 
   const [step, setStep] = useState<Step>('connecting')
   const [errorMsg, setErrorMsg] = useState('')
   const redirectScheduled = useRef(false)
+  // Prevent the effect from re-running if the component re-renders after initialisation.
+  const initialisedRef = useRef(false)
 
   const progress = useImportProgress()
 
@@ -35,8 +37,15 @@ export default function StravaCallbackPage() {
     }
   }
 
-  // Kick off the OAuth finalisation once
+  // Kick off the OAuth finalisation once, after the app's initial data load completes.
+  // App.tsx calls loadUserData() on mount; waiting for isLoadingUserData to be false
+  // ensures stravaConnection is up-to-date before we start the import, and avoids
+  // triggering a second concurrent loadUserData call that would cause an infinite loop.
   useEffect(() => {
+    if (isLoadingUserData) return
+    if (initialisedRef.current) return
+    initialisedRef.current = true
+
     const params = new URLSearchParams(window.location.search)
     const error = params.get('error')
     const success = params.get('success')
@@ -52,14 +61,8 @@ export default function StravaCallbackPage() {
       return
     }
 
-    const finalise = async () => {
-      if (authToken) {
-        await loadUserData(authToken).catch(() => {})
-      }
-      await startImport()
-    }
-    void finalise()
-  }, [authToken, loadUserData]) // eslint-disable-line react-hooks/exhaustive-deps
+    void startImport()
+  }, [isLoadingUserData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Watch polling state to detect completion
   useEffect(() => {
