@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -32,6 +33,7 @@ export default function SettingsPage() {
   )
 
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
+  const queryClient = useQueryClient()
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
@@ -116,6 +118,7 @@ export default function SettingsPage() {
         ? await updateMetrics({ currentFTP: parsed })
         : await recalculateAll()
       if (parsed !== undefined) setFtpInput('')
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
         text: `Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
@@ -223,6 +226,7 @@ export default function SettingsPage() {
       setMaxHrInput('')
       setRestingHrInput('')
       setAgeInput('')
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
         type: 'success',
         text: `Done! Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
