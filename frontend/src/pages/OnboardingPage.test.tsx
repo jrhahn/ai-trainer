@@ -130,12 +130,11 @@ describe('OnboardingPage', () => {
     })
   })
 
-  it('shows manual fitness inputs when manual assessment is selected', async () => {
+  it('shows fitness inputs on the Training Inputs step', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
@@ -183,8 +182,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
 
     await waitFor(() => {
       expect(mockAnalyseStravaActivities).toHaveBeenCalledTimes(1)
@@ -201,23 +199,25 @@ describe('OnboardingPage', () => {
     })
   })
 
-  it('shows the Connect Strava option on step 3', async () => {
+  it('shows the Connect Strava option on step 4', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByText(/Connect with Strava/i)).toBeInTheDocument()
-    expect(screen.getByText(/Enter fitness parameters manually/i)).toBeInTheDocument()
+    expect(screen.getByText(/Use parameters I entered/i)).toBeInTheDocument()
   })
 
-  it('shows the StravaConnect component when "Connect with Strava" is selected on step 3', async () => {
+  it('shows the StravaConnect component when "Connect with Strava" is selected on step 4', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
@@ -228,11 +228,12 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: /connect strava/i })).toBeInTheDocument()
   })
 
-  it('disables Continue on step 3 when Strava method is selected but not yet connected', async () => {
+  it('disables Continue on step 4 when Strava method is selected but not yet connected', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
@@ -244,19 +245,20 @@ describe('OnboardingPage', () => {
     expect(continueButton).toBeDisabled()
   })
 
-  it('enables Continue on step 3 once Strava is connected', async () => {
-    // User already has Strava connected when they reach step 3
+  it('enables Continue on step 4 once Strava is connected', async () => {
+    // User already has Strava connected when they reach step 4
     setupStore({ stravaConnection: { athleteId: 42, athleteName: 'Alex Rider' } })
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     // With stravaConnection present, the default assessment method becomes 'strava'
-    // and the Continue button should be enabled
-    const continueButton = screen.getByRole('button', { name: 'Continue' })
-    expect(continueButton).not.toBeDisabled()
+    // and the button should be enabled (showing 'Analyse & Generate Plan')
+    const actionButton = screen.getByRole('button', { name: 'Analyse & Generate Plan' })
+    expect(actionButton).not.toBeDisabled()
   })
 
   it('saves onboarding progress to sessionStorage so it survives the OAuth redirect', async () => {
@@ -264,7 +266,8 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
-    // Advance to step 3 and select Strava method
+    // Advance to step 4 and select Strava method
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByText(/Connect with Strava/i))
@@ -275,7 +278,7 @@ describe('OnboardingPage', () => {
       const raw = sessionStorage.getItem('ai_trainer_onboarding_progress')
       expect(raw).not.toBeNull()
       const progress = JSON.parse(raw!)
-      expect(progress.step).toBe(3)
+      expect(progress.step).toBe(4)
       expect(progress.assessmentMethod).toBe('strava')
     })
   })
@@ -288,10 +291,9 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
 
-    // Navigate to step 4 (manual fitness inputs)
+    // Navigate to step 3 (Training Inputs)
     await user.click(screen.getByRole('button', { name: 'Continue' })) // step 1→2
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 2→3
-    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 3→4 (manual selected)
+    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 2→3 (Training Inputs)
 
     // Enter age 35 — expected estimated Max HR = 220 - 35 = 185
     const ageInputs = screen.getAllByPlaceholderText(/e\.g\. 35/)
@@ -300,7 +302,8 @@ describe('OnboardingPage', () => {
     // Live preview should show estimated Max HR
     expect(screen.getByText(/Estimated Max HR: 185 bpm/i)).toBeInTheDocument()
 
-    // Proceed to step 5 and generate plan
+    // Proceed through assessment step to step 5 and generate plan
+    await user.click(screen.getByRole('button', { name: 'Continue' })) // step 3→4 (assessment, manual default)
     await user.click(screen.getByRole('button', { name: 'Continue' })) // step 4→5
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
