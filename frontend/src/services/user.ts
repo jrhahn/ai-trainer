@@ -25,6 +25,8 @@ interface BackendUserResponse {
   weeklyHours?: number
   followsTrainingPlan: boolean
   maxHeartRate?: number
+  restingHeartRate?: number
+  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -55,6 +57,8 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       weeklyHours: user.weeklyHours ?? 8,
       followsTrainingPlan: user.followsTrainingPlan ?? false,
       maxHeartRate: user.maxHeartRate,
+      restingHeartRate: user.restingHeartRate,
+      thresholdHeartRate: user.thresholdHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -85,6 +89,8 @@ export async function updateCurrentUser(
     weeklyHours: updates.weeklyHours,
     followsTrainingPlan: updates.followsTrainingPlan,
     maxHeartRate: updates.maxHeartRate,
+    restingHeartRate: updates.restingHeartRate,
+    thresholdHeartRate: updates.thresholdHeartRate,
     currentFTP: updates.currentFTP,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,

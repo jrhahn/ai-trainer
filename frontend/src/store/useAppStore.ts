@@ -90,6 +90,8 @@ export interface UserProfile {
   weeklyHours?: number
   followsTrainingPlan: boolean
   maxHeartRate?: number
+  restingHeartRate?: number
+  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }
