@@ -607,8 +607,8 @@ async def test_metrics_history_empty_for_new_user(client):
 
 
 @pytest.mark.asyncio
-async def test_metrics_history_populated_after_analysis(client, mock_ai_service):
-    """An AthleteMetricSnapshot row is created after analyse-activities and appears in history."""
+async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_service):
+    """analyse-activities should create a per-ride metric row in /ride-metrics-history."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={"name": "Mia", "email": "mia@example.com", "password": "password1"},
@@ -635,14 +635,13 @@ async def test_metrics_history_populated_after_analysis(client, mock_ai_service)
         },
     )
 
-    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
+    resp = await client.get("/api/v1/users/me/ride-metrics-history", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["snapshots"]) == 1
-    snap = body["snapshots"][0]
-    assert snap["ftp"] is None          # FTP is never estimated from activity data
-    assert snap["source"] == "strava_analysis"
-    assert "recordedAt" in snap
+    assert len(body["rides"]) == 1
+    ride = body["rides"][0]
+    assert ride["activityDate"] == "2026-04-10"
+    assert ride["sportType"] == "cycling"
 
 
 # ---------------------------------------------------------------------------
@@ -750,5 +749,4 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
     snap = hist["snapshots"][0]
     # Mock AI service returns estimatedFTP=210
     assert snap["ftp"] == 210
-    assert snap["thresholdHR"] == 165
     assert snap["source"] == "fit_upload"

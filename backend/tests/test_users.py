@@ -45,7 +45,7 @@ async def test_metrics_history_empty(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_metrics_history_after_analyse_activities(client, auth_headers, mock_ai_service):
-    """analyse-activities should create a metric snapshot visible in /metrics-history."""
+    """analyse-activities should create a per-ride metric visible in /ride-metrics-history."""
     analyse_response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -68,15 +68,14 @@ async def test_metrics_history_after_analyse_activities(client, auth_headers, mo
     assert analyse_response.status_code == 200
 
     history_response = await client.get(
-        "/api/v1/users/me/metrics-history", headers=auth_headers
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
     )
     assert history_response.status_code == 200
     body = history_response.json()
-    assert len(body["snapshots"]) == 1
-    snap = body["snapshots"][0]
-    assert snap["ftp"] is None   # FTP is never estimated from activity data
-    assert snap["source"] == "strava_analysis"
-    assert "recordedAt" in snap
+    assert len(body["rides"]) == 1
+    ride = body["rides"][0]
+    assert ride["activityDate"] == "2026-04-18"
+    assert ride["sportType"] == "cycling"
 
 
 @pytest.mark.asyncio
