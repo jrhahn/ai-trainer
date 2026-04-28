@@ -177,6 +177,27 @@ export default function OnboardingPage() {
     return true
   }
 
+  const persistMetricsBeforeStravaConnect = async () => {
+    if (!authToken || !userProfile) return
+
+    const resolvedMaxHR: number | undefined = form.maxHeartRate
+      ? Number(form.maxHeartRate)
+      : form.age
+      ? estimateMaxHRFromAge(Number(form.age))
+      : undefined
+
+    const updates: Partial<UserProfile> = {
+      currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
+      maxHeartRate: resolvedMaxHR,
+    }
+
+    await updateCurrentUser(authToken, updates)
+    setUserProfile({
+      ...userProfile,
+      ...updates,
+    })
+  }
+
   const handleGenerate = async () => {
     if (!authToken) return
 
@@ -525,7 +546,7 @@ export default function OnboardingPage() {
                   </div>
                   {form.assessmentMethod === 'strava' && (
                     <div className="mt-4 space-y-3">
-                      <StravaConnect />
+                      <StravaConnect onBeforeConnect={persistMetricsBeforeStravaConnect} />
                       {!stravaConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="flex-shrink-0" />

@@ -194,7 +194,7 @@ export default function FitnessMetricsCard() {
 
       {!editing && (
         <p className="text-xs text-gray-400 mt-3">
-          Click <strong>Edit</strong> to update your FTP, heart-rate limits, and threshold HR. These
+          Click <strong>Edit</strong> to update your FTP and heart-rate limits. These
           values are used by the AI coach to tailor workout intensity.
         </p>
       )}

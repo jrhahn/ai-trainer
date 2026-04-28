@@ -140,4 +140,32 @@ describe('StravaConnect', () => {
 
     expect(mockGetStravaAuthUrl).not.toHaveBeenCalled()
   })
+
+  it('runs onBeforeConnect before requesting auth URL', async () => {
+    const onBeforeConnect = vi.fn().mockResolvedValue(undefined)
+    useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
+    render(<StravaConnect onBeforeConnect={onBeforeConnect} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => {
+      expect(onBeforeConnect).toHaveBeenCalledTimes(1)
+      expect(mockGetStravaAuthUrl).toHaveBeenCalledWith('tok-123')
+    })
+  })
+
+  it('shows connect error when onBeforeConnect fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onBeforeConnect = vi.fn().mockRejectedValue(new Error('Profile save failed'))
+    useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
+    render(<StravaConnect onBeforeConnect={onBeforeConnect} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not start the Strava connection/i)).toBeInTheDocument()
+    })
+    expect(mockGetStravaAuthUrl).not.toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
 })
