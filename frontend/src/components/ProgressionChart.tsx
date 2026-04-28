@@ -158,19 +158,6 @@ export default function ProgressionChart() {
   const ftpData = firstFtpIdx >= 0 ? (ftpAligned.slice(firstFtpIdx) as number[]) : []
   const ftpLabels = firstFtpIdx >= 0 ? loadLabels.slice(firstFtpIdx) : []
 
-  const thrHrData = snapshots
-    .filter((s) => s.thresholdHR != null)
-    .map((s) => s.thresholdHR as number)
-  const thrHrLabels = snapshots
-    .filter((s) => s.thresholdHR != null)
-    .map((s) => {
-      try {
-        return format(new Date(s.recordedAt), 'MMM d')
-      } catch {
-        return ''
-      }
-    })
-
   const latestFTP = snapshots.findLast((s) => s.ftp != null)?.ftp
   const latestCTL = snapshots.findLast((s) => s.ctl != null)?.ctl
   const latestATL = snapshots.findLast((s) => s.atl != null)?.atl
@@ -242,20 +229,6 @@ export default function ProgressionChart() {
             color="#9333ea"
             height={72}
             yLabel="FTP in Watts"
-          />
-        </div>
-      )}
-
-      {/* Threshold HR chart */}
-      {thrHrData.length >= 2 && (
-        <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">❤️ Threshold HR History (bpm)</p>
-          <LineChart
-            data={thrHrData}
-            labels={thrHrLabels}
-            color="#ef4444"
-            height={72}
-            yLabel="Threshold HR in bpm"
           />
         </div>
       )}

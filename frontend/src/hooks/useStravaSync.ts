@@ -6,7 +6,6 @@ import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
-import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -69,9 +68,7 @@ export function useStravaSync(): UseStravaSyncResult {
       const updatedProfile = {
         ...userProfile,
         currentFTP: userProfile.currentFTP,
-        maxHeartRate: userProfile.maxHeartRate ?? (assessment.estimatedThresholdHR
-          ? Math.round(assessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
-          : undefined),
+        maxHeartRate: userProfile.maxHeartRate,
       }
       setUserProfile(updatedProfile)
 

@@ -71,11 +71,6 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         ftp_field = (
             "- \"estimatedFTP\": always null for running (no power data)\n"
         )
-        threshold_hr_field = (
-            "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
-            "otherwise estimate from HR data (typically ~87% of max HR for a threshold effort); "
-            "null if no HR data\n"
-        )
         category_section = (
             "Run categories (use HR-based zones when power is unavailable):\n"
             "- recovery: easy jogging, HR < 65% max HR\n"
@@ -107,10 +102,6 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
             "set this field to null"
             "\n"
         )
-        threshold_hr_field = (
-            "- \"estimatedThresholdHR\": integer bpm — use the pre-computed value when provided, "
-            "otherwise estimate from activity summaries; null if no HR data\n"
-        )
         category_section = (
             "Ride categories:\n"
             "- recovery: avg power < 60% FTP\n"
@@ -140,7 +131,6 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         "Return ONLY a valid JSON object with these fields "
         "(all keys double-quoted, numeric values must be plain numbers with no units):\n"
         f"{ftp_field}"
-        f"{threshold_hr_field}"
         "- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n"
         "- \"notes\": a concise overall assessment addressed directly to the athlete using 'you'. "
         f"Mention their strengths, rider type, and key observations from their {activities_noun}. "
@@ -193,11 +183,9 @@ def analyse_activities_user(
     is_running = sport_type.lower() in ("running", "run")
     activities_noun = "runs" if is_running else "Strava rides"
     ftp_note = (
-        "When pre-computed threshold HR values are given, "
-        "use them verbatim for estimatedThresholdHR. Set estimatedFTP to null. "
+        "Set estimatedFTP to null. "
     ) if is_running else (
         "Set estimatedFTP to null. "
-        "When pre-computed threshold HR values are given, use them verbatim for estimatedThresholdHR. "
     )
     plan_section = ""
     if training_plan:
@@ -217,7 +205,6 @@ def analyse_activities_user(
 
 def analyse_activities_computed_section(
     computed_ftp: int | None,
-    computed_threshold_hr: int | None,
     max_heart_rate: int | None,
     computed_hr_zones: dict | None,
 ) -> str:
@@ -230,11 +217,6 @@ def analyse_activities_computed_section(
         section += (
             f"\nAthlete's entered FTP: {computed_ftp} W "
             "(set directly by the athlete — use this value verbatim)"
-        )
-    if computed_threshold_hr is not None:
-        section += (
-            f"\nAlgorithmically estimated threshold HR: {computed_threshold_hr} bpm "
-            "(average HR during best 20-min power effort)"
         )
     if max_heart_rate is not None:
         section += f"\nMax heart rate provided by athlete: {max_heart_rate} bpm"
@@ -383,13 +365,10 @@ def ask_trainer_assessment_section(rider_assessment: dict | None, current_ftp: i
     if not rider_assessment:
         return ""
     rider_type = rider_assessment.get("riderType", "")
-    thr = rider_assessment.get("estimatedThresholdHR")
     notes = rider_assessment.get("notes", "")
     assessment_lines = [f"- Rider type: {rider_type}"]
     if current_ftp:
         assessment_lines.append(f"- FTP: {current_ftp} W")
-    if thr:
-        assessment_lines.append(f"- Estimated threshold HR: {thr} bpm")
     if notes:
         assessment_lines.append(f"- Assessment notes: {notes}")
     return (

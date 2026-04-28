@@ -92,18 +92,16 @@ async def analyse_strava_activities(
 
     # --- Algorithmic computation from per-activity stream data ---
     computed_ftp: int | None = None
-    computed_threshold_hr: int | None = None
     computed_hr_zones: dict | None = None
     ride_analyses: dict[str, dict] = {}  # activity_id → per-ride analysis
 
     if streams_by_id:
-        raw_ftp, raw_threshold_hr = compute_ftp_from_streams(
+        raw_ftp, _raw_threshold_hr = compute_ftp_from_streams(
             streams_by_id, max_heart_rate
         )
         # Skip power-based FTP for running — no watts stream expected
         if not is_running:
             computed_ftp = raw_ftp
-        computed_threshold_hr = raw_threshold_hr
 
         # --- Per-ride analysis: category + interval detection + HR drift ---
         # Only meaningful for cycling where power streams are available.
@@ -130,10 +128,10 @@ async def analyse_strava_activities(
         computed_hr_zones = compute_hr_zones(max_heart_rate)
 
     # --- Build the contextual section describing computed metrics ---
-    # Pass the user-entered FTP directly to the prompt; computed_ftp is used only
-    # for per-ride categorisation above, not for the AI assessment output.
+    # Pass the user-entered FTP and threshold HR directly to the prompt; computed_ftp
+    # is used only for per-ride categorisation above, not for the AI assessment output.
     computed_section = analyse_activities_computed_section(
-        user_ftp, computed_threshold_hr, max_heart_rate, computed_hr_zones,
+        user_ftp, max_heart_rate, computed_hr_zones,
     )
 
     system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
@@ -157,8 +155,6 @@ async def analyse_strava_activities(
     # FTP is never estimated — always null; user-entered currentFTP is the
     # authoritative value and is used directly from the user profile.
     parsed["estimatedFTP"] = None
-    if computed_threshold_hr is not None:
-        parsed["estimatedThresholdHR"] = computed_threshold_hr
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
@@ -182,22 +178,18 @@ async def analyse_fit_activity(
     FTP estimation:
     - Cycling: estimated as ``avg_power × AVG_POWER_TO_FTP_RATIO`` when power
       data is present (a rough proxy since we lack the full stream).
-    - Running: FTP is set to ``null``; threshold HR is estimated from
-      ``max_heart_rate × LTHR_RATIO`` when max HR is known.
+    - Running: FTP is set to ``null``.
+    Threshold HR is never estimated — only the user-entered value is used.
     """
     is_running = sport_type.lower() in ("running", "run")
 
     computed_ftp: int | None = None
-    computed_threshold_hr: int | None = None
     computed_hr_zones: dict | None = None
 
     if not is_running and avg_power and avg_power > 0:
         computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
-    # Estimate threshold HR only when max HR is provided (LTHR = max_hr × LTHR_RATIO).
-    # Average HR from a single activity is not a reliable threshold proxy.
     if max_heart_rate and max_heart_rate > 0:
-        computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
         computed_hr_zones = compute_hr_zones(max_heart_rate)
 
     activity_summary = {
@@ -209,7 +201,6 @@ async def analyse_fit_activity(
 
     computed_section = analyse_activities_computed_section(
         computed_ftp if not is_running else None,
-        computed_threshold_hr,
         max_heart_rate,
         computed_hr_zones,
     )
@@ -224,8 +215,6 @@ async def analyse_fit_activity(
 
     # FTP is never estimated — always null.
     parsed["estimatedFTP"] = None
-    if computed_threshold_hr is not None:
-        parsed["estimatedThresholdHR"] = computed_threshold_hr
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 

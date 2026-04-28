@@ -555,7 +555,6 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
 
     mock_ai_service["analyse_strava_activities"].return_value = {
         "estimatedFTP": 290,
-        "estimatedThresholdHR": 170,
         "riderType": "climber",
         "notes": "Good climber.",
         "rideInsights": [

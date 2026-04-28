@@ -179,7 +179,6 @@ async def test_user_response_camelcase_shape(client):
         "follows_training_plan",
         "resting_heart_rate",
         "max_heart_rate",
-        "threshold_heart_rate",
         "current_ftp",
         "fitness_level",
         "ai_provider",
@@ -576,7 +575,7 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     assert "riderType" in assessment
     assert "notes" in assessment
     # Optional fields may or may not be present
-    for optional_key in ("estimatedThresholdHR", "rideInsights", "lastRideFeedback"):
+    for optional_key in ("rideInsights", "lastRideFeedback"):
         if optional_key in assessment:
             assert assessment[optional_key] is not None or assessment[optional_key] is None
 
@@ -642,7 +641,6 @@ async def test_metrics_history_populated_after_analysis(client, mock_ai_service)
     assert len(body["snapshots"]) == 1
     snap = body["snapshots"][0]
     assert snap["ftp"] is None          # FTP is never estimated from activity data
-    assert snap["thresholdHR"] == 172   # from mock_ai_service estimatedThresholdHR
     assert snap["source"] == "strava_analysis"
     assert "recordedAt" in snap
 
@@ -750,7 +748,7 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
     hist = hist_resp.json()
     assert len(hist["snapshots"]) >= 1
     snap = hist["snapshots"][0]
-    # Mock AI service returns estimatedFTP=210, estimatedThresholdHR=165
+    # Mock AI service returns estimatedFTP=210
     assert snap["ftp"] == 210
     assert snap["thresholdHR"] == 165
     assert snap["source"] == "fit_upload"

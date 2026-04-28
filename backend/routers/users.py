@@ -14,7 +14,7 @@ import models
 import schemas
 from database import get_db
 from services import ai_service, metrics_service
-from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO
+from services.analysis import AVG_POWER_TO_FTP_RATIO
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -214,7 +214,6 @@ async def get_metrics_history(
             schemas.AthleteMetricSnapshotSchema(
                 recorded_at=s.recorded_at.isoformat(),
                 ftp=s.ftp,
-                threshold_hr=s.threshold_hr,
                 ctl=s.ctl,
                 atl=s.atl,
                 tsb=s.tsb,
@@ -437,7 +436,6 @@ async def upload_fit_file(
             db,
             current_user.id,
             estimated_ftp=ai_result.get("estimatedFTP"),
-            estimated_threshold_hr=ai_result.get("estimatedThresholdHR"),
             rider_type=ai_result.get("riderType"),
             notes=ai_result.get("notes"),
             hr_zones=ai_result.get("hrZones"),
@@ -447,23 +445,17 @@ async def upload_fit_file(
 
     # Write a time-series metric snapshot regardless of AI result
     ftp_value = ai_result.get("estimatedFTP") if ai_result else None
-    threshold_hr_value = ai_result.get("estimatedThresholdHR") if ai_result else None
 
     # For cycling without AI: fall back to avg_power-based FTP estimate
     if ftp_value is None and sport_type.lower() not in ("running", "run") and avg_power:
         ftp_value = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
-    # For any sport without AI: fall back to LTHR estimate if max HR is known
-    if threshold_hr_value is None and max_hr:
-        threshold_hr_value = round(max_hr * LTHR_RATIO)
-
-    if ftp_value is not None or threshold_hr_value is not None:
+    if ftp_value is not None:
         try:
             await crud.create_athlete_metric_snapshot(
                 db,
                 current_user.id,
                 ftp=ftp_value,
-                threshold_hr=threshold_hr_value,
                 source="fit_upload",
             )
         except Exception:

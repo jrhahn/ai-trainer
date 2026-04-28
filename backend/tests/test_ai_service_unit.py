@@ -370,7 +370,6 @@ async def test_analyse_strava_activities_with_streams():
     ai_response = json.dumps(
         {
             "estimatedFTP": 999,  # AI guess — should be overridden
-            "estimatedThresholdHR": None,
             "riderType": "allrounder",
             "notes": "Looks good.",
             "rideInsights": "Solid endurance ride.",
@@ -411,7 +410,6 @@ async def test_analyse_strava_activities_with_max_hr_sets_hr_zones():
     ai_response = json.dumps(
         {
             "estimatedFTP": 250,
-            "estimatedThresholdHR": 165,
             "riderType": "endurance",
             "notes": "Good aerobic base.",
             "rideInsights": "Endurance ride.",
@@ -453,7 +451,6 @@ async def test_analyse_strava_activities_no_streams():
     ai_response = json.dumps(
         {
             "estimatedFTP": 290,
-            "estimatedThresholdHR": None,
             "riderType": "allrounder",
             "notes": "Good effort.",
             "rideInsights": "Solid ride.",
@@ -632,7 +629,6 @@ async def test_analyse_strava_activities_with_streams_and_hr():
     ai_response = json.dumps(
         {
             "estimatedFTP": 999,
-            "estimatedThresholdHR": 999,
             "riderType": "allrounder",
             "notes": "Good.",
             "rideInsights": "Solid.",
@@ -1124,7 +1120,6 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
         "trainingGoal": "ftp_improvement",
         "fitnessLevel": "intermediate",
         "currentFTP": 260,
-        "thresholdHeartRate": 175,
     }
     fake_plan = [
         {

@@ -59,7 +59,7 @@ const mockActivities = [
 
 const mockAssessment = {
   riderType: 'endurance' as const,
-  estimatedThresholdHR: 160,
+  estimatedFTP: 260,
   notes: 'Good aerobic base.',
   rideInsights: 'Consistent power output.',
   lastRideFeedback: 'Strong finish.',

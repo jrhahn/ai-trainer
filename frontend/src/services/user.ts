@@ -26,7 +26,6 @@ interface BackendUserResponse {
   followsTrainingPlan: boolean
   maxHeartRate?: number
   restingHeartRate?: number
-  thresholdHeartRate?: number
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -58,7 +57,6 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       followsTrainingPlan: user.followsTrainingPlan ?? false,
       maxHeartRate: user.maxHeartRate,
       restingHeartRate: user.restingHeartRate,
-      thresholdHeartRate: user.thresholdHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -90,7 +88,6 @@ export async function updateCurrentUser(
     followsTrainingPlan: updates.followsTrainingPlan,
     maxHeartRate: updates.maxHeartRate,
     restingHeartRate: updates.restingHeartRate,
-    thresholdHeartRate: updates.thresholdHeartRate,
     currentFTP: updates.currentFTP,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
@@ -195,7 +192,7 @@ export async function recalculateMetrics(
 
 export async function estimateFTP(
   token: string,
-  opts: { maxHeartRate?: number; restingHeartRate?: number; thresholdHeartRate?: number },
+  opts: { maxHeartRate?: number; restingHeartRate?: number },
 ): Promise<{ estimatedFTP: number | null; source: string }> {
   return apiFetch<{ estimatedFTP: number | null; source: string }>('/users/me/estimate-ftp', {
     token,
@@ -203,7 +200,6 @@ export async function estimateFTP(
     body: {
       maxHeartRate: opts.maxHeartRate ?? null,
       restingHeartRate: opts.restingHeartRate ?? null,
-      thresholdHeartRate: opts.thresholdHeartRate ?? null,
     },
   })
 }

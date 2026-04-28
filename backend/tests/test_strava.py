@@ -378,7 +378,6 @@ async def test_import_background_replace_existing_overwrites_prior_rows(auth_hea
             session,
             user_id,
             ftp=250,
-            threshold_hr=None,
             ctl=10.0,
             atl=12.0,
             tsb=-2.0,

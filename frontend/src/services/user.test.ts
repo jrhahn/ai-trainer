@@ -252,7 +252,7 @@ describe('estimateFTP', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
       token: 'tok-123',
       method: 'POST',
-      body: { maxHeartRate: 185, restingHeartRate: null, thresholdHeartRate: null },
+      body: { maxHeartRate: 185, restingHeartRate: null },
     })
   })
 
@@ -266,7 +266,7 @@ describe('estimateFTP', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/estimate-ftp', {
       token: 'tok-123',
       method: 'POST',
-      body: { maxHeartRate: null, restingHeartRate: null, thresholdHeartRate: null },
+      body: { maxHeartRate: null, restingHeartRate: null },
     })
   })
 })

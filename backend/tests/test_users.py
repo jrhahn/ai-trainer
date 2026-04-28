@@ -75,7 +75,6 @@ async def test_metrics_history_after_analyse_activities(client, auth_headers, mo
     assert len(body["snapshots"]) == 1
     snap = body["snapshots"][0]
     assert snap["ftp"] is None   # FTP is never estimated from activity data
-    assert snap["thresholdHR"] == 172  # matches mock_ai_service estimatedThresholdHR
     assert snap["source"] == "strava_analysis"
     assert "recordedAt" in snap
 

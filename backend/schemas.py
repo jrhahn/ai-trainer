@@ -74,7 +74,6 @@ class TokenResponse(BaseModel):
 
 
 class RiderAssessmentSchema(CamelModel):
-    estimated_threshold_hr: Optional[int] = None
     rider_type: str
     notes: str
     hr_zones: Optional[Any] = None
@@ -370,7 +369,6 @@ class RefreshLoginSummaryResponse(CamelModel):
 class AthleteMetricSnapshotSchema(CamelModel):
     recorded_at: str
     ftp: Optional[int] = None
-    threshold_hr: Optional[int] = None
     ctl: Optional[float] = None
     atl: Optional[float] = None
     tsb: Optional[float] = None

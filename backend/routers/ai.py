@@ -182,7 +182,6 @@ async def analyse_activities(
         db,
         current_user.id,
         estimated_ftp=result.get("estimatedFTP"),
-        estimated_threshold_hr=result.get("estimatedThresholdHR"),
         rider_type=result.get("riderType"),
         notes=result.get("notes"),
         hr_zones=result.get("hrZones"),
@@ -190,31 +189,6 @@ async def analyse_activities(
         last_ride_feedback=result.get("lastRideFeedback"),
         login_summary=result.get("loginSummary"),
     )
-
-    # Record a time-series metric snapshot for threshold HR progression tracking
-    threshold_hr_value = result.get("estimatedThresholdHR")
-    if threshold_hr_value is not None:
-        plan_days = training_plan
-        # Always use the user-entered FTP for training-load computations.
-        ftp_for_load = current_user.current_ftp or body.current_ftp or 0
-        ctl: float | None = None
-        atl: float | None = None
-        tsb: float | None = None
-        if ftp_for_load > 0 and plan_days:
-            training_load = compute_training_load(plan_days, ftp_for_load)
-            ctl = training_load.get("ctl")
-            atl = training_load.get("atl")
-            tsb = training_load.get("tsb")
-        await crud.create_athlete_metric_snapshot(
-            db,
-            current_user.id,
-            ftp=None,
-            threshold_hr=threshold_hr_value,
-            ctl=ctl,
-            atl=atl,
-            tsb=tsb,
-            source="strava_analysis",
-        )
 
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
@@ -714,7 +688,6 @@ async def refresh_login_summary(
             db,
             current_user.id,
             estimated_ftp=assessment.estimated_ftp,
-            estimated_threshold_hr=assessment.estimated_threshold_hr,
             login_summary=login_summary,
         )
 
