@@ -108,6 +108,10 @@ export function useImportProgress() {
       listeners.delete(setProgress)
       if (listeners.size === 0) {
         stopPolling()
+        // Reset shared cache so the next consumer starts from a clean state
+        // rather than seeing stale progress from a previous session.
+        sharedProgress = INITIAL_PROGRESS
+        sharedAuthToken = null
       }
     }
   }, [authToken])
