@@ -18,7 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, build_ride_metrics_chain, build_ride_analysis
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, project_training_load_from_seed, build_ride_metrics_chain, build_ride_analysis
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
@@ -546,12 +546,23 @@ async def readiness_score(
     if ftp <= 0:
         ftp = float(current_user.current_ftp or 0)
 
-    # --- Compute current CTL/ATL/TSB (plan days up to today) ---
     today_str = _date.today().isoformat()
-    plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
-    current_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
-        "ctl": 0.0, "atl": 0.0, "tsb": 0.0
-    }
+
+    # --- Compute current CTL/ATL/TSB from actual ride metrics ---
+    latest_ride = await crud.get_latest_ride_metric(db, current_user.id)
+    if latest_ride is not None and latest_ride.ctl_after is not None:
+        current_ctl = float(latest_ride.ctl_after)
+        current_atl = float(latest_ride.atl_after or 0.0)
+        current_tsb = float(latest_ride.tsb_after if latest_ride.tsb_after is not None else current_ctl - current_atl)
+    else:
+        # Fall back to plan simulation when no ride data is available
+        plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
+        fallback_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
+            "ctl": 0.0, "atl": 0.0, "tsb": 0.0
+        }
+        current_ctl = fallback_load["ctl"]
+        current_atl = fallback_load["atl"]
+        current_tsb = fallback_load["tsb"]
 
     # --- Compute days until race ---
     days_until_race = 0
@@ -565,19 +576,22 @@ async def readiness_score(
 
     # --- Current readiness score ---
     current_result = compute_readiness_score(
-        ctl=current_load["ctl"],
-        atl=current_load["atl"],
-        tsb=current_load["tsb"],
+        ctl=current_ctl,
+        atl=current_atl,
+        tsb=current_tsb,
         days_until_race=days_until_race,
     )
 
-    # --- Forward-projection to race day (when race_date is set and in the future) ---
+    # --- Forward-projection to race day seeded from actual CTL/ATL ---
     projected_score = None
     projected_ctl = None
     projected_atl = None
     projected_tsb = None
-    if race_date_str and days_until_race > 0 and ftp > 0:
-        projected_load = _project_training_load(plan, ftp, race_date_str)
+    if race_date_str and days_until_race > 0:
+        future_plan_days = [d for d in plan if d.get("date", "") > today_str]
+        projected_load = project_training_load_from_seed(
+            future_plan_days, ftp, seed_ctl=current_ctl, seed_atl=current_atl
+        )
         projected_result = compute_readiness_score(
             ctl=projected_load["ctl"],
             atl=projected_load["atl"],
