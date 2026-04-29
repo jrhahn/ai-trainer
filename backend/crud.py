@@ -154,6 +154,83 @@ async def upsert_workout_log(
 
 
 # ---------------------------------------------------------------------------
+# RaceEvent
+# ---------------------------------------------------------------------------
+
+
+async def get_race_events(db: AsyncSession, user_id: str) -> list[models.RaceEvent]:
+    """Return all RaceEvent rows for a user, ordered by date."""
+    result = await db.scalars(
+        select(models.RaceEvent)
+        .where(models.RaceEvent.user_id == user_id)
+        .order_by(models.RaceEvent.date, models.RaceEvent.start_time)
+    )
+    return list(result)
+
+
+async def get_race_event(
+    db: AsyncSession, user_id: str, event_id: str
+) -> models.RaceEvent | None:
+    """Return a specific RaceEvent belonging to a user, or None."""
+    return await db.scalar(
+        select(models.RaceEvent).where(
+            models.RaceEvent.user_id == user_id,
+            models.RaceEvent.id == event_id,
+        )
+    )
+
+
+async def create_race_event(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    date: str,
+    start_time: str | None,
+    distance_km: float,
+    elevation_m: int,
+) -> models.RaceEvent:
+    """Create a RaceEvent for a user and flush."""
+    event = models.RaceEvent(
+        user_id=user_id,
+        date=date,
+        start_time=start_time,
+        distance_km=distance_km,
+        elevation_m=elevation_m,
+    )
+    db.add(event)
+    await db.flush()
+    return event
+
+
+async def update_race_event(
+    db: AsyncSession,
+    event: models.RaceEvent,
+    *,
+    date: str | None = None,
+    start_time: str | None = None,
+    distance_km: float | None = None,
+    elevation_m: int | None = None,
+) -> models.RaceEvent:
+    """Update a RaceEvent and flush."""
+    if date is not None:
+        event.date = date
+    event.start_time = start_time
+    if distance_km is not None:
+        event.distance_km = distance_km
+    if elevation_m is not None:
+        event.elevation_m = elevation_m
+    event.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return event
+
+
+async def delete_race_event(db: AsyncSession, event: models.RaceEvent) -> None:
+    """Delete a RaceEvent and flush."""
+    await db.delete(event)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
 # ChatMessage
 # ---------------------------------------------------------------------------
 
