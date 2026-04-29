@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { triggerStravaHistoryImport } from '../services/strava'
+import { fetchCurrentUser } from '../services/user'
 import { useImportProgress } from '../hooks/useImportProgress'
 import StravaImportSummary from '../components/StravaImportSummary'
 
@@ -29,7 +30,13 @@ export default function StravaCallbackPage() {
   const navigate = useNavigate()
   const authToken = useAppStore((s) => s.authToken)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
-  const loadUserData = useAppStore((s) => s.loadUserData)
+  const setUserProfile = useAppStore((s) => s.setUserProfile)
+  const setStravaConnection = useAppStore((s) => s.setStravaConnection)
+  const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
+  const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
+  const setLastStravaActivityId = useAppStore((s) => s.setLastStravaActivityId)
+  const setAiProvider = useAppStore((s) => s.setAiProvider)
+  const setOnboarded = useAppStore((s) => s.setOnboarded)
   const initialState = getInitialCallbackState()
 
   const [step, setStep] = useState<Step>(initialState.step)
@@ -39,6 +46,18 @@ export default function StravaCallbackPage() {
   const initialisedRef = useRef(false)
 
   const progress = useImportProgress()
+
+  const refreshCurrentUser = async () => {
+    if (!authToken) return
+    const user = await fetchCurrentUser(authToken)
+    setUserProfile(user.profile)
+    setStravaConnection(user.stravaConnection)
+    setRiderAssessment(user.riderAssessment)
+    setStravaAnalysisComplete(user.stravaAnalysisComplete)
+    setLastStravaActivityId(user.lastStravaActivityId)
+    setAiProvider(user.aiProvider)
+    setOnboarded(user.isOnboarded)
+  }
 
   const startImport = async () => {
     if (!authToken) {
@@ -74,7 +93,7 @@ export default function StravaCallbackPage() {
 
     void (async () => {
       try {
-        await loadUserData(authToken ?? undefined)
+        await refreshCurrentUser()
         await startImport()
       } catch (e) {
         setErrorMsg(e instanceof Error ? e.message : 'Could not refresh your Strava connection.')

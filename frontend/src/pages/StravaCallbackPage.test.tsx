@@ -17,15 +17,12 @@ vi.mock('../services/api', () => ({
   API_BASE: 'http://localhost:8000/api/v1',
 }))
 
-const mockLoadUserData = vi.fn()
-
 function setup(search = '') {
   Object.defineProperty(window, 'location', {
     value: { ...window.location, search },
     writable: true,
   })
   useAppStore.setState({ authToken: 'tok-123' })
-  useAppStore.getState().loadUserData = mockLoadUserData
   return render(
     <MemoryRouter>
       <StravaCallbackPage />
@@ -36,11 +33,24 @@ function setup(search = '') {
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
-  mockLoadUserData.mockResolvedValue(undefined)
   mockNavigate.mockReset()
 
   // Default: POST starts the import, GET returns done with 42 rides
   mockApiFetch.mockImplementation((path: string) => {
+    if (path === '/users/me') {
+      return Promise.resolve({
+        id: 'user-1',
+        email: 'rider@example.com',
+        name: 'Test Rider',
+        isOnboarded: false,
+        stravaAnalysisComplete: false,
+        lastStravaActivityId: null,
+        followsTrainingPlan: false,
+        aiProvider: 'openai',
+        stravaConnection: { athleteId: 42, athleteName: 'Alex Rider' },
+        riderAssessment: null,
+      })
+    }
     if (path === '/strava/import-progress') {
       return Promise.resolve({
         jobId: 'job-1',
@@ -73,6 +83,20 @@ describe('StravaCallbackPage', () => {
   it('shows the importing step while the API call is in flight', async () => {
     // Progress stays at 'running' — component stays in importing step
     mockApiFetch.mockImplementation((path: string) => {
+      if (path === '/users/me') {
+        return Promise.resolve({
+          id: 'user-1',
+          email: 'rider@example.com',
+          name: 'Test Rider',
+          isOnboarded: false,
+          stravaAnalysisComplete: false,
+          lastStravaActivityId: null,
+          followsTrainingPlan: false,
+          aiProvider: 'openai',
+          stravaConnection: { athleteId: 42, athleteName: 'Alex Rider' },
+          riderAssessment: null,
+        })
+      }
       if (path === '/strava/import-progress') {
         return Promise.resolve({
           status: 'running',
@@ -105,22 +129,28 @@ describe('StravaCallbackPage', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'), { timeout: 3000 })
   })
 
-  it('reloads user data before starting the import after OAuth success', async () => {
+  it('reloads current user before starting the import after OAuth success', async () => {
     setup('?success=1')
 
     await waitFor(() => {
-      expect(mockLoadUserData).toHaveBeenCalledWith('tok-123')
+      expect(mockApiFetch).toHaveBeenCalledWith('/users/me', { token: 'tok-123' })
       expect(mockApiFetch).toHaveBeenCalledWith(
         expect.stringContaining('/strava/import-history'),
         expect.objectContaining({ method: 'POST' }),
       )
     })
-    expect(mockLoadUserData.mock.invocationCallOrder[0]).toBeLessThan(
+    const userFetchOrder = mockApiFetch.mock.invocationCallOrder.find((_, idx) => {
+      const call = mockApiFetch.mock.calls[idx]
+      return call[0] === '/users/me'
+    }) ?? Number.MAX_SAFE_INTEGER
+    const importOrder =
       mockApiFetch.mock.invocationCallOrder.find((_, idx) => {
         const call = mockApiFetch.mock.calls[idx]
         return typeof call[0] === 'string' && call[0].includes('/strava/import-history')
       }) ?? Number.MAX_SAFE_INTEGER
-    )
+
+    expect(userFetchOrder).toBeLessThan(importOrder)
+    expect(useAppStore.getState().stravaConnection?.athleteName).toBe('Alex Rider')
   })
 
   it('shows skipped activity details without treating them as fatal', async () => {
