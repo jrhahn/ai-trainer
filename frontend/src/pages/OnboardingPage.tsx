@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Bike, Target, Loader2, CheckCircle, Dumbbell, Link } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
@@ -6,7 +6,6 @@ import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { getStravaActivities } from '../services/strava'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
-import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const TOTAL_STEPS = 5
 const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
@@ -58,16 +57,6 @@ function clearOnboardingProgress(): void {
   }
 }
 
-/** Estimate maximum heart rate from age using the 220 − age formula.
- *  Age is clamped to a minimum of 10 to avoid physiologically unrealistic
- *  values for very young inputs.  Returns undefined when age is not a valid
- *  positive number.
- */
-function estimateMaxHRFromAge(age: number): number | undefined {
-  if (!Number.isFinite(age) || age < 10) return undefined
-  return Math.max(100, 220 - age)
-}
-
 type FormData = {
   name: string
   email: string
@@ -78,9 +67,7 @@ type FormData = {
   followsTrainingPlan: boolean
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
-  restingHeartRate: string
   maxHeartRate: string
-  age: string
 }
 
 export default function OnboardingPage() {
@@ -108,7 +95,7 @@ export default function OnboardingPage() {
 
   const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
     const hasManualMetrics = Boolean(
-      userProfile?.currentFTP || userProfile?.maxHeartRate || userProfile?.restingHeartRate
+      userProfile?.currentFTP || userProfile?.maxHeartRate
     )
     if (hasManualMetrics || !stravaConnection) return 'manual'
     return 'strava'
@@ -124,9 +111,7 @@ export default function OnboardingPage() {
     followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
     currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
     fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
-    restingHeartRate: userProfile?.restingHeartRate ? String(userProfile.restingHeartRate) : '',
     maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
-    age: '',
   })
 
   // Restore progress saved before the Strava OAuth redirect (if any).
@@ -149,6 +134,23 @@ export default function OnboardingPage() {
     }
   })
 
+  // True only when the component mounted after a Strava OAuth redirect (saved
+  // progress had step=3 with assessmentMethod='strava').  Cleared after the
+  // auto-advance fires so that manual Back-navigation never re-triggers it.
+  const restoredAtStravaStepRef = useRef(
+    savedProgress?.step === 4 && savedProgress?.assessmentMethod === 'strava'
+  )
+
+  // After the Strava OAuth redirect, auto-trigger generation once
+  // stravaConnection becomes available (user already saw step 4 assessment).
+  useEffect(() => {
+    if (!restoredAtStravaStepRef.current) return
+    if (step !== 4 || form.assessmentMethod !== 'strava' || !stravaConnection) return
+    restoredAtStravaStepRef.current = false
+    void handleGenerate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stravaConnection, step, form.assessmentMethod])
+
   // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
   useEffect(() => {
     saveOnboardingProgress(step, form)
@@ -159,8 +161,27 @@ export default function OnboardingPage() {
 
   const canNext = () => {
     if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
-    if (step === 3 && form.assessmentMethod === 'strava') return Boolean(stravaConnection)
+    if (step === 4 && form.assessmentMethod === 'strava') return Boolean(stravaConnection)
     return true
+  }
+
+  const persistMetricsBeforeStravaConnect = async () => {
+    if (!authToken || !userProfile) return
+
+    const resolvedMaxHR: number | undefined = form.maxHeartRate
+      ? Number(form.maxHeartRate)
+      : undefined
+
+    const updates: Partial<UserProfile> = {
+      currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
+      maxHeartRate: resolvedMaxHR,
+    }
+
+    await updateCurrentUser(authToken, updates)
+    setUserProfile({
+      ...userProfile,
+      ...updates,
+    })
   }
 
   const handleGenerate = async () => {
@@ -169,19 +190,12 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
-    // Threshold HR is typically ~87% of max HR for trained cyclists.
-    // Must stay in sync with _LTHR_RATIO in backend/services/ai_service.py.
     let riderAssessment: RiderAssessment | undefined
 
-    // Resolve Max HR: use explicitly entered value, or estimate from age (220 − age).
+    // Resolve Max HR: use explicitly entered value.
     const resolvedMaxHR: number | undefined = form.maxHeartRate
       ? Number(form.maxHeartRate)
-      : form.age
-      ? estimateMaxHRFromAge(Number(form.age))
       : undefined
-
-    // Default resting HR to 60 when not provided.
-    const resolvedRestingHR: number = form.restingHeartRate ? Number(form.restingHeartRate) : 60
 
     const profile: UserProfile = {
       name: form.name,
@@ -193,7 +207,6 @@ export default function OnboardingPage() {
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
-      restingHeartRate: resolvedRestingHR,
       maxHeartRate: resolvedMaxHR,
     }
 
@@ -209,14 +222,13 @@ export default function OnboardingPage() {
             recentActivities,
             authToken,
             resolvedMaxHR,
+            profile.currentFTP,
           )
           riderAssessment = analyseResult.assessment
           profileForPlan = {
             ...profile,
-            currentFTP: profile.currentFTP ?? riderAssessment.estimatedFTP,
-            maxHeartRate: profile.maxHeartRate ?? (riderAssessment.estimatedThresholdHR
-              ? Math.round(riderAssessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
-              : undefined),
+            currentFTP: profile.currentFTP,
+            maxHeartRate: profile.maxHeartRate,
           }
           stravaAnalysisComplete = true
         }
@@ -241,6 +253,14 @@ export default function OnboardingPage() {
       setError(e instanceof Error ? e.message : 'Failed to generate plan.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleContinue = () => {
+    if (step === 4 && form.assessmentMethod === 'strava' && stravaConnection) {
+      void handleGenerate()
+    } else {
+      setStep(step + 1)
     }
   }
 
@@ -358,124 +378,13 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: Strava or manual assessment */}
+          {/* Step 3: Training Inputs */}
           {step === 3 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Connect Strava for automatic analysis of your last 7 rides, or enter parameters manually.
-              </p>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => update('assessmentMethod', 'strava')}
-                  className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
-                    form.assessmentMethod === 'strava'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-gray-200 hover:border-amber-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-900">Connect with Strava</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Works best when rides include both power and heart rate.
-                      </p>
-                    </div>
-                    {form.assessmentMethod === 'strava' && (
-                      <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
-                    )}
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => update('assessmentMethod', 'manual')}
-                  className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
-                    form.assessmentMethod === 'manual'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-gray-200 hover:border-amber-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-900">Enter fitness parameters manually</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Add FTP and heart-rate details now. Everything is optional and can be updated later.
-                      </p>
-                    </div>
-                    {form.assessmentMethod === 'manual' && (
-                      <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
-                    )}
-                  </div>
-                </button>
-              </div>
-              {form.assessmentMethod === 'strava' && (
-                <div className="mt-4 space-y-4">
-                  {/* HR inputs collected BEFORE Strava connection so they're
-                      available for the FTP estimation that runs during analysis. */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Heart Rate (bpm)
-                      </label>
-                      <input
-                        type="number"
-                        value={form.maxHeartRate}
-                        onChange={(e) => update('maxHeartRate', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 185"
-                      />
-                      {!form.maxHeartRate && (
-                        <div className="mt-2">
-                          <label className="block text-xs text-gray-500 mb-1">
-                            Or enter your age — we&apos;ll estimate Max HR as 220 − age.
-                          </label>
-                          <input
-                            type="number"
-                            value={form.age}
-                            onChange={(e) => update('age', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                            placeholder="e.g. 35"
-                          />
-                          {form.age && estimateMaxHRFromAge(Number(form.age)) !== undefined && (
-                            <p className="text-xs text-amber-700 mt-1">
-                              Estimated Max HR: {estimateMaxHRFromAge(Number(form.age))} bpm
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Resting Heart Rate (bpm){' '}
-                        <span className="text-gray-400 font-normal">default 60 if left blank</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={form.restingHeartRate}
-                        onChange={(e) => update('restingHeartRate', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 55"
-                      />
-                    </div>
-                  </div>
-                  <StravaConnect />
-                  {!stravaConnection && (
-                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-                      <Link size={14} className="flex-shrink-0" />
-                      Connect Strava to continue with automatic ride analysis.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 4: Fitness and availability */}
-          {step === 4 && (
-            <div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Training Inputs</h2>
-              <p className="text-sm text-gray-500 mb-4">Helps calibrate workout intensity and schedule.</p>
+              <p className="text-sm text-gray-500 mb-4">
+                Tell us about your current fitness — everything is optional and can be updated later.
+              </p>
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
@@ -502,71 +411,33 @@ export default function OnboardingPage() {
                     ))}
                   </div>
                 </div>
-                {form.assessmentMethod === 'manual' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={form.currentFTP}
-                        onChange={(e) => update('currentFTP', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 250"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Resting Heart Rate (bpm){' '}
-                        <span className="text-gray-400 font-normal">default 60 if left blank</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={form.restingHeartRate}
-                        onChange={(e) => update('restingHeartRate', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 55 (default: 60)"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Heart Rate (bpm)
-                      </label>
-                      <input
-                        type="number"
-                        value={form.maxHeartRate}
-                        onChange={(e) => update('maxHeartRate', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                        placeholder="e.g. 185"
-                      />
-                      {!form.maxHeartRate && (
-                        <div className="mt-2">
-                          <label className="block text-xs text-gray-500 mb-1">
-                            Or enter your age — we&apos;ll estimate Max HR as 220 − age.
-                          </label>
-                          <input
-                            type="number"
-                            value={form.age}
-                            onChange={(e) => update('age', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                            placeholder="e.g. 35"
-                          />
-                          {form.age && estimateMaxHRFromAge(Number(form.age)) !== undefined && (
-                            <p className="text-xs text-amber-700 mt-1">
-                              Estimated Max HR: {estimateMaxHRFromAge(Number(form.age))} bpm
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={form.currentFTP}
+                      onChange={(e) => update('currentFTP', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                      placeholder="e.g. 250"
+                    />
                   </div>
-                )}
-                {form.assessmentMethod === 'strava' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
-                    We&apos;ll download and analyse your last 7 rides — including detailed power, HR, cadence, and speed data — to estimate your FTP and training zones.
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={form.maxHeartRate}
+                      onChange={(e) => update('maxHeartRate', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                      placeholder="e.g. 185"
+                    />
+
                   </div>
-                )}
+                </div>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -580,25 +451,97 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {/* Step 4: Fitness assessment method */}
+          {step === 4 && (
+            <div>
+              {loading ? (
+                <div className="text-center py-10">
+                  <Loader2 size={32} className="animate-spin text-amber-500 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-900">Analysing rides and generating your plan…</p>
+                  <p className="text-sm text-gray-500 mt-1">This takes about 30 seconds.</p>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Connect Strava for automatic analysis of your last 7 rides, or use the parameters you just entered.
+                  </p>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => update('assessmentMethod', 'strava')}
+                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
+                        form.assessmentMethod === 'strava'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-900">Connect with Strava</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Analyses your last 7 rides to estimate FTP and training zones.
+                          </p>
+                        </div>
+                        {form.assessmentMethod === 'strava' && (
+                          <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update('assessmentMethod', 'manual')}
+                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
+                        form.assessmentMethod === 'manual'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-900">Use parameters I entered</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            We&apos;ll use the FTP and heart-rate values from the previous step.
+                          </p>
+                        </div>
+                        {form.assessmentMethod === 'manual' && (
+                          <CheckCircle size={16} className="text-amber-500 flex-shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                  {form.assessmentMethod === 'strava' && (
+                    <div className="mt-4 space-y-3">
+                      <StravaConnect onBeforeConnect={persistMetricsBeforeStravaConnect} />
+                      {!stravaConnection && (
+                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                          <Link size={14} className="flex-shrink-0" />
+                          Connect Strava to continue with automatic ride analysis.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mt-4">
+                      {error}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Step 5: Summary */}
           {step === 5 && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
               <p className="text-sm text-gray-500 mb-4">
-                We&apos;ll generate your first 14-day plan{form.assessmentMethod === 'strava' ? ' after ride analysis' : ''}.
+                Review your inputs and generate your first 14-day plan.
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(() => {
-                  const estimatedHR = form.age ? estimateMaxHRFromAge(Number(form.age)) : undefined
-                  const displayMaxHR = form.maxHeartRate
-                    ? `${form.maxHeartRate} bpm`
-                    : estimatedHR !== undefined
-                    ? `${estimatedHR} bpm (estimated from age)`
-                    : null
-                  const displayRestingHR = form.restingHeartRate
-                    ? `${form.restingHeartRate} bpm`
-                    : '60 bpm (default)'
+                  const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
                   return (
                     [
                       ['Name', form.name],
@@ -608,7 +551,6 @@ export default function OnboardingPage() {
                       ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
                       ['Fitness Level', form.fitnessLevel],
                       ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
-                      ['Resting HR', displayRestingHR],
                       ...(displayMaxHR ? [['Max HR', displayMaxHR]] : []),
                     ] as [string, string][]
                   ).map(([label, value]) => (
@@ -634,7 +576,7 @@ export default function OnboardingPage() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    {form.assessmentMethod === 'strava' ? 'Downloading rides and generating plan...' : 'Generating your plan...'}
+                    Generating your plan...
                   </>
                 ) : (
                   <>
@@ -647,7 +589,7 @@ export default function OnboardingPage() {
           )}
 
           {/* Navigation */}
-          {step < TOTAL_STEPS && (
+          {step < TOTAL_STEPS && !(step === 4 && loading) && (
             <div className="flex gap-3 mt-8">
               {step > 1 && (
                 <button
@@ -658,11 +600,13 @@ export default function OnboardingPage() {
                 </button>
               )}
               <button
-                onClick={() => setStep(step + 1)}
+                onClick={handleContinue}
                 disabled={!canNext()}
                 className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
-                Continue
+                {step === 4 && form.assessmentMethod === 'strava' && stravaConnection
+                  ? 'Analyse & Generate Plan'
+                  : 'Continue'}
               </button>
             </div>
           )}

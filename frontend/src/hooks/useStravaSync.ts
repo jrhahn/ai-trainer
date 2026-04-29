@@ -6,7 +6,6 @@ import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
-import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -53,9 +52,13 @@ export function useStravaSync(): UseStravaSyncResult {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState('')
   const [newRidesCount, setNewRidesCount] = useState(0)
+  // Guard: prevents double-triggering when React batches setState calls from
+  // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
+  const isAnalysingRef = useRef(false)
 
   const runAnalysis = async (activities: StravaActivity[], isIncremental = false) => {
     if (!authToken || !userProfile || activities.length === 0) return
+    isAnalysingRef.current = true
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
@@ -64,10 +67,8 @@ export function useStravaSync(): UseStravaSyncResult {
 
       const updatedProfile = {
         ...userProfile,
-        currentFTP: userProfile.currentFTP ?? assessment.estimatedFTP,
-        maxHeartRate: userProfile.maxHeartRate ?? (assessment.estimatedThresholdHR
-          ? Math.round(assessment.estimatedThresholdHR / THRESHOLD_HR_TO_MAX_HR_RATIO)
-          : undefined),
+        currentFTP: userProfile.currentFTP,
+        maxHeartRate: userProfile.maxHeartRate,
       }
       setUserProfile(updatedProfile)
 
@@ -105,6 +106,8 @@ export function useStravaSync(): UseStravaSyncResult {
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : 'Analysis failed')
       setAnalysisStatus('error')
+    } finally {
+      isAnalysingRef.current = false
     }
   }
 
@@ -126,7 +129,7 @@ export function useStravaSync(): UseStravaSyncResult {
   // Trigger initial analysis when activities are first loaded
   useEffect(() => {
     if (!stravaConnection || !authToken || !userProfile) return
-    if (stravaActivities.length > 0 && !stravaAnalysisComplete) {
+    if (stravaActivities.length > 0 && !stravaAnalysisComplete && !isAnalysingRef.current) {
       void runAnalysis(stravaActivities)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

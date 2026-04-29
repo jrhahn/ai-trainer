@@ -24,13 +24,11 @@ interface BackendUserResponse {
   raceDescription?: string
   weeklyHours?: number
   followsTrainingPlan: boolean
-  restingHeartRate?: number
   maxHeartRate?: number
-  thresholdHeartRate?: number
+  restingHeartRate?: number
   currentFTP?: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
-  useEstimatedFTP?: boolean
   riderAssessment?: RiderAssessment | null
   stravaConnection?: StravaConnection | null
 }
@@ -57,12 +55,10 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       raceDescription: user.raceDescription,
       weeklyHours: user.weeklyHours ?? 8,
       followsTrainingPlan: user.followsTrainingPlan ?? false,
-      restingHeartRate: user.restingHeartRate,
       maxHeartRate: user.maxHeartRate,
-      thresholdHeartRate: user.thresholdHeartRate,
+      restingHeartRate: user.restingHeartRate,
       currentFTP: user.currentFTP,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
-      useEstimatedFTP: user.useEstimatedFTP ?? false,
     },
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,
@@ -90,16 +86,14 @@ export async function updateCurrentUser(
     raceDescription: updates.raceDescription,
     weeklyHours: updates.weeklyHours,
     followsTrainingPlan: updates.followsTrainingPlan,
-    restingHeartRate: updates.restingHeartRate,
     maxHeartRate: updates.maxHeartRate,
-    thresholdHeartRate: updates.thresholdHeartRate,
+    restingHeartRate: updates.restingHeartRate,
     currentFTP: updates.currentFTP,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,
     lastStravaActivityId: updates.lastStravaActivityId,
     aiProvider: updates.aiProvider,
-    useEstimatedFTP: updates.useEstimatedFTP,
   }
   await apiFetch('/users/me', { token, method: 'PUT', body })
   return fetchCurrentUser(token)
@@ -198,7 +192,7 @@ export async function recalculateMetrics(
 
 export async function estimateFTP(
   token: string,
-  opts: { maxHeartRate?: number; restingHeartRate?: number; thresholdHeartRate?: number },
+  opts: { maxHeartRate?: number; restingHeartRate?: number },
 ): Promise<{ estimatedFTP: number | null; source: string }> {
   return apiFetch<{ estimatedFTP: number | null; source: string }>('/users/me/estimate-ftp', {
     token,
@@ -206,7 +200,6 @@ export async function estimateFTP(
     body: {
       maxHeartRate: opts.maxHeartRate ?? null,
       restingHeartRate: opts.restingHeartRate ?? null,
-      thresholdHeartRate: opts.thresholdHeartRate ?? null,
     },
   })
 }

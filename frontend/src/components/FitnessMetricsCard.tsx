@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Pencil, Check, X, Zap, Heart, Activity, HeartPulse } from 'lucide-react'
+import { Pencil, Check, X, Zap, Activity } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
-import { THRESHOLD_HR_TO_MAX_HR_RATIO } from '../utils/constants'
 
 const DEFAULT_FTP: Record<string, number> = {
   beginner: 150,
@@ -12,7 +11,7 @@ const DEFAULT_FTP: Record<string, number> = {
 }
 
 interface MetricField {
-  key: 'currentFTP' | 'maxHeartRate' | 'restingHeartRate' | 'thresholdHeartRate'
+  key: 'currentFTP' | 'maxHeartRate'
   label: string
   unit: string
   icon: React.ReactNode
@@ -21,12 +20,10 @@ interface MetricField {
   hint?: string
 }
 
-function buildDefaults(fitnessLevel: string, maxHR: number | undefined) {
+function buildDefaults(fitnessLevel: string) {
   return {
     defaultFTP: DEFAULT_FTP[fitnessLevel] ?? 220,
     defaultMaxHR: 185,
-    defaultRestingHR: 60,
-    derivedThresholdHR: maxHR ? Math.round(maxHR * THRESHOLD_HR_TO_MAX_HR_RATIO) : Math.round(185 * THRESHOLD_HR_TO_MAX_HR_RATIO),
   }
 }
 
@@ -48,31 +45,13 @@ const METRICS: MetricField[] = [
     placeholder: () => 'e.g. 185',
     hint: '220 − age',
   },
-  {
-    key: 'restingHeartRate',
-    label: 'Resting HR',
-    unit: ' bpm',
-    icon: <Heart size={18} />,
-    color: 'text-blue-600 bg-blue-50',
-    placeholder: () => 'e.g. 60',
-  },
-  {
-    key: 'thresholdHeartRate',
-    label: 'Threshold HR',
-    unit: ' bpm',
-    icon: <HeartPulse size={18} />,
-    color: 'text-orange-600 bg-orange-50',
-    placeholder: (d) => `e.g. ${d.derivedThresholdHR}`,
-    hint: '≈ 87% of Max HR',
-  },
 ]
 
 export default function FitnessMetricsCard() {
-  const { authToken, userProfile, riderAssessment } = useAppStore(
+  const { authToken, userProfile } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      riderAssessment: s.riderAssessment,
     }))
   )
   const { updateMetrics, isPending } = useMetricsPipeline()
@@ -82,24 +61,15 @@ export default function FitnessMetricsCard() {
   const [draft, setDraft] = useState({
     currentFTP: '',
     maxHeartRate: '',
-    restingHeartRate: '',
-    thresholdHeartRate: '',
   })
 
   const fitnessLevel = userProfile?.fitnessLevel ?? 'intermediate'
-  const defaults = buildDefaults(fitnessLevel, userProfile?.maxHeartRate)
-
-  const useEstimatedFTP = userProfile?.useEstimatedFTP ?? false
-  const estimatedFTP = riderAssessment?.estimatedFTP
+  const defaults = buildDefaults(fitnessLevel)
 
   const startEditing = () => {
     setDraft({
       currentFTP: userProfile?.currentFTP != null ? String(userProfile.currentFTP) : '',
       maxHeartRate: userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : '',
-      restingHeartRate:
-        userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : '',
-      thresholdHeartRate:
-        userProfile?.thresholdHeartRate != null ? String(userProfile.thresholdHeartRate) : '',
     })
     setError('')
     setEditing(true)
@@ -114,8 +84,6 @@ export default function FitnessMetricsCard() {
     const updates = {
       currentFTP: parse(draft.currentFTP),
       maxHeartRate: parse(draft.maxHeartRate),
-      restingHeartRate: parse(draft.restingHeartRate),
-      thresholdHeartRate: parse(draft.thresholdHeartRate),
     }
 
     const invalid = Object.entries(updates).find(
@@ -132,15 +100,6 @@ export default function FitnessMetricsCard() {
       setEditing(false)
     } catch {
       setError('Failed to save. Please try again.')
-    }
-  }
-
-  const handleFtpSourceToggle = async () => {
-    if (!authToken || !userProfile || isPending) return
-    try {
-      await updateMetrics({ useEstimatedFTP: !useEstimatedFTP })
-    } catch {
-      // toggle failure is non-critical; silently ignore
     }
   }
 
@@ -226,12 +185,6 @@ export default function FitnessMetricsCard() {
                       <span className="text-gray-400 font-normal text-xs">Not set</span>
                     )}
                   </p>
-                  {/* Estimated FTP debug info — shown only for the FTP field */}
-                  {m.key === 'currentFTP' && estimatedFTP != null && (
-                    <p className="text-xs text-gray-400">
-                      (estimated FTP: {estimatedFTP}&thinsp;W)
-                    </p>
-                  )}
                 </div>
               )}
             </div>
@@ -239,41 +192,9 @@ export default function FitnessMetricsCard() {
         })}
       </div>
 
-      {/* FTP source toggle — visible outside edit mode when an estimated FTP exists */}
-      {!editing && estimatedFTP != null && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
-          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={useEstimatedFTP}
-              disabled={isPending}
-              onClick={handleFtpSourceToggle}
-              className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 disabled:opacity-50 ${
-                useEstimatedFTP ? 'bg-purple-500' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${
-                  useEstimatedFTP ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            <span className="text-xs text-gray-600">
-              Use estimated FTP for calculations
-            </span>
-          </label>
-          <p className="text-xs text-gray-400 mt-1 ml-11">
-            {useEstimatedFTP
-              ? 'Estimated FTP is used. Toggle off to use your entered value.'
-              : 'Your entered FTP is used. Toggle on to use the estimated value instead.'}
-          </p>
-        </div>
-      )}
-
       {!editing && (
         <p className="text-xs text-gray-400 mt-3">
-          Click <strong>Edit</strong> to update your FTP, heart-rate limits, and threshold HR. These
+          Click <strong>Edit</strong> to update your FTP and heart-rate limits. These
           values are used by the AI coach to tailor workout intensity.
         </p>
       )}

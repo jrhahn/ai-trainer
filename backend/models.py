@@ -79,7 +79,6 @@ class User(Base):
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
-    threshold_heart_rate: Mapped[int | None] = mapped_column(Integer)
     current_ftp: Mapped[int | None] = mapped_column(Integer)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
@@ -224,7 +223,6 @@ class RiderAssessment(Base):
         String(36), ForeignKey("users.id"), primary_key=True
     )
     estimated_ftp: Mapped[int | None] = mapped_column(Integer)
-    estimated_threshold_hr: Mapped[int | None] = mapped_column(Integer)
     rider_type: Mapped[str] = mapped_column(String(50), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     hr_zones: Mapped[Any | None] = mapped_column(JSON, nullable=True)
@@ -249,7 +247,6 @@ class AthleteMetricSnapshot(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    threshold_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ctl: Mapped[float | None] = mapped_column(nullable=True)
     atl: Mapped[float | None] = mapped_column(nullable=True)
     tsb: Mapped[float | None] = mapped_column(nullable=True)

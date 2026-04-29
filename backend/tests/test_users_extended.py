@@ -108,7 +108,7 @@ async def test_get_me_includes_rider_assessment(client, auth_headers, mock_ai_se
     response = await client.get("/api/v1/users/me", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["riderAssessment"] is not None
-    assert response.json()["riderAssessment"]["estimatedFTP"] == 280
+    assert response.json()["riderAssessment"]["riderType"] is not None
 
 
 # ---------------------------------------------------------------------------

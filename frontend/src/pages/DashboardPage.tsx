@@ -126,7 +126,7 @@ export default function DashboardPage() {
           <p className="text-sm text-amber-900 mt-2">
             {importProgress.status === 'done'
               ? `${importProgress.imported} imported, ${importProgress.skipped} skipped`
-              : `${analyzedRides} / ${importProgress.total} rides analyzed`}
+              : `Processed activities: ${analyzedRides} / ${importProgress.total}`}
           </p>
           {importProgress.status === 'done' && (
             <div className="mt-3">

@@ -40,9 +40,7 @@ _USER_RESPONSE_OPTIONAL_KEYS = {
     "raceDate",
     "raceDescription",
     "weeklyHours",
-    "restingHeartRate",
     "maxHeartRate",
-    "thresholdHeartRate",
     "currentFTP",
     "fitnessLevel",
     "riderAssessment",
@@ -97,7 +95,6 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
             "followsTrainingPlan": False,
             "currentFTP": 250,
             "fitnessLevel": "intermediate",
-            "restingHeartRate": 55,
             "maxHeartRate": 185,
             "isOnboarded": True,
             "stravaAnalysisComplete": False,
@@ -182,7 +179,6 @@ async def test_user_response_camelcase_shape(client):
         "follows_training_plan",
         "resting_heart_rate",
         "max_heart_rate",
-        "threshold_heart_rate",
         "current_ftp",
         "fitness_level",
         "ai_provider",
@@ -221,9 +217,7 @@ async def test_update_profile_camelcase_fields(client):
             "raceDescription": "Local gran fondo",
             "weeklyHours": 10.5,
             "followsTrainingPlan": True,
-            "restingHeartRate": 52,
             "maxHeartRate": 190,
-            "thresholdHeartRate": 165,
             "currentFTP": 300,
             "fitnessLevel": "advanced",
             "isOnboarded": True,
@@ -239,9 +233,7 @@ async def test_update_profile_camelcase_fields(client):
     assert body["raceDate"] == "2026-09-15"
     assert body["weeklyHours"] == 10.5
     assert body["followsTrainingPlan"] is True
-    assert body["restingHeartRate"] == 52
     assert body["maxHeartRate"] == 190
-    assert body["thresholdHeartRate"] == 165
     assert body["currentFTP"] == 300
     assert body["fitnessLevel"] == "advanced"
     assert body["isOnboarded"] is True
@@ -291,7 +283,8 @@ async def test_strava_activities_snake_case_fields_accepted(client, mock_ai_serv
     assert resp.status_code == 200
     body = resp.json()
     assert "assessment" in body
-    assert body["assessment"]["estimatedFTP"] == 280
+    assert "riderType" in body["assessment"]
+    assert "notes" in body["assessment"]
 
 
 @pytest.mark.asyncio
@@ -582,7 +575,7 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     assert "riderType" in assessment
     assert "notes" in assessment
     # Optional fields may or may not be present
-    for optional_key in ("estimatedFTP", "estimatedThresholdHR", "rideInsights", "lastRideFeedback"):
+    for optional_key in ("rideInsights", "lastRideFeedback"):
         if optional_key in assessment:
             assert assessment[optional_key] is not None or assessment[optional_key] is None
 
@@ -614,8 +607,8 @@ async def test_metrics_history_empty_for_new_user(client):
 
 
 @pytest.mark.asyncio
-async def test_metrics_history_populated_after_analysis(client, mock_ai_service):
-    """An AthleteMetricSnapshot row is created after analyse-activities and appears in history."""
+async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_service):
+    """analyse-activities should create a per-ride metric row in /ride-metrics-history."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={"name": "Mia", "email": "mia@example.com", "password": "password1"},
@@ -642,15 +635,13 @@ async def test_metrics_history_populated_after_analysis(client, mock_ai_service)
         },
     )
 
-    resp = await client.get("/api/v1/users/me/metrics-history", headers=headers)
+    resp = await client.get("/api/v1/users/me/ride-metrics-history", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["snapshots"]) == 1
-    snap = body["snapshots"][0]
-    assert snap["ftp"] == 280           # from mock_ai_service estimatedFTP
-    assert snap["thresholdHR"] == 172   # from mock_ai_service estimatedThresholdHR
-    assert snap["source"] == "strava_analysis"
-    assert "recordedAt" in snap
+    assert len(body["rides"]) == 1
+    ride = body["rides"][0]
+    assert ride["activityDate"] == "2026-04-10"
+    assert ride["sportType"] == "cycling"
 
 
 # ---------------------------------------------------------------------------
@@ -756,7 +747,6 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
     hist = hist_resp.json()
     assert len(hist["snapshots"]) >= 1
     snap = hist["snapshots"][0]
-    # Mock AI service returns estimatedFTP=210, estimatedThresholdHR=165
+    # Mock AI service returns estimatedFTP=210
     assert snap["ftp"] == 210
-    assert snap["thresholdHR"] == 165
     assert snap["source"] == "fit_upload"

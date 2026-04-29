@@ -144,7 +144,7 @@ describe('loadUserData', () => {
     mockFetchChatHistory.mockResolvedValue([{ role: 'assistant', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }])
     mockFetchCoachMemory.mockResolvedValue('Prefers morning rides.')
     mockFetchMetricsHistory.mockResolvedValue([
-      { recordedAt: '2024-01-10T10:00:00Z', ftp: 260, thresholdHR: 168, source: 'strava_analysis' },
+      { recordedAt: '2024-01-10T10:00:00Z', ftp: 260, source: 'strava_analysis' },
     ])
     mockFetchRideMetricsHistory.mockResolvedValue([
       { activityDate: '2024-01-10', sportType: 'cycling', tss: 80, ctlAfter: 45.2, atlAfter: 60.1, tsbAfter: -14.9 },

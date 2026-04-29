@@ -72,7 +72,6 @@ def mock_ai_service(monkeypatch):
         "analyse_strava_activities": AsyncMock(
             return_value={
                 "estimatedFTP": 280,
-                "estimatedThresholdHR": 172,
                 "riderType": "allrounder",
                 "notes": "Balanced rider",
                 "rideInsights": "Your last ride was an endurance effort at 68% FTP. No intervals detected.",
@@ -82,7 +81,6 @@ def mock_ai_service(monkeypatch):
         "analyse_fit_activity": AsyncMock(
             return_value={
                 "estimatedFTP": 210,
-                "estimatedThresholdHR": 165,
                 "riderType": "endurance",
                 "notes": "Solid aerobic base from .fit upload.",
                 "rideInsights": "Steady effort across the session.",

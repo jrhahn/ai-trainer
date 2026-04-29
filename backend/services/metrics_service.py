@@ -22,13 +22,11 @@ logger = logging.getLogger(__name__)
 def get_effective_ftp(user: models.User, ftp_override: int | None = None) -> int | None:
     """Return the best available FTP value for *user*.
 
-    Priority order: explicit *ftp_override* → rider assessment → manual profile.
+    Priority order: explicit *ftp_override* → manual profile.
     Returns ``None`` when no FTP is known.
     """
     if ftp_override is not None and ftp_override > 0:
         return ftp_override
-    if user.rider_assessment and user.rider_assessment.estimated_ftp:
-        return user.rider_assessment.estimated_ftp
     if user.current_ftp:
         return user.current_ftp
     return None
@@ -116,7 +114,6 @@ async def _rebuild_metric_snapshots(
             db,
             user.id,
             ftp=ftp_value,
-            threshold_hr=user.threshold_heart_rate,
             ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
             atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
             tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,
@@ -138,7 +135,6 @@ async def _refresh_rider_assessment_feedback(
         db,
         user.id,
         estimated_ftp=user.rider_assessment.estimated_ftp,
-        estimated_threshold_hr=user.rider_assessment.estimated_threshold_hr,
         rider_type=user.rider_assessment.rider_type,
         notes=user.rider_assessment.notes,
         hr_zones=user.rider_assessment.hr_zones,

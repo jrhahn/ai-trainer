@@ -318,7 +318,7 @@ async def test_upsert_rider_assessment_creates_new(db: AsyncSession) -> None:
         db,
         user.id,
         estimated_ftp=280,
-        estimated_threshold_hr=172,
+        
         rider_type="climber",
         notes="Likes hills",
         hr_zones={"z1": [0, 130]},
@@ -337,7 +337,7 @@ async def test_upsert_rider_assessment_defaults_for_new(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=None,
-        estimated_threshold_hr=None,
+        
     )
     assert assessment.rider_type == "allrounder"
     assert assessment.notes == ""
@@ -350,7 +350,7 @@ async def test_upsert_rider_assessment_updates_existing(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=250,
-        estimated_threshold_hr=165,
+        
         rider_type="sprinter",
         notes="Explosive",
     )
@@ -358,7 +358,7 @@ async def test_upsert_rider_assessment_updates_existing(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=270,
-        estimated_threshold_hr=168,
+        
         rider_type="allrounder",
         notes="More balanced now",
     )
@@ -373,13 +373,13 @@ async def test_upsert_rider_assessment_preserves_rider_type_when_none(
 ) -> None:
     user = await _make_user(db)
     await crud.upsert_rider_assessment(
-        db, user.id, estimated_ftp=250, estimated_threshold_hr=165, rider_type="sprinter"
+        db, user.id, estimated_ftp=250, rider_type="sprinter"
     )
     updated = await crud.upsert_rider_assessment(
         db,
         user.id,
         estimated_ftp=260,
-        estimated_threshold_hr=166,
+        
         rider_type=None,  # should keep existing "sprinter"
     )
     assert updated.rider_type == "sprinter"
@@ -394,14 +394,14 @@ async def test_upsert_rider_assessment_only_updates_last_ride_feedback_when_trut
         db,
         user.id,
         estimated_ftp=250,
-        estimated_threshold_hr=165,
+        
         last_ride_feedback="Original feedback",
     )
     updated = await crud.upsert_rider_assessment(
         db,
         user.id,
         estimated_ftp=260,
-        estimated_threshold_hr=166,
+        
         last_ride_feedback=None,  # should NOT overwrite
     )
     assert updated.last_ride_feedback == "Original feedback"
@@ -419,14 +419,12 @@ async def test_create_athlete_metric_snapshot(db: AsyncSession) -> None:
         db,
         user.id,
         ftp=285,
-        threshold_hr=172,
         ctl=45.3,
         atl=52.1,
         tsb=-6.8,
         source="strava_analysis",
     )
     assert snapshot.ftp == 285
-    assert snapshot.threshold_hr == 172
     assert snapshot.ctl == 45.3
     assert snapshot.atl == 52.1
     assert snapshot.tsb == -6.8
@@ -443,10 +441,8 @@ async def test_create_athlete_metric_snapshot_nulls(db: AsyncSession) -> None:
         db,
         user.id,
         ftp=None,
-        threshold_hr=None,
     )
     assert snapshot.ftp is None
-    assert snapshot.threshold_hr is None
     assert snapshot.ctl is None
     assert snapshot.atl is None
     assert snapshot.tsb is None
@@ -462,9 +458,9 @@ async def test_get_athlete_metric_history_empty(db: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_get_athlete_metric_history_ordered_ascending(db: AsyncSession) -> None:
     user = await _make_user(db)
-    await crud.create_athlete_metric_snapshot(db, user.id, ftp=250, threshold_hr=160)
-    await crud.create_athlete_metric_snapshot(db, user.id, ftp=265, threshold_hr=163)
-    await crud.create_athlete_metric_snapshot(db, user.id, ftp=280, threshold_hr=167)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=250)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=265)
+    await crud.create_athlete_metric_snapshot(db, user.id, ftp=280)
 
     history = await crud.get_athlete_metric_history(db, user.id)
     assert len(history) == 3
@@ -477,7 +473,9 @@ async def test_get_athlete_metric_history_ordered_ascending(db: AsyncSession) ->
 async def test_get_athlete_metric_history_limit(db: AsyncSession) -> None:
     user = await _make_user(db)
     for ftp in range(100, 200, 5):  # 20 snapshots
-        await crud.create_athlete_metric_snapshot(db, user.id, ftp=ftp, threshold_hr=None)
+        await crud.create_athlete_metric_snapshot(db, user.id, ftp=ftp)
 
     history = await crud.get_athlete_metric_history(db, user.id, limit=5)
     assert len(history) == 5
+    ftps = [s.ftp for s in history]
+    assert ftps == [175, 180, 185, 190, 195]

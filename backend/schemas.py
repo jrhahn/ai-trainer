@@ -74,8 +74,6 @@ class TokenResponse(BaseModel):
 
 
 class RiderAssessmentSchema(CamelModel):
-    estimated_ftp: Optional[int] = None
-    estimated_threshold_hr: Optional[int] = None
     rider_type: str
     notes: str
     hr_zones: Optional[Any] = None
@@ -108,13 +106,10 @@ class UserResponse(CamelModel):
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
-    resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
-    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
-    use_estimated_ftp: bool = False
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
@@ -136,13 +131,10 @@ class UpdateProfileRequest(CamelModel):
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
     follows_training_plan: Optional[bool] = None
-    resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
-    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
-    use_estimated_ftp: Optional[bool] = None
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
@@ -258,12 +250,9 @@ class UserProfileSchema(CamelModel):
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
-    resting_heart_rate: Optional[int] = None
     max_heart_rate: Optional[int] = None
-    threshold_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
-    use_estimated_ftp: bool = False
 
     @classmethod
     def from_user(cls, user: "models.User") -> "UserProfileSchema":
@@ -277,18 +266,16 @@ class UserProfileSchema(CamelModel):
             race_description=user.race_description,
             weekly_hours=user.weekly_hours,
             follows_training_plan=user.follows_training_plan,
-            resting_heart_rate=user.resting_heart_rate,
             max_heart_rate=user.max_heart_rate,
-            threshold_heart_rate=user.threshold_heart_rate,
             current_ftp=user.current_ftp,
             fitness_level=user.fitness_level or "",
-            use_estimated_ftp=user.use_estimated_ftp,
         )
 
 
 class AnalyseActivitiesRequest(CamelModel):
     activities: list[StravaActivitySchema]
     max_heart_rate: Optional[int] = None
+    current_ftp: Optional[int] = None
 
 
 class GeneratePlanRequest(CamelModel):
@@ -382,7 +369,6 @@ class RefreshLoginSummaryResponse(CamelModel):
 class AthleteMetricSnapshotSchema(CamelModel):
     recorded_at: str
     ftp: Optional[int] = None
-    threshold_hr: Optional[int] = None
     ctl: Optional[float] = None
     atl: Optional[float] = None
     tsb: Optional[float] = None
@@ -527,13 +513,6 @@ class EstimateFTPRequest(CamelModel):
 
     max_heart_rate: Optional[int] = None
     """Athlete's maximum heart rate in bpm."""
-
-    resting_heart_rate: Optional[int] = None
-    """Athlete's resting heart rate in bpm.  Defaults to 60 when absent."""
-
-    threshold_heart_rate: Optional[int] = None
-    """Athlete's lactate-threshold heart rate in bpm.  When provided, saved to
-    the user profile and included in subsequent metric snapshots."""
 
 
 class EstimateFTPResponse(CamelModel):

@@ -29,18 +29,17 @@ describe('FitnessMetricsCard', () => {
     render(<FitnessMetricsCard />)
     // All four metrics should show "Not set"
     const notSetElements = screen.getAllByText('Not set')
-    expect(notSetElements.length).toBeGreaterThanOrEqual(4)
+    expect(notSetElements.length).toBeGreaterThanOrEqual(2)
   })
 
   it('displays existing metric values when set on the profile', () => {
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: { ...baseProfile, currentFTP: 280, maxHeartRate: 185, restingHeartRate: 55 },
+      userProfile: { ...baseProfile, currentFTP: 280, maxHeartRate: 185 },
     })
     render(<FitnessMetricsCard />)
     expect(screen.getByText('280')).toBeInTheDocument()
     expect(screen.getByText('185')).toBeInTheDocument()
-    expect(screen.getByText('55')).toBeInTheDocument()
   })
 
   it('enters edit mode when Edit is clicked', async () => {
@@ -51,7 +50,7 @@ describe('FitnessMetricsCard', () => {
 
     // Should show number inputs
     const inputs = screen.getAllByRole('spinbutton')
-    expect(inputs.length).toBeGreaterThanOrEqual(4)
+    expect(inputs.length).toBeGreaterThanOrEqual(2)
   })
 
   it('exits edit mode without saving when Cancel is clicked', async () => {

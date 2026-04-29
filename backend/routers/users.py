@@ -14,7 +14,7 @@ import models
 import schemas
 from database import get_db
 from services import ai_service, metrics_service
-from services.analysis import AVG_POWER_TO_FTP_RATIO, LTHR_RATIO
+from services.analysis import AVG_POWER_TO_FTP_RATIO
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -46,13 +46,10 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         race_description=user.race_description,
         weekly_hours=user.weekly_hours,
         follows_training_plan=user.follows_training_plan,
-        resting_heart_rate=user.resting_heart_rate,
         max_heart_rate=user.max_heart_rate,
-        threshold_heart_rate=user.threshold_heart_rate,
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
-        use_estimated_ftp=user.use_estimated_ftp,
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
     )
@@ -217,7 +214,6 @@ async def get_metrics_history(
             schemas.AthleteMetricSnapshotSchema(
                 recorded_at=s.recorded_at.isoformat(),
                 ftp=s.ftp,
-                threshold_hr=s.threshold_hr,
                 ctl=s.ctl,
                 atl=s.atl,
                 tsb=s.tsb,
@@ -279,53 +275,20 @@ async def estimate_ftp(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.EstimateFTPResponse:
-    """Save updated heart-rate values and return the best available FTP estimate.
+    """Save updated heart-rate values and return the user-entered FTP.
 
-    Persists ``max_heart_rate`` and/or ``resting_heart_rate`` to the user
-    profile when supplied so that subsequent Strava imports and analyses
-    automatically use the new values.
+    Persists ``max_heart_rate`` to the user profile when supplied so that
+    subsequent Strava imports and analyses automatically use the new values.
 
-    The FTP returned is sourced from (in priority order):
-
-    1. Most recent ``AthleteMetricSnapshot`` with a non-null FTP.
-    2. ``RiderAssessment.estimated_ftp``.
-    3. ``User.current_ftp`` set manually on the profile.
-
-    The caller is expected to present this value to the user, allow an
-    override, and then call ``POST /users/me/recalculate-metrics`` with the
-    confirmed FTP to rebuild TSS / CTL / ATL / TSB.
+    Returns the FTP value set directly on the user profile (``current_ftp``).
+    FTP is never estimated or derived from activity data.
     """
     # --- Persist new HR values when provided ---
     if body.max_heart_rate is not None:
         current_user.max_heart_rate = body.max_heart_rate
-    if body.resting_heart_rate is not None:
-        current_user.resting_heart_rate = body.resting_heart_rate
-    elif current_user.resting_heart_rate is None:
-        # Default resting HR to 60 when the user has never set one.
-        current_user.resting_heart_rate = 60
-    if body.threshold_heart_rate is not None:
-        current_user.threshold_heart_rate = body.threshold_heart_rate
     await db.flush()
 
-    # --- Find best available FTP estimate ---
-    # 1. Most recent AthleteMetricSnapshot with a non-null FTP
-    snapshots = await crud.get_athlete_metric_history(db, current_user.id)
-    # snapshots are oldest-first; iterate in reverse to find the most recent
-    for snap in reversed(snapshots):
-        if snap.ftp is not None:
-            return schemas.EstimateFTPResponse(
-                estimated_ftp=snap.ftp,
-                source=snap.source or "ftp_estimation",
-            )
-
-    # 2. RiderAssessment.estimated_ftp
-    if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
-        return schemas.EstimateFTPResponse(
-            estimated_ftp=current_user.rider_assessment.estimated_ftp,
-            source="rider_assessment",
-        )
-
-    # 3. Manually set profile FTP
+    # Return the user-entered FTP directly from the profile
     if current_user.current_ftp:
         return schemas.EstimateFTPResponse(
             estimated_ftp=current_user.current_ftp,
@@ -473,7 +436,6 @@ async def upload_fit_file(
             db,
             current_user.id,
             estimated_ftp=ai_result.get("estimatedFTP"),
-            estimated_threshold_hr=ai_result.get("estimatedThresholdHR"),
             rider_type=ai_result.get("riderType"),
             notes=ai_result.get("notes"),
             hr_zones=ai_result.get("hrZones"),
@@ -483,23 +445,17 @@ async def upload_fit_file(
 
     # Write a time-series metric snapshot regardless of AI result
     ftp_value = ai_result.get("estimatedFTP") if ai_result else None
-    threshold_hr_value = ai_result.get("estimatedThresholdHR") if ai_result else None
 
     # For cycling without AI: fall back to avg_power-based FTP estimate
     if ftp_value is None and sport_type.lower() not in ("running", "run") and avg_power:
         ftp_value = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
-    # For any sport without AI: fall back to LTHR estimate if max HR is known
-    if threshold_hr_value is None and max_hr:
-        threshold_hr_value = round(max_hr * LTHR_RATIO)
-
-    if ftp_value is not None or threshold_hr_value is not None:
+    if ftp_value is not None:
         try:
             await crud.create_athlete_metric_snapshot(
                 db,
                 current_user.id,
                 ftp=ftp_value,
-                threshold_hr=threshold_hr_value,
                 source="fit_upload",
             )
         except Exception:

@@ -363,7 +363,6 @@ async def upsert_rider_assessment(
     user_id: str,
     *,
     estimated_ftp: int | None,
-    estimated_threshold_hr: int | None,
     rider_type: str | None = None,
     notes: str | None = None,
     hr_zones: Any | None = None,
@@ -382,7 +381,6 @@ async def upsert_rider_assessment(
         assessment = models.RiderAssessment(
             user_id=user_id,
             estimated_ftp=estimated_ftp,
-            estimated_threshold_hr=estimated_threshold_hr,
             rider_type=rider_type if rider_type is not None else "allrounder",
             notes=notes if notes is not None else "",
             hr_zones=hr_zones,
@@ -393,7 +391,6 @@ async def upsert_rider_assessment(
         db.add(assessment)
     else:
         assessment.estimated_ftp = estimated_ftp
-        assessment.estimated_threshold_hr = estimated_threshold_hr
         if rider_type is not None:
             assessment.rider_type = rider_type
         if notes is not None:
@@ -418,7 +415,6 @@ async def create_athlete_metric_snapshot(
     user_id: str,
     *,
     ftp: int | None,
-    threshold_hr: int | None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -433,7 +429,6 @@ async def create_athlete_metric_snapshot(
     kwargs: dict = dict(
         user_id=user_id,
         ftp=ftp,
-        threshold_hr=threshold_hr,
         ctl=ctl,
         atl=atl,
         tsb=tsb,
@@ -452,14 +447,16 @@ async def get_athlete_metric_history(
     user_id: str,
     limit: int = 90,
 ) -> list[models.AthleteMetricSnapshot]:
-    """Return up to *limit* AthleteMetricSnapshot rows for a user, oldest first."""
-    result = await db.scalars(
+    """Return the most recent *limit* snapshots, ordered oldest -> newest."""
+    recent_result = await db.scalars(
         select(models.AthleteMetricSnapshot)
         .where(models.AthleteMetricSnapshot.user_id == user_id)
-        .order_by(models.AthleteMetricSnapshot.recorded_at.asc())
+        .order_by(models.AthleteMetricSnapshot.recorded_at.desc())
         .limit(limit)
     )
-    return list(result)
+    # Query newest-first so the limit window represents recent history,
+    # then reverse so chart consumers still receive chronological ordering.
+    return list(reversed(list(recent_result)))
 
 
 async def delete_athlete_metric_snapshots(db: AsyncSession, user_id: str) -> None:

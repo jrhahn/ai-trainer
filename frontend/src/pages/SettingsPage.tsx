@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -32,6 +33,7 @@ export default function SettingsPage() {
   )
 
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
+  const queryClient = useQueryClient()
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
@@ -45,7 +47,6 @@ export default function SettingsPage() {
   // Heart Rate settings state
   const [maxHrInput, setMaxHrInput] = useState('')
   const [restingHrInput, setRestingHrInput] = useState('')
-  const [thresholdHrInput, setThresholdHrInput] = useState('')
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [hrWorking, setHrWorking] = useState(false)
@@ -117,6 +118,7 @@ export default function SettingsPage() {
         ? await updateMetrics({ currentFTP: parsed })
         : await recalculateAll()
       if (parsed !== undefined) setFtpInput('')
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
         text: `Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
@@ -146,19 +148,17 @@ export default function SettingsPage() {
       parsedMaxHr ?? (parsedAge !== undefined && parsedAge >= 10 ? Math.max(100, 220 - parsedAge) : undefined)
 
     const parsedRestingHr = restingHrInput.trim() ? parseInt(restingHrInput, 10) : undefined
-    const parsedThresholdHr = thresholdHrInput.trim() ? parseInt(thresholdHrInput, 10) : undefined
 
     if (
       (parsedMaxHr !== undefined && (isNaN(parsedMaxHr) || parsedMaxHr <= 0)) ||
       (parsedRestingHr !== undefined && (isNaN(parsedRestingHr) || parsedRestingHr <= 0)) ||
-      (parsedThresholdHr !== undefined && (isNaN(parsedThresholdHr) || parsedThresholdHr <= 0)) ||
       (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge < 10))
     ) {
       setHrMsg({ type: 'error', text: 'Please enter valid values (age must be at least 10).' })
       return
     }
 
-    if (!resolvedMaxHr && !parsedRestingHr && !parsedThresholdHr) {
+    if (!resolvedMaxHr && !parsedRestingHr) {
       setHrMsg({ type: 'error', text: 'Please enter at least one heart rate value (or your age).' })
       return
     }
@@ -172,19 +172,16 @@ export default function SettingsPage() {
       await updateCurrentUser(authToken, {
         ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
         ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
-        ...(parsedThresholdHr !== undefined ? { thresholdHeartRate: parsedThresholdHr } : {}),
       })
       // Update local profile state with new HR values.
       setUserProfile({
         ...userProfile,
         ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
         ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
-        ...(parsedThresholdHr !== undefined ? { thresholdHeartRate: parsedThresholdHr } : {}),
       })
       const result = await estimateFTP(authToken, {
         maxHeartRate: resolvedMaxHr,
         restingHeartRate: parsedRestingHr,
-        thresholdHeartRate: parsedThresholdHr,
       })
       if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
         setFtpEstimate(result.estimatedFTP)
@@ -228,8 +225,8 @@ export default function SettingsPage() {
       setFtpConfirmInput('')
       setMaxHrInput('')
       setRestingHrInput('')
-      setThresholdHrInput('')
       setAgeInput('')
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
         type: 'success',
         text: `Done! Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
@@ -420,9 +417,9 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
         <p className="text-xs text-gray-500 mb-1">
-          Max HR, resting HR, and threshold HR are used for HR-based FTP estimation and training zones.
+          Max HR and resting HR are used for HR-based FTP estimation and training zones.
         </p>
-        {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null || userProfile?.thresholdHeartRate != null) && (
+        {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null) && (
           <p className="text-xs text-gray-500 mb-4">
             Current:{' '}
             {userProfile.maxHeartRate != null && (
@@ -430,9 +427,6 @@ export default function SettingsPage() {
             )}
             {userProfile.restingHeartRate != null && (
               <span className="font-medium text-gray-700 mr-2">Resting HR: <span className="text-blue-600">{userProfile.restingHeartRate} bpm</span></span>
-            )}
-            {userProfile.thresholdHeartRate != null && (
-              <span className="font-medium text-gray-700">Threshold HR: <span className="text-orange-600">{userProfile.thresholdHeartRate} bpm</span></span>
             )}
           </p>
         )}
@@ -502,27 +496,11 @@ export default function SettingsPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
             />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              <span className="flex items-center gap-1"><Heart size={13} /> Threshold Heart Rate (bpm)</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={thresholdHrInput}
-              onChange={(e) => setThresholdHrInput(e.target.value)}
-              placeholder={userProfile?.thresholdHeartRate != null ? String(userProfile.thresholdHeartRate) : 'e.g. 162 (optional)'}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Lactate threshold HR — the highest HR you can sustain for ~60 min. Typically ~87% of max HR.
-            </p>
-          </div>
         </div>
 
         <button
           onClick={() => void handleSaveHR()}
-          disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim() && !thresholdHrInput.trim())}
+          disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim())}
           className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
         >
           <Heart size={15} className={hrWorking ? 'animate-pulse' : ''} />
@@ -607,7 +585,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-gray-500">
                     {pct !== null
-                      ? `${importProgress.processed} / ${importProgress.total} rides (${pct}%)`
+                      ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%)`
                       : 'Fetching ride list…'}
                   </p>
                 </>

@@ -3,7 +3,11 @@ import { useAppStore } from '../store/useAppStore'
 import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
 import { AlertCircle, CheckCircle, Link2Off } from 'lucide-react'
 
-export default function StravaConnect() {
+interface StravaConnectProps {
+  onBeforeConnect?: () => Promise<void> | void
+}
+
+export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
   const authToken = useAppStore((s) => s.authToken)
   const stravaConnection = useAppStore((s) => s.stravaConnection)
   const setStravaConnection = useAppStore((s) => s.setStravaConnection)
@@ -12,16 +16,20 @@ export default function StravaConnect() {
 
   const [connectError, setConnectError] = useState<string | null>(null)
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!authToken) return
     setConnectError(null)
-    void getStravaAuthUrl(authToken).then((authUrl) => {
+    try {
+      if (onBeforeConnect) {
+        await onBeforeConnect()
+      }
+      const authUrl = await getStravaAuthUrl(authToken)
       window.location.href = authUrl
-    }).catch((err: unknown) => {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[StravaConnect] Failed to get Strava auth URL:', message, err)
       setConnectError('Could not start the Strava connection. Please try again.')
-    })
+    }
   }
 
   const handleDisconnect = async () => {

@@ -89,12 +89,10 @@ export interface UserProfile {
   raceDescription?: string
   weeklyHours?: number
   followsTrainingPlan: boolean
-  restingHeartRate?: number
   maxHeartRate?: number
-  thresholdHeartRate?: number
+  restingHeartRate?: number
   currentFTP?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
-  useEstimatedFTP?: boolean
 }
 
 export interface WorkoutFeedback {
@@ -168,7 +166,6 @@ export interface HrZones {
 export interface AthleteMetricSnapshot {
   recordedAt: string
   ftp?: number
-  thresholdHR?: number
   ctl?: number
   atl?: number
   tsb?: number
@@ -188,8 +185,6 @@ export interface RideMetricPoint {
 }
 
 export interface RiderAssessment {
-  estimatedFTP?: number
-  estimatedThresholdHR?: number
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string
   hrZones?: HrZones

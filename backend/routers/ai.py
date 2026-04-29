@@ -18,7 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, build_ride_metrics_chain, estimate_ftp_over_time, build_ride_analysis
+from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, project_training_load_from_seed, build_ride_metrics_chain, build_ride_analysis
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
@@ -165,7 +165,7 @@ async def analyse_activities(
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
             training_plan=training_plan or None,
-            user_ftp=int(current_user.current_ftp) if current_user.current_ftp else None,
+            user_ftp=body.current_ftp or (int(current_user.current_ftp) if current_user.current_ftp else None),
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -182,7 +182,6 @@ async def analyse_activities(
         db,
         current_user.id,
         estimated_ftp=result.get("estimatedFTP"),
-        estimated_threshold_hr=result.get("estimatedThresholdHR"),
         rider_type=result.get("riderType"),
         notes=result.get("notes"),
         hr_zones=result.get("hrZones"),
@@ -190,37 +189,6 @@ async def analyse_activities(
         last_ride_feedback=result.get("lastRideFeedback"),
         login_summary=result.get("loginSummary"),
     )
-
-    # Record a time-series metric snapshot so the athlete can track progression
-    ftp_value = result.get("estimatedFTP")
-    threshold_hr_value = result.get("estimatedThresholdHR")
-    if ftp_value is not None or threshold_hr_value is not None:
-        plan_days = training_plan
-        # Respect the user's FTP source preference for training-load computations.
-        # By default use the user-entered FTP; only fall back to the estimated
-        # value when use_estimated_ftp is explicitly enabled or no manual value exists.
-        if current_user.use_estimated_ftp:
-            ftp_for_load = ftp_value or current_user.current_ftp or 0
-        else:
-            ftp_for_load = current_user.current_ftp or ftp_value or 0
-        ctl: float | None = None
-        atl: float | None = None
-        tsb: float | None = None
-        if ftp_for_load > 0 and plan_days:
-            training_load = compute_training_load(plan_days, ftp_for_load)
-            ctl = training_load.get("ctl")
-            atl = training_load.get("atl")
-            tsb = training_load.get("tsb")
-        await crud.create_athlete_metric_snapshot(
-            db,
-            current_user.id,
-            ftp=ftp_value,
-            threshold_hr=threshold_hr_value,
-            ctl=ctl,
-            atl=atl,
-            tsb=tsb,
-            source="strava_analysis",
-        )
 
     current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
@@ -230,13 +198,11 @@ async def analyse_activities(
             current_user.last_strava_activity_id = newest_id
 
     # --- Incremental ride-metrics chain ---
-    # Prefer user-entered FTP for all ride-metric computations unless the user
-    # has explicitly opted into using the estimated value.
-    if current_user.use_estimated_ftp:
-        ftp_for_chain = float(ftp_value or current_user.current_ftp or 0)
-    else:
-        ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
-    if body.activities and ftp_for_chain > 0:
+    # Always use the user-entered FTP for all ride-metric computations.
+    # Store rides even when FTP is not yet set (TSS/IF will be null) so that
+    # a later recalculate-metrics call can fill them in.
+    ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
+    if body.activities:
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
         seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
         seed_atl = latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
@@ -264,50 +230,31 @@ async def analyse_activities(
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
 
-            # --- Phase 5b: Estimate FTP over time from steady intervals ---
-            ftp_series = estimate_ftp_over_time(
-                rides_input,
-                max_heart_rate=current_user.max_heart_rate,
-                resting_heart_rate=current_user.resting_heart_rate,
-            )
-            for point in ftp_series:
-                try:
-                    ride_dt = datetime.fromisoformat(point["date"]).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    ride_dt = datetime.now(timezone.utc)
-                await crud.create_athlete_metric_snapshot(
-                    db,
-                    current_user.id,
-                    ftp=point["ftp"],
-                    threshold_hr=None,
-                    source="ftp_estimation",
-                    recorded_at=ride_dt,
-                )
-
             # --- Phase 6: Auto-rate rides that have a matching plan day ---
-            profile_for_rating = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
-            for ride_input, metric in zip(rides_input, metrics_chain):
-                activity_date = ride_input["activity_date"]
-                # Find matching plan day
-                matching_plan_day = next(
-                    (day for day in training_plan if day.get("date") == activity_date),
-                    None,
-                )
-                if matching_plan_day and ride_input["streams"]:
-                    coach_note = await _auto_rate_ride(
-                        matching_plan_day,
-                        ride_input["streams"],
-                        ftp_for_chain,
-                        profile_for_rating,
-                        _provider(current_user),
+            if ftp_for_chain > 0:
+                profile_for_rating = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+                for ride_input, metric in zip(rides_input, metrics_chain):
+                    activity_date = ride_input["activity_date"]
+                    # Find matching plan day
+                    matching_plan_day = next(
+                        (day for day in training_plan if day.get("date") == activity_date),
+                        None,
                     )
-                    if coach_note:
-                        await crud.update_ride_metric_notes(
-                            db,
-                            current_user.id,
-                            ride_input["strava_activity_id"],
-                            coach_note=coach_note,
+                    if matching_plan_day and ride_input["streams"]:
+                        coach_note = await _auto_rate_ride(
+                            matching_plan_day,
+                            ride_input["streams"],
+                            ftp_for_chain,
+                            profile_for_rating,
+                            _provider(current_user),
                         )
+                        if coach_note:
+                            await crud.update_ride_metric_notes(
+                                db,
+                                current_user.id,
+                                ride_input["strava_activity_id"],
+                                coach_note=coach_note,
+                            )
 
     await db.flush()
 
@@ -599,12 +546,23 @@ async def readiness_score(
     if ftp <= 0:
         ftp = float(current_user.current_ftp or 0)
 
-    # --- Compute current CTL/ATL/TSB (plan days up to today) ---
     today_str = _date.today().isoformat()
-    plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
-    current_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
-        "ctl": 0.0, "atl": 0.0, "tsb": 0.0
-    }
+
+    # --- Compute current CTL/ATL/TSB from actual ride metrics ---
+    latest_ride = await crud.get_latest_ride_metric(db, current_user.id)
+    if latest_ride is not None and latest_ride.ctl_after is not None:
+        current_ctl = float(latest_ride.ctl_after)
+        current_atl = float(latest_ride.atl_after or 0.0)
+        current_tsb = float(latest_ride.tsb_after if latest_ride.tsb_after is not None else current_ctl - current_atl)
+    else:
+        # Fall back to plan simulation when no ride data is available
+        plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
+        fallback_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
+            "ctl": 0.0, "atl": 0.0, "tsb": 0.0
+        }
+        current_ctl = fallback_load["ctl"]
+        current_atl = fallback_load["atl"]
+        current_tsb = fallback_load["tsb"]
 
     # --- Compute days until race ---
     days_until_race = 0
@@ -618,19 +576,22 @@ async def readiness_score(
 
     # --- Current readiness score ---
     current_result = compute_readiness_score(
-        ctl=current_load["ctl"],
-        atl=current_load["atl"],
-        tsb=current_load["tsb"],
+        ctl=current_ctl,
+        atl=current_atl,
+        tsb=current_tsb,
         days_until_race=days_until_race,
     )
 
-    # --- Forward-projection to race day (when race_date is set and in the future) ---
+    # --- Forward-projection to race day seeded from actual CTL/ATL ---
     projected_score = None
     projected_ctl = None
     projected_atl = None
     projected_tsb = None
-    if race_date_str and days_until_race > 0 and ftp > 0:
-        projected_load = _project_training_load(plan, ftp, race_date_str)
+    if race_date_str and days_until_race > 0:
+        future_plan_days = [d for d in plan if d.get("date", "") > today_str]
+        projected_load = project_training_load_from_seed(
+            future_plan_days, ftp, seed_ctl=current_ctl, seed_atl=current_atl
+        )
         projected_result = compute_readiness_score(
             ctl=projected_load["ctl"],
             atl=projected_load["atl"],
@@ -741,7 +702,6 @@ async def refresh_login_summary(
             db,
             current_user.id,
             estimated_ftp=assessment.estimated_ftp,
-            estimated_threshold_hr=assessment.estimated_threshold_hr,
             login_summary=login_summary,
         )
 

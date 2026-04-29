@@ -42,7 +42,7 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     )
     assert analyse_response.status_code == 200
     body = analyse_response.json()
-    assert body["assessment"]["estimatedFTP"] == 280
+    assert body["assessment"]["riderType"] == "allrounder"
     assert body["assessment"]["rideInsights"] is not None
     assert body["assessment"]["lastRideFeedback"] is not None
 
@@ -531,7 +531,7 @@ async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_s
     assert resp.status_code == 200
     body = resp.json()
     assert "assessment" in body
-    assert body["assessment"]["estimatedFTP"] == 280
+    assert "riderType" in body["assessment"]
     assert body["assessment"]["rideInsights"] is not None
     assert body["assessment"]["lastRideFeedback"] is not None
     assert "planUpdates" in body
@@ -555,7 +555,6 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
 
     mock_ai_service["analyse_strava_activities"].return_value = {
         "estimatedFTP": 290,
-        "estimatedThresholdHR": 170,
         "riderType": "climber",
         "notes": "Good climber.",
         "rideInsights": [

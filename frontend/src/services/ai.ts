@@ -55,7 +55,8 @@ export const MAX_CONVERSATION_HISTORY = 20
 export async function analyseStravaActivities(
   activities: StravaActivity[],
   authToken: string,
-  maxHeartRate?: number
+  maxHeartRate?: number,
+  currentFTP?: number
 ): Promise<AnalyseActivitiesResult> {
   const raw = await apiFetch<BackendAnalyseActivitiesResult>('/ai/analyse-activities', {
     token: authToken,
@@ -63,6 +64,7 @@ export async function analyseStravaActivities(
     body: {
       activities,
       ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
+      ...(currentFTP !== undefined ? { currentFTP } : {}),
     },
   })
   return {

@@ -92,18 +92,16 @@ async def analyse_strava_activities(
 
     # --- Algorithmic computation from per-activity stream data ---
     computed_ftp: int | None = None
-    computed_threshold_hr: int | None = None
     computed_hr_zones: dict | None = None
     ride_analyses: dict[str, dict] = {}  # activity_id → per-ride analysis
 
     if streams_by_id:
-        raw_ftp, raw_threshold_hr = compute_ftp_from_streams(
+        raw_ftp, _raw_threshold_hr = compute_ftp_from_streams(
             streams_by_id, max_heart_rate
         )
         # Skip power-based FTP for running — no watts stream expected
         if not is_running:
             computed_ftp = raw_ftp
-        computed_threshold_hr = raw_threshold_hr
 
         # --- Per-ride analysis: category + interval detection + HR drift ---
         # Only meaningful for cycling where power streams are available.
@@ -130,12 +128,10 @@ async def analyse_strava_activities(
         computed_hr_zones = compute_hr_zones(max_heart_rate)
 
     # --- Build the contextual section describing computed metrics ---
-    # Use the user-entered FTP for the prompt context so the AI knows the correct
-    # value; computed_ftp is kept only for per-ride categorisation above.
-    ftp_for_prompt = user_ftp if user_ftp is not None else computed_ftp
+    # Pass the user-entered FTP and threshold HR directly to the prompt; computed_ftp
+    # is used only for per-ride categorisation above, not for the AI assessment output.
     computed_section = analyse_activities_computed_section(
-        ftp_for_prompt, computed_threshold_hr, max_heart_rate, computed_hr_zones,
-        is_user_entered_ftp=(user_ftp is not None),
+        user_ftp, max_heart_rate, computed_hr_zones,
     )
 
     system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
@@ -156,21 +152,9 @@ async def analyse_strava_activities(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
 
-    # Override estimatedFTP: always prefer the user-entered FTP when available.
-    # Regular rides are not suitable for FTP estimation, so the user-entered value
-    # is authoritative.  The algorithmically-derived computed_ftp is used as a
-    # fallback when no user-entered FTP exists.  When neither is present, keep
-    # whatever the AI returned (summary-only path with no streams).
-    if user_ftp is not None:
-        parsed["estimatedFTP"] = user_ftp
-    elif computed_ftp is not None and not is_running:
-        parsed["estimatedFTP"] = computed_ftp
-    elif is_running:
-        # Ensure FTP is explicitly null for running activities
-        parsed["estimatedFTP"] = None
-    # else: no user FTP, no computed FTP, non-running — preserve the AI's estimate
-    if computed_threshold_hr is not None:
-        parsed["estimatedThresholdHR"] = computed_threshold_hr
+    # FTP is never estimated — always null; user-entered currentFTP is the
+    # authoritative value and is used directly from the user profile.
+    parsed["estimatedFTP"] = None
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
@@ -194,22 +178,18 @@ async def analyse_fit_activity(
     FTP estimation:
     - Cycling: estimated as ``avg_power × AVG_POWER_TO_FTP_RATIO`` when power
       data is present (a rough proxy since we lack the full stream).
-    - Running: FTP is set to ``null``; threshold HR is estimated from
-      ``max_heart_rate × LTHR_RATIO`` when max HR is known.
+    - Running: FTP is set to ``null``.
+    Threshold HR is never estimated — only the user-entered value is used.
     """
     is_running = sport_type.lower() in ("running", "run")
 
     computed_ftp: int | None = None
-    computed_threshold_hr: int | None = None
     computed_hr_zones: dict | None = None
 
     if not is_running and avg_power and avg_power > 0:
         computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
-    # Estimate threshold HR only when max HR is provided (LTHR = max_hr × LTHR_RATIO).
-    # Average HR from a single activity is not a reliable threshold proxy.
     if max_heart_rate and max_heart_rate > 0:
-        computed_threshold_hr = round(max_heart_rate * LTHR_RATIO)
         computed_hr_zones = compute_hr_zones(max_heart_rate)
 
     activity_summary = {
@@ -221,7 +201,6 @@ async def analyse_fit_activity(
 
     computed_section = analyse_activities_computed_section(
         computed_ftp if not is_running else None,
-        computed_threshold_hr,
         max_heart_rate,
         computed_hr_zones,
     )
@@ -234,13 +213,8 @@ async def analyse_fit_activity(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
 
-    # Override with algorithmically derived values
-    if not is_running and computed_ftp is not None:
-        parsed["estimatedFTP"] = computed_ftp
-    else:
-        parsed["estimatedFTP"] = None
-    if computed_threshold_hr is not None:
-        parsed["estimatedThresholdHR"] = computed_threshold_hr
+    # FTP is never estimated — always null.
+    parsed["estimatedFTP"] = None
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
@@ -276,20 +250,8 @@ async def adapt_training_plan(
 ) -> list[dict]:
     today = datetime.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
-    # Prefer user-entered FTP for load computation; fall back to estimated
-    # only when use_estimated_ftp is explicitly set or no manual value exists.
-    if profile.get("useEstimatedFTP"):
-        ftp = float(
-            (rider_assessment or {}).get("estimatedFTP")
-            or profile.get("currentFTP")
-            or 0
-        )
-    else:
-        ftp = float(
-            profile.get("currentFTP")
-            or (rider_assessment or {}).get("estimatedFTP")
-            or 0
-        )
+    # Always use the user-entered FTP for training load computation.
+    ftp = float(profile.get("currentFTP") or 0)
     training_load = compute_training_load(plan, ftp) if ftp > 0 else None
 
     # Detect taper window: if race is within 14 days, pass the remaining days
@@ -361,24 +323,15 @@ async def ask_trainer(
     trimmed_memory = (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
     memory_section = f"\n\nCoach notes about this athlete (remember these):\n{trimmed_memory}" if trimmed_memory else ""
 
-    assessment_section = ask_trainer_assessment_section(rider_assessment)
+    assessment_section = ask_trainer_assessment_section(
+        rider_assessment, current_ftp=profile.get("currentFTP")
+    )
     workout_section = ask_trainer_workout_section(context_workout)
     plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
 
     # --- Task 1: Compute training load from the plan ---
-    # Prefer user-entered FTP; only use estimated when explicitly opted in.
-    if profile.get("useEstimatedFTP"):
-        ftp = float(
-            (rider_assessment or {}).get("estimatedFTP")
-            or profile.get("currentFTP")
-            or 0
-        )
-    else:
-        ftp = float(
-            profile.get("currentFTP")
-            or (rider_assessment or {}).get("estimatedFTP")
-            or 0
-        )
+    # Always use the user-entered FTP for load computation.
+    ftp = float(profile.get("currentFTP") or 0)
     training_load = compute_training_load(plan, ftp) if ftp > 0 and plan else None
 
     system_prompt = ask_trainer_system(

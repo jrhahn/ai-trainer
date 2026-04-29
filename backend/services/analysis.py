@@ -676,6 +676,86 @@ def _project_training_load(
     return compute_training_load(days_up_to_target, ftp)
 
 
+def project_training_load_from_seed(
+    future_plan_days: list[dict],
+    ftp: float,
+    seed_ctl: float,
+    seed_atl: float,
+) -> dict:
+    """Forward-project CTL/ATL/TSB starting from real (seeded) CTL/ATL values.
+
+    Unlike :func:`_project_training_load` which simulates the entire plan from
+    zero, this function starts from *seed_ctl* / *seed_atl* — i.e. the actual
+    CTL and ATL measured from real Strava rides — and then applies the future
+    plan days on top of that.
+
+    This produces a more accurate race-day projection because the starting
+    point reflects what the athlete has actually done rather than what the plan
+    assumed.
+
+    Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float]}``.
+    """
+    if ftp <= 0:
+        return {"ctl": seed_ctl, "atl": seed_atl, "tsb": seed_ctl - seed_atl, "daily_tss": []}
+
+    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
+    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
+
+    ctl = seed_ctl
+    atl = seed_atl
+    daily_tss: list[float] = []
+
+    # Re-use TSS estimation logic from compute_training_load
+    for day in future_plan_days:
+        duration_min = day.get("durationMinutes") or 0
+        duration_s = duration_min * 60.0
+        if duration_s <= 0:
+            tss = 0.0
+        else:
+            target_power = day.get("targetPower")
+            np_approx: float | None = None
+            if target_power and isinstance(target_power, dict):
+                low = target_power.get("low") or 0
+                high = target_power.get("high") or 0
+                if low > 0 and high > 0:
+                    np_approx = (low + high) / 2.0
+                elif high > 0:
+                    np_approx = float(high)
+                elif low > 0:
+                    np_approx = float(low)
+
+            if np_approx is None or np_approx <= 0:
+                workout_type = (day.get("workoutType") or "").lower()
+                type_pct_map = {
+                    "rest": 0.0,
+                    "recovery": 0.50,
+                    "endurance": 0.68,
+                    "tempo": 0.80,
+                    "intervals": 0.90,
+                    "strength": 0.65,
+                    "race": 0.95,
+                }
+                np_approx = ftp * type_pct_map.get(workout_type, 0.65)
+
+            if np_approx <= 0:
+                tss = 0.0
+            else:
+                intensity_factor = np_approx / ftp
+                tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
+
+        daily_tss.append(round(tss, 1))
+        ctl = ctl + alpha_ctl * (tss - ctl)
+        atl = atl + alpha_atl * (tss - atl)
+
+    tsb = ctl - atl
+    return {
+        "ctl": round(ctl, 1),
+        "atl": round(atl, 1),
+        "tsb": round(tsb, 1),
+        "daily_tss": daily_tss,
+    }
+
+
 def _normalized_power(watts: list[float], time_stream: list[float]) -> float | None:
     """Compute Normalized Power (NP) from a power stream.
 
@@ -1052,7 +1132,6 @@ def compute_ftp_from_streams(
 def estimate_ftp_over_time(
     rides: list[dict],
     max_heart_rate: int | None = None,
-    resting_heart_rate: int | None = None,
     smoothing_days: int = 21,
 ) -> list[dict]:
     """Estimate FTP over time from a rolling power-duration envelope.
@@ -1078,8 +1157,6 @@ def estimate_ftp_over_time(
         max_heart_rate: Athlete's max heart rate in bpm.  Used only to filter
             low-intensity HR windows; power-only estimates require longer
             sustained efforts when not provided.
-        resting_heart_rate: Resting HR in bpm.  Reserved for future use; not
-            used in the current formula.
         smoothing_days: Size of the sliding window (days) used to take the
             recent power-duration envelope.  Default 21 (3 weeks) — long
             enough to smooth noise while still tracking gradual FTP changes.
