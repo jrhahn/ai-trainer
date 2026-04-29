@@ -25,6 +25,7 @@ from .analysis import (
 )
 from .llm import AIRateLimitError, get_provider  # re-exported for backward compat
 from .prompts import (
+    COACH_PERSONA,
     analyse_activities_computed_section,
     analyse_activities_system,
     analyse_activities_user,
@@ -32,6 +33,7 @@ from .prompts import (
     generate_plan_user,
     adapt_plan_system,
     adapt_plan_user,
+    race_events_context_section,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
     ask_trainer_classify_user,
@@ -59,6 +61,33 @@ _SLIM_PLAN_KEEP = {"date", "workoutType", "workout_type", "title", "durationMinu
 def _slim_plan_entry(entry: dict) -> dict:
     """Return a compact version of a plan day with only fields needed for chat context."""
     return {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
+
+
+def _event_date(value: dict) -> datetime.date | None:
+    raw = value.get("date")
+    if not raw:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(raw))
+    except ValueError:
+        return None
+
+
+def _next_race_date(profile: dict, race_events: list[dict] | None) -> datetime.date | None:
+    today = datetime.date.today()
+    candidates: list[datetime.date] = []
+    profile_race = profile.get("raceDate")
+    if profile_race:
+        try:
+            candidates.append(datetime.date.fromisoformat(str(profile_race)))
+        except ValueError:
+            pass
+    for event in race_events or []:
+        parsed = _event_date(event)
+        if parsed is not None:
+            candidates.append(parsed)
+    upcoming = [date for date in candidates if date >= today]
+    return min(upcoming) if upcoming else None
 
 
 def _parse_ai_json(text: str) -> Any:
@@ -226,6 +255,7 @@ async def generate_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
+    race_events: list[dict] | None = None,
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
@@ -234,7 +264,13 @@ async def generate_training_plan(
         else ""
     )
     today = datetime.date.today().isoformat()
-    user_msg = generate_plan_user(profile, today, assessment_section, metrics_history_section=metrics_history_section)
+    user_msg = generate_plan_user(
+        profile,
+        today,
+        assessment_section,
+        metrics_history_section=metrics_history_section,
+        race_events_section=race_events_context_section(race_events),
+    )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return parsed.get("plan", [])
@@ -247,6 +283,7 @@ async def adapt_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
+    race_events: list[dict] | None = None,
 ) -> list[dict]:
     today = datetime.date.today().isoformat()
     incomplete_days = [day for day in plan if not day.get("completed")]
@@ -257,15 +294,11 @@ async def adapt_training_plan(
     # Detect taper window: if race is within 14 days, pass the remaining days
     # so the prompt builder can inject explicit taper instructions.
     taper_days_remaining: int | None = None
-    race_date_str = profile.get("raceDate")
-    if race_date_str:
-        try:
-            rd = datetime.date.fromisoformat(race_date_str)
-            days_left = (rd - datetime.date.today()).days
-            if 0 <= days_left <= 14:
-                taper_days_remaining = days_left
-        except ValueError:
-            pass
+    next_race = _next_race_date(profile, race_events)
+    if next_race is not None:
+        days_left = (next_race - datetime.date.today()).days
+        if 0 <= days_left <= 14:
+            taper_days_remaining = days_left
 
     system_prompt = adapt_plan_system()
     user_msg = adapt_plan_user(
@@ -277,6 +310,7 @@ async def adapt_training_plan(
         training_load=training_load,
         taper_days_remaining=taper_days_remaining,
         metrics_history_section=metrics_history_section,
+        race_events_section=race_events_context_section(race_events),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
@@ -316,6 +350,7 @@ async def ask_trainer(
     science_context: str | None = None,
     classification: dict | None = None,
     metrics_history_section: str = "",
+    race_events: list[dict] | None = None,
 ) -> dict:
     today = datetime.date.today().isoformat()
     last_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") <= today][-MAX_PLAN_DAYS_PAST:]
@@ -347,6 +382,7 @@ async def ask_trainer(
         training_load=training_load,
         classification=classification,
         metrics_history_section=metrics_history_section,
+        race_events_section=race_events_context_section(race_events),
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
@@ -362,6 +398,46 @@ async def ask_trainer(
         "sources": parsed.get("sources") or [],
         "ride_note_update": parsed.get("ride_note_update"),
     }
+
+
+async def race_event_feedback(
+    event: dict,
+    plan: list[dict],
+    profile: dict,
+    provider: str = "openai",
+    rider_assessment: dict | None = None,
+    race_events: list[dict] | None = None,
+    metrics_history_section: str = "",
+    action: str = "added",
+) -> str:
+    today = datetime.date.today().isoformat()
+    upcoming_plan = [
+        _slim_plan_entry(day)
+        for day in plan
+        if day.get("date", "") >= today and not day.get("completed")
+    ][:14]
+    system_prompt = (
+        f"{COACH_PERSONA} Review a calendar race event that was {action}. "
+        "Return ONLY a valid JSON object with a \"feedback\" string. "
+        "For added or updated events, the feedback must cover exactly: "
+        "(1) how well the event fits the current training plan, "
+        "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
+        "sprinting, endurance, taper, recovery, or other work. "
+        "Do not ask whether the athlete wants the plan adapted; the UI asks that separately. "
+        "Do not include planUpdates and do not rewrite the plan yet."
+    )
+    user_msg = (
+        f"Today's date: {today}\n"
+        f"Athlete profile: {json.dumps(profile)}\n"
+        f"Race event {action}: {json.dumps(event)}\n"
+        f"All race events: {json.dumps(race_events or [])}\n"
+        f"Upcoming plan: {json.dumps(upcoming_plan)}\n"
+        f"Rider assessment: {json.dumps(rider_assessment or {})}\n"
+        f"{metrics_history_section}"
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+    return parsed.get("feedback", "")
 
 
 async def update_coach_memory(

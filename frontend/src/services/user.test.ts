@@ -9,6 +9,10 @@ import {
   fetchWorkoutLogs,
   saveTrainingPlan,
   saveWorkoutLog,
+  fetchRaceEvents,
+  createRaceEvent,
+  updateRaceEventRemote,
+  deleteRaceEventRemote,
   fetchChatHistory,
   clearChatHistoryRemote,
   fetchCoachMemory,
@@ -150,6 +154,78 @@ describe('saveWorkoutLog', () => {
   })
 })
 
+describe('race events', () => {
+  it('fetches race events from the backend envelope', async () => {
+    mockApiFetch.mockResolvedValue({
+      events: [{ id: 'race-1', date: '2026-06-01', distanceKm: 120, elevationM: 1800 }],
+    })
+
+    const result = await fetchRaceEvents('tok-123')
+
+    expect(result).toHaveLength(1)
+    expect(result[0].distanceKm).toBe(120)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/race-events', { token: 'tok-123' })
+  })
+
+  it('creates a race event', async () => {
+    const event = { id: 'race-1', date: '2026-06-01', startTime: null, distanceKm: 120, elevationM: 1800 }
+    mockApiFetch.mockResolvedValue(event)
+
+    const result = await createRaceEvent('tok-123', {
+      date: '2026-06-01',
+      startTime: null,
+      distanceKm: 120,
+      elevationM: 1800,
+    })
+
+    expect(result).toEqual(event)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/race-events', {
+      token: 'tok-123',
+      method: 'POST',
+      body: {
+        date: '2026-06-01',
+        startTime: null,
+        distanceKm: 120,
+        elevationM: 1800,
+      },
+    })
+  })
+
+  it('updates and deletes a race event', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      id: 'race-1',
+      date: '2026-06-02',
+      startTime: '09:00',
+      distanceKm: 130,
+      elevationM: 2000,
+    })
+    mockApiFetch.mockResolvedValueOnce(undefined)
+
+    await updateRaceEventRemote('tok-123', 'race-1', {
+      date: '2026-06-02',
+      startTime: '09:00',
+      distanceKm: 130,
+      elevationM: 2000,
+    })
+    await deleteRaceEventRemote('tok-123', 'race-1')
+
+    expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me/race-events/race-1', {
+      token: 'tok-123',
+      method: 'PUT',
+      body: {
+        date: '2026-06-02',
+        startTime: '09:00',
+        distanceKm: 130,
+        elevationM: 2000,
+      },
+    })
+    expect(mockApiFetch).toHaveBeenNthCalledWith(2, '/users/me/race-events/race-1', {
+      token: 'tok-123',
+      method: 'DELETE',
+    })
+  })
+})
+
 describe('fetchChatHistory', () => {
   it('returns the list of chat messages', async () => {
     mockApiFetch.mockResolvedValue({
@@ -270,4 +346,3 @@ describe('estimateFTP', () => {
     })
   })
 })
-

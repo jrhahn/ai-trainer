@@ -3,6 +3,8 @@
 import io
 import json
 import logging
+import re
+from datetime import date as _date
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
@@ -19,6 +21,9 @@ from services.analysis import AVG_POWER_TO_FTP_RATIO
 router = APIRouter(prefix="/users/me", tags=["users"])
 
 logger = logging.getLogger(__name__)
+
+
+_RACE_MEMORY_HEADING = "Race calendar:"
 
 
 def _user_to_response(user: models.User) -> schemas.UserResponse:
@@ -53,6 +58,63 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
     )
+
+
+def _format_race_event_for_memory(event: models.RaceEvent) -> str:
+    time_part = f" at {event.start_time}" if event.start_time else ""
+    return (
+        f"{event.date}{time_part}: {event.distance_km:g} km, "
+        f"{event.elevation_m} m climbing"
+    )
+
+
+def _race_events_memory_section(events: list[models.RaceEvent]) -> str:
+    if not events:
+        return ""
+    lines = [_RACE_MEMORY_HEADING]
+    lines.extend(f"- {_format_race_event_for_memory(event)}" for event in events)
+    return "\n".join(lines)
+
+
+def _merge_race_events_into_memory(memory: str, events: list[models.RaceEvent]) -> str:
+    cleaned = re.sub(
+        rf"(?:\n\n)?{re.escape(_RACE_MEMORY_HEADING)}\n(?:- .*(?:\n|$))*",
+        "",
+        memory or "",
+    ).strip()
+    section = _race_events_memory_section(events)
+    return "\n\n".join(part for part in (cleaned, section) if part)
+
+
+def _sync_profile_next_race(user: models.User, events: list[models.RaceEvent]) -> None:
+    today = _date.today().isoformat()
+    upcoming = [event for event in events if event.date >= today]
+    if not upcoming:
+        user.race_date = None
+        user.race_description = None
+        return
+
+    next_event = sorted(upcoming, key=lambda event: (event.date, event.start_time or ""))[0]
+    user.training_goal = "race"
+    user.race_date = next_event.date
+    user.race_description = (
+        f"Calendar race: {next_event.distance_km:g} km with "
+        f"{next_event.elevation_m} m climbing"
+    )
+
+
+async def _sync_race_context(
+    db: AsyncSession, current_user: models.User
+) -> list[models.RaceEvent]:
+    events = await crud.get_race_events(db, current_user.id)
+    _sync_profile_next_race(current_user, events)
+    existing_memory = await crud.get_coach_memory(db, current_user.id)
+    merged_memory = _merge_race_events_into_memory(
+        existing_memory.memory if existing_memory is not None else "",
+        events,
+    )
+    await crud.upsert_coach_memory(db, current_user.id, merged_memory)
+    return events
 
 
 @router.get("", response_model=schemas.UserResponse)
@@ -145,6 +207,74 @@ async def save_workout(
         completed_at=feedback.completed_at,
     )
     return {"status": "ok"}
+
+
+@router.get("/race-events", response_model=schemas.RaceEventsResponse)
+async def get_race_events(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RaceEventsResponse:
+    events = await crud.get_race_events(db, current_user.id)
+    return schemas.RaceEventsResponse(
+        events=[
+            schemas.RaceEventResponse.model_validate(event, from_attributes=True)
+            for event in events
+        ]
+    )
+
+
+@router.post("/race-events", response_model=schemas.RaceEventResponse)
+async def create_race_event(
+    body: schemas.RaceEventRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RaceEventResponse:
+    event = await crud.create_race_event(
+        db,
+        current_user.id,
+        date=body.date,
+        start_time=body.start_time,
+        distance_km=body.distance_km,
+        elevation_m=body.elevation_m,
+    )
+    await _sync_race_context(db, current_user)
+    return schemas.RaceEventResponse.model_validate(event, from_attributes=True)
+
+
+@router.put("/race-events/{event_id}", response_model=schemas.RaceEventResponse)
+async def update_race_event(
+    event_id: str,
+    body: schemas.RaceEventRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RaceEventResponse:
+    event = await crud.get_race_event(db, current_user.id, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found")
+    updated = await crud.update_race_event(
+        db,
+        event,
+        date=body.date,
+        start_time=body.start_time,
+        distance_km=body.distance_km,
+        elevation_m=body.elevation_m,
+    )
+    await _sync_race_context(db, current_user)
+    return schemas.RaceEventResponse.model_validate(updated, from_attributes=True)
+
+
+@router.delete("/race-events/{event_id}")
+async def delete_race_event(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    event = await crud.get_race_event(db, current_user.id, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found")
+    await crud.delete_race_event(db, event)
+    await _sync_race_context(db, current_user)
+    return {"status": "deleted"}
 
 
 @router.get("/chat", response_model=schemas.ChatHistoryResponse)

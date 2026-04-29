@@ -175,6 +175,66 @@ class WorkoutLogRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Race events
+# ---------------------------------------------------------------------------
+
+
+class RaceEventRequest(CamelModel):
+    date: str
+    start_time: Optional[str] = None
+    distance_km: float
+    elevation_m: int
+
+    @field_validator("date")
+    @classmethod
+    def date_must_be_iso(cls, value: str) -> str:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise ValueError("date must be YYYY-MM-DD")
+        return value
+
+    @field_validator("start_time")
+    @classmethod
+    def time_must_be_optional_hhmm(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        if not re.fullmatch(r"\d{2}:\d{2}", value):
+            raise ValueError("startTime must be HH:MM")
+        return value
+
+    @field_validator("distance_km")
+    @classmethod
+    def distance_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("distanceKm must be greater than 0")
+        return value
+
+    @field_validator("elevation_m")
+    @classmethod
+    def elevation_must_be_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("elevationM must be 0 or greater")
+        return value
+
+
+class RaceEventResponse(CamelModel):
+    id: str
+    date: str
+    start_time: Optional[str] = None
+    distance_km: float
+    elevation_m: int
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class RaceEventsResponse(CamelModel):
+    events: list[RaceEventResponse]
+
+
+# ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------
 
@@ -357,6 +417,15 @@ class RefreshKnowledgeResponse(BaseModel):
 
 class RefreshLoginSummaryResponse(CamelModel):
     login_summary: str
+
+
+class RaceEventFeedbackRequest(CamelModel):
+    event: RaceEventResponse
+    action: str = "added"
+
+
+class RaceEventFeedbackResponse(CamelModel):
+    feedback: str
 
 
 

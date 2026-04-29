@@ -1,5 +1,6 @@
 import type {
   AiProvider,
+  RaceEvent,
   RiderAssessment,
   StravaActivity,
   TrainingDay,
@@ -111,6 +112,19 @@ export async function askTrainer(
     planUpdates: result.planUpdates ?? result.plan_updates,
     sources: result.sources,
   }
+}
+
+export async function fetchRaceEventFeedback(
+  event: RaceEvent,
+  authToken: string,
+  action: 'added' | 'updated' = 'added',
+): Promise<string> {
+  const result = await apiFetch<{ feedback: string }>('/ai/race-event-feedback', {
+    token: authToken,
+    method: 'POST',
+    body: { event, action },
+  })
+  return result.feedback
 }
 
 export async function rateCompletedWorkout(

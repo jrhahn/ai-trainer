@@ -270,11 +270,41 @@ def generate_plan_system() -> str:
     )
 
 
-def generate_plan_user(profile: dict, today: str, assessment_section: str, metrics_history_section: str = "") -> str:
+def race_events_context_section(race_events: list[dict] | None) -> str:
+    if not race_events:
+        return ""
+
+    lines = ["Race calendar (fixed athlete events to plan around):"]
+    for event in race_events:
+        date = event.get("date", "")
+        start_time = event.get("startTime") or event.get("start_time")
+        distance = event.get("distanceKm") or event.get("distance_km")
+        elevation = event.get("elevationM") or event.get("elevation_m")
+        time_part = f" at {start_time}" if start_time else ""
+        lines.append(
+            f"- {date}{time_part}: {distance:g} km with {elevation} m climbing"
+            if isinstance(distance, (int, float)) and elevation is not None
+            else f"- {json.dumps(event)}"
+        )
+    lines.append(
+        "Treat these events as real calendar commitments. Build race-specific preparation, "
+        "terrain-specific work, and taper/recovery around them."
+    )
+    return "\n".join(lines)
+
+
+def generate_plan_user(
+    profile: dict,
+    today: str,
+    assessment_section: str,
+    metrics_history_section: str = "",
+    race_events_section: str = "",
+) -> str:
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
+    events_section = f"\n{race_events_section}" if race_events_section else ""
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{metrics_section}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{metrics_section}{events_section}\n"
         "Generate a 14-day training plan starting from today that reflects both the athlete's "
         "goals and their actual fitness level from recent rides."
     )
@@ -316,6 +346,7 @@ def adapt_plan_user(
     training_load: dict | None = None,
     taper_days_remaining: int | None = None,
     metrics_history_section: str = "",
+    race_events_section: str = "",
 ) -> str:
     assessment_section = (
         f"\nRider assessment: {json.dumps(rider_assessment)}" if rider_assessment else ""
@@ -327,6 +358,7 @@ def adapt_plan_user(
             f"ATL={training_load.get('atl')} TSB={training_load.get('tsb')}"
         )
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
+    events_section = f"\n{race_events_section}" if race_events_section else ""
     taper_section = ""
     if taper_days_remaining is not None:
         taper_section = (
@@ -347,7 +379,7 @@ def adapt_plan_user(
     )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{metrics_section}{taper_section}\n"
+        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{metrics_section}{events_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         + stale_note
@@ -459,6 +491,7 @@ def ask_trainer_system(
     training_load: dict | None = None,
     classification: dict | None = None,
     metrics_history_section: str = "",
+    race_events_section: str = "",
 ) -> str:
     science_section = (
         f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
@@ -479,6 +512,7 @@ def ask_trainer_system(
         )
 
     metrics_section = f"\n\n{metrics_history_section}" if metrics_history_section else ""
+    events_section = f"\n\n{race_events_section}" if race_events_section else ""
 
     classification_section = ""
     if classification:
@@ -505,6 +539,7 @@ def ask_trainer_system(
         f"Upcoming plan (next {len(next_n_days)} days): {json.dumps(next_n_days)}"
         f"{assessment_section}"
         f"{metrics_section}"
+        f"{events_section}"
         f"{training_load_section}"
         f"{memory_section}"
         f"{workout_section}"

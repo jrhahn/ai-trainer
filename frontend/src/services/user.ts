@@ -3,6 +3,7 @@ import type {
   AthleteMetricSnapshot,
   ChatMessage,
   RiderAssessment,
+  RaceEvent,
   RideMetricPoint,
   StravaConnection,
   TrainingDay,
@@ -126,6 +127,42 @@ export async function saveWorkoutLog(token: string, date: string, feedback: Work
     token,
     method: 'POST',
     body: { feedback },
+  })
+}
+
+export type RaceEventInput = Pick<RaceEvent, 'date' | 'distanceKm' | 'elevationM'> & {
+  startTime?: string | null
+}
+
+export async function fetchRaceEvents(token: string): Promise<RaceEvent[]> {
+  const response = await apiFetch<{ events: RaceEvent[] }>('/users/me/race-events', { token })
+  return response.events
+}
+
+export async function createRaceEvent(token: string, event: RaceEventInput): Promise<RaceEvent> {
+  return apiFetch<RaceEvent>('/users/me/race-events', {
+    token,
+    method: 'POST',
+    body: event,
+  })
+}
+
+export async function updateRaceEventRemote(
+  token: string,
+  eventId: string,
+  event: RaceEventInput,
+): Promise<RaceEvent> {
+  return apiFetch<RaceEvent>(`/users/me/race-events/${eventId}`, {
+    token,
+    method: 'PUT',
+    body: event,
+  })
+}
+
+export async function deleteRaceEventRemote(token: string, eventId: string): Promise<void> {
+  await apiFetch(`/users/me/race-events/${eventId}`, {
+    token,
+    method: 'DELETE',
   })
 }
 

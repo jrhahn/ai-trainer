@@ -12,6 +12,7 @@ import {
   analyseStravaActivities,
   askTrainer,
   adaptTrainingPlan,
+  fetchRaceEventFeedback,
   generateTrainingPlan,
   rateCompletedWorkout,
 } from './ai'
@@ -154,6 +155,28 @@ describe('askTrainer', () => {
     const result = await askTrainer('Tell me about polarized training', 'token-123')
 
     expect(result.sources).toEqual(sources)
+  })
+})
+
+describe('fetchRaceEventFeedback', () => {
+  it('returns coach feedback for a race event', async () => {
+    const event = {
+      id: 'race-1',
+      date: '2026-06-01',
+      startTime: null,
+      distanceKm: 120,
+      elevationM: 1800,
+    }
+    mockApiFetch.mockResolvedValue({ feedback: 'Fits well; add more climbing.' })
+
+    const result = await fetchRaceEventFeedback(event, 'token-123', 'added')
+
+    expect(result).toBe('Fits well; add more climbing.')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/race-event-feedback', {
+      token: 'token-123',
+      method: 'POST',
+      body: { event, action: 'added' },
+    })
   })
 })
 

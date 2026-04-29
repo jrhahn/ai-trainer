@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
@@ -95,6 +95,11 @@ class User(Base):
     workout_logs: Mapped[list["WorkoutLog"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    race_events: Mapped[list["RaceEvent"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="RaceEvent.date",
+    )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", order_by="ChatMessage.timestamp"
     )
@@ -155,6 +160,21 @@ class WorkoutLog(Base):
     sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
+
+
+class RaceEvent(Base):
+    __tablename__ = "race_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    start_time: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    elevation_m: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="race_events")
 
 
 class ChatMessage(Base):

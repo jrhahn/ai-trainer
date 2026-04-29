@@ -33,6 +33,38 @@ _RATE_LIMIT_DETAIL = (
 )
 
 
+async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
+    events = await crud.get_race_events(db, user_id)
+    return [
+        schemas.RaceEventResponse.model_validate(event, from_attributes=True).model_dump(
+            by_alias=True
+        )
+        for event in events
+    ]
+
+
+def _next_race_date_from_events(
+    events: list[dict], fallback_race_date: str | None
+) -> str | None:
+    today = _date.today()
+    candidates: list[_date] = []
+    if fallback_race_date:
+        try:
+            candidates.append(_date.fromisoformat(fallback_race_date))
+        except ValueError:
+            pass
+    for event in events:
+        event_date = event.get("date")
+        if not event_date:
+            continue
+        try:
+            candidates.append(_date.fromisoformat(str(event_date)))
+        except ValueError:
+            continue
+    upcoming = [candidate for candidate in candidates if candidate >= today]
+    return min(upcoming).isoformat() if upcoming else None
+
+
 def _default_provider() -> str:
     """Return the best available provider based on configured API keys."""
     if settings.gemini_api_key:
@@ -112,12 +144,14 @@ async def _auto_adapt_plan(
             user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     try:
+        race_events = await _race_events_for_prompt(db, user.id)
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [feedback_entry],
             schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
             provider=provider,
             rider_assessment=rider_assessment,
+            race_events=race_events,
         )
         await crud.upsert_training_plan(db, user.id, updated_plan)
     except Exception:
@@ -278,12 +312,14 @@ async def generate_plan(
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     metrics_section = ride_metrics_context_section(recent_metrics)
+    race_events = await _race_events_for_prompt(db, current_user.id)
     try:
         plan = await ai_service.generate_training_plan(
             profile,
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
+            race_events=race_events,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -309,6 +345,7 @@ async def adapt_plan(
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     metrics_section = ride_metrics_context_section(recent_metrics)
+    race_events = await _race_events_for_prompt(db, current_user.id)
     try:
         updated_plan = await ai_service.adapt_training_plan(
             plan,
@@ -317,6 +354,7 @@ async def adapt_plan(
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
+            race_events=race_events,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -357,6 +395,7 @@ async def ask_trainer(
     )
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     metrics_section = ride_metrics_context_section(recent_metrics)
+    race_events = await _race_events_for_prompt(db, current_user.id)
 
     # --- Task 5: Await classification (likely already done), then conditionally retrieve RAG context ---
     classification = await classify_task
@@ -378,6 +417,7 @@ async def ask_trainer(
             science_context=science_context,
             classification=classification,
             metrics_history_section=metrics_section,
+            race_events=race_events,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -443,6 +483,41 @@ async def ask_trainer(
         result["sources"] = rag_sources
 
     return schemas.AskTrainerResponse.model_validate(result)
+
+
+@router.post("/race-event-feedback", response_model=schemas.RaceEventFeedbackResponse)
+async def race_event_feedback(
+    body: schemas.RaceEventFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RaceEventFeedbackResponse:
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    rider_assessment = None
+    if current_user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+    metrics_section = ride_metrics_context_section(recent_metrics)
+    race_events = await _race_events_for_prompt(db, current_user.id)
+    try:
+        feedback = await ai_service.race_event_feedback(
+            body.event.model_dump(by_alias=True),
+            plan,
+            profile,
+            provider=_provider(current_user),
+            rider_assessment=rider_assessment,
+            race_events=race_events,
+            metrics_history_section=metrics_section,
+            action=body.action,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+    return schemas.RaceEventFeedbackResponse(feedback=feedback)
 
 
 @router.post("/rate-workout", response_model=schemas.RateWorkoutResponse)
@@ -566,7 +641,8 @@ async def readiness_score(
 
     # --- Compute days until race ---
     days_until_race = 0
-    race_date_str = current_user.race_date
+    race_events = await _race_events_for_prompt(db, current_user.id)
+    race_date_str = _next_race_date_from_events(race_events, current_user.race_date)
     if race_date_str:
         try:
             rd = _date.fromisoformat(race_date_str)

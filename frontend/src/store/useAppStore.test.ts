@@ -6,6 +6,7 @@ const {
   mockFetchWorkoutLogs,
   mockFetchChatHistory,
   mockFetchCoachMemory,
+  mockFetchRaceEvents,
   mockFetchMetricsHistory,
   mockFetchRideMetricsHistory,
 } = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ const {
   mockFetchWorkoutLogs: vi.fn(),
   mockFetchChatHistory: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
+  mockFetchRaceEvents: vi.fn(),
   mockFetchMetricsHistory: vi.fn(),
   mockFetchRideMetricsHistory: vi.fn(),
 }))
@@ -24,6 +26,7 @@ vi.mock('../services/user', () => ({
   fetchWorkoutLogs: mockFetchWorkoutLogs,
   fetchChatHistory: mockFetchChatHistory,
   fetchCoachMemory: mockFetchCoachMemory,
+  fetchRaceEvents: mockFetchRaceEvents,
   fetchMetricsHistory: mockFetchMetricsHistory,
   fetchRideMetricsHistory: mockFetchRideMetricsHistory,
 }))
@@ -95,6 +98,7 @@ describe('resetAll', () => {
     expect(state.isOnboarded).toBe(false)
     expect(state.trainingPlan).toEqual([])
     expect(state.coachMemory).toBe('')
+    expect(state.raceEvents).toEqual([])
   })
 })
 
@@ -143,6 +147,9 @@ describe('loadUserData', () => {
     mockFetchWorkoutLogs.mockResolvedValue({ '2024-01-15': mockFeedback })
     mockFetchChatHistory.mockResolvedValue([{ role: 'assistant', content: 'Hi', timestamp: '2024-01-15T09:00:00Z' }])
     mockFetchCoachMemory.mockResolvedValue('Prefers morning rides.')
+    mockFetchRaceEvents.mockResolvedValue([
+      { id: 'race-1', date: '2024-06-01', startTime: '09:00', distanceKm: 120, elevationM: 1800 },
+    ])
     mockFetchMetricsHistory.mockResolvedValue([
       { recordedAt: '2024-01-10T10:00:00Z', ftp: 260, source: 'strava_analysis' },
     ])
@@ -159,6 +166,8 @@ describe('loadUserData', () => {
     expect(state.trainingPlan[0].feedback).toEqual(mockFeedback)
     expect(state.chatHistory).toHaveLength(1)
     expect(state.coachMemory).toBe('Prefers morning rides.')
+    expect(state.raceEvents).toHaveLength(1)
+    expect(state.raceEvents[0].distanceKm).toBe(120)
     expect(state.stravaConnection?.athleteName).toBe('Alice Rider')
     expect(state.metricsHistory).toHaveLength(1)
     expect(state.metricsHistory[0].ftp).toBe(260)
