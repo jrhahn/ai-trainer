@@ -279,6 +279,40 @@ describe('OnboardingPage', () => {
     })
   })
 
+  it('saves Strava onboarding progress immediately before leaving for OAuth', async () => {
+    let capturedHref = ''
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...window.location,
+        set href(url: string) {
+          capturedHref = url
+        },
+        get href() {
+          return capturedHref
+        },
+      },
+      writable: true,
+    })
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText(/Connect with Strava/i))
+    await user.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => expect(mockGetStravaAuthUrl).toHaveBeenCalled())
+    const raw = sessionStorage.getItem('ai_trainer_onboarding_progress')
+    expect(raw).not.toBeNull()
+    const progress = JSON.parse(raw!)
+    expect(progress.step).toBe(4)
+    expect(progress.assessmentMethod).toBe('strava')
+    expect(capturedHref).toBe('https://strava.test/auth')
+  })
+
   it('does not send restingHeartRate during onboarding', async () => {
     mockGenerateTrainingPlan.mockResolvedValue([])
     mockSaveTrainingPlan.mockResolvedValue([])

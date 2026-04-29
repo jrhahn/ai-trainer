@@ -105,6 +105,24 @@ describe('StravaCallbackPage', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'), { timeout: 3000 })
   })
 
+  it('reloads user data before starting the import after OAuth success', async () => {
+    setup('?success=1')
+
+    await waitFor(() => {
+      expect(mockLoadUserData).toHaveBeenCalledWith('tok-123')
+      expect(mockApiFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/strava/import-history'),
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    expect(mockLoadUserData.mock.invocationCallOrder[0]).toBeLessThan(
+      mockApiFetch.mock.invocationCallOrder.find((_, idx) => {
+        const call = mockApiFetch.mock.calls[idx]
+        return typeof call[0] === 'string' && call[0].includes('/strava/import-history')
+      }) ?? Number.MAX_SAFE_INTEGER
+    )
+  })
+
   it('shows skipped activity details without treating them as fatal', async () => {
     mockApiFetch.mockImplementation((path: string) => {
       if (path === '/strava/import-progress') {

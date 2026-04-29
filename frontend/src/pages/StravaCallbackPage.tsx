@@ -8,13 +8,32 @@ import StravaImportSummary from '../components/StravaImportSummary'
 
 type Step = 'connecting' | 'importing' | 'done' | 'error'
 
+function getInitialCallbackState(): { step: Step; errorMsg: string } {
+  const params = new URLSearchParams(window.location.search)
+  const error = params.get('error')
+  const success = params.get('success')
+
+  if (error) {
+    return { step: 'error', errorMsg: decodeURIComponent(error) }
+  }
+  if (!success) {
+    return {
+      step: 'error',
+      errorMsg: 'No success confirmation received. Please try again.',
+    }
+  }
+  return { step: 'connecting', errorMsg: '' }
+}
+
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
   const authToken = useAppStore((s) => s.authToken)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
+  const loadUserData = useAppStore((s) => s.loadUserData)
+  const initialState = getInitialCallbackState()
 
-  const [step, setStep] = useState<Step>('connecting')
-  const [errorMsg, setErrorMsg] = useState('')
+  const [step, setStep] = useState<Step>(initialState.step)
+  const [errorMsg, setErrorMsg] = useState(initialState.errorMsg)
   const redirectScheduled = useRef(false)
   // Prevent the effect from re-running if the component re-renders after initialisation.
   const initialisedRef = useRef(false)
@@ -47,21 +66,21 @@ export default function StravaCallbackPage() {
     initialisedRef.current = true
 
     const params = new URLSearchParams(window.location.search)
-    const error = params.get('error')
     const success = params.get('success')
 
-    if (error) {
-      setErrorMsg(decodeURIComponent(error))
-      setStep('error')
-      return
-    }
     if (!success) {
-      setErrorMsg('No success confirmation received. Please try again.')
-      setStep('error')
       return
     }
 
-    void startImport()
+    void (async () => {
+      try {
+        await loadUserData(authToken ?? undefined)
+        await startImport()
+      } catch (e) {
+        setErrorMsg(e instanceof Error ? e.message : 'Could not refresh your Strava connection.')
+        setStep('error')
+      }
+    })()
   }, [isLoadingUserData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Watch polling state to detect completion
@@ -71,12 +90,14 @@ export default function StravaCallbackPage() {
     if (redirectScheduled.current) return
 
     if (progress.status === 'error') {
-      setErrorMsg(progress.error || 'The Strava import failed. Please try again.')
-      setStep('error')
+      queueMicrotask(() => {
+        setErrorMsg(progress.error || 'The Strava import failed. Please try again.')
+        setStep('error')
+      })
       return
     }
 
-    setStep('done')
+    queueMicrotask(() => setStep('done'))
     if (progress.skipped === 0 && progress.failedActivities.length === 0) {
       redirectScheduled.current = true
       setTimeout(() => navigate('/'), 2000)
