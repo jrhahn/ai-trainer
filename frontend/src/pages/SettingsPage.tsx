@@ -32,21 +32,30 @@ export default function SettingsPage() {
     }))
   )
 
+  const profileNameInput = userProfile?.name ?? ''
+  const profileFtpInput = userProfile?.currentFTP != null ? String(userProfile.currentFTP) : ''
+  const profileMaxHrInput = userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : ''
+  const profileRestingHrInput = userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : ''
+
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
   const queryClient = useQueryClient()
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
-  const [nameInput, setNameInput] = useState(userProfile?.name ?? '')
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const nameInput = nameDraft ?? profileNameInput
 
   // FTP override state
-  const [ftpInput, setFtpInput] = useState('')
+  const [ftpDraft, setFtpDraft] = useState<string | null>(null)
+  const ftpInput = ftpDraft ?? profileFtpInput
   const [ftpSaving, setFtpSaving] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Heart Rate settings state
-  const [maxHrInput, setMaxHrInput] = useState('')
-  const [restingHrInput, setRestingHrInput] = useState('')
+  const [maxHrDraft, setMaxHrDraft] = useState<string | null>(null)
+  const [restingHrDraft, setRestingHrDraft] = useState<string | null>(null)
+  const maxHrInput = maxHrDraft ?? profileMaxHrInput
+  const restingHrInput = restingHrDraft ?? profileRestingHrInput
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [hrWorking, setHrWorking] = useState(false)
@@ -71,6 +80,7 @@ export default function SettingsPage() {
     if (!trimmed) return
     const updated = await updateCurrentUser(authToken, { name: trimmed })
     setUserProfile(updated.profile)
+    setNameDraft(null)
     setSavedMsg('Name saved!')
     setTimeout(() => setSavedMsg(''), 2000)
   }
@@ -87,7 +97,7 @@ export default function SettingsPage() {
     try {
       const updated = await updateCurrentUser(authToken, { currentFTP: parsed })
       setUserProfile(updated.profile)
-      setFtpInput('')
+      setFtpDraft(null)
       setFtpMsg({ type: 'success', text: `FTP updated to ${parsed} W.` })
       setTimeout(() => setFtpMsg(null), 3000)
     } catch {
@@ -99,7 +109,8 @@ export default function SettingsPage() {
 
   const handleRecalculate = async () => {
     if (!authToken) return
-    const parsed = ftpInput.trim() ? parseInt(ftpInput, 10) : undefined
+    const overrideInput = ftpDraft !== null ? ftpInput.trim() : ''
+    const parsed = overrideInput ? parseInt(overrideInput, 10) : undefined
     if (parsed !== undefined && (isNaN(parsed) || parsed <= 0)) {
       setFtpMsg({ type: 'error', text: 'Please enter a valid positive FTP value in watts.' })
       return
@@ -117,7 +128,7 @@ export default function SettingsPage() {
       const result = parsed !== undefined
         ? await updateMetrics({ currentFTP: parsed })
         : await recalculateAll()
-      if (parsed !== undefined) setFtpInput('')
+      if (parsed !== undefined) setFtpDraft(null)
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
@@ -179,6 +190,9 @@ export default function SettingsPage() {
         ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
         ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
       })
+      setMaxHrDraft(null)
+      setRestingHrDraft(null)
+      setAgeInput('')
       const result = await estimateFTP(authToken, {
         maxHeartRate: resolvedMaxHr,
         restingHeartRate: parsedRestingHr,
@@ -223,8 +237,8 @@ export default function SettingsPage() {
       const result = await updateMetrics({ currentFTP: parsed })
       setFtpEstimate(null)
       setFtpConfirmInput('')
-      setMaxHrInput('')
-      setRestingHrInput('')
+      setMaxHrDraft(null)
+      setRestingHrDraft(null)
       setAgeInput('')
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
@@ -316,7 +330,7 @@ export default function SettingsPage() {
             <input
               type="text"
               value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
+              onChange={(e) => setNameDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void saveName()}
               placeholder="Your name"
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -373,7 +387,7 @@ export default function SettingsPage() {
               type="number"
               min={1}
               value={ftpInput}
-              onChange={(e) => setFtpInput(e.target.value)}
+              onChange={(e) => setFtpDraft(e.target.value)}
               placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
               className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
             />
@@ -381,7 +395,7 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => void saveFTP()}
-            disabled={ftpSaving || !ftpInput.trim()}
+            disabled={ftpSaving || !ftpInput.trim() || ftpInput.trim() === profileFtpInput}
             className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             <Save size={15} /> {ftpSaving ? 'Saving…' : 'Save FTP'}
@@ -452,7 +466,7 @@ export default function SettingsPage() {
               type="number"
               min={1}
               value={maxHrInput}
-              onChange={(e) => setMaxHrInput(e.target.value)}
+              onChange={(e) => setMaxHrDraft(e.target.value)}
               placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
             />
@@ -491,7 +505,7 @@ export default function SettingsPage() {
               type="number"
               min={1}
               value={restingHrInput}
-              onChange={(e) => setRestingHrInput(e.target.value)}
+              onChange={(e) => setRestingHrDraft(e.target.value)}
               placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
             />

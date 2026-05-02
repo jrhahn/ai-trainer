@@ -52,6 +52,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         weekly_hours=user.weekly_hours,
         follows_training_plan=user.follows_training_plan,
         max_heart_rate=user.max_heart_rate,
+        resting_heart_rate=user.resting_heart_rate,
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
@@ -416,6 +417,8 @@ async def estimate_ftp(
     # --- Persist new HR values when provided ---
     if body.max_heart_rate is not None:
         current_user.max_heart_rate = body.max_heart_rate
+    if body.resting_heart_rate is not None:
+        current_user.resting_heart_rate = body.resting_heart_rate
     await db.flush()
 
     # Return the user-entered FTP directly from the profile

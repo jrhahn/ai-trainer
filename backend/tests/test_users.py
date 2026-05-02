@@ -90,7 +90,7 @@ async def test_estimate_ftp_no_data(client, auth_headers):
     response = await client.post(
         "/api/v1/users/me/estimate-ftp",
         headers=auth_headers,
-        json={"maxHeartRate": 185},
+        json={"maxHeartRate": 185, "restingHeartRate": 55},
     )
     assert response.status_code == 200
     body = response.json()
@@ -100,6 +100,7 @@ async def test_estimate_ftp_no_data(client, auth_headers):
     # Verify HR values were persisted on the user profile.
     me = await client.get("/api/v1/users/me", headers=auth_headers)
     assert me.json()["maxHeartRate"] == 185
+    assert me.json()["restingHeartRate"] == 55
 
 
 @pytest.mark.asyncio

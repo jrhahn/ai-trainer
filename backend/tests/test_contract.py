@@ -41,6 +41,7 @@ _USER_RESPONSE_OPTIONAL_KEYS = {
     "raceDescription",
     "weeklyHours",
     "maxHeartRate",
+    "restingHeartRate",
     "currentFTP",
     "fitnessLevel",
     "riderAssessment",
@@ -218,6 +219,7 @@ async def test_update_profile_camelcase_fields(client):
             "weeklyHours": 10.5,
             "followsTrainingPlan": True,
             "maxHeartRate": 190,
+            "restingHeartRate": 52,
             "currentFTP": 300,
             "fitnessLevel": "advanced",
             "isOnboarded": True,
@@ -234,6 +236,7 @@ async def test_update_profile_camelcase_fields(client):
     assert body["weeklyHours"] == 10.5
     assert body["followsTrainingPlan"] is True
     assert body["maxHeartRate"] == 190
+    assert body["restingHeartRate"] == 52
     assert body["currentFTP"] == 300
     assert body["fitnessLevel"] == "advanced"
     assert body["isOnboarded"] is True

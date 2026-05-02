@@ -107,6 +107,7 @@ class UserResponse(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
@@ -132,6 +133,7 @@ class UpdateProfileRequest(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: Optional[bool] = None
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
@@ -311,6 +313,7 @@ class UserProfileSchema(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
 
@@ -327,6 +330,7 @@ class UserProfileSchema(CamelModel):
             weekly_hours=user.weekly_hours,
             follows_training_plan=user.follows_training_plan,
             max_heart_rate=user.max_heart_rate,
+            resting_heart_rate=user.resting_heart_rate,
             current_ftp=user.current_ftp,
             fitness_level=user.fitness_level or "",
         )
@@ -582,6 +586,9 @@ class EstimateFTPRequest(CamelModel):
 
     max_heart_rate: Optional[int] = None
     """Athlete's maximum heart rate in bpm."""
+
+    resting_heart_rate: Optional[int] = None
+    """Athlete's resting heart rate in bpm."""
 
 
 class EstimateFTPResponse(CamelModel):

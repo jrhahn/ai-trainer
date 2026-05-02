@@ -112,6 +112,34 @@ describe('OnboardingPage', () => {
     expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
   })
 
+  it('persists FTP and max heart rate entered during manual onboarding', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    await user.type(screen.getByPlaceholderText('e.g. 250'), '275')
+    await user.type(screen.getByPlaceholderText('e.g. 185'), '189')
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      currentFTP: 275,
+      maxHeartRate: 189,
+      isOnboarded: true,
+    })
+    expect(useAppStore.getState().userProfile?.currentFTP).toBe(275)
+    expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(189)
+  })
+
   it('shows error message when plan generation fails', async () => {
     mockGenerateTrainingPlan.mockRejectedValue(new Error('AI service unavailable'))
 
