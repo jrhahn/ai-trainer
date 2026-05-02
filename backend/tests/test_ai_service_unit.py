@@ -1180,27 +1180,68 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
 
 
 # ---------------------------------------------------------------------------
-# COACH_PERSONA / RUNNING_COACH_PERSONA — friendly talking style
+# COACH_PERSONA / RUNNING_COACH_PERSONA — balanced coach voice
 # ---------------------------------------------------------------------------
 
 
-def test_coach_persona_is_friend_framed():
-    """COACH_PERSONA must position the coach as a friend, not a clinical professional."""
+def test_coach_persona_is_warm_but_not_overfamiliar():
+    """COACH_PERSONA must stay warm without buddy-style overfamiliarity."""
     from services.prompts import COACH_PERSONA
 
-    assert "friend" in COACH_PERSONA.lower(), "COACH_PERSONA must describe the coach as a friend"
+    text = COACH_PERSONA.lower()
+    assert "warm" in text and "personal" in text and "respectful" in text and "direct" in text
     assert "cycling" in COACH_PERSONA.lower(), "COACH_PERSONA must mention cycling"
-    # Should not fall back to the old stiff framing
-    assert "professional cycling coach" not in COACH_PERSONA.lower()
+    assert "great friend" not in text
+    assert "my friend" not in text
+    assert "supportive buddy" not in text
 
 
-def test_running_coach_persona_is_friend_framed():
-    """RUNNING_COACH_PERSONA must use the same friendly framing as COACH_PERSONA."""
+def test_running_coach_persona_is_warm_but_not_overfamiliar():
+    """RUNNING_COACH_PERSONA must use the same balanced voice as COACH_PERSONA."""
     from services.prompts import RUNNING_COACH_PERSONA
 
-    assert "friend" in RUNNING_COACH_PERSONA.lower()
-    assert "running" in RUNNING_COACH_PERSONA.lower()
-    assert "professional running coach" not in RUNNING_COACH_PERSONA.lower()
+    text = RUNNING_COACH_PERSONA.lower()
+    assert "warm" in text and "personal" in text and "respectful" in text and "direct" in text
+    assert "running" in text
+    assert "great friend" not in text
+    assert "my friend" not in text
+    assert "supportive buddy" not in text
+
+
+def test_coach_persona_handles_jokes_and_sarcasm():
+    """Both personas must understand jokes and sarcasm without losing the coaching thread."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        text = persona.lower()
+        assert "take the athlete seriously" in text
+        assert "joking" in text
+        assert "sarcastic" in text
+        assert "useful coaching" in text
+
+
+def test_coach_persona_encourages_concise_answers():
+    """Both personas must keep the default answer length focused."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        text = persona.lower()
+        assert "concise" in text
+        assert "2-4 focused sentences" in text
+
+
+def test_coach_persona_keeps_replies_personal():
+    """Both personas must make replies feel specific to the athlete."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        text = persona.lower()
+        assert "first name" in text
+        assert "specific to their goals" in text
+        assert "recent training" in text
+        assert "personal detail" in text
+        assert "coach memory" in text
+        assert "feel seen" in text
 
 
 def test_personas_are_sport_distinct():
@@ -1269,11 +1310,11 @@ def test_rate_workout_system_uses_coach_persona():
     assert system.startswith(COACH_PERSONA)
 
 
-def test_friend_coach_traits_template_interpolation():
-    """_FRIEND_COACH_TRAITS must resolve without placeholders for known sport names."""
-    from services.prompts import _FRIEND_COACH_TRAITS
+def test_coach_voice_traits_template_interpolation():
+    """_COACH_VOICE_TRAITS must resolve without placeholders for known sport names."""
+    from services.prompts import _COACH_VOICE_TRAITS
 
     for sport in ("cycling", "running"):
-        resolved = _FRIEND_COACH_TRAITS.format(sport=sport)
+        resolved = _COACH_VOICE_TRAITS.format(sport=sport)
         assert sport in resolved
         assert "{sport}" not in resolved

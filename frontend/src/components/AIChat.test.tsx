@@ -61,7 +61,8 @@ describe('AIChat', () => {
   it('shows a welcome message when there is no chat history', () => {
     setupStore()
     render(<AIChat />)
-    expect(screen.getByText(/Hey! 👋 I'm your coach/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hey, good to see you/i)).toBeInTheDocument()
+    expect(screen.getByText(/How are you feeling about training today/i)).toBeInTheDocument()
   })
 
   it('shows a workout-specific welcome message when contextWorkout is provided', () => {
@@ -78,6 +79,7 @@ describe('AIChat', () => {
       />
     )
     expect(screen.getByText(/VO2max Intervals/)).toBeInTheDocument()
+    expect(screen.getByText(/How are you feeling about it/i)).toBeInTheDocument()
   })
 
   it('sends a message and displays the AI response', async () => {

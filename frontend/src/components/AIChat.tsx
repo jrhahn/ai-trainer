@@ -61,8 +61,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
   }, [input])
 
   const welcomeContent = contextWorkout
-    ? `Hey! 👋 Great to see you here. I'm your coach and I'm genuinely excited to help you nail today's ${contextWorkout.title} session. Got any questions about it, or anything else on your mind?`
-    : "Hey! 👋 I'm your coach — think of me as that friend who's always happy to chat training. Ask me anything: your plan, recovery, nutrition, technique… I'm here for it! 😊"
+    ? `Hey, good to see you. Let's look at today's ${contextWorkout.title} session together. How are you feeling about it?`
+    : "Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique."
 
   const displayMessages: ChatMessage[] =
     chatHistory.length > 0
