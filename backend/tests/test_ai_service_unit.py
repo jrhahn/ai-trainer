@@ -1244,6 +1244,19 @@ def test_coach_persona_keeps_replies_personal():
         assert "feel seen" in text
 
 
+def test_coach_persona_has_balanced_conversational_tone():
+    """Both personas must steer toward natural warmth without performative friendliness."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        text = persona.lower()
+        assert "balanced conversational tone" in text
+        assert "attentive" in text
+        assert "natural" in text
+        assert "calmly confident" in text
+        assert "neither robotic nor performatively friendly" in text
+
+
 def test_personas_are_sport_distinct():
     """The two personas must be distinct and each reference their own sport."""
     from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
