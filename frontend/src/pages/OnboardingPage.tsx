@@ -166,6 +166,7 @@ export default function OnboardingPage() {
   }
 
   const persistMetricsBeforeStravaConnect = async () => {
+    saveOnboardingProgress(4, { ...form, assessmentMethod: 'strava' })
     if (!authToken || !userProfile) return
 
     const resolvedMaxHR: number | undefined = form.maxHeartRate

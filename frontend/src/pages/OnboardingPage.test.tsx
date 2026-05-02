@@ -112,6 +112,34 @@ describe('OnboardingPage', () => {
     expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
   })
 
+  it('persists FTP and max heart rate entered during manual onboarding', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    await user.type(screen.getByPlaceholderText('e.g. 250'), '275')
+    await user.type(screen.getByPlaceholderText('e.g. 185'), '189')
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      currentFTP: 275,
+      maxHeartRate: 189,
+      isOnboarded: true,
+    })
+    expect(useAppStore.getState().userProfile?.currentFTP).toBe(275)
+    expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(189)
+  })
+
   it('shows error message when plan generation fails', async () => {
     mockGenerateTrainingPlan.mockRejectedValue(new Error('AI service unavailable'))
 
@@ -277,6 +305,40 @@ describe('OnboardingPage', () => {
       expect(progress.step).toBe(4)
       expect(progress.assessmentMethod).toBe('strava')
     })
+  })
+
+  it('saves Strava onboarding progress immediately before leaving for OAuth', async () => {
+    let capturedHref = ''
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...window.location,
+        set href(url: string) {
+          capturedHref = url
+        },
+        get href() {
+          return capturedHref
+        },
+      },
+      writable: true,
+    })
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText(/Connect with Strava/i))
+    await user.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    await waitFor(() => expect(mockGetStravaAuthUrl).toHaveBeenCalled())
+    const raw = sessionStorage.getItem('ai_trainer_onboarding_progress')
+    expect(raw).not.toBeNull()
+    const progress = JSON.parse(raw!)
+    expect(progress.step).toBe(4)
+    expect(progress.assessmentMethod).toBe('strava')
+    expect(capturedHref).toBe('https://strava.test/auth')
   })
 
   it('does not send restingHeartRate during onboarding', async () => {

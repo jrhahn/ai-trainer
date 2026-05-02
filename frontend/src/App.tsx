@@ -12,7 +12,7 @@ import StravaCallbackPage from './pages/StravaCallbackPage'
 import SettingsPage from './pages/SettingsPage'
 import { useImportProgress } from './hooks/useImportProgress'
 
-const USER_DATA_LOADING_STEPS = 7
+const USER_DATA_LOADING_STEPS = 8
 
 export default function App() {
   const authToken = useAppStore((s) => s.authToken)

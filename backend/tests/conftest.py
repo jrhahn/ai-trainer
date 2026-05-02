@@ -124,6 +124,9 @@ def mock_ai_service(monkeypatch):
                 "sources": [],
             }
         ),
+        "race_event_feedback": AsyncMock(
+            return_value="That race fits well; add climbing work and a short taper. Want me to adapt the plan?"
+        ),
         "update_coach_memory": AsyncMock(return_value="Prefers morning workouts."),
         "rate_completed_workout": AsyncMock(return_value={"feedback": "Strong execution overall.", "flag_for_adaptation": False}),
         "classify_question": AsyncMock(return_value={"category": "plan_query", "needs_science_rag": False}),

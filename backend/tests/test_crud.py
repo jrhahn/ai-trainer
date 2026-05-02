@@ -166,6 +166,44 @@ async def test_upsert_workout_log_updates_existing(db: AsyncSession) -> None:
 
 
 # ---------------------------------------------------------------------------
+# RaceEvent
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_update_delete_race_event(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    event = await crud.create_race_event(
+        db,
+        user.id,
+        date="2026-06-01",
+        start_time="09:00",
+        distance_km=120.5,
+        elevation_m=1800,
+    )
+    assert event.id is not None
+
+    events = await crud.get_race_events(db, user.id)
+    assert len(events) == 1
+    assert events[0].distance_km == 120.5
+
+    updated = await crud.update_race_event(
+        db,
+        event,
+        date="2026-06-02",
+        start_time=None,
+        distance_km=130,
+        elevation_m=2100,
+    )
+    assert updated.date == "2026-06-02"
+    assert updated.start_time is None
+    assert updated.elevation_m == 2100
+
+    await crud.delete_race_event(db, updated)
+    assert await crud.get_race_events(db, user.id) == []
+
+
+# ---------------------------------------------------------------------------
 # ChatMessage
 # ---------------------------------------------------------------------------
 

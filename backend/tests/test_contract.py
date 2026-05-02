@@ -41,6 +41,7 @@ _USER_RESPONSE_OPTIONAL_KEYS = {
     "raceDescription",
     "weeklyHours",
     "maxHeartRate",
+    "restingHeartRate",
     "currentFTP",
     "fitnessLevel",
     "riderAssessment",
@@ -218,6 +219,7 @@ async def test_update_profile_camelcase_fields(client):
             "weeklyHours": 10.5,
             "followsTrainingPlan": True,
             "maxHeartRate": 190,
+            "restingHeartRate": 52,
             "currentFTP": 300,
             "fitnessLevel": "advanced",
             "isOnboarded": True,
@@ -234,6 +236,7 @@ async def test_update_profile_camelcase_fields(client):
     assert body["weeklyHours"] == 10.5
     assert body["followsTrainingPlan"] is True
     assert body["maxHeartRate"] == 190
+    assert body["restingHeartRate"] == 52
     assert body["currentFTP"] == 300
     assert body["fitnessLevel"] == "advanced"
     assert body["isOnboarded"] is True
@@ -422,7 +425,97 @@ async def test_workout_log_contract(client):
 
 
 # ---------------------------------------------------------------------------
-# 7. Chat history contract
+# 7. Race event contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_race_events_contract(client):
+    """Race event endpoints use the camelCase shape expected by the expert calendar."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Racer", "email": "racer@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (await client.get("/api/v1/users/me/race-events", headers=headers)).json()
+    assert empty == {"events": []}
+
+    create_resp = await client.post(
+        "/api/v1/users/me/race-events",
+        headers=headers,
+        json={
+            "date": "2026-06-01",
+            "startTime": "09:00",
+            "distanceKm": 120.5,
+            "elevationM": 1800,
+        },
+    )
+    assert create_resp.status_code == 200
+    event = create_resp.json()
+    assert event["date"] == "2026-06-01"
+    assert event["startTime"] == "09:00"
+    assert event["distanceKm"] == 120.5
+    assert event["elevationM"] == 1800
+
+    memory = (await client.get("/api/v1/users/me/coach-memory", headers=headers)).json()
+    assert "Race calendar:" in memory["memory"]
+    assert "120.5 km" in memory["memory"]
+
+    list_resp = (await client.get("/api/v1/users/me/race-events", headers=headers)).json()
+    assert list_resp["events"][0]["id"] == event["id"]
+
+    update_resp = await client.put(
+        f"/api/v1/users/me/race-events/{event['id']}",
+        headers=headers,
+        json={
+            "date": "2026-06-02",
+            "startTime": None,
+            "distanceKm": 130,
+            "elevationM": 2100,
+        },
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["startTime"] is None
+    assert update_resp.json()["distanceKm"] == 130
+
+    delete_resp = await client.delete(
+        f"/api/v1/users/me/race-events/{event['id']}",
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200
+    assert (await client.get("/api/v1/users/me/race-events", headers=headers)).json() == {"events": []}
+
+
+@pytest.mark.asyncio
+async def test_race_event_feedback_contract(client, mock_ai_service):
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Feedback", "email": "feedback@example.com", "password": "password1"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    event = {
+        "id": "race-1",
+        "date": "2026-06-01",
+        "startTime": None,
+        "distanceKm": 120,
+        "elevationM": 1800,
+    }
+    resp = await client.post(
+        "/api/v1/ai/race-event-feedback",
+        headers=headers,
+        json={"event": event, "action": "added"},
+    )
+    assert resp.status_code == 200
+    assert "feedback" in resp.json()
+    assert "adapt the plan" in resp.json()["feedback"].lower()
+
+
+# ---------------------------------------------------------------------------
+# 8. Chat history contract
 # ---------------------------------------------------------------------------
 
 

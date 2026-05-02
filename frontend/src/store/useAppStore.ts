@@ -73,6 +73,7 @@ import {
   fetchCoachMemory,
   fetchCurrentUser,
   fetchMetricsHistory,
+  fetchRaceEvents,
   fetchRideMetricsHistory,
   fetchTrainingPlan,
   fetchWorkoutLogs,
@@ -119,6 +120,14 @@ export interface TrainingDay {
   coachFeedback?: string
   workoutPurpose?: string
   keyFocusPoints?: string[]
+}
+
+export interface RaceEvent {
+  id: string
+  date: string
+  startTime?: string | null
+  distanceKm: number
+  elevationM: number
 }
 
 export interface ChatMessage {
@@ -208,6 +217,7 @@ interface AppState {
   isOnboarded: boolean
   chatHistory: ChatMessage[]
   coachMemory: string
+  raceEvents: RaceEvent[]
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
 
@@ -227,6 +237,10 @@ interface AppState {
   resetAll: () => void
   addChatMessage: (msg: ChatMessage) => void
   setCoachMemory: (memory: string) => void
+  setRaceEvents: (events: RaceEvent[]) => void
+  addRaceEvent: (event: RaceEvent) => void
+  updateRaceEvent: (event: RaceEvent) => void
+  removeRaceEvent: (eventId: string) => void
   setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
@@ -245,6 +259,7 @@ const dataState = {
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
   coachMemory: '',
+  raceEvents: [] as RaceEvent[],
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
 }
@@ -311,6 +326,17 @@ export const useAppStore = create<AppState>()(
     addChatMessage: (msg) =>
       set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
     setCoachMemory: (memory) => set({ coachMemory: memory }),
+    setRaceEvents: (events) => set({ raceEvents: events }),
+    addRaceEvent: (event) =>
+      set((state) => ({ raceEvents: [...state.raceEvents, event] })),
+    updateRaceEvent: (event) =>
+      set((state) => ({
+        raceEvents: state.raceEvents.map((item) => (item.id === event.id ? event : item)),
+      })),
+    removeRaceEvent: (eventId) =>
+      set((state) => ({
+        raceEvents: state.raceEvents.filter((event) => event.id !== eventId),
+      })),
     setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
@@ -323,12 +349,13 @@ export const useAppStore = create<AppState>()(
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
       try {
         const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
-        const [user, plan, workoutLogs, chatHistory, coachMemory, metricsHistory, rideMetricsHistory] = await Promise.all([
+        const [user, plan, workoutLogs, chatHistory, coachMemory, raceEvents, metricsHistory, rideMetricsHistory] = await Promise.all([
           track(fetchCurrentUser(token)),
           track(fetchTrainingPlan(token)),
           track(fetchWorkoutLogs(token)),
           track(fetchChatHistory(token)),
           track(fetchCoachMemory(token)),
+          track(fetchRaceEvents(token)),
           track(fetchMetricsHistory(token)),
           track(fetchRideMetricsHistory(token)),
         ])
@@ -346,6 +373,7 @@ export const useAppStore = create<AppState>()(
           isOnboarded: user.isOnboarded,
           chatHistory,
           coachMemory,
+          raceEvents,
           metricsHistory,
           rideMetricsHistory,
         })

@@ -1,9 +1,10 @@
 import { differenceInDays, format } from 'date-fns'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Activity, Loader2, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
+import type { RaceEvent } from '../store/useAppStore'
 import TrainingCalendar from '../components/TrainingCalendar'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import ProgressionChart from '../components/ProgressionChart'
@@ -12,17 +13,33 @@ import RaceReadinessCard from '../components/RaceReadinessCard'
 import FitFileUpload from '../components/FitFileUpload'
 import StravaConnect from '../components/StravaConnect'
 import { useStravaSync } from '../hooks/useStravaSync'
-import { fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
+import { adaptTrainingPlan, fetchRaceEventFeedback, generateTrainingPlan } from '../services/ai'
+import { fetchCoachMemory, fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
 
 const REFRESH_INTERVAL_MS = 60 * 1000 // refresh all graphs once per minute
 
 export default function ExpertPage() {
-  const { userProfile, riderAssessment, stravaAnalysisComplete, authToken, setMetricsHistory, setRideMetricsHistory } = useAppStore(
+  const {
+    userProfile,
+    trainingPlan,
+    raceEvents,
+    riderAssessment,
+    stravaAnalysisComplete,
+    authToken,
+    setTrainingPlan,
+    setCoachMemory,
+    setMetricsHistory,
+    setRideMetricsHistory,
+  } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
+      trainingPlan: s.trainingPlan,
+      raceEvents: s.raceEvents,
       riderAssessment: s.riderAssessment,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
       authToken: s.authToken,
+      setTrainingPlan: s.setTrainingPlan,
+      setCoachMemory: s.setCoachMemory,
       setMetricsHistory: s.setMetricsHistory,
       setRideMetricsHistory: s.setRideMetricsHistory,
     }))
@@ -30,6 +47,11 @@ export default function ExpertPage() {
 
   const queryClient = useQueryClient()
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [eventFeedback, setEventFeedback] = useState<string | null>(null)
+  const [eventFeedbackLoading, setEventFeedbackLoading] = useState(false)
+  const [planQuestion, setPlanQuestion] = useState<string | null>(null)
+  const [planUpdateLoading, setPlanUpdateLoading] = useState(false)
+  const [eventError, setEventError] = useState<string | null>(null)
 
   // Periodically refresh metrics data and the readiness score so charts stay
   // current as the date progresses (e.g. at midnight or after background imports).
@@ -56,10 +78,72 @@ export default function ExpertPage() {
 
   const { stravaActivities, analysisStatus, analysisError, newRidesCount } = useStravaSync()
 
+  const upcomingRaceDate =
+    raceEvents
+      .map((event) => event.date)
+      .filter((date) => date >= new Date().toISOString().split('T')[0])
+      .sort()[0] ?? userProfile?.raceDate
+
   const daysToRace =
-    userProfile?.trainingGoal === 'race' && userProfile.raceDate
-      ? differenceInDays(new Date(userProfile.raceDate), new Date())
+    upcomingRaceDate
+      ? differenceInDays(new Date(upcomingRaceDate), new Date())
       : null
+
+  const updatePlanFromCoach = async () => {
+    if (!authToken || planUpdateLoading) return
+    setPlanUpdateLoading(true)
+    setEventError(null)
+    try {
+      const updatedPlan = trainingPlan.length > 0
+        ? await adaptTrainingPlan([], authToken)
+        : await generateTrainingPlan(authToken)
+      setTrainingPlan(updatedPlan)
+      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
+      setPlanQuestion(null)
+      setEventFeedback('Training plan updated with the current race calendar.')
+    } catch (err) {
+      setEventError(err instanceof Error ? err.message : 'Could not update the training plan')
+    } finally {
+      setPlanUpdateLoading(false)
+    }
+  }
+
+  const refreshMemory = async () => {
+    if (!authToken) return
+    try {
+      setCoachMemory(await fetchCoachMemory(authToken))
+    } catch {
+      // local memory can stay stale until the next full refresh
+    }
+  }
+
+  const handleRaceEventSaved = async (event: RaceEvent, action: 'added' | 'updated') => {
+    queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
+    void refreshMemory()
+    if (!authToken) return
+    setEventFeedback(null)
+    setEventError(null)
+    setPlanQuestion(null)
+    setEventFeedbackLoading(true)
+    try {
+      const feedback = await fetchRaceEventFeedback(event, authToken, action)
+      setEventFeedback(feedback)
+      setPlanQuestion('Do you want the coach to adapt the training plan for this race?')
+    } catch (err) {
+      setEventError(err instanceof Error ? err.message : 'Could not get coach feedback for this race')
+      setPlanQuestion('Do you want the coach to adapt the training plan for this race?')
+    } finally {
+      setEventFeedbackLoading(false)
+    }
+  }
+
+  const handleRaceEventRemoved = (event: RaceEvent) => {
+    queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
+    void refreshMemory()
+    setEventFeedback(null)
+    setEventError(null)
+    setPlanQuestion(`Update the training plan now that the ${event.date} race is removed?`)
+  }
 
   return (
     <div className="space-y-6">
@@ -87,7 +171,7 @@ export default function ExpertPage() {
       <TrainingLoadChart />
 
       {/* Race-day readiness */}
-      {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate) && (
+      {(userProfile?.trainingGoal === 'race' || userProfile?.raceDate || raceEvents.length > 0) && (
         <RaceReadinessCard />
       )}
 
@@ -151,8 +235,58 @@ export default function ExpertPage() {
 
       {/* Training Calendar */}
       <div>
-        <h2 className="text-base font-bold text-gray-800 mb-2">Training Calendar</h2>
-        <TrainingCalendar />
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-bold text-gray-800">Training Calendar</h2>
+          <button
+            type="button"
+            onClick={() => void updatePlanFromCoach()}
+            disabled={!authToken || planUpdateLoading}
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+          >
+            {planUpdateLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Update training plan
+          </button>
+        </div>
+        {(eventFeedbackLoading || eventFeedback || planQuestion || eventError) && (
+          <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+            {eventFeedbackLoading && (
+              <p className="text-sm font-medium text-amber-700">Coach is checking how this race fits…</p>
+            )}
+            {eventFeedback && (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{eventFeedback}</p>
+            )}
+            {eventError && (
+              <p className="text-sm font-medium text-red-600">{eventError}</p>
+            )}
+            {planQuestion && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <p className="mr-2 text-sm font-semibold text-gray-800">{planQuestion}</p>
+                <button
+                  type="button"
+                  onClick={() => void updatePlanFromCoach()}
+                  disabled={planUpdateLoading}
+                  className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlanQuestion(null)}
+                  disabled={planUpdateLoading}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  No
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        <TrainingCalendar
+          editableEvents
+          onRaceEventAdded={(event) => void handleRaceEventSaved(event, 'added')}
+          onRaceEventUpdated={(event) => void handleRaceEventSaved(event, 'updated')}
+          onRaceEventRemoved={handleRaceEventRemoved}
+        />
       </div>
 
       {/* Recent Strava activities */}

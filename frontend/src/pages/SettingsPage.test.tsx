@@ -154,6 +154,47 @@ describe('SettingsPage', () => {
     expect(nameInput).toHaveValue('Alice')
   })
 
+  it('fills FTP and heart-rate inputs from the current profile', () => {
+    useAppStore.setState({
+      userProfile: {
+        ...baseProfile,
+        currentFTP: 285,
+        maxHeartRate: 188,
+        restingHeartRate: 52,
+      },
+    })
+
+    setup()
+
+    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    expect(within(ftpSection).getByDisplayValue('285')).toBeInTheDocument()
+    expect(within(ftpSection).getByRole('button', { name: /Save FTP/i })).toBeDisabled()
+
+    const hrSection = screen.getByRole('heading', { name: /Heart Rate Settings/i }).closest('div')!
+    expect(within(hrSection).getByDisplayValue('188')).toBeInTheDocument()
+    expect(within(hrSection).getByDisplayValue('52')).toBeInTheDocument()
+    expect(within(hrSection).getByText(/188 bpm/i)).toBeInTheDocument()
+  })
+
+  it('hydrates FTP and heart-rate inputs when profile data arrives after render', async () => {
+    useAppStore.setState({ userProfile: null })
+
+    setup()
+
+    useAppStore.setState({
+      userProfile: {
+        ...baseProfile,
+        currentFTP: 275,
+        maxHeartRate: 191,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('275')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('191')).toBeInTheDocument()
+    })
+  })
+
   it('saves the updated name when Save is clicked in the Account section', async () => {
     mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Alice Updated' } })
     setup()

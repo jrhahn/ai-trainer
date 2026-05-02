@@ -107,6 +107,7 @@ class UserResponse(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
@@ -132,6 +133,7 @@ class UpdateProfileRequest(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: Optional[bool] = None
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
@@ -172,6 +174,66 @@ class WorkoutFeedbackSchema(CamelModel):
 
 class WorkoutLogRequest(BaseModel):
     feedback: WorkoutFeedbackSchema
+
+
+# ---------------------------------------------------------------------------
+# Race events
+# ---------------------------------------------------------------------------
+
+
+class RaceEventRequest(CamelModel):
+    date: str
+    start_time: Optional[str] = None
+    distance_km: float
+    elevation_m: int
+
+    @field_validator("date")
+    @classmethod
+    def date_must_be_iso(cls, value: str) -> str:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise ValueError("date must be YYYY-MM-DD")
+        return value
+
+    @field_validator("start_time")
+    @classmethod
+    def time_must_be_optional_hhmm(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        if not re.fullmatch(r"\d{2}:\d{2}", value):
+            raise ValueError("startTime must be HH:MM")
+        return value
+
+    @field_validator("distance_km")
+    @classmethod
+    def distance_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("distanceKm must be greater than 0")
+        return value
+
+    @field_validator("elevation_m")
+    @classmethod
+    def elevation_must_be_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("elevationM must be 0 or greater")
+        return value
+
+
+class RaceEventResponse(CamelModel):
+    id: str
+    date: str
+    start_time: Optional[str] = None
+    distance_km: float
+    elevation_m: int
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class RaceEventsResponse(CamelModel):
+    events: list[RaceEventResponse]
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +313,7 @@ class UserProfileSchema(CamelModel):
     weekly_hours: Optional[float] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
     fitness_level: str
 
@@ -267,6 +330,7 @@ class UserProfileSchema(CamelModel):
             weekly_hours=user.weekly_hours,
             follows_training_plan=user.follows_training_plan,
             max_heart_rate=user.max_heart_rate,
+            resting_heart_rate=user.resting_heart_rate,
             current_ftp=user.current_ftp,
             fitness_level=user.fitness_level or "",
         )
@@ -357,6 +421,15 @@ class RefreshKnowledgeResponse(BaseModel):
 
 class RefreshLoginSummaryResponse(CamelModel):
     login_summary: str
+
+
+class RaceEventFeedbackRequest(CamelModel):
+    event: RaceEventResponse
+    action: str = "added"
+
+
+class RaceEventFeedbackResponse(CamelModel):
+    feedback: str
 
 
 
@@ -513,6 +586,9 @@ class EstimateFTPRequest(CamelModel):
 
     max_heart_rate: Optional[int] = None
     """Athlete's maximum heart rate in bpm."""
+
+    resting_heart_rate: Optional[int] = None
+    """Athlete's resting heart rate in bpm."""
 
 
 class EstimateFTPResponse(CamelModel):
