@@ -1,6 +1,20 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Clock, Flag, Mountain, Pencil, Plus, Route, Save, Trash2, X } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Flag,
+  Mountain,
+  Pencil,
+  Plus,
+  Route,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, TrainingDay } from '../store/useAppStore'
@@ -48,6 +62,14 @@ function formatIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 12)
+}
+
+function addMonths(date: Date, amount: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1, 12)
 }
 
 function emptyForm(date: string): RaceEventForm {
@@ -98,6 +120,7 @@ export default function TrainingCalendar({
   )
 
   const today = formatIsoDate(new Date())
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const [form, setForm] = useState<RaceEventForm>(emptyForm(today))
@@ -112,34 +135,34 @@ export default function TrainingCalendar({
     return grouped
   }, [raceEvents])
 
-  const firstCalendarDate = useMemo(() => {
-    const dates = [
-      ...plan.map((day) => day.date),
-      ...raceEvents.map((event) => event.date),
-      today,
-    ].sort()
-    return parseLocalDate(dates[0])
-  }, [plan, raceEvents, today])
+  const monthLabel = visibleMonth.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  })
 
-  const dayOfWeek = firstCalendarDate.getDay()
-  const monday = new Date(firstCalendarDate)
-  monday.setDate(firstCalendarDate.getDate() - ((dayOfWeek + 6) % 7))
+  const weeks = useMemo(() => {
+    const firstCalendarDate = startOfMonth(visibleMonth)
+    const dayOfWeek = firstCalendarDate.getDay()
+    const monday = new Date(firstCalendarDate)
+    monday.setDate(firstCalendarDate.getDate() - ((dayOfWeek + 6) % 7))
 
-  const weeks: Array<Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }>> = []
-  for (let w = 0; w < 4; w++) {
-    const week: Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }> = []
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + w * 7 + d)
-      const iso = formatIsoDate(date)
-      week.push({
-        date: iso,
-        day: plan.find((p) => p.date === iso) ?? null,
-        events: racesByDate[iso] ?? [],
-      })
+    const result: Array<Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }>> = []
+    for (let w = 0; w < 6; w++) {
+      const week: Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }> = []
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(monday)
+        date.setDate(monday.getDate() + w * 7 + d)
+        const iso = formatIsoDate(date)
+        week.push({
+          date: iso,
+          day: plan.find((p) => p.date === iso) ?? null,
+          events: racesByDate[iso] ?? [],
+        })
+      }
+      result.push(week)
     }
-    weeks.push(week)
-  }
+    return result
+  }, [plan, racesByDate, visibleMonth])
 
   const selectedEvents = selectedDate ? racesByDate[selectedDate] ?? [] : []
   const selectedPlanDay = selectedDate ? plan.find((day) => day.date === selectedDate) : null
@@ -185,6 +208,7 @@ export default function TrainingCalendar({
         onRaceEventAdded?.(created)
       }
       setSelectedDate(payload.date)
+      setVisibleMonth(startOfMonth(parseLocalDate(payload.date)))
       setEditingEventId(null)
       setForm(emptyForm(payload.date))
     } catch (err) {
@@ -216,6 +240,35 @@ export default function TrainingCalendar({
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between border-b px-3 py-2">
+          <p className="text-sm font-bold text-gray-800">{monthLabel}</p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
+              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(startOfMonth(new Date()))}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <CalendarDays size={14} />
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
+              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              aria-label="Next month"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-7 border-b">
           {DAYS.map((d) => (
             <div key={d} className="py-2 text-center text-xs font-semibold text-gray-400 border-r last:border-r-0">
@@ -228,11 +281,13 @@ export default function TrainingCalendar({
             {week.map(({ date, day, events }) => {
               const isToday = date === today
               const isPast = date < today
+              const isVisibleMonth = parseLocalDate(date).getMonth() === visibleMonth.getMonth()
               const baseColor = day ? typeColors[day.workoutType] : 'bg-gray-50 text-gray-500 border-gray-200'
               return (
                 <button
                   key={date}
                   type="button"
+                  aria-label={`Calendar day ${date}`}
                   onClick={() => {
                     if (editableEvents) {
                       openEventEditor(date)
@@ -242,7 +297,7 @@ export default function TrainingCalendar({
                   }}
                   className={`min-h-[104px] border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
                     isToday ? 'ring-2 ring-inset ring-amber-500' : ''
-                  } ${day && isPast && !day.completed ? 'opacity-60' : ''}`}
+                  } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !day.completed ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-xs font-bold">{parseLocalDate(date).getDate()}</span>
