@@ -46,6 +46,8 @@ from .prompts import (
     rate_workout_user,
     refresh_login_summary_system,
     refresh_login_summary_user,
+    batch_review_system,
+    batch_review_user,
 )
 
 MAX_CONVERSATION_HISTORY = 10
@@ -496,3 +498,24 @@ async def generate_login_summary(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return parsed.get("loginSummary") or ""
+
+
+async def batch_review_rides(
+    rides: list,
+    profile: dict,
+    provider: str = "openai",
+    training_plan: list[dict] | None = None,
+) -> str:
+    """Generate a coach review for a batch of newly imported rides.
+
+    *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
+    Returns the review text string, or an empty string when there are no rides
+    or the LLM call fails.
+    """
+    if not rides:
+        return ""
+    system_prompt = batch_review_system()
+    user_msg = batch_review_user(rides, profile=profile, training_plan=training_plan)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+    return parsed.get("review") or ""

@@ -963,3 +963,96 @@ def ride_metrics_context_section(metrics: list) -> str:
             lines.append("    [no athlete feedback — consider asking how this ride felt]")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# batch_review_rides prompts
+# ---------------------------------------------------------------------------
+
+
+def batch_review_system() -> str:
+    return (
+        f"{COACH_PERSONA} Review a batch of newly imported rides that the athlete has not yet "
+        "received feedback on. Treat these rides as a small training block, not as isolated events.\n"
+        "Your review must cover:\n"
+        "1. What changed across the rides (e.g. intensity progression, load variation).\n"
+        "2. Whether each ride matched the training plan (if a plan was provided).\n"
+        "3. Flag any ride that was short, ambiguous, over-paced, or especially strong — "
+        "and for ambiguous/short rides, ask one concise follow-up question rather than over-interpreting.\n"
+        "4. The combined fatigue/load impact of the batch (CTL/ATL/TSB trends if available).\n"
+        "5. What the next planned session should focus on given the batch.\n"
+        "Keep the response concise and warm: 4-8 sentences or a short structured paragraph. "
+        "Use the athlete's name when you know it.\n"
+        "Return ONLY a valid JSON object with exactly one field:\n"
+        '- "review": your coaching response as a string'
+    )
+
+
+def batch_review_user(
+    rides: list,
+    profile: dict | None = None,
+    training_plan: list[dict] | None = None,
+) -> str:
+    """Build the user message for a batch ride review.
+
+    *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
+    """
+    import datetime as _dt
+
+    today = str(_dt.date.today())
+    profile_section = f"\nAthlete profile: {json.dumps(profile)}" if profile else ""
+
+    plan_section = ""
+    if training_plan:
+        plan_section = f"\nTraining plan (relevant days): {json.dumps(training_plan)}"
+
+    rides_lines: list[str] = ["Rides to review (oldest first):"]
+    for m in rides:
+        parts: list[str] = []
+        parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+        purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+        parts.append(f"Type: {purpose}")
+        confidence = getattr(m, "classification_confidence", None)
+        reason = getattr(m, "classification_reason", None)
+        if confidence:
+            parts.append(f"Confidence: {confidence}")
+        duration = getattr(m, "duration_seconds", None)
+        if duration:
+            parts.append(f"Duration: {round(duration / 60)} min")
+        tss = getattr(m, "tss", None)
+        if tss is not None:
+            parts.append(f"TSS: {round(tss)}")
+        np_val = getattr(m, "normalized_power_w", None)
+        if np_val is not None:
+            parts.append(f"NP: {np_val}W")
+        avg_pwr = getattr(m, "avg_power_w", None)
+        if avg_pwr is not None and np_val is None:
+            parts.append(f"Avg power: {avg_pwr}W")
+        ctl = getattr(m, "ctl_after", None)
+        atl = getattr(m, "atl_after", None)
+        tsb = getattr(m, "tsb_after", None)
+        if ctl is not None:
+            parts.append(f"CTL: {round(ctl, 1)}")
+        if atl is not None:
+            parts.append(f"ATL: {round(atl, 1)}")
+        if tsb is not None:
+            parts.append(f"TSB: {round(tsb, 1)}")
+        coach_note = getattr(m, "coach_note", None)
+        if coach_note:
+            parts.append(f'Coach note: "{coach_note}"')
+        user_note = getattr(m, "user_note", None)
+        if user_note:
+            parts.append(f'Athlete note: "{user_note}"')
+        if reason and confidence != "high":
+            parts.append(f"[classification note: {reason}]")
+        rides_lines.append("  - " + " | ".join(parts))
+
+    rides_section = "\n".join(rides_lines)
+
+    return (
+        f"Today's date: {today}"
+        f"{profile_section}"
+        f"{plan_section}\n\n"
+        f"{rides_section}\n\n"
+        "Please review these rides as a training block and give feedback."
+    )
