@@ -376,6 +376,47 @@ async def get_ride_metrics_history(
     )
 
 
+@router.patch(
+    "/ride-feedback/{strava_activity_id}",
+    response_model=schemas.RideFeedbackResponse,
+)
+async def save_ride_feedback(
+    strava_activity_id: int,
+    body: schemas.RideFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RideFeedbackResponse:
+    """Save structured post-ride subjective feedback for a specific Strava activity.
+
+    The four feedback fields (RPE, legs feeling, intent, optional note) are
+    formatted into a single human-readable ``user_note`` string that is stored
+    on the ``RideMetric`` row.  This note is then automatically included in all
+    AI coach prompts via ``ride_metrics_context_section()``.
+    """
+    parts = [
+        f"RPE {body.rpe}/10",
+        f"legs: {body.legs}",
+        f"intent: {body.intent}",
+    ]
+    if body.note:
+        parts.append(body.note)
+    user_note = " | ".join(parts)
+
+    row = await crud.update_ride_metric_notes(
+        db, current_user.id, strava_activity_id, user_note=user_note
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found",
+        )
+
+    return schemas.RideFeedbackResponse(
+        strava_activity_id=strava_activity_id,
+        user_note=user_note,
+    )
+
+
 @router.post("/recalculate-metrics", response_model=schemas.RecalculateMetricsResponse)
 async def recalculate_metrics(
     body: schemas.RecalculateMetricsRequest,

@@ -182,6 +182,7 @@ export interface AthleteMetricSnapshot {
 }
 
 export interface RideMetricPoint {
+  stravaActivityId: number
   activityDate: string
   sportType: string
   tss?: number
@@ -191,6 +192,7 @@ export interface RideMetricPoint {
   durationSeconds?: number
   avgPowerW?: number
   normalizedPowerW?: number
+  userNote?: string | null
 }
 
 export interface RiderAssessment {

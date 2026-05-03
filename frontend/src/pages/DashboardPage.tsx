@@ -2,16 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import type { RideMetricPoint } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import StravaImportSummary from '../components/StravaImportSummary'
+import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, setRideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -20,12 +22,15 @@ export default function DashboardPage() {
       setTrainingPlan: s.setTrainingPlan,
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
+      rideMetricsHistory: s.rideMetricsHistory,
+      setRideMetricsHistory: s.setRideMetricsHistory,
     }))
   )
 
   const adaptationTriggeredRef = useRef(false)
   const summaryTriggeredRef = useRef(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [feedbackRide, setFeedbackRide] = useState<RideMetricPoint | null>(null)
   const importProgress = useImportProgress()
 
   // keep sync running so analysis status updates remain active
@@ -44,6 +49,12 @@ export default function DashboardPage() {
   const progressPct = hasRideProgress
     ? Math.round((analyzedRides / importProgress.total) * 100)
     : 0
+
+  // Recent rides (last 7 days) that are still missing subjective feedback.
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const ridesNeedingFeedback = rideMetricsHistory.filter(
+    (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !r.userNote,
+  )
 
   // Always show the next 3 upcoming days (today or later)
   const next3Days = trainingPlan.filter((d) => d.date >= today).slice(0, 3)
@@ -151,6 +162,36 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Recent rides missing subjective feedback */}
+      {ridesNeedingFeedback.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            📝 Recent rides — add your feedback
+          </h2>
+          <div className="space-y-1.5">
+            {ridesNeedingFeedback.map((ride) => (
+              <button
+                key={ride.stravaActivityId}
+                onClick={() => setFeedbackRide(ride)}
+                className="w-full flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left hover:bg-amber-100 transition-colors"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{ride.activityDate}</p>
+                  <p className="text-xs text-gray-500">
+                    {ride.sportType}
+                    {ride.durationSeconds ? ` · ${Math.round(ride.durationSeconds / 60)} min` : ''}
+                    {ride.tss ? ` · TSS ${Math.round(ride.tss)}` : ''}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-1 rounded-lg">
+                  + Feedback
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Ask your coach — takes up the majority of the remaining space */}
       <div className="flex flex-col">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ask your coach</h2>
@@ -162,6 +203,26 @@ export default function DashboardPage() {
 
       {/* Athlete progression charts */}
       <ProgressionChart />
+
+      {/* Post-ride feedback modal */}
+      {feedbackRide && (
+        <RideFeedbackForm
+          stravaActivityId={feedbackRide.stravaActivityId}
+          activityDate={feedbackRide.activityDate}
+          onSaved={(userNote) => {
+            // Update the local ride metrics history so the card disappears
+            setRideMetricsHistory(
+              rideMetricsHistory.map((r) =>
+                r.stravaActivityId === feedbackRide.stravaActivityId
+                  ? { ...r, userNote }
+                  : r,
+              ),
+            )
+            setFeedbackRide(null)
+          }}
+          onCancel={() => setFeedbackRide(null)}
+        />
+      )}
     </div>
   )
 }

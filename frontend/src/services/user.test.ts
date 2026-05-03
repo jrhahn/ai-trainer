@@ -346,3 +346,48 @@ describe('estimateFTP', () => {
     })
   })
 })
+
+describe('submitRideFeedback', () => {
+  it('patches the ride-feedback endpoint with structured data', async () => {
+    mockApiFetch.mockResolvedValue({
+      stravaActivityId: 9001,
+      userNote: 'RPE 7/10 | legs: heavy | intent: planned workout | Felt strong',
+    })
+
+    const { submitRideFeedback } = await import('./user')
+    const result = await submitRideFeedback('tok-abc', 9001, {
+      rpe: 7,
+      legs: 'heavy',
+      intent: 'planned workout',
+      note: 'Felt strong',
+    })
+
+    expect(result.stravaActivityId).toBe(9001)
+    expect(result.userNote).toContain('RPE 7/10')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9001', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { rpe: 7, legs: 'heavy', intent: 'planned workout', note: 'Felt strong' },
+    })
+  })
+
+  it('omits note when undefined', async () => {
+    mockApiFetch.mockResolvedValue({
+      stravaActivityId: 9002,
+      userNote: 'RPE 4/10 | legs: fresh | intent: recovery',
+    })
+
+    const { submitRideFeedback } = await import('./user')
+    await submitRideFeedback('tok-abc', 9002, {
+      rpe: 4,
+      legs: 'fresh',
+      intent: 'recovery',
+    })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9002', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { rpe: 4, legs: 'fresh', intent: 'recovery', note: undefined },
+    })
+  })
+})

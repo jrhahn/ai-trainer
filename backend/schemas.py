@@ -7,7 +7,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -528,6 +528,38 @@ class RideMetricSchema(CamelModel):
 
 class RideMetricHistoryResponse(BaseModel):
     rides: list[RideMetricSchema]
+
+
+# ---------------------------------------------------------------------------
+# Ride feedback
+# ---------------------------------------------------------------------------
+
+
+class RideFeedbackRequest(CamelModel):
+    """Structured post-ride feedback submitted by the athlete.
+
+    The four fields are combined into a single human-readable ``user_note``
+    string that is stored on the ``RideMetric`` row and shown to the coach.
+    """
+
+    rpe: int = Field(ge=1, le=10)
+    """Perceived effort on a 1–10 scale (1 = very easy, 10 = maximal)."""
+
+    legs: Literal["fresh", "normal", "heavy"]
+    """Subjective leg-freshness rating."""
+
+    intent: Literal["planned workout", "recovery", "commute", "free ride", "aborted"]
+    """What the athlete intended this ride to be."""
+
+    note: Optional[str] = None
+    """Optional free-text note."""
+
+
+class RideFeedbackResponse(CamelModel):
+    """Response returned after saving ride feedback."""
+
+    strava_activity_id: int
+    user_note: str
 
 
 class ImportHistoryResponse(BaseModel):
