@@ -631,12 +631,29 @@ def rate_workout_system() -> str:
         "when objective stream data is available (power, HR, time-in-zone), use it to give "
         "precise, actionable insights — e.g. 'You went 15 % over Z2 intensity in the first 30 min, "
         "which erodes your aerobic base and costs recovery'. Otherwise use the hand-entered metrics. "
-        "Give the response in 2-4 sentences, warm and personal.\n"
+        "Give the response in 2-4 sentences, warm and personal.\n\n"
+        "IMPORTANT — follow-up dialogue rules:\n"
+        "When the ride data is SHORT (actual duration < 30 min or < 40 % of planned duration), "
+        "LOW-CONFIDENCE (no power/HR data and no athlete notes), or AMBIGUOUS (ride character "
+        "does not match the plan and the reason is unclear), do NOT confidently prescribe the "
+        "next hard workout. Instead, set needs_athlete_feedback=true and populate follow_up_question "
+        "with ONE concise, open-ended question that will help you understand the context — e.g. "
+        "'This looks like a short easy spin rather than a full endurance session. Was it intentional "
+        "recovery, a commute, or did you cut it short?' "
+        "For normal, high-confidence sessions, set needs_athlete_feedback=false and "
+        "follow_up_question=null.\n\n"
         "Return ONLY a valid JSON object with these fields:\n"
         '- "feedback": your 2-4 sentence coaching response as a string\n'
         '- "flag_for_adaptation": true when the athlete should adapt their upcoming plan '
         "(perceived effort ≫ planned intensity, actual duration significantly shorter than "
-        "planned, or athlete notes indicate fatigue/illness/pain); otherwise false"
+        "planned, or athlete notes indicate fatigue/illness/pain); otherwise false\n"
+        '- "needs_athlete_feedback": true when the ride is short, low-confidence, or ambiguous '
+        "and you need the athlete to clarify before giving a confident verdict; otherwise false\n"
+        '- "follow_up_question": a single concise follow-up question string when needs_athlete_feedback '
+        "is true, or null when not needed\n"
+        '- "suggested_feedback_tags": a JSON array of short tag strings (e.g. ["recovery", "commute", '
+        '"cut_short", "illness"]) that represent plausible explanations the athlete can confirm; '
+        "use an empty array when not applicable"
     )
 
 

@@ -412,6 +412,9 @@ class RateWorkoutRequest(CamelModel):
 class RateWorkoutResponse(BaseModel):
     feedback: str
     flag_for_adaptation: bool = False
+    needs_athlete_feedback: bool = False
+    follow_up_question: Optional[str] = None
+    suggested_feedback_tags: list[str] = []
 
 
 class RefreshKnowledgeResponse(BaseModel):

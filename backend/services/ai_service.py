@@ -470,6 +470,9 @@ async def rate_completed_workout(
     return {
         "feedback": parsed.get("feedback", ""),
         "flag_for_adaptation": bool(parsed.get("flag_for_adaptation", False)),
+        "needs_athlete_feedback": bool(parsed.get("needs_athlete_feedback", False)),
+        "follow_up_question": parsed.get("follow_up_question") or None,
+        "suggested_feedback_tags": list(parsed.get("suggested_feedback_tags") or []),
     }
 
 

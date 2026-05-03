@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
-import { rateCompletedWorkout } from '../services/ai'
+import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
@@ -47,9 +47,9 @@ export default function WorkoutPage() {
       )
       return rateCompletedWorkout(dayWithFeedback, authToken!, matchingActivity?.id)
     },
-    onSuccess: async (coachFeedback) => {
-      if (coachFeedback) {
-        updateTrainingDay(day!.date, { coachFeedback })
+    onSuccess: async (rating: WorkoutRatingResult) => {
+      if (rating.feedback) {
+        updateTrainingDay(day!.date, { coachFeedback: rating.feedback })
         await saveTrainingPlan(authToken!, useAppStore.getState().trainingPlan)
       }
     },
@@ -262,6 +262,26 @@ export default function WorkoutPage() {
                   <Bot size={12} /> Coach's Feedback
                 </p>
                 <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
+                {rateWorkoutMutation.data?.followUpQuestion && (
+                  <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-xs font-semibold text-amber-800 mb-1">Coach wants to know:</p>
+                    <p className="text-xs text-amber-700 leading-relaxed italic">
+                      {rateWorkoutMutation.data.followUpQuestion}
+                    </p>
+                    {rateWorkoutMutation.data.suggestedFeedbackTags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {rateWorkoutMutation.data.suggestedFeedbackTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-block text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 capitalize"
+                          >
+                            {tag.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
