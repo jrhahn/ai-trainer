@@ -470,6 +470,51 @@ def classify_ride_purpose(
     }.get(sole_type, "endurance")
 
 
+def classify_ride_confidence_and_reason(
+    ride_category: str,
+    duration_seconds: float,
+    intervals: list[dict],
+) -> tuple[str, str]:
+    """Return (confidence, reason) for a ride classification.
+
+    confidence: ``'high'``, ``'medium'``, or ``'low'``.
+    reason: one short machine-readable sentence explaining the confidence level.
+
+    Rules:
+    - ``unknown`` / short rides → ``low``: not enough data or duration.
+    - ``recovery`` / ``endurance`` → ``high`` when duration ≥ MIN_ENDURANCE_RIDE_SECS,
+      ``medium`` otherwise.
+    - ``tempo`` → ``medium``: no interval structure to confirm intent.
+    - Structured interval categories → ``high`` with ≥ 2 intervals, ``medium`` with 1.
+    - ``mixed`` → ``medium``: ambiguous multi-type session.
+    """
+    if ride_category == "unknown":
+        return "low", "Insufficient stream data to classify ride reliably."
+    if ride_category == "short_easy_spin":
+        return "low", "Ride too short for a reliable aerobic classification."
+    if ride_category == "short_hard_effort":
+        return "low", "Short high-intensity effort; may be a warmup or incomplete session."
+    if ride_category == "recovery":
+        if duration_seconds >= MIN_ENDURANCE_RIDE_SECS:
+            return "high", "Average power consistently below recovery threshold for sufficient duration."
+        return "medium", "Low average power suggests recovery, but ride duration is limited."
+    if ride_category == "endurance":
+        if duration_seconds >= 45 * 60:
+            return "high", "Sustained aerobic effort across adequate ride duration."
+        return "medium", "Average power in aerobic zone, but ride duration is short."
+    if ride_category == "tempo":
+        return "medium", "Average power in tempo band with no distinct interval blocks detected."
+    if ride_category in ("interval_sweetspot", "interval_threshold", "interval_vo2max", "interval_sprints"):
+        interval_label = ride_category.split("_", 1)[1]
+        if len(intervals) >= 2:
+            return "high", f"Structured {interval_label} intervals detected."
+        return "medium", f"Single {interval_label} effort detected; may not be a structured session."
+    if ride_category == "mixed":
+        return "medium", "Multiple interval types detected; overall training intent is ambiguous."
+    # Fallback for any unknown future categories
+    return "medium", "Classification based on available power data."
+
+
 def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     """Compute CTL, ATL, and TSB training load metrics from plan days.
 
@@ -1050,8 +1095,11 @@ def build_ride_analysis(
     duration_seconds = round(_stream_duration_seconds(time_data))
 
     if not watts or len(watts) != len(time_data):
+        confidence, reason = classify_ride_confidence_and_reason("unknown", duration_seconds, [])
         return {
             "ride_category": "unknown",
+            "classification_confidence": confidence,
+            "classification_reason": reason,
             "duration_seconds": duration_seconds,
             "intervals_detected": [],
         }
@@ -1083,8 +1131,12 @@ def build_ride_analysis(
                 )
         annotated.append(annotated_iv)
 
+    confidence, reason = classify_ride_confidence_and_reason(ride_category, duration_seconds, annotated)
+
     return {
         "ride_category": ride_category,
+        "classification_confidence": confidence,
+        "classification_reason": reason,
         "duration_seconds": duration_seconds,
         "avg_power_w": round(sum(watts) / len(watts)),
         "intervals_detected": annotated,
@@ -1497,6 +1549,13 @@ def build_ride_metrics_chain(
             intervals,
         )
 
+        # --- Classification confidence and reason ---
+        classification_confidence, classification_reason = classify_ride_confidence_and_reason(
+            ride_purpose or "unknown",
+            duration_s,
+            intervals,
+        )
+
         result.append({
             "strava_activity_id": ride["strava_activity_id"],
             "activity_date": activity_date_str,
@@ -1511,6 +1570,8 @@ def build_ride_metrics_chain(
             "atl_after": round(atl, 2),
             "tsb_after": round(tsb, 2),
             "ride_purpose": ride_purpose,
+            "classification_confidence": classification_confidence,
+            "classification_reason": classification_reason,
             "summary": summary,
         })
 

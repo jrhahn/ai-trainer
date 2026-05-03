@@ -906,6 +906,12 @@ def ride_metrics_context_section(metrics: list) -> str:
         purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
         parts.append(str(purpose))
 
+        # Classification confidence and reason
+        confidence = getattr(m, "classification_confidence", None)
+        reason = getattr(m, "classification_reason", None)
+        if confidence:
+            parts.append(f"conf:{confidence}")
+
         # TSS
         tss = getattr(m, "tss", None)
         if tss is not None:
@@ -934,6 +940,10 @@ def ride_metrics_context_section(metrics: list) -> str:
 
         line = " | ".join(parts)
         lines.append(f"  {line}")
+
+        # Classification reason — only shown when confidence is not high
+        if reason and confidence != "high":
+            lines.append(f"    [classification: {reason}]")
 
         # Coach note
         coach_note = getattr(m, "coach_note", None)
