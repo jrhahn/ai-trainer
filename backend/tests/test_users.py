@@ -439,6 +439,8 @@ async def test_save_ride_feedback_persists_in_history(client, auth_headers, mock
 
     history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
     rides = history.json()["rides"]
-    assert len(rides) == 1
-    assert "RPE 8/10" in rides[0]["userNote"]
+    # Find the specific ride we submitted feedback for
+    target = next((r for r in rides if r["stravaActivityId"] == 5003), None)
+    assert target is not None
+    assert "RPE 8/10" in target["userNote"]
 

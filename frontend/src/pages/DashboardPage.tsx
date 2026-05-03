@@ -51,8 +51,15 @@ export default function DashboardPage() {
     : 0
 
   // Recent rides (last 7 days) that are still missing subjective feedback.
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  // date-fns subDays is available; activityDate uses ISO YYYY-MM-DD strings
+  // so lexicographic string comparison correctly sorts chronologically.
+  const FEEDBACK_WINDOW_DAYS = 7
+  const sevenDaysAgo = format(
+    new Date(Date.now() - FEEDBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000),
+    'yyyy-MM-dd',
+  )
   const ridesNeedingFeedback = rideMetricsHistory.filter(
+    // ISO YYYY-MM-DD strings compare correctly as plain strings
     (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !r.userNote,
   )
 
