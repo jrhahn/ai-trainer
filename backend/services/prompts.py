@@ -116,6 +116,9 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         )
         category_section = (
             "Ride categories:\n"
+            "- unknown: insufficient stream data or FTP to classify reliably\n"
+            "- short_easy_spin: short low/medium-intensity ride (<30 min), likely recovery, commute, warmup, or aborted ride\n"
+            "- short_hard_effort: short high-intensity ride (<30 min) without clear full workout structure\n"
             "- recovery: avg power < 60% FTP\n"
             "- endurance: avg power 60–75% FTP, no distinct intervals\n"
             "- tempo: avg power ~76–85% FTP, no distinct intervals\n"

@@ -169,15 +169,45 @@ def test_compute_hr_zones_values():
 
 
 def test_classify_ride_purpose_empty_watts():
-    # Should not raise; returns "endurance" as a safe default
+    # Should not raise; insufficient data should not be treated as endurance.
     result = analysis.classify_ride_purpose([], [], 250)
-    assert result == "endurance"
+    assert result == "unknown"
 
 
 def test_classify_ride_purpose_zero_ftp():
     watts = [200.0] * 600
     ts = list(range(600))
     result = analysis.classify_ride_purpose(watts, ts, 0)
+    assert result == "unknown"
+
+
+def test_classify_ride_purpose_missing_watts_with_duration():
+    ts = list(range(5 * 60))
+    result = analysis.classify_ride_purpose([], ts, 250)
+    assert result == "unknown"
+
+
+def test_classify_ride_purpose_short_easy_spin():
+    ftp = 250
+    watts = [round(ftp * 0.68)] * (15 * 60)
+    ts = list(range(len(watts)))
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
+    assert result == "short_easy_spin"
+
+
+def test_classify_ride_purpose_short_hard_effort():
+    ftp = 250
+    watts = [round(ftp * 0.80)] * (20 * 60)
+    ts = list(range(len(watts)))
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
+    assert result == "short_hard_effort"
+
+
+def test_classify_ride_purpose_long_z2_still_endurance():
+    ftp = 250
+    watts = [round(ftp * 0.68)] * (60 * 60)
+    ts = list(range(len(watts)))
+    result = analysis.classify_ride_purpose(watts, ts, ftp)
     assert result == "endurance"
 
 
@@ -314,6 +344,44 @@ def test_build_ride_analysis_no_hr_data():
     result = analysis.build_ride_analysis(streams, ftp)
     assert "ride_category" in result
     assert result["ride_category"] == "endurance"
+    assert result["duration_seconds"] == 3600
+
+
+def test_build_ride_analysis_missing_watts_returns_unknown_with_duration():
+    ts = list(range(5 * 60))
+    streams = {"time": {"data": ts}}
+    result = analysis.build_ride_analysis(streams, 250.0)
+    assert result["ride_category"] == "unknown"
+    assert result["duration_seconds"] == 300
+    assert result["intervals_detected"] == []
+
+
+def test_build_rule_based_summary_short_categories():
+    summary = analysis.build_rule_based_summary(
+        "short_easy_spin",
+        15 * 60,
+        normalized_power=170,
+        tss=8,
+        intervals=[],
+    )
+    assert summary.startswith("Short easy spin")
+
+
+def test_build_ride_metrics_chain_missing_watts_marks_unknown():
+    result = analysis.build_ride_metrics_chain(
+        [
+            {
+                "strava_activity_id": 123,
+                "activity_date": "2026-05-01",
+                "sport_type": "cycling",
+                "duration_seconds": 5 * 60,
+                "streams": {"time": {"data": list(range(5 * 60))}},
+            }
+        ],
+        ftp=250,
+    )
+    assert result[0]["ride_purpose"] == "unknown"
+    assert result[0]["summary"].startswith("Unknown ride")
 
 
 # ---------------------------------------------------------------------------
