@@ -45,6 +45,10 @@ TEMPO_THRESHOLD_PCT = 0.76
 # the normal endurance bucket.
 VERY_SHORT_RIDE_SECS = 10 * 60
 MIN_ENDURANCE_RIDE_SECS = 30 * 60
+# Minimum duration for endurance rides to be classified with high confidence.
+# Rides shorter than this are in the aerobic zone but too brief to confirm
+# meaningful adaptation.
+MIN_HIGH_CONFIDENCE_ENDURANCE_SECS = 45 * 60
 
 # Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
 # true FTP is typically ~75 % of their raw average power across all recent rides
@@ -499,7 +503,7 @@ def classify_ride_confidence_and_reason(
             return "high", "Average power consistently below recovery threshold for sufficient duration."
         return "medium", "Low average power suggests recovery, but ride duration is limited."
     if ride_category == "endurance":
-        if duration_seconds >= 45 * 60:
+        if duration_seconds >= MIN_HIGH_CONFIDENCE_ENDURANCE_SECS:
             return "high", "Sustained aerobic effort across adequate ride duration."
         return "medium", "Average power in aerobic zone, but ride duration is short."
     if ride_category == "tempo":
@@ -1095,13 +1099,14 @@ def build_ride_analysis(
     duration_seconds = round(_stream_duration_seconds(time_data))
 
     if not watts or len(watts) != len(time_data):
-        confidence, reason = classify_ride_confidence_and_reason("unknown", duration_seconds, [])
+        no_intervals: list[dict] = []
+        confidence, reason = classify_ride_confidence_and_reason("unknown", duration_seconds, no_intervals)
         return {
             "ride_category": "unknown",
             "classification_confidence": confidence,
             "classification_reason": reason,
             "duration_seconds": duration_seconds,
-            "intervals_detected": [],
+            "intervals_detected": no_intervals,
         }
 
     ride_category = classify_ride_purpose(watts, time_data, ftp)
