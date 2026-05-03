@@ -40,6 +40,12 @@ FTP_ESTIMATE_DURATIONS: tuple[float, ...] = tuple(
 # effort is in the tempo/sweet-spot band.
 TEMPO_THRESHOLD_PCT = 0.76
 
+# Very short rides should not be treated as meaningful endurance work.  These
+# thresholds keep warmups, commutes, short spins, and aborted workouts out of
+# the normal endurance bucket.
+VERY_SHORT_RIDE_SECS = 10 * 60
+MIN_ENDURANCE_RIDE_SECS = 30 * 60
+
 # Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
 # true FTP is typically ~75 % of their raw average power across all recent rides
 # (accounting for the mix of easy and hard sessions that make up their history).
@@ -365,6 +371,23 @@ def compute_hr_drift(hr_segment: list[float]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
+def _stream_duration_seconds(time_stream: list[float]) -> float:
+    """Estimate ride duration from a Strava-style time stream."""
+    if not time_stream:
+        return 0.0
+    if len(time_stream) == 1:
+        return 1.0
+
+    elapsed = time_stream[-1] - time_stream[0]
+    if elapsed < 0:
+        return 0.0
+
+    sample_spacing = elapsed / max(1, len(time_stream) - 1)
+    if sample_spacing <= 0:
+        sample_spacing = 1.0
+    return elapsed + sample_spacing
+
+
 def classify_ride_purpose(
     watts: list[float],
     time_stream: list[float],
@@ -373,6 +396,9 @@ def classify_ride_purpose(
     """Classify the overall purpose/category of a ride.
 
     Categories (aligned with problem statement):
+    - ``unknown``             : insufficient stream data or FTP
+    - ``short_easy_spin``     : short low/medium-intensity ride, not enough aerobic duration
+    - ``short_hard_effort``   : short high-intensity ride without clear interval structure
     - ``recovery``            : avg power < 60 % FTP
     - ``endurance``           : avg power 60–75 % FTP, no hard intervals
     - ``tempo``               : avg power ~76–85 % FTP, no distinct intervals
@@ -382,16 +408,22 @@ def classify_ride_purpose(
     - ``interval_sprints``    : detected intervals < 2 min at > 130 % FTP
     - ``mixed``               : multiple distinct interval types detected
     """
-    if not watts or ftp <= 0:
-        return "endurance"
+    if not watts or not time_stream or len(watts) != len(time_stream) or ftp <= 0:
+        return "unknown"
 
     avg_power = sum(watts) / len(watts)
     avg_pct = avg_power / ftp
+    duration_secs = _stream_duration_seconds(time_stream)
 
     # Detect intervals at 85 % threshold
     intervals = detect_intervals(watts, time_stream, ftp, work_threshold_pct=0.85)
 
     if not intervals:
+        if duration_secs < VERY_SHORT_RIDE_SECS:
+            return "unknown"
+        if duration_secs < MIN_ENDURANCE_RIDE_SECS:
+            return "short_hard_effort" if avg_pct >= TEMPO_THRESHOLD_PCT else "short_easy_spin"
+
         # No distinct interval blocks — classify by average power
         if avg_pct < 0.60:
             return "recovery"
@@ -424,6 +456,8 @@ def classify_ride_purpose(
     unique_types = set(interval_types)
     if not unique_types:
         # Intervals detected but all fell below the classification thresholds
+        if duration_secs < MIN_ENDURANCE_RIDE_SECS:
+            return "short_hard_effort" if avg_pct >= TEMPO_THRESHOLD_PCT else "short_easy_spin"
         return "endurance" if avg_pct < TEMPO_THRESHOLD_PCT else "tempo"
     if len(unique_types) > 1:
         return "mixed"
@@ -1010,8 +1044,17 @@ def build_ride_analysis(
     hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
     time_data: list[float] = streams.get("time", {}).get("data", [])
 
-    if not watts or not time_data:
+    if not time_data:
         return {}
+
+    duration_seconds = round(_stream_duration_seconds(time_data))
+
+    if not watts or len(watts) != len(time_data):
+        return {
+            "ride_category": "unknown",
+            "duration_seconds": duration_seconds,
+            "intervals_detected": [],
+        }
 
     ride_category = classify_ride_purpose(watts, time_data, ftp)
     intervals = detect_intervals(watts, time_data, ftp)
@@ -1042,6 +1085,7 @@ def build_ride_analysis(
 
     return {
         "ride_category": ride_category,
+        "duration_seconds": duration_seconds,
         "avg_power_w": round(sum(watts) / len(watts)),
         "intervals_detected": annotated,
     }
@@ -1330,6 +1374,9 @@ def build_rule_based_summary(
     duration_str = f"{h}h{m:02d}m" if h > 0 else f"{m}m"
 
     label_map = {
+        "unknown": "Unknown ride",
+        "short_easy_spin": "Short easy spin",
+        "short_hard_effort": "Short hard effort",
         "recovery": "Recovery",
         "endurance": "Endurance",
         "tempo": "Tempo",
@@ -1408,7 +1455,7 @@ def build_ride_metrics_chain(
         ride_purpose: str | None = None
         intervals: list[dict] = []
 
-        if watts and time_data:
+        if watts and time_data and len(watts) == len(time_data):
             avg_power = round(sum(watts) / len(watts))
             np_raw = _normalized_power(watts, time_data)
             if np_raw is not None:
@@ -1416,12 +1463,13 @@ def build_ride_metrics_chain(
                 if ftp > 0:
                     intensity_factor = round(np_raw / ftp, 3)
                     tss = compute_ride_tss(ride["duration_seconds"], np_raw, ftp)
+            ride_purpose = classify_ride_purpose(watts, time_data, ftp)
             if ftp > 0:
-                ride_purpose = classify_ride_purpose(watts, time_data, ftp)
                 intervals = detect_intervals(watts, time_data, ftp)
-        elif ftp <= 0:
-            # No power streams and no FTP — skip TSS computation
-            pass
+        else:
+            # Missing or mismatched streams are not enough evidence for a
+            # training-purpose label.
+            ride_purpose = "unknown"
 
         # --- CTL/ATL decay and update ---
         activity_date_str = ride["activity_date"]
