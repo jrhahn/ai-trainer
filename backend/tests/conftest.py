@@ -130,6 +130,7 @@ def mock_ai_service(monkeypatch):
         "update_coach_memory": AsyncMock(return_value="Prefers morning workouts."),
         "rate_completed_workout": AsyncMock(return_value={"feedback": "Strong execution overall.", "flag_for_adaptation": False}),
         "classify_question": AsyncMock(return_value={"category": "plan_query", "needs_science_rag": False}),
+        "batch_review_rides": AsyncMock(return_value="Good training block."),
     }
     for name, mock in mocks.items():
         monkeypatch.setattr(ai_service, name, mock)

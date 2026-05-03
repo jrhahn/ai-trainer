@@ -608,3 +608,18 @@ class EstimateFTPResponse(CamelModel):
     - ``"profile"`` – value manually set on the user profile.
     - ``"none"`` – no estimate available.
     """
+
+
+# ---------------------------------------------------------------------------
+# Batch ride review
+# ---------------------------------------------------------------------------
+
+
+class BatchReviewRidesResponse(CamelModel):
+    """Response for POST /ai/review-new-rides."""
+
+    review: str
+    """Coach's batch review text covering all newly added rides."""
+
+    ride_count: int
+    """Number of rides included in this review."""

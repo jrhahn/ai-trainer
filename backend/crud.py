@@ -728,3 +728,45 @@ async def get_ride_metric_by_date(
             models.RideMetric.activity_date == activity_date,
         )
     )
+
+
+async def get_unreviewed_ride_metrics(
+    db: AsyncSession,
+    user_id: str,
+) -> list[models.RideMetric]:
+    """Return all RideMetric rows for a user that have not yet been included in a
+    batch coach review (i.e. ``coach_reviewed_at`` is NULL), ordered oldest first.
+    """
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.coach_reviewed_at.is_(None),
+        )
+        .order_by(models.RideMetric.activity_date.asc())
+    )
+    return list(result)
+
+
+async def mark_rides_as_reviewed(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_ids: list[int],
+) -> int:
+    """Set ``coach_reviewed_at`` to the current UTC time for each of the given
+    rides.  Returns the number of rows that were actually updated.
+    """
+    if not strava_activity_ids:
+        return 0
+    now = datetime.now(timezone.utc)
+    rows = await db.scalars(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id.in_(strava_activity_ids),
+        )
+    )
+    count = 0
+    for row in rows:
+        row.coach_reviewed_at = now
+        count += 1
+    return count

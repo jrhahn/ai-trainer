@@ -1664,3 +1664,173 @@ def test_ride_metrics_context_section_no_confidence_field_is_graceful():
     assert "endurance" in section
     # conf: should not appear when the attribute is missing
     assert "conf:" not in section
+
+
+# ---------------------------------------------------------------------------
+# batch_review_user prompt — content checks
+# ---------------------------------------------------------------------------
+
+
+class _FakeRide:
+    """Minimal duck-typed RideMetric for prompt tests."""
+
+    def __init__(
+        self,
+        activity_date: str,
+        ride_purpose: str = "endurance",
+        classification_confidence: str = "high",
+        classification_reason: str | None = None,
+        duration_seconds: int = 3600,
+        tss: float = 80.0,
+        normalized_power_w: int | None = 200,
+        avg_power_w: int | None = None,
+        ctl_after: float | None = 55.0,
+        atl_after: float | None = 60.0,
+        tsb_after: float | None = -5.0,
+        coach_note: str | None = None,
+        user_note: str | None = None,
+    ) -> None:
+        self.activity_date = activity_date
+        self.ride_purpose = ride_purpose
+        self.classification_confidence = classification_confidence
+        self.classification_reason = classification_reason
+        self.duration_seconds = duration_seconds
+        self.tss = tss
+        self.normalized_power_w = normalized_power_w
+        self.avg_power_w = avg_power_w
+        self.ctl_after = ctl_after
+        self.atl_after = atl_after
+        self.tsb_after = tsb_after
+        self.coach_note = coach_note
+        self.user_note = user_note
+
+
+def test_batch_review_user_contains_all_ride_dates():
+    from services.prompts import batch_review_user
+
+    rides = [
+        _FakeRide("2026-05-01"),
+        _FakeRide("2026-05-02"),
+        _FakeRide("2026-05-03"),
+    ]
+    msg = batch_review_user(rides, profile={"name": "Alice"})
+    assert "2026-05-01" in msg
+    assert "2026-05-02" in msg
+    assert "2026-05-03" in msg
+
+
+def test_batch_review_user_includes_tss_and_np():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide("2026-05-01", tss=95.0, normalized_power_w=240)
+    msg = batch_review_user([ride])
+    assert "TSS: 95" in msg
+    assert "NP: 240W" in msg
+
+
+def test_batch_review_user_includes_classification_reason_for_low_confidence():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide(
+        "2026-05-01",
+        ride_purpose="short_easy_spin",
+        classification_confidence="low",
+        classification_reason="Ride too short for a reliable classification.",
+    )
+    msg = batch_review_user([ride])
+    assert "Ride too short" in msg
+
+
+def test_batch_review_user_omits_classification_reason_for_high_confidence():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide(
+        "2026-05-01",
+        ride_purpose="endurance",
+        classification_confidence="high",
+        classification_reason="Sustained aerobic effort.",
+    )
+    msg = batch_review_user([ride])
+    # Reason detail should not leak for high-confidence rides
+    assert "Sustained aerobic effort" not in msg
+
+
+def test_batch_review_user_includes_training_plan():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide("2026-05-01")
+    plan = [{"date": "2026-05-01", "workoutType": "endurance", "durationMinutes": 90}]
+    msg = batch_review_user([ride], training_plan=plan)
+    assert "Training plan" in msg
+    assert "endurance" in msg
+
+
+def test_batch_review_user_includes_coach_and_athlete_notes():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide(
+        "2026-05-01",
+        coach_note="Good effort.",
+        user_note="Felt heavy.",
+    )
+    msg = batch_review_user([ride])
+    assert "Good effort." in msg
+    assert "Felt heavy." in msg
+
+
+def test_batch_review_user_empty_rides():
+    from services.prompts import batch_review_user
+
+    msg = batch_review_user([])
+    assert "Rides to review" in msg
+
+
+# ---------------------------------------------------------------------------
+# batch_review_rides service function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_batch_review_rides_returns_empty_for_no_rides():
+    result = await ai_service.batch_review_rides([], profile={"name": "Alice"})
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_batch_review_rides_calls_chat_with_all_rides():
+    captured_user_msgs: list[str] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        captured_user_msgs.append(user_msg)
+        return json.dumps({"review": "Good block of training."})
+
+    rides = [
+        _FakeRide("2026-05-01"),
+        _FakeRide("2026-05-02"),
+        _FakeRide("2026-05-03"),
+    ]
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.batch_review_rides(
+            rides, profile={"name": "Alice"}, provider="openai"
+        )
+
+    assert result == "Good block of training."
+    assert len(captured_user_msgs) == 1
+    msg = captured_user_msgs[0]
+    # All three ride dates must appear in the prompt
+    assert "2026-05-01" in msg
+    assert "2026-05-02" in msg
+    assert "2026-05-03" in msg
+
+
+@pytest.mark.asyncio
+async def test_batch_review_rides_single_ride_still_works():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        return json.dumps({"review": "Nice endurance ride."})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.batch_review_rides(
+            [_FakeRide("2026-05-01")], profile={}
+        )
+
+    assert result == "Nice endurance ride."

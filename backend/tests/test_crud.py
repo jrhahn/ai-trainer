@@ -517,3 +517,100 @@ async def test_get_athlete_metric_history_limit(db: AsyncSession) -> None:
     assert len(history) == 5
     ftps = [s.ftp for s in history]
     assert ftps == [175, 180, 185, 190, 195]
+
+
+# ---------------------------------------------------------------------------
+# get_unreviewed_ride_metrics / mark_rides_as_reviewed
+# ---------------------------------------------------------------------------
+
+
+async def _make_ride(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+    activity_date: str,
+) -> models.RideMetric:
+    return await crud.upsert_ride_metric(
+        db,
+        user_id,
+        strava_activity_id=strava_activity_id,
+        activity_date=activity_date,
+        sport_type="cycling",
+        duration_seconds=3600,
+        tss=80.0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_unreviewed_ride_metrics_empty(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert unreviewed == []
+
+
+@pytest.mark.asyncio
+async def test_get_unreviewed_ride_metrics_returns_all_new(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await _make_ride(db, user.id, 1001, "2026-05-01")
+    await _make_ride(db, user.id, 1002, "2026-05-02")
+    await _make_ride(db, user.id, 1003, "2026-05-03")
+
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert len(unreviewed) == 3
+    # Should be ordered oldest first
+    dates = [m.activity_date for m in unreviewed]
+    assert dates == ["2026-05-01", "2026-05-02", "2026-05-03"]
+
+
+@pytest.mark.asyncio
+async def test_get_unreviewed_ride_metrics_excludes_reviewed(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await _make_ride(db, user.id, 2001, "2026-05-01")
+    await _make_ride(db, user.id, 2002, "2026-05-02")
+
+    # Mark first ride as reviewed
+    await crud.mark_rides_as_reviewed(db, user.id, [2001])
+
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert len(unreviewed) == 1
+    assert unreviewed[0].strava_activity_id == 2002
+
+
+@pytest.mark.asyncio
+async def test_mark_rides_as_reviewed_sets_timestamp(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await _make_ride(db, user.id, 3001, "2026-05-01")
+
+    count = await crud.mark_rides_as_reviewed(db, user.id, [3001])
+    assert count == 1
+
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert unreviewed == []
+
+
+@pytest.mark.asyncio
+async def test_mark_rides_as_reviewed_empty_list(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await _make_ride(db, user.id, 4001, "2026-05-01")
+
+    count = await crud.mark_rides_as_reviewed(db, user.id, [])
+    assert count == 0
+
+    # Ride should still be unreviewed
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert len(unreviewed) == 1
+
+
+@pytest.mark.asyncio
+async def test_mark_rides_as_reviewed_only_affects_given_ids(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await _make_ride(db, user.id, 5001, "2026-05-01")
+    await _make_ride(db, user.id, 5002, "2026-05-02")
+    await _make_ride(db, user.id, 5003, "2026-05-03")
+
+    count = await crud.mark_rides_as_reviewed(db, user.id, [5001, 5003])
+    assert count == 2
+
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
+    assert len(unreviewed) == 1
+    assert unreviewed[0].strava_activity_id == 5002

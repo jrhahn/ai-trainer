@@ -846,3 +846,163 @@ async def test_generate_plan_endpoint_returns_503_on_rate_limit(
     assert response.status_code == 503
     assert "rate" in response.json()["detail"].lower()
 
+
+# ---------------------------------------------------------------------------
+# POST /ai/review-new-rides  (Task 3: batch review)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_review_new_rides_no_unreviewed_returns_empty(client, auth_headers, mock_ai_service):
+    """When there are no unreviewed rides the endpoint returns an empty review."""
+    response = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review"] == ""
+    assert body["rideCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_review_new_rides_one_ride(client, auth_headers, mock_ai_service):
+    """A single unreviewed ride triggers a batch review and marks it as reviewed."""
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    mock_ai_service["batch_review_rides"].return_value = "Great endurance ride!"
+
+    # Seed one unreviewed ride metric
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=10001,
+            activity_date="2026-05-01",
+            sport_type="cycling",
+            duration_seconds=3600,
+            tss=80.0,
+        )
+        await db.commit()
+
+    response = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review"] == "Great endurance ride!"
+    assert body["rideCount"] == 1
+
+    # Verify the ride is now marked as reviewed
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        unreviewed = await crud.get_unreviewed_ride_metrics(db, user_id)
+        assert unreviewed == []
+
+
+@pytest.mark.asyncio
+async def test_review_new_rides_multiple_rides_all_included(client, auth_headers, mock_ai_service):
+    """Multiple unreviewed rides must all be passed to batch_review_rides and then marked reviewed."""
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    mock_ai_service["batch_review_rides"].return_value = "Nice training block."
+
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        for i, date in enumerate(["2026-05-01", "2026-05-02", "2026-05-03"], start=1):
+            await crud.upsert_ride_metric(
+                db,
+                user_id,
+                strava_activity_id=20000 + i,
+                activity_date=date,
+                sport_type="cycling",
+                duration_seconds=3600,
+                tss=float(70 + i * 5),
+            )
+        await db.commit()
+
+    response = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review"] == "Nice training block."
+    assert body["rideCount"] == 3
+
+    # All three rides must have been passed to the service call
+    call_args = mock_ai_service["batch_review_rides"].call_args
+    rides_arg = call_args.args[0] if call_args.args else call_args.kwargs.get("rides", [])
+    assert len(rides_arg) == 3
+    ride_dates = {m.activity_date for m in rides_arg}
+    assert ride_dates == {"2026-05-01", "2026-05-02", "2026-05-03"}
+
+    # All rides must now be marked as reviewed
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        unreviewed = await crud.get_unreviewed_ride_metrics(db, user_id)
+        assert unreviewed == []
+
+
+@pytest.mark.asyncio
+async def test_review_new_rides_second_call_returns_empty(client, auth_headers, mock_ai_service):
+    """After rides are reviewed a second call to the endpoint returns nothing new."""
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    mock_ai_service["batch_review_rides"].return_value = "First review."
+
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=30001,
+            activity_date="2026-05-01",
+            sport_type="cycling",
+        )
+        await db.commit()
+
+    # First call: review is generated and rides marked
+    r1 = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert r1.status_code == 200
+    assert r1.json()["rideCount"] == 1
+
+    # Second call: no new rides, empty response
+    r2 = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert r2.status_code == 200
+    assert r2.json()["review"] == ""
+    assert r2.json()["rideCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_review_new_rides_returns_503_on_rate_limit(client, auth_headers, mock_ai_service):
+    """The endpoint must return HTTP 503 when AIRateLimitError is raised."""
+    import crud
+    from tests.conftest import TestSessionLocal
+    from services.ai_service import AIRateLimitError
+
+    mock_ai_service["batch_review_rides"].side_effect = AIRateLimitError("rate limited")
+
+    async with TestSessionLocal() as db:
+        from auth import decode_token
+        token = auth_headers["Authorization"].split(" ", 1)[1]
+        user_id = decode_token(token)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=40001,
+            activity_date="2026-05-01",
+            sport_type="cycling",
+        )
+        await db.commit()
+
+    response = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
+    assert response.status_code == 503
+    assert "rate" in response.json()["detail"].lower()
+

@@ -595,6 +595,46 @@ async def rate_workout(
     )
 
 
+@router.post("/review-new-rides", response_model=schemas.BatchReviewRidesResponse)
+async def review_new_rides(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.BatchReviewRidesResponse:
+    """Review all rides that have not yet received a batch coach review.
+
+    - Fetches every ride with ``coach_reviewed_at IS NULL`` for the current user.
+    - If there are no unreviewed rides, returns an empty review with ``ride_count=0``.
+    - Calls the AI to produce a batch review treating the rides as a training block.
+    - Marks all included rides as reviewed so they are not re-presented on the
+      next request.
+    """
+    unreviewed = await crud.get_unreviewed_ride_metrics(db, current_user.id)
+    if not unreviewed:
+        return schemas.BatchReviewRidesResponse(review="", ride_count=0)
+
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    training_plan = existing_plan.plan if existing_plan is not None else None
+
+    try:
+        review_text = await ai_service.batch_review_rides(
+            unreviewed,
+            profile=profile,
+            provider=_provider(current_user),
+            training_plan=training_plan,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+
+    # Mark rides as reviewed so they are not presented again
+    ride_ids = [m.strava_activity_id for m in unreviewed]
+    await crud.mark_rides_as_reviewed(db, current_user.id, ride_ids)
+
+    return schemas.BatchReviewRidesResponse(review=review_text, ride_count=len(unreviewed))
+
+
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
 async def readiness_score(
     db: AsyncSession = Depends(get_db),
