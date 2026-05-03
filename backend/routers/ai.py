@@ -592,6 +592,9 @@ async def rate_workout(
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),
         flag_for_adaptation=result.get("flag_for_adaptation", False),
+        needs_athlete_feedback=result.get("needs_athlete_feedback", False),
+        follow_up_question=result.get("follow_up_question"),
+        suggested_feedback_tags=result.get("suggested_feedback_tags", []),
     )
 
 

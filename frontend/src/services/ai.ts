@@ -127,12 +127,24 @@ export async function fetchRaceEventFeedback(
   return result.feedback
 }
 
+export interface WorkoutRatingResult {
+  feedback: string
+  needsAthleteFeedback: boolean
+  followUpQuestion: string | null
+  suggestedFeedbackTags: string[]
+}
+
 export async function rateCompletedWorkout(
   day: TrainingDay,
   authToken: string,
   stravaActivityId?: number
-): Promise<string> {
-  const result = await apiFetch<{ feedback: string }>('/ai/rate-workout', {
+): Promise<WorkoutRatingResult> {
+  const result = await apiFetch<{
+    feedback: string
+    needs_athlete_feedback: boolean
+    follow_up_question: string | null
+    suggested_feedback_tags: string[]
+  }>('/ai/rate-workout', {
     token: authToken,
     method: 'POST',
     body: {
@@ -140,7 +152,12 @@ export async function rateCompletedWorkout(
       ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
     },
   })
-  return result.feedback
+  return {
+    feedback: result.feedback,
+    needsAthleteFeedback: result.needs_athlete_feedback ?? false,
+    followUpQuestion: result.follow_up_question ?? null,
+    suggestedFeedbackTags: result.suggested_feedback_tags ?? [],
+  }
 }
 
 export interface ReadinessScore {

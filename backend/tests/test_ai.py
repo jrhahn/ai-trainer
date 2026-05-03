@@ -1006,3 +1006,97 @@ async def test_review_new_rides_returns_503_on_rate_limit(client, auth_headers, 
     assert response.status_code == 503
     assert "rate" in response.json()["detail"].lower()
 
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for Task 4: follow-up dialogue fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_workout_returns_follow_up_fields_when_ride_is_ambiguous(
+    client, auth_headers, mock_ai_service
+):
+    """rate-workout endpoint must return follow-up fields when the AI flags ambiguous ride."""
+    mock_ai_service["rate_completed_workout"].return_value = {
+        "feedback": "This looks like a short easy spin rather than a full endurance session.",
+        "flag_for_adaptation": False,
+        "needs_athlete_feedback": True,
+        "follow_up_question": "Was this intentional recovery, a commute, or did you cut it short?",
+        "suggested_feedback_tags": ["recovery", "commute", "cut_short"],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "endurance",
+                "title": "Long Ride",
+                "description": "2-hour endurance ride",
+                "durationMinutes": 120,
+                "feedback": {
+                    "actualDurationMinutes": 20,
+                    "perceivedEffort": 1,
+                    "notes": "",
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    # Backward-compat field still present
+    assert "feedback" in body
+
+    # New follow-up fields
+    needs_fb = body.get("needsAthleteFeedback", body.get("needs_athlete_feedback"))
+    assert needs_fb is True
+
+    follow_up = body.get("followUpQuestion", body.get("follow_up_question"))
+    assert follow_up == "Was this intentional recovery, a commute, or did you cut it short?"
+
+    tags = body.get("suggestedFeedbackTags", body.get("suggested_feedback_tags"))
+    assert "recovery" in tags
+
+
+@pytest.mark.asyncio
+async def test_rate_workout_follow_up_fields_default_to_falsy_for_normal_ride(
+    client, auth_headers, mock_ai_service
+):
+    """rate-workout endpoint must return falsy follow-up fields for normal high-confidence rides."""
+    # The default mock already returns needs_athlete_feedback=False
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "endurance",
+                "title": "Long Ride",
+                "description": "90-min Z2",
+                "durationMinutes": 90,
+                "feedback": {
+                    "actualDurationMinutes": 90,
+                    "perceivedEffort": 2,
+                    "notes": "Felt solid",
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    needs_fb = body.get("needsAthleteFeedback", body.get("needs_athlete_feedback"))
+    assert needs_fb is False
+
+    follow_up = body.get("followUpQuestion", body.get("follow_up_question"))
+    assert follow_up is None
+
+    tags = body.get("suggestedFeedbackTags", body.get("suggested_feedback_tags"))
+    assert tags == []

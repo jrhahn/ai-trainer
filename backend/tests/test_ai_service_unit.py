@@ -1834,3 +1834,125 @@ async def test_batch_review_rides_single_ride_still_works():
         )
 
     assert result == "Nice endurance ride."
+
+
+# ---------------------------------------------------------------------------
+# Task 4: rate_completed_workout — follow-up dialogue fields
+# ---------------------------------------------------------------------------
+
+
+def test_rate_workout_system_prompt_includes_follow_up_rules():
+    """rate_workout_system() prompt must include the follow-up dialogue instructions."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system()
+
+    # Must mention the new structured fields
+    assert "needs_athlete_feedback" in prompt
+    assert "follow_up_question" in prompt
+    assert "suggested_feedback_tags" in prompt
+
+    # Must describe when to ask a follow-up (short/low-confidence/ambiguous)
+    assert "short" in prompt.lower()
+    assert "low-confidence" in prompt.lower() or "ambiguous" in prompt.lower()
+
+
+def test_rate_workout_system_prompt_backward_compatible_fields():
+    """rate_workout_system() must still mention feedback and flag_for_adaptation fields."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system()
+    assert '"feedback"' in prompt
+    assert '"flag_for_adaptation"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_ride():
+    """For a short/ambiguous ride the AI may signal needs_athlete_feedback=true."""
+    ai_response = {
+        "feedback": "This looks like a short easy spin rather than a full endurance session.",
+        "flag_for_adaptation": False,
+        "needs_athlete_feedback": True,
+        "follow_up_question": "Was this intentional recovery, a commute, or did you cut it short?",
+        "suggested_feedback_tags": ["recovery", "commute", "cut_short"],
+    }
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        import json as _json
+        return _json.dumps(ai_response)
+
+    day = {
+        "workoutType": "endurance",
+        "title": "Long Ride",
+        "description": "2-hour endurance ride",
+        "durationMinutes": 120,
+        "feedback": {"actualDurationMinutes": 20, "perceivedEffort": 1, "notes": ""},
+    }
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(day, {})
+
+    assert result["needs_athlete_feedback"] is True
+    assert result["follow_up_question"] == "Was this intentional recovery, a commute, or did you cut it short?"
+    assert result["suggested_feedback_tags"] == ["recovery", "commute", "cut_short"]
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_returns_no_follow_up_for_normal_ride():
+    """For a normal high-confidence ride the follow-up fields should be falsy/empty."""
+    ai_response = {
+        "feedback": "Great endurance session — you held Z2 power consistently for 90 minutes.",
+        "flag_for_adaptation": False,
+        "needs_athlete_feedback": False,
+        "follow_up_question": None,
+        "suggested_feedback_tags": [],
+    }
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        import json as _json
+        return _json.dumps(ai_response)
+
+    day = {
+        "workoutType": "endurance",
+        "title": "Long Ride",
+        "description": "90-min Z2",
+        "durationMinutes": 90,
+        "feedback": {"actualDurationMinutes": 90, "perceivedEffort": 2, "notes": "Felt solid"},
+    }
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(day, {})
+
+    assert result["needs_athlete_feedback"] is False
+    assert result["follow_up_question"] is None
+    assert result["suggested_feedback_tags"] == []
+    assert "Great endurance" in result["feedback"]
+
+
+@pytest.mark.asyncio
+async def test_rate_completed_workout_defaults_missing_follow_up_fields():
+    """If the AI response omits the new fields, sensible defaults are returned."""
+    # Legacy AI response without the new fields
+    ai_response = {
+        "feedback": "Good session.",
+        "flag_for_adaptation": False,
+    }
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        import json as _json
+        return _json.dumps(ai_response)
+
+    day = {
+        "workoutType": "endurance",
+        "title": "Ride",
+        "description": "Easy",
+        "durationMinutes": 60,
+        "feedback": {"actualDurationMinutes": 60, "perceivedEffort": 2, "notes": ""},
+    }
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.rate_completed_workout(day, {})
+
+    assert result["needs_athlete_feedback"] is False
+    assert result["follow_up_question"] is None
+    assert result["suggested_feedback_tags"] == []
