@@ -596,6 +596,8 @@ async def upsert_ride_metric(
     atl_after: float | None = None,
     tsb_after: float | None = None,
     ride_purpose: str | None = None,
+    classification_confidence: str | None = None,
+    classification_reason: str | None = None,
     summary: str | None = None,
 ) -> models.RideMetric:
     """Insert or update a RideMetric row identified by (user_id, strava_activity_id)."""
@@ -614,6 +616,8 @@ async def upsert_ride_metric(
         atl_after=atl_after,
         tsb_after=tsb_after,
         ride_purpose=ride_purpose,
+        classification_confidence=classification_confidence,
+        classification_reason=classification_reason,
         summary=summary,
     )
 

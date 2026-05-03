@@ -300,6 +300,8 @@ class RideMetric(Base):
     atl_after: Mapped[float | None] = mapped_column(nullable=True)
     tsb_after: Mapped[float | None] = mapped_column(nullable=True)
     ride_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    classification_confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)

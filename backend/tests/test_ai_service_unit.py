@@ -1399,3 +1399,268 @@ def test_coach_voice_traits_template_interpolation():
         resolved = _COACH_VOICE_TRAITS.format(sport=sport)
         assert sport in resolved
         assert "{sport}" not in resolved
+
+
+# ---------------------------------------------------------------------------
+# classify_ride_confidence_and_reason
+# ---------------------------------------------------------------------------
+
+
+def test_classify_ride_confidence_unknown_is_low():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("unknown", 600, [])
+    assert confidence == "low"
+    assert len(reason) > 0
+
+
+def test_classify_ride_confidence_short_easy_spin_is_low():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("short_easy_spin", 15 * 60, [])
+    assert confidence == "low"
+
+
+def test_classify_ride_confidence_short_hard_effort_is_low():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("short_hard_effort", 20 * 60, [])
+    assert confidence == "low"
+
+
+def test_classify_ride_confidence_recovery_long_is_high():
+    # MIN_ENDURANCE_RIDE_SECS = 30 min
+    confidence, reason = analysis.classify_ride_confidence_and_reason("recovery", 45 * 60, [])
+    assert confidence == "high"
+
+
+def test_classify_ride_confidence_recovery_short_is_medium():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("recovery", 10 * 60, [])
+    assert confidence == "medium"
+
+
+def test_classify_ride_confidence_endurance_long_is_high():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("endurance", 60 * 60, [])
+    assert confidence == "high"
+
+
+def test_classify_ride_confidence_endurance_short_is_medium():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("endurance", 30 * 60, [])
+    assert confidence == "medium"
+
+
+def test_classify_ride_confidence_tempo_is_medium():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("tempo", 60 * 60, [])
+    assert confidence == "medium"
+
+
+def test_classify_ride_confidence_threshold_two_intervals_is_high():
+    fake_intervals = [{"duration_secs": 480}, {"duration_secs": 480}]
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "interval_threshold", 60 * 60, fake_intervals
+    )
+    assert confidence == "high"
+
+
+def test_classify_ride_confidence_sweetspot_one_interval_is_medium():
+    fake_intervals = [{"duration_secs": 900}]
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "interval_sweetspot", 60 * 60, fake_intervals
+    )
+    assert confidence == "medium"
+
+
+def test_classify_ride_confidence_mixed_is_medium():
+    confidence, reason = analysis.classify_ride_confidence_and_reason("mixed", 90 * 60, [])
+    assert confidence == "medium"
+
+
+def test_classify_ride_confidence_returns_string_reason():
+    """reason must always be a non-empty string for every category."""
+    categories = [
+        "unknown", "short_easy_spin", "short_hard_effort",
+        "recovery", "endurance", "tempo",
+        "interval_sweetspot", "interval_threshold", "interval_vo2max", "interval_sprints",
+        "mixed",
+    ]
+    for cat in categories:
+        _, reason = analysis.classify_ride_confidence_and_reason(cat, 60 * 60, [])
+        assert isinstance(reason, str) and len(reason) > 0, f"Empty reason for category {cat!r}"
+
+
+# ---------------------------------------------------------------------------
+# build_ride_analysis — classification_confidence and classification_reason
+# ---------------------------------------------------------------------------
+
+
+def test_build_ride_analysis_includes_confidence_and_reason():
+    ftp = 250.0
+    watts = [ftp * 0.70] * 3600
+    ts = list(range(3600))
+    streams = {"watts": {"data": watts}, "time": {"data": ts}}
+    result = analysis.build_ride_analysis(streams, ftp)
+    assert "classification_confidence" in result
+    assert "classification_reason" in result
+    assert result["classification_confidence"] in ("high", "medium", "low")
+    assert isinstance(result["classification_reason"], str)
+
+
+def test_build_ride_analysis_missing_watts_includes_confidence():
+    ts = list(range(5 * 60))
+    streams = {"time": {"data": ts}}
+    result = analysis.build_ride_analysis(streams, 250.0)
+    assert result["ride_category"] == "unknown"
+    assert result["classification_confidence"] == "low"
+    assert isinstance(result["classification_reason"], str)
+
+
+# ---------------------------------------------------------------------------
+# build_ride_metrics_chain — classification fields propagated
+# ---------------------------------------------------------------------------
+
+
+def test_build_ride_metrics_chain_includes_classification_fields():
+    ftp = 250
+    watts = [ftp * 0.68] * (60 * 60)
+    ts = list(range(len(watts)))
+    rides = [
+        {
+            "strava_activity_id": 1,
+            "activity_date": "2026-05-01",
+            "sport_type": "cycling",
+            "duration_seconds": 60 * 60,
+            "streams": {"watts": {"data": watts}, "time": {"data": ts}},
+        }
+    ]
+    result = analysis.build_ride_metrics_chain(rides, ftp=ftp)
+    assert len(result) == 1
+    row = result[0]
+    assert "classification_confidence" in row
+    assert "classification_reason" in row
+    assert row["classification_confidence"] in ("high", "medium", "low")
+    assert isinstance(row["classification_reason"], str) and len(row["classification_reason"]) > 0
+
+
+def test_build_ride_metrics_chain_missing_streams_sets_low_confidence():
+    rides = [
+        {
+            "strava_activity_id": 2,
+            "activity_date": "2026-05-02",
+            "sport_type": "cycling",
+            "duration_seconds": 3600,
+            "streams": {},
+        }
+    ]
+    result = analysis.build_ride_metrics_chain(rides, ftp=250)
+    assert result[0]["ride_purpose"] == "unknown"
+    assert result[0]["classification_confidence"] == "low"
+
+
+# ---------------------------------------------------------------------------
+# ride_metrics_context_section — confidence/reason in prompt output
+# ---------------------------------------------------------------------------
+
+
+def test_ride_metrics_context_section_shows_confidence():
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-05-01"
+        ride_purpose = "endurance"
+        classification_confidence = "high"
+        classification_reason = "Sustained aerobic effort across adequate ride duration."
+        tss = 80.0
+        normalized_power_w = 190
+        ctl_after = 55.0
+        atl_after = 60.0
+        tsb_after = -5.0
+        summary = "60 min Z2 @ 190W NP"
+        coach_note = None
+        user_note = None
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "conf:high" in section
+
+
+def test_ride_metrics_context_section_low_confidence_shows_reason():
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-05-01"
+        ride_purpose = "short_easy_spin"
+        classification_confidence = "low"
+        classification_reason = "Ride too short for a reliable aerobic classification."
+        tss = 8.0
+        normalized_power_w = None
+        ctl_after = None
+        atl_after = None
+        tsb_after = None
+        summary = None
+        coach_note = None
+        user_note = None
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "conf:low" in section
+    assert "Ride too short" in section
+
+
+def test_ride_metrics_context_section_high_confidence_omits_reason_line():
+    """For high-confidence rides the reason sub-line should not appear."""
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-04-01"
+        ride_purpose = "endurance"
+        classification_confidence = "high"
+        classification_reason = "Sustained aerobic effort across adequate ride duration."
+        tss = 90.0
+        normalized_power_w = 200
+        ctl_after = 60.0
+        atl_after = 65.0
+        tsb_after = -5.0
+        summary = None
+        coach_note = None
+        user_note = None
+
+    section = ride_metrics_context_section([FakeMetric()])
+    # The reason detail line should NOT appear for high-confidence rides
+    assert "[classification:" not in section
+
+
+def test_ride_metrics_context_section_medium_confidence_shows_reason_line():
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-04-01"
+        ride_purpose = "tempo"
+        classification_confidence = "medium"
+        classification_reason = "Average power in tempo band with no distinct interval blocks detected."
+        tss = 60.0
+        normalized_power_w = 220
+        ctl_after = 55.0
+        atl_after = 58.0
+        tsb_after = -3.0
+        summary = None
+        coach_note = None
+        user_note = None
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "[classification:" in section
+    assert "tempo band" in section
+
+
+def test_ride_metrics_context_section_no_confidence_field_is_graceful():
+    """If classification_confidence is absent the section should still render."""
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-04-01"
+        ride_purpose = "endurance"
+        # no classification_confidence / classification_reason attributes
+        tss = 70.0
+        normalized_power_w = 185
+        ctl_after = 50.0
+        atl_after = 55.0
+        tsb_after = -5.0
+        summary = None
+        coach_note = None
+        user_note = None
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "endurance" in section
+    # conf: should not appear when the attribute is missing
+    assert "conf:" not in section

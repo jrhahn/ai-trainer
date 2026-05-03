@@ -516,6 +516,8 @@ class RideMetricSchema(CamelModel):
     atl_after: Optional[float] = None
     tsb_after: Optional[float] = None
     ride_purpose: Optional[str] = None
+    classification_confidence: Optional[str] = None
+    classification_reason: Optional[str] = None
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
