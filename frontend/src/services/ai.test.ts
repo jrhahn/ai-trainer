@@ -194,11 +194,21 @@ describe('rateCompletedWorkout', () => {
   }
 
   it('returns the backend workout rating text', async () => {
-    mockApiFetch.mockResolvedValue({ feedback: 'Great session! You matched the plan well.' })
+    mockApiFetch.mockResolvedValue({
+      feedback: 'Great session! You matched the plan well.',
+      needs_athlete_feedback: false,
+      follow_up_question: null,
+      suggested_feedback_tags: [],
+    })
 
     const result = await rateCompletedWorkout(completedDay, 'token-123')
 
-    expect(result).toBe('Great session! You matched the plan well.')
+    expect(result).toEqual({
+      feedback: 'Great session! You matched the plan well.',
+      needsAthleteFeedback: false,
+      followUpQuestion: null,
+      suggestedFeedbackTags: [],
+    })
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/rate-workout', {
       token: 'token-123',
       method: 'POST',
