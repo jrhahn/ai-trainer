@@ -23,7 +23,14 @@ from .analysis import (
     compute_hr_zones,
     compute_training_load,
 )
-from .llm import AIRateLimitError, get_provider  # re-exported for backward compat
+from .llm import (
+    AIRateLimitError,
+    TASK_CLASSIFY,
+    TASK_COACH,
+    TASK_FEEDBACK,
+    TASK_PLAN,
+    get_provider,
+)  # re-exported for backward compat
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -102,14 +109,14 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
-async def _chat(provider: str, system_prompt: str, user_msg: str, json_mode: bool = False) -> str:
-    return await get_provider(provider).chat(system_prompt, user_msg, json_mode=json_mode)
+async def _chat(provider: str, system_prompt: str, user_msg: str, json_mode: bool = False, task: str = TASK_COACH) -> str:
+    return await get_provider(provider, task=task).chat(system_prompt, user_msg, json_mode=json_mode)
 
 
 async def _chat_history(
-    provider: str, system_prompt: str, messages: list[dict[str, str]], json_mode: bool = False
+    provider: str, system_prompt: str, messages: list[dict[str, str]], json_mode: bool = False, task: str = TASK_COACH
 ) -> str:
-    return await get_provider(provider).chat_history(system_prompt, messages, json_mode=json_mode)
+    return await get_provider(provider, task=task).chat_history(system_prompt, messages, json_mode=json_mode)
 
 
 async def analyse_strava_activities(
@@ -182,7 +189,7 @@ async def analyse_strava_activities(
         training_plan=training_plan,
     )
 
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
 
     # FTP is never estimated — always null; user-entered currentFTP is the
@@ -243,7 +250,7 @@ async def analyse_fit_activity(
         [activity_summary], computed_section, "", sport_type=sport_type
     )
 
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
 
     # FTP is never estimated — always null.
@@ -275,7 +282,7 @@ async def generate_training_plan(
         metrics_history_section=metrics_history_section,
         race_events_section=race_events_context_section(race_events),
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     return parsed.get("plan", [])
 
@@ -316,7 +323,7 @@ async def adapt_training_plan(
         metrics_history_section=metrics_history_section,
         race_events_section=race_events_context_section(race_events),
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     updated_days = {day["date"]: day for day in parsed.get("updatedDays", [])}
     return [day if day.get("completed") else updated_days.get(day["date"], day) for day in plan]
@@ -335,7 +342,7 @@ async def classify_question(question: str, provider: str = "openai") -> dict:
     try:
         classify_sys = ask_trainer_classify_system()
         classify_user = ask_trainer_classify_user(question)
-        classify_raw = await _chat(provider, classify_sys, classify_user, json_mode=True)
+        classify_raw = await _chat(provider, classify_sys, classify_user, json_mode=True, task=TASK_CLASSIFY)
         return _parse_ai_json(classify_raw)
     except Exception:
         logger.warning("Question classification failed; defaulting to no-RAG", exc_info=True)
@@ -390,7 +397,7 @@ async def ask_trainer(
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
-    raw = await _chat_history(provider, system_prompt, messages, json_mode=True)
+    raw = await _chat_history(provider, system_prompt, messages, json_mode=True, task=TASK_COACH)
     parsed = _parse_ai_json(raw)
 
     # --- Task 2: Strip "thinking" — never expose internal reasoning to the frontend ---
@@ -439,7 +446,7 @@ async def race_event_feedback(
         f"Rider assessment: {json.dumps(rider_assessment or {})}\n"
         f"{metrics_history_section}"
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH)
     parsed = _parse_ai_json(raw)
     return parsed.get("feedback", "")
 
@@ -449,7 +456,7 @@ async def update_coach_memory(
 ) -> str:
     system_prompt = update_memory_system()
     user_msg = update_memory_user(current_memory, user_message, coach_response)
-    return await _chat(provider, system_prompt, user_msg)
+    return await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
 
 
 async def rate_completed_workout(
@@ -467,7 +474,7 @@ async def rate_completed_workout(
     user_msg = rate_workout_user(
         day, feedback, profile, stream_delta=stream_delta, actual_ride_analysis=ride_analysis
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
     parsed = _parse_ai_json(raw)
     return {
         "feedback": parsed.get("feedback", ""),
@@ -500,7 +507,7 @@ async def generate_login_summary(
         estimated_ftp=estimated_ftp,
         training_plan=training_plan,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     return parsed.get("loginSummary") or ""
 
@@ -521,7 +528,7 @@ async def batch_review_rides(
         return ""
     system_prompt = batch_review_system()
     user_msg = batch_review_user(rides, profile=profile, training_plan=training_plan)
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
     parsed = _parse_ai_json(raw)
     return parsed.get("review") or ""
 
@@ -554,7 +561,7 @@ async def recommend_next_session(
         atl=atl,
         tsb=tsb,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
     parsed = _parse_ai_json(raw)
     return {
         "response": parsed.get("response", ""),
