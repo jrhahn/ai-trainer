@@ -2028,3 +2028,119 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     # plan_updates must be absent / empty when the AI does not return them
     assert result.get("plan_updates") is None or result.get("plan_updates") == []
     assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 8: Improved coach memory – update_memory_system prompt categories
+# ---------------------------------------------------------------------------
+
+
+def test_update_memory_system_includes_schedule_constraints():
+    """System prompt must guide the AI to capture schedule constraints."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "schedule" in text or "weekday" in text or "availability" in text
+
+
+def test_update_memory_system_includes_fatigue_patterns():
+    """System prompt must guide the AI to capture subjective fatigue / intensity response."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "fatigue" in text or "intensity" in text or "over-reaching" in text
+
+
+def test_update_memory_system_includes_preferred_workout_types():
+    """System prompt must guide the AI to capture preferred workout types."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "preferred workout" in text or "workout types" in text or "favourite" in text or "favorite" in text
+
+
+def test_update_memory_system_includes_recurring_issues():
+    """System prompt must guide the AI to capture recurring coaching issues."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "recurring" in text or "over-pacing" in text or "repeated" in text
+
+
+def test_update_memory_system_includes_ftp_context():
+    """System prompt must guide the AI to record FTP history."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "ftp" in text
+
+
+def test_update_memory_system_includes_race_event_priorities():
+    """System prompt must guide the AI to capture race and event priorities."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "race" in text or "event" in text or "priorities" in text
+
+
+def test_update_memory_system_avoids_transient_details():
+    """System prompt must explicitly instruct the AI not to store transient / one-off details."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "transient" in text or "one-off" in text or "durable" in text
+
+
+def test_update_memory_system_uses_coach_persona():
+    """update_memory_system must embed the COACH_PERSONA."""
+    from services.prompts import update_memory_system, COACH_PERSONA
+
+    assert COACH_PERSONA in update_memory_system()
+
+
+def test_update_memory_user_includes_existing_notes_and_exchange():
+    """update_memory_user must include existing notes and the latest exchange."""
+    from services.prompts import update_memory_user
+
+    msg = update_memory_user(
+        current_memory="Prefers morning rides.",
+        user_message="I can only ride 45 min on weekdays.",
+        coach_response="Noted, I'll keep weekday sessions short.",
+    )
+    assert "Prefers morning rides." in msg
+    assert "45 min on weekdays" in msg
+    assert "weekday sessions short" in msg
+
+
+def test_update_memory_user_handles_empty_memory():
+    """update_memory_user must not raise when current_memory is empty."""
+    from services.prompts import update_memory_user
+
+    msg = update_memory_user(current_memory="", user_message="Hi", coach_response="Hello!")
+    assert "none" in msg.lower() or msg  # at minimum it must return a non-empty string
+
+
+@pytest.mark.asyncio
+async def test_update_coach_memory_passes_system_and_user_prompts():
+    """update_coach_memory must call _chat with the system and user prompts."""
+    from services.prompts import update_memory_system, update_memory_user
+
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+        captured.append((system_prompt, user_msg))
+        return "Schedule constraints: weekdays limited to 45 min."
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.update_coach_memory(
+            current_memory="",
+            user_message="I can only ride 45 min on weekdays.",
+            coach_response="Noted.",
+            provider="openai",
+        )
+
+    assert len(captured) == 1
+    system_prompt, user_msg = captured[0]
+    assert system_prompt == update_memory_system()
+    assert "45 min on weekdays" in user_msg
+    assert "weekdays" in result.lower() or "45 min" in result.lower()
