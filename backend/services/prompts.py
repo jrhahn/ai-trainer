@@ -614,13 +614,18 @@ def ask_trainer_system(
 
 def update_memory_system() -> str:
     return (
-        f"{COACH_PERSONA} Maintain concise notes about an athlete.\n"
+        f"{COACH_PERSONA} Maintain concise, structured notes about an athlete.\n"
         "Extract any important, actionable information from this conversation exchange and update the notes.\n"
-        "Keep notes under 300 words. Focus on: goals, limitations, health issues, preferences, "
-        "performance achievements, recurring problems, FTP history (record up to the 5 most recent "
-        "FTP estimates with their approximate dates to track progress; drop the oldest when adding a new one), "
-        "rider strengths and weaknesses, and personal motivations such as "
-        "preferred terrain or event types (e.g. loves hill climbing, prefers long endurance rides).\n"
+        "Keep notes under 400 words total. Organise notes under these categories (omit any category that has no relevant information):\n"
+        "- Schedule constraints: preferred ride days, weekday time limits, work/life commitments affecting training availability.\n"
+        "- Fatigue & intensity response: how the athlete subjectively responds to hard efforts, signs of over-reaching, recovery rate.\n"
+        "- Preferred workout types: favourite session formats, terrain preferences (e.g. loves hill climbing, prefers long endurance rides).\n"
+        "- Recurring issues: repeated problems such as over-pacing endurance rides, skipping cooldowns, abandoning intervals early.\n"
+        "- FTP & target context: record up to the 5 most recent FTP estimates with approximate dates; drop the oldest when adding a new one. Note current power/HR targets.\n"
+        "- Race & event priorities: upcoming events, goal races, priority A/B/C designations, target dates.\n"
+        "- Goals & motivations: overall training goals, personal motivations, rider strengths and weaknesses.\n"
+        "Only update a category when new, durable information is present. "
+        "Do not store one-off transient details unless they reflect a pattern that will affect future coaching. "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 
