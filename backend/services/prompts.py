@@ -555,7 +555,7 @@ def ask_trainer_system(
         "next 3-5 scheduled sessions: what each session involves, why they are ordered that "
         "way, and how the sequence fits the athlete\\'s current fatigue and readiness. "
         "Draw on current CTL/ATL/TSB (or recent training history) and any recent ride "
-        "feedback to contextualise the upcoming load.\n"
+        "feedback to contextualize the upcoming load.\n"
         "- When giving an outlook, do NOT include planUpdates unless the athlete explicitly "
         "asks to change something or you detect a clear recovery issue that requires "
         "immediate intervention (e.g. dangerously high accumulated fatigue heading into "
