@@ -181,7 +181,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
         <button
-          onClick={sendMessage}
+          onClick={() => void sendMessage()}
           disabled={loading || !input.trim()}
           aria-label="Send message"
           className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
