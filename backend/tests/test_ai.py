@@ -597,6 +597,68 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
 
 
 # ---------------------------------------------------------------------------
+# loginSummary serialisation regression (dict vs str)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_login_summary_as_dict_is_persisted(
+    client, auth_headers, mock_ai_service
+):
+    """When the LLM returns loginSummary as a dict the endpoint must not
+    raise a DB error — the dict must be JSON-serialised before the INSERT.
+    Regression for: asyncpg.DataError 'expected str, got dict'
+    """
+    import crud
+    from database import async_session_maker
+
+    mock_ai_service["analyse_strava_activities"].return_value = {
+        "estimatedFTP": 290,
+        "riderType": "climber",
+        "notes": "Good climber.",
+        "rideInsights": "Great rides.",
+        "lastRideFeedback": "Nice ride.",
+        "loginSummary": {
+            "1_WHAT_YOU_DID": "Over the past week you completed two rides totalling 3h.",
+            "2_FTP_AND_FITNESS_INSIGHTS": "FTP looks stable at ~290 W.",
+            "3_PLAN_ALIGNMENT": "You hit your endurance session well.",
+            "4_CONCLUSIONS": "Keep up the consistency.",
+        },
+    }
+
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 102,
+                    "name": "Morning Ride",
+                    "type": "Ride",
+                    "distance": 60000,
+                    "movingTime": 5400,
+                    "elapsedTime": 5500,
+                    "totalElevationGain": 800,
+                    "startDate": "2026-04-22T10:00:00Z",
+                    "averageWatts": 250,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Verify the value was serialised and round-trips correctly from the DB
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        await db.refresh(user, ["rider_assessment"])
+        stored = user.rider_assessment.login_summary
+        assert isinstance(stored, str), "login_summary must be stored as a string in the DB"
+        parsed = json.loads(stored)
+        assert isinstance(parsed, dict)
+        assert "1_WHAT_YOU_DID" in parsed
+
+
+# ---------------------------------------------------------------------------
 # Strava stream error logging
 # ---------------------------------------------------------------------------
 
