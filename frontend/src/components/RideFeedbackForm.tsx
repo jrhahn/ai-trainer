@@ -56,10 +56,11 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
       }),
     onSuccess: async (data) => {
       setSavedNote(data.userNote)
+      if (!authToken) return
       setRecommendationLoading(true)
       setRecommendationError(false)
       try {
-        const rec = await fetchNextRideRecommendation(authToken!, stravaActivityId)
+        const rec = await fetchNextRideRecommendation(authToken, stravaActivityId)
         setRecommendation(rec)
         // Apply plan updates to the local store
         if (rec.planUpdates && rec.planUpdates.length > 0) {

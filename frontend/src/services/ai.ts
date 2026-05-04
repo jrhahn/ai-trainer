@@ -230,7 +230,6 @@ interface BackendNextRideRecommendationResult {
   response: string
   next_session_recommendation: string
   recommendation_type: string
-  plan_updates?: PlanDayUpdate[]
   planUpdates?: PlanDayUpdate[]
 }
 
@@ -249,6 +248,6 @@ export async function fetchNextRideRecommendation(
     response: raw.response,
     nextSessionRecommendation: raw.next_session_recommendation,
     recommendationType: (raw.recommendation_type ?? 'keep_as_planned') as NextRideRecommendationResult['recommendationType'],
-    planUpdates: raw.planUpdates ?? raw.plan_updates,
+    planUpdates: raw.planUpdates,
   }
 }
