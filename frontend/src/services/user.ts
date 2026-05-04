@@ -216,6 +216,22 @@ export async function fetchRideMetricsHistory(token: string): Promise<RideMetric
   return response.rides
 }
 
+export async function submitRideFeedback(
+  token: string,
+  stravaActivityId: number,
+  feedback: {
+    rpe: number
+    legs: 'fresh' | 'normal' | 'heavy'
+    intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'aborted'
+    note?: string
+  },
+): Promise<{ stravaActivityId: number; userNote: string }> {
+  return apiFetch<{ stravaActivityId: number; userNote: string }>(
+    `/users/me/ride-feedback/${stravaActivityId}`,
+    { token, method: 'PATCH', body: feedback },
+  )
+}
+
 export async function recalculateMetrics(
   token: string,
   ftpOverride?: number,
