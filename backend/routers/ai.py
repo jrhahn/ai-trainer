@@ -825,3 +825,104 @@ async def refresh_login_summary(
         )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
+
+
+@router.post("/next-ride-recommendation", response_model=schemas.NextRideRecommendationResponse)
+async def next_ride_recommendation(
+    body: schemas.NextRideRecommendationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.NextRideRecommendationResponse:
+    """Generate a concrete next-session recommendation after ride feedback.
+
+    Accepts an optional ``strava_activity_id``.  When provided the recommendation
+    is based on that specific ride; when omitted the most recently recorded ride
+    metric is used.  In either case the endpoint also incorporates the current
+    training plan, coach memory, rider assessment, and CTL/ATL/TSB values to
+    produce a context-aware recommendation.
+
+    If the recommendation includes ``planUpdates`` the next planned session is
+    automatically updated in the database (same logic as ``ask-trainer``).
+    """
+    # --- Load plan, profile, assessment, coach memory ---
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+
+    rider_assessment = None
+    if current_user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+
+    coach_memory_row = await crud.get_coach_memory(db, current_user.id)
+    coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+
+    # --- Resolve the ride(s) to use for the recommendation ---
+    if body.strava_activity_id is not None:
+        target_ride = await crud.get_ride_metric_by_strava_id(
+            db, current_user.id, body.strava_activity_id
+        )
+        rides = [target_ride] if target_ride is not None else []
+    else:
+        # Use the most recently recorded ride metric
+        latest = await crud.get_latest_ride_metric(db, current_user.id)
+        rides = [latest] if latest is not None else []
+
+    # --- Extract CTL/ATL/TSB from the most recent ride metric ---
+    ctl: float | None = None
+    atl: float | None = None
+    tsb: float | None = None
+    if rides:
+        last = rides[-1]
+        ctl = float(last.ctl_after) if last.ctl_after is not None else None
+        atl = float(last.atl_after) if last.atl_after is not None else None
+        tsb = float(last.tsb_after) if last.tsb_after is not None else None
+    else:
+        # Fall back to the global latest ride metric for training-load context
+        latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
+        if latest_metric is not None:
+            ctl = float(latest_metric.ctl_after) if latest_metric.ctl_after is not None else None
+            atl = float(latest_metric.atl_after) if latest_metric.atl_after is not None else None
+            tsb = float(latest_metric.tsb_after) if latest_metric.tsb_after is not None else None
+
+    try:
+        result = await ai_service.recommend_next_session(
+            rides=rides,
+            plan=plan,
+            profile=profile,
+            provider=_provider(current_user),
+            rider_assessment=rider_assessment,
+            coach_memory=coach_memory,
+            ctl=ctl,
+            atl=atl,
+            tsb=tsb,
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+
+    # --- Apply plan updates using the same logic as ask-trainer ---
+    plan_updates = result.get("plan_updates") or []
+    if plan_updates:
+        updates_by_date = {u["date"]: u for u in plan_updates}
+        updated_plan = [
+            {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
+            if day.get("date") in updates_by_date
+            else day
+            for day in plan
+        ]
+        await crud.upsert_training_plan(db, current_user.id, updated_plan)
+
+    validated_updates = (
+        [schemas.PlanDayUpdateSchema.model_validate(u) for u in plan_updates]
+        if plan_updates
+        else None
+    )
+    return schemas.NextRideRecommendationResponse(
+        response=result["response"],
+        next_session_recommendation=result["next_session_recommendation"],
+        recommendation_type=result.get("recommendation_type", "keep_as_planned"),
+        plan_updates=validated_updates,
+    )

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { Bot, CalendarCheck, Loader2 } from 'lucide-react'
 import { submitRideFeedback } from '../services/user'
+import { fetchNextRideRecommendation, type NextRideRecommendationResult } from '../services/ai'
 import { useAppStore } from '../store/useAppStore'
 import { useShallow } from 'zustand/shallow'
 
@@ -29,12 +31,20 @@ interface Props {
 }
 
 export default function RideFeedbackForm({ stravaActivityId, activityDate, onSaved, onCancel }: Props) {
-  const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
+  const { authToken, updateTrainingDay } = useAppStore(
+    useShallow((s) => ({ authToken: s.authToken, updateTrainingDay: s.updateTrainingDay })),
+  )
 
   const [rpe, setRpe] = useState(5)
   const [legs, setLegs] = useState<LegsFeeling>('normal')
   const [intent, setIntent] = useState<RideIntent>('planned workout')
   const [note, setNote] = useState('')
+
+  const [savedNote, setSavedNote] = useState<string | null>(null)
+  const [recommendation, setRecommendation] = useState<NextRideRecommendationResult | null>(null)
+  const [recommendationLoading, setRecommendationLoading] = useState(false)
+  const [recommendationError, setRecommendationError] = useState(false)
+  const [planUpdateCount, setPlanUpdateCount] = useState(0)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -44,7 +54,27 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
         intent,
         note: note.trim() || undefined,
       }),
-    onSuccess: (data) => onSaved(data.userNote),
+    onSuccess: async (data) => {
+      setSavedNote(data.userNote)
+      setRecommendationLoading(true)
+      setRecommendationError(false)
+      try {
+        const rec = await fetchNextRideRecommendation(authToken!, stravaActivityId)
+        setRecommendation(rec)
+        // Apply plan updates to the local store
+        if (rec.planUpdates && rec.planUpdates.length > 0) {
+          for (const update of rec.planUpdates) {
+            const { date, ...fields } = update
+            updateTrainingDay(date, fields)
+          }
+          setPlanUpdateCount(rec.planUpdates.length)
+        }
+      } catch {
+        setRecommendationError(true)
+      } finally {
+        setRecommendationLoading(false)
+      }
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,6 +82,68 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
     mutation.mutate()
   }
 
+  const handleClose = () => {
+    onSaved(savedNote ?? '')
+  }
+
+  // --- Recommendation step (shown after feedback is saved) ---
+  if (savedNote !== null) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Bot size={16} className="text-amber-600" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Coach says…</h2>
+            </div>
+
+            {recommendationLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 size={14} className="animate-spin" />
+                Getting next-session recommendation…
+              </div>
+            )}
+
+            {!recommendationLoading && recommendationError && (
+              <p className="text-sm text-gray-500">
+                Feedback saved. Could not load recommendation right now.
+              </p>
+            )}
+
+            {!recommendationLoading && recommendation && (
+              <>
+                <p className="text-sm text-gray-800 leading-relaxed">{recommendation.response}</p>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  <p className="text-xs font-semibold text-amber-700 mb-0.5">Next session</p>
+                  <p className="text-sm text-amber-900">{recommendation.nextSessionRecommendation}</p>
+                </div>
+
+                {planUpdateCount > 0 && (
+                  <p className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
+                    <CalendarCheck size={12} />
+                    Training plan updated:{' '}
+                    {planUpdateCount === 1 ? '1 day modified.' : `${planUpdateCount} days modified.`}
+                  </p>
+                )}
+              </>
+            )}
+
+            <button
+              onClick={handleClose}
+              className="w-full bg-amber-500 text-white rounded-lg py-2 text-sm font-semibold hover:bg-amber-600 transition-colors"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Feedback input step ---
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">

@@ -730,6 +730,20 @@ async def get_ride_metric_by_date(
     )
 
 
+async def get_ride_metric_by_strava_id(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+) -> models.RideMetric | None:
+    """Return the RideMetric for a specific Strava activity ID."""
+    return await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id == strava_activity_id,
+        )
+    )
+
+
 async def get_unreviewed_ride_metrics(
     db: AsyncSession,
     user_id: str,

@@ -48,6 +48,8 @@ from .prompts import (
     refresh_login_summary_user,
     batch_review_system,
     batch_review_user,
+    next_ride_recommendation_system,
+    next_ride_recommendation_user,
 )
 
 MAX_CONVERSATION_HISTORY = 10
@@ -522,3 +524,41 @@ async def batch_review_rides(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
     parsed = _parse_ai_json(raw)
     return parsed.get("review") or ""
+
+
+async def recommend_next_session(
+    rides: list,
+    plan: list[dict],
+    profile: dict,
+    provider: str = "openai",
+    rider_assessment: dict | None = None,
+    coach_memory: str | None = None,
+    ctl: float | None = None,
+    atl: float | None = None,
+    tsb: float | None = None,
+) -> dict:
+    """Generate a concrete next-ride recommendation based on recent ride(s) and feedback.
+
+    *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
+    Returns a dict with ``response``, ``next_session_recommendation``,
+    ``recommendation_type``, and optional ``plan_updates``.
+    """
+    system_prompt = next_ride_recommendation_system()
+    user_msg = next_ride_recommendation_user(
+        rides=rides,
+        plan=plan,
+        profile=profile,
+        rider_assessment=rider_assessment,
+        coach_memory=coach_memory,
+        ctl=ctl,
+        atl=atl,
+        tsb=tsb,
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True)
+    parsed = _parse_ai_json(raw)
+    return {
+        "response": parsed.get("response", ""),
+        "next_session_recommendation": parsed.get("next_session_recommendation", ""),
+        "recommendation_type": parsed.get("recommendation_type", "keep_as_planned"),
+        "plan_updates": parsed.get("planUpdates") or None,
+    }
