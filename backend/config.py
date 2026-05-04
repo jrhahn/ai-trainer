@@ -71,6 +71,28 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     # ------------------------------------------------------------------
+    # AI model selection by task
+    #
+    # Each task type can be configured independently so cheap tasks use
+    # fast/cheap models while conversational and feedback tasks can use
+    # a stronger model when desired.
+    #
+    # classify  – question classification / routing (lightweight)
+    # plan      – structured JSON plan generation / adaptation
+    # coach     – conversational ask-trainer chat (prefer stronger model)
+    # feedback  – post-ride / workout feedback (prefer stronger model)
+    # ------------------------------------------------------------------
+    openai_classify_model: str = "gpt-4o-mini"
+    openai_plan_model: str = "gpt-4o-mini"
+    openai_coach_model: str = "gpt-4o"
+    openai_feedback_model: str = "gpt-4o"
+
+    gemini_classify_model: str = "gemini-2.5-flash"
+    gemini_plan_model: str = "gemini-2.5-flash"
+    gemini_coach_model: str = "gemini-2.5-flash"
+    gemini_feedback_model: str = "gemini-2.5-flash"
+
+    # ------------------------------------------------------------------
     # Computed helpers
     # ------------------------------------------------------------------
 

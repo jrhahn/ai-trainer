@@ -445,7 +445,7 @@ async def test_analyse_strava_activities_with_streams():
         }
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return ai_response
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -485,7 +485,7 @@ async def test_analyse_strava_activities_with_max_hr_sets_hr_zones():
         }
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return ai_response
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -526,7 +526,7 @@ async def test_analyse_strava_activities_no_streams():
         }
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return ai_response
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -553,7 +553,7 @@ async def test_generate_training_plan_calls_chat():
         }
     ]
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"plan": fake_plan})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -592,7 +592,7 @@ async def test_adapt_training_plan_calls_chat():
         "durationMinutes": 45,
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"updatedDays": [updated_day]})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -605,7 +605,7 @@ async def test_adapt_training_plan_calls_chat():
 
 @pytest.mark.asyncio
 async def test_update_coach_memory_calls_chat():
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return "Prefers morning rides. FTP ~280 W."
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -651,7 +651,7 @@ async def test_rate_completed_workout_calls_chat():
     }
     profile = {"fitnessLevel": "advanced"}
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"feedback": "Great effort today! You nailed the power targets.", "flag_for_adaptation": False})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -704,7 +704,7 @@ async def test_analyse_strava_activities_with_streams_and_hr():
         }
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return ai_response
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -866,7 +866,7 @@ async def test_rate_completed_workout_with_stream_delta():
 
     captured_user_msg: list[str] = []
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured_user_msg.append(user_msg)
         return json.dumps({"feedback": "You went over intensity — ease back next time.", "flag_for_adaptation": False})
 
@@ -1006,7 +1006,7 @@ PROFILE_WITH_FTP = {
 async def test_ask_trainer_thinking_not_in_return():
     """'thinking' must be stripped from the return value and never reach the frontend."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         return json.dumps({
             "thinking": "The athlete is asking about tomorrow's workout...",
             "response": "Tomorrow is an endurance ride.",
@@ -1030,7 +1030,7 @@ async def test_ask_trainer_classify_step_skips_rag_when_not_needed():
     """When classify says needs_science_rag=False, the effective science context is empty."""
     captured_system_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         captured_system_prompt.append(system_prompt)
         return json.dumps({"response": "Here's your plan.", "planUpdates": [], "sources": []})
 
@@ -1052,7 +1052,7 @@ async def test_ask_trainer_training_load_in_prompt():
     """CTL/ATL/TSB should appear in the system prompt when FTP is known."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "OK.", "planUpdates": [], "sources": []})
 
@@ -1090,7 +1090,7 @@ async def test_rate_completed_workout_returns_dict():
         },
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"feedback": "Tough session.", "flag_for_adaptation": True})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -1115,7 +1115,7 @@ async def test_rate_completed_workout_flag_false_for_normal_session():
         },
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"feedback": "Great session, well done!", "flag_for_adaptation": False})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -1164,7 +1164,7 @@ async def test_classify_question_returns_default_on_failure():
 
 @pytest.mark.asyncio
 async def test_classify_question_parses_response():
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"category": "science_question", "needs_science_rag": True})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -1228,7 +1228,7 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
         },
     ]
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"plan": fake_plan})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -1800,7 +1800,7 @@ async def test_batch_review_rides_returns_empty_for_no_rides():
 async def test_batch_review_rides_calls_chat_with_all_rides():
     captured_user_msgs: list[str] = []
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured_user_msgs.append(user_msg)
         return json.dumps({"review": "Good block of training."})
 
@@ -1825,7 +1825,7 @@ async def test_batch_review_rides_calls_chat_with_all_rides():
 
 @pytest.mark.asyncio
 async def test_batch_review_rides_single_ride_still_works():
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"review": "Nice endurance ride."})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -1877,7 +1877,7 @@ async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_rid
         "suggested_feedback_tags": ["recovery", "commute", "cut_short"],
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
         return _json.dumps(ai_response)
 
@@ -1908,7 +1908,7 @@ async def test_rate_completed_workout_returns_no_follow_up_for_normal_ride():
         "suggested_feedback_tags": [],
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
         return _json.dumps(ai_response)
 
@@ -1938,7 +1938,7 @@ async def test_rate_completed_workout_defaults_missing_follow_up_fields():
         "flag_for_adaptation": False,
     }
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
         return _json.dumps(ai_response)
 
@@ -1991,7 +1991,7 @@ async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "Here are your next sessions.", "sources": []})
 
@@ -2011,7 +2011,7 @@ async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
 async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     """Asking for an outlook that does not include planUpdates should return no plan updates."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         # AI returns an outlook response with no planUpdates
         return json.dumps({
             "response": "Next up: endurance on Wed, intervals Thu, long ride Sat.",
@@ -2127,7 +2127,7 @@ async def test_update_coach_memory_passes_system_and_user_prompts():
 
     captured: list[tuple[str, str]] = []
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
         return "Schedule constraints: weekdays limited to 45 min."
 
