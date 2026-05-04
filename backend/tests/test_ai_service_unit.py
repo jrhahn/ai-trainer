@@ -1959,6 +1959,85 @@ async def test_rate_completed_workout_defaults_missing_follow_up_fields():
 
 
 # ---------------------------------------------------------------------------
+# Task 10: Tighten prompts around natural coaching behavior
+# ---------------------------------------------------------------------------
+
+
+def test_rate_workout_system_includes_response_quality_rules():
+    """rate_workout_system must include response quality rules for the feedback field."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+
+    # Must instruct the model to acknowledge uncertainty
+    assert "uncertainty" in prompt or "uncertain" in prompt or "fabricate" in prompt
+    # Must require a concrete ride detail in the response
+    assert "concrete" in prompt or "specific" in prompt
+    # Must require a clear next action
+    assert "next" in prompt and ("action" in prompt or "step" in prompt)
+    # Must limit follow-up questions to one
+    assert "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+    # Must guard against false endurance claims for short rides
+    assert "20 minutes" in prompt or "under 20" in prompt
+
+
+def test_rate_workout_system_includes_example_short_recovery_spin():
+    """rate_workout_system must contain an example for a short recovery spin."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "short recovery spin" in prompt or "leg-loosener" in prompt
+
+
+def test_rate_workout_system_includes_example_over_paced_endurance():
+    """rate_workout_system must contain an example for an over-paced endurance ride."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "over-paced endurance" in prompt or ("z3/z4" in prompt and "endurance" in prompt)
+
+
+def test_rate_workout_system_includes_example_missed_aborted_workout():
+    """rate_workout_system must contain an example for a missed or aborted workout."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "missed" in prompt or "aborted" in prompt
+
+
+def test_rate_workout_system_includes_example_successful_interval_day():
+    """rate_workout_system must contain an example for a successful interval day."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "successful interval" in prompt or ("threshold" in prompt and "target" in prompt and "solid" in prompt)
+
+
+def test_rate_workout_system_includes_example_over_paced_endurance():
+    """rate_workout_system must contain an example for an over-paced endurance ride."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "over-paced endurance" in prompt or ("z3/z4" in prompt and "endurance" in prompt)
+
+
+def test_rate_workout_system_includes_example_missed_aborted_workout():
+    """rate_workout_system must contain an example for a missed or aborted workout."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "missed" in prompt or "aborted" in prompt
+
+
+def test_rate_workout_system_includes_example_successful_interval_day():
+    """rate_workout_system must contain an example for a successful interval day."""
+    from services.prompts import rate_workout_system
+
+    prompt = rate_workout_system().lower()
+    assert "successful interval" in prompt or ("threshold" in prompt and "target" in prompt and "solid" in prompt)
+
+
+# ---------------------------------------------------------------------------
 # Outlook feature (Task 7)
 # ---------------------------------------------------------------------------
 
@@ -2028,6 +2107,53 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     # plan_updates must be absent / empty when the AI does not return them
     assert result.get("plan_updates") is None or result.get("plan_updates") == []
     assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
+
+
+def test_ask_trainer_system_includes_response_quality_rules():
+    """ask_trainer_system must include response quality rules for the response field."""
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-05-01",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    # Must acknowledge uncertainty when data is weak
+    assert "uncertain" in prompt or "sparse" in prompt or "weak" in prompt
+    # Must require reference to a concrete ride/athlete detail
+    assert "concrete" in prompt or "specific" in prompt
+    # Must require a clear next action
+    assert "next action" in prompt or "next step" in prompt or "recommendation" in prompt
+    # Must cap follow-up questions at one
+    assert "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+
+
+def test_ask_trainer_system_includes_outlook_response_example():
+    """ask_trainer_system must include an example response for an outlook request."""
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-05-01",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    # The prompt should contain an inline example for outlook responses
+    assert "example" in prompt
+    # The example should reference sessions and fatigue/tsb in context
+    assert "recovery" in prompt or "endurance" in prompt
+    assert "tsb" in prompt.lower() or "fatigue" in prompt.lower()
 
 
 # ---------------------------------------------------------------------------
