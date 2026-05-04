@@ -658,3 +658,33 @@ class BatchReviewRidesResponse(CamelModel):
 
     ride_count: int
     """Number of rides included in this review."""
+
+
+# ---------------------------------------------------------------------------
+# Next-ride recommendation (Task 6)
+# ---------------------------------------------------------------------------
+
+
+class NextRideRecommendationRequest(CamelModel):
+    """Request body for POST /ai/next-ride-recommendation."""
+
+    strava_activity_id: Optional[int] = None
+    """Strava activity ID of the ride just reviewed.  When provided the
+    recommendation is based on that specific ride; when omitted the most
+    recently imported ride metric is used."""
+
+
+class NextRideRecommendationResponse(CamelModel):
+    """Response for POST /ai/next-ride-recommendation."""
+
+    response: str
+    """Natural coach message explaining the recommendation."""
+
+    next_session_recommendation: str
+    """Short one-sentence summary of what the athlete should do next."""
+
+    recommendation_type: str = "keep_as_planned"
+    """One of: keep_as_planned, easier, recovery, move_intensity."""
+
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
+    """Plan changes to apply.  Present only when the next session should change."""

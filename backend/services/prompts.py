@@ -1073,3 +1073,140 @@ def batch_review_user(
         f"{rides_section}\n\n"
         "Please review these rides as a training block and give feedback."
     )
+
+
+# ---------------------------------------------------------------------------
+# next_ride_recommendation prompts (Task 6)
+# ---------------------------------------------------------------------------
+
+
+def next_ride_recommendation_system() -> str:
+    return (
+        f"{COACH_PERSONA} Give a concrete recommendation for the athlete's next training session "
+        "based on their recent ride(s) and subjective feedback.\n\n"
+        "You MUST choose one of the following recommendation types and explain why:\n"
+        "- 'keep_as_planned': the next session should proceed exactly as scheduled\n"
+        "- 'easier': do the same type of session but reduce intensity or duration\n"
+        "- 'recovery': replace with a recovery spin or full rest day\n"
+        "- 'move_intensity': postpone any high-intensity work to a later session\n\n"
+        "Base your decision on: recent TSS, CTL/ATL/TSB, subjective RPE, leg feel, "
+        "and how recent rides compared to the plan.\n\n"
+        "Return ONLY a valid JSON object with these fields:\n"
+        '- "response": a warm, personal 2-4 sentence coaching message that explains '
+        "what you recommend and why\n"
+        '- "next_session_recommendation": a brief one-sentence summary of the recommendation '
+        "(e.g. 'Take tomorrow as a full rest day — your TSB is deeply negative and legs felt heavy.')\n"
+        '- "recommendation_type": one of "keep_as_planned", "easier", "recovery", "move_intensity"\n'
+        '- "planUpdates": a JSON array of plan-day updates — include ONLY when the next session '
+        "should actually change; omit or use null if keeping as planned. "
+        "Each update has: date (YYYY-MM-DD), workoutType, title, description, durationMinutes. "
+        "Only update days that are TODAY or in the future."
+    )
+
+
+def next_ride_recommendation_user(
+    rides: list,
+    plan: list[dict],
+    profile: dict | None = None,
+    rider_assessment: dict | None = None,
+    coach_memory: str | None = None,
+    ctl: float | None = None,
+    atl: float | None = None,
+    tsb: float | None = None,
+) -> str:
+    """Build the user message for a next-ride recommendation.
+
+    *rides* is a list of RideMetric ORM objects (or duck-typed dicts) with recent
+    ride data including user_note (subjective feedback).
+    """
+    import datetime as _dt
+
+    today = str(_dt.date.today())
+
+    parts: list[str] = [f"Today's date: {today}"]
+
+    if profile:
+        parts.append(f"Athlete profile: {json.dumps(profile)}")
+
+    if rider_assessment:
+        parts.append(f"Rider assessment: {json.dumps(rider_assessment)}")
+
+    if coach_memory:
+        trimmed = coach_memory[-800:]
+        parts.append(f"Coach notes about this athlete:\n{trimmed}")
+
+    # Current training load
+    load_parts: list[str] = []
+    if ctl is not None:
+        load_parts.append(f"CTL (fitness): {round(ctl, 1)}")
+    if atl is not None:
+        load_parts.append(f"ATL (fatigue): {round(atl, 1)}")
+    if tsb is not None:
+        load_parts.append(f"TSB (form): {round(tsb, 1)}")
+    if load_parts:
+        parts.append("Current training load: " + " | ".join(load_parts))
+
+    # Recent rides with feedback
+    if rides:
+        rides_lines: list[str] = ["Recent ride(s) to review (newest first):"]
+        for m in rides:
+            ride_parts: list[str] = []
+            ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+            purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+            ride_parts.append(f"Type: {purpose}")
+            duration = getattr(m, "duration_seconds", None)
+            if duration:
+                ride_parts.append(f"Duration: {round(duration / 60)} min")
+            tss = getattr(m, "tss", None)
+            if tss is not None:
+                ride_parts.append(f"TSS: {round(tss)}")
+            np_val = getattr(m, "normalized_power_w", None)
+            if np_val is not None:
+                ride_parts.append(f"NP: {np_val}W")
+            m_ctl = getattr(m, "ctl_after", None)
+            m_atl = getattr(m, "atl_after", None)
+            m_tsb = getattr(m, "tsb_after", None)
+            if m_ctl is not None:
+                ride_parts.append(f"CTL after: {round(m_ctl, 1)}")
+            if m_atl is not None:
+                ride_parts.append(f"ATL after: {round(m_atl, 1)}")
+            if m_tsb is not None:
+                ride_parts.append(f"TSB after: {round(m_tsb, 1)}")
+            coach_note = getattr(m, "coach_note", None)
+            if coach_note:
+                ride_parts.append(f'Coach note: "{coach_note}"')
+            user_note = getattr(m, "user_note", None)
+            if user_note:
+                ride_parts.append(f'Athlete feedback: "{user_note}"')
+            rides_lines.append("  - " + " | ".join(ride_parts))
+        parts.append("\n".join(rides_lines))
+    else:
+        parts.append("No recent rides available.")
+
+    # Next planned session(s)
+    upcoming = [d for d in plan if d.get("date", "") >= today and not d.get("completed")][:3]
+    if upcoming:
+        next_session = upcoming[0]
+        parts.append(
+            f"Next planned session ({next_session.get('date', '?')}): "
+            f"{next_session.get('title', 'Unknown')} — {next_session.get('workoutType', '?')}, "
+            f"{next_session.get('durationMinutes', '?')} min. "
+            f"Description: {next_session.get('description', '')}"
+        )
+        if len(upcoming) > 1:
+            parts.append(
+                "Following sessions: "
+                + ", ".join(
+                    f"{d.get('date')} {d.get('title', d.get('workoutType', '?'))}"
+                    for d in upcoming[1:]
+                )
+            )
+    else:
+        parts.append("No upcoming sessions in the training plan.")
+
+    parts.append(
+        "\nBased on the recent ride(s) and feedback, give a concrete recommendation "
+        "for what the athlete should do in their next training session."
+    )
+
+    return "\n\n".join(parts)

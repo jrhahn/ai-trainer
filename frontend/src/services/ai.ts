@@ -218,3 +218,36 @@ export async function refreshLoginSummary(authToken: string): Promise<string> {
   })
   return raw.loginSummary ?? ''
 }
+
+export interface NextRideRecommendationResult {
+  response: string
+  nextSessionRecommendation: string
+  recommendationType: 'keep_as_planned' | 'easier' | 'recovery' | 'move_intensity'
+  planUpdates?: PlanDayUpdate[]
+}
+
+interface BackendNextRideRecommendationResult {
+  response: string
+  next_session_recommendation: string
+  recommendation_type: string
+  planUpdates?: PlanDayUpdate[]
+}
+
+export async function fetchNextRideRecommendation(
+  authToken: string,
+  stravaActivityId?: number,
+): Promise<NextRideRecommendationResult> {
+  const raw = await apiFetch<BackendNextRideRecommendationResult>('/ai/next-ride-recommendation', {
+    token: authToken,
+    method: 'POST',
+    body: {
+      ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
+    },
+  })
+  return {
+    response: raw.response,
+    nextSessionRecommendation: raw.next_session_recommendation,
+    recommendationType: (raw.recommendation_type ?? 'keep_as_planned') as NextRideRecommendationResult['recommendationType'],
+    planUpdates: raw.planUpdates,
+  }
+}

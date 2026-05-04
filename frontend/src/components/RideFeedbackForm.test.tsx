@@ -10,9 +10,15 @@ vi.mock('../services/user', () => ({
   submitRideFeedback: mockSubmit,
 }))
 
-// Provide a minimal auth token via the store mock.
+// Mock fetchNextRideRecommendation so the recommendation step resolves immediately.
+const mockRecommend = vi.hoisted(() => vi.fn())
+vi.mock('../services/ai', () => ({
+  fetchNextRideRecommendation: mockRecommend,
+}))
+
+// Provide a minimal auth token + updateTrainingDay via the store mock.
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: () => ({ authToken: 'test-token' }),
+  useAppStore: () => ({ authToken: 'test-token', updateTrainingDay: vi.fn() }),
 }))
 
 function renderForm(props?: Partial<Parameters<typeof RideFeedbackForm>[0]>) {
@@ -78,7 +84,14 @@ describe('RideFeedbackForm', () => {
   })
 
   it('calls submitRideFeedback with the form data and invokes onSaved on success', async () => {
-    mockSubmit.mockResolvedValue({ stravaActivityId: 1234, userNote: 'RPE 7/10 | legs: heavy | intent: recovery' })
+    const userNote = 'RPE 7/10 | legs: heavy | intent: recovery'
+    mockSubmit.mockResolvedValue({ stravaActivityId: 1234, userNote })
+    mockRecommend.mockResolvedValue({
+      response: 'Take it easy tomorrow.',
+      nextSessionRecommendation: 'Rest day recommended.',
+      recommendationType: 'recovery',
+      planUpdates: undefined,
+    })
 
     const { props } = renderForm()
 
@@ -99,13 +112,24 @@ describe('RideFeedbackForm', () => {
         intent: 'recovery',
       }),
     )
-    expect(props.onSaved).toHaveBeenCalledWith('RPE 7/10 | legs: heavy | intent: recovery')
+
+    // After feedback is saved the recommendation step is shown; dismiss it
+    const gotItButton = await screen.findByRole('button', { name: /got it/i })
+    await userEvent.click(gotItButton)
+
+    expect(props.onSaved).toHaveBeenCalledWith(userNote)
   })
 
   it('includes optional note when filled', async () => {
     mockSubmit.mockResolvedValue({
       stravaActivityId: 1234,
       userNote: 'RPE 5/10 | legs: normal | intent: free ride | Great day',
+    })
+    mockRecommend.mockResolvedValue({
+      response: 'Good effort.',
+      nextSessionRecommendation: 'Keep the plan.',
+      recommendationType: 'keep_as_planned',
+      planUpdates: undefined,
     })
 
     renderForm()
@@ -124,3 +148,4 @@ describe('RideFeedbackForm', () => {
     )
   })
 })
+
