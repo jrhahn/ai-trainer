@@ -9,7 +9,28 @@ Covers:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
+
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helper: patch OpenAIProvider.__init__ to avoid real API client creation
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _stub_openai_init():
+    """Patch OpenAIProvider.__init__ so it sets _model/_client without hitting the API."""
+    import services.llm as llm
+
+    def _fake_init(self, model=llm.OPENAI_MODEL):
+        self._model = model
+        self._client = MagicMock()
+
+    with patch("services.llm.OpenAIProvider.__init__", _fake_init):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -17,9 +38,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_openai_defaults(monkeypatch):
+def test_openai_defaults():
     """Cheap tasks use gpt-4o-mini; strong tasks use gpt-4o by default."""
-    # Re-import to pick up clean state (monkeypatch operates on the settings object)
     from config import settings
 
     assert settings.openai_classify_model == "gpt-4o-mini"
@@ -127,8 +147,7 @@ def test_get_provider_openai_uses_coach_model(monkeypatch):
     monkeypatch.setattr(settings, "openai_coach_model", "gpt-4o")
 
     # Prevent real client instantiation
-    from unittest.mock import patch, MagicMock
-    with patch("services.llm.OpenAIProvider.__init__", lambda self, model=llm.OPENAI_MODEL: setattr(self, "_model", model) or setattr(self, "_client", MagicMock())):
+    with _stub_openai_init():
         provider = llm.get_provider("openai", task=llm.TASK_COACH)
     assert isinstance(provider, llm.OpenAIProvider)
     assert provider._model == "gpt-4o"
@@ -143,8 +162,7 @@ def test_get_provider_openai_uses_classify_model(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "")
     monkeypatch.setattr(settings, "openai_classify_model", "gpt-4o-mini")
 
-    from unittest.mock import patch, MagicMock
-    with patch("services.llm.OpenAIProvider.__init__", lambda self, model=llm.OPENAI_MODEL: setattr(self, "_model", model) or setattr(self, "_client", MagicMock())):
+    with _stub_openai_init():
         provider = llm.get_provider("openai", task=llm.TASK_CLASSIFY)
     assert isinstance(provider, llm.OpenAIProvider)
     assert provider._model == "gpt-4o-mini"
