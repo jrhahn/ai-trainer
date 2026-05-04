@@ -1956,3 +1956,75 @@ async def test_rate_completed_workout_defaults_missing_follow_up_fields():
     assert result["needs_athlete_feedback"] is False
     assert result["follow_up_question"] is None
     assert result["suggested_feedback_tags"] == []
+
+
+# ---------------------------------------------------------------------------
+# Outlook feature (Task 7)
+# ---------------------------------------------------------------------------
+
+
+def test_ask_trainer_system_includes_outlook_rules():
+    """The ask_trainer system prompt must contain outlook handling instructions."""
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-05-01",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    )
+
+    # The prompt must mention outlook-related guidance
+    assert "outlook" in prompt.lower()
+    # Must reference next 3-5 sessions
+    assert "3-5" in prompt
+    # Must state that planUpdates should be omitted for a plain outlook
+    assert "planUpdates" in prompt or "plan_updates" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
+    """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
+    captured_prompt: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        captured_prompt.append(system_prompt)
+        return json.dumps({"response": "Here are your next sessions.", "sources": []})
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        await ai_service.ask_trainer(
+            question="Show me an outlook for my next few sessions",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert len(captured_prompt) >= 1
+    assert "outlook" in captured_prompt[0].lower()
+    assert "3-5" in captured_prompt[0]
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
+    """Asking for an outlook that does not include planUpdates should return no plan updates."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False):
+        # AI returns an outlook response with no planUpdates
+        return json.dumps({
+            "response": "Next up: endurance on Wed, intervals Thu, long ride Sat.",
+            "sources": [],
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="Show me an outlook for my next few sessions",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    # plan_updates must be absent / empty when the AI does not return them
+    assert result.get("plan_updates") is None or result.get("plan_updates") == []
+    assert "endurance" in result["response"].lower() or "next" in result["response"].lower()

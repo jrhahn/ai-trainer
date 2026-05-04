@@ -546,6 +546,22 @@ def ask_trainer_system(
         "in your JSON response. Omit \"ride_note_update\" entirely when no ride is being described."
     )
 
+    # Outlook instructions: guide the coach when the athlete asks for a session preview
+    outlook_instructions = (
+        "\n\nOutlook rules:\n"
+        "- When the athlete asks for an outlook on upcoming sessions (e.g. 'show outlook', "
+        "'what are my next sessions', 'what\\'s coming up', 'preview my training', "
+        "'walk me through upcoming training'), give a natural, readable explanation of the "
+        "next 3-5 scheduled sessions: what each session involves, why they are ordered that "
+        "way, and how the sequence fits the athlete\\'s current fatigue and readiness. "
+        "Draw on current CTL/ATL/TSB (or recent training history) and any recent ride "
+        "feedback to contextualize the upcoming load.\n"
+        "- When giving an outlook, do NOT include planUpdates unless the athlete explicitly "
+        "asks to change something or you detect a clear recovery issue that requires "
+        "immediate intervention (e.g. dangerously high accumulated fatigue heading into "
+        "a hard block)."
+    )
+
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
@@ -560,7 +576,8 @@ def ask_trainer_system(
         f"{workout_section}"
         f"{classification_section}"
         f"{science_section}"
-        f"{feedback_instructions}\n\n"
+        f"{feedback_instructions}"
+        f"{outlook_instructions}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
         + (
