@@ -157,8 +157,9 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         + ("HR response and pace consistency or drift if data available, " if is_running else "power consistency and HR response or drift if data available, ")
         + "(3) one concrete recommendation for the next training session. "
         "Be warm, personal, and specific — use their actual numbers.\n"
-        f"- \"rideInsights\": a per-{activity_noun} narrative addressed to the athlete. "
-        f"For each {activity_noun}: state its category, "
+        f"- \"rideInsights\": a JSON array — one object per {activity_noun} — with keys "
+        "\"id\" (the activity id as a number), \"name\" (activity name string), and \"note\" (a 2-4 sentence "
+        f"coach note addressed to the athlete). For each {activity_noun}: state its category, "
         "comment on the effort quality (HR drift if data available), and give one "
         "concrete takeaway. Also include 1-2 specific recommendations for the athlete's next training "
         "session based on what you observed. Be empathetic and personal — reference their specific numbers.\n"
