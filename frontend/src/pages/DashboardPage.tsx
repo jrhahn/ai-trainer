@@ -20,6 +20,7 @@ import TodayCard from '../components/TodayCard'
 import TrainingStatusBadge from '../components/TrainingStatusBadge'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
+import { useFeedbackDebounce } from '../hooks/useFeedbackDebounce'
 import {
   adaptTrainingPlan,
   fetchRaceEventFeedback,
@@ -102,8 +103,14 @@ export default function DashboardPage() {
     new Date(Date.now() - FEEDBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000),
     'yyyy-MM-dd',
   )
+  const { isPending: summaryUpdatePending } = useFeedbackDebounce()
+
   const ridesNeedingFeedback = rideMetricsHistory.filter(
     (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !r.userNote,
+  )
+
+  const recentlyFeedbackedRides = rideMetricsHistory.filter(
+    (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote,
   )
 
   const next2Days = trainingPlan.filter((d) => d.date > today).slice(0, 2)
@@ -311,17 +318,43 @@ export default function DashboardPage() {
       )}
 
       {/* Coach insight */}
-      {(riderAssessment?.loginSummary || summaryLoading) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+      {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending || recentlyFeedbackedRides.length > 0) && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-2">
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
             📊 Your Recent Training Summary
           </p>
           {summaryLoading ? (
             <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
           ) : (
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {riderAssessment!.loginSummary}
-            </p>
+            <>
+              {summaryUpdatePending && (
+                <div className="flex items-center gap-1.5 text-xs text-blue-500">
+                  <Loader2 size={12} className="animate-spin" />
+                  Updating summary with recent feedback…
+                </div>
+              )}
+              {riderAssessment?.loginSummary && (
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {riderAssessment.loginSummary}
+                </p>
+              )}
+              {recentlyFeedbackedRides.length > 0 && (
+                <div className="border-t border-blue-100 pt-2 space-y-1">
+                  <p className="text-xs font-medium text-blue-500">Your recent notes</p>
+                  {recentlyFeedbackedRides.map((ride) => (
+                    <div key={ride.stravaActivityId} className="text-xs text-gray-600">
+                      <span className="font-medium text-gray-700">
+                        {format(new Date(ride.activityDate), 'EEE MMM d')}
+                      </span>
+                      {' · '}{ride.sportType}
+                      {ride.userNote && (
+                        <span className="text-gray-500"> — {ride.userNote}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

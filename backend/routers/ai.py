@@ -927,3 +927,58 @@ async def next_ride_recommendation(
         recommendation_type=result.get("recommendation_type", "keep_as_planned"),
         plan_updates=validated_updates,
     )
+
+
+@router.post("/process-pending-feedbacks", response_model=schemas.ProcessPendingFeedbacksResponse)
+async def process_pending_feedbacks(
+    body: schemas.ProcessPendingFeedbacksRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ProcessPendingFeedbacksResponse:
+    """Generate an updated training summary from a batch of rides with new athlete feedback.
+
+    Called by the frontend after a 60-second quiet window following one or more
+    ride-feedback submissions.  Processes the rides in chronological order and
+    persists the resulting ``login_summary`` on the rider assessment.
+    """
+    if not body.activity_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="activity_ids must not be empty",
+        )
+
+    rides = await crud.get_ride_metrics_by_activity_ids(
+        db, current_user.id, body.activity_ids
+    )
+    # rides are already sorted oldest-first by the crud helper
+
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    training_plan = existing_plan.plan if existing_plan is not None else None
+
+    assessment_dict: dict | None = None
+    if current_user.rider_assessment is not None:
+        assessment_dict = schemas.RiderAssessmentSchema.model_validate(
+            current_user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+
+    try:
+        login_summary = await ai_service.generate_summary_from_ride_feedbacks(
+            rides=rides,
+            assessment=assessment_dict,
+            training_plan=training_plan or None,
+            provider=_provider(current_user),
+        )
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+
+    if login_summary and current_user.rider_assessment is not None:
+        await crud.upsert_rider_assessment(
+            db,
+            current_user.id,
+            estimated_ftp=current_user.rider_assessment.estimated_ftp,
+            login_summary=login_summary,
+        )
+
+    return schemas.ProcessPendingFeedbacksResponse(login_summary=login_summary)

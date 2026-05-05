@@ -744,6 +744,25 @@ async def get_ride_metric_by_strava_id(
     )
 
 
+async def get_ride_metrics_by_activity_ids(
+    db: AsyncSession,
+    user_id: str,
+    activity_ids: list[int],
+) -> list[models.RideMetric]:
+    """Return RideMetric rows for the given Strava activity IDs, oldest first."""
+    if not activity_ids:
+        return []
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id.in_(activity_ids),
+        )
+        .order_by(models.RideMetric.activity_date.asc())
+    )
+    return list(result)
+
+
 async def get_unreviewed_ride_metrics(
     db: AsyncSession,
     user_id: str,

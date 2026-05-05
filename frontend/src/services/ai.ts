@@ -251,3 +251,15 @@ export async function fetchNextRideRecommendation(
     planUpdates: raw.planUpdates,
   }
 }
+
+export async function processPendingFeedbacks(
+  authToken: string,
+  activityIds: number[],
+): Promise<string> {
+  const result = await apiFetch<{ loginSummary: string }>('/ai/process-pending-feedbacks', {
+    token: authToken,
+    method: 'POST',
+    body: { activityIds },
+  })
+  return result.loginSummary ?? ''
+}

@@ -241,6 +241,7 @@ interface AppState {
   raceEvents: RaceEvent[]
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
+  pendingFeedbackRideIds: number[]
 
   setAuthToken: (token: string | null) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
@@ -266,6 +267,8 @@ interface AppState {
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
+  addPendingFeedbackRide: (id: number) => void
+  clearPendingFeedbackRides: () => void
   toggleExpertMode: () => void
 }
 
@@ -284,6 +287,7 @@ const dataState = {
   raceEvents: [] as RaceEvent[],
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
+  pendingFeedbackRideIds: [] as number[],
 }
 
 const initialState = {
@@ -364,6 +368,13 @@ export const useAppStore = create<AppState>()(
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
+    addPendingFeedbackRide: (id) =>
+      set((state) => ({
+        pendingFeedbackRideIds: state.pendingFeedbackRideIds.includes(id)
+          ? state.pendingFeedbackRideIds
+          : [...state.pendingFeedbackRideIds, id],
+      })),
+    clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
     toggleExpertMode: () =>
       set((state) => {
         const next = !state.isExpertMode
