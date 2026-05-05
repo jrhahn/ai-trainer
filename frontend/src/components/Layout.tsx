@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike, FlaskConical, CheckCircle } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
+import { useAppStore } from '../store/useAppStore'
 
 const navItems = [
   { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
-  { to: '/expert', label: 'Expert', icon: FlaskConical },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
+  const toggleExpertMode = useAppStore((s) => s.toggleExpertMode)
 
   const importProgress = useImportProgress()
   const prevStatusRef = useRef(importProgress.status)
@@ -63,6 +65,20 @@ export default function Layout() {
           <span className="font-bold text-lg tracking-tight">Train Like a Pro!</span>
         </div>
         <NavLinks />
+        <div className="mt-auto px-1 pt-4">
+          <button
+            onClick={toggleExpertMode}
+            title={isExpertMode ? 'Expert mode ON — click to turn off' : 'Turn on Expert mode'}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              isExpertMode
+                ? 'bg-amber-500 text-white'
+                : 'text-gray-300 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <SlidersHorizontal size={18} />
+            Expert
+          </button>
+        </div>
       </aside>
 
       {/* Mobile top bar */}
@@ -73,13 +89,25 @@ export default function Layout() {
           </div>
           <span className="font-bold text-base tracking-tight">Train Like a Pro!</span>
         </div>
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 rounded-lg hover:bg-white/10"
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleExpertMode}
+            title={isExpertMode ? 'Expert mode ON' : 'Expert mode OFF'}
+            className={`p-2 rounded-lg transition-colors ${
+              isExpertMode ? 'bg-amber-500 text-white' : 'text-gray-300 hover:bg-white/10'
+            }`}
+            aria-label="Toggle expert mode"
+          >
+            <SlidersHorizontal size={18} />
+          </button>
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="p-2 rounded-lg hover:bg-white/10"
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}
