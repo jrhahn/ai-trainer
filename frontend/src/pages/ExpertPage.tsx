@@ -216,14 +216,48 @@ export default function ExpertPage() {
           {riderAssessment.notes && (
             <p className="text-xs text-gray-500 mt-2 italic">{riderAssessment.notes}</p>
           )}
-          {riderAssessment.rideInsights && (
-            <details className="mt-2">
-              <summary className="text-xs font-semibold text-gray-700 cursor-pointer select-none">
-                📊 Ride analysis &amp; recommendations ▾
-              </summary>
-              <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{riderAssessment.rideInsights}</p>
-            </details>
-          )}
+          {riderAssessment.rideInsights && (() => {
+            // rideInsights may be a JSON-serialised array of per-ride objects
+            // (e.g. [{id, name, note}, …]) or a plain-text string.
+            // `comment` is a legacy field kept for backward compatibility with older AI responses.
+            type RideInsight = { id?: number; name?: string; note?: string; comment?: string }
+            let parsedInsights: RideInsight[] | null = null
+            try {
+              const parsed: unknown = JSON.parse(riderAssessment.rideInsights!)
+              if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null) {
+                parsedInsights = parsed as RideInsight[]
+              }
+            } catch {
+              // Not JSON — fall through to plain-text rendering
+            }
+            return (
+              <details className="mt-2">
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                  📊 Ride analysis &amp; recommendations ▾
+                </summary>
+                {parsedInsights ? (
+                  <div className="mt-2 space-y-2">
+                    {parsedInsights.map((insight, i) => (
+                      <div
+                        key={insight.id ?? i}
+                        className="bg-white border border-gray-100 rounded-lg px-3 py-2"
+                      >
+                        {insight.name && (
+                          <p className="text-xs font-semibold text-gray-700 mb-1">🚴 {insight.name}</p>
+                        )}
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          {/* `comment` is a legacy fallback; `note` is the current standard field */}
+                          {insight.note ?? insight.comment ?? ''}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{riderAssessment.rideInsights}</p>
+                )}
+              </details>
+            )
+          })()}
         </div>
       )}
       {analysisStatus === 'error' && (

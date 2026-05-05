@@ -558,8 +558,8 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
         "riderType": "climber",
         "notes": "Good climber.",
         "rideInsights": [
-            {"id": 18187434054, "name": "Afternoon Ride", "category": "mixed", "comment": "Strong effort."},
-            {"id": 18187434055, "name": "Morning Ride", "category": "endurance", "comment": "Easy spin."},
+            {"id": 18187434054, "name": "Afternoon Ride", "note": "Strong effort. Great consistency."},
+            {"id": 18187434055, "name": "Morning Ride", "note": "Easy spin. Good recovery."},
         ],
         "lastRideFeedback": "Nice ride.",
     }
