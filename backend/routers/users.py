@@ -601,10 +601,12 @@ async def upload_fit_file(
 
     # Save rider assessment feedback if AI succeeded
     if ai_result:
-        # Normalise rideInsights: LLM may return list or string; column expects string.
-        _ri = ai_result.get("rideInsights")
-        if _ri is not None and not isinstance(_ri, str):
-            ai_result["rideInsights"] = json.dumps(_ri)
+        # Normalise text fields: LLM may return dicts or lists instead of strings.
+        # The DB columns expect plain strings.
+        for _field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):
+            _val = ai_result.get(_field)
+            if _val is not None and not isinstance(_val, str):
+                ai_result[_field] = json.dumps(_val)
 
         await crud.upsert_rider_assessment(
             db,

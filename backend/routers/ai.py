@@ -206,11 +206,12 @@ async def analyse_activities(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
 
-    # Normalise rideInsights: the LLM may return a list of dicts or a string.
-    # The DB column and Pydantic schema both expect a plain string.
-    _ri = result.get("rideInsights")
-    if _ri is not None and not isinstance(_ri, str):
-        result["rideInsights"] = json.dumps(_ri)
+    # Normalise text fields: the LLM may return dicts or lists instead of strings.
+    # The DB columns and Pydantic schema both expect plain strings.
+    for _field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):
+        _val = result.get(_field)
+        if _val is not None and not isinstance(_val, str):
+            result[_field] = json.dumps(_val)
 
     await crud.upsert_rider_assessment(
         db,
