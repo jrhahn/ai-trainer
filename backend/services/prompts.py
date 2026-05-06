@@ -1025,8 +1025,23 @@ def ride_metrics_context_section(metrics: list) -> str:
         if summary:
             parts.append(f'"{summary}"')
 
+        match_status = getattr(m, "plan_match_status", None)
+        matched_date = getattr(m, "matched_plan_date", None)
+        matched_snapshot = getattr(m, "matched_plan_snapshot", None)
+        if match_status and match_status != "unmatched":
+            parts.append(f"plan match:{match_status}")
+            if matched_date:
+                parts.append(f"planned {matched_date}")
+
         line = " | ".join(parts)
         lines.append(f"  {line}")
+
+        if isinstance(matched_snapshot, dict):
+            title = matched_snapshot.get("title") or matched_snapshot.get("workoutType")
+            duration = matched_snapshot.get("durationMinutes")
+            if title:
+                duration_part = f", {duration} min" if duration else ""
+                lines.append(f"    Planned workout: {title}{duration_part}")
 
         # Classification reason — only shown when confidence is not high
         if reason and confidence != "high":
@@ -1132,6 +1147,15 @@ def batch_review_user(
             parts.append(f'Athlete note: "{user_note}"')
         if reason and confidence != "high":
             parts.append(f"[classification note: {reason}]")
+        match_status = getattr(m, "plan_match_status", None)
+        matched_snapshot = getattr(m, "matched_plan_snapshot", None)
+        if match_status:
+            parts.append(f"Plan match: {match_status}")
+        if isinstance(matched_snapshot, dict):
+            parts.append(
+                "Matched planned workout: "
+                f"{matched_snapshot.get('title') or matched_snapshot.get('workoutType', 'planned workout')}"
+            )
         rides_lines.append("  - " + " | ".join(parts))
 
     rides_section = "\n".join(rides_lines)
@@ -1248,6 +1272,15 @@ def next_ride_recommendation_user(
             user_note = getattr(m, "user_note", None)
             if user_note:
                 ride_parts.append(f'Athlete feedback: "{user_note}"')
+            match_status = getattr(m, "plan_match_status", None)
+            matched_snapshot = getattr(m, "matched_plan_snapshot", None)
+            if match_status:
+                ride_parts.append(f"Plan match: {match_status}")
+            if isinstance(matched_snapshot, dict):
+                ride_parts.append(
+                    "Matched planned workout: "
+                    f"{matched_snapshot.get('title') or matched_snapshot.get('workoutType', 'planned workout')}"
+                )
             rides_lines.append("  - " + " | ".join(ride_parts))
         parts.append("\n".join(rides_lines))
     else:
@@ -1358,6 +1391,15 @@ def process_pending_feedbacks_user(
             coach_note = getattr(m, "coach_note", None)
             if coach_note:
                 ride_parts.append(f'Previous coach note: "{coach_note}"')
+            match_status = getattr(m, "plan_match_status", None)
+            matched_snapshot = getattr(m, "matched_plan_snapshot", None)
+            if match_status:
+                ride_parts.append(f"Plan match: {match_status}")
+            if isinstance(matched_snapshot, dict):
+                ride_parts.append(
+                    "Matched planned workout: "
+                    f"{matched_snapshot.get('title') or matched_snapshot.get('workoutType', 'planned workout')}"
+                )
             rides_lines.append("  - " + " | ".join(ride_parts))
         parts.append("\n".join(rides_lines))
     else:

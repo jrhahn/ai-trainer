@@ -1069,6 +1069,301 @@ async def test_review_new_rides_returns_503_on_rate_limit(client, auth_headers, 
     assert "rate" in response.json()["detail"].lower()
 
 
+@pytest.mark.asyncio
+async def test_analyse_activities_auto_matches_single_planned_ride(
+    client, auth_headers, mock_ai_service
+):
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-04",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 90,
+                }
+            ],
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 61001,
+                    "name": "Morning endurance",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-04T08:00:00Z",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61001)
+    assert ride["planMatchStatus"] == "auto_matched"
+    assert ride["matchedPlanDate"] == "2026-05-04"
+    assert ride["matchedPlanSnapshot"]["title"] == "Endurance Ride"
+    assert ride["activityName"] == "Morning endurance"
+    mock_ai_service["rate_completed_workout"].assert_called()
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_marks_multiple_same_day_rides_ambiguous(
+    client, auth_headers, mock_ai_service
+):
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-05",
+                    "workoutType": "intervals",
+                    "title": "Threshold Intervals",
+                    "description": "4x8 min",
+                    "durationMinutes": 75,
+                }
+            ],
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 62001,
+                    "name": "Commute",
+                    "type": "Ride",
+                    "distance": 8000,
+                    "movingTime": 1200,
+                    "elapsedTime": 1200,
+                    "totalElevationGain": 50,
+                    "startDate": "2026-05-05T07:00:00Z",
+                },
+                {
+                    "id": 62002,
+                    "name": "Workout",
+                    "type": "Ride",
+                    "distance": 45000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-05T18:00:00Z",
+                },
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    rides = [r for r in history.json()["rides"] if r["activityDate"] == "2026-05-05"]
+    assert {r["planMatchStatus"] for r in rides} == {"ambiguous"}
+    assert {r["matchedPlanSnapshot"]["title"] for r in rides} == {"Threshold Intervals"}
+    mock_ai_service["rate_completed_workout"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
+    client, auth_headers, mock_ai_service
+):
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-06",
+                    "workoutType": "tempo",
+                    "title": "Tempo Ride",
+                    "description": "Controlled tempo",
+                    "durationMinutes": 80,
+                }
+            ],
+        )
+        await crud.upsert_ride_metric(db, user_id, strava_activity_id=63001, activity_date="2026-05-06")
+        await crud.upsert_ride_metric(db, user_id, strava_activity_id=63002, activity_date="2026-05-06")
+        await db.commit()
+        auto = await crud.get_ride_metrics_by_activity_ids(db, user_id, [63001, 63002])
+        assert len(auto) == 2
+        # Apply matching after both rides exist.
+        from services.ride_matching import apply_ride_plan_matches
+
+        await apply_ride_plan_matches(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-06",
+                    "workoutType": "tempo",
+                    "title": "Tempo Ride",
+                    "description": "Controlled tempo",
+                    "durationMinutes": 80,
+                }
+            ],
+            [63001, 63002],
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/resolve-ride-match",
+        headers=auth_headers,
+        json={"plannedDate": "2026-05-06", "stravaActivityId": 63002},
+    )
+    assert response.status_code == 200
+    assert response.json()["ride"]["planMatchStatus"] == "manual_matched"
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    by_id = {r["stravaActivityId"]: r for r in history.json()["rides"]}
+    assert by_id[63002]["planMatchStatus"] == "manual_matched"
+    assert by_id[63001]["planMatchStatus"] == "unmatched"
+    mock_ai_service["rate_completed_workout"].assert_called()
+
+
+@pytest.mark.asyncio
+async def test_save_ride_feedback_reruns_review_for_matched_ride(
+    client, auth_headers, mock_ai_service
+):
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-07",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady aerobic ride",
+                    "durationMinutes": 90,
+                },
+                {
+                    "date": "2026-05-08",
+                    "workoutType": "intervals",
+                    "title": "Intervals",
+                    "description": "Hard work",
+                    "durationMinutes": 60,
+                },
+            ],
+        )
+        await db.commit()
+
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 64001,
+                    "name": "Endurance",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-07T08:00:00Z",
+                }
+            ]
+        },
+    )
+    mock_ai_service["rate_completed_workout"].reset_mock()
+    mock_ai_service["rate_completed_workout"].return_value = {
+        "feedback": "With your note, I would keep tomorrow easier.",
+        "flag_for_adaptation": False,
+        "needs_athlete_feedback": False,
+        "follow_up_question": None,
+        "suggested_feedback_tags": [],
+    }
+    mock_ai_service["recommend_next_session"].return_value = {
+        "response": "Make tomorrow easier.",
+        "next_session_recommendation": "Reduce tomorrow.",
+        "recommendation_type": "easier",
+        "plan_updates": [
+            {
+                "date": "2026-05-08",
+                "workoutType": "recovery",
+                "title": "Recovery Spin",
+                "description": "Easy spin",
+                "durationMinutes": 45,
+            }
+        ],
+    }
+
+    response = await client.patch(
+        "/api/v1/users/me/ride-feedback/64001",
+        headers=auth_headers,
+        json={"rpe": 8, "legs": "heavy", "intent": "planned workout", "note": "Harder than expected"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["coachNote"] == "With your note, I would keep tomorrow easier."
+    assert body["planUpdates"][0]["workoutType"] == "recovery"
+    mock_ai_service["rate_completed_workout"].assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_without_plan_leaves_ride_unmatched(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 65001,
+                    "name": "Free ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-09T08:00:00Z",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 65001)
+    assert ride["planMatchStatus"] == "unmatched"
+
+
 
 # ---------------------------------------------------------------------------
 # Integration tests for Task 4: follow-up dialogue fields

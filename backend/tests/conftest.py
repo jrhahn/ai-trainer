@@ -129,6 +129,14 @@ def mock_ai_service(monkeypatch):
         ),
         "update_coach_memory": AsyncMock(return_value="Prefers morning workouts."),
         "rate_completed_workout": AsyncMock(return_value={"feedback": "Strong execution overall.", "flag_for_adaptation": False, "needs_athlete_feedback": False, "follow_up_question": None, "suggested_feedback_tags": []}),
+        "recommend_next_session": AsyncMock(
+            return_value={
+                "response": "Keep the next ride easy.",
+                "next_session_recommendation": "Keep the next session as planned.",
+                "recommendation_type": "keep_as_planned",
+                "plan_updates": None,
+            }
+        ),
         "classify_question": AsyncMock(return_value={"category": "plan_query", "needs_science_rag": False}),
         "batch_review_rides": AsyncMock(return_value="Good training block."),
     }

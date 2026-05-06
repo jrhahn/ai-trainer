@@ -2,9 +2,9 @@ import { differenceInDays, format } from 'date-fns'
 import { useEffect, useRef, useState } from 'react'
 import { Activity, Loader2, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
-import type { RaceEvent, RideMetricPoint } from '../store/useAppStore'
+import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
@@ -26,6 +26,7 @@ import {
   fetchRaceEventFeedback,
   generateTrainingPlan,
   refreshLoginSummary,
+  resolveRideMatch,
 } from '../services/ai'
 import { fetchCoachMemory, fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
 
@@ -106,8 +107,22 @@ export default function DashboardPage() {
   const { isPending: summaryUpdatePending } = useFeedbackDebounce()
 
   const ridesNeedingFeedback = rideMetricsHistory.filter(
-    (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !r.userNote,
+    (r) =>
+      r.activityDate >= sevenDaysAgo &&
+      r.activityDate <= today &&
+      !r.userNote &&
+      r.planMatchStatus !== 'ambiguous',
   )
+
+  const ambiguousRideGroups = Object.entries(
+    rideMetricsHistory
+      .filter((r) => r.planMatchStatus === 'ambiguous' && r.matchedPlanDate)
+      .reduce<Record<string, RideMetricPoint[]>>((groups, ride) => {
+        const date = ride.matchedPlanDate ?? ride.activityDate
+        groups[date] = [...(groups[date] ?? []), ride]
+        return groups
+      }, {}),
+  ).sort(([a], [b]) => a.localeCompare(b))
 
   const recentlyFeedbackedRides = rideMetricsHistory.filter(
     (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote,
@@ -127,6 +142,26 @@ export default function DashboardPage() {
     upcomingRaceDate ? differenceInDays(new Date(upcomingRaceDate), new Date()) : null
 
   const showConnectNudge = !stravaConnection && metricsHistory.length === 0
+
+  const applyPlanUpdates = (updates?: Partial<TrainingDay>[]) => {
+    if (!updates || updates.length === 0) return
+    const updatesByDate = Object.fromEntries(updates.filter((u) => u?.date).map((u) => [u.date, u]))
+    setTrainingPlan(
+      trainingPlan.map((day) =>
+        updatesByDate[day.date] ? { ...day, ...updatesByDate[day.date] } : day,
+      ),
+    )
+  }
+
+  const resolveMatchMutation = useMutation({
+    mutationFn: ({ plannedDate, stravaActivityId }: { plannedDate: string; stravaActivityId: number }) =>
+      resolveRideMatch(authToken!, plannedDate, stravaActivityId),
+    onSuccess: async (result) => {
+      applyPlanUpdates(result.planUpdates)
+      const freshMetrics = await fetchRideMetricsHistory(authToken!)
+      setRideMetricsHistory(freshMetrics)
+    },
+  })
 
   // Auto-adapt stale plan
   useEffect(() => {
@@ -284,6 +319,77 @@ export default function DashboardPage() {
           {importProgress.status === 'error' && importProgress.error && (
             <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
           )}
+        </div>
+      )}
+
+      {/* Ambiguous same-day ride matches */}
+      {ambiguousRideGroups.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Which ride was your planned workout?
+          </h2>
+          <div className="space-y-3">
+            {ambiguousRideGroups.map(([plannedDate, rides]) => {
+              const planned = rides[0]?.matchedPlanSnapshot
+              return (
+                <div key={plannedDate} className="bg-white border border-amber-200 rounded-xl px-4 py-3">
+                  <div className="mb-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {plannedDate}
+                      {planned?.title ? ` · ${planned.title}` : ''}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Multiple rides were imported on this date. Pick the one that should count as the scheduled training ride.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {rides.map((ride) => {
+                      const startLabel = ride.activityStartDatetime
+                        ? format(new Date(ride.activityStartDatetime), 'HH:mm')
+                        : null
+                      const isPending =
+                        resolveMatchMutation.isPending &&
+                        resolveMatchMutation.variables?.stravaActivityId === ride.stravaActivityId
+                      return (
+                        <button
+                          key={ride.stravaActivityId}
+                          type="button"
+                          disabled={resolveMatchMutation.isPending}
+                          onClick={() =>
+                            resolveMatchMutation.mutate({
+                              plannedDate,
+                              stravaActivityId: ride.stravaActivityId,
+                            })
+                          }
+                          className="w-full flex items-center justify-between gap-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-left hover:bg-amber-100 disabled:opacity-60 transition-colors"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">
+                              {ride.activityName || ride.sportType}
+                              {startLabel ? ` · ${startLabel}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {ride.durationSeconds ? `${Math.round(ride.durationSeconds / 60)} min` : 'Duration unknown'}
+                              {ride.tss ? ` · TSS ${Math.round(ride.tss)}` : ''}
+                              {ride.normalizedPowerW ? ` · NP ${ride.normalizedPowerW}W` : ride.avgPowerW ? ` · ${ride.avgPowerW}W avg` : ''}
+                            </p>
+                          </div>
+                          <span className="text-xs font-semibold text-amber-700 bg-white border border-amber-200 px-2 py-1 rounded-lg">
+                            {isPending ? 'Saving...' : 'Choose'}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {resolveMatchMutation.isError && (
+                    <p className="text-xs text-red-600 mt-2">
+                      Could not save that match. Please try again.
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -636,12 +742,23 @@ export default function DashboardPage() {
         <RideFeedbackForm
           stravaActivityId={feedbackRide.stravaActivityId}
           activityDate={feedbackRide.activityDate}
-          onSaved={(userNote) => {
-            setRideMetricsHistory(
-              rideMetricsHistory.map((r) =>
-                r.stravaActivityId === feedbackRide.stravaActivityId ? { ...r, userNote } : r,
-              ),
-            )
+          onSaved={(data) => {
+            applyPlanUpdates(data.planUpdates)
+            if (data.ride) {
+              setRideMetricsHistory(
+                rideMetricsHistory.map((r) =>
+                  r.stravaActivityId === data.ride?.stravaActivityId ? data.ride : r,
+                ),
+              )
+            } else {
+              setRideMetricsHistory(
+                rideMetricsHistory.map((r) =>
+                  r.stravaActivityId === feedbackRide.stravaActivityId
+                    ? { ...r, userNote: data.userNote, coachNote: data.coachNote ?? r.coachNote }
+                    : r,
+                ),
+              )
+            }
             setFeedbackRide(null)
           }}
           onCancel={() => setFeedbackRide(null)}
@@ -650,4 +767,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-

@@ -585,6 +585,8 @@ async def upsert_ride_metric(
     *,
     strava_activity_id: int,
     activity_date: str,
+    activity_name: str | None = None,
+    activity_start_datetime: str | None = None,
     sport_type: str = "cycling",
     duration_seconds: int | None = None,
     avg_power_w: int | None = None,
@@ -620,6 +622,10 @@ async def upsert_ride_metric(
         classification_reason=classification_reason,
         summary=summary,
     )
+    if activity_name is not None:
+        values["activity_name"] = activity_name
+    if activity_start_datetime is not None:
+        values["activity_start_datetime"] = activity_start_datetime
 
     conn = await db.connection()
     if conn.dialect.name == "postgresql":
@@ -730,6 +736,28 @@ async def get_ride_metric_by_date(
     )
 
 
+async def get_ride_metrics_by_date(
+    db: AsyncSession,
+    user_id: str,
+    activity_date: str,
+) -> list[models.RideMetric]:
+    """Return all RideMetric rows for a specific user/date, oldest-ish first.
+
+    Multiple activities can happen on the same calendar date; callers that need
+    a planned-workout match should use this helper instead of choosing a scalar
+    row implicitly.
+    """
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_date == activity_date,
+        )
+        .order_by(models.RideMetric.activity_start_datetime.asc(), models.RideMetric.created_at.asc())
+    )
+    return list(result)
+
+
 async def get_ride_metric_by_strava_id(
     db: AsyncSession,
     user_id: str,
@@ -761,6 +789,24 @@ async def get_ride_metrics_by_activity_ids(
         .order_by(models.RideMetric.activity_date.asc())
     )
     return list(result)
+
+
+async def update_ride_match(
+    db: AsyncSession,
+    ride: models.RideMetric,
+    *,
+    status: str,
+    matched_plan_date: str | None = None,
+    matched_plan_snapshot: Any | None = None,
+    matched_at: datetime | None = None,
+) -> models.RideMetric:
+    """Update matching metadata for a RideMetric row and flush."""
+    ride.plan_match_status = status
+    ride.matched_plan_date = matched_plan_date
+    ride.matched_plan_snapshot = matched_plan_snapshot
+    ride.matched_at = matched_at
+    await db.flush()
+    return ride
 
 
 async def get_unreviewed_ride_metrics(

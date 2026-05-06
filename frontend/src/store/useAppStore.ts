@@ -201,6 +201,8 @@ export interface AthleteMetricSnapshot {
 
 export interface RideMetricPoint {
   stravaActivityId: number
+  activityName?: string | null
+  activityStartDatetime?: string | null
   activityDate: string
   sportType: string
   tss?: number
@@ -210,7 +212,12 @@ export interface RideMetricPoint {
   durationSeconds?: number
   avgPowerW?: number
   normalizedPowerW?: number
+  coachNote?: string | null
   userNote?: string | null
+  planMatchStatus?: 'unmatched' | 'auto_matched' | 'ambiguous' | 'manual_matched'
+  matchedPlanDate?: string | null
+  matchedPlanSnapshot?: Partial<TrainingDay> | null
+  matchedAt?: string | null
 }
 
 export interface RiderAssessment {

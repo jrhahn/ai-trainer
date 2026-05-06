@@ -225,8 +225,20 @@ export async function submitRideFeedback(
     intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'aborted'
     note?: string
   },
-): Promise<{ stravaActivityId: number; userNote: string }> {
-  return apiFetch<{ stravaActivityId: number; userNote: string }>(
+): Promise<{
+  stravaActivityId: number
+  userNote: string
+  coachNote?: string | null
+  planUpdates?: Partial<TrainingDay>[]
+  ride?: RideMetricPoint | null
+}> {
+  return apiFetch<{
+    stravaActivityId: number
+    userNote: string
+    coachNote?: string | null
+    planUpdates?: Partial<TrainingDay>[]
+    ride?: RideMetricPoint | null
+  }>(
     `/users/me/ride-feedback/${stravaActivityId}`,
     { token, method: 'PATCH', body: feedback },
   )

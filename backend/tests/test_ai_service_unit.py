@@ -1778,6 +1778,52 @@ def test_batch_review_user_includes_coach_and_athlete_notes():
     assert "Felt heavy." in msg
 
 
+def test_ride_metrics_context_section_includes_matched_plan_snapshot():
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-05-06"
+        ride_purpose = "tempo"
+        sport_type = "cycling"
+        classification_confidence = "high"
+        classification_reason = None
+        tss = 75
+        normalized_power_w = 235
+        ctl_after = 40.0
+        atl_after = 50.0
+        tsb_after = -10.0
+        summary = "Tempo ride"
+        coach_note = "Good match."
+        user_note = "Felt controlled."
+        plan_match_status = "manual_matched"
+        matched_plan_date = "2026-05-06"
+        matched_plan_snapshot = {"title": "Planned Tempo", "durationMinutes": 80}
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "plan match:manual_matched" in section
+    assert "Planned workout: Planned Tempo, 80 min" in section
+
+
+def test_batch_review_user_includes_ambiguous_plan_match():
+    from services.prompts import batch_review_user
+
+    ride = _FakeRide(
+        "2026-05-06",
+        ride_purpose="unknown",
+        classification_confidence="low",
+        classification_reason="Multiple same-day rides need athlete selection.",
+    )
+    ride.plan_match_status = "ambiguous"
+    ride.matched_plan_snapshot = {"title": "Planned Intervals", "durationMinutes": 75}
+
+    msg = batch_review_user(
+        [ride],
+        training_plan=[{"date": "2026-05-06", "title": "Planned Intervals"}],
+    )
+    assert "Plan match: ambiguous" in msg
+    assert "Matched planned workout: Planned Intervals" in msg
+
+
 def test_batch_review_user_empty_rides():
     from services.prompts import batch_review_user
 

@@ -7,6 +7,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -507,6 +508,8 @@ class FitUploadResponse(BaseModel):
 
 class RideMetricSchema(CamelModel):
     strava_activity_id: int
+    activity_name: Optional[str] = None
+    activity_start_datetime: Optional[str] = None
     activity_date: str
     sport_type: str
     duration_seconds: Optional[int] = None
@@ -524,6 +527,10 @@ class RideMetricSchema(CamelModel):
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
+    plan_match_status: str = "unmatched"
+    matched_plan_date: Optional[str] = None
+    matched_plan_snapshot: Optional[Any] = None
+    matched_at: Optional[datetime] = None
 
 
 class RideMetricHistoryResponse(BaseModel):
@@ -560,6 +567,9 @@ class RideFeedbackResponse(CamelModel):
 
     strava_activity_id: int
     user_note: str
+    coach_note: Optional[str] = None
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
+    ride: Optional[RideMetricSchema] = None
 
 
 class ImportHistoryResponse(BaseModel):
@@ -658,6 +668,21 @@ class BatchReviewRidesResponse(CamelModel):
 
     ride_count: int
     """Number of rides included in this review."""
+
+
+class ResolveRideMatchRequest(CamelModel):
+    """Request body for POST /ai/resolve-ride-match."""
+
+    planned_date: str
+    strava_activity_id: int
+
+
+class ResolveRideMatchResponse(CamelModel):
+    """Response returned after resolving an ambiguous planned-workout ride."""
+
+    ride: RideMetricSchema
+    coach_note: Optional[str] = None
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
 # ---------------------------------------------------------------------------

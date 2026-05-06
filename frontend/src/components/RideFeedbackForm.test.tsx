@@ -10,15 +10,9 @@ vi.mock('../services/user', () => ({
   submitRideFeedback: mockSubmit,
 }))
 
-// Mock fetchNextRideRecommendation so the recommendation step resolves immediately.
-const mockRecommend = vi.hoisted(() => vi.fn())
-vi.mock('../services/ai', () => ({
-  fetchNextRideRecommendation: mockRecommend,
-}))
-
 // Provide a minimal auth token + updateTrainingDay via the store mock.
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: () => ({ authToken: 'test-token', updateTrainingDay: vi.fn() }),
+  useAppStore: () => ({ authToken: 'test-token', addPendingFeedbackRide: vi.fn() }),
 }))
 
 function renderForm(props?: Partial<Parameters<typeof RideFeedbackForm>[0]>) {
@@ -85,12 +79,10 @@ describe('RideFeedbackForm', () => {
 
   it('calls submitRideFeedback with the form data and invokes onSaved on success', async () => {
     const userNote = 'RPE 7/10 | legs: heavy | intent: recovery'
-    mockSubmit.mockResolvedValue({ stravaActivityId: 1234, userNote })
-    mockRecommend.mockResolvedValue({
-      response: 'Take it easy tomorrow.',
-      nextSessionRecommendation: 'Rest day recommended.',
-      recommendationType: 'recovery',
-      planUpdates: undefined,
+    mockSubmit.mockResolvedValue({
+      stravaActivityId: 1234,
+      userNote,
+      coachNote: 'Take it easy tomorrow.',
     })
 
     const { props } = renderForm()
@@ -117,19 +109,15 @@ describe('RideFeedbackForm', () => {
     const gotItButton = await screen.findByRole('button', { name: /got it/i })
     await userEvent.click(gotItButton)
 
-    expect(props.onSaved).toHaveBeenCalledWith(userNote)
+    expect(props.onSaved).toHaveBeenCalledWith(
+      expect.objectContaining({ userNote, coachNote: 'Take it easy tomorrow.' }),
+    )
   })
 
   it('includes optional note when filled', async () => {
     mockSubmit.mockResolvedValue({
       stravaActivityId: 1234,
       userNote: 'RPE 5/10 | legs: normal | intent: free ride | Great day',
-    })
-    mockRecommend.mockResolvedValue({
-      response: 'Good effort.',
-      nextSessionRecommendation: 'Keep the plan.',
-      recommendationType: 'keep_as_planned',
-      planUpdates: undefined,
     })
 
     renderForm()
@@ -148,4 +136,3 @@ describe('RideFeedbackForm', () => {
     )
   })
 })
-
