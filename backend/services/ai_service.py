@@ -57,6 +57,8 @@ from .prompts import (
     batch_review_user,
     next_ride_recommendation_system,
     next_ride_recommendation_user,
+    process_pending_feedbacks_system,
+    process_pending_feedbacks_user,
 )
 
 MAX_CONVERSATION_HISTORY = 10
@@ -569,3 +571,27 @@ async def recommend_next_session(
         "recommendation_type": parsed.get("recommendation_type", "keep_as_planned"),
         "plan_updates": parsed.get("planUpdates") or None,
     }
+
+
+async def generate_summary_from_ride_feedbacks(
+    rides: list,
+    assessment: dict | None = None,
+    training_plan: list[dict] | None = None,
+    provider: str = "openai",
+) -> str:
+    """Generate an updated loginSummary from a batch of rides with fresh athlete feedback.
+
+    *rides* is a list of RideMetric ORM objects (or duck-typed equivalents) sorted
+    oldest-first.  Returns the summary string, or an empty string on failure.
+    """
+    if not rides:
+        return ""
+    system_prompt = process_pending_feedbacks_system()
+    user_msg = process_pending_feedbacks_user(
+        rides=rides,
+        assessment=assessment,
+        training_plan=training_plan,
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
+    parsed = _parse_ai_json(raw)
+    return parsed.get("loginSummary") or ""

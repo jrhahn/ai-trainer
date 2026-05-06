@@ -688,3 +688,17 @@ class NextRideRecommendationResponse(CamelModel):
 
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     """Plan changes to apply.  Present only when the next session should change."""
+
+
+class ProcessPendingFeedbacksRequest(CamelModel):
+    """Request body for POST /ai/process-pending-feedbacks."""
+
+    activity_ids: list[int]
+    """Strava activity IDs of rides whose user feedback should be processed."""
+
+
+class ProcessPendingFeedbacksResponse(CamelModel):
+    """Response for POST /ai/process-pending-feedbacks."""
+
+    login_summary: str
+    """Updated training summary incorporating the batched ride feedback."""

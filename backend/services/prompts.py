@@ -1280,3 +1280,102 @@ def next_ride_recommendation_user(
     )
 
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Process-pending-feedbacks prompts
+# ---------------------------------------------------------------------------
+
+
+def process_pending_feedbacks_system() -> str:
+    """Return the system prompt for generating a training summary from multiple ride feedbacks."""
+    return (
+        f"{COACH_PERSONA} Generate an updated training summary after receiving fresh athlete "
+        "feedback on one or more recent rides.\n"
+        "You will receive the rides in chronological order with dates, types, load metrics, "
+        "and the athlete's own notes.\n"
+        "Return ONLY a valid JSON object with a single field:\n"
+        '- "loginSummary": a 4-6 sentence coaching narrative addressed directly to the athlete. '
+        "Structure it as flowing prose covering:\n"
+        "  (1) What they did across these rides — volume, types, effort levels.\n"
+        "  (2) Fitness and load observations — TSS, fatigue, form trends.\n"
+        "  (3) How well the rides matched the plan (if plan context is available).\n"
+        "  (4) 1-2 concrete, actionable recommendations for upcoming sessions.\n"
+        "Be specific, warm, and encouraging — reference actual numbers from the data."
+    )
+
+
+def process_pending_feedbacks_user(
+    rides: list,
+    assessment: dict | None = None,
+    training_plan: list[dict] | None = None,
+) -> str:
+    """Build the user message for generating a summary from multiple ride feedbacks.
+
+    *rides* is a list of RideMetric ORM objects sorted oldest-first.
+    """
+    import datetime as _dt
+
+    today = str(_dt.date.today())
+    parts: list[str] = [f"Today's date: {today}"]
+
+    if assessment:
+        ftp = assessment.get("estimatedFtp") or assessment.get("estimated_ftp")
+        notes = assessment.get("notes")
+        if ftp:
+            parts.append(f"Athlete estimated FTP: {ftp} W")
+        if notes:
+            parts.append(f"Athlete profile notes: {notes}")
+
+    if rides:
+        rides_lines: list[str] = ["Rides with new athlete feedback (chronological order):"]
+        for m in rides:
+            ride_parts: list[str] = []
+            ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+            purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+            ride_parts.append(f"Type: {purpose}")
+            duration = getattr(m, "duration_seconds", None)
+            if duration:
+                ride_parts.append(f"Duration: {round(duration / 60)} min")
+            tss = getattr(m, "tss", None)
+            if tss is not None:
+                ride_parts.append(f"TSS: {round(tss)}")
+            np_val = getattr(m, "normalized_power_w", None)
+            if np_val is not None:
+                ride_parts.append(f"NP: {np_val}W")
+            ctl = getattr(m, "ctl_after", None)
+            atl = getattr(m, "atl_after", None)
+            tsb = getattr(m, "tsb_after", None)
+            if ctl is not None:
+                ride_parts.append(f"CTL after: {round(float(ctl), 1)}")
+            if atl is not None:
+                ride_parts.append(f"ATL after: {round(float(atl), 1)}")
+            if tsb is not None:
+                ride_parts.append(f"TSB after: {round(float(tsb), 1)}")
+            user_note = getattr(m, "user_note", None)
+            if user_note:
+                ride_parts.append(f'Athlete feedback: "{user_note}"')
+            coach_note = getattr(m, "coach_note", None)
+            if coach_note:
+                ride_parts.append(f'Previous coach note: "{coach_note}"')
+            rides_lines.append("  - " + " | ".join(ride_parts))
+        parts.append("\n".join(rides_lines))
+    else:
+        parts.append("No ride data available.")
+
+    if training_plan:
+        upcoming = [d for d in training_plan if d.get("date", "") >= today and not d.get("completed")][:3]
+        if upcoming:
+            parts.append(
+                "Upcoming planned sessions: "
+                + ", ".join(
+                    f"{d.get('date')} {d.get('title', d.get('workoutType', '?'))}"
+                    for d in upcoming
+                )
+            )
+
+    parts.append(
+        "\nGenerate an updated loginSummary JSON that reflects the athlete's recent feedback "
+        "and gives forward-looking coaching guidance."
+    )
+    return "\n\n".join(parts)

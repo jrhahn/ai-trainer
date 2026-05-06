@@ -68,6 +68,24 @@ function persistToken(token: string | null): void {
     // sessionStorage may be unavailable in some contexts; silently ignore
   }
 }
+
+const EXPERT_MODE_KEY = 'ai_trainer_expert_mode'
+
+function readExpertMode(): boolean {
+  try {
+    return localStorage.getItem(EXPERT_MODE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function persistExpertMode(value: boolean): void {
+  try {
+    localStorage.setItem(EXPERT_MODE_KEY, value ? 'true' : 'false')
+  } catch {
+    // silently ignore
+  }
+}
 import {
   fetchChatHistory,
   fetchCoachMemory,
@@ -208,6 +226,7 @@ interface AppState {
   authToken: string | null
   isLoadingUserData: boolean
   loadingStep: number
+  isExpertMode: boolean
   userProfile: UserProfile | null
   trainingPlan: TrainingDay[]
   workoutLogs: Record<string, WorkoutFeedback>
@@ -222,6 +241,7 @@ interface AppState {
   raceEvents: RaceEvent[]
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
+  pendingFeedbackRideIds: number[]
 
   setAuthToken: (token: string | null) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
@@ -247,6 +267,9 @@ interface AppState {
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
+  addPendingFeedbackRide: (id: number) => void
+  clearPendingFeedbackRides: () => void
+  toggleExpertMode: () => void
 }
 
 const dataState = {
@@ -264,6 +287,7 @@ const dataState = {
   raceEvents: [] as RaceEvent[],
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
+  pendingFeedbackRideIds: [] as number[],
 }
 
 const initialState = {
@@ -285,8 +309,9 @@ function mergePlanWithWorkouts(
 
 export const useAppStore = create<AppState>()(
   (set, get) => ({
-    ...initialState,
-    // Hydrate authToken from sessionStorage on app load.
+    ...initialState,    // Expert mode preference — persisted in localStorage, survives tab close.
+    // NOT part of initialState so that resetAll() / logout() does not clear it.
+    isExpertMode: readExpertMode(),    // Hydrate authToken from sessionStorage on app load.
     // sessionStorage persists across same-tab page reloads (including OAuth
     // redirect round-trips) but is cleared when the tab is closed.
     // See the SESSION_TOKEN_KEY comment above for the full security rationale.
@@ -343,6 +368,19 @@ export const useAppStore = create<AppState>()(
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
+    addPendingFeedbackRide: (id) =>
+      set((state) => ({
+        pendingFeedbackRideIds: state.pendingFeedbackRideIds.includes(id)
+          ? state.pendingFeedbackRideIds
+          : [...state.pendingFeedbackRideIds, id],
+      })),
+    clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
+    toggleExpertMode: () =>
+      set((state) => {
+        const next = !state.isExpertMode
+        persistExpertMode(next)
+        return { isExpertMode: next }
+      }),
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
       if (!token) return
