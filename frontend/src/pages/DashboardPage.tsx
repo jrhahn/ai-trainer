@@ -29,6 +29,64 @@ import { fetchCoachMemory, fetchMetricsHistory, fetchRideMetricsHistory } from '
 
 const REFRESH_INTERVAL_MS = 60 * 1000
 
+type TrainingSummaryBullet = {
+  label?: string
+  text: string
+}
+
+function cleanSummarySentence(sentence: string): string {
+  return sentence
+    .replace(/^\(?\d+\)?[.)]?\s*/, '')
+    .replace(/^(what you did|ftp & fitness insights|ftp and fitness insights|plan alignment|conclusions):\s*/i, '')
+    .trim()
+}
+
+function parseSummaryBullet(text: string): TrainingSummaryBullet {
+  const cleaned = cleanSummarySentence(text.replace(/^[-*]\s+/, ''))
+  const labelMatch = cleaned.match(/^([^:]{2,36}):\s+(.+)$/)
+  if (!labelMatch) return { text: cleaned }
+  return {
+    label: labelMatch[1].trim(),
+    text: labelMatch[2].trim(),
+  }
+}
+
+function splitTrainingSummary(summary?: string): {
+  intro: string | null
+  bullets: TrainingSummaryBullet[]
+} {
+  const normalized = summary?.trim()
+  if (!normalized) return { intro: null, bullets: [] }
+
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line))
+  if (bulletLines.length > 0) {
+    const firstBulletIndex = lines.findIndex((line) => /^[-*]\s+/.test(line))
+    return {
+      intro: firstBulletIndex > 0 ? lines.slice(0, firstBulletIndex).join(' ') : null,
+      bullets: bulletLines.map(parseSummaryBullet).filter((bullet) => bullet.text),
+    }
+  }
+
+  const sentences = normalized
+    .replace(/\s+/g, ' ')
+    .match(/.*?[.!?](?=\s+[A-Z(]|\s+\d+[.)]|\s*$)|.+$/g)
+    ?.map(cleanSummarySentence)
+    .filter(Boolean) ?? [normalized]
+
+  if (sentences.length <= 1) {
+    return { intro: null, bullets: sentences.map((text) => ({ text })) }
+  }
+
+  return {
+    intro: sentences[0],
+    bullets: sentences.slice(1).map((text) => ({ text })),
+  }
+}
+
 export default function DashboardPage() {
   const {
     userProfile,
@@ -116,6 +174,7 @@ export default function DashboardPage() {
   const recentlyFeedbackedRides = rideMetricsHistory
     .filter((r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote)
     .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+  const trainingSummary = splitTrainingSummary(riderAssessment?.loginSummary)
 
   const next2Days = trainingPlan.filter((d) => d.date > today).slice(0, 2)
   const hasStalePlan =
@@ -412,10 +471,30 @@ export default function DashboardPage() {
                     Updating summary with recent feedback…
                   </div>
                 )}
-                {riderAssessment?.loginSummary && (
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {riderAssessment.loginSummary}
+                {trainingSummary.intro && (
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {trainingSummary.intro}
                   </p>
+                )}
+                {trainingSummary.bullets.length > 0 && (
+                  <ul className="space-y-2">
+                    {trainingSummary.bullets.map((point, index) => (
+                      <li
+                        key={`${point.label ?? ''}-${point.text}-${index}`}
+                        className="flex gap-2 text-sm leading-relaxed"
+                      >
+                        <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
+                        <span className="text-gray-700">
+                          {point.label && (
+                            <>
+                              <span className="font-semibold text-gray-900">{point.label}:</span>{' '}
+                            </>
+                          )}
+                          {point.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
                 {recentlyFeedbackedRides.length > 0 && (
                   <div className="border-t border-gray-100 pt-3 space-y-2">
@@ -426,15 +505,19 @@ export default function DashboardPage() {
                       {recentlyFeedbackedRides.map((ride) => (
                         <div
                           key={ride.stravaActivityId}
-                          className="flex flex-col gap-0.5 text-xs text-gray-600 sm:flex-row sm:items-start sm:gap-2"
+                          className="flex flex-col gap-1 text-xs text-gray-600 sm:flex-row sm:items-start sm:gap-2"
                         >
-                          <span className="font-medium text-gray-700 sm:w-24 sm:flex-shrink-0">
-                            {format(new Date(ride.activityDate), 'EEE MMM d')}
+                          <span className="flex flex-wrap gap-1 sm:w-32 sm:flex-shrink-0">
+                            <span className="rounded-md bg-gray-50 px-1.5 py-0.5 font-medium text-gray-700 ring-1 ring-inset ring-gray-100">
+                              {format(new Date(ride.activityDate), 'EEE MMM d')}
+                            </span>
+                            <span className="rounded-md bg-gray-50 px-1.5 py-0.5 text-gray-500 ring-1 ring-inset ring-gray-100">
+                              {ride.sportType}
+                            </span>
                           </span>
-                          <span className="text-gray-500">
-                            {ride.sportType}
-                            {ride.userNote ? ` · ${ride.userNote}` : ''}
-                          </span>
+                          {ride.userNote && (
+                            <span className="text-gray-600 sm:pt-0.5">{ride.userNote}</span>
+                          )}
                         </div>
                       ))}
                     </div>
