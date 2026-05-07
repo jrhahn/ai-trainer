@@ -14,12 +14,10 @@ import FitFileUpload from '../components/FitFileUpload'
 import StravaConnect from '../components/StravaConnect'
 import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import TrainingCalendar from '../components/TrainingCalendar'
-import StravaImportSummary from '../components/StravaImportSummary'
 import RideFeedbackForm from '../components/RideFeedbackForm'
 import TodayCard from '../components/TodayCard'
 import TrainingStatusBadge from '../components/TrainingStatusBadge'
 import { useStravaSync } from '../hooks/useStravaSync'
-import { useImportProgress } from '../hooks/useImportProgress'
 import { useFeedbackDebounce } from '../hooks/useFeedbackDebounce'
 import {
   adaptTrainingPlan,
@@ -81,7 +79,6 @@ export default function DashboardPage() {
   const [planUpdateLoading, setPlanUpdateLoading] = useState(false)
   const [eventError, setEventError] = useState<string | null>(null)
 
-  const importProgress = useImportProgress()
   const { stravaActivities, analysisStatus, analysisError, newRidesCount } = useStravaSync()
 
   const greeting = () => {
@@ -92,13 +89,6 @@ export default function DashboardPage() {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const analyzedRides = Math.min(importProgress.processed, importProgress.total)
-  const hasRideProgress =
-    !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
-  const progressPct = hasRideProgress
-    ? Math.round((analyzedRides / importProgress.total) * 100)
-    : 0
-
   const FEEDBACK_WINDOW_DAYS = 7
   const sevenDaysAgo = format(
     new Date(Date.now() - FEEDBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000),
@@ -293,34 +283,6 @@ export default function DashboardPage() {
 
       {/* Training status badge — only shown after 7 days of data */}
       <TrainingStatusBadge metricsHistory={metricsHistory} />
-
-      {/* Strava ride analysis progress */}
-      {hasRideProgress && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            Strava Ride Analysis
-          </p>
-          <div className="w-full bg-amber-100 rounded-full h-2.5">
-            <div
-              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <p className="text-sm text-amber-900 mt-2">
-            {importProgress.status === 'done'
-              ? `${importProgress.imported} imported, ${importProgress.skipped} skipped`
-              : `Processed activities: ${analyzedRides} / ${importProgress.total}`}
-          </p>
-          {importProgress.status === 'done' && (
-            <div className="mt-3">
-              <StravaImportSummary progress={importProgress} compact />
-            </div>
-          )}
-          {importProgress.status === 'error' && importProgress.error && (
-            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
-          )}
-        </div>
-      )}
 
       {/* Ambiguous same-day ride matches */}
       {ambiguousRideGroups.length > 0 && (

@@ -584,7 +584,7 @@ export default function SettingsPage() {
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-700 mb-2">Ride history import</p>
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Ride Analysis</p>
             {importProgress.status === 'running' && (() => {
               const pct = importProgress.total > 0
                 ? Math.round((importProgress.processed / importProgress.total) * 100)
@@ -599,14 +599,19 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-gray-500">
                     {pct !== null
-                      ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%)`
+                      ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%) · ${importProgress.imported} imported`
                       : 'Fetching ride list…'}
                   </p>
                 </>
               )
             })()}
             {importProgress.status === 'done' && (
-              <StravaImportSummary progress={importProgress} compact />
+              <div className="space-y-3">
+                <p className="text-sm text-gray-700">
+                  {importProgress.imported} imported, {importProgress.skipped} skipped
+                </p>
+                <StravaImportSummary progress={importProgress} compact />
+              </div>
             )}
             {importProgress.status === 'error' && (
               <p className="text-xs text-red-600">Import failed: {importProgress.error || 'unknown error'}</p>

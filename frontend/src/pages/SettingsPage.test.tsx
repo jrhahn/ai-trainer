@@ -303,6 +303,24 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('shows Strava ride analysis progress inside the Strava settings card while running', () => {
+    mockImportProgress.mockReturnValue({
+      jobId: 'job-1',
+      status: 'running',
+      total: 10,
+      processed: 4,
+      imported: 2,
+      skipped: 0,
+      failedActivities: [],
+      error: '',
+    })
+
+    setup()
+
+    expect(screen.getByText('Strava Ride Analysis')).toBeInTheDocument()
+    expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
+  })
+
   it('shows the completed Strava import report with skipped activities', () => {
     mockImportProgress.mockReturnValue({
       jobId: 'job-1',
@@ -324,6 +342,8 @@ describe('SettingsPage', () => {
 
     setup()
 
+    expect(screen.getByText('Strava Ride Analysis')).toBeInTheDocument()
+    expect(screen.getByText('1 imported, 1 skipped')).toBeInTheDocument()
     expect(screen.getByText('Imported')).toBeInTheDocument()
     expect(screen.getByText('Skipped')).toBeInTheDocument()
     expect(screen.getByText(/Broken ride/)).toBeInTheDocument()

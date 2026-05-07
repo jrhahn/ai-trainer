@@ -328,6 +328,34 @@ async def test_import_progress_reads_persisted_final_report(client, auth_headers
 
 
 @pytest.mark.asyncio
+async def test_import_background_updates_imported_counter_while_running(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    recorded_updates: list[dict] = []
+    original_update = strava_router._update_import_job
+
+    async def _recording_update(user_id_: str, job_id: str | None, **updates):
+        recorded_updates.append(updates.copy())
+        await original_update(user_id_, job_id, **updates)
+
+    monkeypatch.setattr(strava_router, "_update_import_job", _recording_update)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    assert any(
+        update.get("status") == "running" and update.get("imported", 0) > 0
+        for update in recorded_updates
+    )
+
+
+@pytest.mark.asyncio
 async def test_import_background_records_fatal_list_failure(auth_headers, monkeypatch):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", FatalImportHttpClient)
