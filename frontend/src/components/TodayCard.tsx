@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import type { TrainingDay, AthleteMetricSnapshot } from '../store/useAppStore'
+import type { TrainingDay } from '../store/useAppStore'
 
 const WORKOUT_COLORS: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-500',
@@ -15,24 +15,12 @@ const WORKOUT_COLORS: Record<string, string> = {
 interface Props {
   today: string
   trainingPlan: TrainingDay[]
-  metricsHistory: AthleteMetricSnapshot[]
 }
 
-export default function TodayCard({ today, trainingPlan, metricsHistory }: Props) {
+export default function TodayCard({ today, trainingPlan }: Props) {
   const todayWorkout = trainingPlan.find((d) => d.date === today)
-  const latestTSB = metricsHistory.length > 0 ? metricsHistory[metricsHistory.length - 1].tsb : undefined
 
   if (!todayWorkout || todayWorkout.workoutType === 'rest') {
-    let tsbText: string | null = null
-    if (latestTSB !== undefined) {
-      if (latestTSB > 5) {
-        tsbText = `Your form is good (TSB +${Math.round(latestTSB)}) — legs should feel fresh.`
-      } else if (latestTSB < -10) {
-        tsbText = `You're carrying some fatigue (TSB ${Math.round(latestTSB)}) — rest is well timed.`
-      } else {
-        tsbText = `Form is neutral today (TSB ${Math.round(latestTSB)}).`
-      }
-    }
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-1">
@@ -44,7 +32,6 @@ export default function TodayCard({ today, trainingPlan, metricsHistory }: Props
           )}
         </div>
         <p className="text-lg font-semibold text-gray-800 mt-1">Recovery &amp; rest</p>
-        {tsbText && <p className="text-sm text-gray-500 mt-1">{tsbText}</p>}
         {!todayWorkout && (
           <p className="text-sm text-gray-400 mt-1">No workout scheduled for today.</p>
         )}

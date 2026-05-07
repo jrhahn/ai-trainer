@@ -16,7 +16,6 @@ import FitnessMetricsCard from '../components/FitnessMetricsCard'
 import TrainingCalendar from '../components/TrainingCalendar'
 import RideFeedbackForm from '../components/RideFeedbackForm'
 import TodayCard from '../components/TodayCard'
-import TrainingStatusBadge from '../components/TrainingStatusBadge'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useFeedbackDebounce } from '../hooks/useFeedbackDebounce'
 import {
@@ -29,6 +28,130 @@ import {
 import { fetchCoachMemory, fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
 
 const REFRESH_INTERVAL_MS = 60 * 1000
+
+type TrainingSummaryBullet = {
+  label?: string
+  text: string
+}
+
+type ParsedRideNote = {
+  rpe?: string
+  legs?: string
+  intent?: string
+  comment?: string
+}
+
+function cleanSummarySentence(sentence: string): string {
+  return sentence
+    .replace(/^\(?\d+\)?[.)]?\s*/, '')
+    .replace(/^(what you did|ftp & fitness insights|ftp and fitness insights|plan alignment|conclusions):\s*/i, '')
+    .trim()
+}
+
+function capitalizeText(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
+  if (!normalized) return ''
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+function formatActivityType(sportType: string): string {
+  const withoutRideSuffix = sportType.replace(/Ride$/i, '')
+  return capitalizeText(
+    withoutRideSuffix
+      .replace(/[_-]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2'),
+  )
+}
+
+function formatNoteLabel(value: string): string {
+  return capitalizeText(value)
+}
+
+function parseRideNote(note?: string | null): ParsedRideNote {
+  if (!note) return {}
+  const parsed: ParsedRideNote = {}
+  const comments: string[] = []
+
+  note
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const rpeMatch = part.match(/^RPE\s*:?[\s]*(\d+\s*\/\s*10|\d+)/i)
+      if (rpeMatch) {
+        parsed.rpe = rpeMatch[1].replace(/\s+/g, '')
+        return
+      }
+
+      const keyValueMatch = part.match(/^([a-z][a-z\s]*):\s*(.+)$/i)
+      if (keyValueMatch) {
+        const key = keyValueMatch[1].trim().toLowerCase()
+        const value = formatNoteLabel(keyValueMatch[2])
+        if (key === 'legs') {
+          parsed.legs = value
+          return
+        }
+        if (key === 'intent') {
+          parsed.intent = value
+          return
+        }
+      }
+
+      comments.push(part)
+    })
+
+  if (comments.length > 0) {
+    parsed.comment = comments.join(' ')
+  }
+
+  return parsed
+}
+
+function parseSummaryBullet(text: string): TrainingSummaryBullet {
+  const cleaned = cleanSummarySentence(text.replace(/^[-*]\s+/, ''))
+  const labelMatch = cleaned.match(/^([^:]{2,36}):\s+(.+)$/)
+  if (!labelMatch) return { text: cleaned }
+  return {
+    label: labelMatch[1].trim(),
+    text: labelMatch[2].trim(),
+  }
+}
+
+function splitTrainingSummary(summary?: string): {
+  intro: string | null
+  bullets: TrainingSummaryBullet[]
+} {
+  const normalized = summary?.trim()
+  if (!normalized) return { intro: null, bullets: [] }
+
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line))
+  if (bulletLines.length > 0) {
+    const firstBulletIndex = lines.findIndex((line) => /^[-*]\s+/.test(line))
+    return {
+      intro: firstBulletIndex > 0 ? lines.slice(0, firstBulletIndex).join(' ') : null,
+      bullets: bulletLines.map(parseSummaryBullet).filter((bullet) => bullet.text),
+    }
+  }
+
+  const sentences = normalized
+    .replace(/\s+/g, ' ')
+    .match(/.*?[.!?](?=\s+[A-Z(]|\s+\d+[.)]|\s*$)|.+$/g)
+    ?.map(cleanSummarySentence)
+    .filter(Boolean) ?? [normalized]
+
+  if (sentences.length <= 1) {
+    return { intro: null, bullets: sentences.map((text) => ({ text })) }
+  }
+
+  return {
+    intro: sentences[0],
+    bullets: sentences.slice(1).map((text) => ({ text })),
+  }
+}
 
 export default function DashboardPage() {
   const {
@@ -117,6 +240,7 @@ export default function DashboardPage() {
   const recentlyFeedbackedRides = rideMetricsHistory
     .filter((r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote)
     .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+  const trainingSummary = splitTrainingSummary(riderAssessment?.loginSummary)
 
   const next2Days = trainingPlan.filter((d) => d.date > today).slice(0, 2)
   const hasStalePlan =
@@ -279,10 +403,21 @@ export default function DashboardPage() {
       </div>
 
       {/* Today's workout or rest day */}
-      <TodayCard today={today} trainingPlan={trainingPlan} metricsHistory={metricsHistory} />
+      <TodayCard today={today} trainingPlan={trainingPlan} />
 
-      {/* Training status badge — only shown after 7 days of data */}
-      <TrainingStatusBadge metricsHistory={metricsHistory} />
+      {/* Upcoming workouts — next 2 days beyond today */}
+      {next2Days.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Coming up
+          </h2>
+          <div className="space-y-1.5">
+            {next2Days.map((day) => (
+              <WorkoutCard key={day.date} day={day} compact />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Ambiguous same-day ride matches */}
       {ambiguousRideGroups.length > 0 && (
@@ -386,57 +521,91 @@ export default function DashboardPage() {
       )}
 
       {/* Coach insight */}
-      {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending || recentlyFeedbackedRides.length > 0) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <>
-              {summaryUpdatePending && (
-                <div className="flex items-center gap-1.5 text-xs text-blue-500">
-                  <Loader2 size={12} className="animate-spin" />
-                  Updating summary with recent feedback…
-                </div>
-              )}
-              {riderAssessment?.loginSummary && (
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {riderAssessment.loginSummary}
-                </p>
-              )}
-              {recentlyFeedbackedRides.length > 0 && (
-                <div className="border-t border-blue-100 pt-2 space-y-1">
-                  <p className="text-xs font-medium text-blue-500">Your recent notes</p>
-                  {recentlyFeedbackedRides.map((ride) => (
-                    <div key={ride.stravaActivityId} className="text-xs text-gray-600">
-                      <span className="font-medium text-gray-700">
-                        {format(new Date(ride.activityDate), 'EEE MMM d')}
-                      </span>
-                      {' · '}{ride.sportType}
-                      {ride.userNote && (
-                        <span className="text-gray-500"> — {ride.userNote}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+      {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending) && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Your recent training
+          </h2>
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 space-y-3">
+            {summaryLoading ? (
+              <p className="text-sm text-gray-400 italic">Preparing your training summary…</p>
+            ) : (
+              <>
+                {summaryUpdatePending && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Loader2 size={12} className="animate-spin" />
+                    Updating summary with recent feedback…
+                  </div>
+                )}
+                {trainingSummary.intro && (
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {trainingSummary.intro}
+                  </p>
+                )}
+                {trainingSummary.bullets.length > 0 && (
+                  <ul className="space-y-2">
+                    {trainingSummary.bullets.map((point, index) => (
+                      <li
+                        key={`${point.label ?? ''}-${point.text}-${index}`}
+                        className="flex gap-2 text-sm leading-relaxed"
+                      >
+                        <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
+                        <span className="text-gray-700">
+                          {point.label && (
+                            <>
+                              <span className="font-semibold text-gray-900">{point.label}:</span>{' '}
+                            </>
+                          )}
+                          {point.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Upcoming workouts — next 2 days beyond today */}
-      {next2Days.length > 0 && (
+      {/* Recent athlete notes */}
+      {recentlyFeedbackedRides.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Coming up
+            Your recent notes
           </h2>
-          <div className="space-y-1.5">
-            {next2Days.map((day) => (
-              <WorkoutCard key={day.date} day={day} compact />
-            ))}
+          <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+            <table className="w-full min-w-[42rem] table-fixed text-left text-xs">
+              <thead className="bg-gray-50 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                <tr>
+                  <th className="w-24 px-3 py-2">Date</th>
+                  <th className="w-28 px-3 py-2">Activity</th>
+                  <th className="w-16 px-3 py-2">RPE</th>
+                  <th className="w-32 px-3 py-2">Intent</th>
+                  <th className="w-24 px-3 py-2">Legs</th>
+                  <th className="px-3 py-2">Comment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {recentlyFeedbackedRides.map((ride) => {
+                  const note = parseRideNote(ride.userNote)
+                  return (
+                    <tr key={ride.stravaActivityId} className="text-gray-600">
+                      <td className="px-3 py-2 font-medium text-gray-700 tabular-nums">
+                        {format(new Date(ride.activityDate), 'MMM d')}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">
+                        {formatActivityType(ride.sportType)}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{note.rpe ?? '-'}</td>
+                      <td className="px-3 py-2">{note.intent ?? '-'}</td>
+                      <td className="px-3 py-2">{note.legs ?? '-'}</td>
+                      <td className="px-3 py-2 text-gray-700">{note.comment ?? '-'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
