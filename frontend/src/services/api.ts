@@ -23,6 +23,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    credentials: init.credentials ?? 'include',
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -39,8 +40,13 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     let message = 'Request failed'
     let parseFailReason: string | undefined
     try {
-      const data = await response.json() as { detail?: string }
-      if (data.detail) message = data.detail
+      const data = await response.json() as { detail?: string | Array<{ msg?: string }> }
+      if (typeof data.detail === 'string') {
+        message = data.detail
+      } else if (Array.isArray(data.detail)) {
+        message = data.detail.find((item) => item.msg)?.msg ?? message
+        message = message.replace(/^Value error,\s*/i, '')
+      }
     } catch (e) {
       parseFailReason = e instanceof Error ? e.message : 'non-JSON error body'
     }

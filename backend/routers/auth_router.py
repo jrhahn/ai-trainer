@@ -163,30 +163,10 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse:
     if auth.AUTHELIA_AUTH_ENABLED:
-        if not auth.AUTHELIA_USERS_DB_PATH:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Authentication service is not configured.",
-            )
-
-        if not _verify_authelia_credentials(body.email, body.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password.",
-            )
-
-        # Find or auto-create the app user for this Authelia account
-        user = await crud.get_user_by_email_simple(db, body.email)
-        if user is None:
-            user = await crud.create_user(
-                db,
-                email=body.email,
-                name=body.email.split("@")[0],
-                hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
-            )
-
-        token = auth.create_access_token(user.id)
-        return schemas.TokenResponse(access_token=token)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password login is disabled. Sign in through Authelia to complete two-factor authentication.",
+        )
 
     user = await crud.get_user_by_email_simple(db, body.email)
     if user is None or not auth.verify_password(body.password, user.hashed_password):

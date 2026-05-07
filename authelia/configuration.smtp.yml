@@ -75,5 +75,11 @@ storage:
     path: /data/db.sqlite3
 
 notifier:
-  filesystem:
-    filename: /data/notification.txt
+  smtp:
+    address: submission://smtp.example.com:587
+    username: smtp-user
+    password: replace-in-env
+    sender: Train Like a Pro <no-reply@trainlikea.pro>
+    identifier: trainlikea.pro
+    subject: "[Train Like a Pro] {title}"
+    startup_check_address: admin@trainlikea.pro

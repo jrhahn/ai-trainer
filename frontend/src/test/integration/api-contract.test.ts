@@ -54,28 +54,28 @@ function uniqueEmail(label: string): string {
 
 describe('auth service ↔ backend', () => {
   it('register returns a JWT string for a new user', async () => {
-    const token = await register('Test Rider', uniqueEmail('reg'), 'password1')
+    const token = await register('Test Rider', uniqueEmail('reg'), 'Str0ng!Pass')
     expect(typeof token).toBe('string')
     expect(token!.length).toBeGreaterThan(10)
   })
 
   it('login returns a JWT string for a registered user', async () => {
     const email = uniqueEmail('login')
-    await register('Login Rider', email, 'password1')
-    const token = await login(email, 'password1')
+    await register('Login Rider', email, 'Str0ng!Pass')
+    const token = await login(email, 'Str0ng!Pass')
     expect(typeof token).toBe('string')
     expect(token.length).toBeGreaterThan(10)
   })
 
   it('register rejects a duplicate email', async () => {
     const email = uniqueEmail('dup')
-    await register('First', email, 'password1')
-    await expect(register('Second', email, 'password1')).rejects.toThrow()
+    await register('First', email, 'Str0ng!Pass')
+    await expect(register('Second', email, 'Str0ng!Pass')).rejects.toThrow()
   })
 
   it('login rejects wrong credentials', async () => {
     const email = uniqueEmail('wrongpw')
-    await register('WrongPw Rider', email, 'password1')
+    await register('WrongPw Rider', email, 'Str0ng!Pass')
     await expect(login(email, 'wrongpassword')).rejects.toThrow()
   })
 })
@@ -89,7 +89,7 @@ describe('user profile service ↔ backend', () => {
 
   beforeAll(async () => {
     const email = uniqueEmail('profile')
-    token = (await register('Alice Rider', email, 'password1'))!
+    token = (await register('Alice Rider', email, 'Str0ng!Pass'))!
   })
 
   it('fetchCurrentUser returns the correct initial shape', async () => {
@@ -132,7 +132,7 @@ describe('user profile service ↔ backend', () => {
 
   it('deleteCurrentUser removes the account (subsequent request fails)', async () => {
     const email = uniqueEmail('deleteme')
-    const delToken = (await register('Del Rider', email, 'password1'))!
+    const delToken = (await register('Del Rider', email, 'Str0ng!Pass'))!
     await deleteCurrentUser(delToken)
     await expect(fetchCurrentUser(delToken)).rejects.toThrow()
   })
@@ -147,7 +147,7 @@ describe('training plan service ↔ backend', () => {
 
   beforeAll(async () => {
     const email = uniqueEmail('plan')
-    token = (await register('Plan Rider', email, 'password1'))!
+    token = (await register('Plan Rider', email, 'Str0ng!Pass'))!
   })
 
   it('fetchTrainingPlan returns an empty array for a new user', async () => {
@@ -210,7 +210,7 @@ describe('workout log service ↔ backend', () => {
 
   beforeAll(async () => {
     const email = uniqueEmail('workout')
-    token = (await register('Workout Rider', email, 'password1'))!
+    token = (await register('Workout Rider', email, 'Str0ng!Pass'))!
   })
 
   it('fetchWorkoutLogs returns empty object for a new user', async () => {
@@ -266,7 +266,7 @@ describe('chat history service ↔ backend', () => {
 
   beforeAll(async () => {
     const email = uniqueEmail('chat')
-    token = (await register('Chat Rider', email, 'password1'))!
+    token = (await register('Chat Rider', email, 'Str0ng!Pass'))!
   })
 
   it('fetchChatHistory returns empty array for a new user', async () => {
@@ -313,7 +313,7 @@ describe('coach memory service ↔ backend', () => {
 
   beforeAll(async () => {
     const email = uniqueEmail('memory')
-    token = (await register('Memory Rider', email, 'password1'))!
+    token = (await register('Memory Rider', email, 'Str0ng!Pass'))!
   })
 
   it('fetchCoachMemory returns empty string for a new user', async () => {

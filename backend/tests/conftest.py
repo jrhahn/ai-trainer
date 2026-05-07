@@ -59,7 +59,7 @@ async def auth_headers(client: AsyncClient):
     payload = {
         "name": "Test Rider",
         "email": "rider@example.com",
-        "password": "hunter2xx",
+        "password": "Str0ng!Pass",
     }
     response = await client.post("/api/v1/auth/register", json=payload)
     token = response.json()["access_token"]

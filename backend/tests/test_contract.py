@@ -71,7 +71,7 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
     # 1. Register
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Alice Rider", "email": "alice@example.com", "password": "hunter2xx"},
+        json={"name": "Alice Rider", "email": "alice@example.com", "password": "Str0ng!Pass"},
     )
     assert reg_resp.status_code == 200
     token = reg_resp.json()["access_token"]
@@ -156,7 +156,7 @@ async def test_user_response_camelcase_shape(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Bob", "email": "bob@example.com", "password": "password1"},
+        json={"name": "Bob", "email": "bob@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -202,7 +202,7 @@ async def test_update_profile_camelcase_fields(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Carol", "email": "carol@example.com", "password": "password1"},
+        json={"name": "Carol", "email": "carol@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -256,7 +256,7 @@ async def test_strava_activities_snake_case_fields_accepted(client, mock_ai_serv
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Dan", "email": "dan@example.com", "password": "password1"},
+        json={"name": "Dan", "email": "dan@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -295,7 +295,7 @@ async def test_strava_activities_camelcase_fields_also_accepted(client, mock_ai_
     """The backend should accept camelCase aliases too (used in the existing test suite)."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Eve", "email": "eve@example.com", "password": "password1"},
+        json={"name": "Eve", "email": "eve@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -338,7 +338,7 @@ async def test_plan_response_shape(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Frank", "email": "frank@example.com", "password": "password1"},
+        json={"name": "Frank", "email": "frank@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -390,7 +390,7 @@ async def test_workout_log_contract(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Grace", "email": "grace@example.com", "password": "password1"},
+        json={"name": "Grace", "email": "grace@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -434,7 +434,7 @@ async def test_race_events_contract(client):
     """Race event endpoints use the camelCase shape expected by the expert calendar."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Racer", "email": "racer@example.com", "password": "password1"},
+        json={"name": "Racer", "email": "racer@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -492,7 +492,7 @@ async def test_race_events_contract(client):
 async def test_race_event_feedback_contract(client, mock_ai_service):
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Feedback", "email": "feedback@example.com", "password": "password1"},
+        json={"name": "Feedback", "email": "feedback@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -526,7 +526,7 @@ async def test_chat_history_contract(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Henry", "email": "henry@example.com", "password": "password1"},
+        json={"name": "Henry", "email": "henry@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -566,7 +566,7 @@ async def test_coach_memory_contract(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Iris", "email": "iris@example.com", "password": "password1"},
+        json={"name": "Iris", "email": "iris@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -602,7 +602,7 @@ async def test_auth_token_response_shape(client):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Jake", "email": "jake@example.com", "password": "password1"},
+        json={"name": "Jake", "email": "jake@example.com", "password": "Str0ng!Pass"},
     )
     assert reg_resp.status_code == 200
     token_data = reg_resp.json()
@@ -614,7 +614,7 @@ async def test_auth_token_response_shape(client):
 
     login_resp = await client.post(
         "/api/v1/auth/login",
-        json={"email": "jake@example.com", "password": "password1"},
+        json={"email": "jake@example.com", "password": "Str0ng!Pass"},
     )
     assert login_resp.status_code == 200
     login_data = login_resp.json()
@@ -634,7 +634,7 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Kim", "email": "kim@example.com", "password": "password1"},
+        json={"name": "Kim", "email": "kim@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -687,7 +687,7 @@ async def test_metrics_history_empty_for_new_user(client):
     """GET /users/me/metrics-history returns { snapshots: [] } for a new user."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Leo", "email": "leo@example.com", "password": "password1"},
+        json={"name": "Leo", "email": "leo@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -704,7 +704,7 @@ async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_ser
     """analyse-activities should create a per-ride metric row in /ride-metrics-history."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Mia", "email": "mia@example.com", "password": "password1"},
+        json={"name": "Mia", "email": "mia@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -747,7 +747,7 @@ async def test_fit_upload_rejects_non_fit_file(client):
     """POST /users/me/upload-fit must reject non-.fit files with 422."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Nina", "email": "nina@example.com", "password": "password1"},
+        json={"name": "Nina", "email": "nina@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -765,7 +765,7 @@ async def test_fit_upload_rejects_invalid_fit_data(client):
     """POST /users/me/upload-fit must return 422 for a .fit file with invalid data."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Oscar", "email": "oscar@example.com", "password": "password1"},
+        json={"name": "Oscar", "email": "oscar@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -819,7 +819,7 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
 
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Pat", "email": "pat@example.com", "password": "password1"},
+        json={"name": "Pat", "email": "pat@example.com", "password": "Str0ng!Pass"},
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

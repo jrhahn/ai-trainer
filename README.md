@@ -35,6 +35,10 @@ The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
 Before first deploy, replace the placeholder Authelia user in
 `authelia/users_database.yml` with your real admin account.
+Authelia enforces TOTP for protected app/API routes. Local Compose keeps
+Authelia notifications in `/data/notification.txt`; production deployments
+should provide SMTP settings and include `compose.smtp.yml` so users can verify
+TOTP enrollment by email.
 
 ### Backend (Strava OAuth)
 

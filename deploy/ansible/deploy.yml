@@ -96,8 +96,7 @@
     - name: Build and start Docker services
       community.docker.docker_compose_v2:
         project_src: "{{ app_dir }}"
-        files:
-          - compose.yml
+        files: "{{ ['compose.yml'] + (['compose.smtp.yml'] if (authelia_notifier_smtp_address | default('')) else []) }}"
         build: always
         remove_orphans: true
         state: present

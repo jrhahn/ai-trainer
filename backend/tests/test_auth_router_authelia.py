@@ -36,7 +36,7 @@ def test_create_authelia_user_adds_entry(monkeypatch):
         _make_users_db(db_path)
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
-        _create_authelia_user("alice@example.com", "Alice", "password123")
+        _create_authelia_user("alice@example.com", "Alice", "Str0ng!Pass")
 
         with open(db_path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
@@ -47,13 +47,13 @@ def test_create_authelia_user_adds_entry(monkeypatch):
         assert entry["email"] == "alice@example.com"
         assert entry["displayname"] == "Alice"
         assert entry["disabled"] is False
-        assert auth.verify_password("password123", entry["password"])
+        assert auth.verify_password("Str0ng!Pass", entry["password"])
 
 
 def test_create_authelia_user_raises_on_missing_db(monkeypatch):
     monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/path/users_database.yml")
     with pytest.raises(RuntimeError, match="not found"):
-        _create_authelia_user("x@example.com", "X", "password1")
+        _create_authelia_user("x@example.com", "X", "Str0ng!Pass")
 
 
 def test_create_authelia_user_raises_on_duplicate_email(monkeypatch):
@@ -81,7 +81,7 @@ def test_create_authelia_user_overwrites_atomically(monkeypatch):
         _make_users_db(db_path)
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
-        _create_authelia_user("a@example.com", "A", "password1")
+        _create_authelia_user("a@example.com", "A", "Str0ng!Pass")
         _create_authelia_user("b@example.com", "B", "password2")
 
         with open(db_path, encoding="utf-8") as fh:
@@ -181,7 +181,7 @@ async def test_authelia_register_creates_user_and_returns_204(client, monkeypatc
             json={
                 "name": "Carol",
                 "email": "carol@example.com",
-                "password": "password123",
+                "password": "Str0ng!Pass",
             },
         )
         assert response.status_code == 204
@@ -198,7 +198,7 @@ async def test_authelia_register_duplicate_returns_409(client, monkeypatch):
         payload = {
             "name": "Dave",
             "email": "dave@example.com",
-            "password": "password123",
+            "password": "Str0ng!Pass",
         }
         # Register once
         await client.post("/api/v1/auth/register", json=payload)
@@ -217,15 +217,15 @@ async def test_authelia_register_missing_db_returns_503(client, monkeypatch):
         json={
             "name": "Eve",
             "email": "eve@example.com",
-            "password": "password123",
+            "password": "Str0ng!Pass",
         },
     )
     assert response.status_code == 503
 
 
 @pytest.mark.asyncio
-async def test_authelia_login_valid_credentials(client, monkeypatch):
-    """Login should succeed when credentials match the users_database.yml."""
+async def test_authelia_login_is_disabled(client, monkeypatch):
+    """Authelia mode must not mint app tokens from password-only login."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
@@ -238,68 +238,17 @@ async def test_authelia_login_valid_credentials(client, monkeypatch):
             json={
                 "name": "Frank",
                 "email": "frank@example.com",
-                "password": "password123",
+                "password": "Str0ng!Pass",
             },
         )
 
         # Login via authelia mode (reads YAML directly)
         response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "frank@example.com", "password": "password123"},
+            json={"email": "frank@example.com", "password": "Str0ng!Pass"},
         )
-        assert response.status_code == 200
-        assert "access_token" in response.json()
-
-
-@pytest.mark.asyncio
-async def test_authelia_login_wrong_password_returns_401(client, monkeypatch):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
-
-        await client.post(
-            "/api/v1/auth/register",
-            json={"name": "Grace", "email": "grace@example.com", "password": "rightpass1"},
-        )
-
-        response = await client.post(
-            "/api/v1/auth/login",
-            json={"email": "grace@example.com", "password": "wrongpass"},
-        )
-        assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
-    """Authelia login for a user not in the app DB should auto-create the user."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "users_database.yml"
-        hashed = auth.hash_password("mypassword")
-        _make_users_db(db_path, users={
-            "henry@example.com": {
-                "disabled": False,
-                "displayname": "Henry",
-                "email": "henry@example.com",
-                "password": hashed,
-                "groups": [],
-            }
-        })
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
-
-        # Login without prior registration in app DB
-        response = await client.post(
-            "/api/v1/auth/login",
-            json={"email": "henry@example.com", "password": "mypassword"},
-        )
-        assert response.status_code == 200
-        token = response.json()["access_token"]
-
-        # Should be able to access protected endpoints with this token
-        me = await client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
-        assert me.status_code == 200
+        assert response.status_code == 403
+        assert "two-factor" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
