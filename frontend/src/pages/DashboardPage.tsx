@@ -17,7 +17,6 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import StravaImportSummary from '../components/StravaImportSummary'
 import RideFeedbackForm from '../components/RideFeedbackForm'
 import TodayCard from '../components/TodayCard'
-import TrainingStatusBadge from '../components/TrainingStatusBadge'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { useFeedbackDebounce } from '../hooks/useFeedbackDebounce'
@@ -289,10 +288,21 @@ export default function DashboardPage() {
       </div>
 
       {/* Today's workout or rest day */}
-      <TodayCard today={today} trainingPlan={trainingPlan} metricsHistory={metricsHistory} />
+      <TodayCard today={today} trainingPlan={trainingPlan} />
 
-      {/* Training status badge — only shown after 7 days of data */}
-      <TrainingStatusBadge metricsHistory={metricsHistory} />
+      {/* Upcoming workouts — next 2 days beyond today */}
+      {next2Days.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Coming up
+          </h2>
+          <div className="space-y-1.5">
+            {next2Days.map((day) => (
+              <WorkoutCard key={day.date} day={day} compact />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Strava ride analysis progress */}
       {hasRideProgress && (
@@ -425,56 +435,51 @@ export default function DashboardPage() {
 
       {/* Coach insight */}
       {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending || recentlyFeedbackedRides.length > 0) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <>
-              {summaryUpdatePending && (
-                <div className="flex items-center gap-1.5 text-xs text-blue-500">
-                  <Loader2 size={12} className="animate-spin" />
-                  Updating summary with recent feedback…
-                </div>
-              )}
-              {riderAssessment?.loginSummary && (
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {riderAssessment.loginSummary}
-                </p>
-              )}
-              {recentlyFeedbackedRides.length > 0 && (
-                <div className="border-t border-blue-100 pt-2 space-y-1">
-                  <p className="text-xs font-medium text-blue-500">Your recent notes</p>
-                  {recentlyFeedbackedRides.map((ride) => (
-                    <div key={ride.stravaActivityId} className="text-xs text-gray-600">
-                      <span className="font-medium text-gray-700">
-                        {format(new Date(ride.activityDate), 'EEE MMM d')}
-                      </span>
-                      {' · '}{ride.sportType}
-                      {ride.userNote && (
-                        <span className="text-gray-500"> — {ride.userNote}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Upcoming workouts — next 2 days beyond today */}
-      {next2Days.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Coming up
+            Your recent training
           </h2>
-          <div className="space-y-1.5">
-            {next2Days.map((day) => (
-              <WorkoutCard key={day.date} day={day} compact />
-            ))}
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 space-y-3">
+            {summaryLoading ? (
+              <p className="text-sm text-gray-400 italic">Preparing your training summary…</p>
+            ) : (
+              <>
+                {summaryUpdatePending && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Loader2 size={12} className="animate-spin" />
+                    Updating summary with recent feedback…
+                  </div>
+                )}
+                {riderAssessment?.loginSummary && (
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {riderAssessment.loginSummary}
+                  </p>
+                )}
+                {recentlyFeedbackedRides.length > 0 && (
+                  <div className="border-t border-gray-100 pt-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Your recent notes
+                    </p>
+                    <div className="space-y-1.5">
+                      {recentlyFeedbackedRides.map((ride) => (
+                        <div
+                          key={ride.stravaActivityId}
+                          className="flex flex-col gap-0.5 text-xs text-gray-600 sm:flex-row sm:items-start sm:gap-2"
+                        >
+                          <span className="font-medium text-gray-700 sm:w-24 sm:flex-shrink-0">
+                            {format(new Date(ride.activityDate), 'EEE MMM d')}
+                          </span>
+                          <span className="text-gray-500">
+                            {ride.sportType}
+                            {ride.userNote ? ` · ${ride.userNote}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
