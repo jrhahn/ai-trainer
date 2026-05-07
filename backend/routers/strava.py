@@ -507,6 +507,7 @@ async def _run_import_background(
                         "duration_seconds": duration_seconds,
                         "streams": streams,
                     })
+                    imported = len(rides)
                 except Exception as exc:  # noqa: BLE001
                     # Keep the import moving even when one activity fails.
                     skipped += 1

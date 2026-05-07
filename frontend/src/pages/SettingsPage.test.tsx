@@ -309,7 +309,7 @@ describe('SettingsPage', () => {
       status: 'running',
       total: 10,
       processed: 4,
-      imported: 0,
+      imported: 2,
       skipped: 0,
       failedActivities: [],
       error: '',
@@ -318,7 +318,7 @@ describe('SettingsPage', () => {
     setup()
 
     expect(screen.getByText('Strava Ride Analysis')).toBeInTheDocument()
-    expect(screen.getByText('Processed activities: 4 / 10 (40%)')).toBeInTheDocument()
+    expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
   it('shows the completed Strava import report with skipped activities', () => {
