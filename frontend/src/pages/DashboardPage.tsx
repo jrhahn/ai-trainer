@@ -34,11 +34,77 @@ type TrainingSummaryBullet = {
   text: string
 }
 
+type ParsedRideNote = {
+  rpe?: string
+  legs?: string
+  intent?: string
+  comment?: string
+}
+
 function cleanSummarySentence(sentence: string): string {
   return sentence
     .replace(/^\(?\d+\)?[.)]?\s*/, '')
     .replace(/^(what you did|ftp & fitness insights|ftp and fitness insights|plan alignment|conclusions):\s*/i, '')
     .trim()
+}
+
+function capitalizeText(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
+  if (!normalized) return ''
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+function formatActivityType(sportType: string): string {
+  const withoutRideSuffix = sportType.replace(/Ride$/i, '')
+  return capitalizeText(
+    withoutRideSuffix
+      .replace(/[_-]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2'),
+  )
+}
+
+function formatNoteLabel(value: string): string {
+  return capitalizeText(value)
+}
+
+function parseRideNote(note?: string | null): ParsedRideNote {
+  if (!note) return {}
+  const parsed: ParsedRideNote = {}
+  const comments: string[] = []
+
+  note
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const rpeMatch = part.match(/^RPE\s*:?[\s]*(\d+\s*\/\s*10|\d+)/i)
+      if (rpeMatch) {
+        parsed.rpe = rpeMatch[1].replace(/\s+/g, '')
+        return
+      }
+
+      const keyValueMatch = part.match(/^([a-z][a-z\s]*):\s*(.+)$/i)
+      if (keyValueMatch) {
+        const key = keyValueMatch[1].trim().toLowerCase()
+        const value = formatNoteLabel(keyValueMatch[2])
+        if (key === 'legs') {
+          parsed.legs = value
+          return
+        }
+        if (key === 'intent') {
+          parsed.intent = value
+          return
+        }
+      }
+
+      comments.push(part)
+    })
+
+  if (comments.length > 0) {
+    parsed.comment = comments.join(' ')
+  }
+
+  return parsed
 }
 
 function parseSummaryBullet(text: string): TrainingSummaryBullet {
@@ -455,7 +521,7 @@ export default function DashboardPage() {
       )}
 
       {/* Coach insight */}
-      {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending || recentlyFeedbackedRides.length > 0) && (
+      {(riderAssessment?.loginSummary || summaryLoading || summaryUpdatePending) && (
         <div>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
             Your recent training
@@ -496,35 +562,50 @@ export default function DashboardPage() {
                     ))}
                   </ul>
                 )}
-                {recentlyFeedbackedRides.length > 0 && (
-                  <div className="border-t border-gray-100 pt-3 space-y-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Your recent notes
-                    </p>
-                    <div className="space-y-1.5">
-                      {recentlyFeedbackedRides.map((ride) => (
-                        <div
-                          key={ride.stravaActivityId}
-                          className="flex flex-col gap-1 text-xs text-gray-600 sm:flex-row sm:items-start sm:gap-2"
-                        >
-                          <span className="flex flex-wrap gap-1 sm:w-32 sm:flex-shrink-0">
-                            <span className="rounded-md bg-gray-50 px-1.5 py-0.5 font-medium text-gray-700 ring-1 ring-inset ring-gray-100">
-                              {format(new Date(ride.activityDate), 'EEE MMM d')}
-                            </span>
-                            <span className="rounded-md bg-gray-50 px-1.5 py-0.5 text-gray-500 ring-1 ring-inset ring-gray-100">
-                              {ride.sportType}
-                            </span>
-                          </span>
-                          {ride.userNote && (
-                            <span className="text-gray-600 sm:pt-0.5">{ride.userNote}</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent athlete notes */}
+      {recentlyFeedbackedRides.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Your recent notes
+          </h2>
+          <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+            <table className="w-full min-w-[42rem] table-fixed text-left text-xs">
+              <thead className="bg-gray-50 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                <tr>
+                  <th className="w-24 px-3 py-2">Date</th>
+                  <th className="w-28 px-3 py-2">Activity</th>
+                  <th className="w-16 px-3 py-2">RPE</th>
+                  <th className="w-32 px-3 py-2">Intent</th>
+                  <th className="w-24 px-3 py-2">Legs</th>
+                  <th className="px-3 py-2">Comment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {recentlyFeedbackedRides.map((ride) => {
+                  const note = parseRideNote(ride.userNote)
+                  return (
+                    <tr key={ride.stravaActivityId} className="text-gray-600">
+                      <td className="px-3 py-2 font-medium text-gray-700 tabular-nums">
+                        {format(new Date(ride.activityDate), 'MMM d')}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">
+                        {formatActivityType(ride.sportType)}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{note.rpe ?? '-'}</td>
+                      <td className="px-3 py-2">{note.intent ?? '-'}</td>
+                      <td className="px-3 py-2">{note.legs ?? '-'}</td>
+                      <td className="px-3 py-2 text-gray-700">{note.comment ?? '-'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
