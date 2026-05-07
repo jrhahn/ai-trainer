@@ -124,9 +124,9 @@ export default function DashboardPage() {
       }, {}),
   ).sort(([a], [b]) => a.localeCompare(b))
 
-  const recentlyFeedbackedRides = rideMetricsHistory.filter(
-    (r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote,
-  )
+  const recentlyFeedbackedRides = rideMetricsHistory
+    .filter((r) => r.activityDate >= sevenDaysAgo && r.activityDate <= today && !!r.userNote)
+    .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
 
   const next2Days = trainingPlan.filter((d) => d.date > today).slice(0, 2)
   const hasStalePlan =
