@@ -2,6 +2,7 @@ import type {
   AiProvider,
   RaceEvent,
   RiderAssessment,
+  RideMetricPoint,
   StravaActivity,
   TrainingDay,
   WorkoutFeedback,
@@ -250,6 +251,21 @@ export async function fetchNextRideRecommendation(
     recommendationType: (raw.recommendation_type ?? 'keep_as_planned') as NextRideRecommendationResult['recommendationType'],
     planUpdates: raw.planUpdates,
   }
+}
+
+export async function resolveRideMatch(
+  authToken: string,
+  plannedDate: string,
+  stravaActivityId: number,
+): Promise<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }> {
+  return apiFetch<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }>(
+    '/ai/resolve-ride-match',
+    {
+      token: authToken,
+      method: 'POST',
+      body: { plannedDate, stravaActivityId },
+    },
+  )
 }
 
 export async function processPendingFeedbacks(

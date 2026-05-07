@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import { submitRideFeedback } from '../services/user'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, type RideMetricPoint, type TrainingDay } from '../store/useAppStore'
 import { useShallow } from 'zustand/shallow'
 
 export type LegsFeeling = 'fresh' | 'normal' | 'heavy'
@@ -25,7 +25,12 @@ const intentLabels: Record<RideIntent, string> = {
 interface Props {
   stravaActivityId: number
   activityDate: string
-  onSaved: (userNote: string) => void
+  onSaved: (data: {
+    userNote: string
+    coachNote?: string | null
+    planUpdates?: Partial<TrainingDay>[]
+    ride?: RideMetricPoint | null
+  }) => void
   onCancel: () => void
 }
 
@@ -39,6 +44,12 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
   const [intent, setIntent] = useState<RideIntent>('planned workout')
   const [note, setNote] = useState('')
   const [savedNote, setSavedNote] = useState<string | null>(null)
+  const [savedData, setSavedData] = useState<{
+    userNote: string
+    coachNote?: string | null
+    planUpdates?: Partial<TrainingDay>[]
+    ride?: RideMetricPoint | null
+  } | null>(null)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -50,6 +61,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
       }),
     onSuccess: (data) => {
       setSavedNote(data.userNote)
+      setSavedData(data)
       addPendingFeedbackRide(stravaActivityId)
     },
   })
@@ -60,7 +72,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
   }
 
   const handleClose = () => {
-    onSaved(savedNote ?? '')
+    onSaved(savedData ?? { userNote: savedNote ?? '' })
   }
 
   // --- Confirmation step (shown after feedback is saved) ---
@@ -205,6 +217,3 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
     </div>
   )
 }
-
-
-

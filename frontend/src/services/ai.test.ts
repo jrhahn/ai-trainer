@@ -15,6 +15,7 @@ import {
   fetchRaceEventFeedback,
   generateTrainingPlan,
   rateCompletedWorkout,
+  resolveRideMatch,
 } from './ai'
 
 const profile: UserProfile = {
@@ -213,6 +214,32 @@ describe('rateCompletedWorkout', () => {
       token: 'token-123',
       method: 'POST',
       body: { day: completedDay },
+    })
+  })
+})
+
+describe('resolveRideMatch', () => {
+  it('posts selected ride and returns updated ride plus plan updates', async () => {
+    mockApiFetch.mockResolvedValue({
+      ride: {
+        stravaActivityId: 7001,
+        activityDate: '2026-05-06',
+        sportType: 'cycling',
+        planMatchStatus: 'manual_matched',
+      },
+      coachNote: 'That was the planned tempo ride.',
+      planUpdates: [{ date: '2026-05-07', workoutType: 'recovery', durationMinutes: 45 }],
+    })
+
+    const result = await resolveRideMatch('token-123', '2026-05-06', 7001)
+
+    expect(result.ride.planMatchStatus).toBe('manual_matched')
+    expect(result.coachNote).toBe('That was the planned tempo ride.')
+    expect(result.planUpdates?.[0].workoutType).toBe('recovery')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
+      token: 'token-123',
+      method: 'POST',
+      body: { plannedDate: '2026-05-06', stravaActivityId: 7001 },
     })
   })
 })

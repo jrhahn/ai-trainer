@@ -21,6 +21,11 @@ from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, project_training_load_from_seed, build_ride_metrics_chain, build_ride_analysis
 from services.prompts import ride_metrics_context_section
 from services.rag import retrieve_cycling_context
+from services.ride_matching import (
+    apply_ride_plan_matches,
+    resolve_manual_match,
+    review_matched_ride_and_adapt,
+)
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -255,6 +260,8 @@ async def analyse_activities(
             )
             rides_input.append({
                 "strava_activity_id": activity.id,
+                "activity_name": a_dict.get("name"),
+                "activity_start_datetime": start_date or None,
                 "activity_date": activity_date,
                 "sport_type": sport_type,
                 "duration_seconds": duration_seconds,
@@ -262,34 +269,32 @@ async def analyse_activities(
             })
         if rides_input:
             metrics_chain = build_ride_metrics_chain(rides_input, ftp_for_chain, seed_ctl, seed_atl)
+            ride_meta_by_id = {r["strava_activity_id"]: r for r in rides_input}
+            for metric in metrics_chain:
+                meta = ride_meta_by_id.get(metric["strava_activity_id"], {})
+                metric["activity_name"] = meta.get("activity_name")
+                metric["activity_start_datetime"] = meta.get("activity_start_datetime")
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
-
-            # --- Phase 6: Auto-rate rides that have a matching plan day ---
-            if ftp_for_chain > 0:
-                profile_for_rating = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
-                for ride_input, metric in zip(rides_input, metrics_chain):
-                    activity_date = ride_input["activity_date"]
-                    # Find matching plan day
-                    matching_plan_day = next(
-                        (day for day in training_plan if day.get("date") == activity_date),
-                        None,
-                    )
-                    if matching_plan_day and ride_input["streams"]:
-                        coach_note = await _auto_rate_ride(
-                            matching_plan_day,
-                            ride_input["streams"],
-                            ftp_for_chain,
-                            profile_for_rating,
-                            _provider(current_user),
-                        )
-                        if coach_note:
-                            await crud.update_ride_metric_notes(
-                                db,
-                                current_user.id,
-                                ride_input["strava_activity_id"],
-                                coach_note=coach_note,
-                            )
+            auto_matched = await apply_ride_plan_matches(
+                db,
+                current_user.id,
+                training_plan,
+                [m["strava_activity_id"] for m in metrics_chain],
+            )
+            streams_by_activity_id = {
+                ride["strava_activity_id"]: ride.get("streams") or {}
+                for ride in rides_input
+            }
+            for ride in auto_matched:
+                await review_matched_ride_and_adapt(
+                    db,
+                    current_user,
+                    ride,
+                    training_plan,
+                    provider=_provider(current_user),
+                    streams=streams_by_activity_id.get(ride.strava_activity_id),
+                )
 
     await db.flush()
 
@@ -434,8 +439,9 @@ async def ask_trainer(
         note_date = ride_note_update.get("activity_date")
         note_text = ride_note_update.get("note")
         if note_date and note_text:
-            target_metric = await crud.get_ride_metric_by_date(db, current_user.id, note_date)
-            if target_metric is not None:
+            target_metrics = await crud.get_ride_metrics_by_date(db, current_user.id, note_date)
+            if len(target_metrics) == 1:
+                target_metric = target_metrics[0]
                 await crud.update_ride_metric_notes(
                     db,
                     current_user.id,
@@ -637,6 +643,57 @@ async def review_new_rides(
     await crud.mark_rides_as_reviewed(db, current_user.id, ride_ids)
 
     return schemas.BatchReviewRidesResponse(review=review_text, ride_count=len(unreviewed))
+
+
+@router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)
+async def resolve_ride_match(
+    body: schemas.ResolveRideMatchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ResolveRideMatchResponse:
+    """Resolve which same-day Strava ride was the scheduled training ride."""
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    plan = existing_plan.plan if existing_plan is not None else []
+    ride = await resolve_manual_match(
+        db,
+        current_user.id,
+        planned_date=body.planned_date,
+        strava_activity_id=body.strava_activity_id,
+        plan=plan,
+    )
+    if ride is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No ambiguous ride match found for that planned date",
+        )
+
+    streams = None
+    if current_user.strava_token is not None:
+        try:
+            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
+            streams = await fetch_activity_streams(access_token, body.strava_activity_id)
+        except Exception:
+            logger.warning("Could not fetch Strava streams while resolving ride match", exc_info=True)
+
+    coach_note, plan_updates = await review_matched_ride_and_adapt(
+        db,
+        current_user,
+        ride,
+        plan,
+        provider=_provider(current_user),
+        streams=streams,
+    )
+
+    validated_updates = (
+        [schemas.PlanDayUpdateSchema.model_validate(u) for u in plan_updates]
+        if plan_updates
+        else None
+    )
+    return schemas.ResolveRideMatchResponse(
+        ride=schemas.RideMetricSchema.model_validate(ride, from_attributes=True),
+        coach_note=coach_note,
+        plan_updates=validated_updates,
+    )
 
 
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)

@@ -18,6 +18,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
+from services.ride_matching import apply_ride_plan_matches, review_matched_ride_and_adapt
 from services.analysis import build_ride_metrics_chain
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
@@ -189,6 +190,23 @@ def _frontend_url() -> str:
 
 def _backend_url() -> str:
     return settings.effective_backend_url
+
+
+def _default_provider() -> str:
+    if settings.gemini_api_key:
+        return "gemini"
+    if settings.openai_api_key:
+        return "openai"
+    return "gemini"
+
+
+def _provider(user: models.User) -> str:
+    stored = user.ai_provider
+    if stored == "gemini" and settings.gemini_api_key:
+        return "gemini"
+    if stored == "openai" and settings.openai_api_key:
+        return "openai"
+    return _default_provider()
 
 
 @router.get("/auth/strava")
@@ -483,6 +501,7 @@ async def _run_import_background(
                     rides.append({
                         "strava_activity_id": activity_id,
                         "activity_name": activity.get("name") or "Unnamed activity",
+                        "activity_start_datetime": start_date or None,
                         "activity_date": activity_date,
                         "sport_type": sport_type,
                         "duration_seconds": duration_seconds,
@@ -524,8 +543,39 @@ async def _run_import_background(
         BATCH = 50
         for i in range(0, len(metrics_chain), BATCH):
             async with async_session_maker() as db:
+                ride_meta_by_id = {r["strava_activity_id"]: r for r in rides}
                 for m in metrics_chain[i : i + BATCH]:
+                    meta = ride_meta_by_id.get(m["strava_activity_id"], {})
+                    m["activity_name"] = meta.get("activity_name")
+                    m["activity_start_datetime"] = meta.get("activity_start_datetime")
                     await crud.upsert_ride_metric(db, user_id, **m)
+                await db.commit()
+
+        if metrics_chain:
+            streams_by_activity_id = {
+                ride["strava_activity_id"]: ride.get("streams") or {}
+                for ride in rides
+            }
+            async with async_session_maker() as db:
+                user = await crud.get_user_by_id(db, user_id)
+                existing_plan = await crud.get_training_plan(db, user_id)
+                training_plan = existing_plan.plan if existing_plan is not None else []
+                auto_matched = await apply_ride_plan_matches(
+                    db,
+                    user_id,
+                    training_plan,
+                    [m["strava_activity_id"] for m in metrics_chain],
+                )
+                if user is not None:
+                    for ride in auto_matched:
+                        await review_matched_ride_and_adapt(
+                            db,
+                            user,
+                            ride,
+                            training_plan,
+                            provider=_provider(user),
+                            streams=streams_by_activity_id.get(ride.strava_activity_id),
+                        )
                 await db.commit()
 
         await _update_import_job(

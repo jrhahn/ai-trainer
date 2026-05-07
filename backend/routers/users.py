@@ -14,9 +14,11 @@ import auth
 import crud
 import models
 import schemas
+from config import settings
 from database import get_db
 from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO
+from services.ride_matching import review_matched_ride_and_adapt
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -24,6 +26,23 @@ logger = logging.getLogger(__name__)
 
 
 _RACE_MEMORY_HEADING = "Race calendar:"
+
+
+def _default_provider() -> str:
+    if settings.gemini_api_key:
+        return "gemini"
+    if settings.openai_api_key:
+        return "openai"
+    return "gemini"
+
+
+def _provider(user: models.User) -> str:
+    stored = user.ai_provider
+    if stored == "gemini" and settings.gemini_api_key:
+        return "gemini"
+    if stored == "openai" and settings.openai_api_key:
+        return "openai"
+    return _default_provider()
 
 
 def _user_to_response(user: models.User) -> schemas.UserResponse:
@@ -411,9 +430,30 @@ async def save_ride_feedback(
             detail="Ride not found",
         )
 
+    coach_note = None
+    plan_updates = None
+    if row.plan_match_status in {"auto_matched", "manual_matched"} and row.matched_plan_date:
+        existing_plan = await crud.get_training_plan(db, current_user.id)
+        plan = existing_plan.plan if existing_plan is not None else []
+        coach_note, raw_plan_updates = await review_matched_ride_and_adapt(
+            db,
+            current_user,
+            row,
+            plan,
+            provider=_provider(current_user),
+        )
+        plan_updates = (
+            [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_plan_updates]
+            if raw_plan_updates
+            else None
+        )
+
     return schemas.RideFeedbackResponse(
         strava_activity_id=strava_activity_id,
         user_note=user_note,
+        coach_note=coach_note,
+        plan_updates=plan_updates,
+        ride=schemas.RideMetricSchema.model_validate(row, from_attributes=True),
     )
 
 
