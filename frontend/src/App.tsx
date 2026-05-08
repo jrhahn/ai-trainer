@@ -4,6 +4,7 @@ import { useAppStore } from './store/useAppStore'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import AuthCallbackPage from './pages/AuthCallbackPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkoutPage from './pages/WorkoutPage'
@@ -75,6 +76,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
         {!authToken ? (
           <>

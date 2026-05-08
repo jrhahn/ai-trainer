@@ -36,7 +36,9 @@ features will only work after you set real values in `.env`.
 Before first deploy, replace the placeholder Authelia user in
 `authelia/users_database.yml` with your real admin account.
 Authelia enforces TOTP for secure sign-in and protected API routes while the
-frontend app shell stays publicly reachable. Local Compose keeps
+frontend app shell stays publicly reachable. The login button redirects to
+Authelia, then returns to `/auth/callback` to exchange the verified session for
+an app token. Local Compose keeps
 Authelia notifications in `/data/notification.txt`; production deployments
 should provide SMTP settings and include `compose.smtp.yml` so users can verify
 TOTP enrollment by email.

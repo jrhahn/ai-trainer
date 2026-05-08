@@ -111,13 +111,6 @@ services:
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-public-https.service=backend
       - traefik.http.routers.backend-public-https.priority=3000
-      - traefik.http.routers.backend-authelia-login-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && Path(`/api/v1/auth/authelia-login`)
-      - traefik.http.routers.backend-authelia-login-https.entrypoints=websecure
-      - traefik.http.routers.backend-authelia-login-https.tls=true
-      - traefik.http.routers.backend-authelia-login-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.backend-authelia-login-https.middlewares=authelia@docker
-      - traefik.http.routers.backend-authelia-login-https.service=backend
-      - traefik.http.routers.backend-authelia-login-https.priority=4000
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
