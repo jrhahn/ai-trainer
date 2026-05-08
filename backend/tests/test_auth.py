@@ -103,6 +103,42 @@ async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_authelia_login_redirects_after_verified_session(client, monkeypatch):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+
+    response = await client.get(
+        "/api/v1/auth/authelia-login",
+        params={"rd": "http://localhost:5173/"},
+        headers={
+            "Remote-User": "authelia-user",
+            "Remote-Name": "Authelia User",
+            "Remote-Email": "authelia@example.com",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173/"
+
+
+@pytest.mark.asyncio
+async def test_authelia_login_rejects_untrusted_redirect(client, monkeypatch):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+
+    response = await client.get(
+        "/api/v1/auth/authelia-login",
+        params={"rd": "https://evil.example/"},
+        headers={
+            "Remote-User": "authelia-user",
+            "Remote-Name": "Authelia User",
+            "Remote-Email": "authelia@example.com",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173/"
+
+
+@pytest.mark.asyncio
 async def test_authelia_mode_registration_returns_503_and_login_is_disabled(client, monkeypatch):
     """When Authelia is enabled but the internal URL / users-DB path are not set,
     the endpoints return 503 rather than silently falling back to local auth."""

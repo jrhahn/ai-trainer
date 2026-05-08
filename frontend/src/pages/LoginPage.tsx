@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Bike, Loader2 } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { login } from '../services/auth'
-import { AUTHELIA_URL } from '../services/api'
+import { API_BASE, AUTHELIA_URL } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 
 export default function LoginPage() {
@@ -33,7 +33,7 @@ export default function LoginPage() {
 
   const handleAutheliaLogin = () => {
     const returnUrl = `${window.location.origin}/`
-    window.location.href = `${AUTHELIA_URL}/?rd=${encodeURIComponent(returnUrl)}`
+    window.location.href = `${API_BASE}/auth/authelia-login?rd=${encodeURIComponent(returnUrl)}`
   }
 
   return (

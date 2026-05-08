@@ -58,9 +58,9 @@ export default function RegisterPage() {
       if (token) {
         navigate('/onboarding')
       } else {
-        // Authelia mode: account created, continue to the protected app so
-        // Authelia can perform login, TOTP enrollment, and session creation.
-        window.location.href = '/'
+        // Authelia mode: account created, user now signs in through Authelia
+        // so TOTP enrollment and verification are enforced by the auth portal.
+        navigate('/login')
       }
     },
   })

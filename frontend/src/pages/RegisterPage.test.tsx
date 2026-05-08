@@ -66,7 +66,7 @@ describe('RegisterPage', () => {
     })
   })
 
-  it('uses browser navigation when registration returns no token (Authelia mode)', async () => {
+  it('navigates to /login when registration returns no token (Authelia mode)', async () => {
     mockRegister.mockResolvedValue(null)
     setup()
 
@@ -77,9 +77,8 @@ describe('RegisterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('Bob', 'bob@example.com', 'Secur3!Pass')
+      expect(mockNavigate).toHaveBeenCalledWith('/login')
     })
-    expect(mockNavigate).not.toHaveBeenCalledWith('/login')
   })
 
   it('shows an error message when registration fails', async () => {

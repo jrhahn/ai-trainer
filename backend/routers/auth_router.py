@@ -7,17 +7,35 @@ import secrets
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
 import crud
 import schemas
+from config import settings
 from database import get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _safe_frontend_redirect(rd: str | None) -> str:
+    fallback = f"{settings.primary_frontend_url.rstrip('/')}/"
+    if not rd:
+        return fallback
+
+    parsed = urlparse(rd)
+    if not parsed.scheme or not parsed.netloc:
+        return fallback
+
+    origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    if origin in settings.allowed_origins:
+        return rd
+    return fallback
 
 
 def _create_authelia_user(email: str, display_name: str, password: str) -> None:
@@ -174,6 +192,22 @@ async def login(
 
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)
+
+
+@router.get("/authelia-login")
+async def authelia_login(
+    request: Request,
+    rd: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    if not auth.AUTHELIA_AUTH_ENABLED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Authelia login is not enabled")
+
+    user = await auth.get_authelia_user(request, db)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authelia session not found")
+
+    return RedirectResponse(_safe_frontend_redirect(rd), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/session", response_model=schemas.TokenResponse)

@@ -111,6 +111,13 @@ services:
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-public-https.service=backend
       - traefik.http.routers.backend-public-https.priority=3000
+      - traefik.http.routers.backend-authelia-login-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && Path(`/api/v1/auth/authelia-login`)
+      - traefik.http.routers.backend-authelia-login-https.entrypoints=websecure
+      - traefik.http.routers.backend-authelia-login-https.tls=true
+      - traefik.http.routers.backend-authelia-login-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.backend-authelia-login-https.middlewares=authelia@docker
+      - traefik.http.routers.backend-authelia-login-https.service=backend
+      - traefik.http.routers.backend-authelia-login-https.priority=4000
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
@@ -133,15 +140,7 @@ services:
       - traefik.http.routers.frontend-https.entrypoints=websecure
       - traefik.http.routers.frontend-https.tls=true
       - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.frontend-https.middlewares=authelia@docker
       - traefik.http.routers.frontend-https.service=frontend
-      - traefik.http.routers.frontend-https.priority=1000
-      - traefik.http.routers.frontend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/register`) || PathPrefix(`/assets`) || Path(`/favicon.svg`) || Path(`/icons.svg`))
-      - traefik.http.routers.frontend-public-https.entrypoints=websecure
-      - traefik.http.routers.frontend-public-https.tls=true
-      - traefik.http.routers.frontend-public-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.frontend-public-https.service=frontend
-      - traefik.http.routers.frontend-public-https.priority=3000
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
   authelia:
