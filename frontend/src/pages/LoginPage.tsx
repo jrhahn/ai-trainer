@@ -32,8 +32,7 @@ export default function LoginPage() {
   }
 
   const handleAutheliaLogin = () => {
-    const returnUrl = `${window.location.origin}/auth/callback`
-    window.location.href = `${AUTHELIA_URL}/?rd=${encodeURIComponent(returnUrl)}`
+    window.location.href = '/auth/callback'
   }
 
   return (
