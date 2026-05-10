@@ -43,6 +43,12 @@ type ParsedRideNote = {
 
 function cleanSummarySentence(sentence: string): string {
   return sentence
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
     .replace(/^\(?\d+\)?[.)]?\s*/, '')
     .replace(/^(what you did|ftp & fitness insights|ftp and fitness insights|plan alignment|conclusions):\s*/i, '')
     .trim()
@@ -117,12 +123,30 @@ function parseSummaryBullet(text: string): TrainingSummaryBullet {
   }
 }
 
-function splitTrainingSummary(summary?: string): {
+export function splitTrainingSummary(summary?: string): {
   intro: string | null
   bullets: TrainingSummaryBullet[]
 } {
   const normalized = summary?.trim()
   if (!normalized) return { intro: null, bullets: [] }
+
+  try {
+    const parsed = JSON.parse(normalized) as {
+      intro?: string
+      bulletPoints?: string[]
+    }
+    if (parsed && (typeof parsed.intro === 'string' || Array.isArray(parsed.bulletPoints))) {
+      return {
+        intro: typeof parsed.intro === 'string' ? cleanSummarySentence(parsed.intro) : null,
+        bullets: (parsed.bulletPoints ?? [])
+          .filter((bullet): bullet is string => typeof bullet === 'string')
+          .map(parseSummaryBullet)
+          .filter((bullet) => bullet.text),
+      }
+    }
+  } catch {
+    // Not JSON; continue with text parsing
+  }
 
   const lines = normalized
     .split('\n')
