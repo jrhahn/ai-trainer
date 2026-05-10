@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
-import { submitRideFeedback } from '../services/user'
-import { useAppStore, type RideMetricPoint, type TrainingDay } from '../store/useAppStore'
+import { saveChatMessage, submitRideFeedback } from '../services/user'
+import { useAppStore, type ChatMessage, type RideMetricPoint, type TrainingDay } from '../store/useAppStore'
 import { useShallow } from 'zustand/shallow'
 
 export type LegsFeeling = 'fresh' | 'normal' | 'heavy'
@@ -25,6 +25,7 @@ const intentLabels: Record<RideIntent, string> = {
 interface Props {
   stravaActivityId: number
   activityDate: string
+  activityName?: string | null
   onSaved: (data: {
     userNote: string
     coachNote?: string | null
@@ -34,9 +35,48 @@ interface Props {
   onCancel: () => void
 }
 
-export default function RideFeedbackForm({ stravaActivityId, activityDate, onSaved, onCancel }: Props) {
-  const { authToken, addPendingFeedbackRide } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, addPendingFeedbackRide: s.addPendingFeedbackRide })),
+function rideReference(activityDate: string, activityName?: string | null): string {
+  const trimmedName = activityName?.trim()
+  return trimmedName ? `your ride "${trimmedName}" on ${activityDate}` : `your ride on ${activityDate}`
+}
+
+function buildRideFeedbackChatMessages(
+  activityDate: string,
+  activityName: string | null | undefined,
+  data: {
+    userNote: string
+    coachNote?: string | null
+  },
+): ChatMessage[] {
+  const reference = rideReference(activityDate, activityName)
+  const timestamp = new Date().toISOString()
+  const messages: ChatMessage[] = [
+    {
+      role: 'user',
+      content: `Ride feedback for ${reference}: ${data.userNote}`,
+      timestamp,
+    },
+  ]
+
+  const coachNote = data.coachNote?.trim()
+  if (coachNote) {
+    messages.push({
+      role: 'assistant',
+      content: `About ${reference}: ${coachNote}`,
+      timestamp,
+    })
+  }
+
+  return messages
+}
+
+export default function RideFeedbackForm({ stravaActivityId, activityDate, activityName, onSaved, onCancel }: Props) {
+  const { authToken, addPendingFeedbackRide, addChatMessage } = useAppStore(
+    useShallow((s) => ({
+      authToken: s.authToken,
+      addPendingFeedbackRide: s.addPendingFeedbackRide,
+      addChatMessage: s.addChatMessage,
+    })),
   )
 
   const [rpe, setRpe] = useState(5)
@@ -63,6 +103,12 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, onSav
       setSavedNote(data.userNote)
       setSavedData(data)
       addPendingFeedbackRide(stravaActivityId)
+
+      const chatMessages = buildRideFeedbackChatMessages(activityDate, activityName, data)
+      chatMessages.forEach((message) => addChatMessage(message))
+      void Promise.all(chatMessages.map((message) => saveChatMessage(authToken!, message))).catch((error) => {
+        console.warn('Failed to persist ride feedback chat messages:', error)
+      })
     },
   })
 

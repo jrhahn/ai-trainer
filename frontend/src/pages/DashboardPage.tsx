@@ -897,6 +897,7 @@ export default function DashboardPage() {
         <RideFeedbackForm
           stravaActivityId={feedbackRide.stravaActivityId}
           activityDate={feedbackRide.activityDate}
+          activityName={feedbackRide.activityName}
           onSaved={(data) => {
             applyPlanUpdates(data.planUpdates)
             if (data.ride) {
