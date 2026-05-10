@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bike, CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { Bike, CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
@@ -38,6 +38,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false)
 
   const passwordChecks = getPasswordChecks(password, name, email)
   const isPasswordStrong = passwordChecks.every((check) => check.valid)
@@ -71,6 +73,26 @@ export default function RegisterPage() {
     if (!canSubmit) return
     registerMutation.mutate()
   }
+
+  const passwordRevealHandlers = (setVisible: (visible: boolean) => void) => ({
+    onPointerDown: () => setVisible(true),
+    onPointerUp: () => setVisible(false),
+    onPointerLeave: () => setVisible(false),
+    onPointerCancel: () => setVisible(false),
+    onBlur: () => setVisible(false),
+    onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault()
+        setVisible(true)
+      }
+    },
+    onKeyUp: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault()
+        setVisible(false)
+      }
+    },
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
@@ -110,15 +132,26 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-              placeholder="Strong password"
-              minLength={8}
-              required
-            />
+            <div className="relative">
+              <input
+                type={isPasswordVisible ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                placeholder="Strong password"
+                minLength={8}
+                required
+              />
+              <button
+                type="button"
+                aria-label="Hold to show password"
+                aria-pressed={isPasswordVisible}
+                className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
+                {...passwordRevealHandlers(setIsPasswordVisible)}
+              >
+                <Eye size={18} aria-hidden="true" />
+              </button>
+            </div>
             <div className="mt-3 grid grid-cols-1 gap-1.5 text-xs">
               {passwordChecks.map((check) => (
                 <div key={check.id} className={check.valid ? 'flex items-center gap-2 text-green-700' : 'flex items-center gap-2 text-gray-500'}>
@@ -130,18 +163,29 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 ${
-                showMismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Repeat your password"
-              minLength={8}
-              required
-              aria-invalid={showMismatch}
-            />
+            <div className="relative">
+              <input
+                type={isConfirmPasswordVisible ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className={`w-full border rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 ${
+                  showMismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                placeholder="Repeat your password"
+                minLength={8}
+                required
+                aria-invalid={showMismatch}
+              />
+              <button
+                type="button"
+                aria-label="Hold to show confirmation password"
+                aria-pressed={isConfirmPasswordVisible}
+                className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
+                {...passwordRevealHandlers(setIsConfirmPasswordVisible)}
+              >
+                <Eye size={18} aria-hidden="true" />
+              </button>
+            </div>
             {showMismatch && <p className="text-xs text-red-600 mt-1">The two passwords do not match.</p>}
             {passwordsMatch && <p className="text-xs text-green-700 mt-1">Passwords match.</p>}
           </div>

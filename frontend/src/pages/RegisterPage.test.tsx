@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -118,6 +118,28 @@ describe('RegisterPage', () => {
 
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+  })
+
+  it('reveals passwords only while the eye buttons are pressed', async () => {
+    setup()
+
+    const passwordInput = screen.getByPlaceholderText(/strong password/i)
+    const confirmInput = screen.getByPlaceholderText(/repeat your password/i)
+    const passwordReveal = screen.getByRole('button', { name: /hold to show password/i })
+    const confirmReveal = screen.getByRole('button', { name: /hold to show confirmation password/i })
+
+    expect(passwordInput).toHaveAttribute('type', 'password')
+    expect(confirmInput).toHaveAttribute('type', 'password')
+
+    fireEvent.pointerDown(passwordReveal)
+    expect(passwordInput).toHaveAttribute('type', 'text')
+    fireEvent.pointerUp(passwordReveal)
+    expect(passwordInput).toHaveAttribute('type', 'password')
+
+    fireEvent.pointerDown(confirmReveal)
+    expect(confirmInput).toHaveAttribute('type', 'text')
+    fireEvent.pointerLeave(confirmReveal)
+    expect(confirmInput).toHaveAttribute('type', 'password')
   })
 
   it('links to the login page', () => {
