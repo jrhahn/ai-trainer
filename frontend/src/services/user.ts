@@ -20,9 +20,9 @@ interface BackendUserResponse {
   stravaAnalysisComplete: boolean
   lastStravaActivityId?: number | null
   bikeType?: UserProfile['bikeType']
-  trainingGoal?: UserProfile['trainingGoal']
-  raceDate?: string
-  raceDescription?: string
+  trainingGoal?: string
+  raceDate?: string | null
+  raceDescription?: string | null
   weeklyHours?: number
   followsTrainingPlan: boolean
   maxHeartRate?: number
@@ -44,6 +44,19 @@ export interface LoadedUserData {
   stravaConnection: StravaConnection | null
 }
 
+function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
+  return goal === 'race' ? 'race' : 'general_fitness'
+}
+
+type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription'> & {
+  raceDate?: string | null
+  raceDescription?: string | null
+  isOnboarded?: boolean
+  stravaAnalysisComplete?: boolean
+  lastStravaActivityId?: number | null
+  aiProvider?: AiProvider
+}
+
 export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
   const user = await apiFetch<BackendUserResponse>('/users/me', { token })
   return {
@@ -51,9 +64,9 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       name: user.name ?? '',
       email: user.email,
       bikeType: user.bikeType ?? 'road',
-      trainingGoal: user.trainingGoal ?? 'general_fitness',
-      raceDate: user.raceDate,
-      raceDescription: user.raceDescription,
+      trainingGoal: normalizeTrainingGoal(user.trainingGoal),
+      raceDate: user.raceDate ?? undefined,
+      raceDescription: user.raceDescription ?? undefined,
       weeklyHours: user.weeklyHours ?? 8,
       followsTrainingPlan: user.followsTrainingPlan ?? false,
       maxHeartRate: user.maxHeartRate,
@@ -72,19 +85,14 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
 
 export async function updateCurrentUser(
   token: string,
-  updates: Partial<UserProfile> & {
-    isOnboarded?: boolean
-    stravaAnalysisComplete?: boolean
-    lastStravaActivityId?: number | null
-    aiProvider?: AiProvider
-  }
+  updates: UserProfileUpdates
 ): Promise<LoadedUserData> {
   const body = {
     name: updates.name,
     bikeType: updates.bikeType,
     trainingGoal: updates.trainingGoal,
-    raceDate: updates.raceDate,
-    raceDescription: updates.raceDescription,
+    raceDate: 'raceDate' in updates ? updates.raceDate ?? null : undefined,
+    raceDescription: 'raceDescription' in updates ? updates.raceDescription ?? null : undefined,
     weeklyHours: updates.weeklyHours,
     followsTrainingPlan: updates.followsTrainingPlan,
     maxHeartRate: updates.maxHeartRate,

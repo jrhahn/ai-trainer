@@ -70,6 +70,10 @@ type FormData = {
   maxHeartRate: string
 }
 
+function normalizeTrainingGoal(goal: unknown): FormData['trainingGoal'] {
+  return goal === 'race' ? 'race' : 'general_fitness'
+}
+
 export default function OnboardingPage() {
   const {
     userProfile,
@@ -101,18 +105,24 @@ export default function OnboardingPage() {
     return 'strava'
   }
 
-  const defaultForm = (): FormData => ({
-    name: userProfile?.name ?? '',
-    email: userProfile?.email ?? '',
-    trainingGoal: userProfile?.trainingGoal ?? 'general_fitness',
-    raceDate: userProfile?.raceDate ?? '',
-    raceDescription: userProfile?.raceDescription ?? '',
-    assessmentMethod: defaultAssessmentMethod(),
-    followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
-    currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
-    fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
-    maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
-  })
+  const defaultTrainingGoal = (): FormData['trainingGoal'] =>
+    userProfile?.trainingGoal === 'race' || userProfile?.raceDate ? 'race' : 'general_fitness'
+
+  const defaultForm = (): FormData => {
+    const trainingGoal = defaultTrainingGoal()
+    return {
+      name: userProfile?.name ?? '',
+      email: userProfile?.email ?? '',
+      trainingGoal,
+      raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',
+      raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
+      assessmentMethod: defaultAssessmentMethod(),
+      followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
+      currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
+      fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
+      maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
+    }
+  }
 
   // Restore progress saved before the Strava OAuth redirect (if any).
   const savedProgress = readOnboardingProgress()
@@ -122,12 +132,13 @@ export default function OnboardingPage() {
   const [form, setForm] = useState<FormData>(() => {
     const base = defaultForm()
     if (!savedProgress) return base
+    const trainingGoal = normalizeTrainingGoal(savedProgress.trainingGoal)
     // Merge persisted non-sensitive fields with health metrics from the user profile.
     return {
       ...base,
-      trainingGoal: savedProgress.trainingGoal,
-      raceDate: savedProgress.raceDate,
-      raceDescription: savedProgress.raceDescription,
+      trainingGoal,
+      raceDate: trainingGoal === 'race' ? savedProgress.raceDate : '',
+      raceDescription: trainingGoal === 'race' ? savedProgress.raceDescription : '',
       assessmentMethod: savedProgress.assessmentMethod,
       followsTrainingPlan: savedProgress.followsTrainingPlan,
       fitnessLevel: savedProgress.fitnessLevel,
@@ -158,6 +169,13 @@ export default function OnboardingPage() {
 
   const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  const selectTrainingGoal = (trainingGoal: FormData['trainingGoal']) =>
+    setForm((f) => ({
+      ...f,
+      trainingGoal,
+      ...(trainingGoal === 'general_fitness' ? { raceDate: '', raceDescription: '' } : {}),
+    }))
 
   const canNext = () => {
     if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
@@ -198,13 +216,14 @@ export default function OnboardingPage() {
       ? Number(form.maxHeartRate)
       : undefined
 
+    const isRacePrep = form.trainingGoal === 'race'
     const profile: UserProfile = {
       name: form.name,
       email: form.email,
       bikeType: userProfile?.bikeType ?? 'road',
-      trainingGoal: form.trainingGoal,
-      raceDate: form.raceDate || undefined,
-      raceDescription: form.raceDescription || undefined,
+      trainingGoal: isRacePrep ? 'race' : 'general_fitness',
+      raceDate: isRacePrep ? form.raceDate || undefined : undefined,
+      raceDescription: isRacePrep ? form.raceDescription || undefined : undefined,
       followsTrainingPlan: form.followsTrainingPlan,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
@@ -267,9 +286,7 @@ export default function OnboardingPage() {
 
   const goals: { value: UserProfile['trainingGoal']; label: string; desc: string; emoji: string }[] = [
     { value: 'race', label: 'Race Prep', desc: 'Be ready for a specific race', emoji: '🏆' },
-    { value: 'ftp_improvement', label: 'FTP Improvement', desc: 'Build sustained power', emoji: '⚡' },
     { value: 'general_fitness', label: 'General Fitness', desc: 'Stay fit and healthy', emoji: '💪' },
-    { value: 'weight_loss', label: 'Weight Loss', desc: 'Burn calories and slim down', emoji: '🔥' },
   ]
 
   const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
@@ -328,14 +345,14 @@ export default function OnboardingPage() {
           {/* Step 2: Training goal */}
           {step === 2 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">What&apos;s your goal?</h2>
-              <p className="text-sm text-gray-500 mb-4">This shapes your first training plan.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Are you preparing for a race?</h2>
+              <p className="text-sm text-gray-500 mb-4">Race prep adds a target date; otherwise your plan starts as general fitness.</p>
               <div className="space-y-2">
                 {goals.map((g) => (
                   <button
                     key={g.value}
                     type="button"
-                    onClick={() => update('trainingGoal', g.value)}
+                    onClick={() => selectTrainingGoal(g.value)}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
                       form.trainingGoal === g.value
                         ? 'border-amber-500 bg-amber-50'

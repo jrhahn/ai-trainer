@@ -170,6 +170,50 @@ describe('OnboardingPage', () => {
     expect(screen.getByText(/Max Heart Rate \(bpm\)/i)).toBeInTheDocument()
   })
 
+  it('only offers race prep and general fitness goals', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByRole('button', { name: /Race Prep/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /General Fitness/i })).toBeInTheDocument()
+    expect(screen.queryByText(/FTP Improvement/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Weight Loss/i)).not.toBeInTheDocument()
+  })
+
+  it('clears race fields when general fitness is selected', async () => {
+    setupStore({
+      stravaConnection: null,
+      userProfile: {
+        ...baseProfile,
+        trainingGoal: 'race',
+        raceDate: '2026-09-15',
+        raceDescription: 'Local gran fondo',
+      },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /General Fitness/i }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      trainingGoal: 'general_fitness',
+      raceDate: undefined,
+      raceDescription: undefined,
+    })
+  })
+
   it('analyses only the last 7 Strava rides before generating the plan', async () => {
     const activities = Array.from({ length: 10 }, (_, idx) => ({
       id: idx + 1,

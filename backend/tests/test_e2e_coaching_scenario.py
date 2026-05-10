@@ -80,7 +80,7 @@ PROFILE = {
     "name": "Scenario Rider",
     "email": "scenario@example.com",
     "bikeType": "road",
-    "trainingGoal": "ftp_improvement",
+    "trainingGoal": "general_fitness",
     "weeklyHours": 10,
     "followsTrainingPlan": True,
     "fitnessLevel": "intermediate",
@@ -276,7 +276,7 @@ async def test_coaching_loop_end_to_end(client, auth_headers, monkeypatch):
         headers=auth_headers,
         json={
             "bikeType": "road",
-            "trainingGoal": "ftp_improvement",
+            "trainingGoal": "general_fitness",
             "weeklyHours": 10,
             "fitnessLevel": "intermediate",
             "followsTrainingPlan": True,

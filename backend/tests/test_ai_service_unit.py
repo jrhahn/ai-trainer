@@ -540,7 +540,7 @@ async def test_generate_training_plan_calls_chat():
     """generate_training_plan should return the plan list from AI response."""
     profile = {
         "bikeType": "road",
-        "trainingGoal": "ftp_improvement",
+        "trainingGoal": "general_fitness",
         "fitnessLevel": "intermediate",
     }
     fake_plan = [
@@ -996,7 +996,7 @@ PROFILE_WITH_FTP = {
     "name": "Test Rider",
     "email": "rider@example.com",
     "bikeType": "road",
-    "trainingGoal": "ftp_improvement",
+    "trainingGoal": "general_fitness",
     "fitnessLevel": "intermediate",
     "currentFTP": 300,
 }
@@ -1145,6 +1145,113 @@ def test_adapt_plan_system_includes_tsb_guidance():
 
 
 # ---------------------------------------------------------------------------
+# onboarding race context prompts
+# ---------------------------------------------------------------------------
+
+
+def test_race_profile_context_empty_without_race_date_or_description():
+    from services.prompts import race_profile_context_section
+
+    assert race_profile_context_section({"trainingGoal": "general_fitness"}) == ""
+
+
+def test_race_profile_context_includes_race_date_and_description():
+    from services.prompts import race_profile_context_section
+
+    section = race_profile_context_section(
+        {
+            "trainingGoal": "general_fitness",
+            "raceDate": "2026-09-15",
+            "raceDescription": "Local gran fondo with repeated climbs",
+        }
+    )
+
+    assert "Profile race context" in section
+    assert "Race date: 2026-09-15" in section
+    assert "race-specific preparation and taper timing" in section
+    assert "Local gran fondo with repeated climbs" in section
+    assert "event context for training decisions" in section
+
+
+def test_generate_adapt_and_chat_prompts_include_profile_race_context():
+    from services.prompts import (
+        adapt_plan_user,
+        ask_trainer_plan_updates_rule,
+        ask_trainer_system,
+        generate_plan_user,
+    )
+
+    profile = {
+        "trainingGoal": "general_fitness",
+        "raceDate": "2026-09-15",
+        "raceDescription": "Flat time trial with crosswinds",
+        "fitnessLevel": "intermediate",
+    }
+    generate_prompt = generate_plan_user(
+        profile,
+        today="2026-05-10",
+        assessment_section="",
+    )
+    adapt_prompt = adapt_plan_user(
+        profile,
+        today="2026-05-10",
+        recent_feedback=[],
+        incomplete_days=[],
+    )
+    chat_prompt = ask_trainer_system(
+        profile=profile,
+        today="2026-05-10",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    )
+
+    for prompt in (generate_prompt, adapt_prompt, chat_prompt):
+        assert "Profile race context" in prompt
+        assert "Flat time trial with crosswinds" in prompt
+        assert "Onboarding goal priority" not in prompt
+
+
+def test_generate_plan_user_omits_race_context_for_general_fitness():
+    from services.prompts import generate_plan_user
+
+    prompt = generate_plan_user(
+        {
+            "trainingGoal": "general_fitness",
+            "fitnessLevel": "intermediate",
+        },
+        today="2026-05-10",
+        assessment_section="",
+    )
+
+    assert "Profile race context" not in prompt
+    assert "Onboarding goal priority" not in prompt
+
+
+def test_race_events_context_keeps_fixed_distance_elevation_commitments():
+    from services.prompts import race_events_context_section
+
+    section = race_events_context_section(
+        [
+            {
+                "date": "2026-09-15",
+                "startTime": "08:30",
+                "distanceKm": 145.0,
+                "elevationM": 2400,
+            }
+        ]
+    )
+
+    assert "Race calendar (fixed athlete events to plan around)" in section
+    assert "2026-09-15 at 08:30: 145 km with 2400 m climbing" in section
+    assert "Treat these events as real calendar commitments" in section
+    assert "terrain-specific work" in section
+
+
+# ---------------------------------------------------------------------------
 # classify_question (Task 5)
 # ---------------------------------------------------------------------------
 
@@ -1185,7 +1292,7 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
     (non-empty string) and keyFocusPoints (list with at least 3 entries)."""
     profile = {
         "bikeType": "road",
-        "trainingGoal": "ftp_improvement",
+        "trainingGoal": "general_fitness",
         "fitnessLevel": "intermediate",
         "currentFTP": 260,
     }

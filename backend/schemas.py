@@ -173,6 +173,15 @@ class UpdateProfileRequest(CamelModel):
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
 
+    @field_validator("training_goal")
+    @classmethod
+    def supported_training_goal(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        if value not in {"race", "general_fitness"}:
+            raise ValueError("training_goal must be 'race' or 'general_fitness'")
+        return value
+
 
 # ---------------------------------------------------------------------------
 # Training plan

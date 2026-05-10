@@ -103,7 +103,7 @@ export interface UserProfile {
   name: string
   email: string
   bikeType: 'road' | 'mtb' | 'gravel' | 'other'
-  trainingGoal: 'ftp_improvement' | 'race' | 'general_fitness' | 'weight_loss'
+  trainingGoal: 'race' | 'general_fitness'
   raceDate?: string
   raceDescription?: string
   weeklyHours?: number
