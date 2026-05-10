@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     import models
@@ -51,12 +51,43 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
 
-    @field_validator("password")
-    @classmethod
-    def password_min_length(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        return v
+    @model_validator(mode="after")
+    def password_strength(self) -> "RegisterRequest":
+        password = self.password
+        password_lower = password.lower()
+        failures: list[str] = []
+
+        if len(password) < 8:
+            failures.append("be at least 8 characters")
+        if not re.search(r"[a-z]", password):
+            failures.append("include a lowercase letter")
+        if not re.search(r"[A-Z]", password):
+            failures.append("include an uppercase letter")
+        if not re.search(r"\d", password):
+            failures.append("include a number")
+        if not re.search(r"[^A-Za-z0-9]", password):
+            failures.append("include a special character")
+
+        weak_terms = ("password", "qwerty", "admin", "welcome", "trainlikea")
+        if any(term in password_lower for term in weak_terms):
+            failures.append("avoid common or app-related words")
+
+        personal_fragments = _password_personal_fragments(str(self.email), self.name)
+        if any(fragment in password_lower for fragment in personal_fragments):
+            failures.append("not include your name or email")
+
+        if failures:
+            raise ValueError(f"Password must {', '.join(failures)}.")
+        return self
+
+
+def _password_personal_fragments(email: str, name: str) -> set[str]:
+    fragments: set[str] = set()
+    local_part, _, domain = email.lower().partition("@")
+    candidates = [local_part, *re.split(r"[^a-z0-9]+", local_part)]
+    candidates.extend(re.split(r"[^a-z0-9]+", domain))
+    candidates.extend(re.split(r"[^a-z0-9]+", name.lower()))
+    return {candidate for candidate in candidates if len(candidate) >= 3}
 
 
 class LoginRequest(BaseModel):

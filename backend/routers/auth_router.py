@@ -175,7 +175,6 @@ async def login(
                 detail="Incorrect username or password.",
             )
 
-        # Find or auto-create the app user for this Authelia account
         user = await crud.get_user_by_email_simple(db, body.email)
         if user is None:
             user = await crud.create_user(

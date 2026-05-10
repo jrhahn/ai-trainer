@@ -103,6 +103,13 @@ services:
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-https.service=backend
+      - traefik.http.routers.backend-https.priority=1000
+      - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
+      - traefik.http.routers.backend-public-https.entrypoints=websecure
+      - traefik.http.routers.backend-public-https.tls=true
+      - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.backend-public-https.service=backend
+      - traefik.http.routers.backend-public-https.priority=3000
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
@@ -132,6 +139,7 @@ services:
     image: authelia/authelia:4.39
     restart: unless-stopped
     environment:
+      X_AUTHELIA_CONFIG: ${X_AUTHELIA_CONFIG:-/config/configuration.yml}
       AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:-change-this-authelia-reset-jwt-secret}
       AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET:-change-this-authelia-session-secret}
       AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:-change-this-authelia-storage-encryption-key}

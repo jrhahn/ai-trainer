@@ -33,6 +33,7 @@ app = FastAPI(title="AI Trainer backend", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", _REQUEST_ID_HEADER],
     expose_headers=[_REQUEST_ID_HEADER],
@@ -95,4 +96,3 @@ def healthz() -> dict:
         "api_version": "v1",
         "frontend_url": ALLOWED_ORIGINS,
     }
-

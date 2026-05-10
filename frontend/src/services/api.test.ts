@@ -72,6 +72,23 @@ describe('apiFetch', () => {
     await expect(apiFetch('/test')).rejects.toThrow('Invalid input')
   })
 
+  it('throws with the first validation detail from a non-OK JSON response', async () => {
+    mockFetch.mockResolvedValue(makeResponse(422, {
+      detail: [{ msg: 'Value error, Password must include a number.' }],
+    }))
+
+    await expect(apiFetch('/test')).rejects.toThrow('Password must include a number.')
+  })
+
+  it('includes cookies by default for Authelia-backed requests', async () => {
+    mockFetch.mockResolvedValue(makeResponse(200, {}))
+
+    await apiFetch('/test')
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(options.credentials).toBe('include')
+  })
+
   it('throws a generic message when the error response has no detail', async () => {
     mockFetch.mockResolvedValue(makeResponse(500, { message: 'Server error' }))
 

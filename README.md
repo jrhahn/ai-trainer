@@ -35,6 +35,10 @@ The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
 Before first deploy, replace the placeholder Authelia user in
 `authelia/users_database.yml` with your real admin account.
+Authelia is the file-backed user store for production registration and login,
+while the app uses its own JWT for API authorization after sign-in. Local Compose keeps
+Authelia notifications in `/data/notification.txt` for password reset and future
+identity-verification flows.
 
 ### Backend (Strava OAuth)
 
