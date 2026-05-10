@@ -35,13 +35,12 @@ The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
 Before first deploy, replace the placeholder Authelia user in
 `authelia/users_database.yml` with your real admin account.
-Authelia enforces TOTP for secure sign-in and protected API routes while the
+Authelia handles secure sign-in and protected API routes while the
 frontend app shell stays publicly reachable. The login button opens the
 protected `/auth/callback` route, Traefik redirects to Authelia when needed,
 and the callback exchanges the verified session for an app token. Local Compose keeps
-Authelia notifications in `/data/notification.txt`; production deployments
-should provide SMTP settings and include `compose.smtp.yml` so users can verify
-TOTP enrollment by email.
+Authelia notifications in `/data/notification.txt` for password reset and future
+identity-verification flows.
 
 ### Backend (Strava OAuth)
 

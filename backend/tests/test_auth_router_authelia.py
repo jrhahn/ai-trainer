@@ -248,7 +248,7 @@ async def test_authelia_login_is_disabled(client, monkeypatch):
             json={"email": "frank@example.com", "password": "Str0ng!Pass"},
         )
         assert response.status_code == 403
-        assert "two-factor" in response.json()["detail"]
+        assert response.json()["detail"] == "Password login is disabled. Sign in through Authelia."
 
 
 @pytest.mark.asyncio

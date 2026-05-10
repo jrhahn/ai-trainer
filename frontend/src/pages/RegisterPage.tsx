@@ -59,7 +59,7 @@ export default function RegisterPage() {
         navigate('/onboarding')
       } else {
         // Authelia mode: account created, user now signs in through Authelia
-        // so TOTP enrollment and verification are enforced by the auth portal.
+        // so the auth portal creates the session used by the app.
         navigate('/login')
       }
     },

@@ -26,16 +26,6 @@ password_policy:
     require_number: true
     require_special: true
 
-totp:
-  disable: false
-  issuer: Train Like a Pro
-  algorithm: sha1
-  digits: 6
-  period: 30
-  skew: 1
-  secret_size: 32
-  disable_reuse_security_policy: false
-
 access_control:
   default_policy: deny
   rules:
@@ -52,7 +42,7 @@ access_control:
         - '*.trainlikea.pro'
         - train-like-a.pro
         - '*.train-like-a.pro'
-      policy: two_factor
+      policy: one_factor
 
 session:
   secret: replace-in-env

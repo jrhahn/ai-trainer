@@ -165,7 +165,7 @@ async def login(
     if auth.AUTHELIA_AUTH_ENABLED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password login is disabled. Sign in through Authelia to complete two-factor authentication.",
+            detail="Password login is disabled. Sign in through Authelia.",
         )
 
     user = await crud.get_user_by_email_simple(db, body.email)
