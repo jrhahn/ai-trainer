@@ -49,11 +49,12 @@ function buildRideFeedbackChatMessages(
   },
 ): ChatMessage[] {
   const reference = rideReference(activityDate, activityName)
+  const timestamp = new Date().toISOString()
   const messages: ChatMessage[] = [
     {
       role: 'user',
       content: `Ride feedback for ${reference}: ${data.userNote}`,
-      timestamp: new Date().toISOString(),
+      timestamp,
     },
   ]
 
@@ -62,7 +63,7 @@ function buildRideFeedbackChatMessages(
     messages.push({
       role: 'assistant',
       content: `About ${reference}: ${coachNote}`,
-      timestamp: new Date(Date.now() + 1).toISOString(),
+      timestamp,
     })
   }
 

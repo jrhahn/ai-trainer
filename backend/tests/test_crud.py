@@ -245,6 +245,19 @@ async def test_chat_messages_ordered_by_timestamp(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_messages_with_same_timestamp_keep_insert_order(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.create_chat_message(
+        db, user.id, role="user", content="First", timestamp="2026-04-10T10:00:00Z"
+    )
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="Second", timestamp="2026-04-10T10:00:00Z"
+    )
+    messages = await crud.get_chat_messages(db, user.id)
+    assert [m.content for m in messages] == ["First", "Second"]
+
+
+@pytest.mark.asyncio
 async def test_delete_chat_messages(db: AsyncSession) -> None:
     user = await _make_user(db)
     await crud.create_chat_message(
