@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -6,13 +6,21 @@ import RideFeedbackForm from './RideFeedbackForm'
 
 // Mock the submitRideFeedback service so no real HTTP calls are made.
 const mockSubmit = vi.hoisted(() => vi.fn())
+const mockSaveChatMessage = vi.hoisted(() => vi.fn())
+const mockAddPendingFeedbackRide = vi.hoisted(() => vi.fn())
+const mockAddChatMessage = vi.hoisted(() => vi.fn())
 vi.mock('../services/user', () => ({
   submitRideFeedback: mockSubmit,
+  saveChatMessage: mockSaveChatMessage,
 }))
 
 // Provide a minimal auth token + updateTrainingDay via the store mock.
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: () => ({ authToken: 'test-token', addPendingFeedbackRide: vi.fn() }),
+  useAppStore: () => ({
+    authToken: 'test-token',
+    addPendingFeedbackRide: mockAddPendingFeedbackRide,
+    addChatMessage: mockAddChatMessage,
+  }),
 }))
 
 function renderForm(props?: Partial<Parameters<typeof RideFeedbackForm>[0]>) {
@@ -20,6 +28,7 @@ function renderForm(props?: Partial<Parameters<typeof RideFeedbackForm>[0]>) {
   const defaultProps = {
     stravaActivityId: 1234,
     activityDate: '2026-04-20',
+    activityName: 'Morning Endurance',
     onSaved: vi.fn(),
     onCancel: vi.fn(),
     ...props,
@@ -35,6 +44,10 @@ function renderForm(props?: Partial<Parameters<typeof RideFeedbackForm>[0]>) {
 }
 
 describe('RideFeedbackForm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('renders the form title and activity date', () => {
     renderForm()
     expect(screen.getByText('How was your ride?')).toBeInTheDocument()
@@ -102,6 +115,38 @@ describe('RideFeedbackForm', () => {
       expect.objectContaining({
         legs: 'heavy',
         intent: 'recovery',
+      }),
+    )
+
+    expect(mockAddPendingFeedbackRide).toHaveBeenCalledWith(1234)
+    expect(mockAddChatMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        role: 'user',
+        content: `Ride feedback for your ride "Morning Endurance" on 2026-04-20: ${userNote}`,
+      }),
+    )
+    expect(mockAddChatMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'About your ride "Morning Endurance" on 2026-04-20: Take it easy tomorrow.',
+      }),
+    )
+    expect(mockSaveChatMessage).toHaveBeenNthCalledWith(
+      1,
+      'test-token',
+      expect.objectContaining({
+        role: 'user',
+        content: `Ride feedback for your ride "Morning Endurance" on 2026-04-20: ${userNote}`,
+      }),
+    )
+    expect(mockSaveChatMessage).toHaveBeenNthCalledWith(
+      2,
+      'test-token',
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'About your ride "Morning Endurance" on 2026-04-20: Take it easy tomorrow.',
       }),
     )
 
