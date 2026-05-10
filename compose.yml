@@ -102,7 +102,6 @@ services:
       - traefik.http.routers.backend-https.entrypoints=websecure
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.backend-https.middlewares=authelia-api@docker
       - traefik.http.routers.backend-https.service=backend
       - traefik.http.routers.backend-https.priority=1000
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
@@ -134,13 +133,6 @@ services:
       - traefik.http.routers.frontend-https.tls=true
       - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.frontend-https.service=frontend
-      - traefik.http.routers.frontend-auth-callback-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && Path(`/auth/callback`)
-      - traefik.http.routers.frontend-auth-callback-https.entrypoints=websecure
-      - traefik.http.routers.frontend-auth-callback-https.tls=true
-      - traefik.http.routers.frontend-auth-callback-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.frontend-auth-callback-https.middlewares=authelia@docker
-      - traefik.http.routers.frontend-auth-callback-https.service=frontend
-      - traefik.http.routers.frontend-auth-callback-https.priority=4000
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
   authelia:

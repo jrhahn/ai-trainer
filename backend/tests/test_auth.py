@@ -103,7 +103,7 @@ async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_authelia_mode_registration_returns_503_and_login_is_disabled(client, monkeypatch):
+async def test_authelia_mode_returns_503_when_not_configured(client, monkeypatch):
     """When Authelia is enabled but the internal URL / users-DB path are not set,
     the endpoints return 503 rather than silently falling back to local auth."""
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
@@ -124,7 +124,7 @@ async def test_authelia_mode_registration_returns_503_and_login_is_disabled(clie
         "/api/v1/auth/login",
         json={"email": "rider@example.com", "password": "Str0ng!Pass"},
     )
-    assert login_response.status_code == 403
+    assert login_response.status_code == 503
 
 
 # ---------------------------------------------------------------------------

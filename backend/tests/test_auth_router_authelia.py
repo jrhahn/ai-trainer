@@ -224,8 +224,8 @@ async def test_authelia_register_missing_db_returns_503(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_authelia_login_is_disabled(client, monkeypatch):
-    """Authelia mode must not mint app tokens from password-only login."""
+async def test_authelia_login_valid_credentials(client, monkeypatch):
+    """Login should succeed when credentials match the Authelia users database."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
@@ -247,8 +247,57 @@ async def test_authelia_login_is_disabled(client, monkeypatch):
             "/api/v1/auth/login",
             json={"email": "frank@example.com", "password": "Str0ng!Pass"},
         )
-        assert response.status_code == 403
-        assert response.json()["detail"] == "Password login is disabled. Sign in through Authelia."
+        assert response.status_code == 200
+        assert "access_token" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_authelia_login_wrong_password_returns_401(client, monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        _make_users_db(db_path)
+        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        await client.post(
+            "/api/v1/auth/register",
+            json={"name": "Grace", "email": "grace@example.com", "password": "Str0ng!Pass"},
+        )
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "grace@example.com", "password": "wrongpass"},
+        )
+        assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
+    """Authelia login for a user not in the app DB should auto-create the user."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        hashed = auth.hash_password("Str0ng!Pass")
+        _make_users_db(db_path, users={
+            "henry@example.com": {
+                "disabled": False,
+                "displayname": "Henry",
+                "email": "henry@example.com",
+                "password": hashed,
+                "groups": [],
+            }
+        })
+        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "henry@example.com", "password": "Str0ng!Pass"},
+        )
+        assert response.status_code == 200
+        token = response.json()["access_token"]
+
+        me = await client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
+        assert me.status_code == 200
 
 
 @pytest.mark.asyncio
