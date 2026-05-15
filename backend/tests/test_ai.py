@@ -1188,6 +1188,40 @@ async def test_analyse_activities_marks_multiple_same_day_rides_ambiguous(
 
 
 @pytest.mark.asyncio
+async def test_analyse_activities_preserves_detailed_strava_sport_type(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 62003,
+                    "name": "Evening mobility",
+                    "type": "Workout",
+                    "sportType": "Yoga",
+                    "distance": 0,
+                    "movingTime": 2700,
+                    "elapsedTime": 2700,
+                    "totalElevationGain": 0,
+                    "startDate": "2026-05-05T20:00:00Z",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    analyse_call = mock_ai_service["analyse_strava_activities"].await_args
+    assert analyse_call is not None
+    assert analyse_call.args[0][0]["sport_type"] == "Yoga"
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 62003)
+    assert ride["sportType"] == "Yoga"
+
+
+@pytest.mark.asyncio
 async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
     client, auth_headers, mock_ai_service
 ):
