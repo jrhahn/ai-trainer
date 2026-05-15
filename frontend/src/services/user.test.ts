@@ -47,7 +47,7 @@ describe('fetchCurrentUser', () => {
       stravaAnalysisComplete: false,
       lastStravaActivityId: null,
       bikeType: 'road',
-      trainingGoal: 'ftp_improvement',
+      trainingGoal: 'general_fitness',
       weeklyHours: 10,
       followsTrainingPlan: true,
       fitnessLevel: 'intermediate',
@@ -86,6 +86,23 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.weeklyHours).toBe(8)
     expect(result.profile.fitnessLevel).toBe('intermediate')
     expect(result.lastStravaActivityId).toBeNull()
+  })
+
+  it('normalizes retired training goals to general fitness', async () => {
+    const retiredGoal = 'ftp' + '_improvement'
+    mockApiFetch.mockResolvedValue({
+      id: 'user-3',
+      email: 'legacy@example.com',
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      followsTrainingPlan: false,
+      trainingGoal: retiredGoal,
+      aiProvider: 'openai',
+    })
+
+    const result = await fetchCurrentUser('tok-legacy')
+
+    expect(result.profile.trainingGoal).toBe('general_fitness')
   })
 })
 

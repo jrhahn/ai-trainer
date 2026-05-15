@@ -22,7 +22,7 @@ const profile: UserProfile = {
   name: 'Alice',
   email: 'alice@example.com',
   bikeType: 'road',
-  trainingGoal: 'ftp_improvement',
+  trainingGoal: 'general_fitness',
   weeklyHours: 10,
   followsTrainingPlan: true,
   fitnessLevel: 'intermediate',

@@ -51,7 +51,7 @@ const baseProfile: UserProfile = {
   name: 'Alice',
   email: 'alice@example.com',
   bikeType: 'road',
-  trainingGoal: 'ftp_improvement',
+  trainingGoal: 'general_fitness',
   followsTrainingPlan: true,
   fitnessLevel: 'intermediate',
 }

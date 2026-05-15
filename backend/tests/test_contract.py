@@ -92,7 +92,7 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
         json={
             "name": "Alice Rider",
             "bikeType": "road",
-            "trainingGoal": "ftp_improvement",
+            "trainingGoal": "general_fitness",
             "followsTrainingPlan": False,
             "currentFTP": 250,
             "fitnessLevel": "intermediate",
@@ -104,7 +104,7 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
     assert update_resp.status_code == 200
     updated = update_resp.json()
     assert updated["bikeType"] == "road"
-    assert updated["trainingGoal"] == "ftp_improvement"
+    assert updated["trainingGoal"] == "general_fitness"
     assert updated["isOnboarded"] is True
     assert updated["currentFTP"] == 250
     assert updated["fitnessLevel"] == "intermediate"

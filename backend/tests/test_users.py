@@ -12,7 +12,7 @@ async def test_get_update_and_delete_me(client, auth_headers):
         headers=auth_headers,
         json={
             "bikeType": "road",
-            "trainingGoal": "ftp_improvement",
+            "trainingGoal": "general_fitness",
             "weeklyHours": 8,
             "fitnessLevel": "intermediate",
             "isOnboarded": True,
@@ -25,6 +25,41 @@ async def test_get_update_and_delete_me(client, auth_headers):
     delete_response = await client.delete("/api/v1/users/me", headers=auth_headers)
     assert delete_response.status_code == 200
     assert delete_response.json()["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_general_fitness_update_clears_profile_race_context(client, auth_headers):
+    race_response = await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={
+            "trainingGoal": "race",
+            "raceDate": "2026-09-15",
+            "raceDescription": "Local gran fondo",
+        },
+    )
+    assert race_response.status_code == 200
+    assert race_response.json()["raceDate"] == "2026-09-15"
+
+    general_response = await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"trainingGoal": "general_fitness"},
+    )
+    assert general_response.status_code == 200
+    assert general_response.json()["trainingGoal"] == "general_fitness"
+    assert general_response.json()["raceDate"] is None
+    assert general_response.json()["raceDescription"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_me_rejects_retired_training_goals(client, auth_headers):
+    response = await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"trainingGoal": "ftp_improvement"},
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -443,4 +478,3 @@ async def test_save_ride_feedback_persists_in_history(client, auth_headers, mock
     target = next((r for r in rides if r["stravaActivityId"] == 5003), None)
     assert target is not None
     assert "RPE 8/10" in target["userNote"]
-

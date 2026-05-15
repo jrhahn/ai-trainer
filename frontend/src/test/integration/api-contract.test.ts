@@ -106,7 +106,7 @@ describe('user profile service ↔ backend', () => {
     const data = await updateCurrentUser(token, {
       name: 'Alice Updated',
       bikeType: 'gravel',
-      trainingGoal: 'ftp_improvement',
+      trainingGoal: 'general_fitness',
       fitnessLevel: 'advanced',
       currentFTP: 310,
       maxHeartRate: 188,
@@ -115,7 +115,7 @@ describe('user profile service ↔ backend', () => {
       stravaAnalysisComplete: false,
     })
     expect(data.profile.bikeType).toBe('gravel')
-    expect(data.profile.trainingGoal).toBe('ftp_improvement')
+    expect(data.profile.trainingGoal).toBe('general_fitness')
     expect(data.profile.fitnessLevel).toBe('advanced')
     expect(data.profile.currentFTP).toBe(310)
     expect(data.profile.maxHeartRate).toBe(188)

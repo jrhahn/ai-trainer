@@ -12,7 +12,7 @@ PROFILE = {
     "name": "Test Rider",
     "email": "rider@example.com",
     "bikeType": "road",
-    "trainingGoal": "ftp_improvement",
+    "trainingGoal": "general_fitness",
     "weeklyHours": 8,
     "followsTrainingPlan": True,
     "fitnessLevel": "intermediate",

@@ -676,9 +676,7 @@ export default function DashboardPage() {
           <TrainingLoadChart />
 
           {/* Race readiness */}
-          {(userProfile?.trainingGoal === 'race' ||
-            userProfile?.raceDate ||
-            raceEvents.length > 0) && <RaceReadinessCard />}
+          {(userProfile?.raceDate || raceEvents.length > 0) && <RaceReadinessCard />}
 
           {/* Last ride feedback */}
           {riderAssessment?.lastRideFeedback && (

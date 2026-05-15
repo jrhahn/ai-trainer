@@ -116,7 +116,7 @@ async def test_generate_plan_uses_gemini_when_user_prefers_it(client, auth_heade
                 "name": "Test",
                 "email": "test@example.com",
                 "bikeType": "road",
-                "trainingGoal": "ftp_improvement",
+                "trainingGoal": "general_fitness",
                 "weeklyHours": 8,
                 "followsTrainingPlan": True,
                 "fitnessLevel": "intermediate",

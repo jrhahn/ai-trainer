@@ -54,8 +54,8 @@ Training plan scheduling rules (ALWAYS follow these):
   * beginner: ~3-5 hours/week, no session longer than 120 min
   * intermediate: ~5-8 hours/week, weekend rides up to 4 h
   * advanced: ~8-12 hours/week, weekend rides up to 4 h
-- Make intensity/volume realistic for the athlete's current fitness level and stated goal.
-- For race-prep goals: taper in the final week before the race date (reduce volume by ~40%, keep intensity).
+- Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
+- When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
 - Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
 - Never schedule two hard days back-to-back.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
@@ -271,9 +271,8 @@ def generate_plan_system() -> str:
         "\"power\" (integer watts), \"rest\" (integer seconds)).\n"
         f"{TRAINING_PLAN_PRINCIPLES}"
         "Workout type guidance:\n"
-        "- For FTP improvement: include threshold and VO2max work\n"
-        "- For race prep: include race-specific workouts and a taper week\n"
-        "- For weight loss: emphasise longer aerobic sessions\n"
+        "- If there is an upcoming race in the athlete profile or race calendar, include race-specific workouts and a taper week\n"
+        "- If there is no upcoming race, build a balanced general-fitness plan with endurance, strength, consistency, and recovery\n"
         "- Tailor workout types to the rider type "
         "(e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)"
     )
@@ -302,6 +301,23 @@ def race_events_context_section(race_events: list[dict] | None) -> str:
     return "\n".join(lines)
 
 
+def race_profile_context_section(profile: dict) -> str:
+    """Return race context from the profile when a race was entered during setup."""
+    race_date = profile.get("raceDate") or profile.get("race_date")
+    race_description = profile.get("raceDescription") or profile.get("race_description")
+    if not race_date and not race_description:
+        return ""
+
+    lines = [
+        "Profile race context:",
+    ]
+    if race_date:
+        lines.append(f"- Race date: {race_date} (use this for race-specific preparation and taper timing).")
+    if race_description:
+        lines.append(f"- Race description: {race_description} (treat this as event context for training decisions).")
+    return "\n".join(lines)
+
+
 def generate_plan_user(
     profile: dict,
     today: str,
@@ -309,13 +325,15 @@ def generate_plan_user(
     metrics_history_section: str = "",
     race_events_section: str = "",
 ) -> str:
+    race_profile_section = race_profile_context_section(profile)
+    race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{metrics_section}{events_section}\n"
-        "Generate a 14-day training plan starting from today that reflects both the athlete's "
-        "goals and their actual fitness level from recent rides."
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{events_section}\n"
+        "Generate a 14-day training plan starting from today that reflects the athlete's "
+        "actual fitness level from recent rides and any upcoming race context."
     )
 
 
@@ -368,6 +386,8 @@ def adapt_plan_user(
         )
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
+    race_profile_section = race_profile_context_section(profile)
+    race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
     taper_section = ""
     if taper_days_remaining is not None:
         taper_section = (
@@ -388,7 +408,7 @@ def adapt_plan_user(
     )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{assessment_section}{load_section}{metrics_section}{events_section}{taper_section}\n"
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{events_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         + stale_note
@@ -522,6 +542,8 @@ def ask_trainer_system(
 
     metrics_section = f"\n\n{metrics_history_section}" if metrics_history_section else ""
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
+    race_profile_section = race_profile_context_section(profile)
+    race_profile_section = f"\n\n{race_profile_section}\n" if race_profile_section else ""
 
     classification_section = ""
     if classification:
@@ -560,6 +582,7 @@ def ask_trainer_system(
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
         f"Athlete profile: {json.dumps(profile)}\n"
+        f"{race_profile_section}"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
         f"Upcoming plan (next {len(next_n_days)} days): {json.dumps(next_n_days)}"
         f"{assessment_section}"

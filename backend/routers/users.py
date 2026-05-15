@@ -150,7 +150,11 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("training_goal") == "general_fitness":
+        updates["race_date"] = None
+        updates["race_description"] = None
+    for field, value in updates.items():
         setattr(current_user, field, value)
     await db.flush()
     await db.refresh(current_user)
