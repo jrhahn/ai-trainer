@@ -123,6 +123,34 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
     })
+    expect(screen.getByRole('button', { name: /Retry last message/i })).toBeEnabled()
+  })
+
+  it('retries the last failed message with the retry button', async () => {
+    mockAskTrainer
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({ response: 'Recovered response.' })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Question')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /Retry last message/i }))
+
+    await waitFor(() => {
+      expect(mockAskTrainer).toHaveBeenNthCalledWith(1, 'Question', 'token-123', expect.any(Object))
+      expect(mockAskTrainer).toHaveBeenNthCalledWith(2, 'Question', 'token-123', expect.any(Object))
+      expect(screen.getByText('Recovered response.')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByText('Question')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /Retry last message/i })).toBeDisabled()
   })
 
   it('clears chat history when the clear button is clicked', async () => {
