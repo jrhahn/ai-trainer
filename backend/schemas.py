@@ -324,6 +324,7 @@ class StravaActivitySchema(CamelModel):
     id: int
     name: str
     type: str
+    sport_type: Optional[str] = None
     distance: float
     moving_time: int
     elapsed_time: int

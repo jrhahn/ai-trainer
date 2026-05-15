@@ -18,6 +18,7 @@ import RideFeedbackForm from '../components/RideFeedbackForm'
 import TodayCard from '../components/TodayCard'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useFeedbackDebounce } from '../hooks/useFeedbackDebounce'
+import { formatActivityType } from '../utils/activityType'
 import {
   adaptTrainingPlan,
   fetchRaceEventFeedback,
@@ -58,15 +59,6 @@ function capitalizeText(value: string): string {
   const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
   if (!normalized) return ''
   return normalized.charAt(0).toUpperCase() + normalized.slice(1)
-}
-
-function formatActivityType(sportType: string): string {
-  const withoutRideSuffix = sportType.replace(/Ride$/i, '')
-  return capitalizeText(
-    withoutRideSuffix
-      .replace(/[_-]+/g, ' ')
-      .replace(/([a-z])([A-Z])/g, '$1 $2'),
-  )
 }
 
 function formatNoteLabel(value: string): string {
@@ -530,7 +522,7 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-800">{ride.activityDate}</p>
                   <p className="text-xs text-gray-500">
-                    {ride.sportType}
+                    {formatActivityType(ride.sportType)}
                     {ride.durationSeconds ? ` · ${Math.round(ride.durationSeconds / 60)} min` : ''}
                     {ride.tss ? ` · TSS ${Math.round(ride.tss)}` : ''}
                   </p>
@@ -868,7 +860,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm text-gray-900 truncate">{act.name}</p>
                       <p className="text-xs text-gray-500">
-                        {act.type} · {(act.distance / 1000).toFixed(1)} km ·{' '}
+                        {formatActivityType(act.sport_type ?? act.type)} · {(act.distance / 1000).toFixed(1)} km ·{' '}
                         {Math.round(act.moving_time / 60)} min
                         {act.average_watts ? ` · ${Math.round(act.average_watts)}W avg` : ''}
                       </p>
