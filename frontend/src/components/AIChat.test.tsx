@@ -150,6 +150,7 @@ describe('AIChat', () => {
     })
 
     expect(screen.getAllByText('Question')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /Retry last message/i })).toBeDisabled()
   })
 
   it('clears chat history when the clear button is clicked', async () => {
