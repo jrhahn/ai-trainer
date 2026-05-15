@@ -2423,3 +2423,39 @@ async def test_update_coach_memory_passes_system_and_user_prompts():
     assert system_prompt == update_memory_system()
     assert "45 min on weekdays" in user_msg
     assert "weekdays" in result.lower() or "45 min" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Communication style — no-filler-opener rules
+# ---------------------------------------------------------------------------
+
+
+def test_coach_voice_traits_forbids_filler_openers():
+    """_COACH_VOICE_TRAITS must explicitly instruct the model not to open with filler phrases."""
+    from services.prompts import _COACH_VOICE_TRAITS
+
+    trait_text = _COACH_VOICE_TRAITS.lower()
+    # The instruction must mention at least one concrete filler example
+    assert "certainly" in trait_text or "great question" in trait_text or "of course" in trait_text
+    # And a clear prohibition
+    assert "never" in trait_text or "do not" in trait_text or "avoid" in trait_text
+
+
+def test_ask_trainer_system_response_rules_forbid_filler_openers():
+    """ask_trainer_system response quality rules must ban filler-opener phrases."""
+    from services.prompts import ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Test"},
+        today="2026-05-15",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule="",
+    )
+    prompt_lower = prompt.lower()
+    # Response quality rules section must include filler-opener prohibition
+    assert "certainly" in prompt_lower or "great question" in prompt_lower
+    assert "never start" in prompt_lower or "do not start" in prompt_lower or "never open" in prompt_lower
