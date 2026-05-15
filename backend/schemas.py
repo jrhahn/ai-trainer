@@ -330,6 +330,7 @@ class StravaActivitySchema(CamelModel):
     elapsed_time: int
     total_elevation_gain: float
     start_date: str
+    start_date_local: Optional[str] = None
     average_watts: Optional[float] = None
     weighted_average_watts: Optional[float] = None
     max_watts: Optional[float] = None

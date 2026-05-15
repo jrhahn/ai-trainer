@@ -51,7 +51,8 @@ class ImportFlowHttpClient:
                 {
                     "id": 111,
                     "name": "Good ride",
-                    "start_date": "2026-04-01T08:00:00Z",
+                    "start_date": "2026-04-01T23:30:00Z",
+                    "start_date_local": "2026-04-02T07:30:00",
                     "sport_type": "Ride",
                     "elapsed_time": 3600,
                 },
@@ -295,6 +296,7 @@ async def test_import_background_continues_when_single_track_fails(auth_headers,
         job = await crud.get_latest_strava_import_job(session, user_id)
     assert len(rides) == 1
     assert rides[0].strava_activity_id == 111
+    assert rides[0].activity_date == "2026-04-02"
     assert job is not None
     assert job.status == "done"
     assert job.imported == 1
