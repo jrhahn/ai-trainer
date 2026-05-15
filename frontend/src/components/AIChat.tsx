@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, CalendarRange } from 'lucide-react'
+import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, CalendarRange, RotateCcw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -49,6 +49,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-grow the textarea as the user types
@@ -69,7 +70,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
 
-  const sendMessage = async (msgOverride?: string) => {
+  const sendMessage = async (msgOverride?: string, options?: { skipAddUserMessage?: boolean }) => {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
     if (!raw.trim() || loading) return
 
@@ -80,7 +81,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
     if (!userProfile || !authToken) return
 
-    addChatMessage({ role: 'user', content: userMsg, timestamp })
+    if (!options?.skipAddUserMessage) {
+      addChatMessage({ role: 'user', content: userMsg, timestamp })
+    }
     setLoading(true)
 
     try {
@@ -102,12 +105,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
         sources: result.sources?.length ? result.sources : undefined,
       })
+      setLastFailedMessage(null)
 
       // Re-sync coach memory from server (backend updated it inside ask_trainer)
       fetchCoachMemory(authToken)
         .then((memory) => setCoachMemory(memory))
         .catch((err) => console.warn('Failed to re-fetch coach memory:', err))
     } catch {
+      setLastFailedMessage(userMsg)
       addChatMessage({
         role: 'assistant',
         content: 'Sorry, something went wrong.',
@@ -180,6 +185,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
           rows={1}
           className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
+        <button
+          onClick={() => void sendMessage(lastFailedMessage ?? undefined, { skipAddUserMessage: true })}
+          disabled={loading || !lastFailedMessage || !authToken || !userProfile}
+          aria-label="Retry last message"
+          className="border border-gray-300 text-gray-600 rounded-xl px-3 py-2 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          <RotateCcw size={16} />
+        </button>
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim()}
