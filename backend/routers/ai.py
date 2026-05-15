@@ -250,7 +250,9 @@ async def analyse_activities(
         for activity in body.activities:
             a_dict = activity.model_dump()
             start_date: str = a_dict.get("startDate") or a_dict.get("start_date") or ""
-            activity_date = start_date[:10] if start_date else ""
+            start_date_local: str = a_dict.get("startDateLocal") or a_dict.get("start_date_local") or ""
+            activity_date_source = start_date_local or start_date
+            activity_date = activity_date_source[:10] if activity_date_source else ""
             if not activity_date:
                 continue
             sport_type = a_dict.get("sportType") or a_dict.get("sport_type") or "cycling"

@@ -1222,6 +1222,36 @@ async def test_analyse_activities_preserves_detailed_strava_sport_type(
 
 
 @pytest.mark.asyncio
+async def test_analyse_activities_uses_start_date_local_for_activity_date(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 62004,
+                    "name": "Late evening ride",
+                    "type": "Ride",
+                    "distance": 12000,
+                    "movingTime": 1800,
+                    "elapsedTime": 1800,
+                    "totalElevationGain": 120,
+                    "startDate": "2026-05-05T23:30:00Z",
+                    "startDateLocal": "2026-05-06T07:30:00",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 62004)
+    assert ride["activityDate"] == "2026-05-06"
+
+
+@pytest.mark.asyncio
 async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
     client, auth_headers, mock_ai_service
 ):
