@@ -2426,23 +2426,24 @@ async def test_update_coach_memory_passes_system_and_user_prompts():
 
 
 # ---------------------------------------------------------------------------
-# Communication style — no-filler-opener rules
+# Communication style — opener variation rules
 # ---------------------------------------------------------------------------
 
 
-def test_coach_voice_traits_forbids_filler_openers():
-    """_COACH_VOICE_TRAITS must explicitly instruct the model not to open with filler phrases."""
+def test_coach_voice_traits_allows_occasional_fillers_but_requires_varied_openers():
+    """_COACH_VOICE_TRAITS should allow occasional fillers but prevent default/repetitive openers."""
     from services.prompts import _COACH_VOICE_TRAITS
 
     trait_text = _COACH_VOICE_TRAITS.lower()
-    # The instruction must mention at least one concrete filler example
-    assert "certainly" in trait_text or "great question" in trait_text or "of course" in trait_text
-    # And a clear prohibition
-    assert "never" in trait_text or "do not" in trait_text or "avoid" in trait_text
+    assert "great question" in trait_text
+    assert "occasionally" in trait_text
+    assert "do not use them as a default opener" in trait_text
+    assert "avoid repetitive" in trait_text
+    assert "you did a tough ride yesterday" in trait_text
 
 
-def test_ask_trainer_system_response_rules_forbid_filler_openers():
-    """ask_trainer_system response quality rules must ban filler-opener phrases."""
+def test_ask_trainer_system_response_rules_allow_occasionally_and_avoid_repetition():
+    """ask_trainer_system should allow occasional fillers while prohibiting repetitive openers."""
     from services.prompts import ask_trainer_system
 
     prompt = ask_trainer_system(
@@ -2456,6 +2457,7 @@ def test_ask_trainer_system_response_rules_forbid_filler_openers():
         plan_updates_rule="",
     )
     prompt_lower = prompt.lower()
-    # Response quality rules section must include filler-opener prohibition
-    assert "certainly" in prompt_lower or "great question" in prompt_lower
-    assert "never start" in prompt_lower or "do not start" in prompt_lower or "never open" in prompt_lower
+    assert "short fillers are okay occasionally" in prompt_lower
+    assert "must not appear as a default opener" in prompt_lower
+    assert "do not sound templated or repetitive" in prompt_lower
+    assert "you did a tough ride yesterday" in prompt_lower
