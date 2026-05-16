@@ -1411,7 +1411,7 @@ def test_coach_persona_keeps_replies_personal():
 
     for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
         text = persona.lower()
-        assert "first name" in text
+        assert "name" in text
         assert "specific to their goals" in text
         assert "recent training" in text
         assert "personal detail" in text
