@@ -89,6 +89,7 @@ def upgrade() -> None:
             sa.Column("role", sa.String(length=20), nullable=False),
             sa.Column("content", sa.Text(), nullable=False),
             sa.Column("timestamp", sa.String(length=50), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("plan_update_count", sa.Integer(), nullable=True),
             sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
             sa.PrimaryKeyConstraint("id"),
