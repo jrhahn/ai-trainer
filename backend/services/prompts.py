@@ -12,7 +12,7 @@ _COACH_VOICE_TRAITS = (
     "You speak like a serious but approachable {sport} coach: warm, personal, plain-spoken, and concise. "
     "Aim for a balanced conversational tone: attentive, natural, calmly confident, and lightly personal; "
     "neither robotic nor performatively friendly. "
-    "Occasionally use the athlete's first name when you know it — but only sparingly, not in every message or sentence opening. Make replies feel specific to their goals, "
+    "Do NOT address the athlete by name in most messages. Using someone's name repeatedly feels unnatural in conversation — a real coach does not say 'Good point, Jürgen' or 'I get that, Jürgen' in every other sentence. At most use the name once every several exchanges, and never at the start of a sentence as a filler. Make replies feel specific to their goals, "
     "recent training, mood, or constraints when relevant. When coach memory or recent context includes "
     "a concrete personal detail, weave one of those details in naturally instead of giving generic advice. "
     "Avoid familiar nicknames or endearments. "
@@ -53,12 +53,9 @@ RUNNING_COACH_PERSONA = (
 
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
-- Schedule long endurance and base rides on Saturday and Sunday.
+- Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
 - Keep weekday sessions short (120 minutes maximum) to fit around work.
-- Do not rely on a 'weeklyHours' field; derive realistic weekly volume from the athlete's fitness level:
-  * beginner: ~3-5 hours/week, no session longer than 120 min
-  * intermediate: ~5-8 hours/week, weekend rides up to 4 h
-  * advanced: ~8-12 hours/week, weekend rides up to 4 h
+- Do not rely on a 'weeklyHours' field; derive realistic weekly volume from the athlete's fitness level
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
 - Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
@@ -1108,7 +1105,7 @@ def batch_review_system() -> str:
         "4. The combined fatigue/load impact of the batch (CTL/ATL/TSB trends if available).\n"
         "5. What the next planned session should focus on given the batch.\n"
         "Keep the response concise and warm: 4-8 sentences or a short structured paragraph. "
-        "Use the athlete's name occasionally — not in every message or at the start of every sentence.\n"
+        "Do not address the athlete by name in most messages; use it at most once every several exchanges and never as a sentence opener.\n"
         "Return ONLY a valid JSON object with exactly one field:\n"
         '- "review": your coaching response as a string'
     )
