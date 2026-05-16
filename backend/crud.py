@@ -163,7 +163,7 @@ async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatM
     result = await db.scalars(
         select(models.ChatMessage)
         .where(models.ChatMessage.user_id == user_id)
-        .order_by(models.ChatMessage.timestamp)
+        .order_by(models.ChatMessage.timestamp, models.ChatMessage.id)
     )
     return list(result)
 
