@@ -2423,3 +2423,41 @@ async def test_update_coach_memory_passes_system_and_user_prompts():
     assert system_prompt == update_memory_system()
     assert "45 min on weekdays" in user_msg
     assert "weekdays" in result.lower() or "45 min" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Communication style — opener variation rules
+# ---------------------------------------------------------------------------
+
+
+def test_coach_voice_traits_allows_occasional_fillers_but_requires_varied_openers():
+    """_COACH_VOICE_TRAITS should allow occasional fillers but prevent default/repetitive openers."""
+    from services.prompts import _COACH_VOICE_TRAITS
+
+    trait_text = _COACH_VOICE_TRAITS.lower()
+    assert "great question" in trait_text
+    assert "occasionally" in trait_text
+    assert "do not use them as a default opener" in trait_text
+    assert "avoid repetitive" in trait_text
+    assert "you did a tough ride yesterday" in trait_text
+
+
+def test_ask_trainer_system_response_rules_allow_occasionally_and_avoid_repetition():
+    """ask_trainer_system should allow occasional fillers while prohibiting repetitive openers."""
+    from services.prompts import ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Test"},
+        today="2026-05-15",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule="",
+    )
+    prompt_lower = prompt.lower()
+    assert "short fillers are okay occasionally" in prompt_lower
+    assert "must not appear as a default opener" in prompt_lower
+    assert "do not sound templated or repetitive" in prompt_lower
+    assert "you did a tough ride yesterday" in prompt_lower
