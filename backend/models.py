@@ -103,7 +103,7 @@ class User(Base):
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
-        order_by="ChatMessage.timestamp, ChatMessage.created_at, ChatMessage.id",
+        order_by="ChatMessage.timestamp, ChatMessage.id",
     )
     coach_memory: Mapped["CoachMemory | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"

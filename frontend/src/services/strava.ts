@@ -26,18 +26,10 @@ export async function disconnectStrava(authToken: string): Promise<void> {
 }
 
 export interface ImportProgress {
-  jobId?: string | null
   status: 'idle' | 'running' | 'done' | 'error'
   total: number
   processed: number
-  imported: number
   skipped: number
-  failedActivities: Array<{
-    activityId?: number | null
-    activityName?: string | null
-    activityDate?: string | null
-    reason: string
-  }>
   error: string
 }
 
@@ -45,12 +37,12 @@ export async function triggerStravaHistoryImport(
   authToken: string,
   months = 24,
   replaceExisting = false,
-): Promise<{ status: string; jobId?: string }> {
-  return apiFetch<{ status: string; jobId?: string }>(
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(
     `/strava/import-history?months=${months}&replace_existing=${replaceExisting ? 'true' : 'false'}`,
     {
-      token: authToken,
-      method: 'POST',
+    token: authToken,
+    method: 'POST',
     }
   )
 }
