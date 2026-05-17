@@ -25,11 +25,20 @@ export async function disconnectStrava(authToken: string): Promise<void> {
   await apiFetch('/strava/disconnect', { token: authToken, method: 'DELETE' })
 }
 
+export interface FailedActivity {
+  activityId?: number
+  activityName?: string
+  activityDate?: string
+  reason?: string
+}
+
 export interface ImportProgress {
   status: 'idle' | 'running' | 'done' | 'error'
   total: number
   processed: number
+  imported: number
   skipped: number
+  failedActivities: FailedActivity[]
   error: string
 }
 
