@@ -6,10 +6,10 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -286,7 +286,6 @@ async def upsert_rider_assessment(
     user_id: str,
     *,
     estimated_ftp: int | None,
-    estimated_threshold_hr: int | None,
     rider_type: str | None = None,
     notes: str | None = None,
     hr_zones: Any | None = None,
@@ -305,7 +304,6 @@ async def upsert_rider_assessment(
         assessment = models.RiderAssessment(
             user_id=user_id,
             estimated_ftp=estimated_ftp,
-            estimated_threshold_hr=estimated_threshold_hr,
             rider_type=rider_type if rider_type is not None else "allrounder",
             notes=notes if notes is not None else "",
             hr_zones=hr_zones,
@@ -316,7 +314,6 @@ async def upsert_rider_assessment(
         db.add(assessment)
     else:
         assessment.estimated_ftp = estimated_ftp
-        assessment.estimated_threshold_hr = estimated_threshold_hr
         if rider_type is not None:
             assessment.rider_type = rider_type
         if notes is not None:
@@ -341,7 +338,7 @@ async def create_athlete_metric_snapshot(
     user_id: str,
     *,
     ftp: int | None,
-    threshold_hr: int | None,
+    threshold_hr: int | None = None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -356,7 +353,6 @@ async def create_athlete_metric_snapshot(
     kwargs: dict = dict(
         user_id=user_id,
         ftp=ftp,
-        threshold_hr=threshold_hr,
         ctl=ctl,
         atl=atl,
         tsb=tsb,
@@ -375,12 +371,18 @@ async def get_athlete_metric_history(
     user_id: str,
     limit: int = 90,
 ) -> list[models.AthleteMetricSnapshot]:
-    """Return up to *limit* AthleteMetricSnapshot rows for a user, oldest first."""
+    """Return the most recent *limit* AthleteMetricSnapshot rows for a user, oldest first."""
+    recent_ids = (
+        select(models.AthleteMetricSnapshot.id)
+        .where(models.AthleteMetricSnapshot.user_id == user_id)
+        .order_by(models.AthleteMetricSnapshot.recorded_at.desc())
+        .limit(limit)
+        .scalar_subquery()
+    )
     result = await db.scalars(
         select(models.AthleteMetricSnapshot)
-        .where(models.AthleteMetricSnapshot.user_id == user_id)
+        .where(models.AthleteMetricSnapshot.id.in_(recent_ids))
         .order_by(models.AthleteMetricSnapshot.recorded_at.asc())
-        .limit(limit)
     )
     return list(result)
 
@@ -435,6 +437,8 @@ async def upsert_ride_metric(
     strava_activity_id: int,
     activity_date: str,
     sport_type: str = "cycling",
+    activity_name: str | None = None,
+    activity_start_datetime: str | None = None,
     duration_seconds: int | None = None,
     avg_power_w: int | None = None,
     normalized_power_w: int | None = None,
@@ -445,6 +449,8 @@ async def upsert_ride_metric(
     atl_after: float | None = None,
     tsb_after: float | None = None,
     ride_purpose: str | None = None,
+    classification_confidence: str | None = None,
+    classification_reason: str | None = None,
     summary: str | None = None,
 ) -> models.RideMetric:
     """Insert or update a RideMetric row identified by (user_id, strava_activity_id)."""
@@ -453,6 +459,8 @@ async def upsert_ride_metric(
         strava_activity_id=strava_activity_id,
         activity_date=activity_date,
         sport_type=sport_type,
+        activity_name=activity_name,
+        activity_start_datetime=activity_start_datetime,
         duration_seconds=duration_seconds,
         avg_power_w=avg_power_w,
         normalized_power_w=normalized_power_w,
@@ -463,6 +471,8 @@ async def upsert_ride_metric(
         atl_after=atl_after,
         tsb_after=tsb_after,
         ride_purpose=ride_purpose,
+        classification_confidence=classification_confidence,
+        classification_reason=classification_reason,
         summary=summary,
     )
 
@@ -558,6 +568,20 @@ async def update_ride_metric_notes(
     return row
 
 
+async def get_ride_metric_by_strava_id(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+) -> models.RideMetric | None:
+    """Return the RideMetric for a given Strava activity ID, or None if not found."""
+    return await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id == strava_activity_id,
+        )
+    )
+
+
 async def get_ride_metric_by_date(
     db: AsyncSession,
     user_id: str,
@@ -573,3 +597,161 @@ async def get_ride_metric_by_date(
             models.RideMetric.activity_date == activity_date,
         )
     )
+
+
+async def get_ride_metrics_by_date(
+    db: AsyncSession,
+    user_id: str,
+    activity_date: str,
+) -> list[models.RideMetric]:
+    """Return all RideMetrics for a user on a given ISO date string.
+
+    Used by ride-matching logic to handle multiple rides on the same day.
+    """
+    result = await db.scalars(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_date == activity_date,
+        )
+    )
+    return list(result)
+
+
+# ---------------------------------------------------------------------------
+# RaceEvent
+# ---------------------------------------------------------------------------
+
+
+async def get_race_events(db: AsyncSession, user_id: str) -> list[models.RaceEvent]:
+    result = await db.execute(
+        select(models.RaceEvent)
+        .where(models.RaceEvent.user_id == user_id)
+        .order_by(models.RaceEvent.date)
+    )
+    return list(result.scalars().all())
+
+
+async def get_race_event(
+    db: AsyncSession, user_id: str, event_id: str
+) -> models.RaceEvent | None:
+    return await db.scalar(
+        select(models.RaceEvent).where(
+            models.RaceEvent.user_id == user_id,
+            models.RaceEvent.id == event_id,
+        )
+    )
+
+
+async def create_race_event(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    date: str,
+    start_time: str | None,
+    distance_km: float,
+    elevation_m: int,
+) -> models.RaceEvent:
+    event = models.RaceEvent(
+        user_id=user_id,
+        date=date,
+        start_time=start_time,
+        distance_km=distance_km,
+        elevation_m=elevation_m,
+    )
+    db.add(event)
+    await db.flush()
+    return event
+
+
+async def update_race_event(
+    db: AsyncSession,
+    event: models.RaceEvent,
+    *,
+    date: str,
+    start_time: str | None,
+    distance_km: float,
+    elevation_m: int,
+) -> models.RaceEvent:
+    event.date = date
+    event.start_time = start_time
+    event.distance_km = distance_km
+    event.elevation_m = elevation_m
+    await db.flush()
+    return event
+
+
+async def delete_race_event(db: AsyncSession, event: models.RaceEvent) -> None:
+    await db.delete(event)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Ride review helpers
+# ---------------------------------------------------------------------------
+
+
+async def get_unreviewed_ride_metrics(
+    db: AsyncSession, user_id: str
+) -> list[models.RideMetric]:
+    """Return all RideMetric rows for a user where coach_reviewed_at is NULL, ordered oldest-first."""
+    result = await db.execute(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.coach_reviewed_at.is_(None),
+        )
+        .order_by(models.RideMetric.activity_date)
+    )
+    return list(result.scalars().all())
+
+
+async def mark_rides_as_reviewed(
+    db: AsyncSession, user_id: str, strava_activity_ids: list[int]
+) -> int:
+    """Set coach_reviewed_at to now for the given activity IDs. Returns count updated."""
+    if not strava_activity_ids:
+        return 0
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        update(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id.in_(strava_activity_ids),
+        )
+        .values(coach_reviewed_at=now)
+    )
+    await db.flush()
+    return result.rowcount
+
+
+async def get_ride_metrics_by_activity_ids(
+    db: AsyncSession, user_id: str, strava_activity_ids: list[int]
+) -> list[models.RideMetric]:
+    """Return RideMetric rows for the given Strava activity IDs, ordered oldest-first."""
+    result = await db.execute(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.strava_activity_id.in_(strava_activity_ids),
+        )
+        .order_by(models.RideMetric.activity_date)
+    )
+    return list(result.scalars().all())
+
+
+async def update_ride_match(
+    db: AsyncSession,
+    ride: models.RideMetric,
+    *,
+    status: str,
+    matched_plan_date: str | None = None,
+    matched_plan_snapshot: dict | None = None,
+    matched_at: datetime | None = None,
+) -> models.RideMetric:
+    """Update the plan-match fields on a RideMetric row and flush."""
+    ride.plan_match_status = status
+    ride.matched_plan_date = matched_plan_date
+    ride.matched_plan_snapshot = matched_plan_snapshot
+    ride.matched_at = matched_at
+    await db.flush()
+    return ride

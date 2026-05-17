@@ -34,7 +34,7 @@ describe('splitTrainingSummary', () => {
 
     expect(parsed.intro).toBe('Intro sentence.')
     expect(parsed.bullets).toEqual([
-      { text: 'Keep tomorrow easy.' },
+      { label: 'Plan Alignment', text: 'Keep tomorrow easy.' },
       { label: 'Next Action', text: 'Follow the plan.' },
     ])
   })

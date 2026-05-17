@@ -9,6 +9,51 @@ import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
 
+export function splitTrainingSummary(raw: string): {
+  intro: string
+  bullets: { label?: string; text: string }[]
+} {
+  let intro = ''
+  let rawBullets: string[] = []
+
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && 'intro' in parsed && Array.isArray(parsed.bulletPoints)) {
+      intro = String(parsed.intro)
+      rawBullets = parsed.bulletPoints as string[]
+    }
+  } catch {
+    const lines = raw.split('\n')
+    const introLines: string[] = []
+    for (const line of lines) {
+      if (line.startsWith('- ')) {
+        rawBullets.push(line)
+      } else {
+        introLines.push(line)
+      }
+    }
+    intro = introLines.join(' ').trim()
+  }
+
+  const bullets = rawBullets.map((b) => {
+    const normalized = b.replace(/\n+\s*/g, ' ').trim()
+    const withoutDash = normalized.startsWith('- ') ? normalized.slice(2) : normalized
+    const decoded = withoutDash
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+    const colonIdx = decoded.indexOf(': ')
+    if (colonIdx > 0) {
+      return { label: decoded.slice(0, colonIdx), text: decoded.slice(colonIdx + 2) }
+    }
+    return { text: decoded }
+  })
+
+  return { intro, bullets }
+}
+
 export default function DashboardPage() {
   const { userProfile, trainingPlan, authToken, stravaConnection, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
