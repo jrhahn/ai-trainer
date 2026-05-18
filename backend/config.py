@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Application
     # ------------------------------------------------------------------
     app_env: str = "development"
+    app_timezone: str = "Europe/Berlin"
     frontend_url: str = "http://localhost:5173"
     backend_url: str = "http://localhost:8000"
     server_url: str = ""

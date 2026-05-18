@@ -50,7 +50,8 @@ class ImportFlowHttpClient:
             1: [
                 {
                     "id": 111,
-                    "start_date": "2026-04-01T08:00:00Z",
+                    "start_date": "2026-04-01T22:30:00Z",
+                    "start_date_local": "2026-04-02T00:30:00",
                     "sport_type": "Ride",
                     "elapsed_time": 3600,
                 },
@@ -107,19 +108,27 @@ async def test_strava_auth_redirect_contains_state(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_strava_auth_uses_runtime_env_credentials(client, auth_headers, monkeypatch):
+async def test_strava_auth_uses_runtime_env_credentials(
+    client, auth_headers, monkeypatch
+):
     monkeypatch.setattr(strava_router.settings, "strava_client_id", "runtime-client-id")
-    monkeypatch.setattr(strava_router.settings, "strava_client_secret", "runtime-client-secret")
+    monkeypatch.setattr(
+        strava_router.settings, "strava_client_secret", "runtime-client-secret"
+    )
 
     response = await client.get("/api/v1/auth/strava", headers=auth_headers)
 
     assert response.status_code == 200
-    query = urllib.parse.parse_qs(urllib.parse.urlparse(response.json()["authUrl"]).query)
+    query = urllib.parse.parse_qs(
+        urllib.parse.urlparse(response.json()["authUrl"]).query
+    )
     assert query["client_id"][0] == "runtime-client-id"
 
 
 @pytest.mark.asyncio
-async def test_strava_auth_shows_server_side_setup_message(client, auth_headers, monkeypatch):
+async def test_strava_auth_shows_server_side_setup_message(
+    client, auth_headers, monkeypatch
+):
     monkeypatch.setattr(strava_router.settings, "strava_client_id", "")
     monkeypatch.setattr(strava_router.settings, "strava_client_secret", "")
 
@@ -130,7 +139,9 @@ async def test_strava_auth_shows_server_side_setup_message(client, auth_headers,
 
 
 @pytest.mark.asyncio
-async def test_get_strava_activities_uses_stored_token(client, auth_headers, monkeypatch):
+async def test_get_strava_activities_uses_stored_token(
+    client, auth_headers, monkeypatch
+):
     class FakeAsyncClient:
         async def __aenter__(self):
             return self
@@ -256,7 +267,9 @@ async def test_connect_to_strava_end_to_end(client, auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_import_background_continues_when_single_track_fails(auth_headers, monkeypatch):
+async def test_import_background_continues_when_single_track_fails(
+    auth_headers, monkeypatch
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
 
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
@@ -278,10 +291,13 @@ async def test_import_background_continues_when_single_track_fails(auth_headers,
         rides = await crud.get_all_ride_metrics_ordered(session, user_id)
     assert len(rides) == 1
     assert rides[0].strava_activity_id == 111
+    assert rides[0].activity_date == "2026-04-02"
 
 
 @pytest.mark.asyncio
-async def test_import_background_replace_existing_overwrites_prior_rows(auth_headers, monkeypatch):
+async def test_import_background_replace_existing_overwrites_prior_rows(
+    auth_headers, monkeypatch
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
 
     # Seed existing rows that should be removed by replace_existing=True.

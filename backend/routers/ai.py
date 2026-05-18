@@ -7,7 +7,7 @@ from datetime import date as _date
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -18,8 +18,18 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
-from services.analysis import compare_planned_vs_actual, compute_readiness_score, compute_readiness_recommendations, compute_training_load, _project_training_load, project_training_load_from_seed, build_ride_metrics_chain, build_ride_analysis
+from services.analysis import (
+    compare_planned_vs_actual,
+    compute_readiness_score,
+    compute_readiness_recommendations,
+    compute_training_load,
+    _project_training_load,
+    project_training_load_from_seed,
+    build_ride_metrics_chain,
+    build_ride_analysis,
+)
 from services.prompts import ride_metrics_context_section
+from services.dates import app_today, app_today_iso, request_timezone
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
     apply_ride_plan_matches,
@@ -41,17 +51,19 @@ _RATE_LIMIT_DETAIL = (
 async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
     events = await crud.get_race_events(db, user_id)
     return [
-        schemas.RaceEventResponse.model_validate(event, from_attributes=True).model_dump(
-            by_alias=True
-        )
+        schemas.RaceEventResponse.model_validate(
+            event, from_attributes=True
+        ).model_dump(by_alias=True)
         for event in events
     ]
 
 
 def _next_race_date_from_events(
-    events: list[dict], fallback_race_date: str | None
+    events: list[dict],
+    fallback_race_date: str | None,
+    timezone_name: str | None = None,
 ) -> str | None:
-    today = _date.today()
+    today = app_today(timezone_name=timezone_name) if timezone_name else app_today()
     candidates: list[_date] = []
     if fallback_race_date:
         try:
@@ -68,6 +80,10 @@ def _next_race_date_from_events(
             continue
     upcoming = [candidate for candidate in candidates if candidate >= today]
     return min(upcoming).isoformat() if upcoming else None
+
+
+def _request_timezone(request: Request) -> str | None:
+    return request_timezone(request)
 
 
 def _default_provider() -> str:
@@ -103,7 +119,10 @@ async def _auto_rate_ride(
         stream_delta = compare_planned_vs_actual(plan_day, streams, ftp=ftp)
         ride_analysis = build_ride_analysis(streams, ftp) if ftp else None
         result = await ai_service.rate_completed_workout(
-            plan_day, profile, provider=provider, stream_delta=stream_delta,
+            plan_day,
+            profile,
+            provider=provider,
+            stream_delta=stream_delta,
             ride_analysis=ride_analysis,
         )
         feedback_text = result.get("feedback", "")
@@ -141,6 +160,7 @@ async def _auto_adapt_plan(
     plan: list[dict],
     feedback_entry: dict,
     provider: str,
+    timezone_name: str | None = None,
 ) -> None:
     """Trigger automatic plan adaptation when a workout signals fatigue/illness."""
     rider_assessment = None
@@ -157,6 +177,7 @@ async def _auto_adapt_plan(
             provider=provider,
             rider_assessment=rider_assessment,
             race_events=race_events,
+            timezone_name=timezone_name,
         )
         await crud.upsert_training_plan(db, user.id, updated_plan)
     except Exception:
@@ -173,7 +194,9 @@ async def analyse_activities(
     streams_by_id: dict[str, dict] = {}
     if current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
+            access_token = await ensure_fresh_strava_token(
+                current_user.strava_token, db
+            )
             for activity in body.activities:
                 streams = await fetch_activity_streams(access_token, activity.id)
                 if streams:
@@ -204,7 +227,8 @@ async def analyse_activities(
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
             training_plan=training_plan or None,
-            user_ftp=body.current_ftp or (int(current_user.current_ftp) if current_user.current_ftp else None),
+            user_ftp=body.current_ftp
+            or (int(current_user.current_ftp) if current_user.current_ftp else None),
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -234,7 +258,10 @@ async def analyse_activities(
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:
         newest_id = max(a.id for a in body.activities)
-        if current_user.last_strava_activity_id is None or newest_id > current_user.last_strava_activity_id:
+        if (
+            current_user.last_strava_activity_id is None
+            or newest_id > current_user.last_strava_activity_id
+        ):
             current_user.last_strava_activity_id = newest_id
 
     # --- Incremental ride-metrics chain ---
@@ -244,33 +271,52 @@ async def analyse_activities(
     ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
     if body.activities:
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-        seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
-        seed_atl = latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
+        seed_ctl = (
+            latest_metric.ctl_after
+            if latest_metric and latest_metric.ctl_after
+            else 0.0
+        )
+        seed_atl = (
+            latest_metric.atl_after
+            if latest_metric and latest_metric.atl_after
+            else 0.0
+        )
         rides_input = []
         for activity in body.activities:
             a_dict = activity.model_dump()
             start_date: str = a_dict.get("startDate") or a_dict.get("start_date") or ""
-            start_date_local: str = a_dict.get("startDateLocal") or a_dict.get("start_date_local") or ""
+            start_date_local: str = (
+                a_dict.get("startDateLocal") or a_dict.get("start_date_local") or ""
+            )
             activity_date_source = start_date_local or start_date
             activity_date = activity_date_source[:10] if activity_date_source else ""
             if not activity_date:
                 continue
-            sport_type = a_dict.get("sportType") or a_dict.get("sport_type") or "cycling"
-            duration_seconds = int(
-                a_dict.get("elapsedTime") or a_dict.get("elapsed_time")
-                or a_dict.get("movingTime") or a_dict.get("moving_time") or 0
+            sport_type = (
+                a_dict.get("sportType") or a_dict.get("sport_type") or "cycling"
             )
-            rides_input.append({
-                "strava_activity_id": activity.id,
-                "activity_name": a_dict.get("name"),
-                "activity_start_datetime": start_date or None,
-                "activity_date": activity_date,
-                "sport_type": sport_type,
-                "duration_seconds": duration_seconds,
-                "streams": streams_by_id.get(str(activity.id), {}),
-            })
+            duration_seconds = int(
+                a_dict.get("elapsedTime")
+                or a_dict.get("elapsed_time")
+                or a_dict.get("movingTime")
+                or a_dict.get("moving_time")
+                or 0
+            )
+            rides_input.append(
+                {
+                    "strava_activity_id": activity.id,
+                    "activity_name": a_dict.get("name"),
+                    "activity_start_datetime": start_date or None,
+                    "activity_date": activity_date,
+                    "sport_type": sport_type,
+                    "duration_seconds": duration_seconds,
+                    "streams": streams_by_id.get(str(activity.id), {}),
+                }
+            )
         if rides_input:
-            metrics_chain = build_ride_metrics_chain(rides_input, ftp_for_chain, seed_ctl, seed_atl)
+            metrics_chain = build_ride_metrics_chain(
+                rides_input, ftp_for_chain, seed_ctl, seed_atl
+            )
             ride_meta_by_id = {r["strava_activity_id"]: r for r in rides_input}
             for metric in metrics_chain:
                 meta = ride_meta_by_id.get(metric["strava_activity_id"], {})
@@ -302,24 +348,36 @@ async def analyse_activities(
 
     assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
     raw_updates = result.get("planUpdates") or []
-    plan_updates = [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_updates] if raw_updates else None
-    return schemas.AnalyseActivitiesResponse(assessment=assessment_schema, plan_updates=plan_updates)
+    plan_updates = (
+        [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_updates]
+        if raw_updates
+        else None
+    )
+    return schemas.AnalyseActivitiesResponse(
+        assessment=assessment_schema, plan_updates=plan_updates
+    )
 
 
 @router.post("/generate-plan")
 async def generate_plan(
     body: schemas.GeneratePlanRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    timezone_name = _request_timezone(request)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
     race_events = await _race_events_for_prompt(db, current_user.id)
     try:
         plan = await ai_service.generate_training_plan(
@@ -328,6 +386,7 @@ async def generate_plan(
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
             race_events=race_events,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -340,19 +399,25 @@ async def generate_plan(
 @router.post("/adapt-plan")
 async def adapt_plan(
     body: schemas.AdaptPlanRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
+    timezone_name = _request_timezone(request)
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
     race_events = await _race_events_for_prompt(db, current_user.id)
     try:
         updated_plan = await ai_service.adapt_training_plan(
@@ -363,6 +428,7 @@ async def adapt_plan(
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
             race_events=race_events,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -376,13 +442,17 @@ async def adapt_plan(
 async def ask_trainer(
     body: schemas.AskTrainerRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AskTrainerResponse:
+    timezone_name = _request_timezone(request)
     # Load state from DB
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -402,7 +472,9 @@ async def ask_trainer(
         ai_service.classify_question(body.question, provider=_provider(current_user))
     )
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
     race_events = await _race_events_for_prompt(db, current_user.id)
 
     # --- Task 5: Await classification (likely already done), then conditionally retrieve RAG context ---
@@ -426,6 +498,7 @@ async def ask_trainer(
             classification=classification,
             metrics_history_section=metrics_section,
             race_events=race_events,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -441,7 +514,9 @@ async def ask_trainer(
         note_date = ride_note_update.get("activity_date")
         note_text = ride_note_update.get("note")
         if note_date and note_text:
-            target_metrics = await crud.get_ride_metrics_by_date(db, current_user.id, note_date)
+            target_metrics = await crud.get_ride_metrics_by_date(
+                db, current_user.id, note_date
+            )
             if len(target_metrics) == 1:
                 target_metric = target_metrics[0]
                 await crud.update_ride_metric_notes(
@@ -453,7 +528,11 @@ async def ask_trainer(
 
     # Persist user and assistant chat messages
     await crud.create_chat_message(
-        db, current_user.id, role="user", content=body.question, timestamp=now,
+        db,
+        current_user.id,
+        role="user",
+        content=body.question,
+        timestamp=now,
     )
     await crud.create_chat_message(
         db,
@@ -478,9 +557,18 @@ async def ask_trainer(
     if plan_updates:
         updates_by_date = {u["date"]: u for u in plan_updates}
         updated_plan = [
-            {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
-            if day.get("date") in updates_by_date
-            else day
+            (
+                {
+                    **day,
+                    **{
+                        k: v
+                        for k, v in updates_by_date[day["date"]].items()
+                        if v is not None
+                    },
+                }
+                if day.get("date") in updates_by_date
+                else day
+            )
             for day in plan
         ]
         await crud.upsert_training_plan(db, current_user.id, updated_plan)
@@ -497,19 +585,25 @@ async def ask_trainer(
 @router.post("/race-event-feedback", response_model=schemas.RaceEventFeedbackResponse)
 async def race_event_feedback(
     body: schemas.RaceEventFeedbackRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RaceEventFeedbackResponse:
+    timezone_name = _request_timezone(request)
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
     race_events = await _race_events_for_prompt(db, current_user.id)
     try:
         feedback = await ai_service.race_event_feedback(
@@ -521,6 +615,7 @@ async def race_event_feedback(
             race_events=race_events,
             metrics_history_section=metrics_section,
             action=body.action,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -532,26 +627,37 @@ async def race_event_feedback(
 @router.post("/rate-workout", response_model=schemas.RateWorkoutResponse)
 async def rate_workout(
     body: schemas.RateWorkoutRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    timezone_name = _request_timezone(request)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
 
     # Fetch Strava streams and compute planned-vs-actual delta when an activity ID is provided
     stream_delta: dict | None = None
     if body.strava_activity_id is not None and current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
-            streams = await fetch_activity_streams(access_token, body.strava_activity_id)
+            access_token = await ensure_fresh_strava_token(
+                current_user.strava_token, db
+            )
+            streams = await fetch_activity_streams(
+                access_token, body.strava_activity_id
+            )
             if streams:
-                ftp = float(
-                    (
-                        current_user.rider_assessment
-                        and current_user.rider_assessment.estimated_ftp
+                ftp = (
+                    float(
+                        (
+                            current_user.rider_assessment
+                            and current_user.rider_assessment.estimated_ftp
+                        )
+                        or current_user.current_ftp
+                        or 0
                     )
-                    or current_user.current_ftp
-                    or 0
-                ) or None
+                    or None
+                )
                 stream_delta = compare_planned_vs_actual(
                     body.day.model_dump(by_alias=True),
                     streams,
@@ -593,10 +699,19 @@ async def rate_workout(
         auto_feedback = {
             "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
             "perceivedEffort": day_feedback.get("perceivedEffort"),
-            "notes": day_feedback.get("notes", "Auto-triggered due to workout feedback"),
+            "notes": day_feedback.get(
+                "notes", "Auto-triggered due to workout feedback"
+            ),
             "completedAt": day_feedback.get("completedAt"),
         }
-        await _auto_adapt_plan(db, current_user, plan, auto_feedback, _provider(current_user))
+        await _auto_adapt_plan(
+            db,
+            current_user,
+            plan,
+            auto_feedback,
+            _provider(current_user),
+            timezone_name=timezone_name,
+        )
 
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),
@@ -609,6 +724,7 @@ async def rate_workout(
 
 @router.post("/review-new-rides", response_model=schemas.BatchReviewRidesResponse)
 async def review_new_rides(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.BatchReviewRidesResponse:
@@ -623,8 +739,11 @@ async def review_new_rides(
     unreviewed = await crud.get_unreviewed_ride_metrics(db, current_user.id)
     if not unreviewed:
         return schemas.BatchReviewRidesResponse(review="", ride_count=0)
+    timezone_name = _request_timezone(request)
 
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
@@ -634,6 +753,7 @@ async def review_new_rides(
             profile=profile,
             provider=_provider(current_user),
             training_plan=training_plan,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -644,7 +764,9 @@ async def review_new_rides(
     ride_ids = [m.strava_activity_id for m in unreviewed]
     await crud.mark_rides_as_reviewed(db, current_user.id, ride_ids)
 
-    return schemas.BatchReviewRidesResponse(review=review_text, ride_count=len(unreviewed))
+    return schemas.BatchReviewRidesResponse(
+        review=review_text, ride_count=len(unreviewed)
+    )
 
 
 @router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)
@@ -672,10 +794,17 @@ async def resolve_ride_match(
     streams = None
     if current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(current_user.strava_token, db)
-            streams = await fetch_activity_streams(access_token, body.strava_activity_id)
+            access_token = await ensure_fresh_strava_token(
+                current_user.strava_token, db
+            )
+            streams = await fetch_activity_streams(
+                access_token, body.strava_activity_id
+            )
         except Exception:
-            logger.warning("Could not fetch Strava streams while resolving ride match", exc_info=True)
+            logger.warning(
+                "Could not fetch Strava streams while resolving ride match",
+                exc_info=True,
+            )
 
     coach_note, plan_updates = await review_matched_ride_and_adapt(
         db,
@@ -700,6 +829,7 @@ async def resolve_ride_match(
 
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
 async def readiness_score(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ReadinessScoreResponse:
@@ -724,20 +854,27 @@ async def readiness_score(
     if ftp <= 0:
         ftp = float(current_user.current_ftp or 0)
 
-    today_str = _date.today().isoformat()
+    timezone_name = _request_timezone(request)
+    today_str = app_today_iso(timezone_name=timezone_name)
 
     # --- Compute current CTL/ATL/TSB from actual ride metrics ---
     latest_ride = await crud.get_latest_ride_metric(db, current_user.id)
     if latest_ride is not None and latest_ride.ctl_after is not None:
         current_ctl = float(latest_ride.ctl_after)
         current_atl = float(latest_ride.atl_after or 0.0)
-        current_tsb = float(latest_ride.tsb_after if latest_ride.tsb_after is not None else current_ctl - current_atl)
+        current_tsb = float(
+            latest_ride.tsb_after
+            if latest_ride.tsb_after is not None
+            else current_ctl - current_atl
+        )
     else:
         # Fall back to plan simulation when no ride data is available
         plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
-        fallback_load = compute_training_load(plan_to_today, ftp) if ftp > 0 else {
-            "ctl": 0.0, "atl": 0.0, "tsb": 0.0
-        }
+        fallback_load = (
+            compute_training_load(plan_to_today, ftp)
+            if ftp > 0
+            else {"ctl": 0.0, "atl": 0.0, "tsb": 0.0}
+        )
         current_ctl = fallback_load["ctl"]
         current_atl = fallback_load["atl"]
         current_tsb = fallback_load["tsb"]
@@ -745,11 +882,15 @@ async def readiness_score(
     # --- Compute days until race ---
     days_until_race = 0
     race_events = await _race_events_for_prompt(db, current_user.id)
-    race_date_str = _next_race_date_from_events(race_events, current_user.race_date)
+    race_date_str = _next_race_date_from_events(
+        race_events,
+        current_user.race_date,
+        timezone_name=timezone_name,
+    )
     if race_date_str:
         try:
             rd = _date.fromisoformat(race_date_str)
-            days_until_race = max(0, (rd - _date.today()).days)
+            days_until_race = max(0, (rd - app_today(timezone_name=timezone_name)).days)
         except ValueError:
             race_date_str = None
 
@@ -841,7 +982,9 @@ async def refresh_knowledge(
     )
 
 
-@router.post("/refresh-login-summary", response_model=schemas.RefreshLoginSummaryResponse)
+@router.post(
+    "/refresh-login-summary", response_model=schemas.RefreshLoginSummaryResponse
+)
 async def refresh_login_summary(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -887,9 +1030,12 @@ async def refresh_login_summary(
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
 
 
-@router.post("/next-ride-recommendation", response_model=schemas.NextRideRecommendationResponse)
+@router.post(
+    "/next-ride-recommendation", response_model=schemas.NextRideRecommendationResponse
+)
 async def next_ride_recommendation(
     body: schemas.NextRideRecommendationRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.NextRideRecommendationResponse:
@@ -904,10 +1050,13 @@ async def next_ride_recommendation(
     If the recommendation includes ``planUpdates`` the next planned session is
     automatically updated in the database (same logic as ``ask-trainer``).
     """
+    timezone_name = _request_timezone(request)
     # --- Load plan, profile, assessment, coach memory ---
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(by_alias=True)
+    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
+        by_alias=True
+    )
 
     rider_assessment = None
     if current_user.rider_assessment is not None:
@@ -942,9 +1091,21 @@ async def next_ride_recommendation(
         # Fall back to the global latest ride metric for training-load context
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
         if latest_metric is not None:
-            ctl = float(latest_metric.ctl_after) if latest_metric.ctl_after is not None else None
-            atl = float(latest_metric.atl_after) if latest_metric.atl_after is not None else None
-            tsb = float(latest_metric.tsb_after) if latest_metric.tsb_after is not None else None
+            ctl = (
+                float(latest_metric.ctl_after)
+                if latest_metric.ctl_after is not None
+                else None
+            )
+            atl = (
+                float(latest_metric.atl_after)
+                if latest_metric.atl_after is not None
+                else None
+            )
+            tsb = (
+                float(latest_metric.tsb_after)
+                if latest_metric.tsb_after is not None
+                else None
+            )
 
     try:
         result = await ai_service.recommend_next_session(
@@ -957,6 +1118,7 @@ async def next_ride_recommendation(
             ctl=ctl,
             atl=atl,
             tsb=tsb,
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(
@@ -968,9 +1130,18 @@ async def next_ride_recommendation(
     if plan_updates:
         updates_by_date = {u["date"]: u for u in plan_updates}
         updated_plan = [
-            {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
-            if day.get("date") in updates_by_date
-            else day
+            (
+                {
+                    **day,
+                    **{
+                        k: v
+                        for k, v in updates_by_date[day["date"]].items()
+                        if v is not None
+                    },
+                }
+                if day.get("date") in updates_by_date
+                else day
+            )
             for day in plan
         ]
         await crud.upsert_training_plan(db, current_user.id, updated_plan)
@@ -988,9 +1159,12 @@ async def next_ride_recommendation(
     )
 
 
-@router.post("/process-pending-feedbacks", response_model=schemas.ProcessPendingFeedbacksResponse)
+@router.post(
+    "/process-pending-feedbacks", response_model=schemas.ProcessPendingFeedbacksResponse
+)
 async def process_pending_feedbacks(
     body: schemas.ProcessPendingFeedbacksRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ProcessPendingFeedbacksResponse:
@@ -1005,6 +1179,7 @@ async def process_pending_feedbacks(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="activity_ids must not be empty",
         )
+    timezone_name = _request_timezone(request)
 
     rides = await crud.get_ride_metrics_by_activity_ids(
         db, current_user.id, body.activity_ids
@@ -1026,6 +1201,7 @@ async def process_pending_feedbacks(
             assessment=assessment_dict,
             training_plan=training_plan or None,
             provider=_provider(current_user),
+            timezone_name=timezone_name,
         )
     except AIRateLimitError:
         raise HTTPException(

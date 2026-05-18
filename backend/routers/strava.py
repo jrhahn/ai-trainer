@@ -316,7 +316,9 @@ async def _run_import_background(
                     continue
 
                 start_date: str = activity.get("start_date", "")
-                activity_date = start_date[:10] if start_date else ""
+                start_date_local: str = activity.get("start_date_local", "")
+                activity_date_source = start_date_local or start_date
+                activity_date = activity_date_source[:10] if activity_date_source else ""
                 if not activity_date:
                     skipped += 1
                     _import_progress[user_id]["skipped"] = skipped

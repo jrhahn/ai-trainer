@@ -32,11 +32,7 @@ def test_next_race_date_returns_closest_upcoming(monkeypatch):
     from datetime import date
     import routers.ai as ai_router
 
-    # Patch today to a fixed date so the test is deterministic
-    monkeypatch.setattr(ai_router, "_date", type("_FakeDate", (), {
-        "today": staticmethod(lambda: date(2026, 5, 1)),
-        "fromisoformat": date.fromisoformat,
-    }))
+    monkeypatch.setattr(ai_router, "app_today", lambda: date(2026, 5, 1))
 
     events = [
         {"date": "2026-06-01"},
@@ -51,10 +47,7 @@ def test_next_race_date_uses_fallback_when_no_events(monkeypatch):
     from datetime import date
     import routers.ai as ai_router
 
-    monkeypatch.setattr(ai_router, "_date", type("_FakeDate", (), {
-        "today": staticmethod(lambda: date(2026, 5, 1)),
-        "fromisoformat": date.fromisoformat,
-    }))
+    monkeypatch.setattr(ai_router, "app_today", lambda: date(2026, 5, 1))
 
     result = ai_router._next_race_date_from_events([], "2026-08-10")
     assert result == "2026-08-10"
@@ -64,10 +57,7 @@ def test_next_race_date_returns_none_when_all_past(monkeypatch):
     from datetime import date
     import routers.ai as ai_router
 
-    monkeypatch.setattr(ai_router, "_date", type("_FakeDate", (), {
-        "today": staticmethod(lambda: date(2026, 5, 1)),
-        "fromisoformat": date.fromisoformat,
-    }))
+    monkeypatch.setattr(ai_router, "app_today", lambda: date(2026, 5, 1))
 
     events = [{"date": "2025-01-01"}, {"date": "2025-06-15"}]
     result = ai_router._next_race_date_from_events(events, None)
@@ -106,6 +96,7 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
 async def test_readiness_score_with_race_events(client, auth_headers):
     """readiness_score includes days_until_race when race events exist."""
     from datetime import date, timedelta
+
     future_date = (date.today() + timedelta(days=30)).isoformat()
 
     # Create a race event
@@ -131,7 +122,9 @@ async def test_readiness_score_with_race_events(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_readiness_score_with_rider_assessment(client, auth_headers, mock_ai_service):
+async def test_readiness_score_with_rider_assessment(
+    client, auth_headers, mock_ai_service
+):
     """readiness_score uses FTP from rider assessment when available."""
     # Create a rider assessment via analyse-activities
     await client.post(
@@ -178,7 +171,9 @@ async def test_review_new_rides_empty(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_with_unreviewed_rides(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_with_unreviewed_rides(
+    client, auth_headers, mock_ai_service
+):
     """review_new_rides calls batch_review_rides when unreviewed rides exist."""
     # Create a ride metric by analysing activities first
     await client.post(
@@ -209,7 +204,9 @@ async def test_review_new_rides_with_unreviewed_rides(client, auth_headers, mock
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_503_on_rate_limit(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
     """review_new_rides returns HTTP 503 when the AI rate limit is hit."""
     # First create a ride so it has something to review
     await client.post(
@@ -253,9 +250,12 @@ async def test_refresh_knowledge_queued(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_refresh_knowledge_503_without_openai_key(client, auth_headers, monkeypatch):
+async def test_refresh_knowledge_503_without_openai_key(
+    client, auth_headers, monkeypatch
+):
     """refresh_knowledge returns 503 when OPENAI_API_KEY is not configured."""
     from config import settings
+
     monkeypatch.setattr(settings, "openai_api_key", None)
 
     response = await client.post("/api/v1/ai/refresh-knowledge", headers=auth_headers)
@@ -270,12 +270,16 @@ async def test_refresh_knowledge_503_without_openai_key(client, auth_headers, mo
 @pytest.mark.asyncio
 async def test_refresh_login_summary_404_without_assessment(client, auth_headers):
     """refresh_login_summary returns 404 when the user has no rider assessment."""
-    response = await client.post("/api/v1/ai/refresh-login-summary", headers=auth_headers)
+    response = await client.post(
+        "/api/v1/ai/refresh-login-summary", headers=auth_headers
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_refresh_login_summary_returns_summary(client, auth_headers, mock_ai_service):
+async def test_refresh_login_summary_returns_summary(
+    client, auth_headers, mock_ai_service
+):
     """refresh_login_summary generates and returns a login summary."""
     # First create a rider assessment via analyse-activities
     await client.post(
@@ -298,8 +302,12 @@ async def test_refresh_login_summary_returns_summary(client, auth_headers, mock_
         },
     )
 
-    with patch.object(ai_service, "generate_login_summary", AsyncMock(return_value="Welcome back!")):
-        response = await client.post("/api/v1/ai/refresh-login-summary", headers=auth_headers)
+    with patch.object(
+        ai_service, "generate_login_summary", AsyncMock(return_value="Welcome back!")
+    ):
+        response = await client.post(
+            "/api/v1/ai/refresh-login-summary", headers=auth_headers
+        )
 
     assert response.status_code == 200
     body = response.json()
@@ -307,7 +315,9 @@ async def test_refresh_login_summary_returns_summary(client, auth_headers, mock_
 
 
 @pytest.mark.asyncio
-async def test_refresh_login_summary_503_on_rate_limit(client, auth_headers, mock_ai_service):
+async def test_refresh_login_summary_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
     """refresh_login_summary returns 503 when the AI rate limit is hit."""
     # Create assessment first
     await client.post(
@@ -330,8 +340,14 @@ async def test_refresh_login_summary_503_on_rate_limit(client, auth_headers, moc
         },
     )
 
-    with patch.object(ai_service, "generate_login_summary", AsyncMock(side_effect=AIRateLimitError("rate"))):
-        response = await client.post("/api/v1/ai/refresh-login-summary", headers=auth_headers)
+    with patch.object(
+        ai_service,
+        "generate_login_summary",
+        AsyncMock(side_effect=AIRateLimitError("rate")),
+    ):
+        response = await client.post(
+            "/api/v1/ai/refresh-login-summary", headers=auth_headers
+        )
 
     assert response.status_code == 503
 
@@ -394,7 +410,9 @@ async def test_rate_workout_triggers_auto_adapt(client, auth_headers, mock_ai_se
 
 
 @pytest.mark.asyncio
-async def test_ask_trainer_persists_ride_note_update(client, auth_headers, mock_ai_service):
+async def test_ask_trainer_persists_ride_note_update(
+    client, auth_headers, mock_ai_service
+):
     """ask_trainer persists ride notes when the response includes ride_note_update."""
     # Create a ride first
     await client.post(
@@ -443,15 +461,34 @@ async def test_ask_trainer_persists_ride_note_update(client, auth_headers, mock_
     }
 
 
+@pytest.mark.asyncio
+async def test_ask_trainer_forwards_browser_timezone(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers={**auth_headers, "X-App-Timezone": "America/Los_Angeles"},
+        json={"question": "What should I do today?"},
+    )
+
+    assert response.status_code == 200
+    call_kwargs = mock_ai_service["ask_trainer"].call_args.kwargs
+    assert call_kwargs["timezone_name"] == "America/Los_Angeles"
+
+
 # ---------------------------------------------------------------------------
 # 503 rate-limit paths for core endpoints
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_analyse_activities_503_on_rate_limit(client, auth_headers, mock_ai_service):
+async def test_analyse_activities_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
     """analyse_activities returns HTTP 503 when AIRateLimitError is raised."""
-    mock_ai_service["analyse_strava_activities"].side_effect = AIRateLimitError("rate limited")
+    mock_ai_service["analyse_strava_activities"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
     response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -477,15 +514,21 @@ async def test_analyse_activities_503_on_rate_limit(client, auth_headers, mock_a
 
 @pytest.mark.asyncio
 async def test_generate_plan_503_on_rate_limit(client, auth_headers, mock_ai_service):
-    mock_ai_service["generate_training_plan"].side_effect = AIRateLimitError("rate limited")
-    response = await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    mock_ai_service["generate_training_plan"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
     assert response.status_code == 503
     mock_ai_service["generate_training_plan"].side_effect = None
 
 
 @pytest.mark.asyncio
 async def test_adapt_plan_503_on_rate_limit(client, auth_headers, mock_ai_service):
-    mock_ai_service["adapt_training_plan"].side_effect = AIRateLimitError("rate limited")
+    mock_ai_service["adapt_training_plan"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
     response = await client.post(
         "/api/v1/ai/adapt-plan",
         headers=auth_headers,
@@ -505,7 +548,9 @@ async def test_adapt_plan_503_on_rate_limit(client, auth_headers, mock_ai_servic
 
 
 @pytest.mark.asyncio
-async def test_ask_trainer_503_on_rate_limit_via_patch(client, auth_headers, mock_ai_service):
+async def test_ask_trainer_503_on_rate_limit_via_patch(
+    client, auth_headers, mock_ai_service
+):
     mock_ai_service["ask_trainer"].side_effect = AIRateLimitError("rate limited")
     response = await client.post(
         "/api/v1/ai/ask-trainer",
@@ -517,9 +562,14 @@ async def test_ask_trainer_503_on_rate_limit_via_patch(client, auth_headers, moc
 
 
 @pytest.mark.asyncio
-async def test_race_event_feedback_503_on_rate_limit(client, auth_headers, mock_ai_service):
-    mock_ai_service["race_event_feedback"].side_effect = AIRateLimitError("rate limited")
+async def test_race_event_feedback_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
+    mock_ai_service["race_event_feedback"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
     from datetime import date, timedelta
+
     future = (date.today() + timedelta(days=60)).isoformat()
     response = await client.post(
         "/api/v1/ai/race-event-feedback",
@@ -541,7 +591,9 @@ async def test_race_event_feedback_503_on_rate_limit(client, auth_headers, mock_
 
 @pytest.mark.asyncio
 async def test_rate_workout_503_on_rate_limit(client, auth_headers, mock_ai_service):
-    mock_ai_service["rate_completed_workout"].side_effect = AIRateLimitError("rate limited")
+    mock_ai_service["rate_completed_workout"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
     response = await client.post(
         "/api/v1/ai/rate-workout",
         headers=auth_headers,
@@ -563,4 +615,3 @@ async def test_rate_workout_503_on_rate_limit(client, auth_headers, mock_ai_serv
     )
     assert response.status_code == 503
     mock_ai_service["rate_completed_workout"].side_effect = None
-

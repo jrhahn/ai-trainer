@@ -115,6 +115,15 @@ describe('apiFetch', () => {
     expect((options.headers as Record<string, string>)['X-Request-ID']).toMatch(/^[0-9a-z]+-[0-9a-z]+$/)
   })
 
+  it('sends the browser timezone with every request', async () => {
+    mockFetch.mockResolvedValue(makeResponse(200, {}))
+
+    await apiFetch('/test')
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect((options.headers as Record<string, string>)['X-App-Timezone']).toEqual(expect.any(String))
+  })
+
   it('logs structured metadata to console.error on a non-OK response', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetch.mockResolvedValue(makeResponse(500, { message: 'oops' }))

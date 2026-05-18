@@ -4,7 +4,6 @@ import io
 import json
 import logging
 import re
-from datetime import date as _date
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
@@ -18,6 +17,7 @@ from config import settings
 from database import get_db
 from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO
+from services.dates import app_today_iso
 from services.ride_matching import review_matched_ride_and_adapt
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -107,7 +107,7 @@ def _merge_race_events_into_memory(memory: str, events: list[models.RaceEvent]) 
 
 
 def _sync_profile_next_race(user: models.User, events: list[models.RaceEvent]) -> None:
-    today = _date.today().isoformat()
+    today = app_today_iso()
     upcoming = [event for event in events if event.date >= today]
     if not upcoming:
         user.race_date = None

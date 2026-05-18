@@ -31,6 +31,7 @@ from .llm import (
     TASK_PLAN,
     get_provider,
 )  # re-exported for backward compat
+from .dates import app_today, app_today_iso
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -68,7 +69,17 @@ MAX_COACH_MEMORY_CHARS = 800
 
 logger = logging.getLogger(__name__)
 
-_SLIM_PLAN_KEEP = {"date", "workoutType", "workout_type", "title", "durationMinutes", "duration_minutes", "targetPower", "target_power", "completed"}
+_SLIM_PLAN_KEEP = {
+    "date",
+    "workoutType",
+    "workout_type",
+    "title",
+    "durationMinutes",
+    "duration_minutes",
+    "targetPower",
+    "target_power",
+    "completed",
+}
 
 
 def _slim_plan_entry(entry: dict) -> dict:
@@ -86,8 +97,12 @@ def _event_date(value: dict) -> datetime.date | None:
         return None
 
 
-def _next_race_date(profile: dict, race_events: list[dict] | None) -> datetime.date | None:
-    today = datetime.date.today()
+def _next_race_date(
+    profile: dict,
+    race_events: list[dict] | None,
+    timezone_name: str | None = None,
+) -> datetime.date | None:
+    today = app_today(timezone_name=timezone_name)
     candidates: list[datetime.date] = []
     profile_race = profile.get("raceDate")
     if profile_race:
@@ -111,14 +126,28 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
-async def _chat(provider: str, system_prompt: str, user_msg: str, json_mode: bool = False, task: str = TASK_COACH) -> str:
-    return await get_provider(provider, task=task).chat(system_prompt, user_msg, json_mode=json_mode)
+async def _chat(
+    provider: str,
+    system_prompt: str,
+    user_msg: str,
+    json_mode: bool = False,
+    task: str = TASK_COACH,
+) -> str:
+    return await get_provider(provider, task=task).chat(
+        system_prompt, user_msg, json_mode=json_mode
+    )
 
 
 async def _chat_history(
-    provider: str, system_prompt: str, messages: list[dict[str, str]], json_mode: bool = False, task: str = TASK_COACH
+    provider: str,
+    system_prompt: str,
+    messages: list[dict[str, str]],
+    json_mode: bool = False,
+    task: str = TASK_COACH,
 ) -> str:
-    return await get_provider(provider, task=task).chat_history(system_prompt, messages, json_mode=json_mode)
+    return await get_provider(provider, task=task).chat_history(
+        system_prompt, messages, json_mode=json_mode
+    )
 
 
 async def analyse_strava_activities(
@@ -151,17 +180,25 @@ async def analyse_strava_activities(
             ftp_for_analysis = float(computed_ftp) if computed_ftp else None
             if ftp_for_analysis is None:
                 # Rough proxy: compute global average power across all activities with power data
-                all_avg_watts = [a.get("averageWatts") or a.get("average_watts") for a in activities]
+                all_avg_watts = [
+                    a.get("averageWatts") or a.get("average_watts") for a in activities
+                ]
                 valid = [w for w in all_avg_watts if w and w > 0]
                 if valid:
-                    ftp_for_analysis = float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
+                    ftp_for_analysis = (
+                        float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
+                    )
             if ftp_for_analysis and ftp_for_analysis > 0:
                 for act_id, streams in streams_by_id.items():
                     analysis = build_ride_analysis(streams, ftp_for_analysis)
                     if analysis:
                         # Find the matching activity name for context
                         act_name = next(
-                            (a.get("name", act_id) for a in activities if str(a.get("id")) == act_id),
+                            (
+                                a.get("name", act_id)
+                                for a in activities
+                                if str(a.get("id")) == act_id
+                            ),
                             act_id,
                         )
                         ride_analyses[act_name] = analysis
@@ -173,7 +210,9 @@ async def analyse_strava_activities(
     # Pass the user-entered FTP and threshold HR directly to the prompt; computed_ftp
     # is used only for per-ride categorisation above, not for the AI assessment output.
     computed_section = analyse_activities_computed_section(
-        user_ftp, max_heart_rate, computed_hr_zones,
+        user_ftp,
+        max_heart_rate,
+        computed_hr_zones,
     )
 
     system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
@@ -182,12 +221,13 @@ async def analyse_strava_activities(
     ride_analyses_section = ""
     if ride_analyses:
         ride_analyses_str = json.dumps(ride_analyses, indent=2)
-        ride_analyses_section = (
-            f"\n\nAlgorithmic per-ride analysis (computed from stream data):\n{ride_analyses_str}"
-        )
+        ride_analyses_section = f"\n\nAlgorithmic per-ride analysis (computed from stream data):\n{ride_analyses_str}"
 
     user_msg = analyse_activities_user(
-        activities, computed_section, ride_analyses_section, sport_type=sport_type,
+        activities,
+        computed_section,
+        ride_analyses_section,
+        sport_type=sport_type,
         training_plan=training_plan,
     )
 
@@ -269,6 +309,7 @@ async def generate_training_plan(
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
     race_events: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
@@ -276,7 +317,7 @@ async def generate_training_plan(
         if rider_assessment
         else ""
     )
-    today = datetime.date.today().isoformat()
+    today = app_today_iso(timezone_name=timezone_name)
     user_msg = generate_plan_user(
         profile,
         today,
@@ -297,8 +338,9 @@ async def adapt_training_plan(
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
     race_events: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> list[dict]:
-    today = datetime.date.today().isoformat()
+    today = app_today_iso(timezone_name=timezone_name)
     incomplete_days = [day for day in plan if not day.get("completed")]
     # Always use the user-entered FTP for training load computation.
     ftp = float(profile.get("currentFTP") or 0)
@@ -307,9 +349,9 @@ async def adapt_training_plan(
     # Detect taper window: if race is within 14 days, pass the remaining days
     # so the prompt builder can inject explicit taper instructions.
     taper_days_remaining: int | None = None
-    next_race = _next_race_date(profile, race_events)
+    next_race = _next_race_date(profile, race_events, timezone_name=timezone_name)
     if next_race is not None:
-        days_left = (next_race - datetime.date.today()).days
+        days_left = (next_race - app_today(timezone_name=timezone_name)).days
         if 0 <= days_left <= 14:
             taper_days_remaining = days_left
 
@@ -328,7 +370,10 @@ async def adapt_training_plan(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     updated_days = {day["date"]: day for day in parsed.get("updatedDays", [])}
-    return [day if day.get("completed") else updated_days.get(day["date"], day) for day in plan]
+    return [
+        day if day.get("completed") else updated_days.get(day["date"], day)
+        for day in plan
+    ]
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:
@@ -344,10 +389,14 @@ async def classify_question(question: str, provider: str = "openai") -> dict:
     try:
         classify_sys = ask_trainer_classify_system()
         classify_user = ask_trainer_classify_user(question)
-        classify_raw = await _chat(provider, classify_sys, classify_user, json_mode=True, task=TASK_CLASSIFY)
+        classify_raw = await _chat(
+            provider, classify_sys, classify_user, json_mode=True, task=TASK_CLASSIFY
+        )
         return _parse_ai_json(classify_raw)
     except Exception:
-        logger.warning("Question classification failed; defaulting to no-RAG", exc_info=True)
+        logger.warning(
+            "Question classification failed; defaulting to no-RAG", exc_info=True
+        )
         return {"category": "general_coaching", "needs_science_rag": False}
 
 
@@ -364,12 +413,23 @@ async def ask_trainer(
     classification: dict | None = None,
     metrics_history_section: str = "",
     race_events: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> dict:
-    today = datetime.date.today().isoformat()
-    last_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") <= today][-MAX_PLAN_DAYS_PAST:]
-    next_7_days = [_slim_plan_entry(day) for day in plan if day.get("date", "") >= today][:MAX_PLAN_DAYS_AHEAD]
-    trimmed_memory = (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
-    memory_section = f"\n\nCoach notes about this athlete (remember these):\n{trimmed_memory}" if trimmed_memory else ""
+    today = app_today_iso(timezone_name=timezone_name)
+    last_7_days = [
+        _slim_plan_entry(day) for day in plan if day.get("date", "") <= today
+    ][-MAX_PLAN_DAYS_PAST:]
+    next_7_days = [
+        _slim_plan_entry(day) for day in plan if day.get("date", "") >= today
+    ][:MAX_PLAN_DAYS_AHEAD]
+    trimmed_memory = (
+        (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
+    )
+    memory_section = (
+        f"\n\nCoach notes about this athlete (remember these):\n{trimmed_memory}"
+        if trimmed_memory
+        else ""
+    )
 
     assessment_section = ask_trainer_assessment_section(
         rider_assessment, current_ftp=profile.get("currentFTP")
@@ -399,7 +459,9 @@ async def ask_trainer(
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
-    raw = await _chat_history(provider, system_prompt, messages, json_mode=True, task=TASK_COACH)
+    raw = await _chat_history(
+        provider, system_prompt, messages, json_mode=True, task=TASK_COACH
+    )
     parsed = _parse_ai_json(raw)
 
     # --- Task 2: Strip "thinking" — never expose internal reasoning to the frontend ---
@@ -422,8 +484,9 @@ async def race_event_feedback(
     race_events: list[dict] | None = None,
     metrics_history_section: str = "",
     action: str = "added",
+    timezone_name: str | None = None,
 ) -> str:
-    today = datetime.date.today().isoformat()
+    today = app_today_iso(timezone_name=timezone_name)
     upcoming_plan = [
         _slim_plan_entry(day)
         for day in plan
@@ -431,7 +494,7 @@ async def race_event_feedback(
     ][:14]
     system_prompt = (
         f"{COACH_PERSONA} Review a calendar race event that was {action}. "
-        "Return ONLY a valid JSON object with a \"feedback\" string. "
+        'Return ONLY a valid JSON object with a "feedback" string. '
         "For added or updated events, the feedback must cover exactly: "
         "(1) how well the event fits the current training plan, "
         "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
@@ -448,13 +511,18 @@ async def race_event_feedback(
         f"Rider assessment: {json.dumps(rider_assessment or {})}\n"
         f"{metrics_history_section}"
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH
+    )
     parsed = _parse_ai_json(raw)
     return parsed.get("feedback", "")
 
 
 async def update_coach_memory(
-    current_memory: str, user_message: str, coach_response: str, provider: str = "openai"
+    current_memory: str,
+    user_message: str,
+    coach_response: str,
+    provider: str = "openai",
 ) -> str:
     system_prompt = update_memory_system()
     user_msg = update_memory_user(current_memory, user_message, coach_response)
@@ -474,9 +542,15 @@ async def rate_completed_workout(
 
     system_prompt = rate_workout_system()
     user_msg = rate_workout_user(
-        day, feedback, profile, stream_delta=stream_delta, actual_ride_analysis=ride_analysis
+        day,
+        feedback,
+        profile,
+        stream_delta=stream_delta,
+        actual_ride_analysis=ride_analysis,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
     parsed = _parse_ai_json(raw)
     return {
         "feedback": parsed.get("feedback", ""),
@@ -519,6 +593,7 @@ async def batch_review_rides(
     profile: dict,
     provider: str = "openai",
     training_plan: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     """Generate a coach review for a batch of newly imported rides.
 
@@ -529,8 +604,15 @@ async def batch_review_rides(
     if not rides:
         return ""
     system_prompt = batch_review_system()
-    user_msg = batch_review_user(rides, profile=profile, training_plan=training_plan)
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    user_msg = batch_review_user(
+        rides,
+        profile=profile,
+        training_plan=training_plan,
+        timezone_name=timezone_name,
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
     parsed = _parse_ai_json(raw)
     return parsed.get("review") or ""
 
@@ -545,6 +627,7 @@ async def recommend_next_session(
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
+    timezone_name: str | None = None,
 ) -> dict:
     """Generate a concrete next-ride recommendation based on recent ride(s) and feedback.
 
@@ -562,8 +645,11 @@ async def recommend_next_session(
         ctl=ctl,
         atl=atl,
         tsb=tsb,
+        timezone_name=timezone_name,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
     parsed = _parse_ai_json(raw)
     return {
         "response": parsed.get("response", ""),
@@ -578,6 +664,7 @@ async def generate_summary_from_ride_feedbacks(
     assessment: dict | None = None,
     training_plan: list[dict] | None = None,
     provider: str = "openai",
+    timezone_name: str | None = None,
 ) -> str:
     """Generate an updated loginSummary from a batch of rides with fresh athlete feedback.
 
@@ -591,6 +678,7 @@ async def generate_summary_from_ride_feedbacks(
         rides=rides,
         assessment=assessment,
         training_plan=training_plan,
+        timezone_name=timezone_name,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

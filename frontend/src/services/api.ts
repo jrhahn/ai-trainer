@@ -11,6 +11,14 @@ function generateRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function getBrowserTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   token?: string | null
   body?: unknown
@@ -20,6 +28,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const { token, headers, body, ...init } = options
   const method = (init.method ?? 'GET').toUpperCase()
   const requestId = generateRequestId()
+  const timezone = getBrowserTimezone()
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -28,6 +37,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'X-Request-ID': requestId,
+      ...(timezone ? { 'X-App-Timezone': timezone } : {}),
       ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
