@@ -154,6 +154,7 @@ export interface ChatMessage {
   timestamp: string
   planUpdateCount?: number
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
+  failedUserMessage?: string
 }
 
 export interface StravaConnection {
