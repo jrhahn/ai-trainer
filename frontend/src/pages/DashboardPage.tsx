@@ -8,6 +8,7 @@ import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
+import { formatLocalDate } from '../utils/workout'
 
 export function splitTrainingSummary(raw: string): {
   intro: string
@@ -82,7 +83,7 @@ export default function DashboardPage() {
     return 'Good evening'
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatLocalDate(new Date())
   const analyzedRides = Math.min(importProgress.processed, importProgress.total)
   const hasRideProgress = !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
   const progressPct = hasRideProgress

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 
+from .dates import app_today, app_today_iso
+
 _COACH_VOICE_TRAITS = (
     "You speak like a serious but approachable {sport} coach: warm, personal, plain-spoken, and concise. "
     "Aim for a balanced conversational tone: attentive, natural, calmly confident, and lightly personal; "
@@ -69,7 +71,9 @@ Training plan scheduling rules (ALWAYS follow these):
 # ---------------------------------------------------------------------------
 
 
-def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None = None) -> str:
+def analyse_activities_system(
+    sport_type: str = "cycling", user_ftp: int | None = None
+) -> str:
     """Return the system prompt for activity analysis.
 
     When *sport_type* is ``"running"`` (or any non-cycling type) a running-
@@ -82,9 +86,7 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         persona = RUNNING_COACH_PERSONA
         activity_noun = "run"
         activities_noun = "runs"
-        ftp_field = (
-            "- \"estimatedFTP\": always null for running (no power data)\n"
-        )
+        ftp_field = '- "estimatedFTP": always null for running (no power data)\n'
         category_section = (
             "Run categories (use HR-based zones when power is unavailable):\n"
             "- recovery: easy jogging, HR < 65% max HR\n"
@@ -148,36 +150,40 @@ def analyse_activities_system(sport_type: str = "cycling", user_ftp: int | None 
         "Return ONLY a valid JSON object with these fields "
         "(all keys double-quoted, numeric values must be plain numbers with no units):\n"
         f"{ftp_field}"
-        "- \"riderType\": one of \"timetrial\", \"sprinter\", \"climber\", \"allrounder\", \"endurance\"\n"
+        '- "riderType": one of "timetrial", "sprinter", "climber", "allrounder", "endurance"\n'
         "- \"notes\": a concise overall assessment addressed directly to the athlete using 'you'. "
         f"Mention their strengths, rider type, and key observations from their {activities_noun}. "
         f"{notes_example}\n"
-        f"- \"lastRideFeedback\": a standalone 2-4 sentence coach note about the SINGLE MOST RECENT {last_ride_key} only "
+        f'- "lastRideFeedback": a standalone 2-4 sentence coach note about the SINGLE MOST RECENT {last_ride_key} only '
         f"(the one with the latest start_date). Write it as a card the athlete reads first thing on their dashboard. "
         f"Cover: (1) what type of {last_ride_key} it was (category) and key numbers, "
         "(2) how the effort looked — "
-        + ("HR response and pace consistency or drift if data available, " if is_running else "power consistency and HR response or drift if data available, ")
+        + (
+            "HR response and pace consistency or drift if data available, "
+            if is_running
+            else "power consistency and HR response or drift if data available, "
+        )
         + "(3) one concrete recommendation for the next training session. "
         "Be warm, personal, and specific — use their actual numbers.\n"
-        f"- \"rideInsights\": a JSON array — one object per {activity_noun} — with keys "
-        "\"id\" (the activity id as a number), \"name\" (activity name string), and \"note\" (a 2-4 sentence "
+        f'- "rideInsights": a JSON array — one object per {activity_noun} — with keys '
+        '"id" (the activity id as a number), "name" (activity name string), and "note" (a 2-4 sentence '
         f"coach note addressed to the athlete). For each {activity_noun}: state its category, "
         "comment on the effort quality (HR drift if data available), and give one "
         "concrete takeaway. Also include 1-2 specific recommendations for the athlete's next training "
         "session based on what you observed. Be empathetic and personal — reference their specific numbers.\n"
-        "- \"loginSummary\": a compact dashboard coaching brief addressed directly to the athlete. "
+        '- "loginSummary": a compact dashboard coaching brief addressed directly to the athlete. '
         "The coach decides which information is important and which details are trivial. Do not force "
         "fixed categories. Write one short intro sentence, then 2-4 bullet points. Each bullet must "
         "start with a short coach-chosen label followed by a colon, for example "
-        "\"- Fatigue: ...\" or \"- Next session: ...\". Include only the most useful takeaways from "
+        '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         f"the recent {activities_noun}, such as volume, effort quality, FTP/fitness signals, plan "
         "alignment, fatigue, or next actions when they genuinely matter. Omit categories with no "
         "meaningful signal. Be specific, warm, and encouraging.\n"
-        "- \"planUpdates\": optional array of training day updates for the upcoming plan based on what "
+        '- "planUpdates": optional array of training day updates for the upcoming plan based on what '
         f"you observed in the {activities_noun}. Only include updates that are genuinely warranted (e.g. add recovery "
         "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
-        "targets). Each update: {\"date\": \"<ISO date>\", \"workoutType\": \"<type>\", \"title\": "
-        "\"<string>\", \"description\": \"<string>\", \"durationMinutes\": <int>}. "
+        'targets). Each update: {"date": "<ISO date>", "workoutType": "<type>", "title": '
+        '"<string>", "description": "<string>", "durationMinutes": <int>}. '
         "If no updates are needed, omit this field or set it to [].\n\n"
         f"{category_section}"
         f"{rider_type_section}"
@@ -194,9 +200,7 @@ def analyse_activities_user(
     is_running = sport_type.lower() in ("running", "run")
     activities_noun = "runs" if is_running else "Strava rides"
     ftp_note = (
-        "Set estimatedFTP to null. "
-    ) if is_running else (
-        "Set estimatedFTP to null. "
+        ("Set estimatedFTP to null. ") if is_running else ("Set estimatedFTP to null. ")
     )
     plan_section = ""
     if training_plan:
@@ -248,29 +252,29 @@ def analyse_activities_computed_section(
 def generate_plan_system() -> str:
     return (
         f"{COACH_PERSONA} Generate a 14-day training plan as JSON.\n"
-        "Return ONLY a valid JSON object with a \"plan\" array of training days. "
+        'Return ONLY a valid JSON object with a "plan" array of training days. '
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units.\n"
-        "Each day must have: \"date\" (ISO date string starting from today), "
-        "\"workoutType\" (one of: \"rest\",\"endurance\",\"intervals\",\"tempo\",\"race\","
-        "\"recovery\",\"strength\"), \"title\" (string), "
-        "\"description\" (a 2-4 sentence summary of the session using the athlete's actual FTP and "
+        'Each day must have: "date" (ISO date string starting from today), '
+        '"workoutType" (one of: "rest","endurance","intervals","tempo","race",'
+        '"recovery","strength"), "title" (string), '
+        '"description" (a 2-4 sentence summary of the session using the athlete\'s actual FTP and '
         "threshold HR values to state exact power/HR targets — never write percentages alone, always "
         "translate them to absolute numbers, e.g. 'Ride for 90 min at 195–220 W (Zone 2, 75–85% of "
         "your 260 W FTP). Keep HR under 148 bpm. The goal is fat oxidation and aerobic base building "
         "— you should be able to hold a conversation throughout.'), "
-        "\"durationMinutes\" (integer), "
-        "\"workoutPurpose\" (1-2 sentences describing the physiological goal of this session and why "
+        '"durationMinutes" (integer), '
+        '"workoutPurpose" (1-2 sentences describing the physiological goal of this session and why '
         "it is placed here in the plan — e.g. 'This tempo block raises your lactate threshold by "
         "training your body to clear lactate more efficiently. It follows yesterday's recovery ride "
         "to take advantage of residual fatigue adaptation.'), "
-        "\"keyFocusPoints\" (array of 3-5 short coaching-cue strings, each beginning with an action "
-        "verb — e.g. [\"Keep cadence between 88-95 rpm throughout\", \"HR must stay below 158 bpm "
-        "(Zone 3); back off if it creeps higher\", \"Breathe rhythmically — aim for a 3-in/2-out "
-        "pattern on climbs\"]).\n"
-        "Optional fields: \"targetPower\" (object with \"low\" and \"high\" integer fields in watts), "
-        "\"targetHeartRate\" (object with \"low\" and \"high\" integer fields in bpm), "
-        "\"intervals\" (array of objects with \"duration\" (integer seconds), "
-        "\"power\" (integer watts), \"rest\" (integer seconds)).\n"
+        '"keyFocusPoints" (array of 3-5 short coaching-cue strings, each beginning with an action '
+        'verb — e.g. ["Keep cadence between 88-95 rpm throughout", "HR must stay below 158 bpm '
+        '(Zone 3); back off if it creeps higher", "Breathe rhythmically — aim for a 3-in/2-out '
+        'pattern on climbs"]).\n'
+        'Optional fields: "targetPower" (object with "low" and "high" integer fields in watts), '
+        '"targetHeartRate" (object with "low" and "high" integer fields in bpm), '
+        '"intervals" (array of objects with "duration" (integer seconds), '
+        '"power" (integer watts), "rest" (integer seconds)).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
         "Workout type guidance:\n"
         "- If there is an upcoming race in the athlete profile or race calendar, include race-specific workouts and a taper week\n"
@@ -314,9 +318,13 @@ def race_profile_context_section(profile: dict) -> str:
         "Profile race context:",
     ]
     if race_date:
-        lines.append(f"- Race date: {race_date} (use this for race-specific preparation and taper timing).")
+        lines.append(
+            f"- Race date: {race_date} (use this for race-specific preparation and taper timing)."
+        )
     if race_description:
-        lines.append(f"- Race description: {race_description} (treat this as event context for training decisions).")
+        lines.append(
+            f"- Race description: {race_description} (treat this as event context for training decisions)."
+        )
     return "\n".join(lines)
 
 
@@ -347,19 +355,19 @@ def generate_plan_user(
 def adapt_plan_system() -> str:
     return (
         f"{COACH_PERSONA} Adapt the remaining training plan based on recent workout feedback.\n"
-        "Return ONLY a valid JSON object with an \"updatedDays\" array. "
+        'Return ONLY a valid JSON object with an "updatedDays" array. '
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units. "
         "For future days keep the same date fields. "
         "For any past incomplete days (date before today), reschedule them to upcoming dates "
         "starting from today, distributing the sessions sensibly without overloading consecutive days.\n"
         "Each updated day must include all required TrainingDay fields: "
-        "\"date\", \"workoutType\", \"title\", \"durationMinutes\".\n"
+        '"date", "workoutType", "title", "durationMinutes".\n'
         "Each updated day must also include: "
-        "\"description\" (a 2-4 sentence summary using the athlete's actual FTP and threshold HR to "
+        '"description" (a 2-4 sentence summary using the athlete\'s actual FTP and threshold HR to '
         "state exact power/HR targets — always translate percentages to absolute numbers), "
-        "\"workoutPurpose\" (1-2 sentences on the physiological goal of the session and why it is "
+        '"workoutPurpose" (1-2 sentences on the physiological goal of the session and why it is '
         "placed here in the adapted plan), "
-        "\"keyFocusPoints\" (array of 3-5 coaching-cue strings, each starting with an action verb).\n"
+        '"keyFocusPoints" (array of 3-5 coaching-cue strings, each starting with an action verb).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
         "Use TSB to guide adaptation: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
         "TSB > +10 before a key workout suggests freshness, intensity can be increased."
@@ -378,7 +386,9 @@ def adapt_plan_user(
     race_events_section: str = "",
 ) -> str:
     assessment_section = (
-        f"\nRider assessment: {json.dumps(rider_assessment)}" if rider_assessment else ""
+        f"\nRider assessment: {json.dumps(rider_assessment)}"
+        if rider_assessment
+        else ""
     )
     load_section = ""
     if training_load:
@@ -423,7 +433,9 @@ def adapt_plan_user(
 # ---------------------------------------------------------------------------
 
 
-def ask_trainer_assessment_section(rider_assessment: dict | None, current_ftp: int | None = None) -> str:
+def ask_trainer_assessment_section(
+    rider_assessment: dict | None, current_ftp: int | None = None
+) -> str:
     """Build the rider-assessment section string. Returns '' when falsy."""
     if not rider_assessment:
         return ""
@@ -461,23 +473,23 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
     """Return the planUpdates rule string for the ask_trainer system prompt."""
     _intervals_rule = (
         "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
-        "or power you MUST include the full \"intervals\" array in planUpdates. "
+        'or power you MUST include the full "intervals" array in planUpdates. '
         "The array must contain EXACTLY the requested number of objects, one per interval rep. "
-        "Each object: {\"duration\": <seconds>, \"power\": <watts>, \"rest\": <seconds>}. "
+        'Each object: {"duration": <seconds>, "power": <watts>, "rest": <seconds>}. '
         "Example — athlete asks for 4×2 min at 370 W with 3 min rest: "
-        "\"intervals\": ["
-        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
-        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
-        "{\"duration\": 120, \"power\": 370, \"rest\": 180}, "
-        "{\"duration\": 120, \"power\": 370, \"rest\": 180}]. "
+        '"intervals": ['
+        '{"duration": 120, "power": 370, "rest": 180}, '
+        '{"duration": 120, "power": 370, "rest": 180}, '
+        '{"duration": 120, "power": 370, "rest": 180}, '
+        '{"duration": 120, "power": 370, "rest": 180}]. '
         "Never describe the intervals only in text and omit the array — always materialise "
         "every rep as a separate object in the array."
     )
     _rich_description_rule = (
-        "Whenever you include a planUpdates entry, always include \"workoutPurpose\" "
-        "(1-2 sentences on the physiological goal) and \"keyFocusPoints\" (array of 3-5 "
+        'Whenever you include a planUpdates entry, always include "workoutPurpose" '
+        '(1-2 sentences on the physiological goal) and "keyFocusPoints" (array of 3-5 '
         "coaching-cue strings starting with an action verb). "
-        "Also write \"description\" using the athlete's actual FTP/threshold HR to state "
+        'Also write "description" using the athlete\'s actual FTP/threshold HR to state '
         "exact power/HR targets — never write percentages alone."
     )
     if context_workout:
@@ -490,8 +502,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "workoutType", "title", "description", "durationMinutes", '
             '"targetPower", "targetHeartRate", "intervals", "workoutPurpose", "keyFocusPoints". '
-            "Always include \"title\" and \"description\" so the plan entry stays informative. "
-            "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+            'Always include "title" and "description" so the plan entry stays informative. '
+            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
             f"{_rich_description_rule} "
             f"{_intervals_rule}"
         )
@@ -502,8 +514,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'date) and any fields to change: "workoutType", "title", "description", '
         '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
         '"workoutPurpose", "keyFocusPoints". '
-        "Always include \"title\" and \"description\" so the plan entry stays informative. "
-        "For a skipped/rest day set workoutType to \"rest\", durationMinutes to 0. "
+        'Always include "title" and "description" so the plan entry stays informative. '
+        'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
         f"{_rich_description_rule} "
         f"{_intervals_rule}"
     )
@@ -525,10 +537,14 @@ def ask_trainer_system(
     race_events_section: str = "",
 ) -> str:
     science_section = (
-        f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
-        f"{science_context}"
-        "\nWhen citing these sources, include the title in your response."
-    ) if science_context else ""
+        (
+            f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
+            f"{science_context}"
+            "\nWhen citing these sources, include the title in your response."
+        )
+        if science_context
+        else ""
+    )
 
     training_load_section = ""
     if training_load and not metrics_history_section:
@@ -542,10 +558,14 @@ def ask_trainer_system(
             "TSB > +10 before a key workout suggests freshness, intensity can be increased."
         )
 
-    metrics_section = f"\n\n{metrics_history_section}" if metrics_history_section else ""
+    metrics_section = (
+        f"\n\n{metrics_history_section}" if metrics_history_section else ""
+    )
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
     race_profile_section = race_profile_context_section(profile)
-    race_profile_section = f"\n\n{race_profile_section}\n" if race_profile_section else ""
+    race_profile_section = (
+        f"\n\n{race_profile_section}\n" if race_profile_section else ""
+    )
 
     classification_section = ""
     if classification:
@@ -560,8 +580,8 @@ def ask_trainer_system(
         "- If any ride in the recent ride history (last 3 days) has no user note, "
         "proactively ask the athlete how it felt — briefly and naturally woven into your response.\n"
         "- When the athlete describes how a specific ride felt, populate "
-        "\"ride_note_update\": {\"activity_date\": \"YYYY-MM-DD\", \"note\": \"1-2 sentence summary\"} "
-        "in your JSON response. Omit \"ride_note_update\" entirely when no ride is being described."
+        '"ride_note_update": {"activity_date": "YYYY-MM-DD", "note": "1-2 sentence summary"} '
+        'in your JSON response. Omit "ride_note_update" entirely when no ride is being described.'
     )
 
     # Outlook instructions: guide the coach when the athlete asks for a session preview
@@ -601,12 +621,12 @@ def ask_trainer_system(
         "(1) what the athlete is really asking, "
         + (
             "(2) what their current CTL/ATL/TSB from actual rides suggests about their fatigue state, "
-            if metrics_history_section else
-            "(2) what their recent training history suggests about their fatigue state, "
+            if metrics_history_section
+            else "(2) what their recent training history suggests about their fatigue state, "
         )
         + "(3) whether the request conflicts with training principles, "
         "(4) the most helpful coaching answer. "
-        "Put this reasoning in a \"thinking\" field — it will not be shown to the athlete.\n"
+        'Put this reasoning in a "thinking" field — it will not be shown to the athlete.\n'
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "Whenever the athlete requests a change to the training plan, your response MUST briefly "
@@ -637,7 +657,7 @@ def ask_trainer_system(
         "what each involves, why they are ordered that way, and how the block fits their current "
         "fatigue — then stop; do not modify the plan unless explicitly asked.\n\n"
         "Example of a well-formed 'response' field (athlete asking for an outlook):\n"
-        '  response: "Coming off yesterday\'s threshold work, tomorrow is a 45-minute recovery spin '
+        "  response: \"Coming off yesterday's threshold work, tomorrow is a 45-minute recovery spin "
         "to let the adaptation settle. Saturday is your long endurance ride — 2.5 hours in Z2, "
         "which is the cornerstone of your base block. Sunday is rest. That sequence gives you "
         "quality stress followed by two easier days, which is exactly right given your TSB is "
@@ -675,7 +695,9 @@ def update_memory_system() -> str:
     )
 
 
-def update_memory_user(current_memory: str, user_message: str, coach_response: str) -> str:
+def update_memory_user(
+    current_memory: str, user_message: str, coach_response: str
+) -> str:
     return (
         f"Existing notes:\n{current_memory or '(none)'}\n\n"
         f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
@@ -730,14 +752,14 @@ def rate_workout_system() -> str:
         'back into Z2."\n'
         "  needs_athlete_feedback: false\n\n"
         "MISSED/ABORTED WORKOUT (planned: 60 min intervals, actual: none or marked aborted):\n"
-        '  feedback: "Looks like the interval session didn\'t happen today — that\'s okay, life gets in '
+        "  feedback: \"Looks like the interval session didn't happen today — that's okay, life gets in "
         "the way. Do you want to shift it to tomorrow, or would you prefer I swap it for something "
         'shorter given your schedule?"\n'
         "  needs_athlete_feedback: true\n\n"
         "SUCCESSFUL INTERVAL DAY (planned: 4×8 min threshold, actual: 4×8 min on target):\n"
         '  feedback: "Really solid threshold session — you hit all four 8-minute blocks within target '
         "power and HR stayed controlled throughout. That kind of consistency is exactly what builds "
-        "sustainable top-end fitness. Keep the next ride easy so this work can land properly.\"\n"
+        'sustainable top-end fitness. Keep the next ride easy so this work can land properly."\n'
         "  needs_athlete_feedback: false\n\n"
         "Return ONLY a valid JSON object with these fields:\n"
         '- "feedback": your 2-4 sentence coaching response as a string\n'
@@ -768,9 +790,19 @@ def rate_workout_user(
     planned_hr = ""
     if day.get("targetHeartRate"):
         planned_hr = f"\n- Target HR: {day['targetHeartRate']['low']}–{day['targetHeartRate']['high']} bpm"
-    actual_power = f"\n- Average power: {feedback['averagePower']}W" if feedback.get("averagePower") else ""
-    actual_peak = f"\n- Peak power: {feedback['peakPower']}W" if feedback.get("peakPower") else ""
-    actual_hr = f"\n- Average HR: {feedback['averageHeartRate']} bpm" if feedback.get("averageHeartRate") else ""
+    actual_power = (
+        f"\n- Average power: {feedback['averagePower']}W"
+        if feedback.get("averagePower")
+        else ""
+    )
+    actual_peak = (
+        f"\n- Peak power: {feedback['peakPower']}W" if feedback.get("peakPower") else ""
+    )
+    actual_hr = (
+        f"\n- Average HR: {feedback['averageHeartRate']} bpm"
+        if feedback.get("averageHeartRate")
+        else ""
+    )
     notes = f"\n- Notes: {feedback['notes']}" if feedback.get("notes") else ""
 
     effort_labels = {
@@ -792,7 +824,9 @@ def rate_workout_user(
         if stream_delta.get("avg_power_w") is not None:
             lines.append(f"- Actual avg power: {stream_delta['avg_power_w']}W")
         if stream_delta.get("normalized_power_w") is not None:
-            lines.append(f"- Normalized power (NP): {stream_delta['normalized_power_w']}W")
+            lines.append(
+                f"- Normalized power (NP): {stream_delta['normalized_power_w']}W"
+            )
         if stream_delta.get("target_power_low") is not None:
             lines.append(
                 f"- Target power: {stream_delta['target_power_low']}–{stream_delta['target_power_high']}W"
@@ -863,7 +897,9 @@ def rate_workout_user(
         category = actual_ride_analysis.get("ride_category", "unknown")
         avg_pwr = actual_ride_analysis.get("avg_power_w")
         intervals = actual_ride_analysis.get("intervals_detected") or []
-        analysis_lines: list[str] = ["\nActual ride character (algorithmically derived):"]
+        analysis_lines: list[str] = [
+            "\nActual ride character (algorithmically derived):"
+        ]
         analysis_lines.append(f"- Detected ride category: {category}")
         if avg_pwr:
             analysis_lines.append(f"- Average power: {avg_pwr}W")
@@ -873,15 +909,21 @@ def rate_workout_user(
                 dur = iv.get("duration_secs", 0) // 60
                 pwr = iv.get("avg_power_w", "?")
                 pct = iv.get("power_pct_ftp", "?")
-                hr_note = f", avg HR {iv['avg_hr_bpm']} bpm" if iv.get("avg_hr_bpm") else ""
+                hr_note = (
+                    f", avg HR {iv['avg_hr_bpm']} bpm" if iv.get("avg_hr_bpm") else ""
+                )
                 analysis_lines.append(f"  • {dur} min @ {pwr}W ({pct}% FTP{hr_note})")
         else:
-            analysis_lines.append("- No distinct interval blocks detected (steady effort)")
+            analysis_lines.append(
+                "- No distinct interval blocks detected (steady effort)"
+            )
         actual_analysis_section = "\n".join(analysis_lines)
 
     actual_duration = feedback.get("actualDurationMinutes")
     perceived_effort = feedback.get("perceivedEffort")
-    actual_duration_line = f"- Duration: {actual_duration} min\n" if actual_duration else ""
+    actual_duration_line = (
+        f"- Duration: {actual_duration} min\n" if actual_duration else ""
+    )
     perceived_effort_line = (
         f"- Perceived effort: {perceived_effort}/5 ({effort_labels.get(perceived_effort, '')})\n"
         if perceived_effort
@@ -916,11 +958,11 @@ def ask_trainer_classify_system() -> str:
     return (
         "You are a routing assistant for a cycling coach chatbot. "
         "Classify the athlete's question into one of the following categories:\n"
-        "- \"plan_query\": asking about their training plan, schedule, or specific workouts\n"
-        "- \"workout_modification\": requesting a change, swap, or skip of a workout\n"
-        "- \"performance_question\": asking about their performance, FTP, progress, or race results\n"
-        "- \"science_question\": asking about training physiology, nutrition, recovery science, or methodology\n"
-        "- \"general_coaching\": general coaching advice, motivation, or strategy\n"
+        '- "plan_query": asking about their training plan, schedule, or specific workouts\n'
+        '- "workout_modification": requesting a change, swap, or skip of a workout\n'
+        '- "performance_question": asking about their performance, FTP, progress, or race results\n'
+        '- "science_question": asking about training physiology, nutrition, recovery science, or methodology\n'
+        '- "general_coaching": general coaching advice, motivation, or strategy\n'
         "Return ONLY a valid JSON object with these fields:\n"
         '- "category": one of the categories above\n'
         '- "needs_science_rag": true when the question would benefit from cycling science research '
@@ -949,7 +991,7 @@ def refresh_login_summary_system() -> str:
         "The coach decides which information is important and which details are trivial. Do not force "
         "fixed categories. Write one short intro sentence, then 2-4 bullet points. Each bullet must "
         "start with a short coach-chosen label followed by a colon, for example "
-        "\"- Fatigue: ...\" or \"- Next session: ...\". Include only the most useful takeaways from "
+        '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         "recent activity, fitness signals, plan alignment, fatigue, or next actions when they genuinely "
         "matter. Omit categories with no meaningful signal. Be specific, warm, and encouraging — "
         "reference actual numbers from the data."
@@ -990,7 +1032,9 @@ def refresh_login_summary_user(
 # ---------------------------------------------------------------------------
 
 
-def ride_metrics_context_section(metrics: list) -> str:
+def ride_metrics_context_section(
+    metrics: list, timezone_name: str | None = None
+) -> str:
     """Build a compact structured-text block from a list of RideMetric ORM objects.
 
     Designed to fit into any LLM prompt without bloating the token count.
@@ -1003,9 +1047,6 @@ def ride_metrics_context_section(metrics: list) -> str:
     """
     if not metrics:
         return ""
-
-    from datetime import date as _date
-    today_str = str(_date.today())
 
     lines: list[str] = ["Recent ride history (actual rides, newest first):"]
     for m in metrics:
@@ -1081,13 +1122,20 @@ def ride_metrics_context_section(metrics: list) -> str:
         user_note = getattr(m, "user_note", None)
         activity_date_str = str(getattr(m, "activity_date", ""))
         try:
-            days_ago = (_date.today() - _date.fromisoformat(activity_date_str)).days
+            from datetime import date as _date
+
+            days_ago = (
+                app_today(timezone_name=timezone_name)
+                - _date.fromisoformat(activity_date_str)
+            ).days
         except ValueError:
             days_ago = 99
         if user_note:
             lines.append(f'    Athlete: "{user_note}"')
         elif days_ago <= 3:
-            lines.append("    [no athlete feedback — consider asking how this ride felt]")
+            lines.append(
+                "    [no athlete feedback — consider asking how this ride felt]"
+            )
 
     return "\n".join(lines)
 
@@ -1119,14 +1167,13 @@ def batch_review_user(
     rides: list,
     profile: dict | None = None,
     training_plan: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     """Build the user message for a batch ride review.
 
     *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
     """
-    import datetime as _dt
-
-    today = str(_dt.date.today())
+    today = app_today_iso(timezone_name=timezone_name)
     profile_section = f"\nAthlete profile: {json.dumps(profile)}" if profile else ""
 
     plan_section = ""
@@ -1232,15 +1279,14 @@ def next_ride_recommendation_user(
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     """Build the user message for a next-ride recommendation.
 
     *rides* is a list of RideMetric ORM objects (or duck-typed dicts) with recent
     ride data including user_note (subjective feedback).
     """
-    import datetime as _dt
-
-    today = str(_dt.date.today())
+    today = app_today_iso(timezone_name=timezone_name)
 
     parts: list[str] = [f"Today's date: {today}"]
 
@@ -1271,7 +1317,9 @@ def next_ride_recommendation_user(
         for m in rides:
             ride_parts: list[str] = []
             ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
-            purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+            purpose = getattr(m, "ride_purpose", None) or getattr(
+                m, "sport_type", "ride"
+            )
             ride_parts.append(f"Type: {purpose}")
             duration = getattr(m, "duration_seconds", None)
             if duration:
@@ -1312,7 +1360,9 @@ def next_ride_recommendation_user(
         parts.append("No recent rides available.")
 
     # Next planned session(s)
-    upcoming = [d for d in plan if d.get("date", "") >= today and not d.get("completed")][:3]
+    upcoming = [
+        d for d in plan if d.get("date", "") >= today and not d.get("completed")
+    ][:3]
     if upcoming:
         next_session = upcoming[0]
         parts.append(
@@ -1357,7 +1407,7 @@ def process_pending_feedbacks_system() -> str:
         "The coach decides which information is important and which details are trivial. Do not force "
         "fixed categories. Write one short intro sentence, then 2-4 bullet points. Each bullet must "
         "start with a short coach-chosen label followed by a colon, for example "
-        "\"- Fatigue: ...\" or \"- Next session: ...\". Include only the most useful takeaways from "
+        '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         "the athlete's notes, ride load, plan alignment, fatigue, or next actions when they genuinely "
         "matter. Omit categories with no meaningful signal. Be specific, warm, and encouraging — "
         "reference actual numbers from the data."
@@ -1368,14 +1418,13 @@ def process_pending_feedbacks_user(
     rides: list,
     assessment: dict | None = None,
     training_plan: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     """Build the user message for generating a summary from multiple ride feedbacks.
 
     *rides* is a list of RideMetric ORM objects sorted oldest-first.
     """
-    import datetime as _dt
-
-    today = str(_dt.date.today())
+    today = app_today_iso(timezone_name=timezone_name)
     parts: list[str] = [f"Today's date: {today}"]
 
     if assessment:
@@ -1387,11 +1436,15 @@ def process_pending_feedbacks_user(
             parts.append(f"Athlete profile notes: {notes}")
 
     if rides:
-        rides_lines: list[str] = ["Rides with new athlete feedback (chronological order):"]
+        rides_lines: list[str] = [
+            "Rides with new athlete feedback (chronological order):"
+        ]
         for m in rides:
             ride_parts: list[str] = []
             ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
-            purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
+            purpose = getattr(m, "ride_purpose", None) or getattr(
+                m, "sport_type", "ride"
+            )
             ride_parts.append(f"Type: {purpose}")
             duration = getattr(m, "duration_seconds", None)
             if duration:
@@ -1432,7 +1485,11 @@ def process_pending_feedbacks_user(
         parts.append("No ride data available.")
 
     if training_plan:
-        upcoming = [d for d in training_plan if d.get("date", "") >= today and not d.get("completed")][:3]
+        upcoming = [
+            d
+            for d in training_plan
+            if d.get("date", "") >= today and not d.get("completed")
+        ][:3]
         if upcoming:
             parts.append(
                 "Upcoming planned sessions: "
