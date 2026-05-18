@@ -115,8 +115,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setLastFailedMessage(userMsg)
       addChatMessage({
         role: 'assistant',
-        content: 'Sorry, something went wrong.',
+        content: 'Sorry, something went wrong and I could not respond.',
         timestamp: new Date().toISOString(),
+        failedUserMessage: userMsg,
       })
     } finally {
       setLoading(false)
@@ -185,17 +186,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
           rows={1}
           className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
-        <button
-          onClick={() => {
-            if (!lastFailedMessage) return
-            void sendMessage(lastFailedMessage, { skipAddUserMessage: true })
-          }}
-          disabled={loading || !lastFailedMessage || !authToken || !userProfile}
-          aria-label="Retry last message"
-          className="border border-gray-300 text-gray-600 rounded-xl px-3 py-2 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        >
-          <RotateCcw size={16} />
-        </button>
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim()}
@@ -291,6 +281,17 @@ export default function AIChat({ contextWorkout, className }: Props) {
                     ))}
                   </ul>
                 </div>
+              )}
+              {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
+                <button
+                  onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
+                  disabled={loading || !authToken || !userProfile}
+                  aria-label="Retry coach response"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <RotateCcw size={12} />
+                  Retry
+                </button>
               )}
             </div>
             {msg.role === 'user' && (
