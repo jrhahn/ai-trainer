@@ -71,7 +71,11 @@ async def test_manual_onboarding_full_flow(client, mock_ai_service):
     # 1. Register
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Alice Rider", "email": "alice@example.com", "password": "Str0ng!Pass"},
+        json={
+            "name": "Alice Rider",
+            "email": "alice@example.com",
+            "password": "Str0ng!Pass",
+        },
     )
     assert reg_resp.status_code == 200
     token = reg_resp.json()["access_token"]
@@ -291,7 +295,9 @@ async def test_strava_activities_snake_case_fields_accepted(client, mock_ai_serv
 
 
 @pytest.mark.asyncio
-async def test_strava_activities_camelcase_fields_also_accepted(client, mock_ai_service):
+async def test_strava_activities_camelcase_fields_also_accepted(
+    client, mock_ai_service
+):
     """The backend should accept camelCase aliases too (used in the existing test suite)."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
@@ -463,7 +469,9 @@ async def test_race_events_contract(client):
     assert "Race calendar:" in memory["memory"]
     assert "120.5 km" in memory["memory"]
 
-    list_resp = (await client.get("/api/v1/users/me/race-events", headers=headers)).json()
+    list_resp = (
+        await client.get("/api/v1/users/me/race-events", headers=headers)
+    ).json()
     assert list_resp["events"][0]["id"] == event["id"]
 
     update_resp = await client.put(
@@ -485,14 +493,20 @@ async def test_race_events_contract(client):
         headers=headers,
     )
     assert delete_resp.status_code == 200
-    assert (await client.get("/api/v1/users/me/race-events", headers=headers)).json() == {"events": []}
+    assert (
+        await client.get("/api/v1/users/me/race-events", headers=headers)
+    ).json() == {"events": []}
 
 
 @pytest.mark.asyncio
 async def test_race_event_feedback_contract(client, mock_ai_service):
     reg_resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Feedback", "email": "feedback@example.com", "password": "Str0ng!Pass"},
+        json={
+            "name": "Feedback",
+            "email": "feedback@example.com",
+            "password": "Str0ng!Pass",
+        },
     )
     token = reg_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -532,7 +546,11 @@ async def test_chat_history_contract(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     # POST message (as saveChatMessage sends)
-    msg = {"role": "user", "content": "How should I train?", "timestamp": "2026-05-01T09:00:00Z"}
+    msg = {
+        "role": "user",
+        "content": "How should I train?",
+        "timestamp": "2026-05-01T09:00:00Z",
+    }
     post_resp = await client.post("/api/v1/users/me/chat", headers=headers, json=msg)
     assert post_resp.status_code == 200
     saved_msg = post_resp.json()
@@ -580,14 +598,23 @@ async def test_coach_memory_contract(client):
         await client.put(
             "/api/v1/users/me/coach-memory",
             headers=headers,
-            json={"memory": "Athlete prefers morning rides and responds well to interval work."},
+            json={
+                "memory": "Athlete prefers morning rides and responds well to interval work."
+            },
         )
     ).json()
-    assert saved == {"memory": "Athlete prefers morning rides and responds well to interval work."}
+    assert saved == {
+        "memory": "Athlete prefers morning rides and responds well to interval work."
+    }
 
     # GET memory returns the saved value
-    retrieved = (await client.get("/api/v1/users/me/coach-memory", headers=headers)).json()
-    assert retrieved["memory"] == "Athlete prefers morning rides and responds well to interval work."
+    retrieved = (
+        await client.get("/api/v1/users/me/coach-memory", headers=headers)
+    ).json()
+    assert (
+        retrieved["memory"]
+        == "Athlete prefers morning rides and responds well to interval work."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -670,7 +697,9 @@ async def test_analyse_activities_response_shape(client, mock_ai_service):
     # Optional fields may or may not be present
     for optional_key in ("rideInsights", "lastRideFeedback"):
         if optional_key in assessment:
-            assert assessment[optional_key] is not None or assessment[optional_key] is None
+            assert (
+                assessment[optional_key] is not None or assessment[optional_key] is None
+            )
 
     # planUpdates is optional; when present it must be a list
     if "planUpdates" in body and body["planUpdates"] is not None:
@@ -700,8 +729,10 @@ async def test_metrics_history_empty_for_new_user(client):
 
 
 @pytest.mark.asyncio
-async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_service):
-    """analyse-activities should create a per-ride metric row in /ride-metrics-history."""
+async def test_ride_metrics_history_preserves_activity_type_after_analysis(
+    client, mock_ai_service
+):
+    """analyse-activities should create a metric row with the Strava activity type."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={"name": "Mia", "email": "mia@example.com", "password": "Str0ng!Pass"},
@@ -716,8 +747,8 @@ async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_ser
             "activities": [
                 {
                     "id": 1,
-                    "name": "Ride",
-                    "type": "Ride",
+                    "name": "Hill Hike",
+                    "type": "Hike",
                     "distance": 50000,
                     "moving_time": 3600,
                     "elapsed_time": 3700,
@@ -734,7 +765,8 @@ async def test_ride_metrics_history_populated_after_analysis(client, mock_ai_ser
     assert len(body["rides"]) == 1
     ride = body["rides"][0]
     assert ride["activityDate"] == "2026-04-10"
-    assert ride["sportType"] == "cycling"
+    assert ride["activityName"] == "Hill Hike"
+    assert ride["sportType"] == "Hike"
 
 
 # ---------------------------------------------------------------------------
@@ -773,7 +805,9 @@ async def test_fit_upload_rejects_invalid_fit_data(client):
     resp = await client.post(
         "/api/v1/users/me/upload-fit",
         headers=headers,
-        files={"file": ("workout.fit", b"not a real fit file", "application/octet-stream")},
+        files={
+            "file": ("workout.fit", b"not a real fit file", "application/octet-stream")
+        },
     )
     assert resp.status_code == 422
 
@@ -781,6 +815,7 @@ async def test_fit_upload_rejects_invalid_fit_data(client):
 @pytest.mark.asyncio
 async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkeypatch):
     """A successful .fit upload must create an AthleteMetricSnapshot row (source='fit_upload')."""
+
     # Build a minimal mock FitFile that returns avg_power + avg_hr from session messages
     class _MockDataField:
         def __init__(self, name, value):
@@ -794,13 +829,15 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
         def __iter__(self):
             return iter(self._fields)
 
-    session_record = _MockRecord([
-        _MockDataField("sport", "cycling"),
-        _MockDataField("total_elapsed_time", 3600),
-        _MockDataField("avg_power", 200),
-        _MockDataField("avg_heart_rate", 155),
-        _MockDataField("start_time", None),
-    ])
+    session_record = _MockRecord(
+        [
+            _MockDataField("sport", "cycling"),
+            _MockDataField("total_elapsed_time", 3600),
+            _MockDataField("avg_power", 200),
+            _MockDataField("avg_heart_rate", 155),
+            _MockDataField("start_time", None),
+        ]
+    )
 
     class _MockFitFile:
         def __init__(self, *args, **kwargs):
@@ -815,6 +852,7 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
             return []
 
     import fitparse as _fitparse_mod
+
     monkeypatch.setattr(_fitparse_mod, "FitFile", _MockFitFile)
 
     reg_resp = await client.post(
@@ -827,7 +865,9 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
     upload_resp = await client.post(
         "/api/v1/users/me/upload-fit",
         headers=headers,
-        files={"file": ("workout.fit", b"\x0e\x10\xd9\x07", "application/octet-stream")},
+        files={
+            "file": ("workout.fit", b"\x0e\x10\xd9\x07", "application/octet-stream")
+        },
     )
     assert upload_resp.status_code == 200
     body = upload_resp.json()

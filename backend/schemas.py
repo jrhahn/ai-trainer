@@ -10,7 +10,14 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 if TYPE_CHECKING:
     import models
@@ -478,8 +485,6 @@ class RaceEventFeedbackResponse(CamelModel):
     feedback: str
 
 
-
-
 # ---------------------------------------------------------------------------
 # Athlete metric history
 # ---------------------------------------------------------------------------
@@ -597,8 +602,15 @@ class RideFeedbackRequest(CamelModel):
     legs: Literal["fresh", "normal", "heavy"]
     """Subjective leg-freshness rating."""
 
-    intent: Literal["planned workout", "recovery", "commute", "free ride", "aborted"]
-    """What the athlete intended this ride to be."""
+    intent: Literal[
+        "planned workout",
+        "recovery",
+        "commute",
+        "free ride",
+        "free activity",
+        "aborted",
+    ]
+    """What the athlete intended this activity to be."""
 
     note: Optional[str] = None
     """Optional free-text note."""

@@ -126,6 +126,26 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
+def _activity_sport_type(activity: dict) -> str:
+    value = (
+        activity.get("sportType")
+        or activity.get("sport_type")
+        or activity.get("type")
+        or "cycling"
+    )
+    return str(value).strip() or "cycling"
+
+
+def _primary_sport_type(activities: list[dict], fallback: str = "cycling") -> str:
+    if not activities:
+        return fallback
+    types = [_activity_sport_type(activity) for activity in activities]
+    normalized = {sport_type.lower() for sport_type in types if sport_type}
+    if len(normalized) == 1:
+        return types[0]
+    return "mixed"
+
+
 async def _chat(
     provider: str,
     system_prompt: str,
@@ -159,6 +179,7 @@ async def analyse_strava_activities(
     training_plan: list[dict] | None = None,
     user_ftp: int | None = None,
 ) -> dict:
+    sport_type = _primary_sport_type(activities, fallback=sport_type)
     is_running = sport_type.lower() in ("running", "run")
 
     # --- Algorithmic computation from per-activity stream data ---

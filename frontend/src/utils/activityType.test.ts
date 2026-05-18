@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatActivityType } from './activityType'
+import { activityNoun, formatActivityType, isCyclingActivity } from './activityType'
 
 describe('formatActivityType', () => {
   it('keeps plain ride labels readable', () => {
@@ -17,5 +17,17 @@ describe('formatActivityType', () => {
 
   it('keeps simple non-ride activity types unchanged apart from casing', () => {
     expect(formatActivityType('Yoga')).toBe('Yoga')
+  })
+
+  it('returns an activity-specific noun for common Strava types', () => {
+    expect(activityNoun('Hike')).toBe('hike')
+    expect(activityNoun('TrailRun')).toBe('run')
+    expect(activityNoun('WeightTraining')).toBe('strength session')
+  })
+
+  it('identifies cycling activity types', () => {
+    expect(isCyclingActivity('Ride')).toBe(true)
+    expect(isCyclingActivity('VirtualRide')).toBe(true)
+    expect(isCyclingActivity('Hike')).toBe(false)
   })
 })

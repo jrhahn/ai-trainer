@@ -89,7 +89,7 @@ export default function ProgressionChart() {
     if (recalcStatus === 'importing') {
       return importProgress.total > 0
         ? `Downloading… ${importProgress.processed}/${importProgress.total}`
-        : 'Downloading rides…'
+        : 'Downloading activities…'
     }
     if (recalcStatus === 'recalculating') return 'Recalculating…'
     if (recalcStatus === 'done') return 'Done!'

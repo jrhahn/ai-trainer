@@ -584,7 +584,7 @@ export default function SettingsPage() {
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Ride Analysis</p>
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Activity Analysis</p>
             {importProgress.status === 'running' && (() => {
               const pct = importProgress.total > 0
                 ? Math.round((importProgress.processed / importProgress.total) * 100)
@@ -600,7 +600,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500">
                     {pct !== null
                       ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%) · ${importProgress.imported} imported`
-                      : 'Fetching ride list…'}
+                      : 'Fetching activity list…'}
                   </p>
                 </>
               )

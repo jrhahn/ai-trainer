@@ -53,6 +53,12 @@ RUNNING_COACH_PERSONA = (
     + _COACH_VOICE_TRAITS.format(sport="running")
 )
 
+GENERAL_ENDURANCE_COACH_PERSONA = (
+    "You are a knowledgeable multisport endurance coach — warm, personal, respectful, direct, and genuinely "
+    "invested in the person you're talking to. "
+    + _COACH_VOICE_TRAITS.format(sport="endurance")
+)
+
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
@@ -80,7 +86,18 @@ def analyse_activities_system(
     specific prompt is returned that omits power-based FTP and uses HR-based
     thresholds instead.
     """
-    is_running = sport_type.lower() in ("running", "run")
+    sport_key = sport_type.lower()
+    is_running = sport_key in ("running", "run")
+    is_cycling = sport_key in (
+        "cycling",
+        "ride",
+        "virtualride",
+        "virtual_ride",
+        "ebikeride",
+        "e-bike ride",
+        "mountainbikeride",
+        "gravelride",
+    )
 
     if is_running:
         persona = RUNNING_COACH_PERSONA
@@ -109,7 +126,7 @@ def analyse_activities_system(
             "Your threshold HR looks solid…'"
         )
         last_ride_key = "run"
-    else:
+    elif is_cycling:
         persona = COACH_PERSONA
         activity_noun = "ride"
         activities_noun = "rides"
@@ -144,6 +161,38 @@ def analyse_activities_system(
             "Your aerobic base looks solid…'"
         )
         last_ride_key = "ride"
+    else:
+        persona = GENERAL_ENDURANCE_COACH_PERSONA
+        activity_noun = "activity"
+        activities_noun = "activities"
+        ftp_field = (
+            '- "estimatedFTP": always null unless the activities are clearly cycling with power; '
+            "for hiking, walking, strength, yoga, or mixed activity batches set this field to null\n"
+        )
+        category_section = (
+            "Activity categories:\n"
+            "- recovery: deliberately easy activity, low HR, low muscular strain\n"
+            "- endurance: steady aerobic work appropriate to the sport\n"
+            "- tempo: sustained moderate-to-hard aerobic effort\n"
+            "- strength: gym, bodyweight, or resistance-training session\n"
+            "- hike_walk: hiking or walking activity; assess duration, elevation, and HR, not cycling power\n"
+            "- commute_transport: transport-oriented activity rather than a planned workout\n"
+            "- mixed: multiple activity types in the same batch\n"
+            "- unknown: insufficient data to classify reliably\n\n"
+        )
+        rider_type_section = (
+            "Athlete-type guidelines:\n"
+            "- endurance: long aerobic activities, high consistency, good fatigue resistance\n"
+            "- climber: strong elevation-heavy activity profile\n"
+            "- sprinter: short powerful efforts or high-intensity bursts\n"
+            "- timetrial: strong sustained efforts at steady intensity\n"
+            "- allrounder: balanced across activity types and intensities"
+        )
+        notes_example = (
+            "Example: 'Your recent hiking volume adds useful low-intensity aerobic load, but it should not be "
+            "treated like a cycling interval session…'"
+        )
+        last_ride_key = "activity"
 
     return (
         f"{persona} Analyse the provided activities and return a JSON assessment.\n"
@@ -197,11 +246,24 @@ def analyse_activities_user(
     sport_type: str = "cycling",
     training_plan: list[dict] | None = None,
 ) -> str:
-    is_running = sport_type.lower() in ("running", "run")
-    activities_noun = "runs" if is_running else "Strava rides"
-    ftp_note = (
-        ("Set estimatedFTP to null. ") if is_running else ("Set estimatedFTP to null. ")
+    sport_key = sport_type.lower()
+    is_running = sport_key in ("running", "run")
+    is_cycling = sport_key in (
+        "cycling",
+        "ride",
+        "virtualride",
+        "virtual_ride",
+        "ebikeride",
+        "e-bike ride",
+        "mountainbikeride",
+        "gravelride",
     )
+    activities_noun = (
+        "runs"
+        if is_running
+        else ("Strava rides" if is_cycling else "Strava activities")
+    )
+    ftp_note = "Set estimatedFTP to null. "
     plan_section = ""
     if training_plan:
         plan_section = (
@@ -214,7 +276,8 @@ def analyse_activities_user(
         f"{ride_analyses_section}"
         f"{plan_section}\n\n"
         f"Assess my fitness. {ftp_note}"
-        "Use the per-activity analyses above to write accurate rideInsights and appropriate planUpdates."
+        "Use each activity's sport_type/type when writing rideInsights and appropriate planUpdates; "
+        "do not describe non-cycling activities as rides."
     )
 
 
@@ -576,12 +639,12 @@ def ask_trainer_system(
 
     # Proactive solicitation and structured feedback extraction instructions
     feedback_instructions = (
-        "\n\nRide feedback rules:\n"
-        "- If any ride in the recent ride history (last 3 days) has no user note, "
+        "\n\nActivity feedback rules:\n"
+        "- If any activity in the recent activity history (last 3 days) has no user note, "
         "proactively ask the athlete how it felt — briefly and naturally woven into your response.\n"
-        "- When the athlete describes how a specific ride felt, populate "
+        "- When the athlete describes how a specific activity felt, populate "
         '"ride_note_update": {"activity_date": "YYYY-MM-DD", "note": "1-2 sentence summary"} '
-        'in your JSON response. Omit "ride_note_update" entirely when no ride is being described.'
+        'in your JSON response. Omit "ride_note_update" entirely when no activity is being described.'
     )
 
     # Outlook instructions: guide the coach when the athlete asks for a session preview
@@ -1038,7 +1101,7 @@ def ride_metrics_context_section(
     """Build a compact structured-text block from a list of RideMetric ORM objects.
 
     Designed to fit into any LLM prompt without bloating the token count.
-    Most recent rides appear first.  Returns an empty string when *metrics* is empty.
+    Most recent activities appear first.  Returns an empty string when *metrics* is empty.
 
     Example output line:
         2026-04-18 | threshold_intervals | TSS 98 | NP 268W | CTL 62.3 | ATL 71.4 | TSB -9.1 | "4×8 min @ FTP"
@@ -1048,16 +1111,19 @@ def ride_metrics_context_section(
     if not metrics:
         return ""
 
-    lines: list[str] = ["Recent ride history (actual rides, newest first):"]
+    lines: list[str] = ["Recent activity history (newest first):"]
     for m in metrics:
         parts: list[str] = []
 
         # Date
         parts.append(str(getattr(m, "activity_date", "??")))
 
-        # Ride purpose
-        purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
-        parts.append(str(purpose))
+        # Activity type and purpose
+        sport = getattr(m, "sport_type", None) or "activity"
+        purpose = getattr(m, "ride_purpose", None)
+        parts.append(f"sport:{sport}")
+        if purpose:
+            parts.append(str(purpose))
 
         # Classification confidence and reason
         confidence = getattr(m, "classification_confidence", None)

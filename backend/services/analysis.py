@@ -334,7 +334,11 @@ def detect_intervals(
     # --- Phase 2: merge blocks separated by a short recovery gap ---
     merged: list[tuple[int, int]] = []
     for block in blocks:
-        if merged and (time_stream[block[0]] - time_stream[merged[-1][1]]) <= recovery_gap_secs:
+        if (
+            merged
+            and (time_stream[block[0]] - time_stream[merged[-1][1]])
+            <= recovery_gap_secs
+        ):
             merged[-1] = (merged[-1][0], block[1])
         else:
             merged.append(block)
@@ -426,7 +430,11 @@ def classify_ride_purpose(
         if duration_secs < VERY_SHORT_RIDE_SECS:
             return "unknown"
         if duration_secs < MIN_ENDURANCE_RIDE_SECS:
-            return "short_hard_effort" if avg_pct >= TEMPO_THRESHOLD_PCT else "short_easy_spin"
+            return (
+                "short_hard_effort"
+                if avg_pct >= TEMPO_THRESHOLD_PCT
+                else "short_easy_spin"
+            )
 
         # No distinct interval blocks — classify by average power
         if avg_pct < 0.60:
@@ -461,7 +469,11 @@ def classify_ride_purpose(
     if not unique_types:
         # Intervals detected but all fell below the classification thresholds
         if duration_secs < MIN_ENDURANCE_RIDE_SECS:
-            return "short_hard_effort" if avg_pct >= TEMPO_THRESHOLD_PCT else "short_easy_spin"
+            return (
+                "short_hard_effort"
+                if avg_pct >= TEMPO_THRESHOLD_PCT
+                else "short_easy_spin"
+            )
         return "endurance" if avg_pct < TEMPO_THRESHOLD_PCT else "tempo"
     if len(unique_types) > 1:
         return "mixed"
@@ -497,24 +509,47 @@ def classify_ride_confidence_and_reason(
     if ride_category == "short_easy_spin":
         return "low", "Ride too short for a reliable aerobic classification."
     if ride_category == "short_hard_effort":
-        return "low", "Short high-intensity effort; may be a warmup or incomplete session."
+        return (
+            "low",
+            "Short high-intensity effort; may be a warmup or incomplete session.",
+        )
     if ride_category == "recovery":
         if duration_seconds >= MIN_ENDURANCE_RIDE_SECS:
-            return "high", "Average power consistently below recovery threshold for sufficient duration."
-        return "medium", "Low average power suggests recovery, but ride duration is limited."
+            return (
+                "high",
+                "Average power consistently below recovery threshold for sufficient duration.",
+            )
+        return (
+            "medium",
+            "Low average power suggests recovery, but ride duration is limited.",
+        )
     if ride_category == "endurance":
         if duration_seconds >= MIN_HIGH_CONFIDENCE_ENDURANCE_SECS:
             return "high", "Sustained aerobic effort across adequate ride duration."
         return "medium", "Average power in aerobic zone, but ride duration is short."
     if ride_category == "tempo":
-        return "medium", "Average power in tempo band with no distinct interval blocks detected."
-    if ride_category in ("interval_sweetspot", "interval_threshold", "interval_vo2max", "interval_sprints"):
+        return (
+            "medium",
+            "Average power in tempo band with no distinct interval blocks detected.",
+        )
+    if ride_category in (
+        "interval_sweetspot",
+        "interval_threshold",
+        "interval_vo2max",
+        "interval_sprints",
+    ):
         interval_label = ride_category.split("_", 1)[1]
         if len(intervals) >= 2:
             return "high", f"Structured {interval_label} intervals detected."
-        return "medium", f"Single {interval_label} effort detected; may not be a structured session."
+        return (
+            "medium",
+            f"Single {interval_label} effort detected; may not be a structured session.",
+        )
     if ride_category == "mixed":
-        return "medium", "Multiple interval types detected; overall training intent is ambiguous."
+        return (
+            "medium",
+            "Multiple interval types detected; overall training intent is ambiguous.",
+        )
     # Fallback for any unknown future categories
     return "medium", "Classification based on available power data."
 
@@ -688,27 +723,47 @@ def compute_readiness_recommendations(
 
     # --- TSB / form feedback ---
     if tsb < -20:
-        tips.append("You are heavily fatigued — prioritise 2–3 easy recovery rides this week.")
+        tips.append(
+            "You are heavily fatigued — prioritise 2–3 easy recovery rides this week."
+        )
     elif tsb < -10:
-        tips.append("Fatigue is elevated — include at least one full rest day before intensity work.")
+        tips.append(
+            "Fatigue is elevated — include at least one full rest day before intensity work."
+        )
     elif tsb < 0:
-        tips.append("Slight fatigue: balance training stress with adequate sleep and nutrition.")
+        tips.append(
+            "Slight fatigue: balance training stress with adequate sleep and nutrition."
+        )
     elif tsb <= 10:
-        tips.append("Form is neutral — good time for quality interval sessions to build fitness.")
+        tips.append(
+            "Form is neutral — good time for quality interval sessions to build fitness."
+        )
     elif tsb <= 20:
-        tips.append("Form is optimal for racing. Maintain with short openers; avoid heavy loads.")
+        tips.append(
+            "Form is optimal for racing. Maintain with short openers; avoid heavy loads."
+        )
     else:
-        tips.append("You are very fresh — consider adding some intensity to avoid detraining.")
+        tips.append(
+            "You are very fresh — consider adding some intensity to avoid detraining."
+        )
 
     # --- CTL / fitness feedback ---
     if ctl < 30:
-        tips.append("Build your fitness base with consistent 45–90 min rides 3–4 times per week.")
+        tips.append(
+            "Build your fitness base with consistent 45–90 min rides 3–4 times per week."
+        )
     elif ctl < 60:
-        tips.append("Add one longer endurance ride per week (2–3 h) to raise your fitness base.")
+        tips.append(
+            "Add one longer endurance ride per week (2–3 h) to raise your fitness base."
+        )
     elif ctl < 80:
-        tips.append("Fitness is solid — focus on quality over quantity; one hard session per week.")
+        tips.append(
+            "Fitness is solid — focus on quality over quantity; one hard session per week."
+        )
     else:
-        tips.append("High fitness level — protect your CTL with consistent training and avoid gaps.")
+        tips.append(
+            "High fitness level — protect your CTL with consistent training and avoid gaps."
+        )
 
     # --- Race-specific advice ---
     if days_until_race > 0:
@@ -733,9 +788,13 @@ def compute_readiness_recommendations(
 
     # --- Overall score nudge ---
     if score < 40:
-        tips.append("Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days.")
+        tips.append(
+            "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days."
+        )
     elif score < 65:
-        tips.append("You are on track — keep consistent training and manage fatigue leading up to race day.")
+        tips.append(
+            "You are on track — keep consistent training and manage fatigue leading up to race day."
+        )
 
     return tips
 
@@ -753,8 +812,7 @@ def _project_training_load(
     Returns the same shape as :func:`compute_training_load`.
     """
     days_up_to_target = [
-        day for day in plan_days
-        if day.get("date", "") <= target_date_str
+        day for day in plan_days if day.get("date", "") <= target_date_str
     ]
     return compute_training_load(days_up_to_target, ftp)
 
@@ -779,7 +837,12 @@ def project_training_load_from_seed(
     Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float]}``.
     """
     if ftp <= 0:
-        return {"ctl": seed_ctl, "atl": seed_atl, "tsb": seed_ctl - seed_atl, "daily_tss": []}
+        return {
+            "ctl": seed_ctl,
+            "atl": seed_atl,
+            "tsb": seed_ctl - seed_atl,
+            "daily_tss": [],
+        }
 
     alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
     alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
@@ -824,7 +887,9 @@ def project_training_load_from_seed(
                 tss = 0.0
             else:
                 intensity_factor = np_approx / ftp
-                tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
+                tss = (
+                    (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
+                )
 
         daily_tss.append(round(tss, 1))
         ctl = ctl + alpha_ctl * (tss - ctl)
@@ -935,7 +1000,10 @@ def _detect_intensity_spikes(
     while window_start_idx < len(watts):
         window_end_time = time_stream[window_start_idx] + window_secs
         window_end_idx = window_start_idx
-        while window_end_idx < len(watts) and time_stream[window_end_idx] < window_end_time:
+        while (
+            window_end_idx < len(watts)
+            and time_stream[window_end_idx] < window_end_time
+        ):
             window_end_idx += 1
 
         if window_end_idx <= window_start_idx:
@@ -945,8 +1013,12 @@ def _detect_intensity_spikes(
         avg = sum(seg) / len(seg)
         pct_over = (avg - target_power) / target_power * 100.0
         if pct_over > spike_threshold_pct:
-            start_min = round((time_stream[window_start_idx] - time_stream[0]) / 60.0, 1)
-            end_min = round((time_stream[window_end_idx - 1] - time_stream[0]) / 60.0, 1)
+            start_min = round(
+                (time_stream[window_start_idx] - time_stream[0]) / 60.0, 1
+            )
+            end_min = round(
+                (time_stream[window_end_idx - 1] - time_stream[0]) / 60.0, 1
+            )
             spikes.append(
                 {
                     "start_min": start_min,
@@ -1100,7 +1172,9 @@ def build_ride_analysis(
 
     if not watts or len(watts) != len(time_data):
         no_intervals: list[dict] = []
-        confidence, reason = classify_ride_confidence_and_reason("unknown", duration_seconds, no_intervals)
+        confidence, reason = classify_ride_confidence_and_reason(
+            "unknown", duration_seconds, no_intervals
+        )
         return {
             "ride_category": "unknown",
             "classification_confidence": confidence,
@@ -1136,7 +1210,9 @@ def build_ride_analysis(
                 )
         annotated.append(annotated_iv)
 
-    confidence, reason = classify_ride_confidence_and_reason(ride_category, duration_seconds, annotated)
+    confidence, reason = classify_ride_confidence_and_reason(
+        ride_category, duration_seconds, annotated
+    )
 
     return {
         "ride_category": ride_category,
@@ -1208,9 +1284,8 @@ def compute_ftp_from_streams(
         if best20 is not None and usable_hr:
             _, start20, end20 = best20
             avg_hr = _segment_average(usable_hr, start20, end20)
-            if (
-                avg_hr is not None
-                and _duration_hr_is_hard_enough(avg_hr, max_heart_rate, 20.0)
+            if avg_hr is not None and _duration_hr_is_hard_enough(
+                avg_hr, max_heart_rate, 20.0
             ):
                 threshold_hrs.append(round(avg_hr))
 
@@ -1221,7 +1296,9 @@ def compute_ftp_from_streams(
         )
     )
     computed_ftp = max(ftp_candidates) if ftp_candidates else None
-    computed_threshold_hr = round(sum(threshold_hrs) / len(threshold_hrs)) if threshold_hrs else None
+    computed_threshold_hr = (
+        round(sum(threshold_hrs) / len(threshold_hrs)) if threshold_hrs else None
+    )
     return computed_ftp, computed_threshold_hr
 
 
@@ -1330,7 +1407,9 @@ def estimate_ftp_over_time(
                 if minutes < 20.0 and (_hr is None or not max_heart_rate):
                     continue
                 power, point_start, point_end = point
-                if not _power_window_is_steady_enough(point_watts, point_start, point_end):
+                if not _power_window_is_steady_enough(
+                    point_watts, point_start, point_end
+                ):
                     continue
                 avg_hr = (
                     _segment_average(_hr, point_start, point_end)
@@ -1364,7 +1443,9 @@ def _in_window(date_str: str, start: object, end: object) -> bool:
     return start <= d <= end  # type: ignore[operator]
 
 
-def compute_ride_tss(duration_seconds: float, normalized_power: float, ftp: float) -> float | None:
+def compute_ride_tss(
+    duration_seconds: float, normalized_power: float, ftp: float
+) -> float | None:
     """Compute Training Stress Score for a single ride.
 
     TSS = (duration_s × NP²) / (FTP² × 3600) × 100
@@ -1374,7 +1455,11 @@ def compute_ride_tss(duration_seconds: float, normalized_power: float, ftp: floa
     if duration_seconds <= 0 or normalized_power <= 0 or ftp <= 0:
         return None
     intensity_factor = normalized_power / ftp
-    tss = (duration_seconds * normalized_power * intensity_factor) / (ftp * 3600.0) * 100.0
+    tss = (
+        (duration_seconds * normalized_power * intensity_factor)
+        / (ftp * 3600.0)
+        * 100.0
+    )
     return round(tss, 1)
 
 
@@ -1555,29 +1640,35 @@ def build_ride_metrics_chain(
         )
 
         # --- Classification confidence and reason ---
-        classification_confidence, classification_reason = classify_ride_confidence_and_reason(
-            ride_purpose or "unknown",
-            duration_s,
-            intervals,
+        classification_confidence, classification_reason = (
+            classify_ride_confidence_and_reason(
+                ride_purpose or "unknown",
+                duration_s,
+                intervals,
+            )
         )
 
-        result.append({
-            "strava_activity_id": ride["strava_activity_id"],
-            "activity_date": activity_date_str,
-            "sport_type": ride.get("sport_type", "cycling"),
-            "duration_seconds": ride.get("duration_seconds"),
-            "avg_power_w": avg_power,
-            "normalized_power_w": np_value,
-            "intensity_factor": intensity_factor,
-            "tss": tss,
-            "ftp_used": round(ftp) if ftp > 0 else None,
-            "ctl_after": round(ctl, 2),
-            "atl_after": round(atl, 2),
-            "tsb_after": round(tsb, 2),
-            "ride_purpose": ride_purpose,
-            "classification_confidence": classification_confidence,
-            "classification_reason": classification_reason,
-            "summary": summary,
-        })
+        result.append(
+            {
+                "strava_activity_id": ride["strava_activity_id"],
+                "activity_name": ride.get("activity_name"),
+                "activity_start_datetime": ride.get("activity_start_datetime"),
+                "activity_date": activity_date_str,
+                "sport_type": ride.get("sport_type", "cycling"),
+                "duration_seconds": ride.get("duration_seconds"),
+                "avg_power_w": avg_power,
+                "normalized_power_w": np_value,
+                "intensity_factor": intensity_factor,
+                "tss": tss,
+                "ftp_used": round(ftp) if ftp > 0 else None,
+                "ctl_after": round(ctl, 2),
+                "atl_after": round(atl, 2),
+                "tsb_after": round(tsb, 2),
+                "ride_purpose": ride_purpose,
+                "classification_confidence": classification_confidence,
+                "classification_reason": classification_reason,
+                "summary": summary,
+            }
+        )
 
     return result

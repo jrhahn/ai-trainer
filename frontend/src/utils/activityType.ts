@@ -9,3 +9,19 @@ export function formatActivityType(sportType: string): string {
 
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
+
+export function activityNoun(sportType?: string | null): string {
+  const normalized = (sportType ?? '').trim().toLowerCase()
+  if (!normalized) return 'activity'
+  if (normalized.includes('run')) return 'run'
+  if (normalized.includes('hike')) return 'hike'
+  if (normalized.includes('walk')) return 'walk'
+  if (normalized.includes('weight') || normalized.includes('strength')) return 'strength session'
+  if (normalized.includes('ride') || normalized === 'cycling') return 'ride'
+  return 'activity'
+}
+
+export function isCyclingActivity(sportType?: string | null): boolean {
+  const normalized = (sportType ?? '').trim().toLowerCase()
+  return normalized === 'cycling' || normalized.includes('ride')
+}
