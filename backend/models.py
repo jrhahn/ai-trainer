@@ -101,7 +101,9 @@ class User(Base):
         order_by="RaceEvent.date",
     )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", order_by="ChatMessage.timestamp"
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.timestamp, ChatMessage.id",
     )
     coach_memory: Mapped["CoachMemory | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -185,6 +187,7 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     plan_update_count: Mapped[int | None] = mapped_column(Integer)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")

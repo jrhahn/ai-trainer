@@ -50,15 +50,12 @@ class ImportFlowHttpClient:
             1: [
                 {
                     "id": 111,
-                    "name": "Good ride",
-                    "start_date": "2026-04-01T23:30:00Z",
-                    "start_date_local": "2026-04-02T07:30:00",
+                    "start_date": "2026-04-01T08:00:00Z",
                     "sport_type": "Ride",
                     "elapsed_time": 3600,
                 },
                 {
                     "id": 222,
-                    "name": "Broken ride",
                     "start_date": "2026-04-02T08:00:00Z",
                     "sport_type": "Ride",
                     "elapsed_time": 3600,
@@ -92,17 +89,6 @@ class ImportFlowHttpClient:
             raise RuntimeError("download failed for activity 222")
 
         return DummyResponse(404, {})
-
-
-class FatalImportHttpClient:
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        return False
-
-    async def get(self, url, params=None, headers=None):
-        return DummyResponse(500, {"message": "Strava unavailable"})
 
 
 @pytest.mark.asyncio
@@ -287,97 +273,11 @@ async def test_import_background_continues_when_single_track_fails(auth_headers,
     assert progress["status"] == "done"
     assert progress["total"] == 2
     assert progress["skipped"] >= 1
-    assert progress["imported"] == 1
-    assert progress["failedActivities"][0]["activityId"] == 222
-    assert "Stream download failed" in progress["failedActivities"][0]["reason"]
 
     async with async_session_maker() as session:
         rides = await crud.get_all_ride_metrics_ordered(session, user_id)
-        job = await crud.get_latest_strava_import_job(session, user_id)
     assert len(rides) == 1
     assert rides[0].strava_activity_id == 111
-    assert rides[0].activity_date == "2026-04-02"
-    assert job is not None
-    assert job.status == "done"
-    assert job.imported == 1
-    assert job.skipped >= 1
-    assert job.failed_activities[0]["activityId"] == 222
-
-
-@pytest.mark.asyncio
-async def test_import_progress_reads_persisted_final_report(client, auth_headers, monkeypatch):
-    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
-    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
-
-    await strava_router._run_import_background(
-        user_id=user_id,
-        access_token="tok",
-        ftp=250.0,
-        after_ts=0,
-        replace_existing=False,
-    )
-    strava_router._import_progress.clear()
-
-    response = await client.get("/api/v1/strava/import-progress", headers=auth_headers)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "done"
-    assert body["total"] == 2
-    assert body["imported"] == 1
-    assert body["skipped"] >= 1
-    assert body["failedActivities"][0]["activityId"] == 222
-
-
-@pytest.mark.asyncio
-async def test_import_background_updates_imported_counter_while_running(auth_headers, monkeypatch):
-    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
-    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
-
-    recorded_updates: list[dict] = []
-    original_update = strava_router._update_import_job
-
-    async def _recording_update(user_id_: str, job_id: str | None, **updates):
-        recorded_updates.append(updates.copy())
-        await original_update(user_id_, job_id, **updates)
-
-    monkeypatch.setattr(strava_router, "_update_import_job", _recording_update)
-
-    await strava_router._run_import_background(
-        user_id=user_id,
-        access_token="tok",
-        ftp=250.0,
-        after_ts=0,
-        replace_existing=False,
-    )
-
-    assert any(
-        update.get("status") == "running" and update.get("imported", 0) > 0
-        for update in recorded_updates
-    )
-
-
-@pytest.mark.asyncio
-async def test_import_background_records_fatal_list_failure(auth_headers, monkeypatch):
-    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
-    monkeypatch.setattr(strava_router.httpx, "AsyncClient", FatalImportHttpClient)
-
-    await strava_router._run_import_background(
-        user_id=user_id,
-        access_token="tok",
-        ftp=250.0,
-        after_ts=0,
-        replace_existing=False,
-    )
-
-    async with async_session_maker() as session:
-        job = await crud.get_latest_strava_import_job(session, user_id)
-
-    assert job is not None
-    assert job.status == "error"
-    assert job.total == 0
-    assert job.imported == 0
-    assert "Strava list error 500" in job.error
 
 
 @pytest.mark.asyncio
@@ -408,6 +308,7 @@ async def test_import_background_replace_existing_overwrites_prior_rows(auth_hea
             session,
             user_id,
             ftp=250,
+            threshold_hr=None,
             ctl=10.0,
             atl=12.0,
             tsb=-2.0,

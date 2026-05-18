@@ -18,8 +18,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from services.ride_matching import apply_ride_plan_matches, review_matched_ride_and_adapt
-from services.analysis import build_ride_metrics_chain
+from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
@@ -32,22 +31,8 @@ _oauth_states: dict[str, tuple[str, float]] = {}
 
 logger = logging.getLogger(__name__)
 
-# Per-user background import progress mirror for compatibility with older tests.
-# The API reads from strava_import_jobs so progress survives reloads/restarts.
-_import_progress: dict[str, dict] = {}
-
-
-def _failure_for_activity(activity: dict, reason: str) -> dict:
-    activity_id = activity.get("id")
-    if not isinstance(activity_id, int):
-        activity_id = None
-    start_date = activity.get("start_date")
-    return {
-        "activityId": activity_id,
-        "activityName": activity.get("name") or "Unnamed activity",
-        "activityDate": start_date[:10] if isinstance(start_date, str) and start_date else None,
-        "reason": reason,
-    }
+# Per-user background import progress  {user_id: {status, total, processed, skipped, error}}
+_import_progress: dict[int, dict] = {}
 
 
 def _sanitize_streams(streams: object) -> dict:
@@ -72,94 +57,33 @@ def _sanitize_streams(streams: object) -> dict:
     return cleaned
 
 
-def _build_metrics_chain_resilient(rides: list[dict], ftp: float) -> tuple[list[dict], list[dict]]:
+def _build_metrics_chain_resilient(rides: list[dict], ftp: float) -> tuple[list[dict], int]:
     """Build metrics while tolerating failures on individual rides.
 
-    Returns ``(metrics_chain, failed_activities)``.
+    Returns ``(metrics_chain, failed_count)``.
     """
     if not rides:
-        return [], []
+        return [], 0
 
     metrics_chain: list[dict] = []
-    failed_activities: list[dict] = []
+    failed = 0
     ctl = 0.0
     atl = 0.0
 
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
             chunk = build_ride_metrics_chain([ride], ftp, initial_ctl=ctl, initial_atl=atl)
-        except Exception as exc:  # noqa: BLE001
-            failed_activities.append(
-                {
-                    "activityId": ride.get("strava_activity_id"),
-                    "activityName": ride.get("activity_name") or "Unnamed activity",
-                    "activityDate": ride.get("activity_date"),
-                    "reason": f"Metric calculation failed: {exc}",
-                }
-            )
+        except Exception:  # noqa: BLE001
+            failed += 1
             continue
         if not chunk:
-            failed_activities.append(
-                {
-                    "activityId": ride.get("strava_activity_id"),
-                    "activityName": ride.get("activity_name") or "Unnamed activity",
-                    "activityDate": ride.get("activity_date"),
-                    "reason": "No ride metrics could be calculated",
-                }
-            )
             continue
         metric = chunk[0]
         ctl = float(metric.get("ctl_after") or ctl)
         atl = float(metric.get("atl_after") or atl)
         metrics_chain.append(metric)
 
-    return metrics_chain, failed_activities
-
-
-def _progress_payload(
-    *,
-    job_id: str | None = None,
-    status: str = "idle",
-    total: int = 0,
-    processed: int = 0,
-    imported: int = 0,
-    skipped: int = 0,
-    failed_activities: list[dict] | None = None,
-    error: str = "",
-) -> dict:
-    return {
-        "job_id": job_id,
-        "status": status,
-        "total": total,
-        "processed": processed,
-        "imported": imported,
-        "skipped": skipped,
-        "failed_activities": failed_activities or [],
-        "error": error,
-    }
-
-
-def _mirror_progress(user_id: str, payload: dict) -> None:
-    _import_progress[user_id] = {
-        "jobId": payload.get("job_id"),
-        "status": payload.get("status", "idle"),
-        "total": payload.get("total", 0),
-        "processed": payload.get("processed", 0),
-        "imported": payload.get("imported", 0),
-        "skipped": payload.get("skipped", 0),
-        "failedActivities": payload.get("failed_activities", []),
-        "error": payload.get("error", ""),
-    }
-
-
-async def _update_import_job(user_id: str, job_id: str | None, **updates) -> None:
-    payload = _progress_payload(job_id=job_id, **updates)
-    _mirror_progress(user_id, payload)
-    if job_id is None:
-        return
-    async with async_session_maker() as db:
-        await crud.update_strava_import_job(db, job_id, **updates)
-        await db.commit()
+    return metrics_chain, failed
 
 
 class RefreshRequest(schemas.CamelModel):
@@ -190,23 +114,6 @@ def _frontend_url() -> str:
 
 def _backend_url() -> str:
     return settings.effective_backend_url
-
-
-def _default_provider() -> str:
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
-
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
-        return "gemini"
-    if stored == "openai" and settings.openai_api_key:
-        return "openai"
-    return _default_provider()
 
 
 @router.get("/auth/strava")
@@ -351,13 +258,13 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
 
 
 async def _run_import_background(
-    user_id: str,
+    user_id: int,
     access_token: str,
     ftp: float,
     after_ts: int,
     replace_existing: bool = False,
     max_heart_rate: int | None = None,
-    job_id: str | None = None,
+    resting_heart_rate: int | None = None,
 ) -> None:
     """Fetch Strava activities and build the ride-metrics chain in the background.
 
@@ -366,28 +273,7 @@ async def _run_import_background(
     the fetched stream data and persists per-ride FTP estimates as
     ``AthleteMetricSnapshot`` rows (source = ``"ftp_estimation"``).
     """
-    if job_id is None:
-        async with async_session_maker() as db:
-            job = await crud.create_strava_import_job(db, user_id)
-            await db.commit()
-            job_id = job.id
-
-    failed_activities: list[dict] = []
-    total = 0
-    processed = 0
-    imported = 0
-    skipped = 0
-    await _update_import_job(
-        user_id,
-        job_id,
-        status="running",
-        total=total,
-        processed=processed,
-        imported=imported,
-        skipped=skipped,
-        failed_activities=failed_activities,
-        error="",
-    )
+    _import_progress[user_id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
     try:
         if replace_existing:
             async with async_session_maker() as db:
@@ -414,61 +300,27 @@ async def _run_import_background(
                 all_activities.extend(batch)
                 page += 1
 
-        total = len(all_activities)
-        await _update_import_job(
-            user_id,
-            job_id,
-            status="running",
-            total=total,
-            processed=processed,
-            imported=imported,
-            skipped=skipped,
-            failed_activities=failed_activities,
-            error="",
-        )
+        _import_progress[user_id]["total"] = len(all_activities)
 
         # --- Fetch streams per activity ---
         rides: list[dict] = []
+        skipped = 0
         keys = "watts,heartrate,cadence,velocity_smooth,altitude,time"
         async with httpx.AsyncClient() as client:
             for idx, activity in enumerate(all_activities):
                 activity_id = activity.get("id")
                 if not isinstance(activity_id, int):
                     skipped += 1
-                    processed = idx + 1
-                    failed_activities.append(_failure_for_activity(activity, "Missing Strava activity ID"))
-                    await _update_import_job(
-                        user_id,
-                        job_id,
-                        status="running",
-                        total=total,
-                        processed=processed,
-                        imported=imported,
-                        skipped=skipped,
-                        failed_activities=failed_activities,
-                        error="",
-                    )
+                    _import_progress[user_id]["skipped"] = skipped
+                    _import_progress[user_id]["processed"] = idx + 1
                     continue
 
                 start_date: str = activity.get("start_date", "")
-                start_date_local: str = activity.get("start_date_local", "")
-                activity_date_source = start_date_local or start_date
-                activity_date = activity_date_source[:10] if activity_date_source else ""
+                activity_date = start_date[:10] if start_date else ""
                 if not activity_date:
                     skipped += 1
-                    processed = idx + 1
-                    failed_activities.append(_failure_for_activity(activity, "Missing activity date"))
-                    await _update_import_job(
-                        user_id,
-                        job_id,
-                        status="running",
-                        total=total,
-                        processed=processed,
-                        imported=imported,
-                        skipped=skipped,
-                        failed_activities=failed_activities,
-                        error="",
-                    )
+                    _import_progress[user_id]["skipped"] = skipped
+                    _import_progress[user_id]["processed"] = idx + 1
                     continue
 
                 sport_type: str = activity.get("sport_type") or activity.get("type") or "cycling"
@@ -483,135 +335,92 @@ async def _run_import_background(
                     )
                     if not resp.is_success:
                         skipped += 1
-                        processed = idx + 1
-                        failed_activities.append(
-                            _failure_for_activity(activity, f"Stream download failed with HTTP {resp.status_code}")
-                        )
-                        await _update_import_job(
-                            user_id,
-                            job_id,
-                            status="running",
-                            total=total,
-                            processed=processed,
-                            imported=imported,
-                            skipped=skipped,
-                            failed_activities=failed_activities,
-                            error="",
-                        )
+                        _import_progress[user_id]["skipped"] = skipped
+                        _import_progress[user_id]["processed"] = idx + 1
                         continue
                     streams = _sanitize_streams(resp.json())
                     rides.append({
                         "strava_activity_id": activity_id,
-                        "activity_name": activity.get("name") or "Unnamed activity",
-                        "activity_start_datetime": start_date or None,
                         "activity_date": activity_date,
                         "sport_type": sport_type,
                         "duration_seconds": duration_seconds,
                         "streams": streams,
                     })
-                    imported += 1
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     # Keep the import moving even when one activity fails.
                     skipped += 1
-                    failed_activities.append(_failure_for_activity(activity, f"Stream download failed: {exc}"))
-                processed = idx + 1
-                await _update_import_job(
-                    user_id,
-                    job_id,
-                    status="running",
-                    total=total,
-                    processed=processed,
-                    imported=imported,
-                    skipped=skipped,
-                    failed_activities=failed_activities,
-                    error="",
-                )
+                    _import_progress[user_id]["skipped"] = skipped
+                _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---
-        metrics_chain, failed_metric_activities = _build_metrics_chain_resilient(rides, ftp)
-        failed_activities.extend(failed_metric_activities)
-        skipped += len(failed_metric_activities)
-        imported = len(metrics_chain)
-        await _update_import_job(
-            user_id,
-            job_id,
-            status="running",
-            total=total,
-            processed=processed,
-            imported=imported,
-            skipped=skipped,
-            failed_activities=failed_activities,
-            error="",
-        )
+        metrics_chain, failed_metrics = _build_metrics_chain_resilient(rides, ftp)
+        skipped += failed_metrics
+        _import_progress[user_id]["skipped"] = skipped
         BATCH = 50
         for i in range(0, len(metrics_chain), BATCH):
             async with async_session_maker() as db:
-                ride_meta_by_id = {r["strava_activity_id"]: r for r in rides}
                 for m in metrics_chain[i : i + BATCH]:
-                    meta = ride_meta_by_id.get(m["strava_activity_id"], {})
-                    m["activity_name"] = meta.get("activity_name")
-                    m["activity_start_datetime"] = meta.get("activity_start_datetime")
                     await crud.upsert_ride_metric(db, user_id, **m)
                 await db.commit()
 
-        if metrics_chain:
-            streams_by_activity_id = {
-                ride["strava_activity_id"]: ride.get("streams") or {}
-                for ride in rides
-            }
-            async with async_session_maker() as db:
-                user = await crud.get_user_by_id(db, user_id)
-                existing_plan = await crud.get_training_plan(db, user_id)
-                training_plan = existing_plan.plan if existing_plan is not None else []
-                auto_matched = await apply_ride_plan_matches(
-                    db,
-                    user_id,
-                    training_plan,
-                    [m["strava_activity_id"] for m in metrics_chain],
-                )
-                if user is not None:
-                    for ride in auto_matched:
-                        await review_matched_ride_and_adapt(
+        # --- Estimate FTP over time from steady intervals ---
+        try:
+            ftp_series = estimate_ftp_over_time(
+                rides,
+                max_heart_rate=max_heart_rate,
+                resting_heart_rate=resting_heart_rate,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "FTP-over-time estimation failed during Strava import for user %s",
+                user_id,
+                exc_info=True,
+            )
+            ftp_series = []
+        if ftp_series:
+            for i in range(0, len(ftp_series), BATCH):
+                async with async_session_maker() as db:
+                    for point in ftp_series[i : i + BATCH]:
+                        try:
+                            ride_dt = datetime.fromisoformat(point["date"]).replace(
+                                tzinfo=timezone.utc
+                            )
+                        except ValueError:
+                            ride_dt = datetime.now(timezone.utc)
+                        await crud.create_athlete_metric_snapshot(
                             db,
-                            user,
-                            ride,
-                            training_plan,
-                            provider=_provider(user),
-                            streams=streams_by_activity_id.get(ride.strava_activity_id),
+                            user_id,
+                            ftp=point["ftp"],
+                            threshold_hr=None,
+                            source="ftp_estimation",
+                            recorded_at=ride_dt,
                         )
-                await db.commit()
+                    await db.commit()
 
-        await _update_import_job(
-            user_id,
-            job_id,
-            status="done",
-            total=total,
-            processed=processed,
-            imported=imported,
-            skipped=skipped,
-            failed_activities=failed_activities,
-            error="",
-        )
+        _import_progress[user_id] = {
+            "status": "done",
+            "total": len(all_activities),
+            "processed": len(metrics_chain),
+            "skipped": skipped,
+            "error": "",
+        }
     except Exception as exc:  # noqa: BLE001
+        prev = _import_progress.get(user_id, {})
         logger.error(
             "Background Strava import failed for user %s after processing %s/%s activities: %s",
             user_id,
-            processed,
-            total,
+            prev.get("processed", 0),
+            prev.get("total", 0),
             exc,
             exc_info=True,
         )
-        await _update_import_job(
-            user_id,
-            job_id,
-            status="error",
-            total=total,
-            processed=processed,
-            imported=imported,
-            skipped=skipped,
-            failed_activities=failed_activities,
-            error=str(exc),
-        )
+        _import_progress[user_id] = {
+            "status": "error",
+            "total": prev.get("total", 0),
+            "processed": prev.get("processed", 0),
+            "skipped": prev.get("skipped", 0),
+            "error": str(exc),
+        }
 
 
 @router.get("/strava/activities")
@@ -674,27 +483,13 @@ async def import_strava_history(
     months = max(1, min(months, 24))
     after_ts = int((datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp())
 
-    # Prevent stacking duplicate background tasks: if one is already running, return it.
-    running_job = await crud.get_running_strava_import_job(db, current_user.id)
-    if running_job is not None:
-        return {"status": "already_running", "jobId": running_job.id}
+    # Prevent stacking duplicate background tasks: if one is already running, bail out.
+    current_progress = _import_progress.get(current_user.id, {})
+    if current_progress.get("status") == "running":
+        return {"status": "already_running"}
 
-    job = await crud.create_strava_import_job(db, current_user.id)
-    await db.commit()
-
-    _mirror_progress(
-        current_user.id,
-        _progress_payload(
-            job_id=job.id,
-            status="running",
-            total=0,
-            processed=0,
-            imported=0,
-            skipped=0,
-            failed_activities=[],
-            error="",
-        ),
-    )
+    # Mark started immediately so the progress endpoint sees "running" right away
+    _import_progress[current_user.id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
 
     background_tasks.add_task(
         _run_import_background,
@@ -704,29 +499,18 @@ async def import_strava_history(
         after_ts=after_ts,
         replace_existing=replace_existing,
         max_heart_rate=current_user.max_heart_rate,
-        job_id=job.id,
+        resting_heart_rate=current_user.resting_heart_rate,
     )
 
-    return {"status": "started", "jobId": job.id}
+    return {"status": "started"}
 
 
 @router.get("/strava/import-progress")
 async def get_import_progress(
-    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ImportProgressResponse:
     """Return the current background import progress for the authenticated user."""
-    job = await crud.get_latest_strava_import_job(db, current_user.id)
-    if job is None:
+    progress = _import_progress.get(current_user.id)
+    if progress is None:
         return schemas.ImportProgressResponse(status="idle")
-    failed_activities = job.failed_activities if isinstance(job.failed_activities, list) else []
-    return schemas.ImportProgressResponse(
-        job_id=job.id,
-        status=job.status,
-        total=job.total,
-        processed=job.processed,
-        imported=job.imported,
-        skipped=job.skipped,
-        failed_activities=failed_activities,
-        error=job.error,
-    )
+    return schemas.ImportProgressResponse(**progress)

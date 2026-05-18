@@ -194,6 +194,7 @@ export interface HrZones {
 export interface AthleteMetricSnapshot {
   recordedAt: string
   ftp?: number
+  thresholdHR?: number
   ctl?: number
   atl?: number
   tsb?: number
