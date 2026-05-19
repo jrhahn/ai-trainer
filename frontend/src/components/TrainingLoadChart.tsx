@@ -171,13 +171,13 @@ export default function TrainingLoadChart() {
       {/* TSS chart */}
       {hasTss && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ Daily TSS (Training Stress Score per ride)</p>
+          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ Daily TSS (Training Stress Score per activity)</p>
           <LineChart
             data={tssData}
             labels={tssLabels}
             color="#8b5cf6"
             height={72}
-            yLabel="TSS per ride"
+            yLabel="TSS per activity"
           />
         </div>
       )}

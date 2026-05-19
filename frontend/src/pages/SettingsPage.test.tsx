@@ -303,7 +303,7 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('shows Strava ride analysis progress inside the Strava settings card while running', () => {
+  it('shows Strava activity analysis progress inside the Strava settings card while running', () => {
     mockImportProgress.mockReturnValue({
       jobId: 'job-1',
       status: 'running',

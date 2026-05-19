@@ -15,7 +15,7 @@ export interface UseStravaSyncResult {
   stravaActivities: StravaActivity[]
   analysisStatus: AnalysisStatus
   analysisError: string
-  newRidesCount: number
+  newActivitiesCount: number
 }
 
 export function useStravaSync(): UseStravaSyncResult {
@@ -51,7 +51,7 @@ export function useStravaSync(): UseStravaSyncResult {
   const { recalculateAll } = useMetricsPipeline()
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState('')
-  const [newRidesCount, setNewRidesCount] = useState(0)
+  const [newActivitiesCount, setNewActivitiesCount] = useState(0)
   // Guard: prevents double-triggering when React batches setState calls from
   // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
@@ -86,7 +86,7 @@ export function useStravaSync(): UseStravaSyncResult {
       await recalculateAll(updatedProfile.currentFTP).catch(() => { /* best-effort */ })
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
-        // For new rides, apply targeted plan updates rather than regenerating the whole plan
+        // For new activities, apply targeted plan updates rather than regenerating the whole plan
         const updatesByDate = Object.fromEntries(planUpdates.map((u) => [u.date, u]))
         const updatedPlan = trainingPlan.map((day) =>
           updatesByDate[day.date] ? { ...day, ...updatesByDate[day.date] } : day
@@ -166,15 +166,15 @@ export function useStravaSync(): UseStravaSyncResult {
     if (unprocessed.length === 0) return
     unprocessed.forEach((a) => processedNewActivitiesRef.current.add(a.id))
 
-    setNewRidesCount(unprocessed.length)
+    setNewActivitiesCount(unprocessed.length)
     // Merge new activities into the main query cache
     queryClient.setQueryData<StravaActivity[]>(['stravaActivities', authToken], (prev = []) => {
       const existingIds = new Set(prev.map((a) => a.id))
       return [...unprocessed.filter((a) => !existingIds.has(a.id)), ...prev]
     })
-    void runAnalysis(unprocessed, true).then(() => setNewRidesCount(0))
+    void runAnalysis(unprocessed, true).then(() => setNewActivitiesCount(0))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polledNewActivities])
 
-  return { stravaActivities, analysisStatus, analysisError, newRidesCount }
+  return { stravaActivities, analysisStatus, analysisError, newActivitiesCount }
 }

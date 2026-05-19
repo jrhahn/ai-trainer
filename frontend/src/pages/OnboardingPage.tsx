@@ -534,7 +534,7 @@ export default function OnboardingPage() {
                       {!stravaConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="flex-shrink-0" />
-                          Connect Strava to continue with automatic ride analysis.
+                          Connect Strava to continue with automatic activity analysis.
                         </div>
                       )}
                     </div>

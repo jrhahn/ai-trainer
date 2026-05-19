@@ -214,7 +214,7 @@ describe('OnboardingPage', () => {
     })
   })
 
-  it('analyses only the last 7 Strava rides before generating the plan', async () => {
+  it('analyses only the last 7 Strava activities before generating the plan', async () => {
     const activities = Array.from({ length: 10 }, (_, idx) => ({
       id: idx + 1,
       name: `Ride ${idx + 1}`,

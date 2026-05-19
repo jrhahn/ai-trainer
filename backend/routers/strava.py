@@ -278,11 +278,11 @@ async def _run_import_background(
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
 ) -> None:
-    """Fetch Strava activities and build the ride-metrics chain in the background.
+    """Fetch Strava activities and build the activity-metrics chain in the background.
 
     Opens its own DB session so it is not tied to the request lifecycle.
-    After building the ride-metrics chain, runs ``estimate_ftp_over_time`` on
-    the fetched stream data and persists per-ride FTP estimates as
+    After building the metrics chain, runs ``estimate_ftp_over_time`` on
+    the fetched stream data and persists per-activity FTP estimates as
     ``AthleteMetricSnapshot`` rows (source = ``"ftp_estimation"``).
     """
     _import_progress[user_id] = {
@@ -354,6 +354,7 @@ async def _run_import_background(
                 )
                 activity_name = activity.get("name")
 
+                streams: dict = {}
                 try:
                     resp = await _get_with_retry(
                         client,
@@ -361,31 +362,27 @@ async def _run_import_background(
                         params={"keys": keys, "key_by_type": "true"},
                         headers={"Authorization": f"Bearer {access_token}"},
                     )
-                    if not resp.is_success:
-                        skipped += 1
-                        _import_progress[user_id]["skipped"] = skipped
-                        _import_progress[user_id]["processed"] = idx + 1
-                        continue
-                    streams = _sanitize_streams(resp.json())
-                    rides.append(
-                        {
-                            "strava_activity_id": activity_id,
-                            "activity_name": (
-                                activity_name
-                                if isinstance(activity_name, str)
-                                else None
-                            ),
-                            "activity_start_datetime": start_date or None,
-                            "activity_date": activity_date,
-                            "sport_type": sport_type,
-                            "duration_seconds": duration_seconds,
-                            "streams": streams,
-                        }
-                    )
+                    if resp.is_success:
+                        streams = _sanitize_streams(resp.json())
                 except Exception:  # noqa: BLE001
-                    # Keep the import moving even when one activity fails.
-                    skipped += 1
-                    _import_progress[user_id]["skipped"] = skipped
+                    logger.info(
+                        "Stream download failed for Strava activity %s; importing summary data only",
+                        activity_id,
+                    )
+
+                rides.append(
+                    {
+                        "strava_activity_id": activity_id,
+                        "activity_name": (
+                            activity_name if isinstance(activity_name, str) else None
+                        ),
+                        "activity_start_datetime": start_date or None,
+                        "activity_date": activity_date,
+                        "sport_type": sport_type,
+                        "duration_seconds": duration_seconds,
+                        "streams": streams,
+                    }
+                )
                 _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---

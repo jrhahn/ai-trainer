@@ -777,7 +777,7 @@ def rate_workout_system() -> str:
     return (
         f"{COACH_PERSONA} Review a completed training session. "
         "Compare what was PLANNED against what the athlete ACTUALLY DID. "
-        "First check whether the actual ride TYPE/CHARACTER matches the planned type — for example, "
+        "First check whether the actual activity type/character matches the planned type — for example, "
         "if an endurance ride was planned but intervals were performed, or vice versa, call that out "
         "explicitly and explain the training impact. Then comment on the numbers: "
         "when objective stream data is available (power, HR, time-in-zone), use it to give "
@@ -785,8 +785,8 @@ def rate_workout_system() -> str:
         "which erodes your aerobic base and costs recovery'. Otherwise use the hand-entered metrics. "
         "Give the response in 2-4 sentences, warm and personal.\n\n"
         "IMPORTANT — follow-up dialogue rules:\n"
-        "When the ride data is SHORT (actual duration < 30 min or < 40 % of planned duration), "
-        "LOW-CONFIDENCE (no power/HR data and no athlete notes), or AMBIGUOUS (ride character "
+        "When the activity data is SHORT (actual duration < 30 min or < 40 % of planned duration), "
+        "LOW-CONFIDENCE (no power/HR data and no athlete notes), or AMBIGUOUS (activity character "
         "does not match the plan and the reason is unclear), do NOT confidently prescribe the "
         "next hard workout. Instead, set needs_athlete_feedback=true and populate follow_up_question "
         "with ONE concise, open-ended question that will help you understand the context — e.g. "
@@ -796,11 +796,11 @@ def rate_workout_system() -> str:
         "follow_up_question=null.\n\n"
         "Response quality rules (apply to the 'feedback' field):\n"
         "- Acknowledge uncertainty explicitly when data is weak or ambiguous — never fabricate confidence.\n"
-        "- Reference at least one concrete detail from this specific ride (duration, power number, "
+        "- Reference at least one concrete detail from this specific activity (duration, power number, "
         "perceived effort, or the athlete's own note) to show the feedback is tailored, not generic.\n"
         "- Give one clear, actionable next step (e.g. what to focus on next session, or what to watch).\n"
         "- Ask at most one follow-up question when clarification is needed — never stack multiple questions.\n"
-        "- Never claim that a ride under 20 minutes produced meaningful endurance adaptation; "
+        "- Never claim that an activity under 20 minutes produced meaningful endurance adaptation; "
         "a short spin is recovery or a warm-up, nothing more.\n\n"
         "Examples of well-formed feedback:\n\n"
         "SHORT RECOVERY SPIN (planned: 90 min endurance, actual: 18 min easy):\n"
@@ -954,16 +954,16 @@ def rate_workout_user(
 
         delta_section = "\n".join(lines)
 
-    # --- Actual ride analysis section (from algorithmic stream analysis) ---
+    # --- Actual activity analysis section (from algorithmic stream analysis) ---
     actual_analysis_section = ""
     if actual_ride_analysis:
         category = actual_ride_analysis.get("ride_category", "unknown")
         avg_pwr = actual_ride_analysis.get("avg_power_w")
         intervals = actual_ride_analysis.get("intervals_detected") or []
         analysis_lines: list[str] = [
-            "\nActual ride character (algorithmically derived):"
+            "\nActual activity character (algorithmically derived):"
         ]
-        analysis_lines.append(f"- Detected ride category: {category}")
+        analysis_lines.append(f"- Detected activity category: {category}")
         if avg_pwr:
             analysis_lines.append(f"- Average power: {avg_pwr}W")
         if intervals:
@@ -1075,15 +1075,15 @@ def refresh_login_summary_user(
     if notes:
         parts.append(f"Overall assessment notes:\n{notes}")
     if last_ride_feedback:
-        parts.append(f"Most recent ride feedback:\n{last_ride_feedback}")
+        parts.append(f"Most recent activity feedback:\n{last_ride_feedback}")
     if ride_insights:
-        parts.append(f"Per-ride analysis narrative:\n{ride_insights}")
+        parts.append(f"Per-activity analysis narrative:\n{ride_insights}")
     if training_plan:
         parts.append(
             f"Current training plan (for plan alignment):\n{json.dumps(training_plan, indent=2)}"
         )
     if not parts:
-        parts.append("No prior ride data available.")
+        parts.append("No prior activity data available.")
     return (
         "\n\n".join(parts)
         + "\n\nGenerate a loginSummary JSON object based on the above."
@@ -1350,7 +1350,7 @@ def next_ride_recommendation_user(
     """Build the user message for a next-ride recommendation.
 
     *rides* is a list of RideMetric ORM objects (or duck-typed dicts) with recent
-    ride data including user_note (subjective feedback).
+    activity data including user_note (subjective feedback).
     """
     today = app_today_iso(timezone_name=timezone_name)
 
@@ -1548,7 +1548,7 @@ def process_pending_feedbacks_user(
             rides_lines.append("  - " + " | ".join(ride_parts))
         parts.append("\n".join(rides_lines))
     else:
-        parts.append("No ride data available.")
+        parts.append("No activity data available.")
 
     if training_plan:
         upcoming = [
