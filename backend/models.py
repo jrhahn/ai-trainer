@@ -69,6 +69,7 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # UserProfile fields
     bike_type: Mapped[str | None] = mapped_column(String(50))

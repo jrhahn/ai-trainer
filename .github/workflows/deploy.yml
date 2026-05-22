@@ -82,6 +82,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           python - <<'PY'
           import json
@@ -99,6 +100,7 @@ jobs:
               "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
               "acme_email": os.environ.get("ACME_EMAIL", ""),
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
+              "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
           }
 
           with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:

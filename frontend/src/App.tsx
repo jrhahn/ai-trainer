@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage'
 import WorkoutPage from './pages/WorkoutPage'
 import StravaCallbackPage from './pages/StravaCallbackPage'
 import SettingsPage from './pages/SettingsPage'
+import AdminPage from './pages/AdminPage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { getSessionToken } from './services/auth'
 import { AUTHELIA_URL } from './services/api'
@@ -77,6 +78,7 @@ export default function App() {
       <Routes>
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/admin" element={<AdminPage />} />
 
         {!authToken ? (
           <>
