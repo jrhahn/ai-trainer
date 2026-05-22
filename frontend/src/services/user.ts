@@ -28,6 +28,7 @@ interface BackendUserResponse {
   maxHeartRate?: number
   restingHeartRate?: number
   currentFTP?: number
+  consumedTokens: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
   riderAssessment?: RiderAssessment | null
@@ -72,6 +73,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       maxHeartRate: user.maxHeartRate,
       restingHeartRate: user.restingHeartRate,
       currentFTP: user.currentFTP,
+      consumedTokens: user.consumedTokens ?? 0,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
     isOnboarded: user.isOnboarded,

@@ -18,6 +18,7 @@ from database import get_db
 from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO
 from services.dates import app_today_iso
+from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import review_matched_ride_and_adapt
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -43,6 +44,14 @@ def _provider(user: models.User) -> str:
     if stored == "openai" and settings.openai_api_key:
         return "openai"
     return _default_provider()
+
+
+async def _persist_collected_token_usage(
+    db: AsyncSession, user: models.User, token
+) -> None:
+    consumed = finish_token_usage_collection(token)
+    if consumed:
+        await crud.increment_user_consumed_tokens(db, user, consumed)
 
 
 def _user_to_response(user: models.User) -> schemas.UserResponse:
@@ -75,6 +84,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         current_ftp=user.current_ftp,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
+        consumed_tokens=user.consumed_tokens or 0,
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
     )
@@ -439,6 +449,7 @@ async def save_ride_feedback(
     if row.plan_match_status in {"auto_matched", "manual_matched"} and row.matched_plan_date:
         existing_plan = await crud.get_training_plan(db, current_user.id)
         plan = existing_plan.plan if existing_plan is not None else []
+        usage_token = begin_token_usage_collection()
         coach_note, raw_plan_updates = await review_matched_ride_and_adapt(
             db,
             current_user,
@@ -446,6 +457,7 @@ async def save_ride_feedback(
             plan,
             provider=_provider(current_user),
         )
+        await _persist_collected_token_usage(db, current_user, usage_token)
         plan_updates = (
             [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_plan_updates]
             if raw_plan_updates
@@ -631,6 +643,7 @@ async def upload_fit_file(
 
     # Trigger AI analysis in the background (best-effort; don't fail the upload if AI is down)
     ai_result: dict | None = None
+    usage_token = begin_token_usage_collection()
     try:
         ai_result = await ai_service.analyse_fit_activity(
             sport_type=sport_type,
@@ -641,7 +654,10 @@ async def upload_fit_file(
             provider=provider,
         )
     except Exception:
+        finish_token_usage_collection(usage_token)
         logger.warning("AI analysis failed for .fit upload; skipping feedback", exc_info=True)
+    else:
+        await _persist_collected_token_usage(db, current_user, usage_token)
 
     # Save rider assessment feedback if AI succeeded
     if ai_result:

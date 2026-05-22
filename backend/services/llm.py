@@ -26,11 +26,65 @@ code edits (e.g. ``OPENAI_COACH_MODEL=gpt-4o``).
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TokenUsage:
+    total: int = 0
+
+
+_token_usage: ContextVar[TokenUsage | None] = ContextVar("token_usage", default=None)
+
+
+def begin_token_usage_collection() -> Token[TokenUsage | None]:
+    """Start collecting provider-reported token usage for the current request."""
+    return _token_usage.set(TokenUsage())
+
+
+def finish_token_usage_collection(token: Token[TokenUsage | None]) -> int:
+    """Return collected token usage and restore the previous collection context."""
+    usage = _token_usage.get()
+    total = usage.total if usage is not None else 0
+    _token_usage.reset(token)
+    return total
+
+
+def _record_token_usage(tokens: int | None) -> None:
+    if not tokens or tokens <= 0:
+        return
+    usage = _token_usage.get()
+    if usage is not None:
+        usage.total += int(tokens)
+
+
+def _attribute_int(obj: object, *names: str) -> int | None:
+    for name in names:
+        value = getattr(obj, name, None)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def _openai_total_tokens(response: object) -> int | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    return _attribute_int(usage, "total_tokens")
+
+
+def _gemini_total_tokens(response: object) -> int | None:
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return None
+    return _attribute_int(usage, "total_token_count")
+
 
 # ---------------------------------------------------------------------------
 # Task type constants
@@ -100,6 +154,7 @@ class OpenAIProvider:
             ],
             **kwargs,
         )
+        _record_token_usage(_openai_total_tokens(response))
         return response.choices[0].message.content or ""
 
     async def chat_history(
@@ -113,6 +168,7 @@ class OpenAIProvider:
             messages=[{"role": "system", "content": system}, *messages],
             **kwargs,
         )
+        _record_token_usage(_openai_total_tokens(response))
         return response.choices[0].message.content or ""
 
 
@@ -140,6 +196,7 @@ class GeminiProvider:
             if exc.code == 429:
                 raise AIRateLimitError(str(exc)) from exc
             raise
+        _record_token_usage(_gemini_total_tokens(response))
         return response.text or ""
 
     async def chat_history(
@@ -169,6 +226,7 @@ class GeminiProvider:
             if exc.code == 429:
                 raise AIRateLimitError(str(exc)) from exc
             raise
+        _record_token_usage(_gemini_total_tokens(response))
         return response.text or ""
 
 

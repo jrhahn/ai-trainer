@@ -56,12 +56,13 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       stravaConnection: s.stravaConnection,
+      isExpertMode: s.isExpertMode,
       setTrainingPlan: s.setTrainingPlan,
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
@@ -85,6 +86,7 @@ export default function DashboardPage() {
 
   const today = formatLocalDate(new Date())
   const analyzedActivities = Math.min(importProgress.processed, importProgress.total)
+  const consumedTokens = userProfile?.consumedTokens ?? 0
   const hasActivityProgress = !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
   const progressPct = hasActivityProgress
     ? Math.round((analyzedActivities / importProgress.total) * 100)
@@ -139,6 +141,17 @@ export default function DashboardPage() {
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {isExpertMode && (
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            Consumed tokens
+          </p>
+          <p className="text-2xl font-bold text-gray-900">
+            {consumedTokens.toLocaleString()}
+          </p>
+        </div>
+      )}
 
       {/* Post-login ride summary */}
       {(riderAssessment?.loginSummary || summaryLoading) && (

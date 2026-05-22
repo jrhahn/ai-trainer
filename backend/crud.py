@@ -59,6 +59,16 @@ async def create_user(
     return user
 
 
+async def increment_user_consumed_tokens(
+    db: AsyncSession, user: models.User, tokens: int
+) -> None:
+    """Add provider-reported LLM tokens to a user's running usage counter."""
+    if tokens <= 0:
+        return
+    user.consumed_tokens = int(user.consumed_tokens or 0) + int(tokens)
+    await db.flush()
+
+
 # ---------------------------------------------------------------------------
 # TrainingPlan
 # ---------------------------------------------------------------------------
