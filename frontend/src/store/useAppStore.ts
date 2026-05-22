@@ -282,6 +282,8 @@ interface AppState {
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
   toggleExpertMode: () => void
+  pendingCoachMessage: string | null
+  setPendingCoachMessage: (msg: string | null) => void
 }
 
 const dataState = {
@@ -300,6 +302,7 @@ const dataState = {
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
   pendingFeedbackRideIds: [] as number[],
+  pendingCoachMessage: null as string | null,
 }
 
 const initialState = {
@@ -387,6 +390,7 @@ export const useAppStore = create<AppState>()(
           : [...state.pendingFeedbackRideIds, id],
       })),
     clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
+    setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
     toggleExpertMode: () =>
       set((state) => {
         const next = !state.isExpertMode

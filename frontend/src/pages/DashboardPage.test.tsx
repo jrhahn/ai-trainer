@@ -1,0 +1,394 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import DashboardPage from './DashboardPage'
+import { useAppStore } from '../store/useAppStore'
+import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import { formatLocalDate } from '../utils/workout'
+
+// ---------------------------------------------------------------------------
+// Hoisted mocks
+// ---------------------------------------------------------------------------
+
+const { mockAdaptTrainingPlan, mockRefreshLoginSummary } = vi.hoisted(() => ({
+  mockAdaptTrainingPlan: vi.fn(),
+  mockRefreshLoginSummary: vi.fn(),
+}))
+
+vi.mock('../services/ai', () => ({
+  adaptTrainingPlan: mockAdaptTrainingPlan,
+  refreshLoginSummary: mockRefreshLoginSummary,
+}))
+
+vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
+
+vi.mock('../hooks/useImportProgress', () => ({
+  useImportProgress: () => ({ status: 'idle', total: 0, processed: 0, error: undefined }),
+}))
+
+vi.mock('../components/ProgressionChart', () => ({
+  default: () => <div data-testid="progression-chart" />,
+}))
+
+vi.mock('../components/AIChat', () => ({
+  default: () => <div data-testid="ai-chat" />,
+}))
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+
+const today = formatLocalDate(new Date())
+const yesterday = formatLocalDate(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))
+const twoDaysAgo = formatLocalDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+const fourDaysAgo = formatLocalDate(new Date(Date.now() - 4 * 24 * 60 * 60 * 1000))
+const sixDaysAgo = formatLocalDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000))
+
+let rideIdCounter = 1
+function makeRide(overrides: Partial<RideMetricPoint> & { activityDate: string }): RideMetricPoint {
+  return {
+    stravaActivityId: rideIdCounter++,
+    sportType: 'Ride',
+    activityName: 'Test Ride',
+    durationSeconds: 3600,
+    ...overrides,
+  }
+}
+
+const baseProfile = {
+  name: 'Test Athlete',
+  email: 'test@example.com',
+  bikeType: 'road' as const,
+  trainingGoal: 'general_fitness' as const,
+  weeklyHours: 8,
+  followsTrainingPlan: false,
+  fitnessLevel: 'intermediate' as const,
+}
+
+function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
+  useAppStore.setState({
+    authToken: 'test-token',
+    userProfile: baseProfile,
+    trainingPlan: [],
+    rideMetricsHistory: [],
+    riderAssessment: null,
+    stravaConnection: null,
+    isExpertMode: false,
+    ...overrides,
+  })
+}
+
+function renderDashboard() {
+  return render(
+    <MemoryRouter>
+      <DashboardPage />
+    </MemoryRouter>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Test lifecycle
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  useAppStore.getState().resetAll()
+  localStorage.clear()
+  vi.clearAllMocks()
+  mockAdaptTrainingPlan.mockResolvedValue([])
+  mockRefreshLoginSummary.mockResolvedValue(null)
+})
+
+// ---------------------------------------------------------------------------
+// Recent rides section
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — recent rides', () => {
+  it('renders a ride from yesterday inside the 3-day window', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'Morning Ride' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Morning Ride')).toBeInTheDocument()
+  })
+
+  it('renders a ride from today', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: "Today's Ride" })],
+    })
+    renderDashboard()
+    expect(await screen.findByText("Today's Ride")).toBeInTheDocument()
+  })
+
+  it('does not render a ride older than 3 days by default', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: fourDaysAgo, activityName: 'Old Ride' })],
+    })
+    renderDashboard()
+    // wait for effects to settle, then assert absence
+    await waitFor(() => {
+      expect(screen.queryByText('Old Ride')).not.toBeInTheDocument()
+    })
+  })
+
+  it('formats the duration of a ride', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Long Ride', durationSeconds: 5400 }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('1h 30m')).toBeInTheDocument()
+  })
+
+  it('renders the sport type label', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, sportType: 'VirtualRide' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('virtualride')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// "new" badge logic
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — "new" badge', () => {
+  it('shows "new" badge for a ride after the previous login date', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'Fresh Ride' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('new')).toBeInTheDocument()
+  })
+
+  it('does not show "new" badge when there is no previous login (first visit)', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'First Visit Ride' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('First Visit Ride')).toBeInTheDocument()
+    expect(screen.queryByText('new')).not.toBeInTheDocument()
+  })
+
+  it('does not show "new" badge for a ride before the previous login date', async () => {
+    // login happened after the ride
+    localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: twoDaysAgo, activityName: 'Old Ride' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Old Ride')).toBeInTheDocument()
+    expect(screen.queryByText('new')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7-day window extension
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — 7-day window extension', () => {
+  it('extends window to 7 days when a new activity exists between 3 and 7 days ago', async () => {
+    // previous login was 6 days ago → activity 4 days ago is "new"
+    localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString())
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: fourDaysAgo, activityName: 'Extended Window Ride' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Extended Window Ride')).toBeInTheDocument()
+    expect(screen.getByText('new')).toBeInTheDocument()
+  })
+
+  it('does not extend window when the activity beyond 3 days is not new', async () => {
+    // previous login was yesterday → activity 4 days ago is NOT new
+    localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString())
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: fourDaysAgo, activityName: 'Old Out-of-Window Ride' }),
+        makeRide({ activityDate: yesterday, activityName: 'Recent Ride' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Recent Ride')).toBeInTheDocument()
+    expect(screen.queryByText('Old Out-of-Window Ride')).not.toBeInTheDocument()
+  })
+
+  it('does not extend window when there is no previous login', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: fourDaysAgo, activityName: 'Far Ride' }),
+        makeRide({ activityDate: yesterday, activityName: 'Close Ride' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Close Ride')).toBeInTheDocument()
+    expect(screen.queryByText('Far Ride')).not.toBeInTheDocument()
+  })
+
+  it('keeps window at 3 days when activity beyond 3 days is on exactly the previous login date', async () => {
+    // previous login was exactly sixDaysAgo — activity also sixDaysAgo:
+    // sixDaysAgo >= sevenDaysAgo ✓  |  sixDaysAgo < threeDaysAgo ✓  |  sixDaysAgo >= sixDaysAgo ✓
+    // → should extend window
+    localStorage.setItem(
+      PREV_LOGIN_KEY,
+      new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+    )
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: sixDaysAgo, activityName: 'Six-Day-Old Ride' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Six-Day-Old Ride')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Upcoming sub-label
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — Activities section layout', () => {
+  it('shows "Upcoming" sub-label when both recent rides and plan days exist', async () => {
+    const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
+    const planDay: TrainingDay = {
+      date: tomorrow,
+      workoutType: 'endurance',
+      title: 'Easy Z2',
+      description: 'Zone 2 ride',
+      durationMinutes: 60,
+    }
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday })],
+      trainingPlan: [planDay],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Upcoming')).toBeInTheDocument()
+  })
+
+  it('does not show "Upcoming" sub-label when there are no recent rides', async () => {
+    const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
+    const planDay: TrainingDay = {
+      date: tomorrow,
+      workoutType: 'endurance',
+      title: 'Easy Z2',
+      description: 'Zone 2 ride',
+      durationMinutes: 60,
+    }
+    setupStore({
+      rideMetricsHistory: [],
+      trainingPlan: [planDay],
+    })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders nothing when there are no rides and no plan', async () => {
+    setupStore({ rideMetricsHistory: [], trainingPlan: [] })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByText('Activities')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows the Activities section header when rides exist', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Activities')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ProgressionChart visibility
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — ProgressionChart', () => {
+  it('does not render ProgressionChart in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('progression-chart')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders ProgressionChart when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('progression-chart')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Plan comparison row & score badge
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — plan comparison row', () => {
+  it('shows plan title and score badge for a matched ride', async () => {
+    const matchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Evening Ride',
+      durationSeconds: 3600,
+      normalizedPowerW: 290,
+      planMatchStatus: 'auto_matched',
+      matchedPlanSnapshot: {
+        title: 'Tempo Intervals',
+        workoutType: 'tempo',
+        durationMinutes: 60,
+        targetPower: { low: 270, high: 310 },
+      },
+    })
+    setupStore({ rideMetricsHistory: [matchedRide] })
+    renderDashboard()
+
+    expect(await screen.findByText('planned:')).toBeInTheDocument()
+    expect(screen.getByText(/Tempo Intervals/)).toBeInTheDocument()
+    // Score badge should show a label
+    const badge = await screen.findByTitle('Ask coach about this match')
+    expect(['Perfect', 'Solid', 'Close', 'Off plan', 'Needs work', '?']).toContain(badge.textContent)
+  })
+
+  it('does not show plan row for an unmatched ride', async () => {
+    const unmatchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Free Ride',
+      planMatchStatus: 'unmatched',
+      matchedPlanSnapshot: null,
+    })
+    setupStore({ rideMetricsHistory: [unmatchedRide] })
+    renderDashboard()
+
+    expect(await screen.findByText('Free Ride')).toBeInTheDocument()
+    expect(screen.queryByText('planned:')).not.toBeInTheDocument()
+  })
+
+  it('clicking the score badge sets pendingCoachMessage in the store', async () => {
+    const matchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Hill Repeats',
+      durationSeconds: 3600,
+      planMatchStatus: 'auto_matched',
+      matchedPlanSnapshot: {
+        title: 'Hill Session',
+        workoutType: 'intervals',
+        durationMinutes: 60,
+      },
+    })
+    setupStore({ rideMetricsHistory: [matchedRide] })
+    renderDashboard()
+
+    const badge = await screen.findByTitle('Ask coach about this match')
+    badge.click()
+
+    const msg = useAppStore.getState().pendingCoachMessage
+    expect(msg).not.toBeNull()
+    expect(msg).toContain('Hill Repeats')
+    expect(msg).toContain('Hill Session')
+  })
+})
+
