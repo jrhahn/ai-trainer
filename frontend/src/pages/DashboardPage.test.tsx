@@ -346,11 +346,11 @@ describe('DashboardPage — plan comparison row', () => {
     setupStore({ rideMetricsHistory: [matchedRide] })
     renderDashboard()
 
-    expect(await screen.findByText('vs plan:')).toBeInTheDocument()
+    expect(await screen.findByText('planned:')).toBeInTheDocument()
     expect(screen.getByText(/Tempo Intervals/)).toBeInTheDocument()
-    // Score badge should be a % value
+    // Score badge should show a label
     const badge = await screen.findByTitle('Ask coach about this match')
-    expect(badge.textContent).toMatch(/\d+%/)
+    expect(['Perfect', 'Solid', 'Close', 'Off plan', 'Needs work', '?']).toContain(badge.textContent)
   })
 
   it('does not show plan row for an unmatched ride', async () => {
@@ -364,7 +364,7 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Free Ride')).toBeInTheDocument()
-    expect(screen.queryByText('vs plan:')).not.toBeInTheDocument()
+    expect(screen.queryByText('planned:')).not.toBeInTheDocument()
   })
 
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {

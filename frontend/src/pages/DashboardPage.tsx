@@ -300,14 +300,30 @@ export default function DashboardPage() {
             {recentRides.map((ride) => {
               const plan = ride.planMatchStatus !== 'unmatched' ? ride.matchedPlanSnapshot : null
               const score = plan ? computeMatchScore(ride, plan) : null
+              const scoreLabel =
+                score === null
+                  ? '?'
+                  : score >= 90
+                    ? 'Perfect'
+                    : score >= 75
+                      ? 'Solid'
+                      : score >= 60
+                        ? 'Close'
+                        : score >= 40
+                          ? 'Off plan'
+                          : 'Needs work'
               const scoreBadgeStyle =
                 score === null
                   ? 'bg-gray-100 text-gray-500'
-                  : score >= 80
+                  : score >= 90
                     ? 'bg-green-100 text-green-700'
-                    : score >= 60
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-orange-100 text-orange-700'
+                    : score >= 75
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : score >= 60
+                        ? 'bg-amber-100 text-amber-700'
+                        : score >= 40
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-red-100 text-red-700'
               return (
                 <div
                   key={ride.stravaActivityId}
@@ -343,7 +359,7 @@ export default function DashboardPage() {
                   {/* Plan comparison row */}
                   {plan && (
                     <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                      <span className="text-xs text-gray-400">vs plan:</span>
+                      <span className="text-xs text-gray-400">planned:</span>
                       <span className="text-xs text-gray-600 font-medium truncate flex-1">
                         {plan.title ?? plan.workoutType}
                         {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
@@ -356,7 +372,7 @@ export default function DashboardPage() {
                         title="Ask coach about this match"
                         className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
                       >
-                        {score !== null ? `${score}%` : '?'}
+                        {scoreLabel}
                       </button>
                     </div>
                   )}
