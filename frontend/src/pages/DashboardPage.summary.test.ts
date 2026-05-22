@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { splitTrainingSummary } from './DashboardPage'
+import { splitTrainingSummary, formatDuration } from './DashboardPage'
+
+describe('formatDuration', () => {
+  it('returns empty string for undefined', () => {
+    expect(formatDuration(undefined)).toBe('')
+  })
+
+  it('returns empty string for zero seconds', () => {
+    expect(formatDuration(0)).toBe('')
+  })
+
+  it('formats a minutes-only duration', () => {
+    expect(formatDuration(45 * 60)).toBe('45 min')
+  })
+
+  it('formats hours and minutes', () => {
+    expect(formatDuration(90 * 60)).toBe('1h 30m')
+  })
+
+  it('formats exact hours with zero minutes', () => {
+    expect(formatDuration(2 * 3600)).toBe('2h 0m')
+  })
+})
 
 describe('splitTrainingSummary', () => {
   it('parses JSON summary payloads with intro and bulletPoints', () => {

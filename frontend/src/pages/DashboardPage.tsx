@@ -1,14 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
+import { Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import type { RideMetricPoint } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
-import { formatLocalDate } from '../utils/workout'
+import { formatLocalDate, parseLocalDate } from '../utils/workout'
+
+const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+
+export function formatDuration(seconds: number | undefined): string {
+  if (!seconds) return ''
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m} min`
+}
 
 export function splitTrainingSummary(raw: string): {
   intro: string
@@ -56,7 +68,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -66,12 +78,24 @@ export default function DashboardPage() {
       setTrainingPlan: s.setTrainingPlan,
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
+      rideMetricsHistory: s.rideMetricsHistory,
     }))
   )
 
   const adaptationTriggeredRef = useRef(false)
   const summaryTriggeredRef = useRef(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PREV_LOGIN_KEY)
+      setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
+      localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    } catch {
+      // localStorage may be unavailable in some contexts; silently ignore
+    }
+  }, [])
   const importProgress = useImportProgress()
 
   // keep sync running so analysis status updates remain active
@@ -94,6 +118,30 @@ export default function DashboardPage() {
 
   // Always show the next 3 upcoming days (today or later)
   const next3Days = trainingPlan.filter((d) => d.date >= today).slice(0, 3)
+
+  const threeDaysAgo = formatLocalDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
+  const sevenDaysAgo = formatLocalDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+
+  // Extend the window to 7 days if there are new (since last login) activities
+  // that fall between 3 and 7 days ago
+  const hasNewBeyond3Days =
+    prevLoginDate !== null &&
+    rideMetricsHistory.some(
+      (r) =>
+        r.activityDate >= sevenDaysAgo &&
+        r.activityDate < threeDaysAgo &&
+        r.activityDate >= prevLoginDate!
+    )
+  const recentWindow = hasNewBeyond3Days ? sevenDaysAgo : threeDaysAgo
+
+  const recentRides = rideMetricsHistory
+    .filter((r) => r.activityDate >= recentWindow && r.activityDate <= today)
+    .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+
+  const isNew = (r: RideMetricPoint): boolean => {
+    if (!prevLoginDate) return false
+    return r.activityDate >= prevLoginDate
+  }
 
   // If there are past incomplete days the plan is stale — ask the AI coach to
   // reschedule them so the athlete always has current upcoming sessions.
@@ -190,11 +238,47 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Next 3 days */}
-      {next3Days.length > 0 && (
+      {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
+      {(recentRides.length > 0 || next3Days.length > 0) && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Next 3 days</h2>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
+            {recentRides.map((ride) => (
+              <div
+                key={ride.stravaActivityId}
+                className="flex items-center gap-2 bg-white rounded-lg border border-gray-100 px-3 py-2"
+              >
+                <p className="text-xs text-gray-400 flex-shrink-0 w-16">
+                  {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </p>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
+                  {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                </span>
+                <span className="text-xs text-gray-700 font-medium flex-1 truncate">
+                  {ride.activityName ?? 'Activity'}
+                </span>
+                {ride.durationSeconds != null && (
+                  <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+                    <Clock size={11} />
+                    {formatDuration(ride.durationSeconds)}
+                  </span>
+                )}
+                {isNew(ride) && (
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                    new
+                  </span>
+                )}
+              </div>
+            ))}
+            {recentRides.length > 0 && next3Days.length > 0 && (
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2 pb-0.5 pl-1">
+                Upcoming
+              </p>
+            )}
             {next3Days.map((day) => (
               <WorkoutCard key={day.date} day={day} compact />
             ))}
@@ -211,8 +295,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Athlete progression charts */}
-      <ProgressionChart />
+      {/* Athlete progression charts — expert mode only */}
+      {isExpertMode && <ProgressionChart />}
     </div>
   )
 }
