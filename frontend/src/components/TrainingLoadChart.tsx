@@ -22,7 +22,7 @@ export default function TrainingLoadChart() {
           <h3 className="text-sm font-bold text-gray-800">Training Load Over Time</h3>
         </div>
         <p className="text-xs text-gray-400 text-center py-4">
-          Sync your Strava rides to see how your training load develops over time.
+          Sync your Strava activities to see how your training load develops over time.
         </p>
       </div>
     )
@@ -70,7 +70,7 @@ export default function TrainingLoadChart() {
         </div>
         <h3 className="text-sm font-bold text-gray-800">Training Load Over Time</h3>
         <span className="ml-auto text-xs text-gray-400">
-          {rides.length} ride{rides.length !== 1 ? 's' : ''}
+          {rides.length} activit{rides.length === 1 ? 'y' : 'ies'}
         </span>
       </div>
 
@@ -171,19 +171,19 @@ export default function TrainingLoadChart() {
       {/* TSS chart */}
       {hasTss && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ Daily TSS (Training Stress Score per ride)</p>
+          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ Daily TSS (Training Stress Score per activity)</p>
           <LineChart
             data={tssData}
             labels={tssLabels}
             color="#8b5cf6"
             height={72}
-            yLabel="TSS per ride"
+            yLabel="TSS per activity"
           />
         </div>
       )}
 
       <p className="text-xs text-gray-400">
-        One data point per ride. CTL = 42-day fitness, ATL = 7-day fatigue, TSB = form (positive = fresh, negative = fatigued).
+        One data point per activity. CTL = 42-day fitness, ATL = 7-day fatigue, TSB = form (positive = fresh, negative = fatigued).
       </p>
     </div>
   )

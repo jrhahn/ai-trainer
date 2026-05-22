@@ -21,6 +21,18 @@ const typeColors: Record<string, string> = {
   strength: 'bg-teal-100 text-teal-700',
 }
 
+function stravaActivityType(activity: StravaActivity): string {
+  return (activity.sport_type || activity.type || '').toLowerCase()
+}
+
+function plannedWorkoutMatchesActivity(day: TrainingDay, activity: StravaActivity): boolean {
+  const type = stravaActivityType(activity)
+  if (day.workoutType === 'strength') {
+    return type.includes('weight') || type.includes('strength') || type.includes('workout')
+  }
+  return type === 'cycling' || type.includes('ride')
+}
+
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
@@ -43,7 +55,8 @@ export default function WorkoutPage() {
       const cachedActivities =
         queryClient.getQueryData<StravaActivity[]>(['stravaActivities', authToken]) ?? []
       const matchingActivity = cachedActivities.find((a) =>
-        a.start_date.startsWith(dayWithFeedback.date)
+        (a.start_date_local || a.start_date).startsWith(dayWithFeedback.date) &&
+        plannedWorkoutMatchesActivity(dayWithFeedback, a)
       )
       return rateCompletedWorkout(dayWithFeedback, authToken!, matchingActivity?.id)
     },

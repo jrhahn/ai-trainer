@@ -71,7 +71,7 @@ export default function ProgressionChart() {
         })
       }
 
-      // Step 3: rebuild CTL/ATL/TSB per-ride snapshots and refresh store
+      // Step 3: rebuild CTL/ATL/TSB snapshots and refresh store
       setRecalcStatus('recalculating')
       await recalculateAll()
       // Invalidate the readiness score so RaceReadinessCard re-fetches with fresh data
@@ -89,7 +89,7 @@ export default function ProgressionChart() {
     if (recalcStatus === 'importing') {
       return importProgress.total > 0
         ? `Downloading… ${importProgress.processed}/${importProgress.total}`
-        : 'Downloading rides…'
+        : 'Downloading activities…'
     }
     if (recalcStatus === 'recalculating') return 'Recalculating…'
     if (recalcStatus === 'done') return 'Done!'
@@ -290,7 +290,7 @@ export default function ProgressionChart() {
       )}
 
       <p className="text-xs text-gray-400">
-        Updated after each Strava ride analysis. CTL = fitness (42-day avg), ATL = fatigue (7-day avg), TSB = form (CTL − ATL).
+        Updated after each Strava activity analysis. CTL = fitness (42-day avg), ATL = fatigue (7-day avg), TSB = form (CTL − ATL).
       </p>
 
       {/* Recalculate button */}

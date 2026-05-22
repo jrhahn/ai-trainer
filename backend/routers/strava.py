@@ -57,7 +57,9 @@ def _sanitize_streams(streams: object) -> dict:
     return cleaned
 
 
-def _build_metrics_chain_resilient(rides: list[dict], ftp: float) -> tuple[list[dict], int]:
+def _build_metrics_chain_resilient(
+    rides: list[dict], ftp: float
+) -> tuple[list[dict], int]:
     """Build metrics while tolerating failures on individual rides.
 
     Returns ``(metrics_chain, failed_count)``.
@@ -72,7 +74,9 @@ def _build_metrics_chain_resilient(rides: list[dict], ftp: float) -> tuple[list[
 
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
-            chunk = build_ride_metrics_chain([ride], ftp, initial_ctl=ctl, initial_atl=atl)
+            chunk = build_ride_metrics_chain(
+                [ride], ftp, initial_ctl=ctl, initial_atl=atl
+            )
         except Exception:  # noqa: BLE001
             failed += 1
             continue
@@ -175,11 +179,15 @@ async def strava_callback(
 
     user_id, expires_at = state_data
     if expires_at <= time.time():
-        return RedirectResponse(f"{_frontend_url()}/strava/callback?error=State%20expired")
+        return RedirectResponse(
+            f"{_frontend_url()}/strava/callback?error=State%20expired"
+        )
 
     user = await crud.get_user_by_id(db, user_id)
     if user is None:
-        return RedirectResponse(f"{_frontend_url()}/strava/callback?error=User%20not%20found")
+        return RedirectResponse(
+            f"{_frontend_url()}/strava/callback?error=User%20not%20found"
+        )
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -198,7 +206,9 @@ async def strava_callback(
 
     data = resp.json()
     athlete = data.get("athlete", {})
-    athlete_name = f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip()
+    athlete_name = (
+        f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip()
+    )
 
     await crud.upsert_strava_token(
         db,
@@ -248,7 +258,9 @@ async def strava_refresh(
     )
 
 
-async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+async def _get_with_retry(
+    client: httpx.AsyncClient, url: str, **kwargs
+) -> httpx.Response:
     """GET with one automatic retry after 16 s on HTTP 429."""
     resp = await client.get(url, **kwargs)
     if resp.status_code == 429:
@@ -266,14 +278,21 @@ async def _run_import_background(
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
 ) -> None:
-    """Fetch Strava activities and build the ride-metrics chain in the background.
+    """Fetch Strava activities and build the activity-metrics chain in the background.
 
     Opens its own DB session so it is not tied to the request lifecycle.
-    After building the ride-metrics chain, runs ``estimate_ftp_over_time`` on
-    the fetched stream data and persists per-ride FTP estimates as
+    After building the metrics chain, runs ``estimate_ftp_over_time`` on
+    the fetched stream data and persists per-activity FTP estimates as
     ``AthleteMetricSnapshot`` rows (source = ``"ftp_estimation"``).
     """
-    _import_progress[user_id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
+    _import_progress[user_id] = {
+        "status": "running",
+        "total": 0,
+        "processed": 0,
+        "imported": 0,
+        "skipped": 0,
+        "error": "",
+    }
     try:
         if replace_existing:
             async with async_session_maker() as db:
@@ -318,16 +337,24 @@ async def _run_import_background(
                 start_date: str = activity.get("start_date", "")
                 start_date_local: str = activity.get("start_date_local", "")
                 activity_date_source = start_date_local or start_date
-                activity_date = activity_date_source[:10] if activity_date_source else ""
+                activity_date = (
+                    activity_date_source[:10] if activity_date_source else ""
+                )
                 if not activity_date:
                     skipped += 1
                     _import_progress[user_id]["skipped"] = skipped
                     _import_progress[user_id]["processed"] = idx + 1
                     continue
 
-                sport_type: str = activity.get("sport_type") or activity.get("type") or "cycling"
-                duration_seconds: int = int(activity.get("elapsed_time") or activity.get("moving_time") or 0)
+                sport_type: str = (
+                    activity.get("sport_type") or activity.get("type") or "cycling"
+                )
+                duration_seconds: int = int(
+                    activity.get("elapsed_time") or activity.get("moving_time") or 0
+                )
+                activity_name = activity.get("name")
 
+                streams: dict = {}
                 try:
                     resp = await _get_with_retry(
                         client,
@@ -335,23 +362,27 @@ async def _run_import_background(
                         params={"keys": keys, "key_by_type": "true"},
                         headers={"Authorization": f"Bearer {access_token}"},
                     )
-                    if not resp.is_success:
-                        skipped += 1
-                        _import_progress[user_id]["skipped"] = skipped
-                        _import_progress[user_id]["processed"] = idx + 1
-                        continue
-                    streams = _sanitize_streams(resp.json())
-                    rides.append({
+                    if resp.is_success:
+                        streams = _sanitize_streams(resp.json())
+                except Exception:  # noqa: BLE001
+                    logger.info(
+                        "Stream download failed for Strava activity %s; importing summary data only",
+                        activity_id,
+                    )
+
+                rides.append(
+                    {
                         "strava_activity_id": activity_id,
+                        "activity_name": (
+                            activity_name if isinstance(activity_name, str) else None
+                        ),
+                        "activity_start_datetime": start_date or None,
                         "activity_date": activity_date,
                         "sport_type": sport_type,
                         "duration_seconds": duration_seconds,
                         "streams": streams,
-                    })
-                except Exception:  # noqa: BLE001
-                    # Keep the import moving even when one activity fails.
-                    skipped += 1
-                    _import_progress[user_id]["skipped"] = skipped
+                    }
+                )
                 _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---
@@ -364,6 +395,8 @@ async def _run_import_background(
                 for m in metrics_chain[i : i + BATCH]:
                     await crud.upsert_ride_metric(db, user_id, **m)
                 await db.commit()
+
+            _import_progress[user_id]["imported"] = min(i + BATCH, len(metrics_chain))
 
         # --- Estimate FTP over time from steady intervals ---
         try:
@@ -402,7 +435,8 @@ async def _run_import_background(
         _import_progress[user_id] = {
             "status": "done",
             "total": len(all_activities),
-            "processed": len(metrics_chain),
+            "processed": len(all_activities),
+            "imported": len(metrics_chain),
             "skipped": skipped,
             "error": "",
         }
@@ -420,6 +454,7 @@ async def _run_import_background(
             "status": "error",
             "total": prev.get("total", 0),
             "processed": prev.get("processed", 0),
+            "imported": prev.get("imported", 0),
             "skipped": prev.get("skipped", 0),
             "error": str(exc),
         }
@@ -443,10 +478,14 @@ async def get_strava_activities(
             headers={"Authorization": f"Bearer {access_token}"},
         )
     if not resp.is_success:
-        raise HTTPException(status_code=resp.status_code, detail="Failed to fetch Strava activities")
+        raise HTTPException(
+            status_code=resp.status_code, detail="Failed to fetch Strava activities"
+        )
     activities: list[dict] = resp.json()
     if after_id is not None:
-        activities = [a for a in activities if isinstance(a.get("id"), int) and a["id"] > after_id]
+        activities = [
+            a for a in activities if isinstance(a.get("id"), int) and a["id"] > after_id
+        ]
     return activities
 
 
@@ -483,7 +522,9 @@ async def import_strava_history(
         ftp = float(current_user.current_ftp)
 
     months = max(1, min(months, 24))
-    after_ts = int((datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp())
+    after_ts = int(
+        (datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp()
+    )
 
     # Prevent stacking duplicate background tasks: if one is already running, bail out.
     current_progress = _import_progress.get(current_user.id, {})
@@ -491,7 +532,14 @@ async def import_strava_history(
         return {"status": "already_running"}
 
     # Mark started immediately so the progress endpoint sees "running" right away
-    _import_progress[current_user.id] = {"status": "running", "total": 0, "processed": 0, "skipped": 0, "error": ""}
+    _import_progress[current_user.id] = {
+        "status": "running",
+        "total": 0,
+        "processed": 0,
+        "imported": 0,
+        "skipped": 0,
+        "error": "",
+    }
 
     background_tasks.add_task(
         _run_import_background,

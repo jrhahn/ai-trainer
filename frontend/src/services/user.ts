@@ -230,7 +230,7 @@ export async function submitRideFeedback(
   feedback: {
     rpe: number
     legs: 'fresh' | 'normal' | 'heavy'
-    intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'aborted'
+    intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
     note?: string
   },
 ): Promise<{

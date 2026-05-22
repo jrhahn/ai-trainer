@@ -113,7 +113,7 @@ describe('StravaCallbackPage', () => {
     setup('?success=1')
 
     await waitFor(() => {
-      expect(screen.getByText(/Importing ride history/i)).toBeInTheDocument()
+      expect(screen.getByText(/Importing activity history/i)).toBeInTheDocument()
     })
   })
 
@@ -122,7 +122,7 @@ describe('StravaCallbackPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Import complete/i)).toBeInTheDocument()
-      expect(screen.getByText(/42 rides imported/i)).toBeInTheDocument()
+      expect(screen.getByText(/42 activities imported/i)).toBeInTheDocument()
       expect(screen.getByText(/All processed activities imported successfully/i)).toBeInTheDocument()
     })
 
@@ -180,7 +180,7 @@ describe('StravaCallbackPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Import complete/i)).toBeInTheDocument()
-      expect(screen.getByText(/1 ride imported, 1 skipped/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 activity imported, 1 skipped/i)).toBeInTheDocument()
       expect(screen.getByText(/Broken ride/i)).toBeInTheDocument()
       expect(screen.getByText(/Stream download failed/i)).toBeInTheDocument()
     })

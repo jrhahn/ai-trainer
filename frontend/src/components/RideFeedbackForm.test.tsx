@@ -77,6 +77,16 @@ describe('RideFeedbackForm', () => {
     expect(screen.getByRole('button', { name: /Aborted/i })).toBeInTheDocument()
   })
 
+  it('uses the activity type in copy and non-cycling intent labels', () => {
+    renderForm({ sportType: 'Hike', activityName: 'Hill Loop' })
+
+    expect(screen.getByText('How was your hike?')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-20 · Hike')).toBeInTheDocument()
+    expect(screen.getByText('What was this hike?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Free activity/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Free ride/i })).not.toBeInTheDocument()
+  })
+
   it('shows optional note textarea and Save/Cancel buttons', () => {
     renderForm()
     expect(screen.getByPlaceholderText(/Anything else the coach should know/i)).toBeInTheDocument()

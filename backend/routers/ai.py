@@ -293,7 +293,10 @@ async def analyse_activities(
             if not activity_date:
                 continue
             sport_type = (
-                a_dict.get("sportType") or a_dict.get("sport_type") or "cycling"
+                a_dict.get("sportType")
+                or a_dict.get("sport_type")
+                or a_dict.get("type")
+                or "cycling"
             )
             duration_seconds = int(
                 a_dict.get("elapsedTime")

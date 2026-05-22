@@ -50,9 +50,10 @@ class ImportFlowHttpClient:
             1: [
                 {
                     "id": 111,
+                    "name": "Morning Hike",
                     "start_date": "2026-04-01T22:30:00Z",
                     "start_date_local": "2026-04-02T00:30:00",
-                    "sport_type": "Ride",
+                    "type": "Hike",
                     "elapsed_time": 3600,
                 },
                 {
@@ -267,7 +268,7 @@ async def test_connect_to_strava_end_to_end(client, auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_import_background_continues_when_single_track_fails(
+async def test_import_background_keeps_activity_when_stream_download_fails(
     auth_headers, monkeypatch
 ):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
@@ -285,13 +286,18 @@ async def test_import_background_continues_when_single_track_fails(
     progress = strava_router._import_progress[user_id]
     assert progress["status"] == "done"
     assert progress["total"] == 2
-    assert progress["skipped"] >= 1
+    assert progress["skipped"] == 0
+    assert progress["imported"] == 2
 
     async with async_session_maker() as session:
         rides = await crud.get_all_ride_metrics_ordered(session, user_id)
-    assert len(rides) == 1
-    assert rides[0].strava_activity_id == 111
-    assert rides[0].activity_date == "2026-04-02"
+    assert len(rides) == 2
+    rides_by_id = {ride.strava_activity_id: ride for ride in rides}
+    assert rides_by_id[111].activity_name == "Morning Hike"
+    assert rides_by_id[111].activity_date == "2026-04-02"
+    assert rides_by_id[111].sport_type == "Hike"
+    assert rides_by_id[222].sport_type == "Ride"
+    assert rides_by_id[222].ride_purpose == "unknown"
 
 
 @pytest.mark.asyncio
@@ -347,6 +353,5 @@ async def test_import_background_replace_existing_overwrites_prior_rows(
         snapshots = await crud.get_athlete_metric_history(session, user_id)
 
     assert all(r.strava_activity_id != 9999 for r in rides)
-    assert len(rides) == 1
-    assert rides[0].strava_activity_id == 111
+    assert {ride.strava_activity_id for ride in rides} == {111, 222}
     assert all(s.source != "manual_recalculate" for s in snapshots)

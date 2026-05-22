@@ -10,7 +10,14 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 if TYPE_CHECKING:
     import models
@@ -317,6 +324,28 @@ class CoachMemoryRequest(BaseModel):
 # AI endpoints
 # ---------------------------------------------------------------------------
 
+_CYCLING_ACTIVITY_TYPES = {
+    "ride",
+    "virtualride",
+    "mountainbikeride",
+    "gravelride",
+    "ebikeride",
+    "emountainbikeride",
+    "handcycle",
+    "velomobile",
+}
+
+
+def _normalise_strava_sport_type(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    stripped = str(value).strip()
+    if not stripped:
+        return None
+    if stripped.replace("_", "").replace("-", "").lower() in _CYCLING_ACTIVITY_TYPES:
+        return "cycling"
+    return stripped
+
 
 class StravaActivitySchema(CamelModel):
     """Mirrors the TypeScript StravaActivity interface."""
@@ -336,6 +365,11 @@ class StravaActivitySchema(CamelModel):
     max_watts: Optional[float] = None
     average_heartrate: Optional[float] = None
     max_heartrate: Optional[float] = None
+
+    @model_validator(mode="after")
+    def normalise_sport_type(self) -> "StravaActivitySchema":
+        self.sport_type = _normalise_strava_sport_type(self.sport_type or self.type)
+        return self
 
 
 class UserProfileSchema(CamelModel):
@@ -478,8 +512,6 @@ class RaceEventFeedbackResponse(CamelModel):
     feedback: str
 
 
-
-
 # ---------------------------------------------------------------------------
 # Athlete metric history
 # ---------------------------------------------------------------------------
@@ -597,8 +629,15 @@ class RideFeedbackRequest(CamelModel):
     legs: Literal["fresh", "normal", "heavy"]
     """Subjective leg-freshness rating."""
 
-    intent: Literal["planned workout", "recovery", "commute", "free ride", "aborted"]
-    """What the athlete intended this ride to be."""
+    intent: Literal[
+        "planned workout",
+        "recovery",
+        "commute",
+        "free ride",
+        "free activity",
+        "aborted",
+    ]
+    """What the athlete intended this activity to be."""
 
     note: Optional[str] = None
     """Optional free-text note."""

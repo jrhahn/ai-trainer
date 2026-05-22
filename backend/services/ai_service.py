@@ -126,6 +126,26 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
+def _activity_sport_type(activity: dict) -> str:
+    value = (
+        activity.get("sportType")
+        or activity.get("sport_type")
+        or activity.get("type")
+        or "cycling"
+    )
+    return str(value).strip() or "cycling"
+
+
+def _primary_sport_type(activities: list[dict], fallback: str = "cycling") -> str:
+    if not activities:
+        return fallback
+    types = [_activity_sport_type(activity) for activity in activities]
+    normalized = {sport_type.lower() for sport_type in types if sport_type}
+    if len(normalized) == 1:
+        return types[0]
+    return "mixed"
+
+
 async def _chat(
     provider: str,
     system_prompt: str,
@@ -159,12 +179,13 @@ async def analyse_strava_activities(
     training_plan: list[dict] | None = None,
     user_ftp: int | None = None,
 ) -> dict:
+    sport_type = _primary_sport_type(activities, fallback=sport_type)
     is_running = sport_type.lower() in ("running", "run")
 
     # --- Algorithmic computation from per-activity stream data ---
     computed_ftp: int | None = None
     computed_hr_zones: dict | None = None
-    ride_analyses: dict[str, dict] = {}  # activity_id → per-ride analysis
+    ride_analyses: dict[str, dict] = {}  # activity_id -> per-activity analysis
 
     if streams_by_id:
         raw_ftp, _raw_threshold_hr = compute_ftp_from_streams(
@@ -174,7 +195,7 @@ async def analyse_strava_activities(
         if not is_running:
             computed_ftp = raw_ftp
 
-        # --- Per-ride analysis: category + interval detection + HR drift ---
+        # --- Per-activity analysis: category + interval detection + HR drift ---
         # Only meaningful for cycling where power streams are available.
         if not is_running:
             ftp_for_analysis = float(computed_ftp) if computed_ftp else None
@@ -208,7 +229,7 @@ async def analyse_strava_activities(
 
     # --- Build the contextual section describing computed metrics ---
     # Pass the user-entered FTP and threshold HR directly to the prompt; computed_ftp
-    # is used only for per-ride categorisation above, not for the AI assessment output.
+    # is used only for per-activity categorisation above, not for the AI assessment output.
     computed_section = analyse_activities_computed_section(
         user_ftp,
         max_heart_rate,
@@ -217,11 +238,11 @@ async def analyse_strava_activities(
 
     system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
 
-    # Build the per-ride analysis section for the AI prompt
+    # Build the per-activity analysis section for the AI prompt
     ride_analyses_section = ""
     if ride_analyses:
         ride_analyses_str = json.dumps(ride_analyses, indent=2)
-        ride_analyses_section = f"\n\nAlgorithmic per-ride analysis (computed from stream data):\n{ride_analyses_str}"
+        ride_analyses_section = f"\n\nAlgorithmic per-activity analysis (computed from stream data):\n{ride_analyses_str}"
 
     user_msg = analyse_activities_user(
         activities,
@@ -313,7 +334,7 @@ async def generate_training_plan(
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
-        f"\nRider assessment from recent Strava rides: {json.dumps(rider_assessment)}"
+        f"\nRider assessment from recent Strava activities: {json.dumps(rider_assessment)}"
         if rider_assessment
         else ""
     )

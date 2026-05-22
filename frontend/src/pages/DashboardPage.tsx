@@ -84,10 +84,10 @@ export default function DashboardPage() {
   }
 
   const today = formatLocalDate(new Date())
-  const analyzedRides = Math.min(importProgress.processed, importProgress.total)
-  const hasRideProgress = !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
-  const progressPct = hasRideProgress
-    ? Math.round((analyzedRides / importProgress.total) * 100)
+  const analyzedActivities = Math.min(importProgress.processed, importProgress.total)
+  const hasActivityProgress = !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
+  const progressPct = hasActivityProgress
+    ? Math.round((analyzedActivities / importProgress.total) * 100)
     : 0
 
   // Always show the next 3 upcoming days (today or later)
@@ -156,11 +156,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Strava history analysis progress (rides-level only) */}
-      {hasRideProgress && (
+      {/* Strava history analysis progress */}
+      {hasActivityProgress && (
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
           <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            Strava Ride Analysis
+            Strava Activity Analysis
           </p>
           <div className="w-full bg-amber-100 rounded-full h-2.5">
             <div
@@ -169,7 +169,7 @@ export default function DashboardPage() {
             />
           </div>
           <p className="text-sm text-amber-900 mt-2">
-            {analyzedRides} / {importProgress.total} rides analyzed
+            {analyzedActivities} / {importProgress.total} activities analyzed
           </p>
           {importProgress.status === 'error' && importProgress.error && (
             <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>

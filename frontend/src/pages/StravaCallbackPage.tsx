@@ -145,7 +145,7 @@ export default function StravaCallbackPage() {
           return (
             <>
               <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-4" />
-              <h2 className="text-lg font-bold text-gray-900">Importing ride history…</h2>
+              <h2 className="text-lg font-bold text-gray-900">Importing activity history…</h2>
               {pct !== null ? (
                 <>
                   <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
@@ -159,7 +159,7 @@ export default function StravaCallbackPage() {
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-gray-500 mt-1">Fetching your ride list…</p>
+                <p className="text-sm text-gray-500 mt-1">Fetching your activity list…</p>
               )}
             </>
           )
@@ -169,7 +169,7 @@ export default function StravaCallbackPage() {
             <CheckCircle size={40} className="text-green-500 mx-auto mb-4" />
             <h2 className="text-lg font-bold text-gray-900">Import complete</h2>
             <p className="text-sm text-gray-500 mt-1 mb-4">
-              {progress.imported} ride{progress.imported !== 1 ? 's' : ''} imported
+              {progress.imported} activit{progress.imported === 1 ? 'y' : 'ies'} imported
               {progress.skipped > 0 ? `, ${progress.skipped} skipped` : ''}
             </p>
             <StravaImportSummary progress={progress} />

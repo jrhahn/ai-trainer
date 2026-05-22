@@ -9,6 +9,14 @@ const effortLabels: Record<number, string> = {
   5: 'Max',
 }
 
+const strengthEffortLabels: Record<number, string> = {
+  1: 'Easy',
+  2: 'Controlled',
+  3: 'Challenging',
+  4: 'Very Hard',
+  5: 'Max',
+}
+
 interface Props {
   day: TrainingDay
   onSubmit: (feedback: WorkoutFeedback) => void
@@ -16,6 +24,14 @@ interface Props {
 }
 
 export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) {
+  const isStrength = day.workoutType === 'strength'
+  const isRideLike = !isStrength
+  const effortCopy = isStrength ? strengthEffortLabels : effortLabels
+  const title = isStrength ? 'Log Strength Session' : 'Log Workout'
+  const notesPlaceholder = isStrength
+    ? 'Exercises, sets, load, soreness, or anything the coach should know'
+    : 'How did it feel? Any issues?'
+
   const [form, setForm] = useState({
     actualDurationMinutes: day.durationMinutes,
     averagePower: '',
@@ -42,7 +58,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Log Workout</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-4">{title}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -57,18 +73,32 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Avg Power (W)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.averagePower}
-                  onChange={(e) => setForm({ ...form, averagePower: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                  placeholder="optional"
-                />
+            {isRideLike ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Avg Power (W)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.averagePower}
+                    onChange={(e) => setForm({ ...form, averagePower: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="optional"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Avg HR (bpm)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.averageHeartRate}
+                    onChange={(e) => setForm({ ...form, averageHeartRate: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    placeholder="optional"
+                  />
+                </div>
               </div>
+            ) : (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Avg HR (bpm)</label>
                 <input
@@ -80,18 +110,20 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                   placeholder="optional"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Peak Power (W)</label>
-              <input
-                type="number"
-                min={0}
-                value={form.peakPower}
-                onChange={(e) => setForm({ ...form, peakPower: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                placeholder="optional"
-              />
-            </div>
+            )}
+            {isRideLike && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Peak Power (W)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.peakPower}
+                  onChange={(e) => setForm({ ...form, peakPower: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="optional"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Perceived Effort *
@@ -110,7 +142,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                   >
                     {n}
                     <br />
-                    <span className="font-normal">{effortLabels[n]}</span>
+                    <span className="font-normal">{effortCopy[n]}</span>
                   </button>
                 ))}
               </div>
@@ -122,7 +154,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={3}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                placeholder="How did it feel? Any issues?"
+                placeholder={notesPlaceholder}
               />
             </div>
             <div className="flex gap-3 pt-2">

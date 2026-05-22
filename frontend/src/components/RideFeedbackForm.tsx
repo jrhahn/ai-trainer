@@ -4,9 +4,10 @@ import { CheckCircle2 } from 'lucide-react'
 import { saveChatMessage, submitRideFeedback } from '../services/user'
 import { useAppStore, type ChatMessage, type RideMetricPoint, type TrainingDay } from '../store/useAppStore'
 import { useShallow } from 'zustand/shallow'
+import { activityNoun, formatActivityType, isCyclingActivity } from '../utils/activityType'
 
 export type LegsFeeling = 'fresh' | 'normal' | 'heavy'
-export type RideIntent = 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'aborted'
+export type RideIntent = 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
 
 const legsLabels: Record<LegsFeeling, string> = {
   fresh: '🟢 Fresh',
@@ -19,6 +20,7 @@ const intentLabels: Record<RideIntent, string> = {
   recovery: '😴 Recovery',
   commute: '🚦 Commute',
   'free ride': '🌄 Free ride',
+  'free activity': '🌄 Free activity',
   aborted: '❌ Aborted',
 }
 
@@ -26,6 +28,7 @@ interface Props {
   stravaActivityId: number
   activityDate: string
   activityName?: string | null
+  sportType?: string | null
   onSaved: (data: {
     userNote: string
     coachNote?: string | null
@@ -35,20 +38,22 @@ interface Props {
   onCancel: () => void
 }
 
-function rideReference(activityDate: string, activityName?: string | null): string {
+function rideReference(activityDate: string, activityName?: string | null, sportType?: string | null): string {
   const trimmedName = activityName?.trim()
-  return trimmedName ? `your ride "${trimmedName}" on ${activityDate}` : `your ride on ${activityDate}`
+  const noun = activityNoun(sportType ?? 'Ride')
+  return trimmedName ? `your ${noun} "${trimmedName}" on ${activityDate}` : `your ${noun} on ${activityDate}`
 }
 
 function buildRideFeedbackChatMessages(
   activityDate: string,
   activityName: string | null | undefined,
+  sportType: string | null | undefined,
   data: {
     userNote: string
     coachNote?: string | null
   },
 ): ChatMessage[] {
-  const reference = rideReference(activityDate, activityName)
+  const reference = rideReference(activityDate, activityName, sportType)
   const timestamp = new Date().toISOString()
   const messages: ChatMessage[] = [
     {
@@ -70,7 +75,7 @@ function buildRideFeedbackChatMessages(
   return messages
 }
 
-export default function RideFeedbackForm({ stravaActivityId, activityDate, activityName, onSaved, onCancel }: Props) {
+export default function RideFeedbackForm({ stravaActivityId, activityDate, activityName, sportType, onSaved, onCancel }: Props) {
   const { authToken, addPendingFeedbackRide, addChatMessage } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -104,7 +109,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
       setSavedData(data)
       addPendingFeedbackRide(stravaActivityId)
 
-      const chatMessages = buildRideFeedbackChatMessages(activityDate, activityName, data)
+      const chatMessages = buildRideFeedbackChatMessages(activityDate, activityName, sportType, data)
       chatMessages.forEach((message) => addChatMessage(message))
       void Promise.all(chatMessages.map((message) => saveChatMessage(authToken!, message))).catch((error) => {
         console.warn('Failed to persist ride feedback chat messages:', error)
@@ -121,6 +126,11 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
     onSaved(savedData ?? { userNote: savedNote ?? '' })
   }
 
+  const noun = activityNoun(sportType ?? 'Ride')
+  const typeLabel = sportType ? formatActivityType(sportType) : ''
+  const freeIntent: RideIntent = isCyclingActivity(sportType ?? 'Ride') ? 'free ride' : 'free activity'
+  const intentOptions: RideIntent[] = ['planned workout', 'recovery', 'commute', freeIntent, 'aborted']
+
   // --- Confirmation step (shown after feedback is saved) ---
   if (savedNote !== null) {
     return (
@@ -135,7 +145,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed">
-              Your training summary will update shortly with coaching insights for this ride.
+              Your training summary will update shortly with coaching insights for this {noun}.
             </p>
 
             <button
@@ -155,8 +165,11 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="p-5">
-          <h2 className="text-base font-bold text-gray-900 mb-0.5">How was your ride?</h2>
-          <p className="text-xs text-gray-500 mb-4">{activityDate}</p>
+          <h2 className="text-base font-bold text-gray-900 mb-0.5">How was your {noun}?</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            {activityDate}
+            {typeLabel ? ` · ${typeLabel}` : ''}
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* RPE */}
@@ -201,9 +214,9 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
 
             {/* Intent */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">What was this ride?</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">What was this {noun}?</label>
               <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(intentLabels) as RideIntent[]).map((option) => (
+                {intentOptions.map((option) => (
                   <button
                     key={option}
                     type="button"

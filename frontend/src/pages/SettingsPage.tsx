@@ -116,7 +116,7 @@ export default function SettingsPage() {
       return
     }
     const confirmed = window.confirm(
-      '⚠️ Recalculate TSS, ATL, CTL for all rides?\n\n' +
+      '⚠️ Recalculate TSS, ATL, CTL for stored activities?\n\n' +
         'This will overwrite all historical training stress values using ' +
         (parsed ? `${parsed} W` : 'your current FTP') +
         ' as the reference. This operation cannot be reversed.\n\nContinue?'
@@ -132,7 +132,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
-        text: `Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
+        text: `Recalculated ${result.updated} activities using FTP ${result.ftpUsed} W.`,
       })
       setTimeout(() => setFtpMsg(null), 5000)
     } catch (e) {
@@ -207,7 +207,7 @@ export default function SettingsPage() {
       } else {
         setHrMsg({
           type: 'success',
-          text: 'Heart rate values saved. No ride data available yet to estimate FTP — sync Strava first.',
+          text: 'Heart rate values saved. No activity data available yet to estimate FTP — sync Strava first.',
         })
       }
     } catch {
@@ -226,7 +226,7 @@ export default function SettingsPage() {
       return
     }
     const confirmed = window.confirm(
-      '⚠️ Recalculate TSS, ATL, CTL for all rides?\n\n' +
+      '⚠️ Recalculate TSS, ATL, CTL for stored activities?\n\n' +
         `This will overwrite all historical training stress values using ${parsed} W as the reference. ` +
         'This operation cannot be reversed.\n\nContinue?'
     )
@@ -243,7 +243,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
         type: 'success',
-        text: `Done! Recalculated ${result.updated} rides using FTP ${result.ftpUsed} W.`,
+        text: `Done! Recalculated ${result.updated} activities using FTP ${result.ftpUsed} W.`,
       })
       setTimeout(() => setHrMsg(null), 6000)
     } catch (e) {
@@ -405,8 +405,8 @@ export default function SettingsPage() {
         <div className="border-t border-gray-100 pt-4">
           <p className="text-xs text-gray-500 mb-3">
             <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
-            TSB for every stored ride using the FTP entered above (or your current FTP if no value is
-            entered). FTP estimates derived automatically from ride data are shown in the Athlete
+            TSB for stored activities using the FTP entered above (or your current FTP if no value is
+            entered). FTP estimates derived automatically from activity data are shown in the Athlete
             Progression chart on your dashboard.
           </p>
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
@@ -528,7 +528,7 @@ export default function SettingsPage() {
               Step 2 — Confirm FTP before rebuilding metrics
             </p>
             <p className="text-xs text-gray-600">
-              Based on your ride history, your estimated FTP is{' '}
+              Based on your activity history, your estimated FTP is{' '}
               <strong className="text-purple-700">{ftpEstimate} W</strong>. You can adjust this value
               before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).
             </p>
@@ -584,7 +584,7 @@ export default function SettingsPage() {
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Ride Analysis</p>
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Activity Analysis</p>
             {importProgress.status === 'running' && (() => {
               const pct = importProgress.total > 0
                 ? Math.round((importProgress.processed / importProgress.total) * 100)
@@ -600,7 +600,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500">
                     {pct !== null
                       ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%) · ${importProgress.imported} imported`
-                      : 'Fetching ride list…'}
+                      : 'Fetching activity list…'}
                   </p>
                 </>
               )

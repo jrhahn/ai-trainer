@@ -172,6 +172,7 @@ export interface StravaActivity {
   elapsed_time: number
   total_elevation_gain: number
   start_date: string
+  start_date_local?: string
   average_watts?: number
   weighted_average_watts?: number
   max_watts?: number

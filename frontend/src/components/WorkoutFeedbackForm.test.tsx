@@ -78,4 +78,19 @@ describe('WorkoutFeedbackForm', () => {
     expect(screen.getByText('Very Hard')).toBeInTheDocument()
     expect(screen.getByText('Max')).toBeInTheDocument()
   })
+
+  it('uses strength-specific feedback fields for strength sessions', () => {
+    render(
+      <WorkoutFeedbackForm
+        day={{ ...baseDay, workoutType: 'strength', title: 'Gym Strength' }}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Log Strength Session')).toBeInTheDocument()
+    expect(screen.queryByText(/Avg Power/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Peak Power/i)).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Exercises, sets, load/i)).toBeInTheDocument()
+  })
 })
