@@ -39,6 +39,7 @@ class AdminUserStat(schemas.CamelModel):
     email: str
     name: str | None
     created_at: datetime
+    last_login: datetime | None
     ai_provider: str
     is_onboarded: bool
     strava_connected: bool
@@ -145,6 +146,7 @@ async def admin_users(db: AsyncSession = Depends(get_db)) -> AdminUsersResponse:
                 email=user.email,
                 name=user.name,
                 created_at=user.created_at,
+                last_login=user.last_login,
                 ai_provider=user.ai_provider,
                 is_onboarded=user.is_onboarded,
                 strava_connected=strava_connected,
@@ -161,3 +163,13 @@ async def admin_users(db: AsyncSession = Depends(get_db)) -> AdminUsersResponse:
         total_users=len(user_stats),
         total_tokens=sum(u.consumed_tokens for u in user_stats),
     )
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(auth.require_admin)])
+async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db)) -> None:
+    """Permanently delete a user and all their associated data."""
+    _admin_enabled()
+    user = await db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    await db.delete(user)

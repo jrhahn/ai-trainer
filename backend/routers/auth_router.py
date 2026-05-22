@@ -5,6 +5,7 @@ import fcntl
 import os
 import secrets
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +185,7 @@ async def login(
                 hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
             )
 
+        user.last_login = datetime.now(timezone.utc)
         token = auth.create_access_token(user.id)
         return schemas.TokenResponse(access_token=token)
 
@@ -191,6 +193,7 @@ async def login(
     if user is None or not auth.verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+    user.last_login = datetime.now(timezone.utc)
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)
 
@@ -203,5 +206,6 @@ async def session_token(
     user = await auth.get_authelia_user(request, db)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authelia session not found")
+    user.last_login = datetime.now(timezone.utc)
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)

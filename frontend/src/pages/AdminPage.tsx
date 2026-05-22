@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, Loader2, LogOut, Users, Zap, Activity } from 'lucide-react'
+import { Shield, Loader2, LogOut, Users, Zap, Activity, Trash2 } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
 
 // ---------------------------------------------------------------------------
@@ -11,6 +11,7 @@ interface AdminUserStat {
   email: string
   name: string | null
   createdAt: string
+  lastLogin: string | null
   aiProvider: string
   isOnboarded: boolean
   stravaConnected: boolean
@@ -79,6 +80,11 @@ export default function AdminPage() {
   const [sortKey, setSortKey] = useState<keyof AdminUserStat>('createdAt')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserStat | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   // -------------------------------------------------------------------------
   // Login
   // -------------------------------------------------------------------------
@@ -124,6 +130,47 @@ export default function AdminPage() {
       setStatsError(err instanceof Error ? err.message : 'Failed to load stats')
     } finally {
       setStatsLoading(false)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Delete user
+  // -------------------------------------------------------------------------
+
+  const openDeleteModal = (user: AdminUserStat) => {
+    setDeleteTarget(user)
+    setDeleteConfirmText('')
+    setDeleteError(null)
+  }
+
+  const closeDeleteModal = () => {
+    if (deleteLoading) return
+    setDeleteTarget(null)
+    setDeleteConfirmText('')
+    setDeleteError(null)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !adminToken) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${deleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { detail?: string }
+        throw new Error(data.detail ?? 'Delete failed')
+      }
+      setDeleteTarget(null)
+      setDeleteConfirmText('')
+      // Refresh stats
+      await loadStats(adminToken)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -261,12 +308,14 @@ export default function AdminPage() {
                 <tr>
                   <SortTh label="Name / Email" field="email" />
                   <SortTh label="Joined" field="createdAt" />
+                  <SortTh label="Last login" field="lastLogin" />
                   <SortTh label="Provider" field="aiProvider" />
                   <SortTh label="Rides" field="rideCount" />
                   <SortTh label="Last ride" field="lastActivityDate" />
                   <SortTh label="Chats" field="chatMessageCount" />
                   <SortTh label="Tokens" field="consumedTokens" />
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Strava</th>
+                  <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -277,6 +326,7 @@ export default function AdminPage() {
                       <p className="text-xs text-gray-400 truncate max-w-[180px]">{u.email}</p>
                     </td>
                     <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{relativeDate(u.createdAt)}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{u.lastLogin ? relativeDate(u.lastLogin) : '—'}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${u.aiProvider === 'gemini' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
                         {u.aiProvider}
@@ -293,6 +343,15 @@ export default function AdminPage() {
                         {u.stravaConnected ? (u.stravaAnalysisComplete ? '✓ synced' : '⧗ pending') : 'none'}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        onClick={() => openDeleteModal(u)}
+                        className="text-gray-300 hover:text-red-500 transition-colors"
+                        title="Delete user"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -300,6 +359,54 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Trash2 size={18} className="text-red-500" />
+              <h2 className="text-base font-bold text-gray-900">Delete account permanently</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              This will erase <span className="font-semibold text-gray-800">{deleteTarget.name ?? deleteTarget.email}</span>'s
+              account and all associated data (rides, chats, training plans, Strava connection). This cannot be undone.
+            </p>
+            <p className="text-xs text-gray-500 mb-2">
+              Type <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">delete {deleteTarget.email}</span> to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              placeholder={`delete ${deleteTarget.email}`}
+              autoFocus
+              disabled={deleteLoading}
+            />
+            {deleteError && (
+              <p className="text-xs text-red-600 mb-3">{deleteError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={closeDeleteModal}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { void handleDelete() }}
+                disabled={deleteConfirmText !== `delete ${deleteTarget.email}` || deleteLoading}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-2"
+              >
+                {deleteLoading && <Loader2 size={14} className="animate-spin" />}
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
