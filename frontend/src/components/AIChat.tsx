@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
-import { clearChatHistoryRemote, fetchCoachMemory } from '../services/user'
+import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
 // Render headings as plain paragraphs so the chat uses a uniform font size
@@ -30,6 +30,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     chatHistory,
     coachMemory,
     addChatMessage,
+    setUserProfile,
     setCoachMemory,
     clearChatHistory,
     updateTrainingDay,
@@ -40,6 +41,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       chatHistory: s.chatHistory,
       coachMemory: s.coachMemory,
       addChatMessage: s.addChatMessage,
+      setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
       updateTrainingDay: s.updateTrainingDay,
@@ -111,6 +113,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
       fetchCoachMemory(authToken)
         .then((memory) => setCoachMemory(memory))
         .catch((err) => console.warn('Failed to re-fetch coach memory:', err))
+      fetchCurrentUser(authToken)
+        .then((user) => setUserProfile(user.profile))
+        .catch((err) => console.warn('Failed to re-fetch user profile:', err))
     } catch {
       setLastFailedMessage(userMsg)
       addChatMessage({

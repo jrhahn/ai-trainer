@@ -111,6 +111,7 @@ export interface UserProfile {
   maxHeartRate?: number
   restingHeartRate?: number
   currentFTP?: number
+  consumedTokens?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }
 

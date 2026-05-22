@@ -51,6 +51,7 @@ describe('fetchCurrentUser', () => {
       weeklyHours: 10,
       followsTrainingPlan: true,
       fitnessLevel: 'intermediate',
+      consumedTokens: 12345,
       aiProvider: 'openai',
       riderAssessment: null,
       stravaConnection: null,
@@ -61,6 +62,7 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.name).toBe('Alice')
     expect(result.profile.email).toBe('alice@example.com')
     expect(result.profile.bikeType).toBe('road')
+    expect(result.profile.consumedTokens).toBe(12345)
     expect(result.isOnboarded).toBe(true)
     expect(result.aiProvider).toBe('openai')
     expect(result.riderAssessment).toBeNull()
@@ -75,6 +77,7 @@ describe('fetchCurrentUser', () => {
       isOnboarded: false,
       stravaAnalysisComplete: false,
       followsTrainingPlan: false,
+      consumedTokens: 0,
       aiProvider: 'gemini',
     })
 
@@ -84,6 +87,7 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.bikeType).toBe('road')
     expect(result.profile.trainingGoal).toBe('general_fitness')
     expect(result.profile.weeklyHours).toBe(8)
+    expect(result.profile.consumedTokens).toBe(0)
     expect(result.profile.fitnessLevel).toBe('intermediate')
     expect(result.lastStravaActivityId).toBeNull()
   })

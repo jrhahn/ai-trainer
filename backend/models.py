@@ -82,6 +82,7 @@ class User(Base):
     current_ftp: Mapped[int | None] = mapped_column(Integer)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
+    consumed_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
 
     use_estimated_ftp: Mapped[bool] = mapped_column(Boolean, default=False)
     strava_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)

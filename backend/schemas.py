@@ -150,6 +150,7 @@ class UserResponse(CamelModel):
     current_ftp: Optional[int] = None
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
+    consumed_tokens: int = 0
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None

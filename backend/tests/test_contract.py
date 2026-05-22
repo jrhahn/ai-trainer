@@ -30,6 +30,7 @@ _USER_RESPONSE_REQUIRED_KEYS = {
     "stravaAnalysisComplete",
     "followsTrainingPlan",
     "aiProvider",
+    "consumedTokens",
 }
 
 _USER_RESPONSE_OPTIONAL_KEYS = {

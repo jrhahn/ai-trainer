@@ -8,10 +8,12 @@ import type { UserProfile } from '../store/useAppStore'
 const {
   mockAskTrainer,
   mockFetchCoachMemory,
+  mockFetchCurrentUser,
   mockClearChatHistoryRemote,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
+  mockFetchCurrentUser: vi.fn(),
   mockClearChatHistoryRemote: vi.fn(),
 }))
 
@@ -25,6 +27,7 @@ vi.mock('../services/ai', async (importOriginal) => {
 
 vi.mock('../services/user', () => ({
   fetchCoachMemory: mockFetchCoachMemory,
+  fetchCurrentUser: mockFetchCurrentUser,
   clearChatHistoryRemote: mockClearChatHistoryRemote,
 }))
 
@@ -54,6 +57,7 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockFetchCoachMemory.mockResolvedValue('')
+  mockFetchCurrentUser.mockResolvedValue({ profile: baseProfile })
   mockClearChatHistoryRemote.mockResolvedValue(undefined)
 })
 
