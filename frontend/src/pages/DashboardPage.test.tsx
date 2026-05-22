@@ -50,7 +50,6 @@ let rideIdCounter = 1
 function makeRide(overrides: Partial<RideMetricPoint> & { activityDate: string }): RideMetricPoint {
   return {
     stravaActivityId: rideIdCounter++,
-    activityDate: overrides.activityDate,
     sportType: 'Ride',
     activityName: 'Test Ride',
     durationSeconds: 3600,
