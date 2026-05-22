@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, CalendarRange, RotateCcw } from 'lucide-react'
+import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -214,19 +214,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
           className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
           <Send size={16} />
-        </button>
-      </div>
-
-      {/* Quick actions */}
-      <div className="px-3 pt-2 pb-1 flex gap-2 flex-wrap border-b">
-        <button
-          onClick={() => void sendMessage('Show me an outlook for my next few sessions')}
-          disabled={loading || !authToken || !userProfile}
-          aria-label="Show outlook"
-          className="flex items-center gap-1 px-2.5 py-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full hover:bg-amber-100 transition-colors disabled:opacity-40"
-        >
-          <CalendarRange size={11} />
-          Show outlook
         </button>
       </div>
 

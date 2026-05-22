@@ -217,9 +217,13 @@ export default function DashboardPage() {
       })
   }, [hasStalePlan, authToken, setTrainingPlan])
 
-  // Auto-generate loginSummary once if the user has a riderAssessment but no summary yet
+  // Auto-generate loginSummary once if the user has a riderAssessment but no summary yet,
+  // or if the stored summary looks truncated (no bullet points / too short).
+  const summaryIncomplete = (s: string | null | undefined) =>
+    !s || s.length < 60 || !s.includes('- ')
+
   useEffect(() => {
-    if (!authToken || !riderAssessment || riderAssessment.loginSummary || summaryTriggeredRef.current) return
+    if (!authToken || !riderAssessment || !summaryIncomplete(riderAssessment.loginSummary) || summaryTriggeredRef.current) return
     summaryTriggeredRef.current = true
     setSummaryLoading(true)
     refreshLoginSummary(authToken)
