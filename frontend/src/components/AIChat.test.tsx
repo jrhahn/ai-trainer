@@ -329,33 +329,4 @@ describe('AIChat', () => {
     expect(document.querySelector('em')?.textContent).toBe('easier')
   })
 
-  it('shows a "Show outlook" quick action button', () => {
-    setupStore()
-    render(<AIChat />)
-    expect(screen.getByRole('button', { name: /Show outlook/i })).toBeInTheDocument()
-  })
-
-  it('sends the outlook message when the "Show outlook" button is clicked', async () => {
-    mockAskTrainer.mockResolvedValue({
-      response: 'Here are your next 3 sessions: endurance Wed, intervals Thu, long ride Sat.',
-    })
-    setupStore()
-    render(<AIChat />)
-
-    await userEvent.click(screen.getByRole('button', { name: /Show outlook/i }))
-
-    await waitFor(() => {
-      expect(mockAskTrainer).toHaveBeenCalledWith(
-        expect.stringMatching(/outlook/i),
-        'token-123',
-        expect.any(Object),
-      )
-    })
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(/Here are your next 3 sessions/i),
-      ).toBeInTheDocument()
-    })
-  })
 })

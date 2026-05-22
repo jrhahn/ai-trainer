@@ -126,6 +126,17 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
+def _is_complete_login_summary(text: str) -> bool:
+    """Return True when *text* looks like a complete login summary.
+
+    A valid summary must have a minimum length and contain at least one
+    bullet point ('- '), matching the format the prompt asks for.  This
+    guards against LLM truncation artefacts where ``repair_json`` closes
+    a partial string and produces something like ``"You had a"``.
+    """
+    return len(text) >= 60 and "- " in text
+
+
 def _activity_sport_type(activity: dict) -> str:
     value = (
         activity.get("sportType")
@@ -606,7 +617,8 @@ async def generate_login_summary(
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
-    return parsed.get("loginSummary") or ""
+    summary = parsed.get("loginSummary") or ""
+    return summary if _is_complete_login_summary(summary) else ""
 
 
 async def batch_review_rides(
@@ -703,4 +715,5 @@ async def generate_summary_from_ride_feedbacks(
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
-    return parsed.get("loginSummary") or ""
+    summary = parsed.get("loginSummary") or ""
+    return summary if _is_complete_login_summary(summary) else ""

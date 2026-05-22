@@ -178,14 +178,23 @@ class GeminiProvider:
     def __init__(self, model: str = GEMINI_MODEL) -> None:
         self._model = model
 
+    @staticmethod
+    def _build_config(
+        system: str, json_mode: bool, types: object
+    ) -> object:
+        # Disable thinking/reasoning (thinking_budget=0) to prevent the hidden
+        # chain-of-thought tokens that cause cost explosions with Gemini 2.5 Flash.
+        return types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json" if json_mode else None,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+
     async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type="application/json" if json_mode else None,
-        )
+        config = self._build_config(system, json_mode, types)
         try:
             client = genai.Client(api_key=settings.gemini_api_key)
             async with client.aio as aio_client:
@@ -205,10 +214,7 @@ class GeminiProvider:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type="application/json" if json_mode else None,
-        )
+        config = self._build_config(system, json_mode, types)
         contents = [
             types.Content(
                 role="model" if m["role"] == "assistant" else "user",
