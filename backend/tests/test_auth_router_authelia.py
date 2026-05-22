@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from argon2 import PasswordHasher
 
 import auth
 from routers.auth_router import _create_authelia_user, _verify_authelia_credentials
@@ -129,6 +130,40 @@ def test_verify_authelia_credentials_wrong_password(monkeypatch):
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("bob@example.com", "wrongpass") is False
+
+
+def test_verify_authelia_credentials_argon2_valid(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        _make_users_db(db_path, users={
+            "argon@example.com": {
+                "disabled": False,
+                "displayname": "Argon",
+                "email": "argon@example.com",
+                "password": PasswordHasher().hash("Str0ng!Pass"),
+                "groups": [],
+            }
+        })
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is True
+
+
+def test_verify_authelia_credentials_malformed_argon2_hash_returns_false(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        _make_users_db(db_path, users={
+            "argon@example.com": {
+                "disabled": False,
+                "displayname": "Argon",
+                "email": "argon@example.com",
+                "password": "$argon2id$v=19$m=65536,t=3,p=4$abc$def",
+                "groups": [],
+            }
+        })
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is False
 
 
 def test_verify_authelia_credentials_disabled_user(monkeypatch):
