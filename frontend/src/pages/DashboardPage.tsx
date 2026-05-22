@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint } from '../store/useAppStore'
+import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
@@ -20,6 +20,59 @@ export function formatDuration(seconds: number | undefined): string {
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m} min`
+}
+
+/** Returns 0-100 match score, or null when not enough data to compare. */
+export function computeMatchScore(
+  ride: RideMetricPoint,
+  plan: Partial<TrainingDay>
+): number | null {
+  const parts: number[] = []
+
+  if (ride.durationSeconds != null && plan.durationMinutes) {
+    const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+    parts.push(Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200)))
+  }
+
+  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
+  if (actualPower != null && plan.targetPower) {
+    const { low, high } = plan.targetPower
+    if (actualPower >= low && actualPower <= high) {
+      parts.push(100)
+    } else {
+      const edge = actualPower < low ? low : high
+      const deviation = Math.abs(actualPower - edge) / edge
+      parts.push(Math.max(0, Math.round(100 - deviation * 300)))
+    }
+  }
+
+  return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null
+}
+
+/** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
+export function buildMatchCoachPrompt(
+  ride: RideMetricPoint,
+  plan: Partial<TrainingDay>,
+  score: number | null
+): string {
+  const rideName = ride.activityName ?? 'my ride'
+  const actualMin = ride.durationSeconds ? Math.round(ride.durationSeconds / 60) : null
+  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
+
+  const actualParts = [
+    actualMin ? `${actualMin} min` : null,
+    actualPower ? `${Math.round(actualPower)}W` : null,
+  ].filter(Boolean).join(', ')
+
+  const planParts = [
+    plan.durationMinutes ? `${plan.durationMinutes} min` : null,
+    plan.targetPower ? `${plan.targetPower.low}–${plan.targetPower.high}W` : null,
+  ].filter(Boolean).join(', ')
+
+  const planLabel = plan.title ?? plan.workoutType ?? 'the planned session'
+  const scoreStr = score !== null ? ` The match score came out at ${score}%.` : ''
+
+  return `Just finished "${rideName}" — ${actualParts}. The plan had "${planLabel}" down for ${planParts}.${scoreStr} What's your take — did I execute it well, and anything I should tweak next time?`
 }
 
 export function splitTrainingSummary(raw: string): {
@@ -68,7 +121,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -79,6 +132,7 @@ export default function DashboardPage() {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
+      setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
 
@@ -243,37 +297,72 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
-            {recentRides.map((ride) => (
-              <div
-                key={ride.stravaActivityId}
-                className="flex items-center gap-2 bg-white rounded-lg border border-gray-100 px-3 py-2"
-              >
-                <p className="text-xs text-gray-400 flex-shrink-0 w-16">
-                  {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </p>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
-                  {ride.sportType.toLowerCase().replace(/_/g, ' ')}
-                </span>
-                <span className="text-xs text-gray-700 font-medium flex-1 truncate">
-                  {ride.activityName ?? 'Activity'}
-                </span>
-                {ride.durationSeconds != null && (
-                  <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-                    <Clock size={11} />
-                    {formatDuration(ride.durationSeconds)}
-                  </span>
-                )}
-                {isNew(ride) && (
-                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
-                    new
-                  </span>
-                )}
-              </div>
-            ))}
+            {recentRides.map((ride) => {
+              const plan = ride.planMatchStatus !== 'unmatched' ? ride.matchedPlanSnapshot : null
+              const score = plan ? computeMatchScore(ride, plan) : null
+              const scoreBadgeStyle =
+                score === null
+                  ? 'bg-gray-100 text-gray-500'
+                  : score >= 80
+                    ? 'bg-green-100 text-green-700'
+                    : score >= 60
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-orange-100 text-orange-700'
+              return (
+                <div
+                  key={ride.stravaActivityId}
+                  className="bg-white rounded-lg border border-gray-100 px-3 py-2"
+                >
+                  {/* Activity row */}
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-400 flex-shrink-0 w-16">
+                      {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
+                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                    <span className="text-xs text-gray-700 font-medium flex-1 truncate">
+                      {ride.activityName ?? 'Activity'}
+                    </span>
+                    {ride.durationSeconds != null && (
+                      <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+                        <Clock size={11} />
+                        {formatDuration(ride.durationSeconds)}
+                      </span>
+                    )}
+                    {isNew(ride) && (
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                        new
+                      </span>
+                    )}
+                  </div>
+                  {/* Plan comparison row */}
+                  {plan && (
+                    <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
+                      <span className="text-xs text-gray-400">vs plan:</span>
+                      <span className="text-xs text-gray-600 font-medium truncate flex-1">
+                        {plan.title ?? plan.workoutType}
+                        {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
+                        {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
+                        }
+                        title="Ask coach about this match"
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
+                      >
+                        {score !== null ? `${score}%` : '?'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             {recentRides.length > 0 && next3Days.length > 0 && (
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2 pb-0.5 pl-1">
                 Upcoming

@@ -323,3 +323,72 @@ describe('DashboardPage — ProgressionChart', () => {
     expect(await screen.findByTestId('progression-chart')).toBeInTheDocument()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Plan comparison row & score badge
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — plan comparison row', () => {
+  it('shows plan title and score badge for a matched ride', async () => {
+    const matchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Evening Ride',
+      durationSeconds: 3600,
+      normalizedPowerW: 290,
+      planMatchStatus: 'auto_matched',
+      matchedPlanSnapshot: {
+        title: 'Tempo Intervals',
+        workoutType: 'tempo',
+        durationMinutes: 60,
+        targetPower: { low: 270, high: 310 },
+      },
+    })
+    setupStore({ rideMetricsHistory: [matchedRide] })
+    renderDashboard()
+
+    expect(await screen.findByText('vs plan:')).toBeInTheDocument()
+    expect(screen.getByText(/Tempo Intervals/)).toBeInTheDocument()
+    // Score badge should be a % value
+    const badge = await screen.findByTitle('Ask coach about this match')
+    expect(badge.textContent).toMatch(/\d+%/)
+  })
+
+  it('does not show plan row for an unmatched ride', async () => {
+    const unmatchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Free Ride',
+      planMatchStatus: 'unmatched',
+      matchedPlanSnapshot: null,
+    })
+    setupStore({ rideMetricsHistory: [unmatchedRide] })
+    renderDashboard()
+
+    expect(await screen.findByText('Free Ride')).toBeInTheDocument()
+    expect(screen.queryByText('vs plan:')).not.toBeInTheDocument()
+  })
+
+  it('clicking the score badge sets pendingCoachMessage in the store', async () => {
+    const matchedRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Hill Repeats',
+      durationSeconds: 3600,
+      planMatchStatus: 'auto_matched',
+      matchedPlanSnapshot: {
+        title: 'Hill Session',
+        workoutType: 'intervals',
+        durationMinutes: 60,
+      },
+    })
+    setupStore({ rideMetricsHistory: [matchedRide] })
+    renderDashboard()
+
+    const badge = await screen.findByTitle('Ask coach about this match')
+    badge.click()
+
+    const msg = useAppStore.getState().pendingCoachMessage
+    expect(msg).not.toBeNull()
+    expect(msg).toContain('Hill Repeats')
+    expect(msg).toContain('Hill Session')
+  })
+})
+

@@ -34,6 +34,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setCoachMemory,
     clearChatHistory,
     updateTrainingDay,
+    pendingCoachMessage,
+    setPendingCoachMessage,
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -45,6 +47,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
       updateTrainingDay: s.updateTrainingDay,
+      pendingCoachMessage: s.pendingCoachMessage,
+      setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
 
@@ -53,6 +57,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
+  const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
   // Auto-grow the textarea as the user types
   useEffect(() => {
@@ -128,6 +134,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setLoading(false)
     }
   }
+
+  // Keep the ref current so the effect below always invokes the latest closure
+  sendMessageRef.current = (msg: string) => sendMessage(msg)
+
+  // Auto-send a message triggered externally (e.g. match-score badge click)
+  useEffect(() => {
+    if (!pendingCoachMessage) return
+    setPendingCoachMessage(null)
+    void sendMessageRef.current?.(pendingCoachMessage)
+  }, [pendingCoachMessage, setPendingCoachMessage])
 
   const handleClearChatHistory = async () => {
     if (!authToken) return
