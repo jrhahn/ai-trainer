@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 import auth as _auth
 from config import settings
 from database import Base, engine
-from routers import ai, auth_router, strava, users
+from routers import ai, admin, auth_router, strava, users
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ api_v1.include_router(auth_router.router)
 api_v1.include_router(users.router)
 api_v1.include_router(ai.router)
 api_v1.include_router(strava.router)
+api_v1.include_router(admin.router)
 app.include_router(api_v1)
 
 

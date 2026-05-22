@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://localhost/aitrainer"
 
     # ------------------------------------------------------------------
+    # Admin
+    # ------------------------------------------------------------------
+    admin_password: str = ""
+    """Password for the /admin panel.  Leave empty to disable admin access."""
+
+    # ------------------------------------------------------------------
     # JWT / Auth
     # ------------------------------------------------------------------
     jwt_secret: str = "change-me-in-production"
