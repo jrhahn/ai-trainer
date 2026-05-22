@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import Argon2Error
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +31,7 @@ AUTHELIA_INTERNAL_URL = settings.authelia_internal_url.rstrip("/")
 AUTHELIA_USERS_DB_PATH = settings.authelia_users_db_path
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+_argon2_hasher = PasswordHasher()
 
 
 def validate_jwt_secret() -> None:
@@ -51,7 +54,16 @@ def hash_password(plain: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    if hashed.startswith("$argon2"):
+        try:
+            return _argon2_hasher.verify(hashed, plain)
+        except Argon2Error:
+            return False
+
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 # ---------------------------------------------------------------------------
