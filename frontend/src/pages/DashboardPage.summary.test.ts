@@ -50,6 +50,42 @@ describe('splitTrainingSummary', () => {
     })
   })
 
+  it('parses JSON summary payloads with intro and bullets', () => {
+    const summary = JSON.stringify({
+      intro: 'Great to see your recent effort. Here’s a quick summary of your training:',
+      bullets: [
+        '- Ride Category: Your latest mountain bike ride was a highly demanding mixed-interval session.',
+        '- Next Steps: Prioritizing rest and recovery is essential.',
+      ],
+    })
+
+    const parsed = splitTrainingSummary(summary)
+
+    expect(parsed.intro).toBe('Great to see your recent effort. Here’s a quick summary of your training:')
+    expect(parsed.bullets).toEqual([
+      {
+        label: 'Ride Category',
+        text: 'Your latest mountain bike ride was a highly demanding mixed-interval session.',
+      },
+      { label: 'Next Steps', text: 'Prioritizing rest and recovery is essential.' },
+    ])
+  })
+
+  it('parses legacy JSON object summaries as bullet values', () => {
+    const summary = JSON.stringify({
+      '1_WHAT_YOU_DID': 'Over the past week you completed two rides totalling 3h.',
+      '2_PLAN_ALIGNMENT': 'You hit your endurance session well.',
+    })
+
+    const parsed = splitTrainingSummary(summary)
+
+    expect(parsed.intro).toBe('')
+    expect(parsed.bullets).toEqual([
+      { text: 'Over the past week you completed two rides totalling 3h.' },
+      { text: 'You hit your endurance session well.' },
+    ])
+  })
+
   it('still parses plain text bullet summaries', () => {
     const parsed = splitTrainingSummary(
       'Intro sentence.\n- Plan Alignment: Keep tomorrow easy.\n- Next Action: Follow the plan.',
@@ -169,4 +205,3 @@ describe('buildMatchCoachPrompt', () => {
     expect(prompt).toContain('my ride')
   })
 })
-

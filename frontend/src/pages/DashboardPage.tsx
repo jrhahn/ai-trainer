@@ -84,9 +84,20 @@ export function splitTrainingSummary(raw: string): {
 
   try {
     const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object' && 'intro' in parsed && Array.isArray(parsed.bulletPoints)) {
-      intro = String(parsed.intro)
-      rawBullets = parsed.bulletPoints as string[]
+    if (parsed && typeof parsed === 'object') {
+      const summary = parsed as Record<string, unknown>
+      const parsedBullets = Array.isArray(summary.bulletPoints)
+        ? summary.bulletPoints
+        : Array.isArray(summary.bullets)
+          ? summary.bullets
+          : null
+
+      if ('intro' in summary && parsedBullets) {
+        intro = String(summary.intro)
+        rawBullets = parsedBullets.map(String)
+      } else {
+        rawBullets = Object.values(summary).map(String)
+      }
     }
   } catch {
     const lines = raw.split('\n')
@@ -165,6 +176,9 @@ export default function DashboardPage() {
   const today = formatLocalDate(new Date())
   const analyzedActivities = Math.min(importProgress.processed, importProgress.total)
   const consumedTokens = userProfile?.consumedTokens ?? 0
+  const loginSummary = riderAssessment?.loginSummary
+    ? splitTrainingSummary(riderAssessment.loginSummary)
+    : null
   const hasActivityProgress = !!stravaConnection && importProgress.status !== 'idle' && importProgress.total > 0
   const progressPct = hasActivityProgress
     ? Math.round((analyzedActivities / importProgress.total) * 100)
@@ -268,9 +282,21 @@ export default function DashboardPage() {
           {summaryLoading ? (
             <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
           ) : (
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {riderAssessment!.loginSummary}
-            </p>
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+              {loginSummary?.bullets.length ? (
+                <ul className="mt-2 space-y-1 list-disc pl-5">
+                  {loginSummary.bullets.map((bullet, index) => (
+                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                      {bullet.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+              )}
+            </div>
           )}
         </div>
       )}
