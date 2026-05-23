@@ -251,6 +251,28 @@ describe('DashboardPage — 7-day window extension', () => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — Activities section layout', () => {
+  it('renders JSON login summaries as formatted text instead of raw JSON', async () => {
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: JSON.stringify({
+          intro: 'Great to see your recent effort.',
+          bullets: [
+            '- Ride Category: Your latest mountain bike ride was demanding.',
+            '- Next Steps: Prioritize rest and recovery.',
+          ],
+        }),
+      },
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Great to see your recent effort.')).toBeInTheDocument()
+    expect(screen.getByText('Ride Category:')).toBeInTheDocument()
+    expect(screen.getByText('Your latest mountain bike ride was demanding.')).toBeInTheDocument()
+    expect(screen.queryByText(/"intro"/)).not.toBeInTheDocument()
+  })
+
   it('shows "Upcoming" sub-label when both recent rides and plan days exist', async () => {
     const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
     const planDay: TrainingDay = {
@@ -391,4 +413,3 @@ describe('DashboardPage — plan comparison row', () => {
     expect(msg).toContain('Hill Session')
   })
 })
-
