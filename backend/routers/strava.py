@@ -19,6 +19,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
+from services.ride_matching import apply_ride_plan_matches
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
@@ -397,6 +398,18 @@ async def _run_import_background(
                 await db.commit()
 
             _import_progress[user_id]["imported"] = min(i + BATCH, len(metrics_chain))
+
+        if metrics_chain:
+            async with async_session_maker() as db:
+                existing_plan = await crud.get_training_plan(db, user_id)
+                training_plan = existing_plan.plan if existing_plan is not None else []
+                await apply_ride_plan_matches(
+                    db,
+                    user_id,
+                    training_plan,
+                    [m["strava_activity_id"] for m in metrics_chain],
+                )
+                await db.commit()
 
         # --- Estimate FTP over time from steady intervals ---
         try:

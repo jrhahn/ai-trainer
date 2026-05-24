@@ -301,6 +301,48 @@ async def test_import_background_keeps_activity_when_stream_download_fails(
 
 
 @pytest.mark.asyncio
+async def test_import_background_matches_imported_activities_to_plan(
+    auth_headers, monkeypatch
+):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async with async_session_maker() as session:
+        await crud.upsert_training_plan(
+            session,
+            user_id,
+            [
+                {
+                    "date": "2026-04-02",
+                    "workoutType": "endurance",
+                    "title": "Aerobic Base Builder",
+                    "description": "Steady aerobic work",
+                    "durationMinutes": 90,
+                }
+            ],
+        )
+        await session.commit()
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+
+    assert {ride.plan_match_status for ride in rides} == {"ambiguous"}
+    assert {ride.matched_plan_date for ride in rides} == {"2026-04-02"}
+    assert {
+        ride.matched_plan_snapshot["title"] for ride in rides if ride.matched_plan_snapshot
+    } == {"Aerobic Base Builder"}
+
+
+@pytest.mark.asyncio
 async def test_import_background_replace_existing_overwrites_prior_rows(
     auth_headers, monkeypatch
 ):
