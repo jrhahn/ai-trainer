@@ -5,6 +5,21 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-05-24
+
+### Added
+
+- **Activity weather display** (`src/pages/DashboardPage.tsx`) — recent activities now show
+  a compact weather-condition icon and rounded temperature beside the activity name when
+  backend weather data is available.
+
+- **Weather fields in app state** (`src/store/useAppStore.ts`) — `StravaActivity` and
+  `RideMetricPoint` now include activity coordinates and weather metadata returned by the
+  backend.
+
+- **Dashboard weather coverage** (`src/pages/DashboardPage.test.tsx`) — added a regression
+  test that verifies ride weather temperature is rendered in the activities list.
+
 ## [0.20.3] - 2026-05-18
 
 ### Added
