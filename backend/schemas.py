@@ -361,6 +361,7 @@ class StravaActivitySchema(CamelModel):
     total_elevation_gain: float
     start_date: str
     start_date_local: Optional[str] = None
+    start_latlng: Optional[list[float]] = None
     average_watts: Optional[float] = None
     weighted_average_watts: Optional[float] = None
     max_watts: Optional[float] = None
@@ -588,6 +589,15 @@ class RideMetricSchema(CamelModel):
     activity_date: str
     sport_type: str
     duration_seconds: Optional[int] = None
+    start_lat: Optional[float] = None
+    start_lng: Optional[float] = None
+    weather_temperature_c: Optional[float] = None
+    weather_apparent_temperature_c: Optional[float] = None
+    weather_condition: Optional[str] = None
+    weather_code: Optional[int] = None
+    weather_wind_speed_kph: Optional[float] = None
+    weather_precipitation_mm: Optional[float] = None
+    weather_source: Optional[str] = None
     avg_power_w: Optional[int] = None
     normalized_power_w: Optional[int] = None
     intensity_factor: Optional[float] = None

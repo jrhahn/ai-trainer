@@ -37,6 +37,10 @@ from services.ride_matching import (
     review_matched_ride_and_adapt,
 )
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
+from services.weather_service import (
+    enrich_activity_weather,
+    training_weather_context_for_user,
+)
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -181,6 +185,7 @@ async def _auto_adapt_plan(
         ).model_dump(by_alias=True)
     try:
         race_events = await _race_events_for_prompt(db, user.id)
+        weather_section = await training_weather_context_for_user(db, user.id)
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [feedback_entry],
@@ -188,6 +193,7 @@ async def _auto_adapt_plan(
             provider=provider,
             rider_assessment=rider_assessment,
             race_events=race_events,
+            weather_context_section=weather_section,
             timezone_name=timezone_name,
         )
         await crud.upsert_training_plan(db, user.id, updated_plan)
@@ -228,13 +234,21 @@ async def analyse_activities(
                 exc_info=True,
             )
 
+    activity_payloads: list[dict] = []
+    weather_by_id: dict[int, dict] = {}
+    for activity in body.activities:
+        activity_dict = activity.model_dump()
+        weather_fields = await enrich_activity_weather(activity_dict)
+        weather_by_id[activity.id] = weather_fields
+        activity_payloads.append({**activity_dict, **weather_fields})
+
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
 
     usage_token = begin_token_usage_collection()
     try:
         result = await ai_service.analyse_strava_activities(
-            [activity.model_dump() for activity in body.activities],
+            activity_payloads,
             provider=_provider(current_user),
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
@@ -323,11 +337,12 @@ async def analyse_activities(
                 {
                     "strava_activity_id": activity.id,
                     "activity_name": a_dict.get("name"),
-                    "activity_start_datetime": start_date or None,
+                    "activity_start_datetime": start_date_local or start_date or None,
                     "activity_date": activity_date,
                     "sport_type": sport_type,
                     "duration_seconds": duration_seconds,
                     "streams": streams_by_id.get(str(activity.id), {}),
+                    **weather_by_id.get(activity.id, {}),
                 }
             )
         if rides_input:
@@ -395,6 +410,7 @@ async def generate_plan(
     metrics_section = ride_metrics_context_section(
         recent_metrics, timezone_name=timezone_name
     )
+    weather_section = await training_weather_context_for_user(db, current_user.id)
     race_events = await _race_events_for_prompt(db, current_user.id)
     usage_token = begin_token_usage_collection()
     try:
@@ -403,6 +419,7 @@ async def generate_plan(
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
+            weather_context_section=weather_section,
             race_events=race_events,
             timezone_name=timezone_name,
         )
@@ -438,6 +455,7 @@ async def adapt_plan(
     metrics_section = ride_metrics_context_section(
         recent_metrics, timezone_name=timezone_name
     )
+    weather_section = await training_weather_context_for_user(db, current_user.id)
     race_events = await _race_events_for_prompt(db, current_user.id)
     usage_token = begin_token_usage_collection()
     try:
@@ -448,6 +466,7 @@ async def adapt_plan(
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
+            weather_context_section=weather_section,
             race_events=race_events,
             timezone_name=timezone_name,
         )

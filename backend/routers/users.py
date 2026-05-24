@@ -20,6 +20,8 @@ from services.analysis import AVG_POWER_TO_FTP_RATIO
 from services.dates import app_today_iso
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import review_matched_ride_and_adapt
+from services.strava_service import ensure_fresh_strava_token
+from services.weather_service import backfill_missing_ride_weather
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -64,7 +66,9 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
 
     rider_assessment = None
     if user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(user.rider_assessment, from_attributes=True)
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            user.rider_assessment, from_attributes=True
+        )
 
     return schemas.UserResponse(
         id=user.id,
@@ -124,7 +128,9 @@ def _sync_profile_next_race(user: models.User, events: list[models.RaceEvent]) -
         user.race_description = None
         return
 
-    next_event = sorted(upcoming, key=lambda event: (event.date, event.start_time or ""))[0]
+    next_event = sorted(
+        upcoming, key=lambda event: (event.date, event.start_time or "")
+    )[0]
     user.training_goal = "race"
     user.race_date = next_event.date
     user.race_description = (
@@ -284,7 +290,9 @@ async def update_race_event(
 ) -> schemas.RaceEventResponse:
     event = await crud.get_race_event(db, current_user.id, event_id)
     if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found"
+        )
     updated = await crud.update_race_event(
         db,
         event,
@@ -305,7 +313,9 @@ async def delete_race_event(
 ) -> dict:
     event = await crud.get_race_event(db, current_user.id, event_id)
     if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Race event not found"
+        )
     await crud.delete_race_event(db, event)
     await _sync_race_context(db, current_user)
     return {"status": "deleted"}
@@ -318,7 +328,10 @@ async def get_chat(
 ) -> schemas.ChatHistoryResponse:
     messages = await crud.get_chat_messages(db, current_user.id)
     return schemas.ChatHistoryResponse(
-        messages=[schemas.ChatMessageSchema.model_validate(m, from_attributes=True) for m in messages]
+        messages=[
+            schemas.ChatMessageSchema.model_validate(m, from_attributes=True)
+            for m in messages
+        ]
     )
 
 
@@ -354,7 +367,9 @@ async def get_coach_memory(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.CoachMemoryResponse:
     memory = await crud.get_coach_memory(db, current_user.id)
-    return schemas.CoachMemoryResponse(memory=memory.memory if memory is not None else "")
+    return schemas.CoachMemoryResponse(
+        memory=memory.memory if memory is not None else ""
+    )
 
 
 @router.put("/coach-memory", response_model=schemas.CoachMemoryResponse)
@@ -398,6 +413,17 @@ async def get_ride_metrics_history(
     Used by the expert-mode time-series charts to show how training load metrics
     develop over time with one data point per ride.
     """
+    if current_user.strava_token is not None:
+        try:
+            access_token = await ensure_fresh_strava_token(
+                current_user.strava_token, db
+            )
+            await backfill_missing_ride_weather(
+                db, current_user.id, access_token, limit=90
+            )
+        except Exception:
+            logger.info("Ride weather backfill skipped", exc_info=True)
+
     rides = await crud.get_ride_metrics_history(db, current_user.id, limit=90)
     # get_ride_metrics_history returns newest-first; reverse for chronological charting
     rides = list(reversed(rides))
@@ -446,7 +472,10 @@ async def save_ride_feedback(
 
     coach_note = None
     plan_updates = None
-    if row.plan_match_status in {"auto_matched", "manual_matched"} and row.matched_plan_date:
+    if (
+        row.plan_match_status in {"auto_matched", "manual_matched"}
+        and row.matched_plan_date
+    ):
         existing_plan = await crud.get_training_plan(db, current_user.id)
         plan = existing_plan.plan if existing_plan is not None else []
         usage_token = begin_token_usage_collection()
@@ -617,9 +646,7 @@ async def upload_fit_file(
         else datetime.now(timezone.utc).strftime("%Y-%m-%d")
     )
     completed_at = (
-        start_time.isoformat()
-        if start_time
-        else datetime.now(timezone.utc).isoformat()
+        start_time.isoformat() if start_time else datetime.now(timezone.utc).isoformat()
     )
 
     log = await crud.upsert_workout_log(
@@ -655,7 +682,9 @@ async def upload_fit_file(
         )
     except Exception:
         finish_token_usage_collection(usage_token)
-        logger.warning("AI analysis failed for .fit upload; skipping feedback", exc_info=True)
+        logger.warning(
+            "AI analysis failed for .fit upload; skipping feedback", exc_info=True
+        )
     else:
         await _persist_collected_token_usage(db, current_user, usage_token)
 
@@ -695,7 +724,9 @@ async def upload_fit_file(
                 source="fit_upload",
             )
         except Exception:
-            logger.warning("Failed to write metric snapshot for .fit upload", exc_info=True)
+            logger.warning(
+                "Failed to write metric snapshot for .fit upload", exc_info=True
+            )
 
     await db.flush()
 

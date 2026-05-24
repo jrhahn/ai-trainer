@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { Clock } from 'lucide-react'
+import {
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  Clock,
+  Sun,
+} from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -20,6 +29,28 @@ export function formatDuration(seconds: number | undefined): string {
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m} min`
+}
+
+export function formatTemperature(value: number | null | undefined): string {
+  if (value == null) return ''
+  return `${Math.round(value)}°C`
+}
+
+function WeatherIcon({ condition }: { condition?: string | null }) {
+  const normalized = condition?.toLowerCase()
+  if (normalized === 'clear') return <Sun size={12} className="text-amber-500" />
+  if (normalized === 'partly_cloudy') {
+    return <CloudSun size={12} className="text-amber-500" />
+  }
+  if (normalized === 'fog') return <CloudFog size={12} className="text-gray-400" />
+  if (normalized === 'rain' || normalized === 'drizzle') {
+    return <CloudRain size={12} className="text-blue-500" />
+  }
+  if (normalized === 'snow') return <CloudSnow size={12} className="text-sky-500" />
+  if (normalized === 'thunderstorm') {
+    return <CloudLightning size={12} className="text-violet-500" />
+  }
+  return <Cloud size={12} className="text-gray-400" />
 }
 
 /** Returns 0-100 match score, or null when not enough data to compare. */
@@ -374,6 +405,15 @@ export default function DashboardPage() {
                     <span className="text-xs text-gray-700 font-medium flex-1 truncate">
                       {ride.activityName ?? 'Activity'}
                     </span>
+                    {ride.weatherTemperatureC != null && (
+                      <span
+                        className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0"
+                        title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
+                      >
+                        <WeatherIcon condition={ride.weatherCondition} />
+                        {formatTemperature(ride.weatherTemperatureC)}
+                      </span>
+                    )}
                     {ride.durationSeconds != null && (
                       <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
                         <Clock size={11} />

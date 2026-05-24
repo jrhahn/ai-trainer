@@ -1,4 +1,5 @@
 import urllib.parse
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -338,8 +339,46 @@ async def test_import_background_matches_imported_activities_to_plan(
     assert {ride.plan_match_status for ride in rides} == {"ambiguous"}
     assert {ride.matched_plan_date for ride in rides} == {"2026-04-02"}
     assert {
-        ride.matched_plan_snapshot["title"] for ride in rides if ride.matched_plan_snapshot
+        ride.matched_plan_snapshot["title"]
+        for ride in rides
+        if ride.matched_plan_snapshot
     } == {"Aerobic Base Builder"}
+
+
+@pytest.mark.asyncio
+async def test_import_background_persists_activity_weather(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+    monkeypatch.setattr(
+        strava_router,
+        "enrich_activity_weather",
+        AsyncMock(
+            return_value={
+                "start_lat": 52.52,
+                "start_lng": 13.405,
+                "weather_temperature_c": 4.3,
+                "weather_condition": "cloudy",
+                "weather_code": 3,
+                "weather_source": "open_meteo",
+            }
+        ),
+    )
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+
+    assert rides
+    assert {ride.weather_temperature_c for ride in rides} == {4.3}
+    assert {ride.weather_condition for ride in rides} == {"cloudy"}
 
 
 @pytest.mark.asyncio

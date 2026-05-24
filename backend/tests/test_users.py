@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock
 
 
 @pytest.mark.asyncio
@@ -71,7 +72,9 @@ async def test_users_me_requires_auth(client):
 @pytest.mark.asyncio
 async def test_metrics_history_empty(client, auth_headers):
     """GET /metrics-history returns an empty list for a new user."""
-    response = await client.get("/api/v1/users/me/metrics-history", headers=auth_headers)
+    response = await client.get(
+        "/api/v1/users/me/metrics-history", headers=auth_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert "snapshots" in body
@@ -79,7 +82,9 @@ async def test_metrics_history_empty(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_metrics_history_after_analyse_activities(client, auth_headers, mock_ai_service):
+async def test_metrics_history_after_analyse_activities(
+    client, auth_headers, mock_ai_service
+):
     """analyse-activities should create a per-ride metric visible in /ride-metrics-history."""
     analyse_response = await client.post(
         "/api/v1/ai/analyse-activities",
@@ -169,7 +174,9 @@ async def test_estimate_ftp_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_recalculate_metrics_creates_per_ride_snapshots(client, auth_headers, mock_ai_service):
+async def test_recalculate_metrics_creates_per_ride_snapshots(
+    client, auth_headers, mock_ai_service
+):
     """recalculate-metrics should create one AthleteMetricSnapshot per ride, not just one final snapshot."""
     # Create two rides via analyse-activities.
     await client.post(
@@ -218,9 +225,9 @@ async def test_recalculate_metrics_creates_per_ride_snapshots(client, auth_heade
     )
     assert history_response.status_code == 200
     snapshots = history_response.json()["snapshots"]
-    assert len(snapshots) == 2, (
-        f"Expected 2 per-ride snapshots after recalculate, got {len(snapshots)}"
-    )
+    assert (
+        len(snapshots) == 2
+    ), f"Expected 2 per-ride snapshots after recalculate, got {len(snapshots)}"
     # All snapshots should use the override FTP.
     for snap in snapshots:
         assert snap["ftp"] == 260
@@ -230,7 +237,9 @@ async def test_recalculate_metrics_creates_per_ride_snapshots(client, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_recalculate_metrics_refreshes_last_ride_feedback(client, auth_headers, mock_ai_service):
+async def test_recalculate_metrics_refreshes_last_ride_feedback(
+    client, auth_headers, mock_ai_service
+):
     await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -279,7 +288,9 @@ async def test_recalculate_metrics_refreshes_last_ride_feedback(client, auth_hea
 @pytest.mark.asyncio
 async def test_ride_metrics_history_empty(client, auth_headers):
     """GET /ride-metrics-history returns an empty list for a new user."""
-    response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    response = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert "rides" in body
@@ -287,7 +298,9 @@ async def test_ride_metrics_history_empty(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_ride_metrics_history_after_analyse_activities(client, auth_headers, mock_ai_service):
+async def test_ride_metrics_history_after_analyse_activities(
+    client, auth_headers, mock_ai_service
+):
     """After analyse-activities, ride-metrics-history should include per-ride CTL/ATL/TSB."""
     analyse_response = await client.post(
         "/api/v1/ai/analyse-activities",
@@ -310,7 +323,9 @@ async def test_ride_metrics_history_after_analyse_activities(client, auth_header
     )
     assert analyse_response.status_code == 200
 
-    response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    response = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert "rides" in body
@@ -320,6 +335,60 @@ async def test_ride_metrics_history_after_analyse_activities(client, auth_header
     assert ride["ctlAfter"] is not None
     assert ride["atlAfter"] is not None
     assert ride["tsbAfter"] is not None
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_persists_weather_on_ride_metrics(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(
+        ai_router,
+        "enrich_activity_weather",
+        AsyncMock(
+            return_value={
+                "start_lat": 52.52,
+                "start_lng": 13.405,
+                "weather_temperature_c": 31.2,
+                "weather_condition": "clear",
+                "weather_code": 0,
+                "weather_source": "open_meteo",
+            }
+        ),
+    )
+
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 2002,
+                    "name": "Hot Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-04-15T08:00:00Z",
+                    "startLatlng": [52.52, 13.405],
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
+    ride = history.json()["rides"][0]
+    assert ride["weatherTemperatureC"] == 31.2
+    assert ride["weatherCondition"] == "clear"
+    assert ride["startLat"] == 52.52
+
+    analyse_call = mock_ai_service["analyse_strava_activities"].await_args
+    assert analyse_call.args[0][0]["weather_temperature_c"] == 31.2
 
 
 @pytest.mark.asyncio
@@ -377,7 +446,9 @@ async def test_save_ride_feedback_success(client, auth_headers, mock_ai_service)
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_without_optional_note(client, auth_headers, mock_ai_service):
+async def test_save_ride_feedback_without_optional_note(
+    client, auth_headers, mock_ai_service
+):
     """PATCH ride-feedback works without the optional note field."""
     await client.post(
         "/api/v1/ai/analyse-activities",
@@ -444,7 +515,9 @@ async def test_save_ride_feedback_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_persists_in_history(client, auth_headers, mock_ai_service):
+async def test_save_ride_feedback_persists_in_history(
+    client, auth_headers, mock_ai_service
+):
     """After saving feedback, ride-metrics-history reflects the user_note."""
     await client.post(
         "/api/v1/ai/analyse-activities",
@@ -469,10 +542,17 @@ async def test_save_ride_feedback_persists_in_history(client, auth_headers, mock
     await client.patch(
         "/api/v1/users/me/ride-feedback/5003",
         headers=auth_headers,
-        json={"rpe": 8, "legs": "normal", "intent": "planned workout", "note": "Great session"},
+        json={
+            "rpe": 8,
+            "legs": "normal",
+            "intent": "planned workout",
+            "note": "Great session",
+        },
     )
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     rides = history.json()["rides"]
     # Find the specific ride we submitted feedback for
     target = next((r for r in rides if r["stravaActivityId"] == 5003), None)

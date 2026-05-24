@@ -67,3 +67,16 @@ async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
     if not resp.is_success:
         return {}
     return resp.json()
+
+
+async def fetch_activity_detail(access_token: str, activity_id: int) -> dict:
+    """Fetch a single Strava activity summary/detail payload."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if not resp.is_success:
+        return {}
+    data = resp.json()
+    return data if isinstance(data, dict) else {}

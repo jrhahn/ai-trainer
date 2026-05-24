@@ -174,6 +174,7 @@ export interface StravaActivity {
   total_elevation_gain: number
   start_date: string
   start_date_local?: string
+  start_latlng?: [number, number] | number[]
   average_watts?: number
   weighted_average_watts?: number
   max_watts?: number
@@ -215,6 +216,15 @@ export interface RideMetricPoint {
   atlAfter?: number
   tsbAfter?: number
   durationSeconds?: number
+  startLat?: number | null
+  startLng?: number | null
+  weatherTemperatureC?: number | null
+  weatherApparentTemperatureC?: number | null
+  weatherCondition?: string | null
+  weatherCode?: number | null
+  weatherWindSpeedKph?: number | null
+  weatherPrecipitationMm?: number | null
+  weatherSource?: string | null
   avgPowerW?: number
   normalizedPowerW?: number
   coachNote?: string | null

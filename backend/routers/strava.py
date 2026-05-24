@@ -25,6 +25,7 @@ from services.strava_service import (
     ensure_fresh_strava_token,
     fetch_activity_streams,
 )
+from services.weather_service import enrich_activity_weather
 
 router = APIRouter(tags=["strava"])
 STATE_TTL_SECONDS = 600
@@ -354,6 +355,7 @@ async def _run_import_background(
                     activity.get("elapsed_time") or activity.get("moving_time") or 0
                 )
                 activity_name = activity.get("name")
+                weather_fields = await enrich_activity_weather(activity)
 
                 streams: dict = {}
                 try:
@@ -377,11 +379,14 @@ async def _run_import_background(
                         "activity_name": (
                             activity_name if isinstance(activity_name, str) else None
                         ),
-                        "activity_start_datetime": start_date or None,
+                        "activity_start_datetime": start_date_local
+                        or start_date
+                        or None,
                         "activity_date": activity_date,
                         "sport_type": sport_type,
                         "duration_seconds": duration_seconds,
                         "streams": streams,
+                        **weather_fields,
                     }
                 )
                 _import_progress[user_id]["processed"] = idx + 1
