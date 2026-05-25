@@ -142,6 +142,21 @@ describe('DashboardPage — recent rides', () => {
     expect(await screen.findByText('1h 30m')).toBeInTheDocument()
   })
 
+  it('shows weather temperature for a ride', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: yesterday,
+          activityName: 'Chilly Ride',
+          weatherTemperatureC: 4.3,
+          weatherCondition: 'cloudy',
+        }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('4°C')).toBeInTheDocument()
+  })
+
   it('renders the sport type label', async () => {
     setupStore({
       rideMetricsHistory: [makeRide({ activityDate: yesterday, sportType: 'VirtualRide' })],

@@ -1656,6 +1656,17 @@ def build_ride_metrics_chain(
                 "activity_date": activity_date_str,
                 "sport_type": ride.get("sport_type", "cycling"),
                 "duration_seconds": ride.get("duration_seconds"),
+                "start_lat": ride.get("start_lat"),
+                "start_lng": ride.get("start_lng"),
+                "weather_temperature_c": ride.get("weather_temperature_c"),
+                "weather_apparent_temperature_c": ride.get(
+                    "weather_apparent_temperature_c"
+                ),
+                "weather_condition": ride.get("weather_condition"),
+                "weather_code": ride.get("weather_code"),
+                "weather_wind_speed_kph": ride.get("weather_wind_speed_kph"),
+                "weather_precipitation_mm": ride.get("weather_precipitation_mm"),
+                "weather_source": ride.get("weather_source"),
                 "avg_power_w": avg_power,
                 "normalized_power_w": np_value,
                 "intensity_factor": intensity_factor,

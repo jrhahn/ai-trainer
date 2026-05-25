@@ -5,7 +5,17 @@ from datetime import datetime, timezone
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
@@ -32,7 +42,8 @@ class EncryptedString(TypeDecorator):
     cache_ok = True
 
     def _get_fernet(self) -> Fernet | None:
-        from config import settings  # local import avoids circular dependency at module load
+        # Local import avoids circular dependency at module load.
+        from config import settings
 
         key = settings.strava_encryption_key
         if not key:
@@ -65,11 +76,17 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
     name: Mapped[str | None] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    last_login: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # UserProfile fields
     bike_type: Mapped[str | None] = mapped_column(String(50))
@@ -87,7 +104,9 @@ class User(Base):
 
     use_estimated_ftp: Mapped[bool] = mapped_column(Boolean, default=False)
     strava_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
-    last_strava_activity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_strava_activity_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
@@ -141,8 +160,12 @@ class TrainingPlan(Base):
         String(36), ForeignKey("users.id"), unique=True, nullable=False
     )
     plan: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     user: Mapped["User"] = relationship(back_populates="training_plan")
 
@@ -151,7 +174,9 @@ class WorkoutLog(Base):
     __tablename__ = "workout_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
 
     actual_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -161,7 +186,9 @@ class WorkoutLog(Base):
     perceived_effort: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     completed_at: Mapped[str] = mapped_column(String(50), nullable=False)
-    sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
+    sport_type: Mapped[str] = mapped_column(
+        String(50), default="cycling", nullable=False
+    )
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
 
@@ -170,13 +197,19 @@ class RaceEvent(Base):
     __tablename__ = "race_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
     date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     start_time: Mapped[str | None] = mapped_column(String(10), nullable=True)
     distance_km: Mapped[float] = mapped_column(Float, nullable=False)
     elevation_m: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     user: Mapped["User"] = relationship(back_populates="race_events")
 
@@ -185,11 +218,15 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
     plan_update_count: Mapped[int | None] = mapped_column(Integer)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
@@ -202,7 +239,9 @@ class CoachMemory(Base):
         String(36), ForeignKey("users.id"), primary_key=True
     )
     memory: Mapped[str] = mapped_column(Text, default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     user: Mapped["User"] = relationship(back_populates="coach_memory")
 
@@ -226,7 +265,9 @@ class StravaImportJob(Base):
     __tablename__ = "strava_import_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
     status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
     total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -234,9 +275,15 @@ class StravaImportJob(Base):
     skipped: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_activities: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
     error: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     user: Mapped["User"] = relationship(back_populates="strava_import_jobs")
 
@@ -254,7 +301,9 @@ class RiderAssessment(Base):
     ride_insights: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_ride_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     login_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     user: Mapped["User"] = relationship(back_populates="rider_assessment")
 
@@ -269,8 +318,12 @@ class AthleteMetricSnapshot(Base):
     __tablename__ = "athlete_metric_snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
     ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ctl: Mapped[float | None] = mapped_column(nullable=True)
     atl: Mapped[float | None] = mapped_column(nullable=True)
@@ -291,13 +344,30 @@ class RideMetric(Base):
     __tablename__ = "ride_metrics"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
     strava_activity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     activity_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    activity_start_datetime: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    activity_start_datetime: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
     activity_date: Mapped[str] = mapped_column(String(20), nullable=False)
-    sport_type: Mapped[str] = mapped_column(String(50), default="cycling", nullable=False)
+    sport_type: Mapped[str] = mapped_column(
+        String(50), default="cycling", nullable=False
+    )
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    start_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    start_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_apparent_temperature_c: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    weather_condition: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    weather_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    weather_wind_speed_kph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_precipitation_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     avg_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     normalized_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     intensity_factor: Mapped[float | None] = mapped_column(nullable=True)
@@ -307,16 +377,26 @@ class RideMetric(Base):
     atl_after: Mapped[float | None] = mapped_column(nullable=True)
     tsb_after: Mapped[float | None] = mapped_column(nullable=True)
     ride_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    classification_confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    classification_confidence: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
+    )
     classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    coach_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    plan_match_status: Mapped[str] = mapped_column(String(20), default="unmatched", nullable=False)
+    coach_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    plan_match_status: Mapped[str] = mapped_column(
+        String(20), default="unmatched", nullable=False
+    )
     matched_plan_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     matched_plan_snapshot: Mapped[Any | None] = mapped_column(JSON, nullable=True)
-    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    matched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     user: Mapped["User"] = relationship(back_populates="ride_metrics")

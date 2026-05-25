@@ -29,14 +29,18 @@ _USER_EAGER_OPTIONS = [
 async def get_user_by_id(db: AsyncSession, user_id: str) -> models.User | None:
     """Return a User with all relationships eagerly loaded, or None."""
     return await db.scalar(
-        select(models.User).options(*_USER_EAGER_OPTIONS).where(models.User.id == user_id)
+        select(models.User)
+        .options(*_USER_EAGER_OPTIONS)
+        .where(models.User.id == user_id)
     )
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> models.User | None:
     """Return a User by email with all relationships eagerly loaded, or None."""
     return await db.scalar(
-        select(models.User).options(*_USER_EAGER_OPTIONS).where(models.User.email == email)
+        select(models.User)
+        .options(*_USER_EAGER_OPTIONS)
+        .where(models.User.email == email)
     )
 
 
@@ -74,7 +78,9 @@ async def increment_user_consumed_tokens(
 # ---------------------------------------------------------------------------
 
 
-async def get_training_plan(db: AsyncSession, user_id: str) -> models.TrainingPlan | None:
+async def get_training_plan(
+    db: AsyncSession, user_id: str
+) -> models.TrainingPlan | None:
     """Return the TrainingPlan for a user, or None."""
     return await db.scalar(
         select(models.TrainingPlan).where(models.TrainingPlan.user_id == user_id)
@@ -202,7 +208,9 @@ async def create_chat_message(
 
 async def delete_chat_messages(db: AsyncSession, user_id: str) -> None:
     """Delete all ChatMessages for a user."""
-    await db.execute(delete(models.ChatMessage).where(models.ChatMessage.user_id == user_id))
+    await db.execute(
+        delete(models.ChatMessage).where(models.ChatMessage.user_id == user_id)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +458,15 @@ async def upsert_ride_metric(
     activity_name: str | None = None,
     activity_start_datetime: str | None = None,
     duration_seconds: int | None = None,
+    start_lat: float | None = None,
+    start_lng: float | None = None,
+    weather_temperature_c: float | None = None,
+    weather_apparent_temperature_c: float | None = None,
+    weather_condition: str | None = None,
+    weather_code: int | None = None,
+    weather_wind_speed_kph: float | None = None,
+    weather_precipitation_mm: float | None = None,
+    weather_source: str | None = None,
     avg_power_w: int | None = None,
     normalized_power_w: int | None = None,
     intensity_factor: float | None = None,
@@ -472,6 +489,15 @@ async def upsert_ride_metric(
         activity_name=activity_name,
         activity_start_datetime=activity_start_datetime,
         duration_seconds=duration_seconds,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        weather_temperature_c=weather_temperature_c,
+        weather_apparent_temperature_c=weather_apparent_temperature_c,
+        weather_condition=weather_condition,
+        weather_code=weather_code,
+        weather_wind_speed_kph=weather_wind_speed_kph,
+        weather_precipitation_mm=weather_precipitation_mm,
+        weather_source=weather_source,
         avg_power_w=avg_power_w,
         normalized_power_w=normalized_power_w,
         intensity_factor=intensity_factor,
@@ -493,7 +519,11 @@ async def upsert_ride_metric(
             .values(**values, id=str(__import__("uuid").uuid4()))
             .on_conflict_do_update(
                 index_elements=["user_id", "strava_activity_id"],
-                set_={k: v for k, v in values.items() if k not in ("user_id", "strava_activity_id")},
+                set_={
+                    k: v
+                    for k, v in values.items()
+                    if k not in ("user_id", "strava_activity_id")
+                },
             )
             .returning(models.RideMetric)
         )
@@ -532,6 +562,41 @@ async def get_ride_metrics_history(
         .limit(limit)
     )
     return list(result)
+
+
+async def get_ride_metrics_missing_weather(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 90,
+) -> list[models.RideMetric]:
+    """Return recent RideMetric rows that do not yet have weather attached."""
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.weather_temperature_c.is_(None),
+        )
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(limit)
+    )
+    return list(result)
+
+
+async def get_latest_ride_metric_with_location(
+    db: AsyncSession,
+    user_id: str,
+) -> models.RideMetric | None:
+    """Return the latest ride metric with usable start coordinates."""
+    return await db.scalar(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.start_lat.is_not(None),
+            models.RideMetric.start_lng.is_not(None),
+        )
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(1)
+    )
 
 
 async def get_latest_ride_metric(

@@ -5,7 +5,36 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.25.1] - 2026-04-25
+## [0.26.0] - 2026-05-24
+
+### Added
+
+- **Weather enrichment for ride metrics** (`services/weather_service.py`, `models.py`,
+  `schemas.py`, `crud.py`) — Strava activities now persist start coordinates plus
+  Open-Meteo temperature, apparent temperature, condition, weather code, wind,
+  precipitation, and source metadata on `ride_metrics`.
+
+- **Alembic migration `20260524_000001_add_ride_weather`** — adds the weather and
+  coordinate columns to `ride_metrics` while remaining idempotent for existing databases.
+
+- **Weather-aware Strava import and analysis** (`routers/strava.py`, `routers/ai.py`,
+  `services/strava_service.py`) — historical imports and new activity analysis request
+  Strava GPS `latlng` streams and attach weather using the midpoint activity GPS point
+  when available, falling back to Strava `start_latlng`; the lookup uses the activity
+  midpoint date/time and switches to Open-Meteo archive data for older activities.
+  Recent weather is included in activity analysis prompts.
+
+- **Best-effort backfill for existing rides** (`routers/users.py`) — loading ride history
+  attempts to fill missing weather for stored Strava rides by fetching activity details and
+  querying Open-Meteo; failures are logged and do not block the dashboard.
+
+### Changed
+
+- **Weather-aware plan generation/adaptation** (`services/prompts.py`, `services/ai_service.py`,
+  `routers/ai.py`) — upcoming forecast context near the athlete's usual activity location is
+  passed into plan generation and adaptation so the coach can shorten hot-day sessions, add
+  warmup/caution for cold days, or swap unsafe weather to indoor, recovery, or strength work.
+
 ## [0.25.2] - 2026-04-26
 
 ### Added

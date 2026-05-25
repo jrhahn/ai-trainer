@@ -69,6 +69,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
 - Never schedule two hard days back-to-back.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
+- Account for weather when provided: shorten or reduce intensity on hot days, extend warmups and avoid long exposed sessions on freezing/cold days, and move sessions indoors or swap to recovery/strength when weather is unsafe.
 """
 
 
@@ -231,7 +232,8 @@ def analyse_activities_system(
         '- "planUpdates": optional array of training day updates for the upcoming plan based on what '
         f"you observed in the {activities_noun}. Only include updates that are genuinely warranted (e.g. add recovery "
         "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
-        'targets). Each update: {"date": "<ISO date>", "workoutType": "<type>", "title": '
+        "targets, or reduce/swap workouts when recent hot/cold weather likely increased strain). "
+        'Each update: {"date": "<ISO date>", "workoutType": "<type>", "title": '
         '"<string>", "description": "<string>", "durationMinutes": <int>}. '
         "If no updates are needed, omit this field or set it to [].\n\n"
         f"{category_section}"
@@ -396,15 +398,17 @@ def generate_plan_user(
     today: str,
     assessment_section: str,
     metrics_history_section: str = "",
+    weather_context_section: str = "",
     race_events_section: str = "",
 ) -> str:
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
+    weather_section = f"\n{weather_context_section}" if weather_context_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{events_section}\n"
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}\n"
         "Generate a 14-day training plan starting from today that reflects the athlete's "
         "actual fitness level from recent rides and any upcoming race context."
     )
@@ -446,6 +450,7 @@ def adapt_plan_user(
     training_load: dict | None = None,
     taper_days_remaining: int | None = None,
     metrics_history_section: str = "",
+    weather_context_section: str = "",
     race_events_section: str = "",
 ) -> str:
     assessment_section = (
@@ -460,6 +465,7 @@ def adapt_plan_user(
             f"ATL={training_load.get('atl')} TSB={training_load.get('tsb')}"
         )
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
+    weather_section = f"\n{weather_context_section}" if weather_context_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
@@ -483,7 +489,7 @@ def adapt_plan_user(
     )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{events_section}{taper_section}\n"
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         + stale_note
@@ -1136,6 +1142,14 @@ def ride_metrics_context_section(
         if tss is not None:
             parts.append(f"TSS {round(tss)}")
 
+        weather_temp = getattr(m, "weather_temperature_c", None)
+        weather_condition = getattr(m, "weather_condition", None)
+        if weather_temp is not None:
+            weather = f"weather {round(weather_temp)}C"
+            if weather_condition:
+                weather += f" {str(weather_condition).replace('_', ' ')}"
+            parts.append(weather)
+
         # Normalised power
         np_val = getattr(m, "normalized_power_w", None)
         if np_val is not None:
@@ -1268,6 +1282,13 @@ def batch_review_user(
         avg_pwr = getattr(m, "avg_power_w", None)
         if avg_pwr is not None and np_val is None:
             parts.append(f"Avg power: {avg_pwr}W")
+        weather_temp = getattr(m, "weather_temperature_c", None)
+        weather_condition = getattr(m, "weather_condition", None)
+        if weather_temp is not None:
+            weather = f"Weather: {round(weather_temp)}C"
+            if weather_condition:
+                weather += f" {str(weather_condition).replace('_', ' ')}"
+            parts.append(weather)
         ctl = getattr(m, "ctl_after", None)
         atl = getattr(m, "atl_after", None)
         tsb = getattr(m, "tsb_after", None)

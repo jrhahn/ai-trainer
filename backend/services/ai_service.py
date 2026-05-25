@@ -340,6 +340,7 @@ async def generate_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
+    weather_context_section: str = "",
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> list[dict]:
@@ -355,6 +356,7 @@ async def generate_training_plan(
         today,
         assessment_section,
         metrics_history_section=metrics_history_section,
+        weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
@@ -369,6 +371,7 @@ async def adapt_training_plan(
     provider: str = "openai",
     rider_assessment: dict | None = None,
     metrics_history_section: str = "",
+    weather_context_section: str = "",
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> list[dict]:
@@ -397,6 +400,7 @@ async def adapt_training_plan(
         training_load=training_load,
         taper_days_remaining=taper_days_remaining,
         metrics_history_section=metrics_history_section,
+        weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
