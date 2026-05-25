@@ -23,6 +23,13 @@ def test_coordinates_from_streams_uses_midpoint_gps_sample():
     assert lng == 13.405
 
 
+def test_midpoint_datetime_from_values_crosses_date_boundary():
+    assert (
+        weather_service._midpoint_datetime_from_values("2026-05-05T23:30:00", 7200)
+        == "2026-05-06T00:30:00"
+    )
+
+
 @pytest.mark.asyncio
 async def test_enrich_activity_weather_uses_midpoint_date_time(monkeypatch):
     captured = {}

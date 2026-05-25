@@ -179,6 +179,22 @@ def _activity_midpoint_datetime(
     return (parsed_start + timedelta(seconds=midpoint_offset)).isoformat()
 
 
+def _midpoint_datetime_from_values(
+    start_datetime: str | None,
+    duration_seconds: int | None,
+) -> str | None:
+    if not start_datetime:
+        return None
+    try:
+        parsed_start = datetime.fromisoformat(
+            str(start_datetime).replace("Z", "+00:00")
+        )
+    except ValueError:
+        return str(start_datetime)
+    midpoint_offset = float(duration_seconds or 0) / 2.0
+    return (parsed_start + timedelta(seconds=midpoint_offset)).isoformat()
+
+
 def _activity_hour(activity_start_datetime: str | None) -> int:
     if not activity_start_datetime:
         return 12
@@ -381,12 +397,14 @@ async def backfill_missing_ride_weather(
                     exc_info=True,
                 )
 
-        weather = await fetch_activity_weather(
-            lat,
-            lng,
-            row.activity_date,
+        weather_datetime = _midpoint_datetime_from_values(
             row.activity_start_datetime,
+            row.duration_seconds,
         )
+        weather_date = (
+            str(weather_datetime)[:10] if weather_datetime else row.activity_date
+        )
+        weather = await fetch_activity_weather(lat, lng, weather_date, weather_datetime)
         if weather:
             fields = {"start_lat": lat, "start_lng": lng, **weather}
             _apply_weather_fields(row, fields)
