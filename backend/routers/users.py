@@ -6,7 +6,15 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -14,13 +22,12 @@ import crud
 import models
 import schemas
 from config import settings
-from database import get_db
+from database import async_session_maker, get_db
 from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO
 from services.dates import app_today_iso
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import review_matched_ride_and_adapt
-from services.strava_service import ensure_fresh_strava_token
 from services.weather_service import backfill_missing_ride_weather
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -29,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 _RACE_MEMORY_HEADING = "Race calendar:"
+_weather_backfill_users_in_progress: set[str] = set()
 
 
 def _default_provider() -> str:
@@ -54,6 +62,20 @@ async def _persist_collected_token_usage(
     consumed = finish_token_usage_collection(token)
     if consumed:
         await crud.increment_user_consumed_tokens(db, user, consumed)
+
+
+async def _backfill_ride_weather_bg(user_id: str, access_token: str | None) -> None:
+    """Background weather backfill so dashboard hydration reads stored data immediately."""
+    try:
+        async with async_session_maker() as session:
+            await backfill_missing_ride_weather(
+                session, user_id, access_token, limit=90
+            )
+            await session.commit()
+    except Exception:
+        logger.info("Ride weather backfill skipped", exc_info=True)
+    finally:
+        _weather_backfill_users_in_progress.discard(user_id)
 
 
 def _user_to_response(user: models.User) -> schemas.UserResponse:
@@ -405,6 +427,7 @@ async def get_metrics_history(
 
 @router.get("/ride-metrics-history", response_model=schemas.RideMetricHistoryResponse)
 async def get_ride_metrics_history(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RideMetricHistoryResponse:
@@ -413,16 +436,16 @@ async def get_ride_metrics_history(
     Used by the expert-mode time-series charts to show how training load metrics
     develop over time with one data point per ride.
     """
-    if current_user.strava_token is not None:
-        try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
-            await backfill_missing_ride_weather(
-                db, current_user.id, access_token, limit=90
-            )
-        except Exception:
-            logger.info("Ride weather backfill skipped", exc_info=True)
+    if (
+        current_user.strava_token is not None
+        and current_user.id not in _weather_backfill_users_in_progress
+    ):
+        _weather_backfill_users_in_progress.add(current_user.id)
+        background_tasks.add_task(
+            _backfill_ride_weather_bg,
+            current_user.id,
+            current_user.strava_token.access_token,
+        )
 
     rides = await crud.get_ride_metrics_history(db, current_user.id, limit=90)
     # get_ride_metrics_history returns newest-first; reverse for chronological charting
