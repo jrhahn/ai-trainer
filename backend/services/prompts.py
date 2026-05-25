@@ -653,6 +653,25 @@ def ask_trainer_system(
         'in your JSON response. Omit "ride_note_update" entirely when no activity is being described.'
     )
 
+    attentive_coach_instructions = (
+        "\n\nAttentive coach rules:\n"
+        "- Listen closely to what the athlete actually says, including casual or messy messages. "
+        "Treat high-signal details as coaching data, not small talk.\n"
+        "- High-signal details include: long duration, back-to-back training days, unusually hot or cold "
+        "weather, running out of drink or food, cramping, bonking, dizziness, illness, pain, unusually high "
+        "fatigue, poor sleep, or a ride that was much harder/easier than planned.\n"
+        "- When a high-signal detail is important and one piece of information is missing, ask one concise "
+        "targeted follow-up question before giving overly confident advice. It is okay for that one question "
+        "to combine two tightly related details, e.g. 'Wie viel und was hast du unterwegs getrunken?' for "
+        "a long hot ride where the athlete ran out of drink.\n"
+        "- Do not interrogate every minor detail. Skip follow-up questions when the detail is trivial, already "
+        "clear enough, or would not change the coaching recommendation.\n"
+        "- When the athlete replies with important specifics such as hydration volume, drink type, sodium/carbs, "
+        "fueling, heat tolerance, symptoms, or recurring fatigue, treat that as information worth preserving "
+        "through coach memory when it can affect future training.\n"
+        "- Reply in the same language the athlete used unless they ask otherwise."
+    )
+
     # Outlook instructions: guide the coach when the athlete asks for a session preview
     outlook_instructions = (
         "\n\nOutlook rules:\n"
@@ -685,6 +704,7 @@ def ask_trainer_system(
         f"{classification_section}"
         f"{science_section}"
         f"{feedback_instructions}"
+        f"{attentive_coach_instructions}"
         f"{outlook_instructions}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
@@ -722,6 +742,8 @@ def ask_trainer_system(
         "- Give one clear next action or coaching recommendation so the athlete always knows what "
         "to do with your answer.\n"
         "- Ask at most one follow-up question per response — never stack multiple questions.\n"
+        "- For important high-signal activity details, prefer a specific follow-up question over a generic "
+        "'how did it feel?' question.\n"
         "- When an athlete asks for an outlook, give a warm narrative of their next 3-5 sessions: "
         "what each involves, why they are ordered that way, and how the block fits their current "
         "fatigue — then stop; do not modify the plan unless explicitly asked.\n\n"
@@ -753,13 +775,17 @@ def update_memory_system() -> str:
         "Keep notes under 400 words total. Organise notes under these categories (omit any category that has no relevant information):\n"
         "- Schedule constraints: preferred ride days, weekday time limits, work/life commitments affecting training availability.\n"
         "- Fatigue & intensity response: how the athlete subjectively responds to hard efforts, signs of over-reaching, recovery rate.\n"
+        "- Hydration, fueling & heat response: actionable intake patterns and problems for long or hot sessions, such as drink volume, drink type, sodium/carbs, running out of fluids, bonking, cramping, GI issues, or poor heat tolerance.\n"
         "- Preferred workout types: favourite session formats, terrain preferences (e.g. loves hill climbing, prefers long endurance rides).\n"
         "- Recurring issues: repeated problems such as over-pacing endurance rides, skipping cooldowns, abandoning intervals early.\n"
         "- FTP & target context: record up to the 5 most recent FTP estimates with approximate dates; drop the oldest when adding a new one. Note current power/HR targets.\n"
         "- Race & event priorities: upcoming events, goal races, priority A/B/C designations, target dates.\n"
         "- Goals & motivations: overall training goals, personal motivations, rider strengths and weaknesses.\n"
         "Only update a category when new, durable information is present. "
-        "Do not store one-off transient details unless they reflect a pattern that will affect future coaching. "
+        "A single event may be stored when it is materially actionable for future coaching, for example "
+        "the athlete ran out of drink on a 5-hour ride in >30 C heat or reported a specific hydration/fueling "
+        "amount that should shape future long-ride advice. "
+        "Do not store one-off transient details unless they reflect a pattern or actionable risk that will affect future coaching. "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 
@@ -770,7 +796,7 @@ def update_memory_user(
     return (
         f"Existing notes:\n{current_memory or '(none)'}\n\n"
         f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
-        "Update the notes with any new important information."
+        "Update the notes with any new important information. If the coach asked a targeted follow-up and the athlete answered it, treat the answer as potentially important coaching context."
     )
 
 
