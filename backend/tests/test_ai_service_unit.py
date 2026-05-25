@@ -2287,6 +2287,61 @@ def test_ask_trainer_system_includes_response_quality_rules():
     assert "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
 
 
+def test_ask_trainer_system_includes_attentive_coach_rules():
+    """ask_trainer_system must tell the coach to notice important athlete details."""
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-05-01",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    assert "attentive coach" in prompt
+    assert "high-signal" in prompt
+    assert "running out of drink" in prompt
+    assert "hot" in prompt
+    assert "wie viel und was hast du" in prompt
+    assert "same language" in prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_prompt_handles_hot_long_ride_as_high_signal():
+    """A casual hot long-ride message should be sent with targeted follow-up guidance."""
+    captured_prompt: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        captured_prompt.append(system_prompt)
+        assert messages[-1]["content"].startswith("so nach dem hike")
+        return json.dumps(
+            {
+                "response": "Wie viel und was hast du unterwegs getrunken?",
+                "sources": [],
+            }
+        )
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question=(
+                "so nach dem hike gestern bin ich heute 5h mtb gefahren. richtig geil. "
+                "nur super heiß im laufe des tages. über 30 grad. trinken war dann leer"
+            ),
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    prompt = captured_prompt[0].lower()
+    assert "running out of drink" in prompt
+    assert "drink volume" in prompt or "drink type" in prompt
+    assert "targeted follow-up" in prompt
+    assert "wie viel" in result["response"].lower()
+
+
 def test_ask_trainer_system_includes_outlook_response_example():
     """ask_trainer_system must include an example response for an outlook request."""
     from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
@@ -2330,6 +2385,18 @@ def test_update_memory_system_includes_fatigue_patterns():
     assert "fatigue" in text or "intensity" in text or "over-reaching" in text
 
 
+def test_update_memory_system_includes_hydration_fueling_heat_context():
+    """System prompt must guide the AI to retain actionable hydration/fueling context."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "hydration" in text
+    assert "fueling" in text
+    assert "heat" in text
+    assert "drink volume" in text
+    assert "running out of fluids" in text
+
+
 def test_update_memory_system_includes_preferred_workout_types():
     """System prompt must guide the AI to capture preferred workout types."""
     from services.prompts import update_memory_system
@@ -2368,6 +2435,8 @@ def test_update_memory_system_avoids_transient_details():
 
     text = update_memory_system().lower()
     assert "transient" in text or "one-off" in text or "durable" in text
+    assert "single event" in text
+    assert "5-hour ride" in text
 
 
 def test_update_memory_system_uses_coach_persona():
