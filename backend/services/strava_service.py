@@ -57,7 +57,7 @@ async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
     whose values are Strava stream objects with a ``data`` list.  Returns an
     empty dict if the activity has no stream data or the request fails.
     """
-    keys = "watts,heartrate,cadence,velocity_smooth,altitude,time"
+    keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}/streams",

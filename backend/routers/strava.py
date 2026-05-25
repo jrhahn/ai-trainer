@@ -45,7 +45,7 @@ def _sanitize_streams(streams: object) -> dict:
     """
     if not isinstance(streams, dict):
         return {}
-    cleaned: dict[str, dict[str, list[float]]] = {}
+    cleaned: dict[str, dict[str, list]] = {}
     for key in ("watts", "heartrate", "cadence", "velocity_smooth", "altitude", "time"):
         stream_obj = streams.get(key)
         if not isinstance(stream_obj, dict):
@@ -56,6 +56,19 @@ def _sanitize_streams(streams: object) -> dict:
         # Keep only numeric samples to avoid type errors in downstream math.
         numeric = [float(v) for v in data if isinstance(v, (int, float))]
         cleaned[key] = {"data": numeric}
+    latlng_obj = streams.get("latlng")
+    if isinstance(latlng_obj, dict):
+        data = latlng_obj.get("data")
+        if isinstance(data, list):
+            points = [
+                [float(p[0]), float(p[1])]
+                for p in data
+                if isinstance(p, (list, tuple))
+                and len(p) >= 2
+                and isinstance(p[0], (int, float))
+                and isinstance(p[1], (int, float))
+            ]
+            cleaned["latlng"] = {"data": points}
     return cleaned
 
 
@@ -326,7 +339,7 @@ async def _run_import_background(
         # --- Fetch streams per activity ---
         rides: list[dict] = []
         skipped = 0
-        keys = "watts,heartrate,cadence,velocity_smooth,altitude,time"
+        keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
         async with httpx.AsyncClient() as client:
             for idx, activity in enumerate(all_activities):
                 activity_id = activity.get("id")
@@ -355,7 +368,6 @@ async def _run_import_background(
                     activity.get("elapsed_time") or activity.get("moving_time") or 0
                 )
                 activity_name = activity.get("name")
-                weather_fields = await enrich_activity_weather(activity)
 
                 streams: dict = {}
                 try:
@@ -372,6 +384,9 @@ async def _run_import_background(
                         "Stream download failed for Strava activity %s; importing summary data only",
                         activity_id,
                     )
+                weather_fields = await enrich_activity_weather(
+                    activity, streams=streams
+                )
 
                 rides.append(
                     {

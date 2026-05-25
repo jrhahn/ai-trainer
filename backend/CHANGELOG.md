@@ -17,9 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Alembic migration `20260524_000001_add_ride_weather`** — adds the weather and
   coordinate columns to `ride_metrics` while remaining idempotent for existing databases.
 
-- **Weather-aware Strava import and analysis** (`routers/strava.py`, `routers/ai.py`) —
-  historical imports and new activity analysis attach weather when activity coordinates are
-  available, and recent weather is included in activity analysis prompts.
+- **Weather-aware Strava import and analysis** (`routers/strava.py`, `routers/ai.py`,
+  `services/strava_service.py`) — historical imports and new activity analysis request
+  Strava GPS `latlng` streams and attach weather using the midpoint activity GPS point
+  when available, falling back to Strava `start_latlng`; the lookup uses the activity
+  midpoint date/time and switches to Open-Meteo archive data for older activities.
+  Recent weather is included in activity analysis prompts.
 
 - **Best-effort backfill for existing rides** (`routers/users.py`) — loading ride history
   attempts to fill missing weather for stored Strava rides by fetching activity details and

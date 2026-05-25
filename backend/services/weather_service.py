@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services.strava_service import fetch_activity_detail
+from services.strava_service import fetch_activity_detail, fetch_activity_streams
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,101 @@ def coordinates_from_activity(
     if float(lat) == 0.0 and float(lng) == 0.0:
         return None, None
     return float(lat), float(lng)
+
+
+def coordinates_from_streams(
+    streams: dict[str, Any] | None,
+) -> tuple[float | None, float | None]:
+    """Return a midpoint GPS coordinate from a Strava latlng stream."""
+    if not isinstance(streams, dict):
+        return None, None
+    latlng_stream = streams.get("latlng")
+    if not isinstance(latlng_stream, dict):
+        return None, None
+    data = latlng_stream.get("data")
+    if not isinstance(data, list):
+        return None, None
+
+    valid_points: list[tuple[int, float, float]] = []
+    for idx, point in enumerate(data):
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        lat, lng = point[0], point[1]
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            continue
+        if float(lat) == 0.0 and float(lng) == 0.0:
+            continue
+        valid_points.append((idx, float(lat), float(lng)))
+    if not valid_points:
+        return None, None
+
+    time_stream = streams.get("time")
+    time_data = time_stream.get("data") if isinstance(time_stream, dict) else None
+    if isinstance(time_data, list) and len(time_data) >= len(data):
+        numeric_times = [t for t in time_data if isinstance(t, (int, float))]
+        if numeric_times:
+            target = (float(numeric_times[0]) + float(numeric_times[-1])) / 2.0
+            _idx, lat, lng = min(
+                valid_points,
+                key=lambda p: (
+                    abs(float(time_data[p[0]]) - target)
+                    if p[0] < len(time_data)
+                    and isinstance(time_data[p[0]], (int, float))
+                    else float("inf")
+                ),
+            )
+            return lat, lng
+
+    _idx, lat, lng = valid_points[len(valid_points) // 2]
+    return lat, lng
+
+
+def _stream_midpoint_offset_seconds(streams: dict[str, Any] | None) -> float | None:
+    if not isinstance(streams, dict):
+        return None
+    time_stream = streams.get("time")
+    time_data = time_stream.get("data") if isinstance(time_stream, dict) else None
+    if not isinstance(time_data, list):
+        return None
+    numeric = [float(t) for t in time_data if isinstance(t, (int, float))]
+    if not numeric:
+        return None
+    return (numeric[0] + numeric[-1]) / 2.0
+
+
+def _activity_midpoint_datetime(
+    activity: dict[str, Any],
+    streams: dict[str, Any] | None,
+) -> str | None:
+    start_datetime = (
+        activity.get("start_date_local")
+        or activity.get("startDateLocal")
+        or activity.get("start_date")
+        or activity.get("startDate")
+    )
+    if not start_datetime:
+        return None
+
+    try:
+        parsed_start = datetime.fromisoformat(
+            str(start_datetime).replace("Z", "+00:00")
+        )
+    except ValueError:
+        return str(start_datetime)
+
+    midpoint_offset = _stream_midpoint_offset_seconds(streams)
+    if midpoint_offset is None:
+        duration = (
+            activity.get("elapsed_time")
+            or activity.get("elapsedTime")
+            or activity.get("moving_time")
+            or activity.get("movingTime")
+        )
+        midpoint_offset = (
+            float(duration) / 2.0 if isinstance(duration, (int, float)) else 0.0
+        )
+
+    return (parsed_start + timedelta(seconds=midpoint_offset)).isoformat()
 
 
 def _activity_hour(activity_start_datetime: str | None) -> int:
@@ -213,26 +308,17 @@ async def fetch_activity_weather(
     }
 
 
-async def enrich_activity_weather(activity: dict[str, Any]) -> dict[str, Any]:
+async def enrich_activity_weather(
+    activity: dict[str, Any],
+    streams: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return weather/coordinate fields for a raw Strava activity dict."""
-    lat, lng = coordinates_from_activity(activity)
-    activity_date_source = (
-        activity.get("start_date_local")
-        or activity.get("startDateLocal")
-        or activity.get("start_date")
-        or activity.get("startDate")
-        or ""
-    )
-    activity_date = str(activity_date_source)[:10] if activity_date_source else ""
-    start_datetime = (
-        activity.get("start_date_local")
-        or activity.get("startDateLocal")
-        or activity.get("start_date")
-        or activity.get("startDate")
-    )
-    weather = await fetch_activity_weather(
-        lat, lng, activity_date, str(start_datetime) if start_datetime else None
-    )
+    lat, lng = coordinates_from_streams(streams)
+    if lat is None or lng is None:
+        lat, lng = coordinates_from_activity(activity)
+    weather_datetime = _activity_midpoint_datetime(activity, streams)
+    activity_date = str(weather_datetime)[:10] if weather_datetime else ""
+    weather = await fetch_activity_weather(lat, lng, activity_date, weather_datetime)
     return {
         "start_lat": lat,
         "start_lng": lng,
@@ -262,6 +348,21 @@ async def backfill_missing_ride_weather(
     for row in rows:
         lat = row.start_lat
         lng = row.start_lng
+
+        if (lat is None or lng is None) and access_token:
+            try:
+                streams = await fetch_activity_streams(
+                    access_token, row.strava_activity_id
+                )
+                stream_lat, stream_lng = coordinates_from_streams(streams)
+                lat = stream_lat if stream_lat is not None else lat
+                lng = stream_lng if stream_lng is not None else lng
+            except Exception:
+                logger.info(
+                    "Could not fetch Strava GPS stream while backfilling weather for %s",
+                    row.strava_activity_id,
+                    exc_info=True,
+                )
 
         if (lat is None or lng is None) and access_token:
             try:

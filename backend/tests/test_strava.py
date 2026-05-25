@@ -94,6 +94,18 @@ class ImportFlowHttpClient:
         return DummyResponse(404, {})
 
 
+def test_sanitize_streams_keeps_latlng_points():
+    streams = strava_router._sanitize_streams(
+        {
+            "watts": {"data": [200, "bad", 210]},
+            "latlng": {"data": [[52.52, 13.405], ["bad", 13.4], [52.53, 13.41]]},
+        }
+    )
+
+    assert streams["watts"]["data"] == [200.0, 210.0]
+    assert streams["latlng"]["data"] == [[52.52, 13.405], [52.53, 13.41]]
+
+
 @pytest.mark.asyncio
 async def test_strava_auth_redirect_contains_state(client, auth_headers):
     token = auth_headers["Authorization"].split(" ", 1)[1]

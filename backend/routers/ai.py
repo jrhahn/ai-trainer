@@ -238,7 +238,10 @@ async def analyse_activities(
     weather_by_id: dict[int, dict] = {}
     for activity in body.activities:
         activity_dict = activity.model_dump()
-        weather_fields = await enrich_activity_weather(activity_dict)
+        weather_fields = await enrich_activity_weather(
+            activity_dict,
+            streams=streams_by_id.get(str(activity.id)),
+        )
         weather_by_id[activity.id] = weather_fields
         activity_payloads.append({**activity_dict, **weather_fields})
 
