@@ -18,6 +18,13 @@ Environment variables:
 
 The script is fully idempotent — it upserts by (source_id, chunk_index)
 so it is safe to re-run without duplicating data.
+
+Maintenance rules:
+- When adding a new knowledge file to backend/knowledge/, add the corresponding
+  SEARCH_QUERIES entries below so that Semantic Scholar papers for that topic
+  are also ingested.
+- When citing a new paper in any knowledge file, add it to
+  backend/knowledge/sources.md under the appropriate topic group.
 """
 
 from __future__ import annotations
@@ -81,6 +88,46 @@ SEARCH_QUERIES = [
     "multiple transportable carbohydrates fructose glucose oxidation",
     "post exercise nutrition glycogen resynthesis protein synthesis",
     "caffeine ergogenic aid cycling time trial",
+    # Sleep and recovery
+    "sleep extension athlete performance sprint reaction time",
+    "sleep deprivation endurance performance RPE VO2max",
+    "sleep quality recovery HRV growth hormone athlete",
+    "napping daytime sleep performance endurance sport",
+    "circadian rhythm chronotype athletic performance",
+    # Tapering and peaking
+    "taper training volume reduction endurance performance",
+    "exponential taper cycling running performance meta-analysis",
+    "pre-competition taper glycogen neuromuscular performance",
+    "performance management chart CTL ATL TSB cycling",
+    "carbohydrate loading pre-race glycogen supercompensation",
+    # HRV-guided training
+    "HRV-guided training autonomic nervous system endurance",
+    "RMSSD daily monitoring training readiness athlete",
+    "heart rate variability overreaching illness prediction",
+    "parasympathetic nervous system recovery endurance training",
+    # Strength training for endurance
+    "concurrent strength endurance training interference effect",
+    "heavy resistance training cycling economy running economy",
+    "explosive strength training endurance performance neuromuscular",
+    "resistance training VO2max lactate threshold cyclists",
+    # HIIT and VO2max development
+    "4x4 interval training VO2max endurance Helgerud",
+    "short interval training VO2max development cycling",
+    "sprint interval training aerobic capacity Gibala",
+    "HIIT dose response endurance performance meta-analysis",
+    # Athlete monitoring and load management
+    "training load monitoring overtraining athlete RPE",
+    "session RPE Foster internal training load validity",
+    "acute chronic workload ratio injury risk sport",
+    "athlete wellness questionnaire subjective readiness monitoring",
+    # Masters athletes
+    "masters athlete endurance performance age decline",
+    "aging muscle power VO2max decline training older athlete",
+    "masters cycling performance longevity training adaptations",
+    # Triathlon and multisport
+    "triathlon training periodization swim bike run",
+    "brick training triathlon transition run economy",
+    "multisport training load distribution triathlon performance",
 ]
 
 S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
