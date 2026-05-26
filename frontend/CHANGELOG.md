@@ -5,6 +5,17 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.1] - 2026-05-26
+
+### Fixed
+
+- **Duplicate coach message sends** (`src/components/AIChat.tsx`) — added a synchronous
+  in-flight guard so rapid submits and StrictMode auto-send replays cannot issue duplicate
+  `/ai/ask-trainer` requests before React updates the loading state.
+
+- **AI chat duplicate-send regression coverage** (`src/components/AIChat.test.tsx`) — added
+  a StrictMode test confirming pending coach messages are auto-sent only once.
+
 ## [0.21.0] - 2026-05-24
 
 ### Added

@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -99,6 +100,22 @@ describe('AIChat', () => {
       expect(screen.getByText('What cadence should I target?')).toBeInTheDocument()
       expect(screen.getByText('Cadence of 90 rpm is ideal.')).toBeInTheDocument()
     })
+  })
+
+  it('only auto-sends a pending coach message once in StrictMode', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Let me unpack that.' })
+    setupStore({ pendingCoachMessage: 'Why was my ride so hard?' })
+
+    render(
+      <StrictMode>
+        <AIChat />
+      </StrictMode>
+    )
+
+    await waitFor(() => {
+      expect(mockAskTrainer).toHaveBeenCalledTimes(1)
+    })
+    expect(mockAskTrainer).toHaveBeenCalledWith('Why was my ride so hard?', 'token-123', expect.any(Object))
   })
 
   it('clears the input field after sending', async () => {

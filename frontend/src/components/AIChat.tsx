@@ -57,6 +57,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const sendInFlightRef = useRef(false)
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
@@ -80,7 +81,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
   const sendMessage = async (msgOverride?: string, options?: { skipAddUserMessage?: boolean }) => {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
-    if (!raw.trim() || loading) return
+    if (!raw.trim() || loading || sendInFlightRef.current) return
 
     const userMsg = raw.trim()
     const timestamp = new Date().toISOString()
@@ -92,6 +93,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     if (!options?.skipAddUserMessage) {
       addChatMessage({ role: 'user', content: userMsg, timestamp })
     }
+    sendInFlightRef.current = true
     setLoading(true)
 
     try {
@@ -131,6 +133,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         failedUserMessage: userMsg,
       })
     } finally {
+      sendInFlightRef.current = false
       setLoading(false)
     }
   }
