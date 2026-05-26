@@ -5,6 +5,20 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.1] - 2026-05-26
+
+### Fixed
+
+- **Coach chat date awareness** (`services/dates.py`, `services/ai_service.py`,
+  `services/prompts.py`) — ask-trainer prompts now include an authoritative local
+  date context for today, yesterday, and tomorrow, including weekdays and ISO dates,
+  so the coach does not infer conflicting calendar dates from model knowledge or
+  conversation history.
+
+- **Date-awareness regression coverage** (`tests/test_dates.py`,
+  `tests/test_ai_service_unit.py`) — added focused tests for the generated date
+  context and its injection into the ask-trainer system prompt.
+
 ## [0.26.0] - 2026-05-24
 
 ### Added

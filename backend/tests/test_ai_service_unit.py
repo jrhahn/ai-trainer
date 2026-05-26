@@ -2530,3 +2530,72 @@ def test_ask_trainer_system_response_rules_allow_occasionally_and_avoid_repetiti
     assert "must not appear as a default opener" in prompt_lower
     assert "do not sound templated or repetitive" in prompt_lower
     assert "you did a tough ride yesterday" in prompt_lower
+
+
+def test_ask_trainer_system_includes_authoritative_date_rules():
+    from services.prompts import ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={},
+        today="2026-05-26",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule="",
+        date_context=(
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Tuesday, May 26, 2026 (2026-05-26).\n"
+            "- Yesterday was Monday, May 25, 2026 (2026-05-25).\n"
+            "- Tomorrow is Wednesday, May 27, 2026 (2026-05-27)."
+        ),
+    )
+
+    assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in prompt
+    assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in prompt
+    assert "Treat the Current local date context above as authoritative" in prompt
+    assert "If you name a weekday, copy it from that date context" in prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_passes_precomputed_date_context(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-05-26"
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Tuesday, May 26, 2026 (2026-05-26).\n"
+            "- Yesterday was Monday, May 25, 2026 (2026-05-25).\n"
+            "- Tomorrow is Wednesday, May 27, 2026 (2026-05-27)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Use today's easy ride.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "What should I do today?",
+        plan=[],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in system_prompt
+    assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in system_prompt

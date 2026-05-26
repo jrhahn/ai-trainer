@@ -31,7 +31,7 @@ from .llm import (
     TASK_PLAN,
     get_provider,
 )  # re-exported for backward compat
-from .dates import app_today, app_today_iso
+from .dates import app_date_context, app_today, app_today_iso
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -452,6 +452,7 @@ async def ask_trainer(
     timezone_name: str | None = None,
 ) -> dict:
     today = app_today_iso(timezone_name=timezone_name)
+    date_context = app_date_context(timezone_name=timezone_name)
     last_7_days = [
         _slim_plan_entry(day) for day in plan if day.get("date", "") <= today
     ][-MAX_PLAN_DAYS_PAST:]
@@ -492,6 +493,7 @@ async def ask_trainer(
         classification=classification,
         metrics_history_section=metrics_history_section,
         race_events_section=race_events_context_section(race_events),
+        date_context=date_context,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]

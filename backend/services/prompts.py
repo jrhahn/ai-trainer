@@ -604,6 +604,7 @@ def ask_trainer_system(
     classification: dict | None = None,
     metrics_history_section: str = "",
     race_events_section: str = "",
+    date_context: str = "",
 ) -> str:
     science_section = (
         (
@@ -691,6 +692,7 @@ def ask_trainer_system(
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
         f"Today's date: {today}\n"
+        f"{date_context}\n"
         f"Athlete profile: {json.dumps(profile)}\n"
         f"{race_profile_section}"
         f"Last 7 days of training: {json.dumps(last_7_days)}\n"
@@ -718,6 +720,14 @@ def ask_trainer_system(
         'Put this reasoning in a "thinking" field — it will not be shown to the athlete.\n'
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
+        "Date awareness rules:\n"
+        "- Treat the Current local date context above as authoritative, regardless of model "
+        "knowledge or conversation history.\n"
+        "- When using words like today, tomorrow, or yesterday, anchor them to the exact dates "
+        "listed there.\n"
+        "- If you name a weekday, copy it from that date context; do not infer or recalculate it.\n"
+        "- If the athlete states a relative date that conflicts with the date context, gently "
+        "clarify using the exact date.\n"
         "Whenever the athlete requests a change to the training plan, your response MUST briefly "
         "reflect on whether the change is a good idea: acknowledge their preference warmly, give "
         "an honest assessment of the training impact (e.g. how it affects load, intensity, "
