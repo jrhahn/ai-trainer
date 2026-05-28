@@ -80,6 +80,22 @@ export function computeMatchScore(
   return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null
 }
 
+export function planForRide(
+  ride: RideMetricPoint,
+  trainingPlan: TrainingDay[]
+): Partial<TrainingDay> | null {
+  const snapshot = ride.matchedPlanSnapshot ?? null
+  const snapshotDate = typeof snapshot?.date === 'string' ? snapshot.date : null
+  const staleMatchedDate = !!ride.matchedPlanDate && ride.matchedPlanDate !== ride.activityDate
+  const staleSnapshotDate = !!snapshotDate && snapshotDate !== ride.activityDate
+
+  if (snapshot && !staleMatchedDate && !staleSnapshotDate) {
+    return snapshot
+  }
+
+  return trainingPlan.find((day) => day.date === ride.activityDate) ?? null
+}
+
 /** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
 export function buildMatchCoachPrompt(
   ride: RideMetricPoint,
@@ -359,10 +375,7 @@ export default function DashboardPage() {
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
-              const plan =
-                ride.matchedPlanSnapshot ??
-                trainingPlan.find((day) => day.date === ride.activityDate) ??
-                null
+              const plan = planForRide(ride, trainingPlan)
               const score = plan ? computeMatchScore(ride, plan) : null
               const scoreLabel =
                 score === null

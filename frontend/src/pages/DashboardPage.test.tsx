@@ -437,6 +437,45 @@ describe('DashboardPage — plan comparison row', () => {
     expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
   })
 
+  it('ignores stale matched snapshots from a different planned date', async () => {
+    const rideWithStaleSnapshot = makeRide({
+      activityDate: yesterday,
+      activityName: 'Afternoon Ride',
+      planMatchStatus: 'auto_matched',
+      matchedPlanDate: today,
+      matchedPlanSnapshot: {
+        date: today,
+        title: 'Complete Rest Day',
+        workoutType: 'rest',
+        durationMinutes: 0,
+      },
+    })
+    setupStore({
+      rideMetricsHistory: [rideWithStaleSnapshot],
+      trainingPlan: [
+        {
+          date: yesterday,
+          workoutType: 'endurance',
+          title: 'Endurance Base Ride',
+          description: 'Keep it steady',
+          durationMinutes: 90,
+          completed: true,
+        },
+        {
+          date: today,
+          workoutType: 'rest',
+          title: 'Complete Rest Day',
+          description: 'No training planned',
+          durationMinutes: 0,
+        },
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('planned:')).toBeInTheDocument()
+    expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
+  })
+
   it('shows the planned row for unmatched rides with same-day plan context', async () => {
     const restDayRide = makeRide({
       activityDate: yesterday,
