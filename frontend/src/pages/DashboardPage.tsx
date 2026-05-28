@@ -359,7 +359,10 @@ export default function DashboardPage() {
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
-              const plan = ride.matchedPlanSnapshot ?? null
+              const plan =
+                ride.matchedPlanSnapshot ??
+                trainingPlan.find((day) => day.date === ride.activityDate) ??
+                null
               const score = plan ? computeMatchScore(ride, plan) : null
               const scoreLabel =
                 score === null
