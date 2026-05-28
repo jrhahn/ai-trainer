@@ -390,7 +390,7 @@ describe('DashboardPage — plan comparison row', () => {
     expect(['Perfect', 'Solid', 'Close', 'Off plan', 'Needs work', '?']).toContain(badge.textContent)
   })
 
-  it('does not show plan row for an unmatched ride', async () => {
+  it('shows when no planned workout can be found for an activity date', async () => {
     const unmatchedRide = makeRide({
       activityDate: yesterday,
       activityName: 'Free Ride',
@@ -401,7 +401,9 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Free Ride')).toBeInTheDocument()
-    expect(screen.queryByText('planned:')).not.toBeInTheDocument()
+    expect(screen.getByText('planned:')).toBeInTheDocument()
+    expect(screen.getByText('No planned workout found')).toBeInTheDocument()
+    expect(screen.queryByTitle('Ask coach about this match')).not.toBeInTheDocument()
   })
 
   it('falls back to the same-date training plan when the ride has no matched snapshot', async () => {

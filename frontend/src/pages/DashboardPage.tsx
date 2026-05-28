@@ -443,14 +443,20 @@ export default function DashboardPage() {
                     )}
                   </div>
                   {/* Plan comparison row */}
-                  {plan && (
-                    <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                      <span className="text-xs text-gray-400">planned:</span>
-                      <span className="text-xs text-gray-600 font-medium truncate flex-1">
-                        {plan.title ?? plan.workoutType}
-                        {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
-                        {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
-                      </span>
+                  <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
+                    <span className="text-xs text-gray-400">planned:</span>
+                    <span className="text-xs text-gray-600 font-medium truncate flex-1">
+                      {plan ? (
+                        <>
+                          {plan.title ?? plan.workoutType}
+                          {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
+                          {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
+                        </>
+                      ) : (
+                        'No planned workout found'
+                      )}
+                    </span>
+                    {plan && (
                       <button
                         onClick={() =>
                           setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
@@ -460,8 +466,8 @@ export default function DashboardPage() {
                       >
                         {scoreLabel}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}

@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.5] - 2026-05-28
+
+### Fixed
+
+- **Explicit missing-plan state for activities** (`src/pages/DashboardPage.tsx`) —
+  every recent activity now renders a `planned:` row; if neither a valid persisted
+  snapshot nor a same-date training-plan entry exists, the row says
+  `No planned workout found` instead of silently omitting planned context.
+
+- **Missing-plan regression coverage** (`src/pages/DashboardPage.test.tsx`) — updated
+  dashboard coverage to confirm unmatched activities without same-date plan context
+  still show an explicit planned-state row.
+
 ## [0.21.4] - 2026-05-28
 
 ### Fixed
