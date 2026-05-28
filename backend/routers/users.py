@@ -27,7 +27,10 @@ from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO
 from services.dates import app_today_iso
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
-from services.ride_matching import review_matched_ride_and_adapt
+from services.ride_matching import (
+    apply_ride_plan_matches,
+    review_matched_ride_and_adapt,
+)
 from services.weather_service import backfill_missing_ride_weather
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -448,6 +451,15 @@ async def get_ride_metrics_history(
         )
 
     rides = await crud.get_ride_metrics_history(db, current_user.id, limit=90)
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    if rides and existing_plan is not None:
+        await apply_ride_plan_matches(
+            db,
+            current_user.id,
+            existing_plan.plan,
+            [ride.strava_activity_id for ride in rides],
+        )
+
     # get_ride_metrics_history returns newest-first; reverse for chronological charting
     rides = list(reversed(rides))
     return schemas.RideMetricHistoryResponse(

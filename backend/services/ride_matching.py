@@ -39,6 +39,14 @@ def _plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
     }
 
 
+def _all_plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
+    return {
+        str(day["date"]): day
+        for day in (plan or [])
+        if isinstance(day, dict) and day.get("date")
+    }
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -90,10 +98,12 @@ async def apply_ride_plan_matches(
         return []
 
     plan_by_date = _plan_days_by_date(plan)
+    display_plan_by_date = _all_plan_days_by_date(plan)
     auto_matched: list[models.RideMetric] = []
 
     for activity_date in sorted({ride.activity_date for ride in rides}):
         plan_day = plan_by_date.get(activity_date)
+        display_plan_day = display_plan_by_date.get(activity_date)
         date_rides = await crud.get_ride_metrics_by_date(db, user_id, activity_date)
         if not date_rides:
             continue
@@ -109,13 +119,34 @@ async def apply_ride_plan_matches(
         )
         if manual_match is not None:
             for ride in date_rides:
-                if ride.strava_activity_id != manual_match.strava_activity_id:
-                    await crud.update_ride_match(db, ride, status=MATCH_UNMATCHED)
+                if ride.strava_activity_id == manual_match.strava_activity_id:
+                    await crud.update_ride_match(
+                        db,
+                        ride,
+                        status=MATCH_MANUAL,
+                        matched_plan_date=activity_date if display_plan_day else None,
+                        matched_plan_snapshot=display_plan_day,
+                        matched_at=ride.matched_at or _utcnow(),
+                    )
+                else:
+                    await crud.update_ride_match(
+                        db,
+                        ride,
+                        status=MATCH_UNMATCHED,
+                        matched_plan_date=activity_date if display_plan_day else None,
+                        matched_plan_snapshot=display_plan_day,
+                    )
             continue
 
         if plan_day is None:
             for ride in date_rides:
-                await crud.update_ride_match(db, ride, status=MATCH_UNMATCHED)
+                await crud.update_ride_match(
+                    db,
+                    ride,
+                    status=MATCH_UNMATCHED,
+                    matched_plan_date=activity_date if display_plan_day else None,
+                    matched_plan_snapshot=display_plan_day,
+                )
             continue
 
         if len(date_rides) == 1:
