@@ -5,6 +5,17 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.2] - 2026-05-28
+
+### Fixed
+
+- **Activities show planned context** (`src/pages/DashboardPage.tsx`) — recent activities
+  now render the `planned:` row whenever the backend provides a matched plan snapshot,
+  including unmatched activities on planned rest days.
+
+- **Dashboard regression coverage** (`src/pages/DashboardPage.test.tsx`) — added coverage
+  for unmatched activities that should still show what was planned.
+
 ## [0.21.1] - 2026-05-26
 
 ### Fixed
