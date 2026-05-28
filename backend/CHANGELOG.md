@@ -5,6 +5,19 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.2] - 2026-05-28
+
+### Fixed
+
+- **Ride-to-plan date matching** (`services/ride_matching.py`, `routers/users.py`) —
+  ride history now re-applies plan matching from each activity's own `activity_date`, so
+  activities imported or analyzed later cannot keep a planned-day snapshot from the
+  processing date.
+
+- **Stale plan snapshot cleanup** (`services/ride_matching.py`) — mismatched stored plan
+  snapshots are cleared when no plan entry exists for the actual activity date, while
+  same-day rest-day context is preserved for display.
+
 ## [0.26.1] - 2026-05-26
 
 ### Fixed

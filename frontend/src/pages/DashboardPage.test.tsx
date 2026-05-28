@@ -404,6 +404,25 @@ describe('DashboardPage — plan comparison row', () => {
     expect(screen.queryByText('planned:')).not.toBeInTheDocument()
   })
 
+  it('shows the planned row for unmatched rides with same-day plan context', async () => {
+    const restDayRide = makeRide({
+      activityDate: yesterday,
+      activityName: 'Bonus Spin',
+      planMatchStatus: 'unmatched',
+      matchedPlanDate: yesterday,
+      matchedPlanSnapshot: {
+        title: 'Complete Rest Day',
+        workoutType: 'rest',
+        durationMinutes: 0,
+      },
+    })
+    setupStore({ rideMetricsHistory: [restDayRide] })
+    renderDashboard()
+
+    expect(await screen.findByText('planned:')).toBeInTheDocument()
+    expect(screen.getByText(/Complete Rest Day/)).toBeInTheDocument()
+  })
+
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {
     const matchedRide = makeRide({
       activityDate: yesterday,
