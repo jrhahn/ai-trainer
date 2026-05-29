@@ -5,16 +5,53 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.5] - 2026-05-28
+
+### Fixed
+
+- **Explicit missing-plan state for activities** (`src/pages/DashboardPage.tsx`) —
+  every recent activity now renders a `planned:` row; if neither a valid persisted
+  snapshot nor a same-date training-plan entry exists, the row says
+  `No planned workout found` instead of silently omitting planned context.
+
+- **Missing-plan regression coverage** (`src/pages/DashboardPage.test.tsx`) — updated
+  dashboard coverage to confirm unmatched activities without same-date plan context
+  still show an explicit planned-state row.
+
+## [0.21.4] - 2026-05-28
+
+### Fixed
+
+- **Stale planned snapshot guard** (`src/pages/DashboardPage.tsx`) — activities now ignore
+  persisted matched-plan snapshots whose `matchedPlanDate` or snapshot `date` differs from
+  the activity's own date, then fall back to the same-date training plan entry.
+
+- **Regression coverage for stale snapshots** (`src/pages/DashboardPage.test.tsx`) — added
+  coverage for the case where an older activity carries today's planned rest-day snapshot.
+
+## [0.21.3] - 2026-05-28
+
+### Fixed
+
+- **Same-date plan fallback for activities** (`src/pages/DashboardPage.tsx`) — when an
+  activity has no persisted matched-plan snapshot, the dashboard now falls back to the
+  current training-plan entry with the same `activityDate`, so every visible activity can
+  show its planned context when that plan day exists.
+
+- **Fallback date-safety coverage** (`src/pages/DashboardPage.test.tsx`) — added a
+  regression test ensuring the fallback uses the activity date and does not attach today's
+  plan to an older activity.
+
 ## [0.21.2] - 2026-05-28
 
 ### Fixed
 
-- **Activities show planned context** (`src/pages/DashboardPage.tsx`) — recent activities
-  now render the `planned:` row whenever the backend provides a matched plan snapshot,
-  including unmatched activities on planned rest days.
+- **Activities planned row** (`src/pages/DashboardPage.tsx`) — activities now render the
+  planned row from the backend-provided same-day plan snapshot, including unmatched rides
+  on planned rest days.
 
 - **Dashboard regression coverage** (`src/pages/DashboardPage.test.tsx`) — added coverage
-  for unmatched activities that should still show what was planned.
+  for unmatched activities that still have valid same-day planned context.
 
 ## [0.21.1] - 2026-05-26
 
