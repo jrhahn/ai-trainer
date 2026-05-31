@@ -384,6 +384,7 @@ class RideMetric(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    label_override: Mapped[str | None] = mapped_column(String(50), nullable=True)
     coach_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
