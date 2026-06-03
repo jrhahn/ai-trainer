@@ -5,6 +5,14 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.1] - 2026-06-03
+
+### Fixed
+
+- **Missing Alembic revision restored** (`alembic/versions/20260530_000001_add_ride_label_override.py`)
+  — restored the `20260530_000001` migration so deployed databases stamped with that
+  revision can resolve the migration graph and continue upgrading normally.
+
 ## [0.27.0] - 2026-06-03
 
 ### Added
