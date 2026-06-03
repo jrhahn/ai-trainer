@@ -580,6 +580,30 @@ async def ask_trainer(
                     user_note=note_text,
                 )
 
+    # --- Phase 7b: Persist AI-issued label corrections ---
+    ride_label_update = result.pop("ride_label_update", None)
+    ride_label_updates: list[dict] = []
+    if ride_label_update and isinstance(ride_label_update, dict):
+        label_date = ride_label_update.get("activity_date")
+        label_text = ride_label_update.get("label")
+        if label_date and label_text:
+            target_metrics = await crud.get_ride_metrics_by_date(
+                db, current_user.id, label_date
+            )
+            if len(target_metrics) == 1:
+                await crud.update_ride_metric_notes(
+                    db,
+                    current_user.id,
+                    target_metrics[0].strava_activity_id,
+                    label_override=label_text,
+                )
+                ride_label_updates = [
+                    {
+                        "stravaActivityId": target_metrics[0].strava_activity_id,
+                        "labelOverride": label_text,
+                    }
+                ]
+
     # Persist user and assistant chat messages
     await crud.create_chat_message(
         db,
@@ -632,6 +656,9 @@ async def ask_trainer(
     # use them as the authoritative sources list when RAG context was retrieved.
     if rag_sources:
         result["sources"] = rag_sources
+
+    if ride_label_updates:
+        result["ride_label_updates"] = ride_label_updates
 
     return schemas.AskTrainerResponse.model_validate(result)
 

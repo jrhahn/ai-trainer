@@ -62,10 +62,39 @@ npm run dev
 
 The app will be available at <http://localhost:5173>.
 
+## How it works
+
+```
+Strava API ──► FastAPI backend ──► AI coaching response
+                    │
+                    ▼
+           pgvector (PostgreSQL)
+           cycling science knowledge base
+           (RAG via text-embedding-3-small)
+```
+
+The coaching assistant combines two sources of context before calling the LLM:
+
+1. **Retrieval-Augmented Generation (RAG)** — a cycling science knowledge base
+   (`backend/knowledge/`) is chunked, embedded with `text-embedding-3-small`, and
+   stored in PostgreSQL via `pgvector`. At query time the most relevant chunks are
+   retrieved by cosine similarity and injected into the prompt.
+
+2. **Athlete context** — real activity data pulled from the Strava API (power,
+   heart rate, elevation, cadence streams) is analysed and summarised alongside
+   the user's training plan and feedback history.
+
+The LLM (OpenAI GPT-4o or Google Gemini, switchable via `AI_PROVIDER` env var)
+receives both sources and returns structured coaching advice. The prompt
+engineering layer lives in `backend/services/prompts.py`.
+
+See [`docs/update_rag.md`](docs/update_rag.md) for how to refresh the knowledge base.
+
 ## Features
 
 - **AI-powered training plans** — generate and adapt cycling plans via OpenAI or Google Gemini
 - **Strava integration** — connect your Strava account to pull in real activity data
+- **RAG knowledge base** — responses grounded in cycling science literature via pgvector
 - **Local-first** — all user data (profile, plan, feedback) persisted in browser `localStorage` via Zustand
 
 ## Building for production

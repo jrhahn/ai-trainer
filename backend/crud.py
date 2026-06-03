@@ -622,8 +622,9 @@ async def update_ride_metric_notes(
     *,
     coach_note: str | None = None,
     user_note: str | None = None,
+    label_override: str | None = None,
 ) -> models.RideMetric | None:
-    """Partially update coach_note and/or user_note on a RideMetric row.
+    """Partially update coach_note, user_note, and/or label_override on a RideMetric row.
 
     Only overwrites fields whose values are explicitly provided (not None).
     Returns the updated row, or None if not found.
@@ -640,6 +641,8 @@ async def update_ride_metric_notes(
         row.coach_note = coach_note
     if user_note is not None:
         row.user_note = user_note
+    if label_override is not None:
+        row.label_override = label_override
     return row
 
 

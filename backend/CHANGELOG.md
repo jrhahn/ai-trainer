@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.3] - 2026-06-01
+
+### Added
+
+- **Strava API 2026 impact note** (`docs/strava-api-2026-impact.md`) — summarizes
+  Strava's June 2026 developer-program changes, the app's current Strava API usage,
+  policy risks around AI processing, and migration action points for the 2027 base
+  URL and OAuth revoke changes.
+
 ## [0.26.2] - 2026-05-28
 
 ### Fixed

@@ -495,6 +495,7 @@ describe('DashboardPage — plan comparison row', () => {
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
     expect(screen.getByText(/Complete Rest Day/)).toBeInTheDocument()
+    expect(screen.getByTitle('Ask coach about this match')).toHaveTextContent('OK')
   })
 
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {
