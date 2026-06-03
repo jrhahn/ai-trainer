@@ -282,11 +282,88 @@ export async function estimateFTP(
 export async function uploadFitFile(
   token: string,
   file: File,
-): Promise<{ status: string; activityId: string; sportType: string; durationMinutes: number; averagePower?: number; averageHeartRate?: number }> {
+): Promise<FitUploadSummary> {
   const { API_BASE } = await import('./api')
   const formData = new FormData()
   formData.append('file', file)
   const response = await fetch(`${API_BASE}/users/me/upload-fit`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  if (!response.ok) {
+    let message = 'Upload failed'
+    try {
+      const data = await response.json() as { detail?: string }
+      if (data.detail) message = data.detail
+    } catch { /* ignore */ }
+    throw new Error(message)
+  }
+  return normalizeFitUploadSummary(await response.json())
+}
+
+export interface FitUploadSummary {
+  status: string
+  activityId: string
+  sportType: string
+  durationMinutes: number
+  averagePower?: number
+  averageHeartRate?: number
+}
+
+export interface FitUploadFileResult {
+  filename: string
+  status: 'imported' | 'skipped' | 'failed'
+  message: string
+  activityId?: string
+  sportType?: string
+  durationMinutes?: number
+  averagePower?: number
+  averageHeartRate?: number
+}
+
+export interface FitBulkUploadResponse {
+  status: string
+  total: number
+  imported: number
+  skipped: number
+  failed: number
+  files: FitUploadFileResult[]
+}
+
+interface RawFitUploadSummary {
+  status: string
+  activityId?: string
+  activity_id?: string
+  sportType?: string
+  sport_type?: string
+  durationMinutes?: number
+  duration_minutes?: number
+  averagePower?: number
+  average_power?: number
+  averageHeartRate?: number
+  average_heart_rate?: number
+}
+
+function normalizeFitUploadSummary(raw: RawFitUploadSummary): FitUploadSummary {
+  return {
+    status: raw.status,
+    activityId: raw.activityId ?? raw.activity_id ?? '',
+    sportType: raw.sportType ?? raw.sport_type ?? '',
+    durationMinutes: raw.durationMinutes ?? raw.duration_minutes ?? 0,
+    averagePower: raw.averagePower ?? raw.average_power,
+    averageHeartRate: raw.averageHeartRate ?? raw.average_heart_rate,
+  }
+}
+
+export async function uploadFitFiles(
+  token: string,
+  files: File[],
+): Promise<FitBulkUploadResponse> {
+  const { API_BASE } = await import('./api')
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  const response = await fetch(`${API_BASE}/users/me/upload-fit/bulk`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,

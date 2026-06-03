@@ -5,6 +5,21 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-06-03
+
+### Added
+
+- **Bulk FIT upload UI** (`src/components/FitFileUpload.tsx`) — the dashboard uploader
+  now accepts multiple `.fit` files in one selection and reports imported, skipped, and
+  failed file counts with per-file details.
+
+- **Bulk FIT upload service** (`src/services/user.ts`) — added `uploadFitFiles()` for
+  `POST /users/me/upload-fit/bulk` and normalized the legacy single-file upload response
+  so frontend callers receive camelCase fields consistently.
+
+- **FIT upload service coverage** (`src/services/user.test.ts`) — added tests for
+  single-file response normalization and multi-file bulk submission.
+
 ## [0.21.5] - 2026-05-28
 
 ### Fixed
