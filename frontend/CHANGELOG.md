@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FIT upload service coverage** (`src/services/user.test.ts`) — added tests for
   single-file response normalization and multi-file bulk submission.
 
+## [0.21.6] - 2026-05-29
+
+### Fixed
+
+- **Rest-day activity match badges** (`src/pages/DashboardPage.tsx`) — planned rest
+  days and no-target plan rows now avoid unknown `?` badges: missing activity/power
+  data is marked `OK`, low-TSS efforts are marked `Recovery`, medium-TSS efforts warn,
+  and high-TSS efforts are marked as too much.
+
+- **Rest-day badge coverage** (`src/pages/DashboardPage.summary.test.ts`,
+  `src/pages/DashboardPage.test.tsx`) — added focused coverage for OK, recovery,
+  warning, and high-load rest-day scoring states.
+
 ## [0.21.5] - 2026-05-28
 
 ### Fixed

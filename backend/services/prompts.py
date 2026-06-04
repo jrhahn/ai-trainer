@@ -561,6 +561,15 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Also write "description" using the athlete\'s actual FTP/threshold HR to state '
         "exact power/HR targets — never write percentages alone."
     )
+    _ride_label_rule = (
+        '- "ride_label_update": an object to correct the displayed compliance badge for a '
+        "completed activity. Use this when the athlete asks to fix, correct, or change the "
+        "label shown on a past activity (e.g., 'Needs work', 'Too much'). "
+        'Shape: {"activity_date": "YYYY-MM-DD", "label": "<new label>"}. '
+        'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
+        '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
+        "Pick the label that best reflects what actually happened."
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
@@ -574,7 +583,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
             f"{_rich_description_rule} "
-            f"{_intervals_rule}"
+            f"{_intervals_rule} "
+            f"{_ride_label_rule}"
         )
     return (
         '- "planUpdates": an array of training day updates (optional). Only include this '
@@ -586,7 +596,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
         f"{_rich_description_rule} "
-        f"{_intervals_rule}"
+        f"{_intervals_rule} "
+        f"{_ride_label_rule}"
     )
 
 

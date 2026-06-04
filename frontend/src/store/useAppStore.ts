@@ -229,6 +229,7 @@ export interface RideMetricPoint {
   normalizedPowerW?: number
   coachNote?: string | null
   userNote?: string | null
+  labelOverride?: string | null
   planMatchStatus?: 'unmatched' | 'auto_matched' | 'ambiguous' | 'manual_matched'
   matchedPlanDate?: string | null
   matchedPlanSnapshot?: Partial<TrainingDay> | null
@@ -289,6 +290,7 @@ interface AppState {
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
+  updateRideMetricLabel: (stravaActivityId: number, labelOverride: string) => void
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
   toggleExpertMode: () => void
@@ -393,6 +395,14 @@ export const useAppStore = create<AppState>()(
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
+    updateRideMetricLabel: (stravaActivityId, labelOverride) =>
+      set((state) => ({
+        rideMetricsHistory: state.rideMetricsHistory.map((ride) =>
+          ride.stravaActivityId === stravaActivityId
+            ? { ...ride, labelOverride }
+            : ride
+        ),
+      })),
     addPendingFeedbackRide: (id) =>
       set((state) => ({
         pendingFeedbackRideIds: state.pendingFeedbackRideIds.includes(id)

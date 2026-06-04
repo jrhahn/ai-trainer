@@ -53,11 +53,37 @@ function WeatherIcon({ condition }: { condition?: string | null }) {
   return <Cloud size={12} className="text-gray-400" />
 }
 
+function isRestOrNoTargetPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  return workoutType === 'rest' || (!plan.durationMinutes && !plan.targetPower)
+}
+
+/** Non-cycling plans (strength, yoga, swim, etc.) that have no power target. */
+function isStrengthPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  return workoutType === 'strength' && !plan.targetPower
+}
+
 /** Returns 0-100 match score, or null when not enough data to compare. */
 export function computeMatchScore(
   ride: RideMetricPoint,
   plan: Partial<TrainingDay>
 ): number | null {
+  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (!ride.durationSeconds || actualPower == null || ride.tss == null) return 90
+    if (ride.tss <= 30) return 80
+    if (ride.tss <= 65) return 55
+    return 20
+  }
+
+  // Strength/non-power plans: score purely on duration completion (0–100 %).
+  if (isStrengthPlan(plan)) {
+    if (!ride.durationSeconds || !plan.durationMinutes) return 90
+    return Math.min(100, Math.round((ride.durationSeconds / 60 / plan.durationMinutes) * 100))
+  }
+
   const parts: number[] = []
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
@@ -65,7 +91,6 @@ export function computeMatchScore(
     parts.push(Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200)))
   }
 
-  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
   if (actualPower != null && plan.targetPower) {
     const { low, high } = plan.targetPower
     if (actualPower >= low && actualPower <= high) {
@@ -78,6 +103,64 @@ export function computeMatchScore(
   }
 
   return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null
+}
+
+export function matchScoreLabel(score: number | null, plan: Partial<TrainingDay>, labelOverride?: string | null): string {
+  if (labelOverride) return labelOverride
+
+  if (score === null) return '?'
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (score >= 90) return 'OK'
+    if (score >= 75) return 'Recovery'
+    if (score >= 40) return 'Warning'
+    return 'Too much'
+  }
+
+  if (isStrengthPlan(plan)) {
+    if (score >= 85) return 'Done'
+    if (score >= 55) return 'Partial'
+    if (score >= 25) return 'Short'
+    return 'Skipped'
+  }
+
+  return score >= 90
+    ? 'Perfect'
+    : score >= 75
+      ? 'Solid'
+      : score >= 60
+        ? 'Close'
+        : score >= 40
+          ? 'Off plan'
+          : 'Needs work'
+}
+
+export function matchScoreBadgeStyle(score: number | null, plan: Partial<TrainingDay>): string {
+  if (score === null) return 'bg-gray-100 text-gray-500'
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (score >= 90) return 'bg-green-100 text-green-700'
+    if (score >= 75) return 'bg-lime-100 text-lime-700'
+    if (score >= 40) return 'bg-amber-100 text-amber-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  if (isStrengthPlan(plan)) {
+    if (score >= 85) return 'bg-green-100 text-green-700'
+    if (score >= 55) return 'bg-amber-100 text-amber-700'
+    if (score >= 25) return 'bg-orange-100 text-orange-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  return score >= 90
+    ? 'bg-green-100 text-green-700'
+    : score >= 75
+      ? 'bg-emerald-100 text-emerald-700'
+      : score >= 60
+        ? 'bg-amber-100 text-amber-700'
+        : score >= 40
+          ? 'bg-orange-100 text-orange-700'
+          : 'bg-red-100 text-red-700'
 }
 
 export function planForRide(
@@ -377,30 +460,8 @@ export default function DashboardPage() {
             {recentRides.map((ride) => {
               const plan = planForRide(ride, trainingPlan)
               const score = plan ? computeMatchScore(ride, plan) : null
-              const scoreLabel =
-                score === null
-                  ? '?'
-                  : score >= 90
-                    ? 'Perfect'
-                    : score >= 75
-                      ? 'Solid'
-                      : score >= 60
-                        ? 'Close'
-                        : score >= 40
-                          ? 'Off plan'
-                          : 'Needs work'
-              const scoreBadgeStyle =
-                score === null
-                  ? 'bg-gray-100 text-gray-500'
-                  : score >= 90
-                    ? 'bg-green-100 text-green-700'
-                    : score >= 75
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : score >= 60
-                        ? 'bg-amber-100 text-amber-700'
-                        : score >= 40
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'bg-red-100 text-red-700'
+              const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
+              const scoreBadgeStyle = plan ? matchScoreBadgeStyle(score, plan) : 'bg-gray-100 text-gray-500'
               return (
                 <div
                   key={ride.stravaActivityId}

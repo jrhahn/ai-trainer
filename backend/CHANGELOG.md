@@ -30,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bulk FIT contract coverage** (`tests/test_contract.py`) — added API tests for batch
   success, duplicate skipping, ride metric creation, and partial failure handling.
 
+## [0.26.3] - 2026-06-01
+
+### Added
+
+- **Strava API 2026 impact note** (`docs/strava-api-2026-impact.md`) — summarizes
+  Strava's June 2026 developer-program changes, the app's current Strava API usage,
+  policy risks around AI processing, and migration action points for the 2027 base
+  URL and OAuth revoke changes.
+
 ## [0.26.2] - 2026-05-28
 
 ### Fixed

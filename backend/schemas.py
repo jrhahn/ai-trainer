@@ -459,10 +459,16 @@ class AnalyseActivitiesResponse(CamelModel):
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
+class RideLabelUpdateSchema(CamelModel):
+    strava_activity_id: int
+    label_override: str
+
+
 class AskTrainerResponse(CamelModel):
     response: str
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     sources: Optional[list[Any]] = None
+    ride_label_updates: Optional[list[RideLabelUpdateSchema]] = None
 
 
 class TrainingDaySchema(CamelModel):
@@ -632,6 +638,7 @@ class RideMetricSchema(CamelModel):
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
+    label_override: Optional[str] = None
     plan_match_status: str = "unmatched"
     matched_plan_date: Optional[str] = None
     matched_plan_snapshot: Optional[Any] = None

@@ -39,10 +39,16 @@ interface BackendAnalyseActivitiesResult {
   plan_updates?: PlanDayUpdate[]
 }
 
+export interface RideLabelUpdate {
+  stravaActivityId: number
+  labelOverride: string
+}
+
 export interface AskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
+  rideLabelUpdates?: RideLabelUpdate[]
 }
 
 interface BackendAskTrainerResult {
@@ -50,6 +56,8 @@ interface BackendAskTrainerResult {
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
+  rideLabelUpdates?: RideLabelUpdate[]
+  ride_label_updates?: RideLabelUpdate[]
 }
 
 export const MAX_CONVERSATION_HISTORY = 20
@@ -112,6 +120,7 @@ export async function askTrainer(
     response: result.response,
     planUpdates: result.planUpdates ?? result.plan_updates,
     sources: result.sources,
+    rideLabelUpdates: result.rideLabelUpdates ?? result.ride_label_updates,
   }
 }
 
