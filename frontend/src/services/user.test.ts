@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
-vi.mock('./api', () => ({ apiFetch: mockApiFetch }))
+vi.mock('./api', () => ({ API_BASE: '/api/v1', apiFetch: mockApiFetch }))
 
 import {
   fetchCurrentUser,
@@ -20,6 +20,8 @@ import {
   deleteCurrentUser,
   recalculateMetrics,
   estimateFTP,
+  uploadFitFile,
+  uploadFitFiles,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -35,6 +37,7 @@ function makeDay(date: string): TrainingDay {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubGlobal('fetch', vi.fn())
 })
 
 describe('fetchCurrentUser', () => {
@@ -365,6 +368,75 @@ describe('estimateFTP', () => {
       method: 'POST',
       body: { maxHeartRate: null, restingHeartRate: null },
     })
+  })
+})
+
+describe('fit uploads', () => {
+  it('normalizes the legacy single-file upload response', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'ok',
+        activity_id: 'activity-1',
+        sport_type: 'cycling',
+        duration_minutes: 75,
+        average_power: 215,
+        average_heart_rate: 151,
+      }),
+    } as Response)
+
+    const result = await uploadFitFile(
+      'tok-fit',
+      new File(['fit'], 'ride.fit', { type: 'application/octet-stream' }),
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      activityId: 'activity-1',
+      sportType: 'cycling',
+      durationMinutes: 75,
+      averagePower: 215,
+      averageHeartRate: 151,
+    })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer tok-fit' },
+      body: expect.any(FormData),
+    })
+  })
+
+  it('posts multiple files to the bulk upload endpoint', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'partial',
+        total: 2,
+        imported: 1,
+        skipped: 1,
+        failed: 0,
+        files: [
+          { filename: 'one.fit', status: 'imported', message: 'Imported FIT activity' },
+          { filename: 'two.fit', status: 'skipped', message: 'Already imported' },
+        ],
+      }),
+    } as Response)
+
+    const result = await uploadFitFiles('tok-fit', [
+      new File(['one'], 'one.fit'),
+      new File(['two'], 'two.fit'),
+    ])
+
+    expect(result.imported).toBe(1)
+    expect(result.skipped).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit/bulk', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer tok-fit' },
+      body: expect.any(FormData),
+    })
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect((request.body as FormData).getAll('files')).toHaveLength(2)
   })
 })
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { splitTrainingSummary, formatDuration, computeMatchScore, buildMatchCoachPrompt } from './DashboardPage'
+import {
+  splitTrainingSummary,
+  formatDuration,
+  computeMatchScore,
+  matchScoreLabel,
+  matchScoreBadgeStyle,
+  buildMatchCoachPrompt,
+} from './DashboardPage'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 
 describe('formatDuration', () => {
@@ -120,8 +127,12 @@ function makeRideForScore(overrides: Partial<RideMetricPoint> = {}): RideMetricP
 }
 
 describe('computeMatchScore', () => {
-  it('returns null when ride has no duration and plan has no power target', () => {
-    expect(computeMatchScore(makeRideForScore(), {})).toBeNull()
+  it('rates a no-target plan as OK when the activity has no duration or power', () => {
+    const score = computeMatchScore(makeRideForScore(), {})
+
+    expect(score).toBe(90)
+    expect(matchScoreLabel(score, {})).toBe('OK')
+    expect(matchScoreBadgeStyle(score, {})).toContain('bg-green-100')
   })
 
   it('returns 100 when duration matches exactly and power is in zone', () => {
@@ -167,6 +178,33 @@ describe('computeMatchScore', () => {
   it('falls back to avgPowerW when normalizedPowerW is absent', () => {
     const ride = makeRideForScore({ avgPowerW: 300, durationSeconds: 60 * 60 })
     expect(computeMatchScore(ride, basePlan)).toBe(100)
+  })
+
+  it('marks a low-TSS rest-day activity as recovery effort', () => {
+    const plan: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 0 }
+    const score = computeMatchScore(makeRideForScore({ durationSeconds: 30 * 60, normalizedPowerW: 120, tss: 18 }), plan)
+
+    expect(score).toBe(80)
+    expect(matchScoreLabel(score, plan)).toBe('Recovery')
+    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-lime-100')
+  })
+
+  it('marks a medium-TSS rest-day activity as a warning', () => {
+    const plan: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 0 }
+    const score = computeMatchScore(makeRideForScore({ durationSeconds: 60 * 60, normalizedPowerW: 180, tss: 48 }), plan)
+
+    expect(score).toBe(55)
+    expect(matchScoreLabel(score, plan)).toBe('Warning')
+    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-amber-100')
+  })
+
+  it('marks a high-TSS rest-day activity as too much', () => {
+    const plan: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 0 }
+    const score = computeMatchScore(makeRideForScore({ durationSeconds: 2 * 60 * 60, normalizedPowerW: 240, tss: 95 }), plan)
+
+    expect(score).toBe(20)
+    expect(matchScoreLabel(score, plan)).toBe('Too much')
+    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-red-100')
   })
 })
 

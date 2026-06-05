@@ -34,6 +34,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setCoachMemory,
     clearChatHistory,
     updateTrainingDay,
+    updateRideMetricLabel,
     pendingCoachMessage,
     setPendingCoachMessage,
   } = useAppStore(
@@ -47,6 +48,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
       updateTrainingDay: s.updateTrainingDay,
+      updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
       setPendingCoachMessage: s.setPendingCoachMessage,
     }))
@@ -106,6 +108,12 @@ export default function AIChat({ contextWorkout, className }: Props) {
           updateTrainingDay(date, fields)
         }
         planUpdateCount = result.planUpdates.length
+      }
+
+      if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {
+        for (const labelUpdate of result.rideLabelUpdates) {
+          updateRideMetricLabel(labelUpdate.stravaActivityId, labelUpdate.labelOverride)
+        }
       }
 
       addChatMessage({

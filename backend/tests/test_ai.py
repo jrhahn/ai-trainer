@@ -1167,7 +1167,9 @@ async def test_ride_metrics_history_backfills_missing_planned_workout(
 
 
 @pytest.mark.asyncio
-async def test_ride_metrics_history_includes_planned_rest_day(client, auth_headers):
+async def test_ride_metrics_history_clears_processing_day_plan_mismatch(
+    client, auth_headers
+):
     import crud
     from auth import decode_token
     from tests.conftest import TestSessionLocal
@@ -1180,30 +1182,92 @@ async def test_ride_metrics_history_includes_planned_rest_day(client, auth_heade
             user_id,
             [
                 {
-                    "date": "2026-05-08",
+                    "date": "2026-05-28",
                     "workoutType": "rest",
-                    "title": "Rest Day",
+                    "title": "Complete Rest Day",
                     "description": "No training planned",
                     "durationMinutes": 0,
                 }
             ],
         )
-        await crud.upsert_ride_metric(
+        ride = await crud.upsert_ride_metric(
             db,
             user_id,
             strava_activity_id=61003,
-            activity_date="2026-05-08",
+            activity_date="2026-05-27",
             sport_type="Ride",
-            activity_name="Bonus Spin",
-            duration_seconds=1800,
+            activity_name="Afternoon Ride",
+            duration_seconds=7680,
+        )
+        await crud.update_ride_match(
+            db,
+            ride,
+            status="auto_matched",
+            matched_plan_date="2026-05-28",
+            matched_plan_snapshot={
+                "date": "2026-05-28",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
         )
         await db.commit()
 
     history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61003)
+    assert ride["activityDate"] == "2026-05-27"
     assert ride["planMatchStatus"] == "unmatched"
-    assert ride["matchedPlanDate"] == "2026-05-08"
-    assert ride["matchedPlanSnapshot"]["title"] == "Rest Day"
+    assert ride["matchedPlanDate"] is None
+    assert ride["matchedPlanSnapshot"] is None
+
+
+@pytest.mark.asyncio
+async def test_ride_metrics_history_uses_activity_date_for_rest_day_context(
+    client, auth_headers
+):
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-27",
+                    "workoutType": "rest",
+                    "title": "Complete Rest Day",
+                    "description": "No training planned",
+                    "durationMinutes": 0,
+                },
+                {
+                    "date": "2026-05-28",
+                    "workoutType": "recovery",
+                    "title": "Active Recovery Spin",
+                    "description": "Easy spin",
+                    "durationMinutes": 45,
+                },
+            ],
+        )
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=61004,
+            activity_date="2026-05-27",
+            sport_type="Ride",
+            activity_name="Afternoon Ride",
+            duration_seconds=7680,
+        )
+        await db.commit()
+
+    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61004)
+    assert ride["planMatchStatus"] == "unmatched"
+    assert ride["matchedPlanDate"] == "2026-05-27"
+    assert ride["matchedPlanSnapshot"]["title"] == "Complete Rest Day"
 
 
 @pytest.mark.asyncio

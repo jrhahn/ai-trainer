@@ -15,6 +15,8 @@ Key flows covered:
 5. Chat & coach-memory endpoint contract.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 
@@ -884,3 +886,203 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
     # Mock AI service returns estimatedFTP=210
     assert snap["ftp"] == 210
     assert snap["source"] == "fit_upload"
+
+
+@pytest.mark.asyncio
+async def test_fit_bulk_upload_imports_multiple_files(client, mock_ai_service, monkeypatch):
+    """POST /users/me/upload-fit/bulk imports multiple FIT files in one request."""
+
+    class _MockDataField:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class _MockRecord:
+        def __init__(self, fields):
+            self._fields = fields
+
+        def __iter__(self):
+            return iter(self._fields)
+
+    def _session(raw: bytes, offset_hours: int):
+        start = datetime(2026, 5, 1, 8, tzinfo=timezone.utc) + timedelta(
+            hours=offset_hours
+        )
+        return _MockRecord(
+            [
+                _MockDataField("sport", "cycling"),
+                _MockDataField("total_elapsed_time", 3600),
+                _MockDataField("avg_power", 210 + offset_hours),
+                _MockDataField("avg_heart_rate", 150 + offset_hours),
+                _MockDataField("start_time", start),
+                _MockDataField("serial_number", raw.decode()),
+            ]
+        )
+
+    class _MockFitFile:
+        def __init__(self, raw_stream, *args, **kwargs):
+            self.raw = raw_stream.read()
+
+        def parse(self):
+            pass
+
+        def get_messages(self, msg_type):
+            if msg_type == "file_id":
+                return [
+                    _MockRecord(
+                        [
+                            _MockDataField("serial_number", self.raw.decode()),
+                            _MockDataField(
+                                "time_created",
+                                datetime(2026, 5, 1, tzinfo=timezone.utc),
+                            ),
+                        ]
+                    )
+                ]
+            if msg_type == "session":
+                offset = 0 if self.raw == b"ride-a" else 2
+                return [_session(self.raw, offset)]
+            if msg_type == "record":
+                start = datetime(2026, 5, 1, 8, tzinfo=timezone.utc)
+                return [
+                    _MockRecord(
+                        [
+                            _MockDataField("timestamp", start),
+                            _MockDataField("power", 200),
+                            _MockDataField("heart_rate", 145),
+                        ]
+                    ),
+                    _MockRecord(
+                        [
+                            _MockDataField("timestamp", start + timedelta(seconds=1)),
+                            _MockDataField("power", 220),
+                            _MockDataField("heart_rate", 150),
+                        ]
+                    ),
+                ]
+            return []
+
+    import fitparse as _fitparse_mod
+
+    monkeypatch.setattr(_fitparse_mod, "FitFile", _MockFitFile)
+
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Quinn", "email": "quinn@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/api/v1/users/me/upload-fit/bulk",
+        headers=headers,
+        files=[
+            ("files", ("ride-a.fit", b"ride-a", "application/octet-stream")),
+            ("files", ("ride-b.fit", b"ride-b", "application/octet-stream")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["imported"] == 2
+    assert body["skipped"] == 0
+    assert body["failed"] == 0
+    assert [file["status"] for file in body["files"]] == ["imported", "imported"]
+
+    metrics_resp = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=headers
+    )
+    assert metrics_resp.status_code == 200
+    assert len(metrics_resp.json()["rides"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_fit_bulk_upload_skips_duplicates_and_keeps_failures_per_file(
+    client, mock_ai_service, monkeypatch
+):
+    """Bulk FIT upload reports duplicate and invalid files without aborting the batch."""
+
+    class _MockDataField:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class _MockRecord:
+        def __init__(self, fields):
+            self._fields = fields
+
+        def __iter__(self):
+            return iter(self._fields)
+
+    class _MockFitFile:
+        def __init__(self, raw_stream, *args, **kwargs):
+            self.raw = raw_stream.read()
+
+        def parse(self):
+            if self.raw == b"invalid":
+                raise RuntimeError("invalid FIT")
+
+        def get_messages(self, msg_type):
+            start = datetime(2026, 5, 2, 8, tzinfo=timezone.utc)
+            if msg_type == "file_id":
+                return [
+                    _MockRecord(
+                        [
+                            _MockDataField("serial_number", "same-device"),
+                            _MockDataField("time_created", start),
+                        ]
+                    )
+                ]
+            if msg_type == "session":
+                return [
+                    _MockRecord(
+                        [
+                            _MockDataField("sport", "cycling"),
+                            _MockDataField("total_elapsed_time", 1800),
+                            _MockDataField("avg_power", 190),
+                            _MockDataField("avg_heart_rate", 142),
+                            _MockDataField("start_time", start),
+                        ]
+                    )
+                ]
+            return []
+
+    import fitparse as _fitparse_mod
+
+    monkeypatch.setattr(_fitparse_mod, "FitFile", _MockFitFile)
+
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Riley", "email": "riley@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/api/v1/users/me/upload-fit/bulk",
+        headers=headers,
+        files=[
+            ("files", ("first.fit", b"same", "application/octet-stream")),
+            ("files", ("duplicate.fit", b"same", "application/octet-stream")),
+            ("files", ("broken.fit", b"invalid", "application/octet-stream")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "partial"
+    assert body["imported"] == 1
+    assert body["skipped"] == 1
+    assert body["failed"] == 1
+    assert [file["status"] for file in body["files"]] == [
+        "imported",
+        "skipped",
+        "failed",
+    ]
+
+    metrics_resp = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=headers
+    )
+    assert metrics_resp.status_code == 200
+    assert len(metrics_resp.json()["rides"]) == 1

@@ -83,12 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Activities show planned context** (`src/pages/DashboardPage.tsx`) — recent activities
-  now render the `planned:` row whenever the backend provides a matched plan snapshot,
-  including unmatched activities on planned rest days.
+- **Activities planned row** (`src/pages/DashboardPage.tsx`) — activities now render the
+  planned row from the backend-provided same-day plan snapshot, including unmatched rides
+  on planned rest days.
 
 - **Dashboard regression coverage** (`src/pages/DashboardPage.test.tsx`) — added coverage
-  for unmatched activities that should still show what was planned.
+  for unmatched activities that still have valid same-day planned context.
 
 ## [0.21.1] - 2026-05-26
 

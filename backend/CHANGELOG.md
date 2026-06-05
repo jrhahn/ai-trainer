@@ -52,14 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Planned activity backfill** (`services/ride_matching.py`, `routers/users.py`) —
-  ride history now reapplies plan matching when activities are loaded so already analyzed
-  rides receive missing planned-workout context whenever the stored training plan has a
-  matching date.
+- **Ride-to-plan date matching** (`services/ride_matching.py`, `routers/users.py`) —
+  ride history now re-applies plan matching from each activity's own `activity_date`, so
+  activities imported or analyzed later cannot keep a planned-day snapshot from the
+  processing date.
 
-- **Rest-day planned context** (`services/ride_matching.py`) — activities recorded on
-  planned rest or non-training days remain unmatched, but still carry the planned-day
-  snapshot so the dashboard can show what was scheduled.
+- **Stale plan snapshot cleanup** (`services/ride_matching.py`) — mismatched stored plan
+  snapshots are cleared when no plan entry exists for the actual activity date, while
+  same-day rest-day context is preserved for display.
 
 ## [0.26.1] - 2026-05-26
 
