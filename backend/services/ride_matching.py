@@ -151,6 +151,12 @@ async def apply_ride_plan_matches(
 
         if len(date_rides) == 1:
             ride = date_rides[0]
+            label_override = None
+            plan_duration_min = plan_day.get("durationMinutes") or plan_day.get("duration_minutes")
+            if ride.duration_seconds and plan_duration_min:
+                ratio = (ride.duration_seconds / 60) / plan_duration_min
+                if ratio > 2.5 or ratio < 0.3:
+                    label_override = "Mismatch"
             await crud.update_ride_match(
                 db,
                 ride,
@@ -158,6 +164,7 @@ async def apply_ride_plan_matches(
                 matched_plan_date=activity_date,
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
+                label_override=label_override,
             )
             auto_matched.append(ride)
         else:

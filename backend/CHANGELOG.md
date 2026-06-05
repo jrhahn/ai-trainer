@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.2] - 2026-06-05
+
+### Fixed
+
+- **Auto-matched rides with >2.5× duration mismatch now set `label_override = "Mismatch"`**
+  (`services/ride_matching.py`, `crud.py`) — `apply_ride_plan_matches` detects gross
+  duration divergence at match time and writes a `Mismatch` label override so the
+  frontend bypasses score computation and shows a clear warning badge immediately.
+
 ## [0.27.1] - 2026-06-03
 
 ### Fixed

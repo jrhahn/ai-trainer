@@ -825,11 +825,13 @@ async def update_ride_match(
     matched_plan_date: str | None = None,
     matched_plan_snapshot: dict | None = None,
     matched_at: datetime | None = None,
+    label_override: str | None = None,
 ) -> models.RideMetric:
     """Update the plan-match fields on a RideMetric row and flush."""
     ride.plan_match_status = status
     ride.matched_plan_date = matched_plan_date
     ride.matched_plan_snapshot = matched_plan_snapshot
     ride.matched_at = matched_at
+    ride.label_override = label_override
     await db.flush()
     return ride

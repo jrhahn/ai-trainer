@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
+import { computeMatchScore, matchScoreLabel } from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
@@ -520,5 +521,52 @@ describe('DashboardPage — plan comparison row', () => {
     expect(msg).not.toBeNull()
     expect(msg).toContain('Hill Repeats')
     expect(msg).toContain('Hill Session')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// computeMatchScore — unit tests
+// ---------------------------------------------------------------------------
+
+describe('computeMatchScore — rest/no-target plan', () => {
+  // A plan that triggers isRestOrNoTargetPlan: workoutType 'rest' (LLM may assign this to Active Recovery)
+  const restPlanWithDuration: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 45 }
+  const restPlanNoData: Partial<TrainingDay> = { workoutType: 'rest' }
+
+  it('returns ~0 for a 5h25m ride vs a 45-min rest plan (TSS null)', () => {
+    const ride = { stravaActivityId: 1, sportType: 'MountainBikeRide', durationSeconds: 19500 } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanWithDuration)
+    expect(score).toBe(0)
+  })
+
+  it('returns 80 when TSS ≤ 30 on a rest plan', () => {
+    const ride = { stravaActivityId: 2, sportType: 'Ride', durationSeconds: 2700, tss: 20 } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanNoData)
+    expect(score).toBe(80)
+  })
+
+  it('returns 90 (no-data fallback) for a rest plan with no duration data on either side', () => {
+    const ride = { stravaActivityId: 3, sportType: 'Ride' } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanNoData)
+    expect(score).toBe(90)
+  })
+
+  it('returns close to 100 for a ride matching planned duration with no TSS', () => {
+    // 44 min on a 45-min plan — should score high (ratio ≈ 0.978)
+    const ride = { stravaActivityId: 4, sportType: 'Ride', durationSeconds: 2640 } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanWithDuration)
+    expect(score).toBeGreaterThanOrEqual(95)
+  })
+
+  it('label for score=0 on rest plan is "Too much", not "OK"', () => {
+    const ride = { stravaActivityId: 5, sportType: 'MountainBikeRide', durationSeconds: 19500 } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanWithDuration)
+    expect(matchScoreLabel(score, restPlanWithDuration)).toBe('Too much')
+  })
+
+  it('label for score=90 on rest plan with no data is "OK"', () => {
+    const ride = { stravaActivityId: 6, sportType: 'Ride' } as RideMetricPoint
+    const score = computeMatchScore(ride, restPlanNoData)
+    expect(matchScoreLabel(score, restPlanNoData)).toBe('OK')
   })
 })

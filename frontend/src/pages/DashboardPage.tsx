@@ -72,10 +72,17 @@ export function computeMatchScore(
   const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
 
   if (isRestOrNoTargetPlan(plan)) {
-    if (!ride.durationSeconds || actualPower == null || ride.tss == null) return 90
-    if (ride.tss <= 30) return 80
-    if (ride.tss <= 65) return 55
-    return 20
+    if (ride.tss != null) {
+      if (ride.tss <= 30) return 80
+      if (ride.tss <= 65) return 55
+      return 20
+    }
+    // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
+    if (ride.durationSeconds && plan.durationMinutes) {
+      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+    }
+    return 90
   }
 
   // Strength/non-power plans: score purely on duration completion (0–100 %).
@@ -178,6 +185,7 @@ export function planForRide(
 
   return trainingPlan.find((day) => day.date === ride.activityDate) ?? null
 }
+
 
 /** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
 export function buildMatchCoachPrompt(

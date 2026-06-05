@@ -1667,3 +1667,78 @@ async def test_rate_workout_follow_up_fields_default_to_falsy_for_normal_ride(
 
     tags = body.get("suggestedFeedbackTags", body.get("suggested_feedback_tags"))
     assert tags == []
+
+
+@pytest.mark.asyncio
+async def test_apply_ride_plan_matches_sets_mismatch_label_for_gross_duration_deviation(
+    client, auth_headers
+):
+    """A ride that is >2.5× longer than the planned duration gets label_override='Mismatch'."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+    from services.ride_matching import apply_ride_plan_matches
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+
+    plan = [
+        {
+            "date": "2026-05-10",
+            "workoutType": "recovery",
+            "title": "Active Recovery",
+            "description": "Easy spin",
+            "durationMinutes": 45,
+        }
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        # 5h 25m ride — 325 min, 7.2× the planned 45 min
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=70001,
+            activity_date="2026-05-10",
+            duration_seconds=19500,
+        )
+        # 42-min ride — within the normal range (ratio ≈ 0.93, no mismatch expected)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=70002,
+            activity_date="2026-05-11",
+            duration_seconds=2520,
+        )
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            plan
+            + [
+                {
+                    "date": "2026-05-11",
+                    "workoutType": "recovery",
+                    "title": "Active Recovery",
+                    "description": "Easy spin",
+                    "durationMinutes": 45,
+                }
+            ],
+        )
+        await apply_ride_plan_matches(db, user_id, plan + [
+            {
+                "date": "2026-05-11",
+                "workoutType": "recovery",
+                "title": "Active Recovery",
+                "description": "Easy spin",
+                "durationMinutes": 45,
+            }
+        ], [70001, 70002])
+        await db.commit()
+
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [70001, 70002])
+        by_id = {r.strava_activity_id: r for r in rides}
+
+    # Gross mismatch ride should be flagged
+    assert by_id[70001].label_override == "Mismatch"
+    # Well-matched ride should have no override
+    assert by_id[70002].label_override is None
