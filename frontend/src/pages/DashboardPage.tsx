@@ -53,6 +53,17 @@ function WeatherIcon({ condition }: { condition?: string | null }) {
   return <Cloud size={12} className="text-gray-400" />
 }
 
+function isRestOrNoTargetPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  return workoutType === 'rest' || (!plan.durationMinutes && !plan.targetPower)
+}
+
+/** Non-cycling plans (strength, yoga, swim, etc.) that have no power target. */
+function isStrengthPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  return workoutType === 'strength' && !plan.targetPower
+}
+
 /** Returns 0-100 match score, or null when not enough data to compare. */
 export function computeMatchScore(
   ride: RideMetricPoint,
@@ -87,7 +98,6 @@ export function computeMatchScore(
     parts.push(Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200)))
   }
 
-  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
   if (actualPower != null && plan.targetPower) {
     const { low, high } = plan.targetPower
     if (actualPower >= low && actualPower <= high) {
@@ -101,6 +111,81 @@ export function computeMatchScore(
 
   return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null
 }
+
+export function matchScoreLabel(score: number | null, plan: Partial<TrainingDay>, labelOverride?: string | null): string {
+  if (labelOverride) return labelOverride
+
+  if (score === null) return '?'
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (score >= 90) return 'OK'
+    if (score >= 75) return 'Recovery'
+    if (score >= 40) return 'Warning'
+    return 'Too much'
+  }
+
+  if (isStrengthPlan(plan)) {
+    if (score >= 85) return 'Done'
+    if (score >= 55) return 'Partial'
+    if (score >= 25) return 'Short'
+    return 'Skipped'
+  }
+
+  return score >= 90
+    ? 'Perfect'
+    : score >= 75
+      ? 'Solid'
+      : score >= 60
+        ? 'Close'
+        : score >= 40
+          ? 'Off plan'
+          : 'Needs work'
+}
+
+export function matchScoreBadgeStyle(score: number | null, plan: Partial<TrainingDay>): string {
+  if (score === null) return 'bg-gray-100 text-gray-500'
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (score >= 90) return 'bg-green-100 text-green-700'
+    if (score >= 75) return 'bg-lime-100 text-lime-700'
+    if (score >= 40) return 'bg-amber-100 text-amber-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  if (isStrengthPlan(plan)) {
+    if (score >= 85) return 'bg-green-100 text-green-700'
+    if (score >= 55) return 'bg-amber-100 text-amber-700'
+    if (score >= 25) return 'bg-orange-100 text-orange-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  return score >= 90
+    ? 'bg-green-100 text-green-700'
+    : score >= 75
+      ? 'bg-emerald-100 text-emerald-700'
+      : score >= 60
+        ? 'bg-amber-100 text-amber-700'
+        : score >= 40
+          ? 'bg-orange-100 text-orange-700'
+          : 'bg-red-100 text-red-700'
+}
+
+export function planForRide(
+  ride: RideMetricPoint,
+  trainingPlan: TrainingDay[]
+): Partial<TrainingDay> | null {
+  const snapshot = ride.matchedPlanSnapshot ?? null
+  const snapshotDate = typeof snapshot?.date === 'string' ? snapshot.date : null
+  const staleMatchedDate = !!ride.matchedPlanDate && ride.matchedPlanDate !== ride.activityDate
+  const staleSnapshotDate = !!snapshotDate && snapshotDate !== ride.activityDate
+
+  if (snapshot && !staleMatchedDate && !staleSnapshotDate) {
+    return snapshot
+  }
+
+  return trainingPlan.find((day) => day.date === ride.activityDate) ?? null
+}
+
 
 /** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
 export function buildMatchCoachPrompt(
@@ -381,32 +466,10 @@ export default function DashboardPage() {
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
-              const plan = ride.matchedPlanSnapshot ?? null
+              const plan = planForRide(ride, trainingPlan)
               const score = plan ? computeMatchScore(ride, plan) : null
-              const scoreLabel =
-                score === null
-                  ? '?'
-                  : score >= 90
-                    ? 'Perfect'
-                    : score >= 75
-                      ? 'Solid'
-                      : score >= 60
-                        ? 'Close'
-                        : score >= 40
-                          ? 'Off plan'
-                          : 'Needs work'
-              const scoreBadgeStyle =
-                score === null
-                  ? 'bg-gray-100 text-gray-500'
-                  : score >= 90
-                    ? 'bg-green-100 text-green-700'
-                    : score >= 75
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : score >= 60
-                        ? 'bg-amber-100 text-amber-700'
-                        : score >= 40
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'bg-red-100 text-red-700'
+              const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
+              const scoreBadgeStyle = plan ? matchScoreBadgeStyle(score, plan) : 'bg-gray-100 text-gray-500'
               return (
                 <div
                   key={ride.stravaActivityId}
@@ -449,14 +512,20 @@ export default function DashboardPage() {
                     )}
                   </div>
                   {/* Plan comparison row */}
-                  {plan && (
-                    <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                      <span className="text-xs text-gray-400">planned:</span>
-                      <span className="text-xs text-gray-600 font-medium truncate flex-1">
-                        {plan.title ?? plan.workoutType}
-                        {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
-                        {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
-                      </span>
+                  <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
+                    <span className="text-xs text-gray-400">planned:</span>
+                    <span className="text-xs text-gray-600 font-medium truncate flex-1">
+                      {plan ? (
+                        <>
+                          {plan.title ?? plan.workoutType}
+                          {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
+                          {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
+                        </>
+                      ) : (
+                        'No planned workout found'
+                      )}
+                    </span>
+                    {plan && (
                       <button
                         onClick={() =>
                           setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
@@ -466,8 +535,8 @@ export default function DashboardPage() {
                       >
                         {scoreLabel}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}
