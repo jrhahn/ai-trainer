@@ -1,15 +1,19 @@
 """User profile, plan, workout, chat, and coach-memory routes."""
 
+import hashlib
 import io
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
     HTTPException,
     Request,
     UploadFile,
@@ -24,7 +28,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
-from services.analysis import AVG_POWER_TO_FTP_RATIO
+from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
 from services.dates import app_today_iso
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import (
@@ -592,127 +596,260 @@ async def estimate_ftp(
     return schemas.EstimateFTPResponse(estimated_ftp=None, source="none")
 
 
-@router.post("/upload-fit", response_model=schemas.FitUploadResponse)
-async def upload_fit_file(
-    file: UploadFile,
-    db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-) -> schemas.FitUploadResponse:
-    """Ingest a .fit file (Garmin/Wahoo/Zwift export) and store as a workout log.
+@dataclass
+class _ParsedFitActivity:
+    source_id: int
+    sport_type: str
+    duration_seconds: int
+    duration_minutes: int
+    ride_date: str
+    completed_at: str
+    activity_name: str
+    avg_power: int | None
+    avg_hr: int | None
+    start_lat: float | None
+    start_lng: float | None
+    streams: dict[str, dict[str, list[Any]]]
 
-    The parsed activity is normalised into the same shape the analysis service
-    already expects, and a ``WorkoutLog`` row is written for the ride date.
-    Returns summary metrics extracted from the file.
-    """
+
+def _fit_field_map(message: Any) -> dict[str, Any]:
+    return {field.name: field.value for field in message}
+
+
+def _as_datetime(value: Any) -> datetime | None:
+    return value if isinstance(value, datetime) else None
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None:
+        return None
     try:
-        from fitparse import FitFile  # noqa: PLC0415
-    except ImportError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="fitparse library not installed; .fit upload is unavailable",
-        )
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
-    if not file.filename or not file.filename.lower().endswith(".fit"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only .fit files are accepted",
-        )
 
-    raw = await file.read()
+def _as_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _average_int(values: list[int]) -> int | None:
+    return round(sum(values) / len(values)) if values else None
+
+
+def _semicircles_to_degrees(value: Any) -> float | None:
+    numeric = _as_float(value)
+    if numeric is None:
+        return None
+    return numeric * (180.0 / 2**31)
+
+
+def _json_safe_fit_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _fit_source_id(raw: bytes, metadata: dict[str, Any]) -> int:
+    metadata_basis = json.dumps(metadata, sort_keys=True, default=str)
+    basis = metadata_basis if metadata else hashlib.sha256(raw).hexdigest()
+    # 60 bits keeps the synthetic id positive and comfortably inside BIGINT.
+    return int(hashlib.sha256(basis.encode()).hexdigest()[:15], 16)
+
+
+def _parse_fit_activity(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitActivity:
     try:
         fit = FitFile(io.BytesIO(raw))
         fit.parse()
     except Exception as exc:
-        logger.warning("Failed to parse .fit file: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Could not parse the uploaded .fit file",
-        ) from exc
+        logger.warning("Failed to parse .fit file %s: %s", filename, exc)
+        raise ValueError("Could not parse the uploaded .fit file") from exc
 
-    # --- Extract summary from session messages ---
     sport_type = "cycling"
     total_elapsed_seconds = 0
     avg_power: int | None = None
     avg_hr: int | None = None
     start_time: datetime | None = None
+    metadata: dict[str, Any] = {}
+
+    for message_type in ("file_id", "activity"):
+        for record in fit.get_messages(message_type):
+            fields = _fit_field_map(record)
+            for key in (
+                "serial_number",
+                "time_created",
+                "manufacturer",
+                "product",
+                "timestamp",
+                "local_timestamp",
+            ):
+                if key in fields and fields[key] is not None:
+                    metadata[f"{message_type}_{key}"] = _json_safe_fit_value(
+                        fields[key]
+                    )
 
     for record in fit.get_messages("session"):
-        for data in record:
-            name = data.name
-            value = data.value
-            if name == "sport" and value:
-                sport_type = str(value).lower()
-            elif name == "total_elapsed_time" and value:
-                total_elapsed_seconds = int(value)
-            elif name == "avg_power" and value:
-                avg_power = int(value)
-            elif name == "avg_heart_rate" and value:
-                avg_hr = int(value)
-            elif name == "start_time" and value:
-                start_time = value if isinstance(value, datetime) else None
+        fields = _fit_field_map(record)
+        if fields.get("sport"):
+            sport_type = str(fields["sport"]).lower()
+        total_elapsed_seconds = (
+            _as_int(fields.get("total_elapsed_time"))
+            or _as_int(fields.get("total_timer_time"))
+            or total_elapsed_seconds
+        )
+        avg_power = _as_int(fields.get("avg_power")) or avg_power
+        avg_hr = _as_int(fields.get("avg_heart_rate")) or avg_hr
+        start_time = _as_datetime(fields.get("start_time")) or start_time
+        for key in (
+            "start_time",
+            "sport",
+            "sub_sport",
+            "total_elapsed_time",
+            "total_timer_time",
+            "enhanced_avg_speed",
+        ):
+            if key in fields and fields[key] is not None:
+                metadata[f"session_{key}"] = _json_safe_fit_value(fields[key])
 
-    # Fall back to record messages if session data is sparse
-    if not total_elapsed_seconds:
-        timestamps = []
-        powers: list[int] = []
-        hrs: list[int] = []
-        for record in fit.get_messages("record"):
-            record_data = {d.name: d.value for d in record}
-            if record_data.get("timestamp"):
-                timestamps.append(record_data["timestamp"])
-            if record_data.get("power") and record_data["power"] > 0:
-                powers.append(int(record_data["power"]))
-            if record_data.get("heart_rate") and record_data["heart_rate"] > 0:
-                hrs.append(int(record_data["heart_rate"]))
-        if len(timestamps) >= 2:
-            delta = timestamps[-1] - timestamps[0]
-            total_elapsed_seconds = int(delta.total_seconds())
-        if powers and avg_power is None:
-            avg_power = round(sum(powers) / len(powers))
-        if hrs and avg_hr is None:
-            avg_hr = round(sum(hrs) / len(hrs))
-        if timestamps and start_time is None:
-            start_time = timestamps[0]
+    timestamps: list[datetime] = []
+    watts: list[int] = []
+    watt_times: list[int] = []
+    heart_rates: list[int] = []
+    hr_times: list[int] = []
+    cadences: list[int] = []
+    cadence_times: list[int] = []
+    altitudes: list[float] = []
+    altitude_times: list[int] = []
+    speeds: list[float] = []
+    speed_times: list[int] = []
+    latlng: list[list[float]] = []
+    start_lat: float | None = None
+    start_lng: float | None = None
 
+    for record in fit.get_messages("record"):
+        fields = _fit_field_map(record)
+        timestamp = _as_datetime(fields.get("timestamp"))
+        if timestamp is None:
+            continue
+        timestamps.append(timestamp)
+        first_timestamp = timestamps[0]
+        elapsed = max(0, int((timestamp - first_timestamp).total_seconds()))
+
+        power = _as_int(fields.get("power"))
+        if power is not None and power > 0:
+            watts.append(power)
+            watt_times.append(elapsed)
+
+        heart_rate = _as_int(fields.get("heart_rate"))
+        if heart_rate is not None and heart_rate > 0:
+            heart_rates.append(heart_rate)
+            hr_times.append(elapsed)
+
+        cadence = _as_int(fields.get("cadence"))
+        if cadence is not None and cadence > 0:
+            cadences.append(cadence)
+            cadence_times.append(elapsed)
+
+        altitude = _as_float(fields.get("enhanced_altitude")) or _as_float(
+            fields.get("altitude")
+        )
+        if altitude is not None:
+            altitudes.append(round(altitude, 2))
+            altitude_times.append(elapsed)
+
+        speed = _as_float(fields.get("enhanced_speed")) or _as_float(
+            fields.get("speed")
+        )
+        if speed is not None:
+            speeds.append(round(speed, 3))
+            speed_times.append(elapsed)
+
+        lat = _semicircles_to_degrees(fields.get("position_lat"))
+        lng = _semicircles_to_degrees(fields.get("position_long"))
+        if lat is not None and lng is not None:
+            point = [round(lat, 6), round(lng, 6)]
+            latlng.append(point)
+            if start_lat is None or start_lng is None:
+                start_lat, start_lng = point
+
+    if not total_elapsed_seconds and len(timestamps) >= 2:
+        total_elapsed_seconds = int((timestamps[-1] - timestamps[0]).total_seconds())
+    if start_time is None and timestamps:
+        start_time = timestamps[0]
+    if avg_power is None:
+        avg_power = _average_int(watts)
+    if avg_hr is None:
+        avg_hr = _average_int(heart_rates)
+
+    total_elapsed_seconds = max(1, total_elapsed_seconds)
     duration_minutes = max(1, round(total_elapsed_seconds / 60))
-    ride_date = (
-        start_time.strftime("%Y-%m-%d")
-        if start_time
-        else datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    )
     completed_at = (
         start_time.isoformat() if start_time else datetime.now(timezone.utc).isoformat()
     )
+    ride_date = completed_at[:10]
 
-    log = await crud.upsert_workout_log(
-        db,
-        current_user.id,
-        ride_date,
-        actual_duration_minutes=duration_minutes,
-        average_power=avg_power,
-        average_heart_rate=avg_hr,
-        peak_power=None,
-        perceived_effort=5,
-        notes=f"Imported from .fit file: {file.filename}",
-        completed_at=completed_at,
+    streams: dict[str, dict[str, list[Any]]] = {}
+    if watts and watt_times and len(watts) == len(watt_times):
+        streams["watts"] = {"data": watts}
+        streams["time"] = {"data": watt_times}
+    if heart_rates:
+        streams["heartrate"] = {"data": heart_rates}
+        streams["heartrate_time"] = {"data": hr_times}
+    if cadences:
+        streams["cadence"] = {"data": cadences}
+        streams["cadence_time"] = {"data": cadence_times}
+    if altitudes:
+        streams["altitude"] = {"data": altitudes}
+        streams["altitude_time"] = {"data": altitude_times}
+    if speeds:
+        streams["velocity_smooth"] = {"data": speeds}
+        streams["velocity_time"] = {"data": speed_times}
+    if latlng:
+        streams["latlng"] = {"data": latlng}
+
+    if start_time is not None:
+        metadata.setdefault("activity_start_time", start_time.isoformat())
+    metadata.setdefault("sport_type", sport_type)
+    metadata.setdefault("duration_seconds", total_elapsed_seconds)
+    source_id = _fit_source_id(raw, metadata)
+
+    return _ParsedFitActivity(
+        source_id=source_id,
         sport_type=sport_type,
+        duration_seconds=total_elapsed_seconds,
+        duration_minutes=duration_minutes,
+        ride_date=ride_date,
+        completed_at=completed_at,
+        activity_name=f"FIT {sport_type.title()} {ride_date}",
+        avg_power=avg_power,
+        avg_hr=avg_hr,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        streams=streams,
     )
 
-    # --- Run analysis and write a metric snapshot ---
-    # Determine provider from user profile
-    provider = current_user.ai_provider or "openai"
-    max_hr = current_user.max_heart_rate
 
-    # Trigger AI analysis in the background (best-effort; don't fail the upload if AI is down)
-    ai_result: dict | None = None
+async def _analyse_fit_import(
+    db: AsyncSession,
+    current_user: models.User,
+    parsed: _ParsedFitActivity,
+) -> dict | None:
+    provider = current_user.ai_provider or "openai"
     usage_token = begin_token_usage_collection()
     try:
         ai_result = await ai_service.analyse_fit_activity(
-            sport_type=sport_type,
-            duration_minutes=duration_minutes,
-            avg_power=avg_power,
-            avg_hr=avg_hr,
-            max_heart_rate=max_hr,
+            sport_type=parsed.sport_type,
+            duration_minutes=parsed.duration_minutes,
+            avg_power=parsed.avg_power,
+            avg_hr=parsed.avg_hr,
+            max_heart_rate=current_user.max_heart_rate,
             provider=provider,
         )
     except Exception:
@@ -720,17 +857,15 @@ async def upload_fit_file(
         logger.warning(
             "AI analysis failed for .fit upload; skipping feedback", exc_info=True
         )
-    else:
-        await _persist_collected_token_usage(db, current_user, usage_token)
+        return None
 
-    # Save rider assessment feedback if AI succeeded
+    await _persist_collected_token_usage(db, current_user, usage_token)
+
     if ai_result:
-        # Normalise text fields: LLM may return dicts or lists instead of strings.
-        # The DB columns expect plain strings.
-        for _field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):
-            _val = ai_result.get(_field)
-            if _val is not None and not isinstance(_val, str):
-                ai_result[_field] = json.dumps(_val)
+        for field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):
+            value = ai_result.get(field)
+            if value is not None and not isinstance(value, str):
+                ai_result[field] = json.dumps(value)
 
         await crud.upsert_rider_assessment(
             db,
@@ -743,12 +878,65 @@ async def upload_fit_file(
             last_ride_feedback=ai_result.get("lastRideFeedback"),
         )
 
-    # Write a time-series metric snapshot regardless of AI result
-    ftp_value = ai_result.get("estimatedFTP") if ai_result else None
+    return ai_result
 
-    # For cycling without AI: fall back to avg_power-based FTP estimate
-    if ftp_value is None and sport_type.lower() not in ("running", "run") and avg_power:
-        ftp_value = round(avg_power * AVG_POWER_TO_FTP_RATIO)
+
+async def _store_fit_import(
+    db: AsyncSession,
+    current_user: models.User,
+    filename: str,
+    parsed: _ParsedFitActivity,
+    seen_source_ids: set[int],
+) -> schemas.FitUploadFileResult:
+    if parsed.source_id in seen_source_ids:
+        return schemas.FitUploadFileResult(
+            filename=filename,
+            status="skipped",
+            message="Duplicate FIT activity in this upload batch",
+            sport_type=parsed.sport_type,
+            duration_minutes=parsed.duration_minutes,
+            average_power=parsed.avg_power,
+            average_heart_rate=parsed.avg_hr,
+        )
+
+    seen_source_ids.add(parsed.source_id)
+    existing_metric = await crud.get_ride_metric_by_strava_id(
+        db, current_user.id, parsed.source_id
+    )
+    if existing_metric is not None:
+        return schemas.FitUploadFileResult(
+            filename=filename,
+            status="skipped",
+            message="FIT activity was already imported",
+            activity_id=existing_metric.id,
+            sport_type=parsed.sport_type,
+            duration_minutes=parsed.duration_minutes,
+            average_power=parsed.avg_power,
+            average_heart_rate=parsed.avg_hr,
+        )
+
+    log = await crud.upsert_workout_log(
+        db,
+        current_user.id,
+        parsed.ride_date,
+        actual_duration_minutes=parsed.duration_minutes,
+        average_power=parsed.avg_power,
+        average_heart_rate=parsed.avg_hr,
+        peak_power=None,
+        perceived_effort=5,
+        notes=f"Imported from .fit file: {filename}",
+        completed_at=parsed.completed_at,
+        sport_type=parsed.sport_type,
+    )
+
+    ai_result = await _analyse_fit_import(db, current_user, parsed)
+    ftp_value = ai_result.get("estimatedFTP") if ai_result else None
+    if (
+        ftp_value is None
+        and parsed.sport_type.lower() not in ("running", "run")
+        and parsed.avg_power
+    ):
+        ftp_value = round(parsed.avg_power * AVG_POWER_TO_FTP_RATIO)
 
     if ftp_value is not None:
         try:
@@ -763,13 +951,141 @@ async def upload_fit_file(
                 "Failed to write metric snapshot for .fit upload", exc_info=True
             )
 
+    latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
+    seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
+    seed_atl = latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
+    ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
+    ride_input = {
+        "strava_activity_id": parsed.source_id,
+        "activity_name": parsed.activity_name,
+        "activity_start_datetime": parsed.completed_at,
+        "activity_date": parsed.ride_date,
+        "sport_type": parsed.sport_type,
+        "duration_seconds": parsed.duration_seconds,
+        "start_lat": parsed.start_lat,
+        "start_lng": parsed.start_lng,
+        "streams": parsed.streams,
+    }
+    metrics_chain = build_ride_metrics_chain(
+        [ride_input], ftp_for_chain, seed_ctl, seed_atl
+    )
+    if metrics_chain:
+        metric = metrics_chain[0]
+        metric["avg_power_w"] = metric.get("avg_power_w") or parsed.avg_power
+        await crud.upsert_ride_metric(db, current_user.id, **metric)
+        existing_plan = await crud.get_training_plan(db, current_user.id)
+        training_plan = existing_plan.plan if existing_plan is not None else []
+        await apply_ride_plan_matches(
+            db,
+            current_user.id,
+            training_plan,
+            [parsed.source_id],
+        )
+
     await db.flush()
+    return schemas.FitUploadFileResult(
+        filename=filename,
+        status="imported",
+        message="Imported FIT activity",
+        activity_id=log.id,
+        sport_type=parsed.sport_type,
+        duration_minutes=parsed.duration_minutes,
+        average_power=parsed.avg_power,
+        average_heart_rate=parsed.avg_hr,
+    )
+
+
+def _fit_file_parser_or_503() -> Any:
+    try:
+        from fitparse import FitFile  # noqa: PLC0415
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="fitparse library not installed; .fit upload is unavailable",
+        )
+    return FitFile
+
+
+@router.post("/upload-fit", response_model=schemas.FitUploadResponse)
+async def upload_fit_file(
+    file: UploadFile,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.FitUploadResponse:
+    """Ingest one .fit file and store workout plus normalized ride metrics."""
+    FitFile = _fit_file_parser_or_503()
+    filename = file.filename or ""
+    if not filename.lower().endswith(".fit"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only .fit files are accepted",
+        )
+
+    raw = await file.read()
+    try:
+        parsed = _parse_fit_activity(raw, filename, FitFile)
+        result = await _store_fit_import(db, current_user, filename, parsed, set())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
     return schemas.FitUploadResponse(
-        status="ok",
-        activity_id=log.id,
-        sport_type=sport_type,
-        duration_minutes=duration_minutes,
-        average_power=avg_power,
-        average_heart_rate=avg_hr,
+        status="ok" if result.status == "imported" else result.status,
+        activity_id=result.activity_id or "",
+        sport_type=result.sport_type or parsed.sport_type,
+        duration_minutes=result.duration_minutes or parsed.duration_minutes,
+        average_power=result.average_power,
+        average_heart_rate=result.average_heart_rate,
+    )
+
+
+@router.post("/upload-fit/bulk", response_model=schemas.FitBulkUploadResponse)
+async def upload_fit_files_bulk(
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.FitBulkUploadResponse:
+    """Import multiple .fit files, reporting success, duplicate, and failure per file."""
+    FitFile = _fit_file_parser_or_503()
+    results: list[schemas.FitUploadFileResult] = []
+    seen_source_ids: set[int] = set()
+
+    for file in files:
+        filename = file.filename or "unnamed"
+        if not filename.lower().endswith(".fit"):
+            results.append(
+                schemas.FitUploadFileResult(
+                    filename=filename,
+                    status="failed",
+                    message="Only .fit files are accepted",
+                )
+            )
+            continue
+
+        raw = await file.read()
+        try:
+            parsed = _parse_fit_activity(raw, filename, FitFile)
+            result = await _store_fit_import(
+                db, current_user, filename, parsed, seen_source_ids
+            )
+        except ValueError as exc:
+            result = schemas.FitUploadFileResult(
+                filename=filename,
+                status="failed",
+                message=str(exc),
+            )
+        results.append(result)
+
+    imported = sum(1 for result in results if result.status == "imported")
+    skipped = sum(1 for result in results if result.status == "skipped")
+    failed = sum(1 for result in results if result.status == "failed")
+    return schemas.FitBulkUploadResponse(
+        status="ok" if failed == 0 else "partial",
+        total=len(results),
+        imported=imported,
+        skipped=skipped,
+        failed=failed,
+        files=results,
     )

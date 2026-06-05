@@ -29,4 +29,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("ride_metrics", "label_override")
+    bind = op.get_bind()
+    inspector = sa_inspect(bind)
+    existing_columns = {c["name"] for c in inspector.get_columns("ride_metrics")}
+
+    if "label_override" in existing_columns:
+        op.drop_column("ride_metrics", "label_override")

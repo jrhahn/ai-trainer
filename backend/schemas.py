@@ -583,6 +583,26 @@ class FitUploadResponse(BaseModel):
     average_heart_rate: Optional[int] = None
 
 
+class FitUploadFileResult(CamelModel):
+    filename: str
+    status: Literal["imported", "skipped", "failed"]
+    message: str
+    activity_id: Optional[str] = None
+    sport_type: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    average_power: Optional[int] = None
+    average_heart_rate: Optional[int] = None
+
+
+class FitBulkUploadResponse(CamelModel):
+    status: str
+    total: int
+    imported: int
+    skipped: int
+    failed: int
+    files: list[FitUploadFileResult]
+
+
 # ---------------------------------------------------------------------------
 # Ride metrics
 # ---------------------------------------------------------------------------
