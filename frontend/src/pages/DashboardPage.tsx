@@ -58,6 +58,28 @@ export function computeMatchScore(
   ride: RideMetricPoint,
   plan: Partial<TrainingDay>
 ): number | null {
+  const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
+
+  if (isRestOrNoTargetPlan(plan)) {
+    if (ride.tss != null) {
+      if (ride.tss <= 30) return 80
+      if (ride.tss <= 65) return 55
+      return 20
+    }
+    // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
+    if (ride.durationSeconds && plan.durationMinutes) {
+      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+    }
+    return 90
+  }
+
+  // Strength/non-power plans: score purely on duration completion (0–100 %).
+  if (isStrengthPlan(plan)) {
+    if (!ride.durationSeconds || !plan.durationMinutes) return 90
+    return Math.min(100, Math.round((ride.durationSeconds / 60 / plan.durationMinutes) * 100))
+  }
+
   const parts: number[] = []
 
   if (ride.durationSeconds != null && plan.durationMinutes) {

@@ -5,6 +5,49 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.2] - 2026-06-05
+
+### Fixed
+
+- **Auto-matched rides with >2.5× duration mismatch now set `label_override = "Mismatch"`**
+  (`services/ride_matching.py`, `crud.py`) — `apply_ride_plan_matches` detects gross
+  duration divergence at match time and writes a `Mismatch` label override so the
+  frontend bypasses score computation and shows a clear warning badge immediately.
+
+## [0.27.1] - 2026-06-03
+
+### Fixed
+
+- **Missing Alembic revision restored** (`alembic/versions/20260530_000001_add_ride_label_override.py`)
+  — restored the `20260530_000001` migration so deployed databases stamped with that
+  revision can resolve the migration graph and continue upgrading normally.
+
+## [0.27.0] - 2026-06-03
+
+### Added
+
+- **Bulk FIT import fallback** (`routers/users.py`, `schemas.py`) — added
+  `POST /users/me/upload-fit/bulk` for multi-file Garmin/Wahoo/Zwift uploads with
+  per-file imported, skipped, and failed results while preserving the existing single-file
+  upload endpoint.
+
+- **Normalized FIT ride metrics** (`routers/users.py`) — FIT imports now derive a stable
+  synthetic activity id from FIT metadata/start time/fingerprint, skip duplicate uploads,
+  parse richer record streams (watts, heart rate, cadence, altitude, speed, time, GPS),
+  and feed imported activities into the existing ride metrics pipeline.
+
+- **Bulk FIT contract coverage** (`tests/test_contract.py`) — added API tests for batch
+  success, duplicate skipping, ride metric creation, and partial failure handling.
+
+## [0.26.3] - 2026-06-01
+
+### Added
+
+- **Strava API 2026 impact note** (`docs/strava-api-2026-impact.md`) — summarizes
+  Strava's June 2026 developer-program changes, the app's current Strava API usage,
+  policy risks around AI processing, and migration action points for the 2027 base
+  URL and OAuth revoke changes.
+
 ## [0.26.2] - 2026-05-28
 
 ### Fixed
