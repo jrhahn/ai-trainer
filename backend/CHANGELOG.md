@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   successful import, duplicate-safe re-import, auth failure handling, and summary-only
   fallback when streams are missing.
 
+### Changed
+
+- **Intervals.icu app-open sync parity** (`routers/intervals.py`, `models.py`, `schemas.py`) —
+  adds an Intervals activity-list endpoint plus independent profile cursor fields so the
+  frontend can poll for new Intervals activities the same way it polls Strava.
+
 ## [0.27.2] - 2026-06-05
 
 ### Fixed

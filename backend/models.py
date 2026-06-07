@@ -107,6 +107,10 @@ class User(Base):
     last_strava_activity_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
+    intervals_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_intervals_activity_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships

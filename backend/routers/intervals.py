@@ -44,6 +44,45 @@ class IntervalsConnectionResponse(schemas.CamelModel):
     athlete_name: str | None = None
 
 
+def _activity_response(activity: dict, detail: dict | None = None) -> dict:
+    source = {**activity, **(detail or {})}
+    raw_id = source.get("id")
+    activity_id = 0 if raw_id is None else _hashed_activity_id(raw_id)
+    start_date = (
+        source.get("start_date")
+        or source.get("start_date_local")
+        or source.get("start_time")
+        or source.get("date")
+    )
+    moving_time = (
+        source.get("moving_time")
+        or source.get("elapsed_time")
+        or source.get("duration")
+    )
+    return {
+        "id": activity_id,
+        "name": source.get("name") or source.get("title") or "Intervals.icu activity",
+        "type": source.get("type") or source.get("sport") or "Ride",
+        "sport_type": source.get("type") or source.get("sport") or "Ride",
+        "distance": source.get("distance"),
+        "moving_time": moving_time,
+        "elapsed_time": source.get("elapsed_time") or moving_time,
+        "start_date": start_date,
+        "start_date_local": source.get("start_date_local") or start_date,
+        "average_watts": source.get("average_watts")
+        or source.get("icu_weighted_avg_watts"),
+        "weighted_average_watts": source.get("icu_weighted_avg_watts"),
+        "average_heartrate": source.get("average_heartrate"),
+        "average_cadence": source.get("average_cadence"),
+    }
+
+
+def _hashed_activity_id(raw_id: object) -> int:
+    from services.intervals_service import intervals_activity_id
+
+    return intervals_activity_id(raw_id)
+
+
 @router.get("/intervals/connection", response_model=IntervalsConnectionResponse)
 async def get_intervals_connection(
     current_user: models.User = Depends(auth.get_current_user),
@@ -88,6 +127,47 @@ async def delete_intervals_connection(
 ) -> dict[str, str]:
     await crud.delete_intervals_token(db, current_user.id)
     return {"status": "disconnected"}
+
+
+@router.get("/intervals/activities")
+async def get_intervals_activities(
+    current_user: models.User = Depends(auth.get_current_user),
+    after_id: int | None = None,
+    months: int = 1,
+) -> list[dict]:
+    token = current_user.intervals_token
+    if token is None:
+        raise HTTPException(status_code=404, detail="Intervals.icu not connected")
+
+    months = max(1, min(months, 24))
+    newest = date.today()
+    oldest = newest - timedelta(days=months * 30)
+    activities = await fetch_recent_activities(
+        token.api_key,
+        token.athlete_id,
+        oldest=oldest,
+        newest=newest,
+    )
+
+    result: list[dict] = []
+    for activity in activities:
+        raw_id = activity.get("id")
+        if raw_id is None:
+            continue
+        activity_id = _hashed_activity_id(raw_id)
+        if after_id is not None and activity_id == after_id:
+            break
+        result.append(_activity_response(activity))
+        if after_id is None and len(result) >= 10:
+            break
+
+    if after_id is not None and all(
+        _hashed_activity_id(activity.get("id")) != after_id
+        for activity in activities
+        if activity.get("id") is not None
+    ):
+        return []
+    return result
 
 
 @router.post("/intervals/import-history", status_code=202)

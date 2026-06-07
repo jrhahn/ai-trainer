@@ -37,6 +37,53 @@ async def test_intervals_connection_can_be_configured(client, auth_headers):
         "athleteId": "0",
         "athleteName": "Intervals Rider",
     }
+    assert profile.json()["intervalsAnalysisComplete"] is False
+    assert profile.json()["lastIntervalsActivityId"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_intervals_activities_returns_items_until_cursor(
+    client, auth_headers, monkeypatch
+):
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        return [
+            {
+                "id": "new",
+                "name": "New Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-07T08:00:00",
+                "moving_time": 1800,
+                "average_watts": 220,
+            },
+            {
+                "id": "old",
+                "name": "Already Seen Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-06T08:00:00",
+                "moving_time": 1800,
+                "average_watts": 180,
+            },
+        ]
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+    old_cursor = intervals_activity_id("old")
+    response = await client.get(
+        f"/api/v1/intervals/activities?after_id={old_cursor}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [activity["name"] for activity in body] == ["New Ride"]
+    assert body[0]["id"] == intervals_activity_id("new")
 
 
 @pytest.mark.asyncio
