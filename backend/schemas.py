@@ -131,6 +131,11 @@ class StravaConnectionSchema(CamelModel):
     athlete_name: str
 
 
+class IntervalsConnectionSchema(CamelModel):
+    athlete_id: str
+    athlete_name: Optional[str] = None
+
+
 class UserResponse(CamelModel):
     id: str
     email: str
@@ -154,6 +159,7 @@ class UserResponse(CamelModel):
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
+    intervals_connection: Optional[IntervalsConnectionSchema] = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
