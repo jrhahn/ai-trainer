@@ -110,6 +110,10 @@ class User(Base):
     last_strava_activity_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
+    intervals_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_intervals_activity_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
@@ -133,6 +137,9 @@ class User(Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     strava_token: Mapped["StravaToken | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    intervals_token: Mapped["IntervalsToken | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     rider_assessment: Mapped["RiderAssessment | None"] = relationship(
@@ -262,6 +269,25 @@ class StravaToken(Base):
     athlete_name: Mapped[str] = mapped_column(String(255), default="")
 
     user: Mapped["User"] = relationship(back_populates="strava_token")
+
+
+class IntervalsToken(Base):
+    __tablename__ = "intervals_tokens"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    api_key: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    athlete_id: Mapped[str] = mapped_column(String(64), default="0", nullable=False)
+    athlete_name: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="intervals_token")
 
 
 class StravaImportJob(Base):

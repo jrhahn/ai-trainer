@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
+import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
@@ -24,12 +25,17 @@ export function useStravaSync(): UseStravaSyncResult {
     userProfile,
     trainingPlan,
     stravaConnection,
+    intervalsConnection,
     stravaAnalysisComplete,
     lastStravaActivityId,
     stravaAutoSyncEnabled,
+    intervalsAnalysisComplete,
+    lastIntervalsActivityId,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setLastStravaActivityId,
+    setIntervalsAnalysisComplete,
+    setLastIntervalsActivityId,
     setTrainingPlan,
     setUserProfile,
   } = useAppStore(
@@ -38,12 +44,17 @@ export function useStravaSync(): UseStravaSyncResult {
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       stravaConnection: s.stravaConnection,
+      intervalsConnection: s.intervalsConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
       lastStravaActivityId: s.lastStravaActivityId,
       stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
+      intervalsAnalysisComplete: s.intervalsAnalysisComplete,
+      lastIntervalsActivityId: s.lastIntervalsActivityId,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setLastStravaActivityId: s.setLastStravaActivityId,
+      setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
+      setLastIntervalsActivityId: s.setLastIntervalsActivityId,
       setTrainingPlan: s.setTrainingPlan,
       setUserProfile: s.setUserProfile,
     }))
@@ -57,9 +68,13 @@ export function useStravaSync(): UseStravaSyncResult {
   // Guard: prevents double-triggering when React batches setState calls from
   // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
+  const activeSource = stravaConnection && stravaAutoSyncEnabled ? 'strava' : intervalsConnection ? 'intervals' : null
+  const activeAnalysisComplete = activeSource === 'intervals' ? intervalsAnalysisComplete : stravaAnalysisComplete
+  const activeLastActivityId = activeSource === 'intervals' ? lastIntervalsActivityId : lastStravaActivityId
 
-  const runAnalysis = async (activities: StravaActivity[], isIncremental = false) => {
+  const runAnalysis = async (activities: StravaActivity[], isIncremental = false, source = activeSource) => {
     if (!authToken || !userProfile || activities.length === 0) return
+    if (!source) return
     isAnalysingRef.current = true
     setAnalysisStatus('analysing')
     setAnalysisError('')
@@ -75,13 +90,18 @@ export function useStravaSync(): UseStravaSyncResult {
       setUserProfile(updatedProfile)
 
       const newestId = Math.max(...activities.map((a) => a.id))
-      setLastStravaActivityId(newestId)
+      if (source === 'intervals') {
+        setLastIntervalsActivityId(newestId)
+      } else {
+        setLastStravaActivityId(newestId)
+      }
 
       await updateCurrentUser(authToken, {
         currentFTP: updatedProfile.currentFTP,
         maxHeartRate: updatedProfile.maxHeartRate,
-        stravaAnalysisComplete: true,
-        lastStravaActivityId: newestId,
+        ...(source === 'intervals'
+          ? { intervalsAnalysisComplete: true, lastIntervalsActivityId: newestId }
+          : { stravaAnalysisComplete: true, lastStravaActivityId: newestId }),
       })
 
       // Recompute all historical TSS/CTL/ATL/TSB with the (potentially updated) FTP.
@@ -103,7 +123,11 @@ export function useStravaSync(): UseStravaSyncResult {
         setTrainingPlan(updatedPlan)
       }
 
-      setStravaAnalysisComplete(true)
+      if (source === 'intervals') {
+        setIntervalsAnalysisComplete(true)
+      } else {
+        setStravaAnalysisComplete(true)
+      }
       setAnalysisStatus('done')
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : 'Analysis failed')
@@ -115,13 +139,13 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Fetch all Strava activities. TanStack Query handles caching so the list
   // is not re-requested on every re-render or page navigation.
-  const activitiesQueryEnabled = !!stravaConnection && !!authToken && !!userProfile && stravaAutoSyncEnabled
+  const activitiesQueryEnabled = !!activeSource && !!authToken && !!userProfile
   const {
     data: stravaActivities = [],
     isError: isActivitiesError,
   } = useQuery({
-    queryKey: ['stravaActivities', authToken],
-    queryFn: () => getStravaActivities(authToken!),
+    queryKey: [activeSource === 'intervals' ? 'intervalsActivities' : 'stravaActivities', authToken],
+    queryFn: () => activeSource === 'intervals' ? getIntervalsActivities(authToken!) : getStravaActivities(authToken!),
     enabled: activitiesQueryEnabled,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -130,27 +154,30 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Trigger initial analysis when activities are first loaded
   useEffect(() => {
-    if (!stravaConnection || !authToken || !userProfile || !stravaAutoSyncEnabled) return
-    if (stravaActivities.length > 0 && !stravaAnalysisComplete && !isAnalysingRef.current) {
-      void runAnalysis(stravaActivities)
+    if (!activeSource || !authToken || !userProfile) return
+    if (stravaActivities.length > 0 && !activeAnalysisComplete && !isAnalysingRef.current) {
+      void runAnalysis(stravaActivities, false, activeSource)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, stravaConnection, stravaAnalysisComplete, stravaAutoSyncEnabled, userProfile?.email, stravaActivities])
+  }, [authToken, activeSource, activeAnalysisComplete, userProfile?.email, stravaActivities])
 
   // Propagate fetch errors to the analysis status
   useEffect(() => {
     if (isActivitiesError) {
       setAnalysisStatus('error')
-      setAnalysisError('Failed to fetch Strava activities')
+      setAnalysisError(`Failed to fetch ${activeSource === 'intervals' ? 'Intervals.icu' : 'Strava'} activities`)
     }
-  }, [isActivitiesError])
+  }, [activeSource, isActivitiesError])
 
   // Poll for new Strava activities every 5 minutes. TanStack Query's
   // refetchInterval replaces the manual setTimeout polling loop.
   const { data: polledNewActivities } = useQuery({
-    queryKey: ['newStravaActivities', authToken, lastStravaActivityId],
-    queryFn: () => getNewStravaActivities(authToken!, lastStravaActivityId!),
-    enabled: !!stravaConnection && !!authToken && stravaAutoSyncEnabled && stravaAnalysisComplete && lastStravaActivityId !== null,
+    queryKey: [activeSource === 'intervals' ? 'newIntervalsActivities' : 'newStravaActivities', authToken, activeLastActivityId],
+    queryFn: () =>
+      activeSource === 'intervals'
+        ? getNewIntervalsActivities(authToken!, activeLastActivityId!)
+        : getNewStravaActivities(authToken!, activeLastActivityId!),
+    enabled: !!activeSource && !!authToken && activeAnalysisComplete && activeLastActivityId !== null,
     refetchInterval: POLL_INTERVAL_MS,
     staleTime: 0,
     refetchOnWindowFocus: false,
@@ -170,11 +197,12 @@ export function useStravaSync(): UseStravaSyncResult {
 
     setNewActivitiesCount(unprocessed.length)
     // Merge new activities into the main query cache
-    queryClient.setQueryData<StravaActivity[]>(['stravaActivities', authToken], (prev = []) => {
+    const activitiesKey = activeSource === 'intervals' ? 'intervalsActivities' : 'stravaActivities'
+    queryClient.setQueryData<StravaActivity[]>([activitiesKey, authToken], (prev = []) => {
       const existingIds = new Set(prev.map((a) => a.id))
       return [...unprocessed.filter((a) => !existingIds.has(a.id)), ...prev]
     })
-    void runAnalysis(unprocessed, true).then(() => setNewActivitiesCount(0))
+    void runAnalysis(unprocessed, true, activeSource).then(() => setNewActivitiesCount(0))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polledNewActivities])
 

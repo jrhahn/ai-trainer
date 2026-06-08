@@ -1,7 +1,7 @@
 """add strava auto sync preference
 
 Revision ID: 20260608_000001
-Revises: 20260530_000001
+Revises: 20260607_000002
 Create Date: 2026-06-08 00:00:01
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy import inspect as sa_inspect
 
 
 revision = "20260608_000001"
-down_revision = "20260530_000001"
+down_revision = "20260607_000002"
 branch_labels = None
 depends_on = None
 

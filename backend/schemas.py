@@ -131,6 +131,11 @@ class StravaConnectionSchema(CamelModel):
     athlete_name: str
 
 
+class IntervalsConnectionSchema(CamelModel):
+    athlete_id: str
+    athlete_name: Optional[str] = None
+
+
 class UserResponse(CamelModel):
     id: str
     email: str
@@ -139,6 +144,8 @@ class UserResponse(CamelModel):
     strava_analysis_complete: bool
     last_strava_activity_id: Optional[int] = None
     strava_auto_sync_enabled: bool = True
+    intervals_analysis_complete: bool = False
+    last_intervals_activity_id: Optional[int] = None
     # profile fields
     bike_type: Optional[str] = None
     training_goal: Optional[str] = None
@@ -155,6 +162,7 @@ class UserResponse(CamelModel):
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
+    intervals_connection: Optional[IntervalsConnectionSchema] = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
@@ -182,6 +190,8 @@ class UpdateProfileRequest(CamelModel):
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
     strava_auto_sync_enabled: Optional[bool] = None
+    intervals_analysis_complete: Optional[bool] = None
+    last_intervals_activity_id: Optional[int] = None
 
     @field_validator("training_goal")
     @classmethod

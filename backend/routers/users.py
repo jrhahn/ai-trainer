@@ -93,6 +93,13 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
             athlete_name=user.strava_token.athlete_name,
         )
 
+    intervals_connection = None
+    if user.intervals_token is not None:
+        intervals_connection = schemas.IntervalsConnectionSchema(
+            athlete_id=user.intervals_token.athlete_id,
+            athlete_name=user.intervals_token.athlete_name,
+        )
+
     rider_assessment = None
     if user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -107,6 +114,8 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         strava_analysis_complete=user.strava_analysis_complete,
         last_strava_activity_id=user.last_strava_activity_id,
         strava_auto_sync_enabled=user.strava_auto_sync_enabled,
+        intervals_analysis_complete=user.intervals_analysis_complete,
+        last_intervals_activity_id=user.last_intervals_activity_id,
         bike_type=user.bike_type,
         training_goal=user.training_goal,
         race_date=user.race_date,
@@ -121,6 +130,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         consumed_tokens=user.consumed_tokens or 0,
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
+        intervals_connection=intervals_connection,
     )
 
 
@@ -953,8 +963,12 @@ async def _store_fit_import(
             )
 
     latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-    seed_ctl = latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
-    seed_atl = latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
+    seed_ctl = (
+        latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
+    )
+    seed_atl = (
+        latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
+    )
     ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
     ride_input = {
         "strava_activity_id": parsed.source_id,

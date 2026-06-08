@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Expert mode now exposes a persisted switch for automatic Strava sync, and foreground
   Strava polling runs only when the setting is enabled.
 
+- **Intervals.icu app-open sync** (`src/hooks/useStravaSync.ts`, `src/services/intervals.ts`,
+  `src/store/useAppStore.ts`, `src/services/user.ts`) — Intervals.icu can now use the same
+  five-minute foreground polling model as Strava when it is the active connected activity
+  source, including independent analysis-complete and last-activity cursor state.
+
+- **Intervals.icu sync coverage** (`src/hooks/useStravaSync.test.ts`) — verifies that
+  Intervals.icu activities are fetched, analysed, and persisted through the same hook path
+  when Strava is not connected.
+
 ## [0.22.1] - 2026-06-05
 
 ### Fixed

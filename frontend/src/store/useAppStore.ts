@@ -163,6 +163,11 @@ export interface StravaConnection {
   athleteName: string
 }
 
+export interface IntervalsConnection {
+  athleteId: string
+  athleteName?: string | null
+}
+
 export interface StravaActivity {
   id: number
   name: string
@@ -254,10 +259,13 @@ interface AppState {
   trainingPlan: TrainingDay[]
   workoutLogs: Record<string, WorkoutFeedback>
   stravaConnection: StravaConnection | null
+  intervalsConnection: IntervalsConnection | null
   riderAssessment: RiderAssessment | null
   stravaAnalysisComplete: boolean
   lastStravaActivityId: number | null
   stravaAutoSyncEnabled: boolean
+  intervalsAnalysisComplete: boolean
+  lastIntervalsActivityId: number | null
   aiProvider: AiProvider
   isOnboarded: boolean
   chatHistory: ChatMessage[]
@@ -274,10 +282,13 @@ interface AppState {
   setTrainingPlan: (plan: TrainingDay[]) => void
   logWorkout: (date: string, feedback: WorkoutFeedback) => void
   setStravaConnection: (connection: StravaConnection | null) => void
+  setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
   setStravaAnalysisComplete: (v: boolean) => void
   setLastStravaActivityId: (id: number | null) => void
   setStravaAutoSyncEnabled: (enabled: boolean) => void
+  setIntervalsAnalysisComplete: (v: boolean) => void
+  setLastIntervalsActivityId: (id: number | null) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
@@ -305,10 +316,13 @@ const dataState = {
   trainingPlan: [] as TrainingDay[],
   workoutLogs: {} as Record<string, WorkoutFeedback>,
   stravaConnection: null as StravaConnection | null,
+  intervalsConnection: null as IntervalsConnection | null,
   riderAssessment: null as RiderAssessment | null,
   stravaAnalysisComplete: false,
   lastStravaActivityId: null as number | null,
   stravaAutoSyncEnabled: true,
+  intervalsAnalysisComplete: false,
+  lastIntervalsActivityId: null as number | null,
   aiProvider: 'openai' as AiProvider,
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
@@ -365,10 +379,13 @@ export const useAppStore = create<AppState>()(
         ),
       })),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
+    setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
     setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
     setLastStravaActivityId: (id) => set({ lastStravaActivityId: id }),
     setStravaAutoSyncEnabled: (enabled) => set({ stravaAutoSyncEnabled: enabled }),
+    setIntervalsAnalysisComplete: (v) => set({ intervalsAnalysisComplete: v }),
+    setLastIntervalsActivityId: (id) => set({ lastIntervalsActivityId: id }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
     updateTrainingDay: (date, updates) =>
@@ -446,10 +463,13 @@ export const useAppStore = create<AppState>()(
           trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
           workoutLogs,
           stravaConnection: user.stravaConnection,
+          intervalsConnection: user.intervalsConnection,
           riderAssessment: user.riderAssessment,
           stravaAnalysisComplete: user.stravaAnalysisComplete,
           lastStravaActivityId: user.lastStravaActivityId ?? null,
           stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
+          intervalsAnalysisComplete: user.intervalsAnalysisComplete,
+          lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
           aiProvider: user.aiProvider,
           isOnboarded: user.isOnboarded,
           chatHistory,

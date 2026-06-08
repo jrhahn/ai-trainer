@@ -8,6 +8,8 @@ import { useStravaSync } from './useStravaSync'
 const {
   mockGetStravaActivities,
   mockGetNewStravaActivities,
+  mockGetIntervalsActivities,
+  mockGetNewIntervalsActivities,
   mockAnalyseStravaActivities,
   mockGenerateTrainingPlan,
   mockSaveTrainingPlan,
@@ -15,6 +17,8 @@ const {
 } = vi.hoisted(() => ({
   mockGetStravaActivities: vi.fn(),
   mockGetNewStravaActivities: vi.fn(),
+  mockGetIntervalsActivities: vi.fn(),
+  mockGetNewIntervalsActivities: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
   mockGenerateTrainingPlan: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
@@ -24,6 +28,11 @@ const {
 vi.mock('../services/strava', () => ({
   getStravaActivities: mockGetStravaActivities,
   getNewStravaActivities: mockGetNewStravaActivities,
+}))
+
+vi.mock('../services/intervals', () => ({
+  getIntervalsActivities: mockGetIntervalsActivities,
+  getNewIntervalsActivities: mockGetNewIntervalsActivities,
 }))
 
 vi.mock('../services/ai', () => ({
@@ -74,6 +83,8 @@ beforeEach(() => {
   mockGenerateTrainingPlan.mockResolvedValue([])
   mockGetStravaActivities.mockResolvedValue([])
   mockGetNewStravaActivities.mockResolvedValue([])
+  mockGetIntervalsActivities.mockResolvedValue([])
+  mockGetNewIntervalsActivities.mockResolvedValue([])
   mockAnalyseStravaActivities.mockResolvedValue({ assessment: mockAssessment, planUpdates: undefined })
 })
 
@@ -254,5 +265,32 @@ describe('useStravaSync', () => {
       const { lastStravaActivityId } = useAppStore.getState()
       expect(lastStravaActivityId).toBe(100)
     })
+  })
+
+  it('uses Intervals.icu as the active polling source when Strava is not connected', async () => {
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockGetIntervalsActivities).toHaveBeenCalledWith('tok')
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(mockActivities, 'tok', undefined)
+      expect(useAppStore.getState().lastIntervalsActivityId).toBe(100)
+    })
+    expect(mockGetStravaActivities).not.toHaveBeenCalled()
+    expect(mockUpdateCurrentUser).toHaveBeenCalledWith(
+      'tok',
+      expect.objectContaining({
+        intervalsAnalysisComplete: true,
+        lastIntervalsActivityId: 100,
+      })
+    )
   })
 })
