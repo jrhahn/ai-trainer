@@ -6,6 +6,7 @@ import type {
   RaceEvent,
   RideMetricPoint,
   StravaConnection,
+  IntervalsConnection,
   TrainingDay,
   UserProfile,
   WorkoutFeedback,
@@ -19,6 +20,8 @@ interface BackendUserResponse {
   isOnboarded: boolean
   stravaAnalysisComplete: boolean
   lastStravaActivityId?: number | null
+  intervalsAnalysisComplete?: boolean
+  lastIntervalsActivityId?: number | null
   bikeType?: UserProfile['bikeType']
   trainingGoal?: string
   raceDate?: string | null
@@ -33,6 +36,7 @@ interface BackendUserResponse {
   aiProvider: AiProvider
   riderAssessment?: RiderAssessment | null
   stravaConnection?: StravaConnection | null
+  intervalsConnection?: IntervalsConnection | null
 }
 
 export interface LoadedUserData {
@@ -40,9 +44,12 @@ export interface LoadedUserData {
   isOnboarded: boolean
   stravaAnalysisComplete: boolean
   lastStravaActivityId: number | null
+  intervalsAnalysisComplete: boolean
+  lastIntervalsActivityId: number | null
   aiProvider: AiProvider
   riderAssessment: RiderAssessment | null
   stravaConnection: StravaConnection | null
+  intervalsConnection: IntervalsConnection | null
 }
 
 function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
@@ -55,6 +62,8 @@ type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescripti
   isOnboarded?: boolean
   stravaAnalysisComplete?: boolean
   lastStravaActivityId?: number | null
+  intervalsAnalysisComplete?: boolean
+  lastIntervalsActivityId?: number | null
   aiProvider?: AiProvider
 }
 
@@ -79,9 +88,12 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,
     lastStravaActivityId: user.lastStravaActivityId ?? null,
+    intervalsAnalysisComplete: user.intervalsAnalysisComplete ?? false,
+    lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
     aiProvider: user.aiProvider ?? 'openai',
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,
+    intervalsConnection: user.intervalsConnection ?? null,
   }
 }
 
@@ -104,6 +116,8 @@ export async function updateCurrentUser(
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,
     lastStravaActivityId: updates.lastStravaActivityId,
+    intervalsAnalysisComplete: updates.intervalsAnalysisComplete,
+    lastIntervalsActivityId: updates.lastIntervalsActivityId,
     aiProvider: updates.aiProvider,
   }
   await apiFetch('/users/me', { token, method: 'PUT', body })

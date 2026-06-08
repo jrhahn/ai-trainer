@@ -18,6 +18,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 from database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
+import routers.intervals as intervals_router  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
@@ -38,6 +39,7 @@ async def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 # Redirect the background task's direct session factory to the test database
 ai_router.async_session_maker = TestSessionLocal
+intervals_router.async_session_maker = TestSessionLocal
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -50,7 +52,9 @@ async def reset_db():
 
 @pytest_asyncio.fixture
 async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as ac:
         yield ac
 
 
@@ -128,7 +132,15 @@ def mock_ai_service(monkeypatch):
             return_value="That race fits well; add climbing work and a short taper. Want me to adapt the plan?"
         ),
         "update_coach_memory": AsyncMock(return_value="Prefers morning workouts."),
-        "rate_completed_workout": AsyncMock(return_value={"feedback": "Strong execution overall.", "flag_for_adaptation": False, "needs_athlete_feedback": False, "follow_up_question": None, "suggested_feedback_tags": []}),
+        "rate_completed_workout": AsyncMock(
+            return_value={
+                "feedback": "Strong execution overall.",
+                "flag_for_adaptation": False,
+                "needs_athlete_feedback": False,
+                "follow_up_question": None,
+                "suggested_feedback_tags": [],
+            }
+        ),
         "recommend_next_session": AsyncMock(
             return_value={
                 "response": "Keep the next ride easy.",
@@ -137,7 +149,9 @@ def mock_ai_service(monkeypatch):
                 "plan_updates": None,
             }
         ),
-        "classify_question": AsyncMock(return_value={"category": "plan_query", "needs_science_rag": False}),
+        "classify_question": AsyncMock(
+            return_value={"category": "plan_query", "needs_science_rag": False}
+        ),
         "batch_review_rides": AsyncMock(return_value="Good training block."),
     }
     for name, mock in mocks.items():

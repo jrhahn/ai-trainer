@@ -5,6 +5,29 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-06-07
+
+### Added
+
+- **Intervals.icu activity importer** (`routers/intervals.py`, `services/intervals_service.py`,
+  `models.py`, `crud.py`, `schemas.py`) — added per-user Intervals.icu API-key storage,
+  connection management endpoints, manual recent-activity import, best-effort activity
+  detail/stream fetching, deterministic import IDs, and ride metric upserts so Strava can
+  remain optional.
+
+- **Intervals.icu credentials migration** (`alembic/versions/20260607_000001_add_intervals_tokens.py`)
+  — adds encrypted per-user Intervals.icu API key storage with athlete metadata.
+
+- **Intervals.icu import tests** (`tests/test_intervals.py`) — covers credential setup,
+  successful import, duplicate-safe re-import, auth failure handling, and summary-only
+  fallback when streams are missing.
+
+### Changed
+
+- **Intervals.icu app-open sync parity** (`routers/intervals.py`, `models.py`, `schemas.py`) —
+  adds an Intervals activity-list endpoint plus independent profile cursor fields so the
+  frontend can poll for new Intervals activities the same way it polls Strava.
+
 ## [0.27.2] - 2026-06-05
 
 ### Fixed
