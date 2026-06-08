@@ -73,6 +73,7 @@ beforeEach(() => {
     userProfile: baseProfile,
     isExpertMode: false,
     stravaAutoSyncEnabled: true,
+    intervalsAutoSyncEnabled: true,
     aiProvider: 'openai',
   })
   vi.clearAllMocks()
@@ -323,10 +324,11 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
-  it('hides the Strava auto-sync toggle outside Expert mode', () => {
+  it('hides activity auto-sync toggles outside Expert mode', () => {
     setup()
 
     expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).not.toBeInTheDocument()
   })
 
   it('lets Expert-mode users disable Strava automatic sync', async () => {
@@ -339,6 +341,18 @@ describe('SettingsPage', () => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { stravaAutoSyncEnabled: false })
     })
     expect(useAppStore.getState().stravaAutoSyncEnabled).toBe(false)
+  })
+
+  it('lets Expert-mode users disable Intervals.icu automatic sync', async () => {
+    useAppStore.setState({ isExpertMode: true, intervalsAutoSyncEnabled: true })
+    setup()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { intervalsAutoSyncEnabled: false })
+    })
+    expect(useAppStore.getState().intervalsAutoSyncEnabled).toBe(false)
   })
 
   it('shows the completed Strava import report with skipped activities', () => {

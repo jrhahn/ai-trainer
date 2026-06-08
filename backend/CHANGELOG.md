@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Strava automatic sync preference** (`models.py`, `schemas.py`, `routers/users.py`,
+- **Activity automatic sync preferences** (`models.py`, `schemas.py`, `routers/users.py`,
   `alembic/versions/20260608_000001_add_strava_auto_sync_enabled.py`) — adds a
-  persisted per-user `stravaAutoSyncEnabled` flag that defaults to enabled for existing
-  behavior while allowing the frontend to disable automatic Strava polling.
+  persisted per-user `stravaAutoSyncEnabled` and `intervalsAutoSyncEnabled` flag that
+  default to enabled for existing behavior while allowing the frontend to disable
+  automatic polling for either activity source.
 
 - **Intervals.icu activity importer** (`routers/intervals.py`, `services/intervals_service.py`,
   `models.py`, `crud.py`, `schemas.py`) — added per-user Intervals.icu API-key storage,

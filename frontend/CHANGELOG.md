@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Expert-mode Strava automatic sync toggle** (`src/pages/SettingsPage.tsx`,
+- **Expert-mode activity automatic sync toggles** (`src/pages/SettingsPage.tsx`,
   `src/hooks/useStravaSync.ts`, `src/store/useAppStore.ts`, `src/services/user.ts`) —
-  Expert mode now exposes a persisted switch for automatic Strava sync, and foreground
-  Strava polling runs only when the setting is enabled.
+  Expert mode now exposes persisted switches for automatic Strava and Intervals.icu sync,
+  and foreground polling for each source runs only when that source's setting is enabled.
 
 - **Intervals.icu app-open sync** (`src/hooks/useStravaSync.ts`, `src/services/intervals.ts`,
   `src/store/useAppStore.ts`, `src/services/user.ts`) — Intervals.icu can now use the same

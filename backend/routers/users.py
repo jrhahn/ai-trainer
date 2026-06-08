@@ -116,6 +116,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         strava_auto_sync_enabled=user.strava_auto_sync_enabled,
         intervals_analysis_complete=user.intervals_analysis_complete,
         last_intervals_activity_id=user.last_intervals_activity_id,
+        intervals_auto_sync_enabled=user.intervals_auto_sync_enabled,
         bike_type=user.bike_type,
         training_goal=user.training_goal,
         race_date=user.race_date,

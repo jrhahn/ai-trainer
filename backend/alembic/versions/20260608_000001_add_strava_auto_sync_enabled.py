@@ -1,4 +1,4 @@
-"""add strava auto sync preference
+"""add activity auto sync preferences
 
 Revision ID: 20260608_000001
 Revises: 20260607_000002
@@ -21,16 +21,21 @@ def upgrade() -> None:
     inspector = sa_inspect(bind)
     existing_columns = {c["name"] for c in inspector.get_columns("users")}
 
-    if "strava_auto_sync_enabled" not in existing_columns:
-        op.add_column(
-            "users",
-            sa.Column(
-                "strava_auto_sync_enabled",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.true(),
-            ),
-        )
+    columns = (
+        "strava_auto_sync_enabled",
+        "intervals_auto_sync_enabled",
+    )
+    for column in columns:
+        if column not in existing_columns:
+            op.add_column(
+                "users",
+                sa.Column(
+                    column,
+                    sa.Boolean(),
+                    nullable=False,
+                    server_default=sa.true(),
+                ),
+            )
 
 
 def downgrade() -> None:
@@ -38,5 +43,6 @@ def downgrade() -> None:
     inspector = sa_inspect(bind)
     existing_columns = {c["name"] for c in inspector.get_columns("users")}
 
-    if "strava_auto_sync_enabled" in existing_columns:
-        op.drop_column("users", "strava_auto_sync_enabled")
+    for column in ("intervals_auto_sync_enabled", "strava_auto_sync_enabled"):
+        if column in existing_columns:
+            op.drop_column("users", column)

@@ -293,4 +293,22 @@ describe('useStravaSync', () => {
       })
     )
   })
+
+  it('does not fetch Intervals.icu activities when automatic sync is disabled', () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: true,
+      lastIntervalsActivityId: 100,
+      intervalsAutoSyncEnabled: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    expect(result.current.analysisStatus).toBe('idle')
+    expect(mockGetIntervalsActivities).not.toHaveBeenCalled()
+    expect(mockGetNewIntervalsActivities).not.toHaveBeenCalled()
+  })
 })

@@ -23,6 +23,7 @@ interface BackendUserResponse {
   stravaAutoSyncEnabled?: boolean
   intervalsAnalysisComplete?: boolean
   lastIntervalsActivityId?: number | null
+  intervalsAutoSyncEnabled?: boolean
   bikeType?: UserProfile['bikeType']
   trainingGoal?: string
   raceDate?: string | null
@@ -48,6 +49,7 @@ export interface LoadedUserData {
   stravaAutoSyncEnabled: boolean
   intervalsAnalysisComplete: boolean
   lastIntervalsActivityId: number | null
+  intervalsAutoSyncEnabled: boolean
   aiProvider: AiProvider
   riderAssessment: RiderAssessment | null
   stravaConnection: StravaConnection | null
@@ -67,6 +69,7 @@ type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescripti
   stravaAutoSyncEnabled?: boolean
   intervalsAnalysisComplete?: boolean
   lastIntervalsActivityId?: number | null
+  intervalsAutoSyncEnabled?: boolean
   aiProvider?: AiProvider
 }
 
@@ -94,6 +97,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     stravaAutoSyncEnabled: user.stravaAutoSyncEnabled ?? true,
     intervalsAnalysisComplete: user.intervalsAnalysisComplete ?? false,
     lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
+    intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled ?? true,
     aiProvider: user.aiProvider ?? 'openai',
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,
@@ -123,6 +127,7 @@ export async function updateCurrentUser(
     stravaAutoSyncEnabled: updates.stravaAutoSyncEnabled,
     intervalsAnalysisComplete: updates.intervalsAnalysisComplete,
     lastIntervalsActivityId: updates.lastIntervalsActivityId,
+    intervalsAutoSyncEnabled: updates.intervalsAutoSyncEnabled,
     aiProvider: updates.aiProvider,
   }
   await apiFetch('/users/me', { token, method: 'PUT', body })

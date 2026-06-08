@@ -114,6 +114,9 @@ class User(Base):
     last_intervals_activity_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
+    intervals_auto_sync_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships

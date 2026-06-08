@@ -140,6 +140,7 @@ describe('loadUserData', () => {
       isOnboarded: true,
       stravaAnalysisComplete: true,
       stravaAutoSyncEnabled: false,
+      intervalsAutoSyncEnabled: false,
       aiProvider: 'openai',
       riderAssessment: { riderType: 'allrounder', notes: 'Strong aerobic base' },
       stravaConnection: { athleteId: 7, athleteName: 'Alice Rider' },
@@ -175,5 +176,6 @@ describe('loadUserData', () => {
     expect(state.rideMetricsHistory).toHaveLength(1)
     expect(state.rideMetricsHistory[0].ctlAfter).toBe(45.2)
     expect(state.stravaAutoSyncEnabled).toBe(false)
+    expect(state.intervalsAutoSyncEnabled).toBe(false)
   })
 })

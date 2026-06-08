@@ -51,6 +51,7 @@ describe('fetchCurrentUser', () => {
       stravaAnalysisComplete: false,
       lastStravaActivityId: null,
       stravaAutoSyncEnabled: false,
+      intervalsAutoSyncEnabled: false,
       bikeType: 'road',
       trainingGoal: 'general_fitness',
       weeklyHours: 10,
@@ -73,6 +74,7 @@ describe('fetchCurrentUser', () => {
     expect(result.riderAssessment).toBeNull()
     expect(result.stravaConnection).toBeNull()
     expect(result.stravaAutoSyncEnabled).toBe(false)
+    expect(result.intervalsAutoSyncEnabled).toBe(false)
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me', { token: 'tok-123' })
   })
 
@@ -97,6 +99,7 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.fitnessLevel).toBe('intermediate')
     expect(result.lastStravaActivityId).toBeNull()
     expect(result.stravaAutoSyncEnabled).toBe(true)
+    expect(result.intervalsAutoSyncEnabled).toBe(true)
   })
 
   it('normalizes retired training goals to general fitness', async () => {
@@ -127,17 +130,21 @@ describe('updateCurrentUser', () => {
         isOnboarded: true,
         stravaAnalysisComplete: true,
         stravaAutoSyncEnabled: false,
+        intervalsAutoSyncEnabled: false,
         followsTrainingPlan: true,
         consumedTokens: 0,
         aiProvider: 'openai',
       })
 
-    await updateCurrentUser('tok-123', { stravaAutoSyncEnabled: false })
+    await updateCurrentUser('tok-123', { stravaAutoSyncEnabled: false, intervalsAutoSyncEnabled: false })
 
     expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me', {
       token: 'tok-123',
       method: 'PUT',
-      body: expect.objectContaining({ stravaAutoSyncEnabled: false }),
+      body: expect.objectContaining({
+        stravaAutoSyncEnabled: false,
+        intervalsAutoSyncEnabled: false,
+      }),
     })
   })
 })

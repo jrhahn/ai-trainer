@@ -23,6 +23,7 @@ async def test_get_update_and_delete_me(client, auth_headers):
     assert update_response.json()["bikeType"] == "road"
     assert update_response.json()["isOnboarded"] is True
     assert update_response.json()["stravaAutoSyncEnabled"] is True
+    assert update_response.json()["intervalsAutoSyncEnabled"] is True
 
     delete_response = await client.delete("/api/v1/users/me", headers=auth_headers)
     assert delete_response.status_code == 200
@@ -34,22 +35,25 @@ async def test_update_me_persists_strava_auto_sync_preference(client, auth_heade
     default_response = await client.get("/api/v1/users/me", headers=auth_headers)
     assert default_response.status_code == 200
     assert default_response.json()["stravaAutoSyncEnabled"] is True
+    assert default_response.json()["intervalsAutoSyncEnabled"] is True
 
     disabled_response = await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
-        json={"stravaAutoSyncEnabled": False},
+        json={"stravaAutoSyncEnabled": False, "intervalsAutoSyncEnabled": False},
     )
     assert disabled_response.status_code == 200
     assert disabled_response.json()["stravaAutoSyncEnabled"] is False
+    assert disabled_response.json()["intervalsAutoSyncEnabled"] is False
 
     enabled_response = await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
-        json={"stravaAutoSyncEnabled": True},
+        json={"stravaAutoSyncEnabled": True, "intervalsAutoSyncEnabled": True},
     )
     assert enabled_response.status_code == 200
     assert enabled_response.json()["stravaAutoSyncEnabled"] is True
+    assert enabled_response.json()["intervalsAutoSyncEnabled"] is True
 
 
 @pytest.mark.asyncio
