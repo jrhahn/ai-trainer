@@ -105,3 +105,15 @@ def test_migration_revisions_are_unique():
         f"Duplicate revision IDs detected: "
         f"{[r for r in rev_ids if rev_ids.count(r) > 1]}"
     )
+
+
+def test_intervals_auto_sync_has_followup_migration():
+    """The Intervals auto-sync column must not be added only by an edited old revision.
+
+    Databases that already applied ``20260608_000001`` need a later revision to
+    add ``users.intervals_auto_sync_enabled``.
+    """
+    script = _get_script_dir()
+    revision = script.get_revision("20260608_000002")
+    assert revision is not None
+    assert revision.down_revision == "20260608_000001"

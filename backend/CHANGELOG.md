@@ -5,13 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.1] - 2026-06-08
+
+### Fixed
+
+- **Intervals.icu auto-sync migration compatibility**
+  (`alembic/versions/20260608_000002_add_intervals_auto_sync_enabled.py`) — adds
+  `users.intervals_auto_sync_enabled` in a follow-up migration so databases that
+  already applied `20260608_000001` still receive the new column.
+
 ## [0.28.0] - 2026-06-08
 
 ### Added
 
 - **Activity automatic sync preferences** (`models.py`, `schemas.py`, `routers/users.py`,
-  `alembic/versions/20260608_000001_add_strava_auto_sync_enabled.py`) — adds a
-  persisted per-user `stravaAutoSyncEnabled` and `intervalsAutoSyncEnabled` flag that
+  `alembic/versions/20260608_000001_add_strava_auto_sync_enabled.py`,
+  `alembic/versions/20260608_000002_add_intervals_auto_sync_enabled.py`) — adds
+  persisted per-user `stravaAutoSyncEnabled` and `intervalsAutoSyncEnabled` flags that
   default to enabled for existing behavior while allowing the frontend to disable
   automatic polling for either activity source.
 
