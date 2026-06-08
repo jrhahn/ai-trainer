@@ -130,6 +130,23 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('does not fetch Strava activities when automatic sync is disabled', () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      lastStravaActivityId: 100,
+      stravaAutoSyncEnabled: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    expect(result.current.analysisStatus).toBe('idle')
+    expect(mockGetStravaActivities).not.toHaveBeenCalled()
+    expect(mockGetNewStravaActivities).not.toHaveBeenCalled()
+  })
+
   it('runs analysis when activities are fetched and analysis has not been done yet', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({
@@ -275,5 +292,23 @@ describe('useStravaSync', () => {
         lastIntervalsActivityId: 100,
       })
     )
+  })
+
+  it('does not fetch Intervals.icu activities when automatic sync is disabled', () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: true,
+      lastIntervalsActivityId: 100,
+      intervalsAutoSyncEnabled: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    expect(result.current.analysisStatus).toBe('idle')
+    expect(mockGetIntervalsActivities).not.toHaveBeenCalled()
+    expect(mockGetNewIntervalsActivities).not.toHaveBeenCalled()
   })
 })

@@ -5,9 +5,14 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.23.0] - 2026-06-07
+## [0.23.0] - 2026-06-08
 
 ### Added
+
+- **Expert-mode activity automatic sync toggles** (`src/pages/SettingsPage.tsx`,
+  `src/hooks/useStravaSync.ts`, `src/store/useAppStore.ts`, `src/services/user.ts`) —
+  Expert mode now exposes persisted switches for automatic Strava and Intervals.icu sync,
+  and foreground polling for each source runs only when that source's setting is enabled.
 
 - **Intervals.icu app-open sync** (`src/hooks/useStravaSync.ts`, `src/services/intervals.ts`,
   `src/store/useAppStore.ts`, `src/services/user.ts`) — Intervals.icu can now use the same
