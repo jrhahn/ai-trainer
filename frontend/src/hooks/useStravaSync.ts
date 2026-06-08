@@ -26,6 +26,7 @@ export function useStravaSync(): UseStravaSyncResult {
     stravaConnection,
     stravaAnalysisComplete,
     lastStravaActivityId,
+    stravaAutoSyncEnabled,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setLastStravaActivityId,
@@ -39,6 +40,7 @@ export function useStravaSync(): UseStravaSyncResult {
       stravaConnection: s.stravaConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
       lastStravaActivityId: s.lastStravaActivityId,
+      stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setLastStravaActivityId: s.setLastStravaActivityId,
@@ -113,7 +115,7 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Fetch all Strava activities. TanStack Query handles caching so the list
   // is not re-requested on every re-render or page navigation.
-  const activitiesQueryEnabled = !!stravaConnection && !!authToken && !!userProfile
+  const activitiesQueryEnabled = !!stravaConnection && !!authToken && !!userProfile && stravaAutoSyncEnabled
   const {
     data: stravaActivities = [],
     isError: isActivitiesError,
@@ -128,12 +130,12 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Trigger initial analysis when activities are first loaded
   useEffect(() => {
-    if (!stravaConnection || !authToken || !userProfile) return
+    if (!stravaConnection || !authToken || !userProfile || !stravaAutoSyncEnabled) return
     if (stravaActivities.length > 0 && !stravaAnalysisComplete && !isAnalysingRef.current) {
       void runAnalysis(stravaActivities)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, stravaConnection, stravaAnalysisComplete, userProfile?.email, stravaActivities])
+  }, [authToken, stravaConnection, stravaAnalysisComplete, stravaAutoSyncEnabled, userProfile?.email, stravaActivities])
 
   // Propagate fetch errors to the analysis status
   useEffect(() => {
@@ -148,7 +150,7 @@ export function useStravaSync(): UseStravaSyncResult {
   const { data: polledNewActivities } = useQuery({
     queryKey: ['newStravaActivities', authToken, lastStravaActivityId],
     queryFn: () => getNewStravaActivities(authToken!, lastStravaActivityId!),
-    enabled: !!stravaConnection && !!authToken && stravaAnalysisComplete && lastStravaActivityId !== null,
+    enabled: !!stravaConnection && !!authToken && stravaAutoSyncEnabled && stravaAnalysisComplete && lastStravaActivityId !== null,
     refetchInterval: POLL_INTERVAL_MS,
     staleTime: 0,
     refetchOnWindowFocus: false,

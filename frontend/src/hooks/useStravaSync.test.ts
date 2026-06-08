@@ -119,6 +119,23 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('does not fetch Strava activities when automatic sync is disabled', () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      lastStravaActivityId: 100,
+      stravaAutoSyncEnabled: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    expect(result.current.analysisStatus).toBe('idle')
+    expect(mockGetStravaActivities).not.toHaveBeenCalled()
+    expect(mockGetNewStravaActivities).not.toHaveBeenCalled()
+  })
+
   it('runs analysis when activities are fetched and analysis has not been done yet', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({

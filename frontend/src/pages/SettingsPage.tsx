@@ -15,18 +15,24 @@ export default function SettingsPage() {
   const {
     authToken,
     userProfile,
+    isExpertMode,
+    stravaAutoSyncEnabled,
     aiProvider,
     setAiProvider,
     setUserProfile,
+    setStravaAutoSyncEnabled,
     resetAll,
     logout,
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
+      isExpertMode: s.isExpertMode,
+      stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
+      setStravaAutoSyncEnabled: s.setStravaAutoSyncEnabled,
       resetAll: s.resetAll,
       logout: s.logout,
     }))
@@ -59,6 +65,8 @@ export default function SettingsPage() {
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [hrWorking, setHrWorking] = useState(false)
+  const [stravaSyncMsg, setStravaSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [stravaSyncSaving, setStravaSyncSaving] = useState(false)
   // Two-step FTP confirmation after HR save
   const [ftpEstimate, setFtpEstimate] = useState<number | null>(null)
   const [ftpConfirmInput, setFtpConfirmInput] = useState('')
@@ -255,6 +263,27 @@ export default function SettingsPage() {
     logout()
     if (AUTHELIA_URL) {
       window.location.href = `${AUTHELIA_URL}/logout`
+    }
+  }
+
+  const handleStravaAutoSyncChange = async (enabled: boolean) => {
+    if (!authToken) return
+    const previous = stravaAutoSyncEnabled
+    setStravaAutoSyncEnabled(enabled)
+    setStravaSyncSaving(true)
+    setStravaSyncMsg(null)
+    try {
+      await updateCurrentUser(authToken, { stravaAutoSyncEnabled: enabled })
+      setStravaSyncMsg({
+        type: 'success',
+        text: enabled ? 'Automatic Strava sync enabled.' : 'Automatic Strava sync disabled.',
+      })
+      setTimeout(() => setStravaSyncMsg(null), 3000)
+    } catch {
+      setStravaAutoSyncEnabled(previous)
+      setStravaSyncMsg({ type: 'error', text: 'Could not save Strava sync setting. Please try again.' })
+    } finally {
+      setStravaSyncSaving(false)
     }
   }
 
@@ -581,6 +610,34 @@ export default function SettingsPage() {
         </div>
 
         <StravaConnect />
+
+        {isExpertMode && (
+          <div className="mt-4 border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Strava</p>
+              <p className="text-xs text-gray-500 mt-1">
+                When enabled, AI Trainer checks for new Strava activities while the app is open.
+              </p>
+              {stravaSyncMsg && (
+                <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                  {stravaSyncMsg.text}
+                </p>
+              )}
+            </div>
+            <label className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={stravaAutoSyncEnabled}
+                disabled={stravaSyncSaving}
+                aria-label="Turn on automatic sync with Strava"
+                onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
+              />
+              <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+              <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+            </label>
+          </div>
+        )}
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">

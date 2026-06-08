@@ -138,6 +138,7 @@ class UserResponse(CamelModel):
     is_onboarded: bool
     strava_analysis_complete: bool
     last_strava_activity_id: Optional[int] = None
+    strava_auto_sync_enabled: bool = True
     # profile fields
     bike_type: Optional[str] = None
     training_goal: Optional[str] = None
@@ -180,6 +181,7 @@ class UpdateProfileRequest(CamelModel):
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
+    strava_auto_sync_enabled: Optional[bool] = None
 
     @field_validator("training_goal")
     @classmethod

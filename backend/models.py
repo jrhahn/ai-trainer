@@ -103,6 +103,9 @@ class User(Base):
     consumed_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
 
     use_estimated_ftp: Mapped[bool] = mapped_column(Boolean, default=False)
+    strava_auto_sync_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     strava_analysis_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     last_strava_activity_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True

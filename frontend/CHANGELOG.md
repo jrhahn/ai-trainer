@@ -5,6 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-06-08
+
+### Added
+
+- **Expert-mode Strava automatic sync toggle** (`src/pages/SettingsPage.tsx`,
+  `src/hooks/useStravaSync.ts`, `src/store/useAppStore.ts`, `src/services/user.ts`) —
+  Expert mode now exposes a persisted switch for automatic Strava sync, and foreground
+  Strava polling runs only when the setting is enabled.
+
 ## [0.22.1] - 2026-06-05
 
 ### Fixed

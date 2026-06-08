@@ -257,6 +257,7 @@ interface AppState {
   riderAssessment: RiderAssessment | null
   stravaAnalysisComplete: boolean
   lastStravaActivityId: number | null
+  stravaAutoSyncEnabled: boolean
   aiProvider: AiProvider
   isOnboarded: boolean
   chatHistory: ChatMessage[]
@@ -276,6 +277,7 @@ interface AppState {
   setRiderAssessment: (assessment: RiderAssessment | null) => void
   setStravaAnalysisComplete: (v: boolean) => void
   setLastStravaActivityId: (id: number | null) => void
+  setStravaAutoSyncEnabled: (enabled: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
   updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
@@ -306,6 +308,7 @@ const dataState = {
   riderAssessment: null as RiderAssessment | null,
   stravaAnalysisComplete: false,
   lastStravaActivityId: null as number | null,
+  stravaAutoSyncEnabled: true,
   aiProvider: 'openai' as AiProvider,
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
@@ -365,6 +368,7 @@ export const useAppStore = create<AppState>()(
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
     setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
     setLastStravaActivityId: (id) => set({ lastStravaActivityId: id }),
+    setStravaAutoSyncEnabled: (enabled) => set({ stravaAutoSyncEnabled: enabled }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
     updateTrainingDay: (date, updates) =>
@@ -445,6 +449,7 @@ export const useAppStore = create<AppState>()(
           riderAssessment: user.riderAssessment,
           stravaAnalysisComplete: user.stravaAnalysisComplete,
           lastStravaActivityId: user.lastStravaActivityId ?? null,
+          stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
           aiProvider: user.aiProvider,
           isOnboarded: user.isOnboarded,
           chatHistory,

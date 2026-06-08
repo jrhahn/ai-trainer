@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-06-08
+
+### Added
+
+- **Strava automatic sync preference** (`models.py`, `schemas.py`, `routers/users.py`,
+  `alembic/versions/20260608_000001_add_strava_auto_sync_enabled.py`) — adds a
+  persisted per-user `stravaAutoSyncEnabled` flag that defaults to enabled for existing
+  behavior while allowing the frontend to disable automatic Strava polling.
+
 ## [0.27.2] - 2026-06-05
 
 ### Fixed

@@ -5,6 +5,7 @@ vi.mock('./api', () => ({ API_BASE: '/api/v1', apiFetch: mockApiFetch }))
 
 import {
   fetchCurrentUser,
+  updateCurrentUser,
   fetchTrainingPlan,
   fetchWorkoutLogs,
   saveTrainingPlan,
@@ -49,6 +50,7 @@ describe('fetchCurrentUser', () => {
       isOnboarded: true,
       stravaAnalysisComplete: false,
       lastStravaActivityId: null,
+      stravaAutoSyncEnabled: false,
       bikeType: 'road',
       trainingGoal: 'general_fitness',
       weeklyHours: 10,
@@ -70,6 +72,7 @@ describe('fetchCurrentUser', () => {
     expect(result.aiProvider).toBe('openai')
     expect(result.riderAssessment).toBeNull()
     expect(result.stravaConnection).toBeNull()
+    expect(result.stravaAutoSyncEnabled).toBe(false)
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me', { token: 'tok-123' })
   })
 
@@ -93,6 +96,7 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.consumedTokens).toBe(0)
     expect(result.profile.fitnessLevel).toBe('intermediate')
     expect(result.lastStravaActivityId).toBeNull()
+    expect(result.stravaAutoSyncEnabled).toBe(true)
   })
 
   it('normalizes retired training goals to general fitness', async () => {
@@ -110,6 +114,31 @@ describe('fetchCurrentUser', () => {
     const result = await fetchCurrentUser('tok-legacy')
 
     expect(result.profile.trainingGoal).toBe('general_fitness')
+  })
+})
+
+describe('updateCurrentUser', () => {
+  it('sends the Strava auto-sync preference to the backend', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'alice@example.com',
+        isOnboarded: true,
+        stravaAnalysisComplete: true,
+        stravaAutoSyncEnabled: false,
+        followsTrainingPlan: true,
+        consumedTokens: 0,
+        aiProvider: 'openai',
+      })
+
+    await updateCurrentUser('tok-123', { stravaAutoSyncEnabled: false })
+
+    expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me', {
+      token: 'tok-123',
+      method: 'PUT',
+      body: expect.objectContaining({ stravaAutoSyncEnabled: false }),
+    })
   })
 })
 
