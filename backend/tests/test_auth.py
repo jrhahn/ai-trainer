@@ -159,6 +159,29 @@ def test_validate_jwt_secret_allowed_in_test_env_with_default(monkeypatch):
 
 
 def test_validate_jwt_secret_allowed_in_production_with_custom_secret(monkeypatch):
-    monkeypatch.setattr(auth, "JWT_SECRET", "a-strong-custom-secret-that-is-not-the-default")
+    monkeypatch.setattr(
+        auth, "JWT_SECRET", "a-strong-custom-secret-that-is-not-the-default"
+    )
     monkeypatch.setattr(auth, "APP_ENV", "production")
     auth.validate_jwt_secret()  # should not raise
+
+
+def test_validate_jwt_secret_raises_in_production_with_short_hmac_secret(monkeypatch):
+    monkeypatch.setattr(auth, "JWT_SECRET", "short-custom-secret")
+    monkeypatch.setattr(auth, "JWT_ALGORITHM", "HS256")
+    monkeypatch.setattr(auth, "APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="below the 32-byte minimum"):
+        auth.validate_jwt_secret()
+
+
+def test_validate_jwt_secret_suppresses_repeated_dev_short_secret_warning(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(auth, "JWT_SECRET", "short-dev-secret")
+    monkeypatch.setattr(auth, "JWT_ALGORITHM", "HS256")
+    monkeypatch.setattr(auth, "APP_ENV", "development")
+
+    with caplog.at_level("WARNING", logger="auth"):
+        auth.validate_jwt_secret()
+
+    assert "Suppressing PyJWT's repeated InsecureKeyLengthWarning" in caplog.text

@@ -41,7 +41,7 @@ cp .env.example .env
 | `FRONTEND_URL`        | URL where the React app is served                        | `http://localhost:5173`    |
 | `SERVER_URL`          | Bare public domain (e.g. `trainlikea.pro`); `https://` is prepended automatically to build the Strava callback URL. Takes priority over `BACKEND_URL`. | – |
 | `BACKEND_URL`         | Full public URL fallback when `SERVER_URL` is not set (local dev) | `http://localhost:8000` |
-| `APP_ENV`             | Runtime environment. Set to `production` (or `staging`) for deployments. The app refuses to start if `JWT_SECRET` is the default insecure value and `APP_ENV` is not a dev/test environment. | `development` |
+| `APP_ENV`             | Runtime environment. Set to `production` (or `staging`) for deployments. The app refuses to start if `JWT_SECRET` is the default insecure value, or shorter than 32 bytes for HS256, and `APP_ENV` is not a dev/test environment. | `development` |
 
 ### 3. Install dependencies
 

@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.4] - 2026-06-09
+
+### Fixed
+
+- **JWT secret length validation** (`auth.py`, `.env.example`, `README.md`) —
+  HS256 deployments now fail fast when `JWT_SECRET` is shorter than 32 bytes,
+  while dev/test environments log one clear warning and suppress PyJWT's repeated
+  per-request `InsecureKeyLengthWarning`.
+
 ## [0.28.3] - 2026-06-09
 
 ### Fixed
