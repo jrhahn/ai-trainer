@@ -13,7 +13,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { getSessionToken } from './services/auth'
-import { AUTHELIA_URL } from './services/api'
+import { AUTH_EXPIRED_EVENT, AUTHELIA_URL } from './services/api'
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -23,6 +23,7 @@ export default function App() {
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
   const loadingStep = useAppStore((s) => s.loadingStep)
   const loadUserData = useAppStore((s) => s.loadUserData)
+  const logout = useAppStore((s) => s.logout)
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const importProgress = useImportProgress()
   const [isCheckingAutheliaSession, setIsCheckingAutheliaSession] = useState(Boolean(AUTHELIA_URL && !authToken))
@@ -32,6 +33,17 @@ export default function App() {
       void loadUserData().catch(() => {})
     }
   }, [authToken, loadUserData])
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      logout()
+      if (AUTHELIA_URL) {
+        setIsCheckingAutheliaSession(true)
+      }
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+  }, [logout])
 
   useEffect(() => {
     if (!AUTHELIA_URL || authToken || !isCheckingAutheliaSession) return

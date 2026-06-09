@@ -33,6 +33,28 @@ def test_uvicorn_access_log_config_includes_timestamp():
     assert formatted[10] == " "
 
 
+def test_root_log_config_includes_timestamp():
+    config = yaml.safe_load((BACKEND_DIR / "logging.yaml").read_text())
+    logging.config.dictConfig(config)
+
+    formatter = logging.getLogger().handlers[0].formatter
+    record = logging.LogRecord(
+        "main",
+        logging.WARNING,
+        __file__,
+        1,
+        "HTTP 401 on GET /api/v1/strava/import-progress: Invalid token",
+        (),
+        None,
+    )
+
+    formatted = formatter.format(record)
+
+    assert "HTTP 401 on GET /api/v1/strava/import-progress" in formatted
+    assert formatted[:10].count("-") == 2
+    assert formatted[10] == " "
+
+
 async def test_request_validation_errors_are_logged(client, auth_headers, caplog):
     with caplog.at_level(logging.WARNING, logger="main"):
         response = await client.post(

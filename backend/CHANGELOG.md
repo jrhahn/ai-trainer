@@ -5,6 +5,14 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.5] - 2026-06-09
+
+### Fixed
+
+- **Timestamped application logs** (`logging.yaml`) — root/application logger
+  output now uses the same timestamped formatter as Uvicorn logs, so auth and
+  validation warnings include dates in Docker output.
+
 ## [0.28.4] - 2026-06-09
 
 ### Fixed
