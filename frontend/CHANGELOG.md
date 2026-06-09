@@ -5,6 +5,14 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.2] - 2026-06-09
+
+### Fixed
+
+- **Intervals.icu sync build typing** (`src/hooks/useStravaSync.ts`) — narrows
+  the active activity source type so the production TypeScript build accepts the
+  explicit Intervals.icu analysis source.
+
 ## [0.24.1] - 2026-06-09
 
 ### Fixed

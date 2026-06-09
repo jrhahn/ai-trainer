@@ -10,6 +10,8 @@ import { useMetricsPipeline } from './useMetricsPipeline'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
+type ActivitySource = 'strava' | 'intervals'
+
 export type AnalysisStatus = 'idle' | 'analysing' | 'done' | 'error'
 
 export interface UseStravaSyncResult {
@@ -70,7 +72,7 @@ export function useStravaSync(): UseStravaSyncResult {
   // Guard: prevents double-triggering when React batches setState calls from
   // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
-  const activeSource = stravaConnection && stravaAutoSyncEnabled
+  const activeSource: ActivitySource | null = stravaConnection && stravaAutoSyncEnabled
     ? 'strava'
     : intervalsConnection && intervalsAutoSyncEnabled
       ? 'intervals'
@@ -78,7 +80,11 @@ export function useStravaSync(): UseStravaSyncResult {
   const activeAnalysisComplete = activeSource === 'intervals' ? intervalsAnalysisComplete : stravaAnalysisComplete
   const activeLastActivityId = activeSource === 'intervals' ? lastIntervalsActivityId : lastStravaActivityId
 
-  const runAnalysis = async (activities: StravaActivity[], isIncremental = false, source = activeSource) => {
+  const runAnalysis = async (
+    activities: StravaActivity[],
+    isIncremental = false,
+    source: ActivitySource | null = activeSource
+  ) => {
     if (!authToken || !userProfile || activities.length === 0) return
     if (!source) return
     isAnalysingRef.current = true
