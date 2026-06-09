@@ -47,6 +47,10 @@ vi.mock('../components/StravaConnect', () => ({
   default: () => <div data-testid="strava-connect-stub" />,
 }))
 
+vi.mock('../components/IntervalsConnect', () => ({
+  default: () => <div data-testid="intervals-connect-stub" />,
+}))
+
 const baseProfile: UserProfile = {
   name: 'Alice',
   email: 'alice@example.com',
@@ -72,6 +76,7 @@ beforeEach(() => {
     authToken: 'tok-123',
     userProfile: baseProfile,
     aiProvider: 'openai',
+    isExpertMode: false,
   })
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue({})
@@ -319,6 +324,20 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Strava Activity Analysis')).toBeInTheDocument()
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
+  })
+
+  it('hides the Intervals.icu connection control outside Expert mode', () => {
+    useAppStore.setState({ isExpertMode: false })
+    setup()
+
+    expect(screen.queryByTestId('intervals-connect-stub')).not.toBeInTheDocument()
+  })
+
+  it('shows the Intervals.icu connection control in Expert mode', () => {
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
   })
 
   it('shows the completed Strava import report with skipped activities', () => {

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
@@ -15,6 +16,7 @@ export default function SettingsPage() {
   const {
     authToken,
     userProfile,
+    isExpertMode,
     aiProvider,
     setAiProvider,
     setUserProfile,
@@ -24,6 +26,7 @@ export default function SettingsPage() {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
+      isExpertMode: s.isExpertMode,
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
@@ -581,6 +584,12 @@ export default function SettingsPage() {
         </div>
 
         <StravaConnect />
+
+        {isExpertMode && (
+          <div className="mt-4">
+            <IntervalsConnect />
+          </div>
+        )}
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">

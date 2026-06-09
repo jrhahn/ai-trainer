@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-06-09
+
+### Added
+
+- **Expert Intervals.icu account linking** (`src/components/IntervalsConnect.tsx`,
+  `src/pages/SettingsPage.tsx`, `src/services/intervals.ts`) — Expert-mode settings now
+  show an Intervals.icu connection form next to the existing integration controls, backed
+  by the existing `/intervals/connection` API.
+
+- **Intervals.icu connection coverage** (`src/components/IntervalsConnect.test.tsx`,
+  `src/pages/SettingsPage.test.tsx`) — verifies expert-mode visibility plus connect and
+  disconnect store updates.
+
 ## [0.23.0] - 2026-06-07
 
 ### Added
