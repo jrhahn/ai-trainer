@@ -5,6 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.3] - 2026-06-09
+
+### Fixed
+
+- **Strava import-progress polling scope** (`src/hooks/useImportProgress.ts`,
+  `src/pages/StravaCallbackPage.tsx`) — import-progress polling now runs only
+  while an import flow opts into it, instead of every three seconds for any
+  authenticated session.
+
 ## [0.24.2] - 2026-06-09
 
 ### Fixed

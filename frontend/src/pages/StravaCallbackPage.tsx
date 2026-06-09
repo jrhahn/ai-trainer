@@ -45,7 +45,7 @@ export default function StravaCallbackPage() {
   // Prevent the effect from re-running if the component re-renders after initialisation.
   const initialisedRef = useRef(false)
 
-  const progress = useImportProgress()
+  const progress = useImportProgress({ poll: step === 'importing' })
 
   const refreshCurrentUser = async () => {
     if (!authToken) return
