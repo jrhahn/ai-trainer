@@ -8,6 +8,7 @@ from sqlalchemy import select
 from auth import decode_token
 from database import async_session_maker
 import models
+import schemas
 from routers import intervals as intervals_router
 from services.intervals_service import IntervalsAuthError, intervals_activity_id
 
@@ -84,6 +85,27 @@ async def test_get_intervals_activities_returns_items_until_cursor(
     body = response.json()
     assert [activity["name"] for activity in body] == ["New Ride"]
     assert body[0]["id"] == intervals_activity_id("new")
+    assert body[0]["distance"] == 0
+    assert body[0]["total_elevation_gain"] == 0
+    schemas.StravaActivitySchema.model_validate(body[0])
+
+
+def test_intervals_activity_response_defaults_match_analysis_schema():
+    activity = intervals_router._activity_response(
+        {
+            "id": "no-distance",
+            "name": "No Distance Ride",
+            "type": "Ride",
+            "start_date_local": "2026-06-07T08:00:00",
+            "moving_time": 1800,
+        }
+    )
+
+    parsed = schemas.StravaActivitySchema.model_validate(activity)
+
+    assert parsed.distance == 0
+    assert parsed.total_elevation_gain == 0
+    assert parsed.moving_time == 1800
 
 
 @pytest.mark.asyncio

@@ -433,6 +433,7 @@ class AnalyseActivitiesRequest(CamelModel):
     activities: list[StravaActivitySchema]
     max_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
+    source: Literal["strava", "intervals"] = "strava"
 
 
 class GeneratePlanRequest(CamelModel):

@@ -30,6 +30,7 @@ from services.analysis import (
 )
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
+from services.intervals_service import apply_summary_fallback
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
     apply_ride_plan_matches,
@@ -209,7 +210,7 @@ async def analyse_activities(
 ) -> schemas.AnalyseActivitiesResponse:
     # Fetch per-second stream data for each activity from Strava
     streams_by_id: dict[str, dict] = {}
-    if current_user.strava_token is not None:
+    if body.source == "strava" and current_user.strava_token is not None:
         try:
             access_token = await ensure_fresh_strava_token(
                 current_user.strava_token, db
@@ -285,11 +286,20 @@ async def analyse_activities(
         login_summary=result.get("loginSummary"),
     )
 
-    current_user.strava_analysis_complete = True
+    if body.source == "intervals":
+        current_user.intervals_analysis_complete = True
+    else:
+        current_user.strava_analysis_complete = True
     # Track the most recent activity analysed so the frontend can detect new rides.
     if body.activities:
         newest_id = max(a.id for a in body.activities)
-        if (
+        if body.source == "intervals":
+            if (
+                current_user.last_intervals_activity_id is None
+                or newest_id > current_user.last_intervals_activity_id
+            ):
+                current_user.last_intervals_activity_id = newest_id
+        elif (
             current_user.last_strava_activity_id is None
             or newest_id > current_user.last_strava_activity_id
         ):
@@ -345,6 +355,8 @@ async def analyse_activities(
                     "sport_type": sport_type,
                     "duration_seconds": duration_seconds,
                     "streams": streams_by_id.get(str(activity.id), {}),
+                    "_summary_avg_power_w": a_dict.get("average_watts"),
+                    "_summary_np_w": a_dict.get("weighted_average_watts"),
                     **weather_by_id.get(activity.id, {}),
                 }
             )
@@ -357,6 +369,8 @@ async def analyse_activities(
                 meta = ride_meta_by_id.get(metric["strava_activity_id"], {})
                 metric["activity_name"] = meta.get("activity_name")
                 metric["activity_start_datetime"] = meta.get("activity_start_datetime")
+                if body.source == "intervals":
+                    apply_summary_fallback(metric, meta)
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
             auto_matched = await apply_ride_plan_matches(

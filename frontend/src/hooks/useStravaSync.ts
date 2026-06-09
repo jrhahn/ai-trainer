@@ -85,7 +85,13 @@ export function useStravaSync(): UseStravaSyncResult {
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
-      const { assessment, planUpdates } = await analyseStravaActivities(activities, authToken, userProfile.maxHeartRate)
+      const { assessment, planUpdates } = await analyseStravaActivities(
+        activities,
+        authToken,
+        userProfile.maxHeartRate,
+        undefined,
+        source
+      )
       setRiderAssessment(assessment)
 
       const updatedProfile = {

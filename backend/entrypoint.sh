@@ -9,4 +9,4 @@ echo "Running database migrations..."
 alembic upgrade head
 echo "Migrations complete."
 
-exec uvicorn main:app --host 0.0.0.0 --port 8000
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --log-config logging.yaml

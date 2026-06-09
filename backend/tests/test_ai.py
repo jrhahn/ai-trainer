@@ -105,6 +105,42 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     assert rate_response.json()["feedback"] == "Strong execution overall."
 
 
+@pytest.mark.asyncio
+async def test_analyse_intervals_activities_updates_intervals_sync_state(
+    client, auth_headers, mock_ai_service
+):
+    activity_id = 12345
+    response = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "source": "intervals",
+            "activities": [
+                {
+                    "id": activity_id,
+                    "name": "Intervals Ride",
+                    "type": "Ride",
+                    "distance": 0,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 0,
+                    "startDate": "2026-06-07T08:00:00Z",
+                    "averageWatts": 210,
+                    "weightedAverageWatts": 220,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    profile = await client.get("/api/v1/users/me", headers=auth_headers)
+    body = profile.json()
+    assert body["intervalsAnalysisComplete"] is True
+    assert body["lastIntervalsActivityId"] == activity_id
+    assert body["stravaAnalysisComplete"] is False
+    assert body["lastStravaActivityId"] is None
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for ask_trainer context_workout prompt branching
 # ---------------------------------------------------------------------------
