@@ -28,8 +28,10 @@ export function useStravaSync(): UseStravaSyncResult {
     intervalsConnection,
     stravaAnalysisComplete,
     lastStravaActivityId,
+    stravaAutoSyncEnabled,
     intervalsAnalysisComplete,
     lastIntervalsActivityId,
+    intervalsAutoSyncEnabled,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setLastStravaActivityId,
@@ -46,8 +48,10 @@ export function useStravaSync(): UseStravaSyncResult {
       intervalsConnection: s.intervalsConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
       lastStravaActivityId: s.lastStravaActivityId,
+      stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
       intervalsAnalysisComplete: s.intervalsAnalysisComplete,
       lastIntervalsActivityId: s.lastIntervalsActivityId,
+      intervalsAutoSyncEnabled: s.intervalsAutoSyncEnabled,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setLastStravaActivityId: s.setLastStravaActivityId,
@@ -66,7 +70,11 @@ export function useStravaSync(): UseStravaSyncResult {
   // Guard: prevents double-triggering when React batches setState calls from
   // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
-  const activeSource = stravaConnection ? 'strava' : intervalsConnection ? 'intervals' : null
+  const activeSource = stravaConnection && stravaAutoSyncEnabled
+    ? 'strava'
+    : intervalsConnection && intervalsAutoSyncEnabled
+      ? 'intervals'
+      : null
   const activeAnalysisComplete = activeSource === 'intervals' ? intervalsAnalysisComplete : stravaAnalysisComplete
   const activeLastActivityId = activeSource === 'intervals' ? lastIntervalsActivityId : lastStravaActivityId
 
