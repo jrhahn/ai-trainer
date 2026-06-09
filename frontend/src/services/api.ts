@@ -5,6 +5,7 @@ export const AUTHELIA_URL =
   ((import.meta.env.VITE_AUTHELIA_URL as string | undefined) ?? '').replace(/\/$/, '')
 
 export const API_BASE = `${BACKEND_URL}/api/v1`
+export const AUTH_EXPIRED_EVENT = 'ai-trainer:auth-expired'
 
 /** Generate a short client-side correlation ID to include in every request. */
 function generateRequestId(): string {
@@ -68,6 +69,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       requestId: serverRequestId,
       ...(parseFailReason !== undefined ? { parseFailReason } : {}),
     })
+    if (response.status === 401 && token && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, {
+        detail: { path, requestId: serverRequestId },
+      }))
+    }
     throw new Error(message)
   }
 

@@ -86,6 +86,31 @@ describe('analyseStravaActivities', () => {
       body: { activities: expect.any(Array) },
     })
   })
+
+  it('includes the source when analysing Intervals.icu activities', async () => {
+    mockApiFetch.mockResolvedValue({
+      assessment: { riderType: 'allrounder', estimatedFTP: 250 },
+    })
+
+    await analyseStravaActivities([
+      {
+        id: 1,
+        name: 'Intervals Ride',
+        type: 'Ride',
+        distance: 0,
+        moving_time: 3600,
+        elapsed_time: 3600,
+        total_elevation_gain: 0,
+        start_date: '2026-06-07T10:00:00Z',
+      },
+    ], 'token-123', undefined, undefined, 'intervals')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/analyse-activities', {
+      token: 'token-123',
+      method: 'POST',
+      body: { activities: expect.any(Array), source: 'intervals' },
+    })
+  })
 })
 
 describe('generateTrainingPlan', () => {

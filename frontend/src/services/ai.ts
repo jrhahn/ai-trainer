@@ -66,7 +66,8 @@ export async function analyseStravaActivities(
   activities: StravaActivity[],
   authToken: string,
   maxHeartRate?: number,
-  currentFTP?: number
+  currentFTP?: number,
+  source?: 'strava' | 'intervals'
 ): Promise<AnalyseActivitiesResult> {
   const raw = await apiFetch<BackendAnalyseActivitiesResult>('/ai/analyse-activities', {
     token: authToken,
@@ -75,6 +76,7 @@ export async function analyseStravaActivities(
       activities,
       ...(maxHeartRate !== undefined ? { maxHeartRate } : {}),
       ...(currentFTP !== undefined ? { currentFTP } : {}),
+      ...(source !== undefined ? { source } : {}),
     },
   })
   return {

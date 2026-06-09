@@ -5,6 +5,52 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.4] - 2026-06-09
+
+### Fixed
+
+- **Expired auth token handling** (`src/services/api.ts`, `src/App.tsx`) —
+  authenticated 401 responses now clear the stale browser token, preventing
+  repeated requests with tokens invalidated by a JWT secret rotation.
+
+## [0.24.3] - 2026-06-09
+
+### Fixed
+
+- **Strava import-progress polling scope** (`src/hooks/useImportProgress.ts`,
+  `src/pages/StravaCallbackPage.tsx`) — import-progress polling now runs only
+  while an import flow opts into it, instead of every three seconds for any
+  authenticated session.
+
+## [0.24.2] - 2026-06-09
+
+### Fixed
+
+- **Intervals.icu sync build typing** (`src/hooks/useStravaSync.ts`) — narrows
+  the active activity source type so the production TypeScript build accepts the
+  explicit Intervals.icu analysis source.
+
+## [0.24.1] - 2026-06-09
+
+### Fixed
+
+- **Intervals.icu analysis source tagging** (`src/hooks/useStravaSync.ts`,
+  `src/services/ai.ts`) — Intervals-triggered automatic analysis now identifies
+  itself as Intervals.icu so the backend can update the correct sync state.
+
+## [0.24.0] - 2026-06-09
+
+### Added
+
+- **Expert Intervals.icu account linking** (`src/components/IntervalsConnect.tsx`,
+  `src/pages/SettingsPage.tsx`, `src/services/intervals.ts`) — Expert-mode settings now
+  show an Intervals.icu connection form next to the existing integration controls, backed
+  by the existing `/intervals/connection` API.
+
+- **Intervals.icu connection coverage** (`src/components/IntervalsConnect.test.tsx`,
+  `src/pages/SettingsPage.test.tsx`) — verifies expert-mode visibility plus connect and
+  disconnect store updates.
+
 ## [0.23.0] - 2026-06-08
 
 ### Added

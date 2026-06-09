@@ -3,7 +3,8 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request, Response
-from fastapi.exceptions import HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -78,6 +79,35 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         status_code=exc.status_code,
         content={"detail": exc.detail},
         headers=headers or None,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Log request validation failures without echoing request bodies into logs."""
+    request_id = getattr(request.state, "request_id", None)
+    summary = [
+        {
+            "loc": error.get("loc"),
+            "type": error.get("type"),
+            "msg": error.get("msg"),
+        }
+        for error in exc.errors()
+    ]
+    logger.warning(
+        "Request validation failed on %s %s (request_id=%s): %s",
+        request.method,
+        request.url.path,
+        request_id,
+        summary,
+    )
+    headers = {_REQUEST_ID_HEADER: request_id} if request_id else None
+    return JSONResponse(
+        status_code=422,
+        content=jsonable_encoder({"detail": exc.errors()}),
+        headers=headers,
     )
 
 

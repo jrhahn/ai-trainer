@@ -86,7 +86,12 @@ function stopPolling() {
   pollInFlight = false
 }
 
-export function useImportProgress() {
+interface UseImportProgressOptions {
+  poll?: boolean
+}
+
+export function useImportProgress(options: UseImportProgressOptions = {}) {
+  const poll = options.poll ?? false
   const authToken = useAppStore((s) => s.authToken)
   const [progress, setProgress] = useState<ImportProgress>(sharedProgress)
 
@@ -102,7 +107,9 @@ export function useImportProgress() {
     sharedAuthToken = authToken
     listeners.add(setProgress)
     setProgress(sharedProgress)
-    startPolling()
+    if (poll) {
+      startPolling()
+    }
 
     return () => {
       listeners.delete(setProgress)
@@ -112,9 +119,11 @@ export function useImportProgress() {
         // rather than seeing stale progress from a previous session.
         sharedProgress = INITIAL_PROGRESS
         sharedAuthToken = null
+      } else if (poll) {
+        stopPolling()
       }
     }
-  }, [authToken])
+  }, [authToken, poll])
 
   return progress
 }

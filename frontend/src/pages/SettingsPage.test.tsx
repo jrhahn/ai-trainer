@@ -47,6 +47,10 @@ vi.mock('../components/StravaConnect', () => ({
   default: () => <div data-testid="strava-connect-stub" />,
 }))
 
+vi.mock('../components/IntervalsConnect', () => ({
+  default: () => <div data-testid="intervals-connect-stub" />,
+}))
+
 const baseProfile: UserProfile = {
   name: 'Alice',
   email: 'alice@example.com',
@@ -324,11 +328,19 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
-  it('hides activity auto-sync toggles outside Expert mode', () => {
+  it('hides expert-only Intervals.icu controls outside Expert mode', () => {
     setup()
 
+    expect(screen.queryByTestId('intervals-connect-stub')).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the Intervals.icu connection control in Expert mode', () => {
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
   })
 
   it('lets Expert-mode users disable Strava automatic sync', async () => {

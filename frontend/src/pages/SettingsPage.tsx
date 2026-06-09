@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
@@ -640,6 +641,7 @@ export default function SettingsPage() {
 
         {isExpertMode && (
           <div className="mt-4 space-y-3">
+            <IntervalsConnect />
             <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Strava</p>

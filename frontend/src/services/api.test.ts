@@ -137,6 +137,17 @@ describe('apiFetch', () => {
     consoleSpy.mockRestore()
   })
 
+  it('dispatches an auth-expired event for authenticated 401 responses', async () => {
+    const listener = vi.fn()
+    window.addEventListener('ai-trainer:auth-expired', listener)
+    mockFetch.mockResolvedValue(makeResponse(401, { detail: 'Invalid token' }))
+
+    await expect(apiFetch('/test', { token: 'expired-token' })).rejects.toThrow('Invalid token')
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('ai-trainer:auth-expired', listener)
+  })
+
   it('includes parseFailReason in the error log when the error body is not JSON', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetch.mockResolvedValue({

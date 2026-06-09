@@ -159,7 +159,13 @@ describe('useStravaSync', () => {
     const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(mockActivities, 'tok', undefined)
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(
+        mockActivities,
+        'tok',
+        undefined,
+        undefined,
+        'strava'
+      )
       expect(result.current.analysisStatus).toBe('done')
     })
   })
@@ -281,7 +287,13 @@ describe('useStravaSync', () => {
 
     await waitFor(() => {
       expect(mockGetIntervalsActivities).toHaveBeenCalledWith('tok')
-      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(mockActivities, 'tok', undefined)
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(
+        mockActivities,
+        'tok',
+        undefined,
+        undefined,
+        'intervals'
+      )
       expect(useAppStore.getState().lastIntervalsActivityId).toBe(100)
     })
     expect(mockGetStravaActivities).not.toHaveBeenCalled()

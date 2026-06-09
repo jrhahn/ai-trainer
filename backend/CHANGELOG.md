@@ -5,6 +5,44 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.5] - 2026-06-09
+
+### Fixed
+
+- **Timestamped application logs** (`logging.yaml`) — root/application logger
+  output now uses the same timestamped formatter as Uvicorn logs, so auth and
+  validation warnings include dates in Docker output.
+
+## [0.28.4] - 2026-06-09
+
+### Fixed
+
+- **JWT secret length validation** (`auth.py`, `.env.example`, `README.md`) —
+  HS256 deployments now fail fast when `JWT_SECRET` is shorter than 32 bytes,
+  while dev/test environments log one clear warning and suppress PyJWT's repeated
+  per-request `InsecureKeyLengthWarning`.
+
+## [0.28.3] - 2026-06-09
+
+### Fixed
+
+- **Intervals.icu analysis payload compatibility** (`routers/intervals.py`,
+  `schemas.py`, `routers/ai.py`) — Intervals.icu activity summaries now include
+  the required Strava-shaped numeric defaults, and Intervals-triggered analysis
+  updates the Intervals sync cursor instead of Strava state.
+
+- **Validation failure diagnostics** (`main.py`) — request validation errors now
+  log the failing route and schema fields so future 422 responses can be diagnosed
+  from container logs without recording request bodies.
+
+## [0.28.2] - 2026-06-09
+
+### Fixed
+
+- **Timestamped backend Docker logs** (`entrypoint.sh`, `logging.yaml`) — Uvicorn
+  access and application log lines now include full date/time stamps in container
+  output, making API requests and health checks easier to correlate.
+
 ## [0.28.1] - 2026-06-08
 
 ### Fixed

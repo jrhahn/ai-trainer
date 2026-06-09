@@ -1,6 +1,8 @@
 """Password hashing, JWT creation/verification, and FastAPI auth dependency."""
 
+import logging
 import secrets
+import warnings
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -17,7 +19,9 @@ from config import settings
 from database import get_db
 
 _JWT_SECRET_DEFAULT = "change-me-in-production"
+_MIN_HMAC_SECRET_BYTES = 32
 _DEV_ENVS = {"development", "dev", "local", "test", "testing"}
+logger = logging.getLogger(__name__)
 
 JWT_SECRET = settings.jwt_secret
 JWT_ALGORITHM = settings.jwt_algorithm
@@ -35,13 +39,33 @@ _argon2_hasher = PasswordHasher()
 
 
 def validate_jwt_secret() -> None:
-    """Raise RuntimeError if JWT_SECRET is the insecure default in a non-dev environment."""
-    if JWT_SECRET == _JWT_SECRET_DEFAULT and APP_ENV.lower() not in _DEV_ENVS:
+    """Validate JWT_SECRET strength for the configured runtime environment."""
+    is_dev_env = APP_ENV.lower() in _DEV_ENVS
+    if JWT_SECRET == _JWT_SECRET_DEFAULT and not is_dev_env:
         raise RuntimeError(
             f"JWT_SECRET is set to the insecure default value '{_JWT_SECRET_DEFAULT}'. "
             "Set a strong, random JWT_SECRET environment variable before starting the app. "
             f"(APP_ENV={APP_ENV!r})"
         )
+    if JWT_ALGORITHM.upper().startswith("HS"):
+        secret_bytes = len(JWT_SECRET.encode("utf-8"))
+        if secret_bytes < _MIN_HMAC_SECRET_BYTES:
+            message = (
+                f"JWT_SECRET is {secret_bytes} bytes long, below the "
+                f"{_MIN_HMAC_SECRET_BYTES}-byte minimum recommended for {JWT_ALGORITHM}. "
+                "Set JWT_SECRET to at least 32 random bytes."
+            )
+            if not is_dev_env:
+                raise RuntimeError(message)
+            logger.warning(
+                "%s Suppressing PyJWT's repeated InsecureKeyLengthWarning in %s.",
+                message,
+                APP_ENV,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                category=jwt.InsecureKeyLengthWarning,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -90,12 +114,18 @@ def decode_token(token: str) -> str:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id: str | None = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
         return user_id
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -114,11 +144,15 @@ async def get_current_user(
             return authelia_user
 
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
+        )
     user_id = decode_token(credentials.credentials)
     user = await crud.get_user_by_id(db, user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user
 
 
@@ -127,15 +161,25 @@ def require_admin(
 ) -> None:
     """FastAPI dependency — raises 401/403 unless the request carries a valid admin JWT."""
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
+        )
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+        )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
     if payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
 
 
 async def get_authelia_user(

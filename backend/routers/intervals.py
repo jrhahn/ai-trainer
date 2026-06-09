@@ -59,14 +59,25 @@ def _activity_response(activity: dict, detail: dict | None = None) -> dict:
         or source.get("elapsed_time")
         or source.get("duration")
     )
+    moving_time = _number_or_default(moving_time, 0)
+    elapsed_time = _number_or_default(
+        source.get("elapsed_time") or moving_time, moving_time
+    )
     return {
         "id": activity_id,
         "name": source.get("name") or source.get("title") or "Intervals.icu activity",
         "type": source.get("type") or source.get("sport") or "Ride",
         "sport_type": source.get("type") or source.get("sport") or "Ride",
-        "distance": source.get("distance"),
+        "distance": _number_or_default(source.get("distance"), 0),
         "moving_time": moving_time,
-        "elapsed_time": source.get("elapsed_time") or moving_time,
+        "elapsed_time": elapsed_time,
+        "total_elevation_gain": _number_or_default(
+            source.get("total_elevation_gain")
+            or source.get("elevation_gain")
+            or source.get("elev_gain")
+            or source.get("ascent"),
+            0,
+        ),
         "start_date": start_date,
         "start_date_local": source.get("start_date_local") or start_date,
         "average_watts": source.get("average_watts")
@@ -81,6 +92,14 @@ def _hashed_activity_id(raw_id: object) -> int:
     from services.intervals_service import intervals_activity_id
 
     return intervals_activity_id(raw_id)
+
+
+def _number_or_default(value: object, default: int | float) -> int | float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return value
+    return default
 
 
 @router.get("/intervals/connection", response_model=IntervalsConnectionResponse)
