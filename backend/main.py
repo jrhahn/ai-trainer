@@ -1,6 +1,4 @@
-import asyncio
 import logging
-import contextlib
 import uuid
 from contextlib import asynccontextmanager
 
@@ -14,8 +12,9 @@ import auth as _auth
 from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
-from services.activity_sync import start_activity_sync_scheduler
-from services.plan_maintenance import start_daily_plan_maintenance_scheduler
+from services.activity_sync import activity_sync_job
+from services.plan_maintenance import daily_plan_maintenance_job
+from services.scheduler import InProcessScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +29,14 @@ async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    maintenance_task = start_daily_plan_maintenance_scheduler(async_session_maker)
-    activity_sync_task = start_activity_sync_scheduler(async_session_maker)
+    scheduler = InProcessScheduler()
+    scheduler.register(daily_plan_maintenance_job(async_session_maker))
+    scheduler.register(activity_sync_job(async_session_maker))
+    scheduler.start()
     try:
         yield
     finally:
-        for task in (maintenance_task, activity_sync_task):
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await scheduler.stop()
 
 
 app = FastAPI(title="AI Trainer backend", lifespan=lifespan)

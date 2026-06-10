@@ -42,6 +42,34 @@ cp .env.example .env
 | `SERVER_URL`          | Bare public domain (e.g. `trainlikea.pro`); `https://` is prepended automatically to build the Strava callback URL. Takes priority over `BACKEND_URL`. | – |
 | `BACKEND_URL`         | Full public URL fallback when `SERVER_URL` is not set (local dev) | `http://localhost:8000` |
 | `APP_ENV`             | Runtime environment. Set to `production` (or `staging`) for deployments. The app refuses to start if `JWT_SECRET` is the default insecure value, or shorter than 32 bytes for HS256, and `APP_ENV` is not a dev/test environment. | `development` |
+| `ACTIVITY_SYNC_INTERVAL_SECONDS` | Interval for the backend activity-source sync job. | `1800` |
+
+## Background jobs
+
+Recurring backend jobs are registered through `services.scheduler.InProcessScheduler`
+inside the FastAPI lifespan handler. The current Docker deployment runs a single
+backend replica, so the scheduler is intentionally in-process and uses an
+`asyncio.Lock` per job name to prevent duplicate concurrent runs within that
+process. If the deployment grows to multiple backend replicas, move the same job
+registry behind a database/advisory lock or a dedicated worker service before
+enabling multiple schedulers.
+
+To add a recurring job:
+
+1. Keep the actual job as an async function that can be called directly in tests.
+2. Expose a `ScheduledJob` factory with a stable name, async runner, and
+   `next_delay` function.
+3. Register the job in `main.py` with the shared `InProcessScheduler`.
+
+Current jobs:
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `daily-plan-maintenance` | Next 02:00 in `APP_TIMEZONE` | Updates stale training plans without a browser session. |
+| `activity-sync` | Every `ACTIVITY_SYNC_INTERVAL_SECONDS` seconds | Checks connected activity sources and adapts matched plans after new activities. |
+
+Scheduler tests use fake `sleep` functions and direct `run_once(...)` calls, so
+job behavior can be verified without waiting for wall-clock time.
 
 ### 3. Install dependencies
 

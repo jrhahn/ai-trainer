@@ -5,6 +5,20 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0] - 2026-06-10
+
+### Added
+
+- **Backend scheduler foundation** (`services/scheduler.py`, `main.py`,
+  `services/plan_maintenance.py`, `services/activity_sync.py`) — adds a shared
+  in-process recurring job registry with per-job duplicate-run protection,
+  deterministic `run_once` support, structured lifecycle logs, and clean FastAPI
+  lifespan startup/shutdown.
+
+- **Scheduler documentation and coverage** (`README.md`, `tests/test_scheduler.py`)
+  — documents the single-backend-replica Docker assumption, job registration
+  pattern, current recurring jobs, and fake-sleep/direct-run testing approach.
+
 ## [0.30.0] - 2026-06-10
 
 ### Added
