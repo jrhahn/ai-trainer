@@ -54,6 +54,23 @@ _RATE_LIMIT_DETAIL = (
 )
 
 
+def _analysis_activity_log_sample(
+    activities: list[schemas.StravaActivitySchema], limit: int = 10
+) -> list[dict[str, object]]:
+    sample: list[dict[str, object]] = []
+    for activity in activities[:limit]:
+        sample.append(
+            {
+                "id": activity.id,
+                "name": activity.name,
+                "type": activity.type,
+                "sport_type": activity.sport_type,
+                "start": activity.start_date_local or activity.start_date,
+            }
+        )
+    return sample
+
+
 async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
     events = await crud.get_race_events(db, user_id)
     return [
@@ -208,6 +225,14 @@ async def analyse_activities(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AnalyseActivitiesResponse:
+    if body.source == "intervals":
+        logger.info(
+            "Intervals analysis received activities user=%s count=%s sample=%s",
+            current_user.id,
+            len(body.activities),
+            _analysis_activity_log_sample(body.activities),
+        )
+
     # Fetch per-second stream data for each activity from Strava
     streams_by_id: dict[str, dict] = {}
     if body.source == "strava" and current_user.strava_token is not None:
@@ -332,6 +357,13 @@ async def analyse_activities(
             activity_date_source = start_date_local or start_date
             activity_date = activity_date_source[:10] if activity_date_source else ""
             if not activity_date:
+                if body.source == "intervals":
+                    logger.warning(
+                        "Intervals analysis skipped activity without date user=%s activity_id=%s name=%s",
+                        current_user.id,
+                        activity.id,
+                        activity.name,
+                    )
                 continue
             sport_type = (
                 a_dict.get("sportType")
@@ -373,6 +405,14 @@ async def analyse_activities(
                     apply_summary_fallback(metric, meta)
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
+            if body.source == "intervals":
+                logger.info(
+                    "Intervals analysis persisted ride metrics user=%s rides_input=%s metrics=%s metric_ids=%s",
+                    current_user.id,
+                    len(rides_input),
+                    len(metrics_chain),
+                    [metric["strava_activity_id"] for metric in metrics_chain[:10]],
+                )
             auto_matched = await apply_ride_plan_matches(
                 db,
                 current_user.id,
@@ -392,6 +432,14 @@ async def analyse_activities(
                     provider=_provider(current_user),
                     streams=streams_by_activity_id.get(ride.strava_activity_id),
                 )
+
+        elif body.source == "intervals":
+            logger.warning(
+                "Intervals analysis produced no ride inputs user=%s activity_count=%s sample=%s",
+                current_user.id,
+                len(body.activities),
+                _analysis_activity_log_sample(body.activities),
+            )
 
     await db.flush()
 

@@ -14,6 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
+from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsAuthError,
@@ -102,6 +103,57 @@ def _number_or_default(value: object, default: int | float) -> int | float:
     return default
 
 
+def _intervals_activity_window(
+    months: int, today: date | None = None
+) -> tuple[date, date]:
+    """Return an Intervals date window that includes the current app-local day."""
+    local_today = today or app_today()
+    return local_today - timedelta(days=months * 30), local_today + timedelta(days=1)
+
+
+def _activity_log_entry(activity: dict) -> dict[str, object]:
+    raw_id = activity.get("id")
+    return {
+        "raw_id": raw_id,
+        "app_id": _hashed_activity_id(raw_id) if raw_id is not None else None,
+        "name": activity.get("name") or activity.get("title"),
+        "type": activity.get("type") or activity.get("sport"),
+        "start": activity.get("start_date_local")
+        or activity.get("start_date")
+        or activity.get("start_time")
+        or activity.get("date"),
+    }
+
+
+def _activity_log_sample(
+    activities: list[dict], limit: int = 10
+) -> list[dict[str, object]]:
+    return [_activity_log_entry(activity) for activity in activities[:limit]]
+
+
+def _activity_response_log_sample(
+    activities: list[dict], limit: int = 10
+) -> list[dict[str, object]]:
+    return [
+        {
+            "app_id": activity.get("id"),
+            "name": activity.get("name"),
+            "type": activity.get("type") or activity.get("sport_type"),
+            "start": activity.get("start_date_local") or activity.get("start_date"),
+        }
+        for activity in activities[:limit]
+    ]
+
+
+def _activity_id_matches_cursor(activity_id: int, cursor: int) -> bool:
+    if activity_id == cursor:
+        return True
+    # Intervals activity ids are stable 63-bit hashes. JavaScript clients parse
+    # those JSON numbers as IEEE-754 values, so values above MAX_SAFE_INTEGER can
+    # round slightly before being sent back as after_id.
+    return abs(activity_id - cursor) <= 2048
+
+
 @router.get("/intervals/connection", response_model=IntervalsConnectionResponse)
 async def get_intervals_connection(
     current_user: models.User = Depends(auth.get_current_user),
@@ -159,13 +211,26 @@ async def get_intervals_activities(
         raise HTTPException(status_code=404, detail="Intervals.icu not connected")
 
     months = max(1, min(months, 24))
-    newest = date.today()
-    oldest = newest - timedelta(days=months * 30)
+    oldest, newest = _intervals_activity_window(months)
+    logger.info(
+        "Fetching Intervals.icu activities for user=%s athlete=%s oldest=%s newest=%s",
+        current_user.id,
+        token.athlete_id,
+        oldest.isoformat(),
+        newest.isoformat(),
+    )
     activities = await fetch_recent_activities(
         token.api_key,
         token.athlete_id,
         oldest=oldest,
         newest=newest,
+    )
+    logger.info(
+        "Intervals.icu returned activities user=%s athlete=%s count=%s sample=%s",
+        current_user.id,
+        token.athlete_id,
+        len(activities),
+        _activity_log_sample(activities),
     )
 
     result: list[dict] = []
@@ -174,19 +239,36 @@ async def get_intervals_activities(
         if raw_id is None:
             continue
         activity_id = _hashed_activity_id(raw_id)
-        if after_id is not None and activity_id == after_id:
+        if after_id is not None and _activity_id_matches_cursor(activity_id, after_id):
             break
         result.append(_activity_response(activity))
         if after_id is None and len(result) >= 10:
             break
 
-    if after_id is not None and all(
-        _hashed_activity_id(activity.get("id")) != after_id
+    cursor_found = after_id is None or any(
+        _activity_id_matches_cursor(_hashed_activity_id(activity.get("id")), after_id)
         for activity in activities
         if activity.get("id") is not None
-    ):
-        return []
-    return result
+    )
+    response_result = result if cursor_found else []
+    logger.info(
+        "Intervals.icu activities response user=%s after_id=%s cursor_found=%s fetched_before_cursor=%s returned=%s sample=%s",
+        current_user.id,
+        after_id,
+        cursor_found,
+        len(result),
+        len(response_result),
+        _activity_response_log_sample(response_result),
+    )
+
+    if after_id is not None and not cursor_found:
+        logger.warning(
+            "Intervals.icu after_id cursor was not found user=%s after_id=%s nearest_sample=%s",
+            current_user.id,
+            after_id,
+            _activity_log_sample(activities),
+        )
+    return response_result
 
 
 @router.post("/intervals/import-history", status_code=202)
@@ -204,8 +286,7 @@ async def import_intervals_history(
         return {"status": "already_running"}
 
     months = max(1, min(months, 24))
-    newest = date.today()
-    oldest = newest - timedelta(days=months * 30)
+    oldest, newest = _intervals_activity_window(months)
     ftp = float(current_user.current_ftp or 0)
     if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
         ftp = float(current_user.rider_assessment.estimated_ftp)
@@ -251,11 +332,25 @@ async def run_intervals_import(
     ftp: float,
 ) -> None:
     try:
+        logger.info(
+            "Starting Intervals.icu history import user=%s athlete=%s oldest=%s newest=%s",
+            user_id,
+            athlete_id,
+            oldest.isoformat(),
+            newest.isoformat(),
+        )
         activities = await fetch_recent_activities(
             api_key,
             athlete_id,
             oldest=oldest,
             newest=newest,
+        )
+        logger.info(
+            "Intervals.icu history import fetched user=%s athlete=%s count=%s sample=%s",
+            user_id,
+            athlete_id,
+            len(activities),
+            _activity_log_sample(activities),
         )
         _intervals_import_progress[user_id] = {
             "status": "running",
@@ -281,6 +376,11 @@ async def run_intervals_import(
                     )
                 ride = map_activity_to_ride_input(activity, detail, streams)
                 if ride is None:
+                    logger.warning(
+                        "Intervals.icu activity could not be mapped user=%s activity=%s",
+                        user_id,
+                        _activity_log_entry(activity),
+                    )
                     failed.append(
                         {
                             "activity_id": None,
@@ -294,6 +394,12 @@ async def run_intervals_import(
             except IntervalsAuthError:
                 raise
             except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Intervals.icu activity processing failed user=%s activity=%s error=%s",
+                    user_id,
+                    _activity_log_entry(activity),
+                    exc,
+                )
                 failed.append(
                     {
                         "activity_id": None,
@@ -318,6 +424,14 @@ async def run_intervals_import(
             else 0.0
         )
         metrics_chain = build_ride_metrics_chain(rides, ftp, seed_ctl, seed_atl)
+        logger.info(
+            "Intervals.icu history import mapped user=%s rides=%s metrics=%s failed=%s metric_ids=%s",
+            user_id,
+            len(rides),
+            len(metrics_chain),
+            len(failed),
+            [metric["strava_activity_id"] for metric in metrics_chain[:10]],
+        )
         rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
         for metric in metrics_chain:
             ride = rides_by_id.get(metric["strava_activity_id"])
@@ -337,6 +451,13 @@ async def run_intervals_import(
                     [m["strava_activity_id"] for m in metrics_chain],
                 )
             await db.commit()
+        logger.info(
+            "Intervals.icu history import persisted user=%s imported=%s skipped=%s failed=%s",
+            user_id,
+            len(metrics_chain),
+            len(failed),
+            failed[:10],
+        )
 
         _intervals_import_progress[user_id] = {
             "status": "done",
