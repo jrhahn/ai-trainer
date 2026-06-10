@@ -5,6 +5,21 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-06-10
+
+### Added
+
+- **Backend activity-triggered plan updates** (`services/activity_sync.py`,
+  `main.py`, `config.py`) — adds an in-process periodic activity sync that
+  checks connected Strava and Intervals.icu sources with auto-sync enabled,
+  imports newly detected activities, updates ride metrics, matches planned
+  workouts, and triggers plan adaptation for matched rides without requiring a
+  browser session.
+
+- **Activity sync coverage** (`tests/test_activity_sync.py`) — covers disabled
+  source skips, duplicate detection, independent Strava/Intervals cursors, and
+  per-user/source failure isolation.
+
 ## [0.29.3] - 2026-06-10
 
 ### Fixed
