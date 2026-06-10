@@ -46,6 +46,20 @@ _RACE_MEMORY_HEADING = "Race calendar:"
 _weather_backfill_users_in_progress: set[str] = set()
 
 
+def _ride_metric_log_sample(
+    rides: list[models.RideMetric], limit: int = 10
+) -> list[dict[str, object]]:
+    return [
+        {
+            "id": ride.strava_activity_id,
+            "name": ride.activity_name,
+            "date": ride.activity_date,
+            "sport_type": ride.sport_type,
+        }
+        for ride in rides[:limit]
+    ]
+
+
 def _default_provider() -> str:
     if settings.gemini_api_key:
         return "gemini"
@@ -478,6 +492,12 @@ async def get_ride_metrics_history(
 
     # get_ride_metrics_history returns newest-first; reverse for chronological charting
     rides = list(reversed(rides))
+    logger.info(
+        "Ride metrics history response user=%s count=%s sample=%s",
+        current_user.id,
+        len(rides),
+        _ride_metric_log_sample(rides),
+    )
     return schemas.RideMetricHistoryResponse(
         rides=[
             schemas.RideMetricSchema.model_validate(r, from_attributes=True)
