@@ -90,6 +90,36 @@ async def test_get_intervals_activities_returns_items_until_cursor(
     schemas.StravaActivitySchema.model_validate(body[0])
 
 
+@pytest.mark.asyncio
+async def test_get_intervals_activities_includes_current_app_day(
+    client, auth_headers, monkeypatch
+):
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(intervals_router, "app_today", lambda: date(2026, 6, 10))
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+    response = await client.get(
+        "/api/v1/intervals/activities?months=1",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert captured["oldest"] == date(2026, 5, 11)
+    assert captured["newest"] == date(2026, 6, 11)
+
+
 def test_intervals_activity_response_defaults_match_analysis_schema():
     activity = intervals_router._activity_response(
         {

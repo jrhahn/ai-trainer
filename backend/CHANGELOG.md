@@ -5,6 +5,16 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2026-06-10
+
+### Fixed
+
+- **Intervals.icu same-day activity fetches** (`routers/intervals.py`,
+  `tests/test_intervals.py`) — Intervals activity list and history-import
+  windows now use the app-local date and send tomorrow as the `newest` bound so
+  activities completed today are included immediately instead of waiting until
+  the next calendar day.
+
 ## [0.29.0] - 2026-06-09
 
 ### Added

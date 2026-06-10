@@ -14,6 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
+from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsAuthError,
@@ -102,6 +103,12 @@ def _number_or_default(value: object, default: int | float) -> int | float:
     return default
 
 
+def _intervals_activity_window(months: int, today: date | None = None) -> tuple[date, date]:
+    """Return an Intervals date window that includes the current app-local day."""
+    local_today = today or app_today()
+    return local_today - timedelta(days=months * 30), local_today + timedelta(days=1)
+
+
 @router.get("/intervals/connection", response_model=IntervalsConnectionResponse)
 async def get_intervals_connection(
     current_user: models.User = Depends(auth.get_current_user),
@@ -159,8 +166,14 @@ async def get_intervals_activities(
         raise HTTPException(status_code=404, detail="Intervals.icu not connected")
 
     months = max(1, min(months, 24))
-    newest = date.today()
-    oldest = newest - timedelta(days=months * 30)
+    oldest, newest = _intervals_activity_window(months)
+    logger.info(
+        "Fetching Intervals.icu activities for user=%s athlete=%s oldest=%s newest=%s",
+        current_user.id,
+        token.athlete_id,
+        oldest.isoformat(),
+        newest.isoformat(),
+    )
     activities = await fetch_recent_activities(
         token.api_key,
         token.athlete_id,
@@ -204,8 +217,7 @@ async def import_intervals_history(
         return {"status": "already_running"}
 
     months = max(1, min(months, 24))
-    newest = date.today()
-    oldest = newest - timedelta(days=months * 30)
+    oldest, newest = _intervals_activity_window(months)
     ftp = float(current_user.current_ftp or 0)
     if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
         ftp = float(current_user.rider_assessment.estimated_ftp)
