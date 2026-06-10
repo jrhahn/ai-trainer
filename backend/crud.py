@@ -50,6 +50,21 @@ async def get_user_by_email_simple(db: AsyncSession, email: str) -> models.User 
     return await db.scalar(select(models.User).where(models.User.email == email))
 
 
+async def get_users_with_training_plans(db: AsyncSession) -> list[models.User]:
+    """Return onboarded users that have a persisted training plan."""
+    result = await db.scalars(
+        select(models.User)
+        .join(models.TrainingPlan)
+        .options(
+            *_USER_EAGER_OPTIONS,
+            selectinload(models.User.training_plan),
+        )
+        .where(models.User.is_onboarded.is_(True))
+        .order_by(models.User.id)
+    )
+    return list(result)
+
+
 async def create_user(
     db: AsyncSession,
     *,

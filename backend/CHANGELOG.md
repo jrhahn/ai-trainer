@@ -5,6 +5,19 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-06-09
+
+### Added
+
+- **Daily backend training-plan maintenance** (`services/plan_maintenance.py`,
+  `main.py`, `crud.py`) — adds an in-process 02:00 app-timezone maintenance job
+  that detects stale incomplete plan days for onboarded users and reuses the
+  existing plan adaptation flow so schedules stay current without a browser login.
+
+- **Plan maintenance coverage** (`tests/test_plan_maintenance.py`) — verifies
+  stale-plan updates, no-op current plans, non-onboarded user skips, timezone
+  cutoffs, idempotency, per-user failure isolation, and 02:00 scheduling math.
+
 ## [0.28.5] - 2026-06-09
 
 ### Fixed
