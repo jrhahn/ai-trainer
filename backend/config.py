@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
+    activity_sync_interval_seconds: int = 1800
 
     # ------------------------------------------------------------------
     # Database
@@ -106,7 +107,9 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         """Return CORS origins parsed from the (possibly comma-separated) FRONTEND_URL."""
-        return [u.strip().rstrip("/") for u in self.frontend_url.split(",") if u.strip()]
+        return [
+            u.strip().rstrip("/") for u in self.frontend_url.split(",") if u.strip()
+        ]
 
     @property
     def primary_frontend_url(self) -> str:
