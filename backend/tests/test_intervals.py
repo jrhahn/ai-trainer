@@ -120,6 +120,48 @@ async def test_get_intervals_activities_includes_current_app_day(
     assert captured["newest"] == date(2026, 6, 11)
 
 
+@pytest.mark.asyncio
+async def test_get_intervals_activities_accepts_js_rounded_cursor(
+    client, auth_headers, monkeypatch
+):
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        return [
+            {
+                "id": "i156039190",
+                "name": "Mittelberg Hiking",
+                "type": "Hike",
+                "start_date_local": "2026-06-10T09:26:13",
+                "moving_time": 7200,
+            },
+            {
+                "id": "i154017725",
+                "name": "Darmstadt Road Cycling",
+                "type": "Ride",
+                "start_date_local": "2026-06-03T17:25:00",
+                "moving_time": 3600,
+            },
+        ]
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+    response = await client.get(
+        "/api/v1/intervals/activities?after_id=8736852676899880000",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [activity["name"] for activity in body] == ["Mittelberg Hiking"]
+    assert body[0]["type"] == "Hike"
+
+
 def test_intervals_activity_response_defaults_match_analysis_schema():
     activity = intervals_router._activity_response(
         {

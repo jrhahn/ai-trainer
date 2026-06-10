@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.3] - 2026-06-10
+
+### Fixed
+
+- **Intervals.icu rounded cursor matching** (`routers/intervals.py`,
+  `tests/test_intervals.py`) — accepts the small JavaScript number-rounding drift
+  that can occur when 63-bit Intervals activity hashes are sent back as
+  `after_id`, so newly returned activities are not discarded as a missing cursor.
+
 ## [0.29.2] - 2026-06-10
 
 ### Added

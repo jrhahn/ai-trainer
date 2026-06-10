@@ -145,6 +145,15 @@ def _activity_response_log_sample(
     ]
 
 
+def _activity_id_matches_cursor(activity_id: int, cursor: int) -> bool:
+    if activity_id == cursor:
+        return True
+    # Intervals activity ids are stable 63-bit hashes. JavaScript clients parse
+    # those JSON numbers as IEEE-754 values, so values above MAX_SAFE_INTEGER can
+    # round slightly before being sent back as after_id.
+    return abs(activity_id - cursor) <= 2048
+
+
 @router.get("/intervals/connection", response_model=IntervalsConnectionResponse)
 async def get_intervals_connection(
     current_user: models.User = Depends(auth.get_current_user),
@@ -230,29 +239,36 @@ async def get_intervals_activities(
         if raw_id is None:
             continue
         activity_id = _hashed_activity_id(raw_id)
-        if after_id is not None and activity_id == after_id:
+        if after_id is not None and _activity_id_matches_cursor(activity_id, after_id):
             break
         result.append(_activity_response(activity))
         if after_id is None and len(result) >= 10:
             break
 
     cursor_found = after_id is None or any(
-        _hashed_activity_id(activity.get("id")) == after_id
+        _activity_id_matches_cursor(_hashed_activity_id(activity.get("id")), after_id)
         for activity in activities
         if activity.get("id") is not None
     )
+    response_result = result if cursor_found else []
     logger.info(
-        "Intervals.icu activities response user=%s after_id=%s cursor_found=%s returned=%s sample=%s",
+        "Intervals.icu activities response user=%s after_id=%s cursor_found=%s fetched_before_cursor=%s returned=%s sample=%s",
         current_user.id,
         after_id,
         cursor_found,
         len(result),
-        _activity_response_log_sample(result),
+        len(response_result),
+        _activity_response_log_sample(response_result),
     )
 
     if after_id is not None and not cursor_found:
-        return []
-    return result
+        logger.warning(
+            "Intervals.icu after_id cursor was not found user=%s after_id=%s nearest_sample=%s",
+            current_user.id,
+            after_id,
+            _activity_log_sample(activities),
+        )
+    return response_result
 
 
 @router.post("/intervals/import-history", status_code=202)
