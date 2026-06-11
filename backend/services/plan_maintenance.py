@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
-from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,6 +16,7 @@ from services import ai_service
 from services.dates import app_today_iso, app_timezone
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.prompts import ride_metrics_context_section
+from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
 
 logger = logging.getLogger(__name__)
@@ -179,31 +178,19 @@ async def run_daily_plan_maintenance(
     return result
 
 
-def start_daily_plan_maintenance_scheduler(
+def daily_plan_maintenance_job(
     session_factory: async_sessionmaker[AsyncSession],
-    *,
-    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-) -> asyncio.Task:
-    """Start the in-process daily maintenance scheduler.
+) -> ScheduledJob:
+    async def _run() -> object:
+        return await run_daily_plan_maintenance(
+            session_factory,
+            timezone_name=settings.app_timezone,
+        )
 
-    The current Docker deployment runs one backend replica. If that changes, move
-    this runner behind a worker or DB-backed lock before enabling multiple copies.
-    """
-
-    async def _loop() -> None:
-        while True:
-            delay = seconds_until_next_daily_run(timezone_name=settings.app_timezone)
-            logger.info(
-                "Daily plan maintenance scheduled in %.0f seconds",
-                delay,
-            )
-            await sleep(delay)
-            try:
-                await run_daily_plan_maintenance(
-                    session_factory,
-                    timezone_name=settings.app_timezone,
-                )
-            except Exception:
-                logger.warning("Daily plan maintenance job crashed", exc_info=True)
-
-    return asyncio.create_task(_loop(), name="daily-plan-maintenance")
+    return ScheduledJob(
+        name="daily-plan-maintenance",
+        run=_run,
+        next_delay=lambda: seconds_until_next_daily_run(
+            timezone_name=settings.app_timezone
+        ),
+    )

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -29,6 +27,7 @@ from services.ride_matching import (
     apply_ride_plan_matches,
     review_matched_ride_and_adapt,
 )
+from services.scheduler import ScheduledJob
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
@@ -424,19 +423,14 @@ async def run_activity_sync(
     return result
 
 
-def start_activity_sync_scheduler(
+def activity_sync_job(
     session_factory: async_sessionmaker[AsyncSession],
-    *,
-    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-) -> asyncio.Task:
-    async def _loop() -> None:
-        while True:
-            delay = max(60, int(settings.activity_sync_interval_seconds))
-            logger.info("Activity sync scheduled in %s seconds", delay)
-            await sleep(delay)
-            try:
-                await run_activity_sync(session_factory)
-            except Exception:
-                logger.warning("Activity sync job crashed", exc_info=True)
+) -> ScheduledJob:
+    async def _run() -> object:
+        return await run_activity_sync(session_factory)
 
-    return asyncio.create_task(_loop(), name="activity-sync")
+    return ScheduledJob(
+        name="activity-sync",
+        run=_run,
+        next_delay=lambda: max(60, int(settings.activity_sync_interval_seconds)),
+    )
