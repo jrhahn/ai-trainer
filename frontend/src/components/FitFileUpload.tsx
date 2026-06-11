@@ -11,7 +11,11 @@ import { useAppStore } from '../store/useAppStore'
 import { uploadFitFiles } from '../services/user'
 import type { FitBulkUploadResponse, FitUploadFileResult } from '../services/user'
 
-export default function FitFileUpload() {
+interface FitFileUploadProps {
+  embedded?: boolean
+}
+
+export default function FitFileUpload({ embedded = false }: FitFileUploadProps) {
   const authToken = useAppStore((s) => s.authToken)
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
@@ -37,7 +41,7 @@ export default function FitFileUpload() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className={embedded ? '' : 'bg-white rounded-xl shadow-sm border border-gray-100 p-4'}>
       <div className="flex items-center gap-2 mb-3">
         <Upload size={16} className="text-blue-500" />
         <h3 className="text-sm font-bold text-gray-800">Upload .fit Files</h3>

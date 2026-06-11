@@ -51,6 +51,10 @@ vi.mock('../components/IntervalsConnect', () => ({
   default: () => <div data-testid="intervals-connect-stub" />,
 }))
 
+vi.mock('../components/FitFileUpload', () => ({
+  default: () => <div data-testid="fit-file-upload-stub">Choose .fit files</div>,
+}))
+
 const baseProfile: UserProfile = {
   name: 'Alice',
   email: 'alice@example.com',
@@ -328,23 +332,42 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
-  it('hides expert-only Intervals.icu controls outside Expert mode', () => {
+  it('renders source-agnostic data source settings', () => {
     setup()
 
-    expect(screen.queryByTestId('intervals-connect-stub')).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).not.toBeInTheDocument()
-  })
-
-  it('shows the Intervals.icu connection control in Expert mode', () => {
-    useAppStore.setState({ isExpertMode: true })
-    setup()
-
+    expect(screen.getByRole('heading', { name: /Data Sources/i })).toBeInTheDocument()
+    expect(screen.getByText(/Automatic sources are convenient/i)).toBeInTheDocument()
+    expect(screen.getByText(/paid Strava subscription/i)).toBeInTheDocument()
+    expect(screen.getByText('Strava')).toBeInTheDocument()
+    expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
+    expect(screen.getByText('FIT files')).toBeInTheDocument()
+    expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
     expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
+    expect(screen.getByTestId('fit-file-upload-stub')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).toBeInTheDocument()
   })
 
-  it('lets Expert-mode users disable Strava automatic sync', async () => {
-    useAppStore.setState({ isExpertMode: true, stravaAutoSyncEnabled: true })
+  it('shows connection and last-sync state for automatic sources', () => {
+    useAppStore.setState({
+      stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' },
+      intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice Intervals' },
+      lastStravaActivityId: 12345,
+      lastIntervalsActivityId: 67890,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: false,
+    })
+    setup()
+
+    expect(screen.getAllByText('Connected')).toHaveLength(2)
+    expect(screen.getByText('Last sync cursor: 12345')).toBeInTheDocument()
+    expect(screen.getByText('Last sync cursor: 67890')).toBeInTheDocument()
+    expect(screen.getByText('Automatic sync: On')).toBeInTheDocument()
+    expect(screen.getByText('Automatic sync: Off')).toBeInTheDocument()
+  })
+
+  it('lets users disable Strava automatic sync', async () => {
+    useAppStore.setState({ stravaAutoSyncEnabled: true })
     setup()
 
     await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i }))
@@ -355,8 +378,8 @@ describe('SettingsPage', () => {
     expect(useAppStore.getState().stravaAutoSyncEnabled).toBe(false)
   })
 
-  it('lets Expert-mode users disable Intervals.icu automatic sync', async () => {
-    useAppStore.setState({ isExpertMode: true, intervalsAutoSyncEnabled: true })
+  it('lets users disable Intervals.icu automatic sync', async () => {
+    useAppStore.setState({ intervalsAutoSyncEnabled: true })
     setup()
 
     await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i }))

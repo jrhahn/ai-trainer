@@ -5,6 +5,20 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-06-11
+
+### Added
+
+- **Data-source settings** (`src/pages/SettingsPage.tsx`,
+  `src/components/FitFileUpload.tsx`) — Settings now groups Strava,
+  Intervals.icu, and FIT upload under a source-agnostic Data Sources area,
+  showing connection state, automatic-sync state, last sync cursors, provider
+  tradeoffs, and the manual FIT bulk uploader.
+
+- **Data-source settings coverage** (`src/pages/SettingsPage.test.tsx`) —
+  verifies that Strava, Intervals.icu, and FIT actions render from Settings and
+  that automatic-source status is visible.
+
 ## [0.24.4] - 2026-06-09
 
 ### Fixed
