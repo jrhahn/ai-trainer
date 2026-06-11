@@ -13,13 +13,18 @@ import crud
 import models
 from config import settings
 from services.analysis import build_ride_metrics_chain
+from services.activity_imports import (
+    ImportedActivity,
+    find_existing_import,
+    to_ride_inputs,
+)
 from services.dates import app_today
 from services.intervals_service import (
     fetch_activity_detail as fetch_intervals_activity_detail,
     fetch_activity_streams as fetch_intervals_activity_streams,
     fetch_recent_activities as fetch_recent_intervals_activities,
     intervals_activity_id,
-    map_activity_to_ride_input,
+    map_activity_to_imported_activity,
     sanitize_intervals_streams,
     apply_summary_fallback,
 )
@@ -130,9 +135,9 @@ async def fetch_recent_strava_activities(
     return data if isinstance(data, list) else []
 
 
-def _strava_activity_to_ride(
+def _strava_activity_to_imported_activity(
     activity: dict, streams: dict, weather: dict
-) -> dict | None:
+) -> ImportedActivity | None:
     activity_id = activity.get("id")
     if not isinstance(activity_id, int):
         return None
@@ -142,29 +147,44 @@ def _strava_activity_to_ride(
     activity_date = activity_date_source[:10] if activity_date_source else ""
     if not activity_date:
         return None
-    return {
-        "strava_activity_id": activity_id,
-        "activity_name": (
-            activity.get("name") if isinstance(activity.get("name"), str) else None
-        ),
-        "activity_start_datetime": start_date_local or start_date or None,
-        "activity_date": activity_date,
-        "sport_type": activity.get("sport_type") or activity.get("type") or "cycling",
-        "duration_seconds": int(
+    return ImportedActivity(
+        source="strava",
+        external_activity_id=str(activity_id),
+        name=activity.get("name") if isinstance(activity.get("name"), str) else None,
+        start_datetime=start_date_local or start_date or None,
+        activity_date=activity_date,
+        sport_type=activity.get("sport_type") or activity.get("type") or "cycling",
+        duration_seconds=int(
             activity.get("elapsed_time") or activity.get("moving_time") or 0
         ),
-        "streams": streams,
-        **weather,
-    }
+        streams=streams,
+        start_lat=(
+            float(activity["start_latlng"][0])
+            if isinstance(activity.get("start_latlng"), list)
+            and len(activity["start_latlng"]) >= 2
+            and isinstance(activity["start_latlng"][0], (int, float))
+            else None
+        ),
+        start_lng=(
+            float(activity["start_latlng"][1])
+            if isinstance(activity.get("start_latlng"), list)
+            and len(activity["start_latlng"]) >= 2
+            and isinstance(activity["start_latlng"][1], (int, float))
+            else None
+        ),
+        weather=weather,
+        metadata={"strava_activity_id": activity_id},
+    )
 
 
 async def _persist_and_adapt(
     db: AsyncSession,
     user: models.User,
-    rides: list[dict],
+    activities: list[ImportedActivity],
 ) -> tuple[int, int]:
-    if not rides:
+    if not activities:
         return 0, 0
+    rides = to_ride_inputs(activities)
 
     latest_metric = await crud.get_latest_ride_metric(db, user.id)
     seed_ctl = (
@@ -248,25 +268,22 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
         if isinstance(activity.get("id"), int)
         and activity["id"] > int(user.last_strava_activity_id)
     ]
-    rides: list[dict] = []
+    imported_activities: list[ImportedActivity] = []
     for activity in new_activities:
         activity_id = int(activity["id"])
-        if (
-            await crud.get_ride_metric_by_strava_id(db, user.id, activity_id)
-            is not None
-        ):
-            result.skipped += 1
-            continue
         raw_streams = await fetch_strava_activity_streams(access_token, activity_id)
         streams = _sanitize_strava_streams(raw_streams)
         weather = await enrich_activity_weather(activity, streams=streams)
-        ride = _strava_activity_to_ride(activity, streams, weather)
-        if ride is None:
+        imported = _strava_activity_to_imported_activity(activity, streams, weather)
+        if imported is None:
             result.skipped += 1
             continue
-        rides.append(ride)
+        if await find_existing_import(db, user.id, imported) is not None:
+            result.skipped += 1
+            continue
+        imported_activities.append(imported)
 
-    imported, adapted = await _persist_and_adapt(db, user, rides)
+    imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
     if latest_seen > int(user.last_strava_activity_id or 0):
@@ -332,13 +349,13 @@ async def sync_intervals_for_user(
             len(valid),
         )
 
-    rides: list[dict] = []
+    imported_activities: list[ImportedActivity] = []
     for activity in new_activities:
-        activity_id = intervals_activity_id(activity.get("id"))
-        if (
-            await crud.get_ride_metric_by_strava_id(db, user.id, activity_id)
-            is not None
-        ):
+        summary_imported = map_activity_to_imported_activity(activity, None, {})
+        if summary_imported is None:
+            result.skipped += 1
+            continue
+        if await find_existing_import(db, user.id, summary_imported) is not None:
             result.skipped += 1
             continue
         detail = await fetch_intervals_activity_detail(
@@ -349,13 +366,13 @@ async def sync_intervals_for_user(
                 user.intervals_token.api_key, activity.get("id")
             )
         )
-        ride = map_activity_to_ride_input(activity, detail, streams)
-        if ride is None:
+        imported = map_activity_to_imported_activity(activity, detail, streams)
+        if imported is None:
             result.skipped += 1
             continue
-        rides.append(ride)
+        imported_activities.append(imported)
 
-    imported, adapted = await _persist_and_adapt(db, user, rides)
+    imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
     if latest_seen != user.last_intervals_activity_id:

@@ -29,6 +29,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
+from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import (
@@ -631,6 +632,7 @@ async def estimate_ftp(
 @dataclass
 class _ParsedFitActivity:
     source_id: int
+    source_metadata: dict[str, Any]
     sport_type: str
     duration_seconds: int
     duration_minutes: int
@@ -642,6 +644,23 @@ class _ParsedFitActivity:
     start_lat: float | None
     start_lng: float | None
     streams: dict[str, dict[str, list[Any]]]
+
+    def to_imported_activity(self) -> ImportedActivity:
+        return ImportedActivity(
+            source="fit",
+            external_activity_id=str(self.source_id),
+            name=self.activity_name,
+            start_datetime=self.completed_at,
+            activity_date=self.ride_date,
+            sport_type=self.sport_type,
+            duration_seconds=self.duration_seconds,
+            start_lat=self.start_lat,
+            start_lng=self.start_lng,
+            streams=self.streams,
+            metadata=self.source_metadata,
+            summary_avg_power_w=self.avg_power,
+            legacy_activity_id=self.source_id,
+        )
 
 
 def _fit_field_map(message: Any) -> dict[str, Any]:
@@ -854,6 +873,7 @@ def _parse_fit_activity(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitAc
 
     return _ParsedFitActivity(
         source_id=source_id,
+        source_metadata=metadata,
         sport_type=sport_type,
         duration_seconds=total_elapsed_seconds,
         duration_minutes=duration_minutes,
@@ -932,9 +952,8 @@ async def _store_fit_import(
         )
 
     seen_source_ids.add(parsed.source_id)
-    existing_metric = await crud.get_ride_metric_by_strava_id(
-        db, current_user.id, parsed.source_id
-    )
+    imported_activity = parsed.to_imported_activity()
+    existing_metric = await find_existing_import(db, current_user.id, imported_activity)
     if existing_metric is not None:
         return schemas.FitUploadFileResult(
             filename=filename,
@@ -991,17 +1010,7 @@ async def _store_fit_import(
         latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
     )
     ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
-    ride_input = {
-        "strava_activity_id": parsed.source_id,
-        "activity_name": parsed.activity_name,
-        "activity_start_datetime": parsed.completed_at,
-        "activity_date": parsed.ride_date,
-        "sport_type": parsed.sport_type,
-        "duration_seconds": parsed.duration_seconds,
-        "start_lat": parsed.start_lat,
-        "start_lng": parsed.start_lng,
-        "streams": parsed.streams,
-    }
+    ride_input = imported_activity.to_ride_input()
     metrics_chain = build_ride_metrics_chain(
         [ride_input], ftp_for_chain, seed_ctl, seed_atl
     )

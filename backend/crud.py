@@ -516,6 +516,9 @@ async def upsert_ride_metric(
     user_id: str,
     *,
     strava_activity_id: int,
+    activity_source: str = "strava",
+    external_activity_id: str | None = None,
+    source_metadata: dict | None = None,
     activity_date: str,
     sport_type: str = "cycling",
     activity_name: str | None = None,
@@ -543,10 +546,13 @@ async def upsert_ride_metric(
     classification_reason: str | None = None,
     summary: str | None = None,
 ) -> models.RideMetric:
-    """Insert or update a RideMetric row identified by (user_id, strava_activity_id)."""
+    """Insert or update a RideMetric row identified by the legacy metric id."""
     values = dict(
         user_id=user_id,
         strava_activity_id=strava_activity_id,
+        activity_source=activity_source,
+        external_activity_id=external_activity_id or str(strava_activity_id),
+        source_metadata=source_metadata,
         activity_date=activity_date,
         sport_type=sport_type,
         activity_name=activity_name,
@@ -719,6 +725,21 @@ async def get_ride_metric_by_strava_id(
         select(models.RideMetric).where(
             models.RideMetric.user_id == user_id,
             models.RideMetric.strava_activity_id == strava_activity_id,
+        )
+    )
+
+
+async def get_ride_metric_by_source(
+    db: AsyncSession,
+    user_id: str,
+    activity_source: str,
+    external_activity_id: str,
+) -> models.RideMetric | None:
+    return await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_source == activity_source,
+            models.RideMetric.external_activity_id == external_activity_id,
         )
     )
 
