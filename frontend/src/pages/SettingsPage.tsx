@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import FitFileUpload from '../components/FitFileUpload'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
@@ -16,8 +17,11 @@ export default function SettingsPage() {
   const {
     authToken,
     userProfile,
-    isExpertMode,
+    stravaConnection,
+    intervalsConnection,
+    lastStravaActivityId,
     stravaAutoSyncEnabled,
+    lastIntervalsActivityId,
     intervalsAutoSyncEnabled,
     aiProvider,
     setAiProvider,
@@ -30,8 +34,11 @@ export default function SettingsPage() {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      isExpertMode: s.isExpertMode,
+      stravaConnection: s.stravaConnection,
+      intervalsConnection: s.intervalsConnection,
+      lastStravaActivityId: s.lastStravaActivityId,
       stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
+      lastIntervalsActivityId: s.lastIntervalsActivityId,
       intervalsAutoSyncEnabled: s.intervalsAutoSyncEnabled,
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
@@ -622,26 +629,45 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Strava */}
+      {/* Data Sources */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Strava Integration</h2>
+        <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Connect Strava to sync your activities automatically.
+          Choose how AI Trainer imports your training history. Automatic sources are convenient,
+          while FIT files keep the original workout data directly in your hands.
         </p>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
           <Server size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700">
-            OAuth is handled by the backend at <code className="font-mono bg-blue-100 px-1 rounded">{BACKEND_URL}</code>.
-            Your Strava credentials are never stored in the browser.
+            Connection secrets are handled by the backend at{' '}
+            <code className="font-mono bg-blue-100 px-1 rounded">{BACKEND_URL}</code>.
+            Strava may require a paid Strava subscription for Standard Tier API access; FIT upload
+            remains available when automatic provider access is not the right fit.
           </p>
         </div>
 
-        <StravaConnect />
-
-        {isExpertMode && (
-          <div className="mt-4 space-y-3">
-            <IntervalsConnect />
+        <div className="space-y-4">
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Strava</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  OAuth-based automatic import for connected Strava accounts.
+                </p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {stravaConnection ? 'Connected' : 'Not connected'}
+              </span>
+            </div>
+            <StravaConnect />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span>Automatic sync: {stravaAutoSyncEnabled ? 'On' : 'Off'}</span>
+              <span className="text-gray-300">·</span>
+              <span>Last sync cursor: {lastStravaActivityId ?? 'none yet'}</span>
+            </div>
             <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Strava</p>
@@ -666,6 +692,28 @@ export default function SettingsPage() {
                 <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
                 <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
               </label>
+            </div>
+          </div>
+
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Direct activity import using your Intervals.icu API key and athlete ID.
+                </p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {intervalsConnection ? 'Connected' : 'Not connected'}
+              </span>
+            </div>
+            <IntervalsConnect />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span>Automatic sync: {intervalsAutoSyncEnabled ? 'On' : 'Off'}</span>
+              <span className="text-gray-300">·</span>
+              <span>Last sync cursor: {lastIntervalsActivityId ?? 'none yet'}</span>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
               <div>
@@ -693,7 +741,25 @@ export default function SettingsPage() {
               </label>
             </div>
           </div>
-        )}
+
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                  <Upload size={15} className="text-blue-500" />
+                  FIT files
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.
+                </p>
+              </div>
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                Manual
+              </span>
+            </div>
+            <FitFileUpload embedded />
+          </div>
+        </div>
 
         {importProgress.status !== 'idle' && (
           <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
