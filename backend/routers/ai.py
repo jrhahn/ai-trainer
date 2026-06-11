@@ -17,6 +17,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services.activity_imports import ImportedActivity
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import (
     compare_planned_vs_actual,
@@ -378,20 +379,22 @@ async def analyse_activities(
                 or a_dict.get("moving_time")
                 or 0
             )
-            rides_input.append(
-                {
-                    "strava_activity_id": activity.id,
-                    "activity_name": a_dict.get("name"),
-                    "activity_start_datetime": start_date_local or start_date or None,
-                    "activity_date": activity_date,
-                    "sport_type": sport_type,
-                    "duration_seconds": duration_seconds,
-                    "streams": streams_by_id.get(str(activity.id), {}),
-                    "_summary_avg_power_w": a_dict.get("average_watts"),
-                    "_summary_np_w": a_dict.get("weighted_average_watts"),
-                    **weather_by_id.get(activity.id, {}),
-                }
+            imported_activity = ImportedActivity(
+                source=body.source,
+                external_activity_id=str(activity.id),
+                name=a_dict.get("name"),
+                start_datetime=start_date_local or start_date or None,
+                activity_date=activity_date,
+                sport_type=sport_type,
+                duration_seconds=duration_seconds,
+                streams=streams_by_id.get(str(activity.id), {}),
+                weather=weather_by_id.get(activity.id, {}),
+                summary_avg_power_w=a_dict.get("average_watts"),
+                summary_normalized_power_w=a_dict.get("weighted_average_watts"),
+                metadata={f"{body.source}_activity_id": str(activity.id)},
+                legacy_activity_id=activity.id,
             )
+            rides_input.append(imported_activity.to_ride_input())
         if rides_input:
             metrics_chain = build_ride_metrics_chain(
                 rides_input, ftp_for_chain, seed_ctl, seed_atl

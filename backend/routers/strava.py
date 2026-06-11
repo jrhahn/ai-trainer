@@ -19,6 +19,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
+from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
@@ -388,22 +389,19 @@ async def _run_import_background(
                     activity, streams=streams
                 )
 
-                rides.append(
-                    {
-                        "strava_activity_id": activity_id,
-                        "activity_name": (
-                            activity_name if isinstance(activity_name, str) else None
-                        ),
-                        "activity_start_datetime": start_date_local
-                        or start_date
-                        or None,
-                        "activity_date": activity_date,
-                        "sport_type": sport_type,
-                        "duration_seconds": duration_seconds,
-                        "streams": streams,
-                        **weather_fields,
-                    }
+                imported_activity = ImportedActivity(
+                    source="strava",
+                    external_activity_id=str(activity_id),
+                    name=activity_name if isinstance(activity_name, str) else None,
+                    start_datetime=start_date_local or start_date or None,
+                    activity_date=activity_date,
+                    sport_type=sport_type,
+                    duration_seconds=duration_seconds,
+                    streams=streams,
+                    weather=weather_fields,
+                    metadata={"strava_activity_id": activity_id},
                 )
+                rides.append(imported_activity.to_ride_input())
                 _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---

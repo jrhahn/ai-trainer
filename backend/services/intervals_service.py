@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+from services.activity_imports import ImportedActivity
+
 INTERVALS_API_BASE = "https://intervals.icu/api/v1"
 INTERVALS_STREAM_TYPES = (
     "time,watts,heartrate,cadence,velocity_smooth,altitude,latlng,distance"
@@ -162,11 +164,11 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
     return cleaned
 
 
-def map_activity_to_ride_input(
+def map_activity_to_imported_activity(
     activity: dict[str, Any],
     detail: dict[str, Any] | None,
     streams: dict[str, dict[str, list]],
-) -> dict[str, Any] | None:
+) -> ImportedActivity | None:
     source = {**activity, **(detail or {})}
     raw_id = source.get("id")
     if raw_id is None:
@@ -183,25 +185,36 @@ def map_activity_to_ride_input(
     if not activity_date:
         return None
 
-    return {
-        "strava_activity_id": intervals_activity_id(raw_id),
-        "activity_name": _first_str(source, "name", "title"),
-        "activity_start_datetime": start_datetime,
-        "activity_date": activity_date,
-        "sport_type": _first_str(source, "type", "sport", default="cycling"),
-        "duration_seconds": _first_int(
+    return ImportedActivity(
+        source="intervals",
+        external_activity_id=str(raw_id),
+        name=_first_str(source, "name", "title"),
+        start_datetime=start_datetime,
+        activity_date=activity_date,
+        sport_type=_first_str(source, "type", "sport", default="cycling") or "cycling",
+        duration_seconds=_first_int(
             source, "moving_time", "elapsed_time", "duration", default=0
         ),
-        "start_lat": _start_latlng(source)[0],
-        "start_lng": _start_latlng(source)[1],
-        "streams": streams,
-        "_summary_avg_power_w": _first_int(
+        start_lat=_start_latlng(source)[0],
+        start_lng=_start_latlng(source)[1],
+        streams=streams,
+        summary_avg_power_w=_first_int(
             source, "average_watts", "icu_weighted_avg_watts"
         ),
-        "_summary_np_w": _first_int(source, "icu_weighted_avg_watts"),
-        "_summary_tss": _first_float(source, "icu_training_load", "training_load"),
-        "_intervals_activity_id": str(raw_id),
-    }
+        summary_normalized_power_w=_first_int(source, "icu_weighted_avg_watts"),
+        summary_tss=_first_float(source, "icu_training_load", "training_load"),
+        metadata={"intervals_activity_id": str(raw_id)},
+        legacy_activity_id=intervals_activity_id(raw_id),
+    )
+
+
+def map_activity_to_ride_input(
+    activity: dict[str, Any],
+    detail: dict[str, Any] | None,
+    streams: dict[str, dict[str, list]],
+) -> dict[str, Any] | None:
+    imported = map_activity_to_imported_activity(activity, detail, streams)
+    return imported.to_ride_input() if imported is not None else None
 
 
 def apply_summary_fallback(metric: dict[str, Any], ride: dict[str, Any]) -> None:

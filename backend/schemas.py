@@ -625,6 +625,9 @@ class FitBulkUploadResponse(CamelModel):
 
 class RideMetricSchema(CamelModel):
     strava_activity_id: int
+    activity_source: str = "strava"
+    external_activity_id: Optional[str] = None
+    source_metadata: Optional[dict[str, Any]] = None
     activity_name: Optional[str] = None
     activity_start_datetime: Optional[str] = None
     activity_date: str

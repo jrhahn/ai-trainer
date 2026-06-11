@@ -5,6 +5,27 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0] - 2026-06-11
+
+### Added
+
+- **Source-neutral activity import contract** (`services/activity_imports.py`,
+  `services/activity_sync.py`, `routers/ai.py`, `routers/strava.py`,
+  `routers/users.py`, `services/intervals_service.py`) — normalizes Strava,
+  Intervals.icu, and FIT imports into a shared imported-activity payload before
+  ride-metric calculation while preserving the existing `strava_activity_id`
+  dashboard contract.
+
+- **Ride metric source metadata** (`models.py`, `crud.py`, `schemas.py`,
+  `alembic/versions/20260611_000001_add_activity_source_to_ride_metrics.py`) —
+  stores `activity_source`, `external_activity_id`, and optional source metadata
+  on ride metrics, with centralized source/external-id lookup for dedupe.
+
+- **Import normalization coverage** (`tests/test_activity_imports.py`,
+  `tests/test_activity_sync.py`, `tests/test_intervals.py`,
+  `tests/test_contract.py`) — verifies multiple sources use the same normalized
+  contract and that duplicate detection still skips already-imported activities.
+
 ## [0.31.0] - 2026-06-10
 
 ### Added

@@ -380,6 +380,11 @@ class RideMetric(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     strava_activity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    activity_source: Mapped[str] = mapped_column(
+        String(50), default="strava", nullable=False
+    )
+    external_activity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     activity_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     activity_start_datetime: Mapped[str | None] = mapped_column(
         String(50), nullable=True

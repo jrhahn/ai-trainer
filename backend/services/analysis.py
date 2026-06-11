@@ -1558,7 +1558,9 @@ def build_ride_metrics_chain(
 
     Args:
         rides: List of ride dicts, each containing:
-            - ``strava_activity_id`` (int)
+            - ``strava_activity_id`` (int legacy dashboard key)
+            - ``activity_source`` (str, optional)
+            - ``external_activity_id`` (str, optional)
             - ``activity_date`` (str, ISO date YYYY-MM-DD)
             - ``sport_type`` (str)
             - ``duration_seconds`` (int)
@@ -1651,6 +1653,10 @@ def build_ride_metrics_chain(
         result.append(
             {
                 "strava_activity_id": ride["strava_activity_id"],
+                "activity_source": ride.get("activity_source", "strava"),
+                "external_activity_id": ride.get("external_activity_id")
+                or str(ride["strava_activity_id"]),
+                "source_metadata": ride.get("source_metadata"),
                 "activity_name": ride.get("activity_name"),
                 "activity_start_datetime": ride.get("activity_start_datetime"),
                 "activity_date": activity_date_str,
