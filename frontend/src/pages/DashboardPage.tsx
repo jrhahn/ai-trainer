@@ -22,6 +22,7 @@ import { adaptTrainingPlan, processPendingFeedbacks, refreshLoginSummary } from 
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -349,13 +350,10 @@ export default function DashboardPage() {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
   }
-  const newRideSummaryKey = prevLoginDate
-    ? recentRides
-      .filter(isNew)
-      .map((r) => r.stravaActivityId)
-      .sort((a, b) => a - b)
-      .join(',')
-    : ''
+  const recentRideSummaryKey = recentRides
+    .map((r) => r.stravaActivityId)
+    .sort((a, b) => a - b)
+    .join(',')
 
   // If there are past incomplete days the plan is stale — ask the AI coach to
   // reschedule them so the athlete always has current upcoming sessions.
@@ -399,10 +397,17 @@ export default function DashboardPage() {
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {
-    if (!authToken || !riderAssessment || !newRideSummaryKey) return
-    if (summaryRefreshKeyRef.current === newRideSummaryKey) return
-    summaryRefreshKeyRef.current = newRideSummaryKey
-    const activityIds = newRideSummaryKey.split(',').map(Number).filter(Number.isFinite)
+    if (!authToken || !riderAssessment || !recentRideSummaryKey) return
+    if (summaryRefreshKeyRef.current === recentRideSummaryKey) return
+
+    try {
+      if (localStorage.getItem(SUMMARY_REFRESH_KEY) === recentRideSummaryKey) return
+    } catch {
+      // localStorage may be unavailable; in-memory guard still prevents loops
+    }
+
+    summaryRefreshKeyRef.current = recentRideSummaryKey
+    const activityIds = recentRideSummaryKey.split(',').map(Number).filter(Number.isFinite)
     if (activityIds.length === 0) return
 
     setSummaryLoading(true)
@@ -410,13 +415,18 @@ export default function DashboardPage() {
       .then((summary) => {
         if (summary) {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
+          try {
+            localStorage.setItem(SUMMARY_REFRESH_KEY, recentRideSummaryKey)
+          } catch {
+            // localStorage may be unavailable; ignore after successful refresh
+          }
         }
       })
       .catch(() => {
         // silently ignore — the existing summary remains available
       })
       .finally(() => setSummaryLoading(false))
-  }, [authToken, newRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [authToken, recentRideSummaryKey, riderAssessment, setRiderAssessment])
 
   return (
     <div className="space-y-5">

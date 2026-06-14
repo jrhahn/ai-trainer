@@ -298,6 +298,59 @@ describe('DashboardPage — Activities section layout', () => {
     })
   })
 
+  it('refreshes a stale summary for visible recent rides even after the previous login marker moved on', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary after revisiting the dashboard.\n- Latest activity: Oberursel MTB is included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old but complete summary.\n- Recent activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9002,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9002])
+      expect(screen.getByText('Updated summary after revisiting the dashboard.')).toBeInTheDocument()
+    })
+  })
+
+  it('does not refresh again once the visible recent activity set was summarized', async () => {
+    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', '9003')
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Already refreshed summary.\n- Latest activity: Oberursel MTB.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9003,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Already refreshed summary.')).toBeInTheDocument()
+    })
+    expect(mockProcessPendingFeedbacks).not.toHaveBeenCalled()
+  })
+
   it('renders JSON login summaries as formatted text instead of raw JSON', async () => {
     setupStore({
       riderAssessment: {
