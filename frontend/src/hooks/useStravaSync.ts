@@ -124,6 +124,7 @@ export function useStravaSync(): UseStravaSyncResult {
 
       // Recompute all historical TSS/CTL/ATL/TSB with the (potentially updated) FTP.
       await recalculateAll(updatedProfile.currentFTP).catch(() => { /* best-effort */ })
+      setRiderAssessment(assessment)
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
         // For new activities, apply targeted plan updates rather than regenerating the whole plan

@@ -5,6 +5,16 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.1] - 2026-06-14
+
+### Fixed
+
+- **Background activity summary refresh** (`src/hooks/useStravaSync.ts`,
+  `src/hooks/useStravaSync.test.ts`) — automatic Strava/Intervals.icu analysis
+  now keeps the freshly returned `riderAssessment.loginSummary` after metrics
+  recalculation refreshes user data, so "Your Recent Training Summary" updates
+  with newly analysed activities.
+
 ## [0.25.0] - 2026-06-11
 
 ### Added
