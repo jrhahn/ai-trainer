@@ -23,7 +23,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
-const SUMMARY_REFRESH_VERSION = 'latest-activity-v2'
+const SUMMARY_REFRESH_VERSION = 'latest-activity-v3'
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''

@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The dashboard also refreshes a complete but stale summary for the latest
   visible recent ride when that ride has not yet been summarized by the current
   summary-refresh version, even if the previous-login marker has already
-  advanced.
+  advanced. The refresh version was bumped after removing stale backend
+  assessment notes from the summary prompt so affected browsers regenerate once.
 
 ## [0.25.0] - 2026-06-11
 

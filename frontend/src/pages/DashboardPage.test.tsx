@@ -361,7 +361,7 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('does not refresh again once the visible recent activity set was summarized', async () => {
-    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v2:9003')
+    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v3:9003')
     setupStore({
       riderAssessment: {
         riderType: 'allrounder',
