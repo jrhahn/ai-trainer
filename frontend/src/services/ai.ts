@@ -281,7 +281,7 @@ export async function resolveRideMatch(
 
 export async function processPendingFeedbacks(
   authToken: string,
-  activityIds: number[],
+  activityIds: Array<number | string>,
 ): Promise<string> {
   const result = await apiFetch<{ loginSummary: string }>('/ai/process-pending-feedbacks', {
     token: authToken,

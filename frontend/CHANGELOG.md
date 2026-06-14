@@ -5,6 +5,16 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.3] - 2026-06-14
+
+### Fixed
+
+- **Dashboard summary refresh identifiers** (`src/pages/DashboardPage.tsx`,
+  `src/services/ai.ts`, `src/store/useAppStore.ts`,
+  `src/pages/DashboardPage.test.tsx`) — dashboard summary refreshes now send the
+  stable `externalActivityId` when available, avoiding JavaScript rounding of
+  large Intervals/FIT activity IDs before the backend refreshes the summary.
+
 ## [0.25.2] - 2026-06-14
 
 ### Fixed

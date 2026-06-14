@@ -358,8 +358,9 @@ export default function DashboardPage() {
     return r.activityDate >= prevLoginDate
   }
   const latestRecentRide = recentRides[0] ?? null
-  const latestRideSummaryKey = latestRecentRide
-    ? `${SUMMARY_REFRESH_VERSION}:${latestRecentRide.stravaActivityId}`
+  const latestRideActivityKey = latestRecentRide?.externalActivityId || latestRecentRide?.stravaActivityId
+  const latestRideSummaryKey = latestRideActivityKey
+    ? `${SUMMARY_REFRESH_VERSION}:${latestRideActivityKey}`
     : ''
 
   // If there are past incomplete days the plan is stale — ask the AI coach to
@@ -404,7 +405,7 @@ export default function DashboardPage() {
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {
-    if (!authToken || !riderAssessment || !latestRecentRide || !latestRideSummaryKey) return
+    if (!authToken || !riderAssessment || !latestRecentRide || !latestRideActivityKey || !latestRideSummaryKey) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
     try {
@@ -414,7 +415,7 @@ export default function DashboardPage() {
     }
 
     summaryRefreshKeyRef.current = latestRideSummaryKey
-    const activityIds = [latestRecentRide.stravaActivityId]
+    const activityIds = [latestRideActivityKey]
 
     setSummaryLoading(true)
     processPendingFeedbacks(authToken, activityIds)
@@ -432,7 +433,7 @@ export default function DashboardPage() {
         // silently ignore — the existing summary remains available
       })
       .finally(() => setSummaryLoading(false))
-  }, [authToken, latestRecentRide, latestRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [authToken, latestRecentRide, latestRideActivityKey, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
   return (
     <div className="space-y-5">

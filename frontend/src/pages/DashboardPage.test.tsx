@@ -360,6 +360,33 @@ describe('DashboardPage — Activities section layout', () => {
     })
   })
 
+  it('uses external activity ids for summary refresh when available', async () => {
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Summary refreshed.\n- Latest activity: Oberursel MTB.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Latest activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 7629419622326427000,
+          externalActivityId: 'i157147093',
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', ['i157147093'])
+    })
+  })
+
   it('does not refresh again once the visible recent activity set was summarized', async () => {
     localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v4:9003')
     setupStore({

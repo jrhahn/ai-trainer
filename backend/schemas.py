@@ -855,8 +855,8 @@ class NextRideRecommendationResponse(CamelModel):
 class ProcessPendingFeedbacksRequest(CamelModel):
     """Request body for POST /ai/process-pending-feedbacks."""
 
-    activity_ids: list[int]
-    """Strava activity IDs of rides whose user feedback should be processed."""
+    activity_ids: list[int | str]
+    """Activity IDs or external activity IDs whose feedback should be processed."""
 
 
 class ProcessPendingFeedbacksResponse(CamelModel):
