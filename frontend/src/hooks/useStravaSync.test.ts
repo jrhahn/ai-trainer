@@ -12,6 +12,7 @@ const {
   mockGetNewIntervalsActivities,
   mockAnalyseStravaActivities,
   mockGenerateTrainingPlan,
+  mockRefreshLoginSummary,
   mockSaveTrainingPlan,
   mockUpdateCurrentUser,
   mockFetchCurrentUser,
@@ -25,6 +26,7 @@ const {
   mockGetNewIntervalsActivities: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
   mockGenerateTrainingPlan: vi.fn(),
+  mockRefreshLoginSummary: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
   mockUpdateCurrentUser: vi.fn(),
   mockFetchCurrentUser: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock('../services/intervals', () => ({
 vi.mock('../services/ai', () => ({
   analyseStravaActivities: mockAnalyseStravaActivities,
   generateTrainingPlan: mockGenerateTrainingPlan,
+  refreshLoginSummary: mockRefreshLoginSummary,
 }))
 
 vi.mock('../services/user', () => ({
@@ -93,6 +96,7 @@ beforeEach(() => {
   mockUpdateCurrentUser.mockResolvedValue(undefined)
   mockSaveTrainingPlan.mockResolvedValue([])
   mockGenerateTrainingPlan.mockResolvedValue([])
+  mockRefreshLoginSummary.mockResolvedValue('')
   mockGetStravaActivities.mockResolvedValue([])
   mockGetNewStravaActivities.mockResolvedValue([])
   mockGetIntervalsActivities.mockResolvedValue([])
@@ -277,6 +281,35 @@ describe('useStravaSync', () => {
       expect(mockFetchCurrentUser).toHaveBeenCalledWith('tok')
       expect(useAppStore.getState().riderAssessment?.loginSummary).toBe(
         mockAssessment.loginSummary
+      )
+    })
+  })
+
+  it('refreshes the login summary after analysis when the analysis response omits one', async () => {
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: {
+        ...mockAssessment,
+        loginSummary: undefined,
+      },
+      planUpdates: undefined,
+    })
+    mockRefreshLoginSummary.mockResolvedValue(
+      'Refreshed summary after background analysis.\n- Recent activity: New ride included.'
+    )
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockRefreshLoginSummary).toHaveBeenCalledWith('tok')
+      expect(useAppStore.getState().riderAssessment?.loginSummary).toBe(
+        'Refreshed summary after background analysis.\n- Recent activity: New ride included.'
       )
     })
   })

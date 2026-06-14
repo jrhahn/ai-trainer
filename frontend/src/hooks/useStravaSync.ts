@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
-import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
+import { analyseStravaActivities, generateTrainingPlan, refreshLoginSummary } from '../services/ai'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
 
@@ -125,6 +125,13 @@ export function useStravaSync(): UseStravaSyncResult {
       // Recompute all historical TSS/CTL/ATL/TSB with the (potentially updated) FTP.
       await recalculateAll(updatedProfile.currentFTP).catch(() => { /* best-effort */ })
       setRiderAssessment(assessment)
+
+      if (!assessment.loginSummary) {
+        const refreshedSummary = await refreshLoginSummary(authToken).catch(() => '')
+        if (refreshedSummary) {
+          setRiderAssessment({ ...assessment, loginSummary: refreshedSummary })
+        }
+      }
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
         // For new activities, apply targeted plan updates rather than regenerating the whole plan
