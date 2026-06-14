@@ -23,6 +23,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
+const SUMMARY_REFRESH_VERSION = 'latest-activity-v2'
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -344,16 +345,22 @@ export default function DashboardPage() {
 
   const recentRides = rideMetricsHistory
     .filter((r) => r.activityDate >= recentWindow && r.activityDate <= today)
-    .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+    .sort((a, b) => {
+      const dateOrder = b.activityDate.localeCompare(a.activityDate)
+      if (dateOrder !== 0) return dateOrder
+      const startOrder = (b.activityStartDatetime ?? '').localeCompare(a.activityStartDatetime ?? '')
+      if (startOrder !== 0) return startOrder
+      return b.stravaActivityId - a.stravaActivityId
+    })
 
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
   }
-  const recentRideSummaryKey = recentRides
-    .map((r) => r.stravaActivityId)
-    .sort((a, b) => a - b)
-    .join(',')
+  const latestRecentRide = recentRides[0] ?? null
+  const latestRideSummaryKey = latestRecentRide
+    ? `${SUMMARY_REFRESH_VERSION}:${latestRecentRide.stravaActivityId}`
+    : ''
 
   // If there are past incomplete days the plan is stale — ask the AI coach to
   // reschedule them so the athlete always has current upcoming sessions.
@@ -397,18 +404,17 @@ export default function DashboardPage() {
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {
-    if (!authToken || !riderAssessment || !recentRideSummaryKey) return
-    if (summaryRefreshKeyRef.current === recentRideSummaryKey) return
+    if (!authToken || !riderAssessment || !latestRecentRide || !latestRideSummaryKey) return
+    if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
     try {
-      if (localStorage.getItem(SUMMARY_REFRESH_KEY) === recentRideSummaryKey) return
+      if (localStorage.getItem(SUMMARY_REFRESH_KEY) === latestRideSummaryKey) return
     } catch {
       // localStorage may be unavailable; in-memory guard still prevents loops
     }
 
-    summaryRefreshKeyRef.current = recentRideSummaryKey
-    const activityIds = recentRideSummaryKey.split(',').map(Number).filter(Number.isFinite)
-    if (activityIds.length === 0) return
+    summaryRefreshKeyRef.current = latestRideSummaryKey
+    const activityIds = [latestRecentRide.stravaActivityId]
 
     setSummaryLoading(true)
     processPendingFeedbacks(authToken, activityIds)
@@ -416,7 +422,7 @@ export default function DashboardPage() {
         if (summary) {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
           try {
-            localStorage.setItem(SUMMARY_REFRESH_KEY, recentRideSummaryKey)
+            localStorage.setItem(SUMMARY_REFRESH_KEY, latestRideSummaryKey)
           } catch {
             // localStorage may be unavailable; ignore after successful refresh
           }
@@ -426,7 +432,7 @@ export default function DashboardPage() {
         // silently ignore — the existing summary remains available
       })
       .finally(() => setSummaryLoading(false))
-  }, [authToken, recentRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [authToken, latestRecentRide, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
   return (
     <div className="space-y-5">

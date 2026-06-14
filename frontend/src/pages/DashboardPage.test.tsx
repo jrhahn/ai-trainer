@@ -326,8 +326,42 @@ describe('DashboardPage — Activities section layout', () => {
     })
   })
 
+  it('summarizes only the latest visible recent ride when older visible rides exist', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary after latest ride.\n- Latest activity: Oberursel MTB is included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Recent activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: twoDaysAgo,
+          activityName: 'Mittelberg Hiking',
+          stravaActivityId: 8001,
+        }),
+        makeRide({
+          activityDate: today,
+          activityStartDatetime: `${today}T15:00:00`,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9004,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9004])
+      expect(mockProcessPendingFeedbacks).not.toHaveBeenCalledWith('test-token', [8001, 9004])
+    })
+  })
+
   it('does not refresh again once the visible recent activity set was summarized', async () => {
-    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', '9003')
+    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v2:9003')
     setupStore({
       riderAssessment: {
         riderType: 'allrounder',

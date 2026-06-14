@@ -15,9 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recalculation refreshes user data, so "Your Recent Training Summary" updates
   with newly analysed activities. If the analysis response omits a summary, the
   hook now triggers the existing summary-refresh endpoint after analysis completes.
-  The dashboard also refreshes a complete but stale summary when the visible
-  recent ride-metric set has not yet been summarized, even if the previous-login
-  marker has already advanced.
+  The dashboard also refreshes a complete but stale summary for the latest
+  visible recent ride when that ride has not yet been summarized by the current
+  summary-refresh version, even if the previous-login marker has already
+  advanced.
 
 ## [0.25.0] - 2026-06-11
 
