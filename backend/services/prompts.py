@@ -1533,9 +1533,12 @@ def process_pending_feedbacks_system() -> str:
     """Return the system prompt for generating a training summary from multiple ride feedbacks."""
     return (
         f"{COACH_PERSONA} Generate an updated training summary after receiving fresh athlete "
-        "feedback on one or more recent rides.\n"
-        "You will receive the rides in chronological order with dates, types, load metrics, "
-        "and the athlete's own notes.\n"
+        "feedback or new activity context for one or more recent activities.\n"
+        "You will receive the activities to summarize in chronological order with names, dates, "
+        "types, load metrics, and optional athlete notes.\n"
+        "The listed activities are the authoritative basis for the summary. Do not summarize an "
+        "older activity from assessment notes when it is not in the listed activities. If assessment "
+        "notes conflict with the listed activities, prefer the listed activity data.\n"
         "Return ONLY a valid JSON object with a single field:\n"
         '- "loginSummary": a compact dashboard coaching brief addressed directly to the athlete. '
         "The coach decides which information is important and which details are trivial. Do not force "
@@ -1571,10 +1574,13 @@ def process_pending_feedbacks_user(
 
     if rides:
         rides_lines: list[str] = [
-            "Rides with new athlete feedback (chronological order):"
+            "Activities to summarize (chronological order; authoritative):"
         ]
         for m in rides:
             ride_parts: list[str] = []
+            name = getattr(m, "activity_name", None)
+            if name:
+                ride_parts.append(f"Name: {name}")
             ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
             purpose = getattr(m, "ride_purpose", None) or getattr(
                 m, "sport_type", "ride"
@@ -1634,7 +1640,8 @@ def process_pending_feedbacks_user(
             )
 
     parts.append(
-        "\nGenerate an updated loginSummary JSON that reflects the athlete's recent feedback "
-        "and gives forward-looking coaching guidance."
+        "\nGenerate an updated loginSummary JSON that reflects the listed activities above "
+        "and gives forward-looking coaching guidance. Mention the latest listed activity by "
+        "name when it is meaningful."
     )
     return "\n\n".join(parts)

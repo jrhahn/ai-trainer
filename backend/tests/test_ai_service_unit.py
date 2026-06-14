@@ -3,12 +3,43 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 import services.ai_service as ai_service
 import services.analysis as analysis
+
+
+def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative():
+    from services.prompts import process_pending_feedbacks_system, process_pending_feedbacks_user
+
+    system_prompt = process_pending_feedbacks_system()
+    user_prompt = process_pending_feedbacks_user(
+        rides=[
+            SimpleNamespace(
+                activity_name="Oberursel (Taunus) Mountain Biking",
+                activity_date="2026-06-14",
+                sport_type="MountainBikeRide",
+                duration_seconds=4 * 3600 + 13 * 60,
+                tss=180.0,
+                plan_match_status="auto_matched",
+                matched_plan_snapshot={"title": "Complete Rest Day"},
+            )
+        ],
+        assessment={
+            "notes": "Older summary says the most recent activity was Mittelberg Hiking."
+        },
+        training_plan=[],
+        timezone_name="Europe/Berlin",
+    )
+
+    assert "authoritative basis" in system_prompt
+    assert "Name: Oberursel (Taunus) Mountain Biking" in user_prompt
+    assert "Type: MountainBikeRide" in user_prompt
+    assert "Mittelberg Hiking" in user_prompt
+    assert "prefer the listed activity data" in system_prompt
 
 
 # ---------------------------------------------------------------------------
