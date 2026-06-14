@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Activity summary prompt freshness** (`services/prompts.py`,
+- **Activity summary prompt freshness** (`services/prompts.py`, `crud.py`,
   `tests/test_ai_service_unit.py`) — summaries generated for newly visible
   ride metrics now include activity names and treat the listed activities as
   authoritative, preventing stale assessment notes from causing "Your Recent
   Training Summary" to describe an older hike instead of the latest MTB ride.
+  The prompt also marks the latest listed activity explicitly and requires the
+  first summary bullet to anchor on it, with ride metric lookups ordered by date,
+  start time, and activity id.
 
 ## [0.32.0] - 2026-06-11
 

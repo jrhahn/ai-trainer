@@ -19,6 +19,15 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
     user_prompt = process_pending_feedbacks_user(
         rides=[
             SimpleNamespace(
+                activity_name="Mittelberg Hiking",
+                activity_date="2026-06-11",
+                sport_type="Hike",
+                duration_seconds=6 * 3600 + 14 * 60,
+                tss=120.0,
+                plan_match_status="auto_matched",
+                matched_plan_snapshot={"title": "Complete Rest Day"},
+            ),
+            SimpleNamespace(
                 activity_name="Oberursel (Taunus) Mountain Biking",
                 activity_date="2026-06-14",
                 sport_type="MountainBikeRide",
@@ -36,10 +45,16 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
     )
 
     assert "authoritative basis" in system_prompt
+    assert "first bullet must summarize the latest listed activity" in system_prompt
+    assert (
+        "Latest listed activity (anchor the first summary bullet on this activity): "
+        "Name: Oberursel (Taunus) Mountain Biking"
+    ) in user_prompt
     assert "Name: Oberursel (Taunus) Mountain Biking" in user_prompt
     assert "Type: MountainBikeRide" in user_prompt
     assert "Mittelberg Hiking" in user_prompt
     assert "prefer the listed activity data" in system_prompt
+    assert "The first bullet must mention the latest listed activity by name." in user_prompt
 
 
 # ---------------------------------------------------------------------------

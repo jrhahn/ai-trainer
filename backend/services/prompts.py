@@ -1539,6 +1539,8 @@ def process_pending_feedbacks_system() -> str:
         "The listed activities are the authoritative basis for the summary. Do not summarize an "
         "older activity from assessment notes when it is not in the listed activities. If assessment "
         "notes conflict with the listed activities, prefer the listed activity data.\n"
+        "The first bullet must summarize the latest listed activity, not the longest or most "
+        "notable older activity.\n"
         "Return ONLY a valid JSON object with a single field:\n"
         '- "loginSummary": a compact dashboard coaching brief addressed directly to the athlete. '
         "The coach decides which information is important and which details are trivial. Do not force "
@@ -1573,6 +1575,24 @@ def process_pending_feedbacks_user(
             parts.append(f"Athlete profile notes: {notes}")
 
     if rides:
+        latest = rides[-1]
+        latest_name = getattr(latest, "activity_name", None) or "Unnamed activity"
+        latest_date = getattr(latest, "activity_date", "?")
+        latest_type = getattr(latest, "ride_purpose", None) or getattr(
+            latest, "sport_type", "activity"
+        )
+        latest_duration = getattr(latest, "duration_seconds", None)
+        latest_parts = [
+            f"Name: {latest_name}",
+            f"Date: {latest_date}",
+            f"Type: {latest_type}",
+        ]
+        if latest_duration:
+            latest_parts.append(f"Duration: {round(latest_duration / 60)} min")
+        parts.append(
+            "Latest listed activity (anchor the first summary bullet on this activity): "
+            + " | ".join(latest_parts)
+        )
         rides_lines: list[str] = [
             "Activities to summarize (chronological order; authoritative):"
         ]
@@ -1641,7 +1661,7 @@ def process_pending_feedbacks_user(
 
     parts.append(
         "\nGenerate an updated loginSummary JSON that reflects the listed activities above "
-        "and gives forward-looking coaching guidance. Mention the latest listed activity by "
-        "name when it is meaningful."
+        "and gives forward-looking coaching guidance. The first bullet must mention the latest "
+        "listed activity by name."
     )
     return "\n\n".join(parts)

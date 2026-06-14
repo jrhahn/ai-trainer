@@ -862,7 +862,11 @@ async def get_unreviewed_ride_metrics(
             models.RideMetric.user_id == user_id,
             models.RideMetric.coach_reviewed_at.is_(None),
         )
-        .order_by(models.RideMetric.activity_date)
+        .order_by(
+            models.RideMetric.activity_date,
+            models.RideMetric.activity_start_datetime,
+            models.RideMetric.strava_activity_id,
+        )
     )
     return list(result.scalars().all())
 
@@ -896,7 +900,11 @@ async def get_ride_metrics_by_activity_ids(
             models.RideMetric.user_id == user_id,
             models.RideMetric.strava_activity_id.in_(strava_activity_ids),
         )
-        .order_by(models.RideMetric.activity_date)
+        .order_by(
+            models.RideMetric.activity_date,
+            models.RideMetric.activity_start_datetime,
+            models.RideMetric.strava_activity_id,
+        )
     )
     return list(result.scalars().all())
 
