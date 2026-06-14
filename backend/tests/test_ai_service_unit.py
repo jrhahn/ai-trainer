@@ -58,6 +58,46 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
     assert "the first bullet must mention the latest listed activity by name." in user_prompt
 
 
+@pytest.mark.asyncio
+async def test_generate_summary_from_ride_feedbacks_falls_back_when_llm_summary_is_empty():
+    rides = [
+        SimpleNamespace(
+            activity_name="Mittelberg Hiking",
+            activity_date="2026-06-11",
+            sport_type="Hike",
+            duration_seconds=6 * 3600 + 14 * 60,
+            tss=120.0,
+            ctl_after=53.8,
+            atl_after=32.0,
+            tsb_after=21.8,
+            matched_plan_snapshot={"title": "Complete Rest Day"},
+        ),
+        SimpleNamespace(
+            activity_name="Oberursel (Taunus) Mountain Biking",
+            activity_date="2026-06-14",
+            sport_type="MountainBikeRide",
+            duration_seconds=4 * 3600 + 13 * 60,
+            tss=180.0,
+            ctl_after=51.3,
+            atl_after=35.5,
+            tsb_after=15.8,
+            matched_plan_snapshot={"title": "Complete Rest Day"},
+        ),
+    ]
+
+    with patch.object(ai_service, "_chat", return_value='{"loginSummary": ""}'):
+        summary = await ai_service.generate_summary_from_ride_feedbacks(
+            rides=rides,
+            assessment={"notes": "Older summary says Mittelberg Hiking was the latest."},
+            training_plan=[],
+            provider="openai",
+        )
+
+    assert ai_service._is_complete_login_summary(summary)
+    assert "Oberursel (Taunus) Mountain Biking" in summary
+    assert "Mittelberg Hiking" not in summary
+
+
 # ---------------------------------------------------------------------------
 # _parse_ai_json
 # ---------------------------------------------------------------------------

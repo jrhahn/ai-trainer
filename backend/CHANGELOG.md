@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first summary bullet to anchor on it, with ride metric lookups ordered by date,
   start time, and activity id. Older free-form rider-assessment notes are no
   longer included in this refresh prompt, so stale notes cannot reintroduce an
-  older activity.
+  older activity. If the LLM returns an empty or incomplete summary, the backend
+  now writes a deterministic fallback summary based on the newest ride metric.
 
 ## [0.32.0] - 2026-06-11
 

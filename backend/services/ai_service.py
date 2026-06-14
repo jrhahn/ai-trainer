@@ -137,6 +137,70 @@ def _is_complete_login_summary(text: str) -> bool:
     return len(text) >= 60 and "- " in text
 
 
+def _duration_label(seconds: int | None) -> str:
+    if not seconds:
+        return ""
+    minutes = round(seconds / 60)
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m"
+    if hours:
+        return f"{hours}h"
+    return f"{mins} min"
+
+
+def _fallback_login_summary_from_rides(rides: list) -> str:
+    """Build a deterministic login summary when the LLM returns an unusable one."""
+    if not rides:
+        return ""
+
+    latest = rides[-1]
+    name = getattr(latest, "activity_name", None) or "your latest activity"
+    date = getattr(latest, "activity_date", None) or "the latest recorded date"
+    sport_type = getattr(latest, "ride_purpose", None) or getattr(
+        latest, "sport_type", None
+    )
+    duration = _duration_label(getattr(latest, "duration_seconds", None))
+    tss = getattr(latest, "tss", None)
+    ctl = getattr(latest, "ctl_after", None)
+    atl = getattr(latest, "atl_after", None)
+    tsb = getattr(latest, "tsb_after", None)
+    matched_snapshot = getattr(latest, "matched_plan_snapshot", None)
+
+    descriptors = [part for part in [duration, str(sport_type) if sport_type else ""] if part]
+    descriptor_text = f" ({', '.join(descriptors)})" if descriptors else ""
+    load_bits: list[str] = []
+    if tss is not None:
+        load_bits.append(f"TSS {round(float(tss))}")
+    if ctl is not None:
+        load_bits.append(f"CTL {round(float(ctl), 1)}")
+    if atl is not None:
+        load_bits.append(f"ATL {round(float(atl), 1)}")
+    if tsb is not None:
+        load_bits.append(f"TSB {round(float(tsb), 1)}")
+    load_text = ", ".join(load_bits)
+
+    bullets = [
+        f"- Latest activity: Your \"{name}\" on {date}{descriptor_text} is the newest activity in your training log."
+    ]
+    if load_text:
+        bullets.append(
+            f"- Training load: The current ride metrics for this activity are {load_text}, so use that load when deciding how hard to go next."
+        )
+    if isinstance(matched_snapshot, dict):
+        planned = matched_snapshot.get("title") or matched_snapshot.get("workoutType")
+        if planned:
+            bullets.append(
+                f"- Plan alignment: This activity is being compared against \"{planned}\", so keep the next session honest if the effort was bigger than planned."
+            )
+    if len(bullets) < 3:
+        bullets.append(
+            "- Next step: Keep the next workout easy if your legs feel heavy; otherwise continue with the planned training rhythm."
+        )
+
+    return "Here is the latest training update based on your newest recorded activity:\n" + "\n".join(bullets[:3])
+
+
 def _activity_sport_type(activity: dict) -> str:
     value = (
         activity.get("sportType")
@@ -722,4 +786,6 @@ async def generate_summary_from_ride_feedbacks(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     summary = parsed.get("loginSummary") or ""
-    return summary if _is_complete_login_summary(summary) else ""
+    if _is_complete_login_summary(summary):
+        return summary
+    return _fallback_login_summary_from_rides(rides)
