@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Training Summary" to describe an older hike instead of the latest MTB ride.
   The prompt also marks the latest listed activity explicitly and requires the
   first summary bullet to anchor on it, with ride metric lookups ordered by date,
-  start time, and activity id.
+  start time, and activity id. Older free-form rider-assessment notes are no
+  longer included in this refresh prompt, so stale notes cannot reintroduce an
+  older activity.
 
 ## [0.32.0] - 2026-06-11
 

@@ -1568,11 +1568,8 @@ def process_pending_feedbacks_user(
 
     if assessment:
         ftp = assessment.get("estimatedFtp") or assessment.get("estimated_ftp")
-        notes = assessment.get("notes")
         if ftp:
             parts.append(f"Athlete estimated FTP: {ftp} W")
-        if notes:
-            parts.append(f"Athlete profile notes: {notes}")
 
     if rides:
         latest = rides[-1]
@@ -1661,7 +1658,7 @@ def process_pending_feedbacks_user(
 
     parts.append(
         "\nGenerate an updated loginSummary JSON that reflects the listed activities above "
-        "and gives forward-looking coaching guidance. The first bullet must mention the latest "
-        "listed activity by name."
+        "and gives forward-looking coaching guidance. Ignore older free-form assessment notes; "
+        "the first bullet must mention the latest listed activity by name."
     )
     return "\n\n".join(parts)
