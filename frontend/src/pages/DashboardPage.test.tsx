@@ -11,13 +11,15 @@ import { formatLocalDate } from '../utils/workout'
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockAdaptTrainingPlan, mockRefreshLoginSummary } = vi.hoisted(() => ({
+const { mockAdaptTrainingPlan, mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
   mockAdaptTrainingPlan: vi.fn(),
+  mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
   adaptTrainingPlan: mockAdaptTrainingPlan,
+  processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
 }))
 
@@ -98,6 +100,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
   mockAdaptTrainingPlan.mockResolvedValue([])
+  mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
 })
 
@@ -267,6 +270,34 @@ describe('DashboardPage — 7-day window extension', () => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — Activities section layout', () => {
+  it('refreshes a complete but stale login summary when new rides are present', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary with the latest ride.\n- Recent activity: Today is now included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old but complete summary.\n- Recent activity: Yesterday only.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Fresh Dashboard Ride',
+          stravaActivityId: 9001,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9001])
+      expect(screen.getByText('Updated summary with the latest ride.')).toBeInTheDocument()
+    })
+  })
+
   it('renders JSON login summaries as formatted text instead of raw JSON', async () => {
     setupStore({
       riderAssessment: {

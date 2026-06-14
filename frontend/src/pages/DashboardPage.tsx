@@ -18,7 +18,7 @@ import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
-import { adaptTrainingPlan, refreshLoginSummary } from '../services/ai'
+import { adaptTrainingPlan, processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
@@ -287,6 +287,7 @@ export default function DashboardPage() {
 
   const adaptationTriggeredRef = useRef(false)
   const summaryTriggeredRef = useRef(false)
+  const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
 
@@ -348,6 +349,13 @@ export default function DashboardPage() {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
   }
+  const newRideSummaryKey = prevLoginDate
+    ? recentRides
+      .filter(isNew)
+      .map((r) => r.stravaActivityId)
+      .sort((a, b) => a - b)
+      .join(',')
+    : ''
 
   // If there are past incomplete days the plan is stale — ask the AI coach to
   // reschedule them so the athlete always has current upcoming sessions.
@@ -389,6 +397,26 @@ export default function DashboardPage() {
       })
       .finally(() => setSummaryLoading(false))
   }, [authToken, riderAssessment, setRiderAssessment])
+
+  useEffect(() => {
+    if (!authToken || !riderAssessment || !newRideSummaryKey) return
+    if (summaryRefreshKeyRef.current === newRideSummaryKey) return
+    summaryRefreshKeyRef.current = newRideSummaryKey
+    const activityIds = newRideSummaryKey.split(',').map(Number).filter(Number.isFinite)
+    if (activityIds.length === 0) return
+
+    setSummaryLoading(true)
+    processPendingFeedbacks(authToken, activityIds)
+      .then((summary) => {
+        if (summary) {
+          setRiderAssessment({ ...riderAssessment, loginSummary: summary })
+        }
+      })
+      .catch(() => {
+        // silently ignore — the existing summary remains available
+      })
+      .finally(() => setSummaryLoading(false))
+  }, [authToken, newRideSummaryKey, riderAssessment, setRiderAssessment])
 
   return (
     <div className="space-y-5">
