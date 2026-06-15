@@ -5,6 +5,52 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.4] - 2026-06-15
+
+### Fixed
+
+- **Coach upcoming-day interpretation** (`services/prompts.py`,
+  `tests/test_ai_service_unit.py`) — Ask Trainer now treats "upcoming",
+  "next", and "coming days" as today-and-future plan entries only, and must not
+  answer those questions from historical plan days or call non-rest recovery
+  sessions "pure rest".
+
+## [0.32.3] - 2026-06-14
+
+### Fixed
+
+- **Coach date grounding** (`services/ai_service.py`, `services/prompts.py`,
+  `tests/test_ai_service_unit.py`) — Ask Trainer prompts now include
+  precomputed weekday/date labels and today/tomorrow annotations on plan days,
+  and the coach is instructed to copy those labels instead of inventing weekday
+  names from model memory.
+
+## [0.32.2] - 2026-06-14
+
+### Fixed
+
+- **Activity summary refresh identifiers** (`crud.py`, `schemas.py`,
+  `tests/test_crud.py`) — process-pending-feedbacks now accepts stable external
+  activity IDs as well as numeric IDs, so Intervals/FIT-derived 64-bit activity
+  identifiers are not lost to JavaScript number rounding before the backend
+  looks up ride metrics.
+
+## [0.32.1] - 2026-06-14
+
+### Fixed
+
+- **Activity summary prompt freshness** (`services/prompts.py`, `crud.py`,
+  `tests/test_ai_service_unit.py`) — summaries generated for newly visible
+  ride metrics now include activity names and treat the listed activities as
+  authoritative, preventing stale assessment notes from causing "Your Recent
+  Training Summary" to describe an older hike instead of the latest MTB ride.
+  The prompt also marks the latest listed activity explicitly and requires the
+  first summary bullet to anchor on it, with ride metric lookups ordered by date,
+  start time, and activity id. Older free-form rider-assessment notes are no
+  longer included in this refresh prompt, so stale notes cannot reintroduce an
+  older activity. If the LLM returns an empty or incomplete summary, the backend
+  now writes a deterministic fallback summary based on the newest ride metric.
+
 ## [0.32.0] - 2026-06-11
 
 ### Added

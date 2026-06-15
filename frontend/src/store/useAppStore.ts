@@ -212,6 +212,7 @@ export interface AthleteMetricSnapshot {
 
 export interface RideMetricPoint {
   stravaActivityId: number
+  externalActivityId?: string | null
   activityName?: string | null
   activityStartDatetime?: string | null
   activityDate: string
