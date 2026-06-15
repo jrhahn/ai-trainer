@@ -154,9 +154,13 @@ describe('AIChat', () => {
       const observer = {
         root: null,
         rootMargin: '0px',
+        scrollMargin: '0px',
         thresholds: [],
         observe: vi.fn(() =>
-          callback([{ isIntersecting: true } as IntersectionObserverEntry], observer as IntersectionObserver)
+          callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            observer as unknown as IntersectionObserver
+          )
         ),
         disconnect: vi.fn(),
         takeRecords: vi.fn(() => []),
