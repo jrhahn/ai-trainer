@@ -106,7 +106,7 @@ describe('AIChat', () => {
     expect(newestAnswer.compareDocumentPosition(olderQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('shows only four exchanges at a time and pages earlier history on demand', async () => {
+  it('starts with four exchanges and appends earlier history near the scroll end', () => {
     setupStore({
       chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
         {
@@ -129,18 +129,20 @@ describe('AIChat', () => {
     expect(screen.queryByText('Question 2')).not.toBeInTheDocument()
     expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /Show earlier messages/i }))
-
-    expect(screen.getByText('Question 2')).toBeInTheDocument()
-    expect(screen.getByText('Answer 1')).toBeInTheDocument()
-    expect(screen.queryByText('Question 3')).not.toBeInTheDocument()
-    expect(screen.queryByText('Question 6')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Show newer messages/i })).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: /Show newer messages/i }))
+    const messages = screen.getByLabelText('Coach chat messages')
+    Object.defineProperties(messages, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 800 },
+      scrollTop: { configurable: true, value: 340 },
+    })
+    fireEvent.scroll(messages)
 
     expect(screen.getByText('Question 6')).toBeInTheDocument()
-    expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Answer 6')).toBeInTheDocument()
+    expect(screen.getByText('Question 3')).toBeInTheDocument()
+    expect(screen.getByText('Question 2')).toBeInTheDocument()
+    expect(screen.getByText('Answer 1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
   })
 
   it('sends a message and displays the AI response', async () => {

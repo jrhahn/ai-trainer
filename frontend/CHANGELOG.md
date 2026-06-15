@@ -10,12 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **AI Coach chat history window** (`src/components/AIChat.tsx`) — limits the
-  rendered chat to four question/answer exchanges at a time, with a subtle
-  fade and dynamic earlier/newer paging controls for longer conversations.
+  initial rendered chat to four question/answer exchanges, then automatically
+  appends older exchanges near the scroll end while keeping the latest messages
+  visible.
 
 - **AI Coach chat history coverage** (`src/components/AIChat.test.tsx`) —
-  verifies the four-exchange window and on-demand paging through older coach
-  chat history.
+  verifies the four-exchange initial window and automatic loading of older
+  coach chat history.
 
 ## [0.25.4] - 2026-06-15
 

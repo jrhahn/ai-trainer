@@ -98,8 +98,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
-  const [exchangeWindowStart, setExchangeWindowStart] = useState(0)
+  const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
@@ -122,21 +123,28 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
   const displayExchanges = groupMessagesIntoExchanges(displayMessages)
-  const visibleExchanges = displayExchanges.slice(
-    exchangeWindowStart,
-    exchangeWindowStart + VISIBLE_EXCHANGE_LIMIT
-  )
-  const olderExchangeCount = Math.max(
-    displayExchanges.length - exchangeWindowStart - VISIBLE_EXCHANGE_LIMIT,
-    0
-  )
-  const newerExchangeCount = exchangeWindowStart
+  const visibleExchanges = displayExchanges.slice(0, visibleExchangeCount)
+  const olderExchangeCount = Math.max(displayExchanges.length - visibleExchangeCount, 0)
   const showLoadingInLatestExchange =
-    exchangeWindowStart === 0 && loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+    loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
 
   useEffect(() => {
-    setExchangeWindowStart(0)
+    setVisibleExchangeCount(VISIBLE_EXCHANGE_LIMIT)
   }, [chatHistory.length])
+
+  const loadOlderExchanges = () => {
+    setVisibleExchangeCount((count) => Math.min(count + VISIBLE_EXCHANGE_LIMIT, displayExchanges.length))
+  }
+
+  const handleMessagesScroll = () => {
+    const container = messagesRef.current
+    if (!container || olderExchangeCount === 0) return
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    if (distanceFromBottom < 96) {
+      loadOlderExchanges()
+    }
+  }
 
   const renderMessage = (msg: ChatMessage, key: string) => (
     <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -392,17 +400,12 @@ export default function AIChat({ contextWorkout, className }: Props) {
       )}
 
       {/* Messages are newest exchange first, while each exchange reads question before answer. */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-        {newerExchangeCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setExchangeWindowStart(Math.max(exchangeWindowStart - VISIBLE_EXCHANGE_LIMIT, 0))}
-            className="self-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
-          >
-            Show newer messages
-          </button>
-        )}
-
+      <div
+        ref={messagesRef}
+        aria-label="Coach chat messages"
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
+      >
         {visibleExchanges.map((exchange, exchangeIndex) => (
           <div
             key={exchange.id}
@@ -415,15 +418,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
 
         {olderExchangeCount > 0 && (
-          <div className="relative -mt-2 flex justify-center pt-8">
+          <div className="relative -mt-2 flex justify-center pt-8" aria-hidden="true">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-transparent to-white backdrop-blur-[1px]" />
-            <button
-              type="button"
-              onClick={() => setExchangeWindowStart(exchangeWindowStart + VISIBLE_EXCHANGE_LIMIT)}
-              className="relative rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
-            >
-              Show earlier messages
-            </button>
+            <div className="relative h-1 w-16 rounded-full bg-gray-200" />
           </div>
         )}
       </div>
