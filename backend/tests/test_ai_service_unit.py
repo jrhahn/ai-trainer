@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -2642,7 +2643,8 @@ def test_ask_trainer_system_includes_authoritative_date_rules():
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in prompt
     assert "Treat the Current local date context above as authoritative" in prompt
-    assert "If you name a weekday, copy it from that date context" in prompt
+    assert "copy it from that date context" in prompt
+    assert "copy the plan entry's weekday/dateLabel fields" in prompt
 
 
 @pytest.mark.asyncio
@@ -2686,3 +2688,66 @@ async def test_ask_trainer_passes_precomputed_date_context(monkeypatch):
     system_prompt = str(captured["system_prompt"])
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in system_prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 14)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Sunday, June 14, 2026 (2026-06-14).\n"
+            "- Yesterday was Saturday, June 13, 2026 (2026-06-13).\n"
+            "- Tomorrow is Monday, June 15, 2026 (2026-06-15)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Rest today and tomorrow.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "Do I rest for the next two days?",
+        plan=[
+            {
+                "date": "2026-06-14",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-15",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert '"date": "2026-06-14"' in system_prompt
+    assert '"weekday": "Sunday"' in system_prompt
+    assert '"dateLabel": "Sunday, June 14, 2026"' in system_prompt
+    assert '"relativeDay": "today"' in system_prompt
+    assert '"date": "2026-06-15"' in system_prompt
+    assert '"weekday": "Monday"' in system_prompt
+    assert '"dateLabel": "Monday, June 15, 2026"' in system_prompt
+    assert '"relativeDay": "tomorrow"' in system_prompt
+    assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
+    assert "check every weekday/date pair" in system_prompt

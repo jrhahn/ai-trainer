@@ -82,9 +82,28 @@ _SLIM_PLAN_KEEP = {
 }
 
 
-def _slim_plan_entry(entry: dict) -> dict:
+def _slim_plan_entry(
+    entry: dict, today_date: datetime.date | None = None
+) -> dict:
     """Return a compact version of a plan day with only fields needed for chat context."""
-    return {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
+    slim = {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
+    raw_date = slim.get("date")
+    if raw_date:
+        try:
+            parsed = datetime.date.fromisoformat(str(raw_date))
+        except ValueError:
+            return slim
+        slim["weekday"] = parsed.strftime("%A")
+        slim["dateLabel"] = f"{parsed.strftime('%A, %B')} {parsed.day}, {parsed.year}"
+        if today_date is not None:
+            delta_days = (parsed - today_date).days
+            if delta_days == 0:
+                slim["relativeDay"] = "today"
+            elif delta_days == 1:
+                slim["relativeDay"] = "tomorrow"
+            elif delta_days == -1:
+                slim["relativeDay"] = "yesterday"
+    return slim
 
 
 def _event_date(value: dict) -> datetime.date | None:
@@ -515,13 +534,18 @@ async def ask_trainer(
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> dict:
-    today = app_today_iso(timezone_name=timezone_name)
+    today_date = app_today(timezone_name=timezone_name)
+    today = today_date.isoformat()
     date_context = app_date_context(timezone_name=timezone_name)
     last_7_days = [
-        _slim_plan_entry(day) for day in plan if day.get("date", "") <= today
+        _slim_plan_entry(day, today_date=today_date)
+        for day in plan
+        if day.get("date", "") <= today
     ][-MAX_PLAN_DAYS_PAST:]
     next_7_days = [
-        _slim_plan_entry(day) for day in plan if day.get("date", "") >= today
+        _slim_plan_entry(day, today_date=today_date)
+        for day in plan
+        if day.get("date", "") >= today
     ][:MAX_PLAN_DAYS_AHEAD]
     trimmed_memory = (
         (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
