@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **AI Coach chat history window** (`src/components/AIChat.tsx`) — limits the
-  initial rendered chat to four question/answer exchanges, then appends older
-  exchanges when the athlete scrolls or wheels toward older history while
-  keeping the latest messages visible.
+  initial rendered chat to four question/answer exchanges, then shows a white
+  fade zone that lets the athlete scroll down to append older exchanges in
+  batches while keeping the latest messages visible.
 
 - **AI Coach chat history coverage** (`src/components/AIChat.test.tsx`) —
   verifies the four-exchange initial window and automatic loading of older

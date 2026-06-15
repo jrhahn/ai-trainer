@@ -426,9 +426,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
 
         {olderExchangeCount > 0 && (
-          <div className="relative -mt-2 flex justify-center pt-8" aria-hidden="true">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-transparent to-white backdrop-blur-[1px]" />
-            <div className="relative h-1 w-16 rounded-full bg-gray-200" />
+          <div
+            className="relative -mt-2 flex min-h-[70%] justify-center pt-8"
+            data-testid="older-history-fade"
+            aria-hidden="true"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/20 via-white/85 to-white" />
+            <div className="relative mt-8 h-1 w-16 rounded-full bg-gray-200" />
           </div>
         )}
       </div>

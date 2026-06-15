@@ -128,6 +128,7 @@ describe('AIChat', () => {
     expect(screen.getByText('Question 3')).toBeInTheDocument()
     expect(screen.queryByText('Question 2')).not.toBeInTheDocument()
     expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('older-history-fade')).toBeInTheDocument()
 
     const messages = screen.getByLabelText('Coach chat messages')
     Object.defineProperties(messages, {
@@ -142,6 +143,7 @@ describe('AIChat', () => {
     expect(screen.getByText('Question 3')).toBeInTheDocument()
     expect(screen.getByText('Question 2')).toBeInTheDocument()
     expect(screen.getByText('Answer 1')).toBeInTheDocument()
+    expect(screen.queryByTestId('older-history-fade')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
   })
 
@@ -166,12 +168,14 @@ describe('AIChat', () => {
     expect(screen.getByText('Short question 3')).toBeInTheDocument()
     expect(screen.queryByText('Short question 2')).not.toBeInTheDocument()
     expect(screen.queryByText('Short question 1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('older-history-fade')).toBeInTheDocument()
 
     fireEvent.wheel(screen.getByLabelText('Coach chat messages'), { deltaY: 120 })
 
     expect(screen.getByText('Short question 6')).toBeInTheDocument()
     expect(screen.getByText('Short question 2')).toBeInTheDocument()
     expect(screen.getByText('Short question 1')).toBeInTheDocument()
+    expect(screen.queryByTestId('older-history-fade')).not.toBeInTheDocument()
   })
 
   it('sends a message and displays the AI response', async () => {
