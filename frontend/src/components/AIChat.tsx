@@ -8,6 +8,8 @@ import { askTrainer } from '../services/ai'
 import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
+const VISIBLE_EXCHANGE_LIMIT = 4
+
 // Render headings as plain paragraphs so the chat uses a uniform font size
 const MARKDOWN_COMPONENTS: Components = {
   h1: 'p',
@@ -96,6 +98,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
+  const [exchangeWindowStart, setExchangeWindowStart] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const sendInFlightRef = useRef(false)
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
@@ -119,7 +122,21 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
   const displayExchanges = groupMessagesIntoExchanges(displayMessages)
-  const showLoadingInLatestExchange = loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+  const visibleExchanges = displayExchanges.slice(
+    exchangeWindowStart,
+    exchangeWindowStart + VISIBLE_EXCHANGE_LIMIT
+  )
+  const olderExchangeCount = Math.max(
+    displayExchanges.length - exchangeWindowStart - VISIBLE_EXCHANGE_LIMIT,
+    0
+  )
+  const newerExchangeCount = exchangeWindowStart
+  const showLoadingInLatestExchange =
+    exchangeWindowStart === 0 && loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+
+  useEffect(() => {
+    setExchangeWindowStart(0)
+  }, [chatHistory.length])
 
   const renderMessage = (msg: ChatMessage, key: string) => (
     <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -376,7 +393,17 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
       {/* Messages are newest exchange first, while each exchange reads question before answer. */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-        {displayExchanges.map((exchange, exchangeIndex) => (
+        {newerExchangeCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setExchangeWindowStart(Math.max(exchangeWindowStart - VISIBLE_EXCHANGE_LIMIT, 0))}
+            className="self-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
+          >
+            Show newer messages
+          </button>
+        )}
+
+        {visibleExchanges.map((exchange, exchangeIndex) => (
           <div
             key={exchange.id}
             className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
@@ -386,6 +413,19 @@ export default function AIChat({ contextWorkout, className }: Props) {
           </div>
         ))}
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
+
+        {olderExchangeCount > 0 && (
+          <div className="relative -mt-2 flex justify-center pt-8">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-transparent to-white backdrop-blur-[1px]" />
+            <button
+              type="button"
+              onClick={() => setExchangeWindowStart(exchangeWindowStart + VISIBLE_EXCHANGE_LIMIT)}
+              className="relative rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              Show earlier messages
+            </button>
+          </div>
+        )}
       </div>
 
     </div>

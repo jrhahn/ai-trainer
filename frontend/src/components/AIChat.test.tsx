@@ -106,6 +106,43 @@ describe('AIChat', () => {
     expect(newestAnswer.compareDocumentPosition(olderQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('shows only four exchanges at a time and pages earlier history on demand', async () => {
+    setupStore({
+      chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
+        {
+          role: 'user' as const,
+          content: `Question ${index + 1}`,
+          timestamp: `2026-06-15T10:0${index}:00.000Z`,
+        },
+        {
+          role: 'assistant' as const,
+          content: `Answer ${index + 1}`,
+          timestamp: `2026-06-15T10:0${index}:01.000Z`,
+        },
+      ]),
+    })
+    render(<AIChat />)
+
+    expect(screen.getByText('Question 6')).toBeInTheDocument()
+    expect(screen.getByText('Answer 6')).toBeInTheDocument()
+    expect(screen.getByText('Question 3')).toBeInTheDocument()
+    expect(screen.queryByText('Question 2')).not.toBeInTheDocument()
+    expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Show earlier messages/i }))
+
+    expect(screen.getByText('Question 2')).toBeInTheDocument()
+    expect(screen.getByText('Answer 1')).toBeInTheDocument()
+    expect(screen.queryByText('Question 3')).not.toBeInTheDocument()
+    expect(screen.queryByText('Question 6')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Show newer messages/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Show newer messages/i }))
+
+    expect(screen.getByText('Question 6')).toBeInTheDocument()
+    expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+  })
+
   it('sends a message and displays the AI response', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Cadence of 90 rpm is ideal.' })
     setupStore()
