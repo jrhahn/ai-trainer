@@ -87,6 +87,25 @@ describe('AIChat', () => {
     expect(screen.getByText(/How are you feeling about it/i)).toBeInTheDocument()
   })
 
+  it('shows the newest exchange first while keeping each question above its answer', () => {
+    setupStore({
+      chatHistory: [
+        { role: 'user', content: 'Older question', timestamp: '2026-06-15T10:00:00.000Z' },
+        { role: 'assistant', content: 'Older answer', timestamp: '2026-06-15T10:00:01.000Z' },
+        { role: 'user', content: 'Newest question', timestamp: '2026-06-15T10:01:00.000Z' },
+        { role: 'assistant', content: 'Newest answer', timestamp: '2026-06-15T10:01:01.000Z' },
+      ],
+    })
+    render(<AIChat />)
+
+    const newestQuestion = screen.getByText('Newest question')
+    const newestAnswer = screen.getByText('Newest answer')
+    const olderQuestion = screen.getByText('Older question')
+
+    expect(newestQuestion.compareDocumentPosition(newestAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(newestAnswer.compareDocumentPosition(olderQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('sends a message and displays the AI response', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Cadence of 90 rpm is ideal.' })
     setupStore()
