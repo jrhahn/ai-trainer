@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AIChat from './AIChat'
@@ -60,10 +60,6 @@ beforeEach(() => {
   mockFetchCoachMemory.mockResolvedValue('')
   mockFetchCurrentUser.mockResolvedValue({ profile: baseProfile })
   mockClearChatHistoryRemote.mockResolvedValue(undefined)
-})
-
-afterEach(() => {
-  vi.unstubAllGlobals()
 })
 
 describe('AIChat', () => {
@@ -149,30 +145,7 @@ describe('AIChat', () => {
     expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
   })
 
-  it('auto-loads earlier history when the older-history marker is already visible', async () => {
-    const intersectionObserverMock = vi.fn(function (callback: IntersectionObserverCallback) {
-      const observer = {
-        root: null,
-        rootMargin: '0px',
-        scrollMargin: '0px',
-        thresholds: [],
-        observe: vi.fn(() =>
-          callback(
-            [{ isIntersecting: true } as IntersectionObserverEntry],
-            observer as unknown as IntersectionObserver
-          )
-        ),
-        disconnect: vi.fn(),
-        takeRecords: vi.fn(() => []),
-        unobserve: vi.fn(),
-      }
-      return observer
-    })
-
-    vi.stubGlobal(
-      'IntersectionObserver',
-      intersectionObserverMock
-    )
+  it('keeps earlier history hidden until the athlete wheels toward older messages', () => {
     setupStore({
       chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
         {
@@ -189,11 +162,16 @@ describe('AIChat', () => {
     })
     render(<AIChat />)
 
-    await waitFor(() => {
-      expect(screen.getByText('Short question 1')).toBeInTheDocument()
-    })
     expect(screen.getByText('Short question 6')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Short question 3')).toBeInTheDocument()
+    expect(screen.queryByText('Short question 2')).not.toBeInTheDocument()
+    expect(screen.queryByText('Short question 1')).not.toBeInTheDocument()
+
+    fireEvent.wheel(screen.getByLabelText('Coach chat messages'), { deltaY: 120 })
+
+    expect(screen.getByText('Short question 6')).toBeInTheDocument()
+    expect(screen.getByText('Short question 2')).toBeInTheDocument()
+    expect(screen.getByText('Short question 1')).toBeInTheDocument()
   })
 
   it('sends a message and displays the AI response', async () => {
