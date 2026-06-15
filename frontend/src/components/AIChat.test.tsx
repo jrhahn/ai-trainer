@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AIChat from './AIChat'
@@ -60,6 +60,10 @@ beforeEach(() => {
   mockFetchCoachMemory.mockResolvedValue('')
   mockFetchCurrentUser.mockResolvedValue({ profile: baseProfile })
   mockClearChatHistoryRemote.mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('AIChat', () => {
@@ -142,6 +146,44 @@ describe('AIChat', () => {
     expect(screen.getByText('Question 3')).toBeInTheDocument()
     expect(screen.getByText('Question 2')).toBeInTheDocument()
     expect(screen.getByText('Answer 1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
+  })
+
+  it('auto-loads earlier history when the older-history marker is already visible', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      vi.fn((callback: IntersectionObserverCallback) => ({
+        root: null,
+        rootMargin: '0px',
+        thresholds: [],
+        observe: vi.fn(() =>
+          callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+        ),
+        disconnect: vi.fn(),
+        takeRecords: vi.fn(() => []),
+        unobserve: vi.fn(),
+      }))
+    )
+    setupStore({
+      chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
+        {
+          role: 'user' as const,
+          content: `Short question ${index + 1}`,
+          timestamp: `2026-06-15T10:0${index}:00.000Z`,
+        },
+        {
+          role: 'assistant' as const,
+          content: `Short answer ${index + 1}`,
+          timestamp: `2026-06-15T10:0${index}:01.000Z`,
+        },
+      ]),
+    })
+    render(<AIChat />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Short question 1')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Short question 6')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Show earlier messages/i })).not.toBeInTheDocument()
   })
 

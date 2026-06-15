@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
@@ -101,6 +101,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const olderHistoryMarkerRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
@@ -132,9 +133,38 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setVisibleExchangeCount(VISIBLE_EXCHANGE_LIMIT)
   }, [chatHistory.length])
 
-  const loadOlderExchanges = () => {
+  const loadOlderExchanges = useCallback(() => {
     setVisibleExchangeCount((count) => Math.min(count + VISIBLE_EXCHANGE_LIMIT, displayExchanges.length))
-  }
+  }, [displayExchanges.length])
+
+  useEffect(() => {
+    const marker = olderHistoryMarkerRef.current
+    const container = messagesRef.current
+    if (!marker || !container || olderExchangeCount === 0) return
+
+    if (typeof IntersectionObserver === 'undefined') {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+      if (
+        container.clientHeight > 0 &&
+        (container.scrollHeight <= container.clientHeight + 96 || distanceFromBottom < 96)
+      ) {
+        loadOlderExchanges()
+      }
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          loadOlderExchanges()
+        }
+      },
+      { root: container, rootMargin: '96px' }
+    )
+
+    observer.observe(marker)
+    return () => observer.disconnect()
+  }, [loadOlderExchanges, olderExchangeCount])
 
   const handleMessagesScroll = () => {
     const container = messagesRef.current
@@ -418,7 +448,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
 
         {olderExchangeCount > 0 && (
-          <div className="relative -mt-2 flex justify-center pt-8" aria-hidden="true">
+          <div ref={olderHistoryMarkerRef} className="relative -mt-2 flex justify-center pt-8" aria-hidden="true">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-transparent to-white backdrop-blur-[1px]" />
             <div className="relative h-1 w-16 rounded-full bg-gray-200" />
           </div>
