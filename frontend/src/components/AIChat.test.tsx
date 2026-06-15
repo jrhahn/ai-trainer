@@ -150,19 +150,24 @@ describe('AIChat', () => {
   })
 
   it('auto-loads earlier history when the older-history marker is already visible', async () => {
-    vi.stubGlobal(
-      'IntersectionObserver',
-      vi.fn((callback: IntersectionObserverCallback) => ({
+    const intersectionObserverMock = vi.fn(function (callback: IntersectionObserverCallback) {
+      const observer = {
         root: null,
         rootMargin: '0px',
         thresholds: [],
         observe: vi.fn(() =>
-          callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+          callback([{ isIntersecting: true } as IntersectionObserverEntry], observer as IntersectionObserver)
         ),
         disconnect: vi.fn(),
         takeRecords: vi.fn(() => []),
         unobserve: vi.fn(),
-      }))
+      }
+      return observer
+    })
+
+    vi.stubGlobal(
+      'IntersectionObserver',
+      intersectionObserverMock
     )
     setupStore({
       chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
