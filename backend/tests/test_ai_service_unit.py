@@ -2751,3 +2751,74 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
     assert '"relativeDay": "tomorrow"' in system_prompt
     assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
     assert "check every weekday/date pair" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 15)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Monday, June 15, 2026 (2026-06-15).\n"
+            "- Yesterday was Sunday, June 14, 2026 (2026-06-14).\n"
+            "- Tomorrow is Tuesday, June 16, 2026 (2026-06-16)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Today is rest; tomorrow is recovery.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "so upcoming days are pure resting, right?",
+        plan=[
+            {
+                "date": "2026-06-14",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-15",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-16",
+                "workoutType": "recovery",
+                "title": "Easy Recovery Spin",
+                "durationMinutes": 60,
+            },
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert "Last 7 days of training (historical context, not upcoming)" in system_prompt
+    assert "Upcoming plan (today and future only" in system_prompt
+    assert "Interpret 'upcoming', 'next', and 'coming days' as TODAY and future dates only" in system_prompt
+    assert "use exactly the first N entries from Upcoming plan" in system_prompt
+    assert "Do not call recovery spins, strength sessions, or other non-rest workouts 'pure rest'" in system_prompt
+    upcoming_section = system_prompt.split("Upcoming plan (today and future only", 1)[1]
+    assert '"date": "2026-06-15"' in upcoming_section
+    assert '"weekday": "Monday"' in upcoming_section
+    assert '"date": "2026-06-16"' in upcoming_section
+    assert '"weekday": "Tuesday"' in upcoming_section
+    assert '"date": "2026-06-14"' not in upcoming_section

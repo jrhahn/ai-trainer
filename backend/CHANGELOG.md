@@ -5,6 +5,16 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.4] - 2026-06-15
+
+### Fixed
+
+- **Coach upcoming-day interpretation** (`services/prompts.py`,
+  `tests/test_ai_service_unit.py`) — Ask Trainer now treats "upcoming",
+  "next", and "coming days" as today-and-future plan entries only, and must not
+  answer those questions from historical plan days or call non-rest recovery
+  sessions "pure rest".
+
 ## [0.32.3] - 2026-06-14
 
 ### Fixed
