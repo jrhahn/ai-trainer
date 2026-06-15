@@ -23,6 +23,44 @@ interface Props {
   className?: string
 }
 
+interface ChatExchange {
+  id: string
+  messages: ChatMessage[]
+}
+
+function groupMessagesIntoExchanges(messages: ChatMessage[]): ChatExchange[] {
+  const exchanges: ChatExchange[] = []
+  let current: ChatMessage[] = []
+
+  messages.forEach((msg, index) => {
+    if (msg.role === 'user') {
+      if (current.length > 0) {
+        exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+      }
+      current = [msg]
+      return
+    }
+
+    if (current.length === 0) {
+      exchanges.push({ id: `exchange-${exchanges.length}`, messages: [msg] })
+      return
+    }
+
+    current.push(msg)
+
+    if (index === messages.length - 1) {
+      exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+      current = []
+    }
+  })
+
+  if (current.length > 0) {
+    exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+  }
+
+  return exchanges.reverse()
+}
+
 export default function AIChat({ contextWorkout, className }: Props) {
   const {
     authToken,
@@ -80,8 +118,106 @@ export default function AIChat({ contextWorkout, className }: Props) {
     chatHistory.length > 0
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
+  const displayExchanges = groupMessagesIntoExchanges(displayMessages)
+  const showLoadingInLatestExchange = loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
 
-  const sendMessage = async (msgOverride?: string, options?: { skipAddUserMessage?: boolean }) => {
+  const renderMessage = (msg: ChatMessage, key: string) => (
+    <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      {msg.role === 'assistant' && (
+        <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <Bot size={14} className="text-amber-600" />
+        </div>
+      )}
+      <div
+        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+          msg.role === 'user'
+            ? 'bg-amber-500 text-white rounded-br-sm'
+            : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+        }`}
+      >
+        {msg.planUpdateCount ? (
+          <>
+            {msg.role === 'assistant' ? (
+              <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
+            ) : (
+              <p className="whitespace-pre-wrap">{msg.content}</p>
+            )}
+            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
+              <CalendarCheck size={12} />
+              Training plan updated:{' '}
+              {msg.planUpdateCount === 1 ? '1 day modified.' : `${msg.planUpdateCount} days modified.`}
+            </p>
+          </>
+        ) : msg.role === 'assistant' ? (
+          <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
+        ) : (
+          <span className="whitespace-pre-wrap">{msg.content}</span>
+        )}
+        {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+          <div className="mt-2 border-t border-gray-200 pt-2">
+            <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
+              <BookOpen size={11} />
+              Sources
+            </p>
+            <ul className="space-y-0.5">
+              {msg.sources.map((source, idx) => (
+                <li key={idx} className="text-xs text-gray-500">
+                  {source.url ? (
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-amber-600 underline"
+                    >
+                      {source.title}
+                    </a>
+                  ) : (
+                    source.title
+                  )}
+                  {source.doi && (
+                    <span className="ml-1 text-gray-400">· DOI: {source.doi}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
+          <button
+            onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
+            disabled={loading || !authToken || !userProfile}
+            aria-label="Retry coach response"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RotateCcw size={12} />
+            Retry
+          </button>
+        )}
+      </div>
+      {msg.role === 'user' && (
+        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+          <User size={14} className="text-gray-600" />
+        </div>
+      )}
+    </div>
+  )
+
+  const renderLoadingIndicator = () => (
+    <div className="flex gap-2 justify-start">
+      <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
+        <Bot size={14} className="text-amber-600" />
+      </div>
+      <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-2">
+        <div className="flex gap-1">
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+    </div>
+  )
+
+  async function sendMessage(msgOverride?: string, options?: { skipAddUserMessage?: boolean }) {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
     if (!raw.trim() || loading || sendInFlightRef.current) return
 
@@ -238,102 +374,18 @@ export default function AIChat({ contextWorkout, className }: Props) {
         </div>
       )}
 
-      {/* Messages — flex-col-reverse renders newest at the top so no scrolling needed */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3">
-        {displayMessages.map((msg, i) => (
-          <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Bot size={14} className="text-amber-600" />
-              </div>
-            )}
-            <div
-              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-amber-500 text-white rounded-br-sm'
-                  : 'bg-gray-100 text-gray-800 rounded-bl-sm'
-              }`}
-            >
-              {msg.planUpdateCount ? (
-                <>
-                  {msg.role === 'assistant' ? (
-                    <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                  <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
-                    <CalendarCheck size={12} />
-                    Training plan updated:{' '}
-                    {msg.planUpdateCount === 1 ? '1 day modified.' : `${msg.planUpdateCount} days modified.`}
-                  </p>
-                </>
-              ) : msg.role === 'assistant' ? (
-                <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
-              ) : (
-                <span className="whitespace-pre-wrap">{msg.content}</span>
-              )}
-              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-                <div className="mt-2 border-t border-gray-200 pt-2">
-                  <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
-                    <BookOpen size={11} />
-                    Sources
-                  </p>
-                  <ul className="space-y-0.5">
-                    {msg.sources.map((source, idx) => (
-                      <li key={idx} className="text-xs text-gray-500">
-                        {source.url ? (
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-amber-600 underline"
-                          >
-                            {source.title}
-                          </a>
-                        ) : (
-                          source.title
-                        )}
-                        {source.doi && (
-                          <span className="ml-1 text-gray-400">· DOI: {source.doi}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
-                <button
-                  onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
-                  disabled={loading || !authToken || !userProfile}
-                  aria-label="Retry coach response"
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <RotateCcw size={12} />
-                  Retry
-                </button>
-              )}
-            </div>
-            {msg.role === 'user' && (
-              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                <User size={14} className="text-gray-600" />
-              </div>
-            )}
+      {/* Messages are newest exchange first, while each exchange reads question before answer. */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+        {displayExchanges.map((exchange, exchangeIndex) => (
+          <div
+            key={exchange.id}
+            className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
+          >
+            {exchange.messages.map((msg, messageIndex) => renderMessage(msg, `${exchange.id}-${messageIndex}`))}
+            {exchangeIndex === 0 && showLoadingInLatestExchange && renderLoadingIndicator()}
           </div>
         ))}
-        {loading && (
-          <div className="flex gap-2 justify-start">
-            <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
-              <Bot size={14} className="text-amber-600" />
-            </div>
-            <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-2">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          </div>
-        )}
+        {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
       </div>
 
     </div>
