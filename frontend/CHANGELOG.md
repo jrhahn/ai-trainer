@@ -5,7 +5,7 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.25.1] - 2026-06-15
+## [0.25.4] - 2026-06-15
 
 ### Fixed
 
@@ -16,6 +16,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI Coach chat ordering coverage** (`src/components/AIChat.test.tsx`) —
   verifies newest-first exchange ordering without reversing the question/answer
   reading flow.
+
+## [0.25.3] - 2026-06-14
+
+### Fixed
+
+- **Dashboard summary refresh identifiers** (`src/pages/DashboardPage.tsx`,
+  `src/services/ai.ts`, `src/store/useAppStore.ts`,
+  `src/pages/DashboardPage.test.tsx`) — dashboard summary refreshes now send the
+  stable `externalActivityId` when available, avoiding JavaScript rounding of
+  large Intervals/FIT activity IDs before the backend refreshes the summary.
+
+## [0.25.2] - 2026-06-14
+
+### Fixed
+
+- **Dashboard summary refresh retry** (`src/pages/DashboardPage.tsx`,
+  `src/pages/DashboardPage.test.tsx`) — bumped the latest-activity summary
+  refresh marker after the backend fallback fix so browsers that already tried
+  the previous refresh version regenerate the "Your Recent Training Summary"
+  once more.
+
+## [0.25.1] - 2026-06-14
+
+### Fixed
+
+- **Background activity summary refresh** (`src/hooks/useStravaSync.ts`,
+  `src/hooks/useStravaSync.test.ts`) — automatic Strava/Intervals.icu analysis
+  now keeps the freshly returned `riderAssessment.loginSummary` after metrics
+  recalculation refreshes user data, so "Your Recent Training Summary" updates
+  with newly analysed activities. If the analysis response omits a summary, the
+  hook now triggers the existing summary-refresh endpoint after analysis completes.
+  The dashboard also refreshes a complete but stale summary for the latest
+  visible recent ride when that ride has not yet been summarized by the current
+  summary-refresh version, even if the previous-login marker has already
+  advanced. The refresh version was bumped after removing stale backend
+  assessment notes from the summary prompt so affected browsers regenerate once.
 
 ## [0.25.0] - 2026-06-11
 

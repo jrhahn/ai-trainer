@@ -90,6 +90,28 @@ async def test_get_user_by_email_simple_missing(db: AsyncSession) -> None:
     assert fetched is None
 
 
+@pytest.mark.asyncio
+async def test_get_ride_metrics_by_activity_ids_accepts_external_activity_id(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=7629419622326427463,
+        external_activity_id="i157147093",
+        activity_date="2026-06-14",
+        activity_start_datetime="2026-06-14T08:19:31",
+        activity_name="Oberursel (Taunus) Mountain Biking",
+        sport_type="MountainBikeRide",
+    )
+
+    rides = await crud.get_ride_metrics_by_activity_ids(db, user.id, ["i157147093"])
+
+    assert len(rides) == 1
+    assert rides[0].activity_name == "Oberursel (Taunus) Mountain Biking"
+
+
 # ---------------------------------------------------------------------------
 # TrainingPlan
 # ---------------------------------------------------------------------------

@@ -694,6 +694,13 @@ def ask_trainer_system(
         "way, and how the sequence fits the athlete\\'s current fatigue and readiness. "
         "Draw on current CTL/ATL/TSB (or recent training history) and any recent ride "
         "feedback to contextualize the upcoming load.\n"
+        "- Interpret 'upcoming', 'next', and 'coming days' as TODAY and future dates only. "
+        "Never answer those questions from Last 7 days entries or older conversation history.\n"
+        "- If the athlete asks about the next N days, use exactly the first N entries from "
+        "Upcoming plan unless they explicitly ask to exclude today.\n"
+        "- If the athlete asks whether upcoming days are all rest, verify each relevant Upcoming "
+        "plan entry's workoutType/title. Do not call recovery spins, strength sessions, or other "
+        "non-rest workouts 'pure rest'.\n"
         "- When giving an outlook, do NOT include planUpdates unless the athlete explicitly "
         "asks to change something or you detect a clear recovery issue that requires "
         "immediate intervention (e.g. dangerously high accumulated fatigue heading into "
@@ -706,8 +713,8 @@ def ask_trainer_system(
         f"{date_context}\n"
         f"Athlete profile: {json.dumps(profile)}\n"
         f"{race_profile_section}"
-        f"Last 7 days of training: {json.dumps(last_7_days)}\n"
-        f"Upcoming plan (next {len(next_n_days)} days): {json.dumps(next_n_days)}"
+        f"Last 7 days of training (historical context, not upcoming): {json.dumps(last_7_days)}\n"
+        f"Upcoming plan (today and future only, next {len(next_n_days)} days): {json.dumps(next_n_days)}"
         f"{assessment_section}"
         f"{metrics_section}"
         f"{events_section}"
@@ -736,7 +743,13 @@ def ask_trainer_system(
         "knowledge or conversation history.\n"
         "- When using words like today, tomorrow, or yesterday, anchor them to the exact dates "
         "listed there.\n"
-        "- If you name a weekday, copy it from that date context; do not infer or recalculate it.\n"
+        "- If you name a weekday for today, tomorrow, or yesterday, copy it from that date context; "
+        "do not infer or recalculate it.\n"
+        "- If you name a weekday for an upcoming plan day, copy the plan entry's weekday/dateLabel "
+        "fields. Never invent a weekday from memory.\n"
+        "- Before returning, check every weekday/date pair in the response against the Current local "
+        "date context and the Upcoming plan dateLabel fields. If a pair conflicts, fix it before "
+        "answering.\n"
         "- If the athlete states a relative date that conflicts with the date context, gently "
         "clarify using the exact date.\n"
         "Whenever the athlete requests a change to the training plan, your response MUST briefly "
@@ -1533,9 +1546,14 @@ def process_pending_feedbacks_system() -> str:
     """Return the system prompt for generating a training summary from multiple ride feedbacks."""
     return (
         f"{COACH_PERSONA} Generate an updated training summary after receiving fresh athlete "
-        "feedback on one or more recent rides.\n"
-        "You will receive the rides in chronological order with dates, types, load metrics, "
-        "and the athlete's own notes.\n"
+        "feedback or new activity context for one or more recent activities.\n"
+        "You will receive the activities to summarize in chronological order with names, dates, "
+        "types, load metrics, and optional athlete notes.\n"
+        "The listed activities are the authoritative basis for the summary. Do not summarize an "
+        "older activity from assessment notes when it is not in the listed activities. If assessment "
+        "notes conflict with the listed activities, prefer the listed activity data.\n"
+        "The first bullet must summarize the latest listed activity, not the longest or most "
+        "notable older activity.\n"
         "Return ONLY a valid JSON object with a single field:\n"
         '- "loginSummary": a compact dashboard coaching brief addressed directly to the athlete. '
         "The coach decides which information is important and which details are trivial. Do not force "
@@ -1563,18 +1581,36 @@ def process_pending_feedbacks_user(
 
     if assessment:
         ftp = assessment.get("estimatedFtp") or assessment.get("estimated_ftp")
-        notes = assessment.get("notes")
         if ftp:
             parts.append(f"Athlete estimated FTP: {ftp} W")
-        if notes:
-            parts.append(f"Athlete profile notes: {notes}")
 
     if rides:
+        latest = rides[-1]
+        latest_name = getattr(latest, "activity_name", None) or "Unnamed activity"
+        latest_date = getattr(latest, "activity_date", "?")
+        latest_type = getattr(latest, "ride_purpose", None) or getattr(
+            latest, "sport_type", "activity"
+        )
+        latest_duration = getattr(latest, "duration_seconds", None)
+        latest_parts = [
+            f"Name: {latest_name}",
+            f"Date: {latest_date}",
+            f"Type: {latest_type}",
+        ]
+        if latest_duration:
+            latest_parts.append(f"Duration: {round(latest_duration / 60)} min")
+        parts.append(
+            "Latest listed activity (anchor the first summary bullet on this activity): "
+            + " | ".join(latest_parts)
+        )
         rides_lines: list[str] = [
-            "Rides with new athlete feedback (chronological order):"
+            "Activities to summarize (chronological order; authoritative):"
         ]
         for m in rides:
             ride_parts: list[str] = []
+            name = getattr(m, "activity_name", None)
+            if name:
+                ride_parts.append(f"Name: {name}")
             ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
             purpose = getattr(m, "ride_purpose", None) or getattr(
                 m, "sport_type", "ride"
@@ -1634,7 +1670,8 @@ def process_pending_feedbacks_user(
             )
 
     parts.append(
-        "\nGenerate an updated loginSummary JSON that reflects the athlete's recent feedback "
-        "and gives forward-looking coaching guidance."
+        "\nGenerate an updated loginSummary JSON that reflects the listed activities above "
+        "and gives forward-looking coaching guidance. Ignore older free-form assessment notes; "
+        "the first bullet must mention the latest listed activity by name."
     )
     return "\n\n".join(parts)

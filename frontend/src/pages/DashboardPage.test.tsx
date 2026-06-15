@@ -11,13 +11,15 @@ import { formatLocalDate } from '../utils/workout'
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockAdaptTrainingPlan, mockRefreshLoginSummary } = vi.hoisted(() => ({
+const { mockAdaptTrainingPlan, mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
   mockAdaptTrainingPlan: vi.fn(),
+  mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
   adaptTrainingPlan: mockAdaptTrainingPlan,
+  processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
 }))
 
@@ -98,6 +100,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
   mockAdaptTrainingPlan.mockResolvedValue([])
+  mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
 })
 
@@ -267,6 +270,148 @@ describe('DashboardPage — 7-day window extension', () => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — Activities section layout', () => {
+  it('refreshes a complete but stale login summary when new rides are present', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary with the latest ride.\n- Recent activity: Today is now included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old but complete summary.\n- Recent activity: Yesterday only.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Fresh Dashboard Ride',
+          stravaActivityId: 9001,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9001])
+      expect(screen.getByText('Updated summary with the latest ride.')).toBeInTheDocument()
+    })
+  })
+
+  it('refreshes a stale summary for visible recent rides even after the previous login marker moved on', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary after revisiting the dashboard.\n- Latest activity: Oberursel MTB is included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old but complete summary.\n- Recent activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9002,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9002])
+      expect(screen.getByText('Updated summary after revisiting the dashboard.')).toBeInTheDocument()
+    })
+  })
+
+  it('summarizes only the latest visible recent ride when older visible rides exist', async () => {
+    localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Updated summary after latest ride.\n- Latest activity: Oberursel MTB is included.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Recent activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: twoDaysAgo,
+          activityName: 'Mittelberg Hiking',
+          stravaActivityId: 8001,
+        }),
+        makeRide({
+          activityDate: today,
+          activityStartDatetime: `${today}T15:00:00`,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9004,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', [9004])
+      expect(mockProcessPendingFeedbacks).not.toHaveBeenCalledWith('test-token', [8001, 9004])
+    })
+  })
+
+  it('uses external activity ids for summary refresh when available', async () => {
+    mockProcessPendingFeedbacks.mockResolvedValue(
+      'Summary refreshed.\n- Latest activity: Oberursel MTB.'
+    )
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Latest activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 7629419622326427000,
+          externalActivityId: 'i157147093',
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockProcessPendingFeedbacks).toHaveBeenCalledWith('test-token', ['i157147093'])
+    })
+  })
+
+  it('does not refresh again once the visible recent activity set was summarized', async () => {
+    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v4:9003')
+    setupStore({
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Already refreshed summary.\n- Latest activity: Oberursel MTB.',
+      },
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Oberursel (Taunus) Mountain Biking',
+          stravaActivityId: 9003,
+        }),
+      ],
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Already refreshed summary.')).toBeInTheDocument()
+    })
+    expect(mockProcessPendingFeedbacks).not.toHaveBeenCalled()
+  })
+
   it('renders JSON login summaries as formatted text instead of raw JSON', async () => {
     setupStore({
       riderAssessment: {

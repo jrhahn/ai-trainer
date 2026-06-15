@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -862,7 +862,11 @@ async def get_unreviewed_ride_metrics(
             models.RideMetric.user_id == user_id,
             models.RideMetric.coach_reviewed_at.is_(None),
         )
-        .order_by(models.RideMetric.activity_date)
+        .order_by(
+            models.RideMetric.activity_date,
+            models.RideMetric.activity_start_datetime,
+            models.RideMetric.strava_activity_id,
+        )
     )
     return list(result.scalars().all())
 
@@ -886,17 +890,40 @@ async def mark_rides_as_reviewed(
     return result.rowcount
 
 
+def _activity_key_filters(activity_keys: list[int | str]) -> list:
+    numeric_ids: list[int] = []
+    external_ids: list[str] = []
+    for key in activity_keys:
+        key_text = str(key)
+        external_ids.append(key_text)
+        if key_text.isdigit():
+            numeric_ids.append(int(key_text))
+    filters = []
+    if numeric_ids:
+        filters.append(models.RideMetric.strava_activity_id.in_(numeric_ids))
+    if external_ids:
+        filters.append(models.RideMetric.external_activity_id.in_(external_ids))
+    return filters
+
+
 async def get_ride_metrics_by_activity_ids(
-    db: AsyncSession, user_id: str, strava_activity_ids: list[int]
+    db: AsyncSession, user_id: str, strava_activity_ids: list[int | str]
 ) -> list[models.RideMetric]:
-    """Return RideMetric rows for the given Strava activity IDs, ordered oldest-first."""
+    """Return RideMetric rows for the given activity keys, ordered oldest-first."""
+    filters = _activity_key_filters(strava_activity_ids)
+    if not filters:
+        return []
     result = await db.execute(
         select(models.RideMetric)
         .where(
             models.RideMetric.user_id == user_id,
-            models.RideMetric.strava_activity_id.in_(strava_activity_ids),
+            or_(*filters),
         )
-        .order_by(models.RideMetric.activity_date)
+        .order_by(
+            models.RideMetric.activity_date,
+            models.RideMetric.activity_start_datetime,
+            models.RideMetric.strava_activity_id,
+        )
     )
     return list(result.scalars().all())
 

@@ -3,12 +3,100 @@
 from __future__ import annotations
 
 import json
+import datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 import services.ai_service as ai_service
 import services.analysis as analysis
+
+
+def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative():
+    from services.prompts import process_pending_feedbacks_system, process_pending_feedbacks_user
+
+    system_prompt = process_pending_feedbacks_system()
+    user_prompt = process_pending_feedbacks_user(
+        rides=[
+            SimpleNamespace(
+                activity_name="Darmstadt Mountain Biking",
+                activity_date="2026-06-11",
+                sport_type="MountainBikeRide",
+                duration_seconds=6 * 3600 + 14 * 60,
+                tss=120.0,
+                plan_match_status="auto_matched",
+                matched_plan_snapshot={"title": "Complete Rest Day"},
+            ),
+            SimpleNamespace(
+                activity_name="Oberursel (Taunus) Mountain Biking",
+                activity_date="2026-06-14",
+                sport_type="MountainBikeRide",
+                duration_seconds=4 * 3600 + 13 * 60,
+                tss=180.0,
+                plan_match_status="auto_matched",
+                matched_plan_snapshot={"title": "Complete Rest Day"},
+            )
+        ],
+        assessment={
+            "notes": "Older summary says the most recent activity was Mittelberg Hiking."
+        },
+        training_plan=[],
+        timezone_name="Europe/Berlin",
+    )
+
+    assert "authoritative basis" in system_prompt
+    assert "first bullet must summarize the latest listed activity" in system_prompt
+    assert (
+        "Latest listed activity (anchor the first summary bullet on this activity): "
+        "Name: Oberursel (Taunus) Mountain Biking"
+    ) in user_prompt
+    assert "Name: Oberursel (Taunus) Mountain Biking" in user_prompt
+    assert "Type: MountainBikeRide" in user_prompt
+    assert "Mittelberg Hiking" not in user_prompt
+    assert "prefer the listed activity data" in system_prompt
+    assert "Ignore older free-form assessment notes" in user_prompt
+    assert "the first bullet must mention the latest listed activity by name." in user_prompt
+
+
+@pytest.mark.asyncio
+async def test_generate_summary_from_ride_feedbacks_falls_back_when_llm_summary_is_empty():
+    rides = [
+        SimpleNamespace(
+            activity_name="Mittelberg Hiking",
+            activity_date="2026-06-11",
+            sport_type="Hike",
+            duration_seconds=6 * 3600 + 14 * 60,
+            tss=120.0,
+            ctl_after=53.8,
+            atl_after=32.0,
+            tsb_after=21.8,
+            matched_plan_snapshot={"title": "Complete Rest Day"},
+        ),
+        SimpleNamespace(
+            activity_name="Oberursel (Taunus) Mountain Biking",
+            activity_date="2026-06-14",
+            sport_type="MountainBikeRide",
+            duration_seconds=4 * 3600 + 13 * 60,
+            tss=180.0,
+            ctl_after=51.3,
+            atl_after=35.5,
+            tsb_after=15.8,
+            matched_plan_snapshot={"title": "Complete Rest Day"},
+        ),
+    ]
+
+    with patch.object(ai_service, "_chat", return_value='{"loginSummary": ""}'):
+        summary = await ai_service.generate_summary_from_ride_feedbacks(
+            rides=rides,
+            assessment={"notes": "Older summary says Mittelberg Hiking was the latest."},
+            training_plan=[],
+            provider="openai",
+        )
+
+    assert ai_service._is_complete_login_summary(summary)
+    assert "Oberursel (Taunus) Mountain Biking" in summary
+    assert "Mittelberg Hiking" not in summary
 
 
 # ---------------------------------------------------------------------------
@@ -2555,7 +2643,8 @@ def test_ask_trainer_system_includes_authoritative_date_rules():
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in prompt
     assert "Treat the Current local date context above as authoritative" in prompt
-    assert "If you name a weekday, copy it from that date context" in prompt
+    assert "copy it from that date context" in prompt
+    assert "copy the plan entry's weekday/dateLabel fields" in prompt
 
 
 @pytest.mark.asyncio
@@ -2599,3 +2688,137 @@ async def test_ask_trainer_passes_precomputed_date_context(monkeypatch):
     system_prompt = str(captured["system_prompt"])
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in system_prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 14)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Sunday, June 14, 2026 (2026-06-14).\n"
+            "- Yesterday was Saturday, June 13, 2026 (2026-06-13).\n"
+            "- Tomorrow is Monday, June 15, 2026 (2026-06-15)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Rest today and tomorrow.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "Do I rest for the next two days?",
+        plan=[
+            {
+                "date": "2026-06-14",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-15",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert '"date": "2026-06-14"' in system_prompt
+    assert '"weekday": "Sunday"' in system_prompt
+    assert '"dateLabel": "Sunday, June 14, 2026"' in system_prompt
+    assert '"relativeDay": "today"' in system_prompt
+    assert '"date": "2026-06-15"' in system_prompt
+    assert '"weekday": "Monday"' in system_prompt
+    assert '"dateLabel": "Monday, June 15, 2026"' in system_prompt
+    assert '"relativeDay": "tomorrow"' in system_prompt
+    assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
+    assert "check every weekday/date pair" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 15)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Monday, June 15, 2026 (2026-06-15).\n"
+            "- Yesterday was Sunday, June 14, 2026 (2026-06-14).\n"
+            "- Tomorrow is Tuesday, June 16, 2026 (2026-06-16)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Today is rest; tomorrow is recovery.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "so upcoming days are pure resting, right?",
+        plan=[
+            {
+                "date": "2026-06-14",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-15",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-16",
+                "workoutType": "recovery",
+                "title": "Easy Recovery Spin",
+                "durationMinutes": 60,
+            },
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert "Last 7 days of training (historical context, not upcoming)" in system_prompt
+    assert "Upcoming plan (today and future only" in system_prompt
+    assert "Interpret 'upcoming', 'next', and 'coming days' as TODAY and future dates only" in system_prompt
+    assert "use exactly the first N entries from Upcoming plan" in system_prompt
+    assert "Do not call recovery spins, strength sessions, or other non-rest workouts 'pure rest'" in system_prompt
+    upcoming_section = system_prompt.split("Upcoming plan (today and future only", 1)[1]
+    assert '"date": "2026-06-15"' in upcoming_section
+    assert '"weekday": "Monday"' in upcoming_section
+    assert '"date": "2026-06-16"' in upcoming_section
+    assert '"weekday": "Tuesday"' in upcoming_section
+    assert '"date": "2026-06-14"' not in upcoming_section
