@@ -33,13 +33,13 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="Compact training intelligence"
-      title="AI-guided training from your real rides"
-      subtitle="Connect your activity data, get adaptive plans, and track readiness without spreadsheet work."
+      eyebrow="Your coach, always in reach"
+      title="Training advice that knows your history"
+      subtitle="Talk to your coach anytime. It uses your rides, workouts, feedback, and what it learns about you over time to give sharper guidance."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h2>
-        <p className="text-sm text-gray-500 mb-5">Pick up your training plan, recent ride feedback, and next workout.</p>
+        <p className="text-sm text-gray-500 mb-5">Jump back into your coach chat, training plan, and next workout.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

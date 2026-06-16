@@ -10,9 +10,9 @@ type AuthShellProps = {
 }
 
 const highlights = [
-  { label: 'Strava and FIT imports', icon: Activity },
-  { label: 'Adaptive weekly workouts', icon: CalendarCheck },
-  { label: 'Readiness feedback loop', icon: TrendingUp },
+  { label: 'Strava, Intervals.icu, and FIT', icon: Activity },
+  { label: 'Coach chat anytime', icon: CalendarCheck },
+  { label: 'Learns from your feedback', icon: TrendingUp },
 ]
 
 export default function AuthShell({ children, eyebrow, title, subtitle }: AuthShellProps) {
@@ -34,7 +34,7 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
               <h1 className="max-w-xl text-4xl font-black leading-tight tracking-normal text-white sm:text-5xl">
                 {title}
               </h1>
-              <p className="mt-4 max-w-lg text-base leading-7 text-slate-200">{subtitle}</p>
+              <p className="mt-4 max-w-xl text-base leading-7 text-slate-200">{subtitle}</p>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(220px,0.65fr)] lg:items-end">
@@ -81,7 +81,7 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-600">Training account</p>
-              <p className="mt-1 text-sm text-gray-500">Secure access to your plans and ride data.</p>
+              <p className="mt-1 text-sm text-gray-500">Secure access to your coach, plans, and ride data.</p>
             </div>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
               <Zap size={19} aria-hidden="true" />

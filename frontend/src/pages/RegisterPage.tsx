@@ -97,9 +97,9 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow="Start with your ride history"
-      title="Build a plan that adapts after every session"
-      subtitle="Create your account, connect training sources, and let the coach adjust load, recovery, and next workouts."
+      eyebrow="Bring your training context"
+      title="A coach that gets better as it gets to know you"
+      subtitle="Connect Strava, Intervals.icu, or FIT files, share feedback, and build a coaching memory that improves every recommendation."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h2>

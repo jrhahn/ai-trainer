@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compact auth landing shell** (`src/components/AuthShell.tsx`,
   `src/pages/LoginPage.tsx`, `src/pages/RegisterPage.tsx`) — unauthenticated
   users now see a polished training-focused landing presentation around the
-  existing login and registration forms, with product positioning, source/plan
-  highlights, and a compact readiness preview.
+  existing login and registration forms, with coach-first product positioning,
+  Strava/Intervals.icu/FIT source highlights, and a compact readiness preview.
 
 ## [0.25.5] - 2026-06-15
 
