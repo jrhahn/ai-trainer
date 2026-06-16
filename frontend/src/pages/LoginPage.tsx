@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bike, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
+import AuthShell from '../components/AuthShell'
 import { login } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 
@@ -31,17 +32,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="bg-amber-500 rounded-lg p-1.5">
-            <Bike size={22} className="text-white" />
-          </div>
-          <span className="font-bold text-xl text-gray-900">Train Like a Pro!</span>
-        </div>
-
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h1>
-        <p className="text-sm text-gray-500 mb-6">Use your account to access your training data.</p>
+    <AuthShell
+      eyebrow="Compact training intelligence"
+      title="AI-guided training from your real rides"
+      subtitle="Connect your activity data, get adaptive plans, and track readiness without spreadsheet work."
+    >
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h2>
+        <p className="text-sm text-gray-500 mb-5">Pick up your training plan, recent ride feedback, and next workout.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -76,7 +74,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loginMutation.isPending}
-            className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold flex items-center justify-center gap-2 hover:bg-amber-400 disabled:opacity-50 transition-colors"
           >
             {loginMutation.isPending ? (
               <>
@@ -89,13 +87,13 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-sm text-gray-500 mt-6 text-center">
+        <p className="text-sm text-gray-500 mt-5 text-center">
           Need an account?{' '}
           <Link to="/register" className="text-amber-600 hover:text-amber-700 font-semibold">
             Register
           </Link>
         </p>
       </div>
-    </div>
+    </AuthShell>
   )
 }

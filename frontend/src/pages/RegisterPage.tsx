@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bike, CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
+import AuthShell from '../components/AuthShell'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 
@@ -95,17 +96,14 @@ export default function RegisterPage() {
   })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="bg-amber-500 rounded-lg p-1.5">
-            <Bike size={22} className="text-white" />
-          </div>
-          <span className="font-bold text-xl text-gray-900">Train Like a Pro!</span>
-        </div>
-
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h1>
-        <p className="text-sm text-gray-500 mb-6">Register once and keep your training synced on the backend.</p>
+    <AuthShell
+      eyebrow="Start with your ride history"
+      title="Build a plan that adapts after every session"
+      subtitle="Create your account, connect training sources, and let the coach adjust load, recovery, and next workouts."
+    >
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h2>
+        <p className="text-sm text-gray-500 mb-5">Register once and keep your training synced on the backend.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -199,7 +197,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold flex items-center justify-center gap-2 hover:bg-amber-400 disabled:opacity-50 transition-colors"
           >
             {registerMutation.isPending ? (
               <>
@@ -219,6 +217,6 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </AuthShell>
   )
 }
