@@ -3,12 +3,44 @@
   become: true
   vars:
     app_dir: /opt/ai-trainer
+    debian_apt_mirror: http://deb.debian.org/debian
+    debian_security_mirror: http://deb.debian.org/debian-security
     docker_arch_map:
       x86_64: amd64
       aarch64: arm64
       armv7l: armhf
 
   tasks:
+    - name: Find APT source files
+      ansible.builtin.find:
+        paths:
+          - /etc/apt
+        patterns:
+          - sources.list
+          - "*.list"
+          - "*.sources"
+        recurse: true
+        file_type: file
+      register: apt_source_files
+
+    - name: Replace Hetzner package mirror with Debian mirror
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "http://mirror\\.hetzner\\.com/debian/packages"
+        replace: "{{ debian_apt_mirror }}"
+      loop: "{{ apt_source_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Replace Hetzner security mirror with Debian security mirror
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "http://mirror\\.hetzner\\.com/debian/security"
+        replace: "{{ debian_security_mirror }}"
+      loop: "{{ apt_source_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
     - name: Remove conflicting old Docker packages
       ansible.builtin.apt:
         name:
