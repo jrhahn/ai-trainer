@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import type { WheelEvent } from 'react'
 import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
@@ -7,6 +8,8 @@ import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
+
+const VISIBLE_EXCHANGE_LIMIT = 4
 
 // Render headings as plain paragraphs so the chat uses a uniform font size
 const MARKDOWN_COMPONENTS: Components = {
@@ -96,7 +99,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
+  const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
@@ -119,7 +124,34 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
   const displayExchanges = groupMessagesIntoExchanges(displayMessages)
-  const showLoadingInLatestExchange = loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+  const visibleExchanges = displayExchanges.slice(0, visibleExchangeCount)
+  const olderExchangeCount = Math.max(displayExchanges.length - visibleExchangeCount, 0)
+  const showLoadingInLatestExchange =
+    loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+
+  useEffect(() => {
+    setVisibleExchangeCount(VISIBLE_EXCHANGE_LIMIT)
+  }, [chatHistory.length])
+
+  const loadOlderExchanges = useCallback(() => {
+    setVisibleExchangeCount((count) => Math.min(count + VISIBLE_EXCHANGE_LIMIT, displayExchanges.length))
+  }, [displayExchanges.length])
+
+  const handleMessagesScroll = () => {
+    const container = messagesRef.current
+    if (!container || olderExchangeCount === 0) return
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    if (distanceFromBottom < 96) {
+      loadOlderExchanges()
+    }
+  }
+
+  const handleMessagesWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY > 0 && olderExchangeCount > 0) {
+      loadOlderExchanges()
+    }
+  }
 
   const renderMessage = (msg: ChatMessage, key: string) => (
     <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -375,8 +407,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
       )}
 
       {/* Messages are newest exchange first, while each exchange reads question before answer. */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-        {displayExchanges.map((exchange, exchangeIndex) => (
+      <div
+        ref={messagesRef}
+        aria-label="Coach chat messages"
+        onScroll={handleMessagesScroll}
+        onWheel={handleMessagesWheel}
+        className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
+      >
+        {visibleExchanges.map((exchange, exchangeIndex) => (
           <div
             key={exchange.id}
             className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
@@ -386,6 +424,17 @@ export default function AIChat({ contextWorkout, className }: Props) {
           </div>
         ))}
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
+
+        {olderExchangeCount > 0 && (
+          <div
+            className="relative -mt-2 flex min-h-[70%] justify-center pt-8"
+            data-testid="older-history-fade"
+            aria-hidden="true"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/20 via-white/85 to-white" />
+            <div className="relative mt-8 h-1 w-16 rounded-full bg-gray-200" />
+          </div>
+        )}
       </div>
 
     </div>

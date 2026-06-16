@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.5] - 2026-06-15
+
+### Changed
+
+- **AI Coach chat history window** (`src/components/AIChat.tsx`) — limits the
+  initial rendered chat to four question/answer exchanges, then shows a white
+  fade zone that lets the athlete scroll down to append older exchanges in
+  batches while keeping the latest messages visible.
+
+- **AI Coach chat history coverage** (`src/components/AIChat.test.tsx`) —
+  verifies the four-exchange initial window and automatic loading of older
+  coach chat history.
+
 ## [0.25.4] - 2026-06-15
 
 ### Fixed
