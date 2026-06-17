@@ -191,11 +191,15 @@ async def upsert_workout_log(
 
 
 async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatMessage]:
-    """Return all ChatMessages for a user ordered by timestamp."""
+    """Return all ChatMessages for a user in persisted conversation order."""
     result = await db.scalars(
         select(models.ChatMessage)
         .where(models.ChatMessage.user_id == user_id)
-        .order_by(models.ChatMessage.timestamp, models.ChatMessage.id)
+        .order_by(
+            models.ChatMessage.timestamp,
+            models.ChatMessage.created_at,
+            models.ChatMessage.id,
+        )
     )
     return list(result)
 

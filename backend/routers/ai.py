@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date as _date
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -624,7 +624,8 @@ async def ask_trainer(
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
 
-    now = datetime.now(timezone.utc).isoformat()
+    user_message_time = datetime.now(timezone.utc)
+    assistant_message_time = user_message_time + timedelta(microseconds=1)
     plan_updates = result.get("plan_updates") or []
     persisted_updated_plan: list[dict] | None = None
 
@@ -676,14 +677,14 @@ async def ask_trainer(
         current_user.id,
         role="user",
         content=body.question,
-        timestamp=now,
+        timestamp=user_message_time.isoformat(),
     )
     await crud.create_chat_message(
         db,
         current_user.id,
         role="assistant",
         content=result["response"],
-        timestamp=now,
+        timestamp=assistant_message_time.isoformat(),
         plan_update_count=len(plan_updates) if plan_updates else None,
     )
 

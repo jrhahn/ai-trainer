@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.6] - 2026-06-17
+
+### Fixed
+
+- **Coach chat reload ordering** (`crud.py`, `routers/ai.py`) — chat history
+  reloads now preserve user/assistant turn order for messages created in the
+  same exchange instead of tie-breaking equal timestamps by UUID, preventing
+  assistant replies from shifting under the wrong question after a page reload.
+
 ## [0.32.5] - 2026-06-17
 
 ### Fixed
