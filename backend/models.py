@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -374,6 +375,21 @@ class RideMetric(Base):
     """
 
     __tablename__ = "ride_metrics"
+    __table_args__ = (
+        Index(
+            "ix_ride_metrics_user_activity",
+            "user_id",
+            "strava_activity_id",
+            unique=True,
+        ),
+        Index(
+            "ix_ride_metrics_user_source_external",
+            "user_id",
+            "activity_source",
+            "external_activity_id",
+            unique=True,
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(

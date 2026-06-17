@@ -5,6 +5,24 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.5] - 2026-06-17
+
+### Fixed
+
+- **Ride metric source-key dedupe** (`crud.py`, `models.py`,
+  `alembic/versions/20260611_000001_add_activity_source_to_ride_metrics.py`,
+  `alembic/versions/20260617_000001_dedupe_ride_metric_source_keys.py`) —
+  imported activity metrics now upsert by `(user_id, activity_source,
+  external_activity_id)`, stale duplicate source-key rows are cleaned before
+  relying on the unique index, and ride-metrics history collapses any remaining
+  duplicate visible rows.
+- **Persisted Ask Trainer plan updates** (`routers/ai.py`, `schemas.py`) —
+  `/ai/ask-trainer` now returns the persisted full `updatedPlan` after applying
+  plan updates so clients can refresh from the authoritative stored plan.
+- **Coach date grounding coverage** (`tests/test_ai_service_unit.py`) — added a
+  June 17, 2026 Europe/Berlin prompt regression covering recent activity
+  history, upcoming plan entries, and exact weekday/date labels.
+
 ## [0.32.4] - 2026-06-15
 
 ### Fixed

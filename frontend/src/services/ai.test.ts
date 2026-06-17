@@ -153,12 +153,16 @@ describe('askTrainer', () => {
       plan_updates: [
         { date: '2024-05-02', workoutType: 'rest', title: 'Rest', description: 'Rest up', durationMinutes: 0 },
       ],
+      updated_plan: [
+        { ...makeDay('2024-05-02'), workoutType: 'rest', title: 'Rest', description: 'Rest up', durationMinutes: 0 },
+      ],
     })
 
     const result = await askTrainer('How should I train?', 'token-123')
 
     expect(result.response).toBe('Try interval training twice a week.')
     expect(result.planUpdates?.[0].workoutType).toBe('rest')
+    expect(result.updatedPlan?.[0].workoutType).toBe('rest')
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/ask-trainer', {
       token: 'token-123',
       method: 'POST',

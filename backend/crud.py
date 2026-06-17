@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import String, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -546,12 +546,19 @@ async def upsert_ride_metric(
     classification_reason: str | None = None,
     summary: str | None = None,
 ) -> models.RideMetric:
-    """Insert or update a RideMetric row identified by the legacy metric id."""
+    """Insert or update a RideMetric row by stable activity identity."""
+    normalized_source = activity_source or "strava"
+    normalized_external_id = (
+        str(external_activity_id)
+        if external_activity_id is not None
+        else str(strava_activity_id)
+    )
+    use_source_key = normalized_source != "strava" or external_activity_id is not None
     values = dict(
         user_id=user_id,
         strava_activity_id=strava_activity_id,
-        activity_source=activity_source,
-        external_activity_id=external_activity_id or str(strava_activity_id),
+        activity_source=normalized_source,
+        external_activity_id=normalized_external_id,
         source_metadata=source_metadata,
         activity_date=activity_date,
         sport_type=sport_type,
@@ -583,15 +590,20 @@ async def upsert_ride_metric(
 
     conn = await db.connection()
     if conn.dialect.name == "postgresql":
+        conflict_keys = (
+            ["user_id", "activity_source", "external_activity_id"]
+            if use_source_key
+            else ["user_id", "strava_activity_id"]
+        )
         stmt = (
             pg_insert(models.RideMetric)
             .values(**values, id=str(__import__("uuid").uuid4()))
             .on_conflict_do_update(
-                index_elements=["user_id", "strava_activity_id"],
+                index_elements=conflict_keys,
                 set_={
                     k: v
                     for k, v in values.items()
-                    if k not in ("user_id", "strava_activity_id")
+                    if k not in conflict_keys
                 },
             )
             .returning(models.RideMetric)
@@ -600,12 +612,29 @@ async def upsert_ride_metric(
         return result.scalar_one()
 
     # SQLite (tests) — SELECT + update/insert; flush immediately to avoid autoflush issues
-    existing = await db.scalar(
-        select(models.RideMetric).where(
-            models.RideMetric.user_id == user_id,
-            models.RideMetric.strava_activity_id == strava_activity_id,
+    if use_source_key:
+        existing = await db.scalar(
+            select(models.RideMetric)
+            .where(
+                models.RideMetric.user_id == user_id,
+                models.RideMetric.activity_source == normalized_source,
+                models.RideMetric.external_activity_id == normalized_external_id,
+            )
+            .order_by(
+                models.RideMetric.created_at.desc(),
+                models.RideMetric.activity_date.desc(),
+                func.coalesce(models.RideMetric.activity_start_datetime, "").desc(),
+                models.RideMetric.id.desc(),
+            )
+            .limit(1)
         )
-    )
+    else:
+        existing = await db.scalar(
+            select(models.RideMetric).where(
+                models.RideMetric.user_id == user_id,
+                models.RideMetric.strava_activity_id == strava_activity_id,
+            )
+        )
     if existing is not None:
         for attr, val in values.items():
             setattr(existing, attr, val)
@@ -623,11 +652,47 @@ async def get_ride_metrics_history(
     user_id: str,
     limit: int = 60,
 ) -> list[models.RideMetric]:
-    """Return the most recent *limit* RideMetric rows for a user, newest first."""
+    """Return the most recent *limit* visible RideMetric rows, newest first.
+
+    Stale duplicate rows are collapsed by source/external activity identity so
+    dashboards never show the same imported activity twice.
+    """
+    source_key = func.coalesce(models.RideMetric.activity_source, "strava")
+    external_key = func.coalesce(
+        models.RideMetric.external_activity_id,
+        cast(models.RideMetric.strava_activity_id, String),
+    )
+    start_key = func.coalesce(models.RideMetric.activity_start_datetime, "")
+    ranked = (
+        select(
+            models.RideMetric.id.label("ride_metric_id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    models.RideMetric.user_id,
+                    source_key,
+                    external_key,
+                ),
+                order_by=(
+                    models.RideMetric.activity_date.desc(),
+                    start_key.desc(),
+                    models.RideMetric.id.desc(),
+                ),
+            )
+            .label("dedupe_rank"),
+        )
+        .where(models.RideMetric.user_id == user_id)
+        .subquery()
+    )
     result = await db.scalars(
         select(models.RideMetric)
-        .where(models.RideMetric.user_id == user_id)
-        .order_by(models.RideMetric.activity_date.desc())
+        .join(ranked, models.RideMetric.id == ranked.c.ride_metric_id)
+        .where(ranked.c.dedupe_rank == 1)
+        .order_by(
+            models.RideMetric.activity_date.desc(),
+            start_key.desc(),
+            models.RideMetric.id.desc(),
+        )
         .limit(limit)
     )
     return list(result)

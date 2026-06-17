@@ -341,6 +341,40 @@ describe('AIChat', () => {
     expect(updatedDay?.workoutType).toBe('recovery')
   })
 
+  it('replaces local training plan with updatedPlan returned by the backend', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const dayAfter = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0]
+    mockAskTrainer.mockResolvedValue({
+      response: 'I persisted the recovery adjustment.',
+      planUpdates: [
+        { date: tomorrow, workoutType: 'recovery', title: 'Recovery Ride', description: 'Easy spin', durationMinutes: 45 },
+      ],
+      updatedPlan: [
+        { date: tomorrow, workoutType: 'recovery', title: 'Recovery Ride', description: 'Easy spin', durationMinutes: 45 },
+        { date: dayAfter, workoutType: 'endurance', title: 'Server Persisted Endurance', description: 'Z2 ride', durationMinutes: 75 },
+      ],
+    })
+    setupStore({
+      trainingPlan: [
+        { date: tomorrow, workoutType: 'intervals', title: 'Hard Intervals', description: '5x5min', durationMinutes: 60 },
+      ],
+    })
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Can you make tomorrow easier?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Training plan updated: 1 day modified/i)).toBeInTheDocument()
+    })
+
+    const state = useAppStore.getState()
+    expect(state.trainingPlan).toHaveLength(2)
+    expect(state.trainingPlan[0].workoutType).toBe('recovery')
+    expect(state.trainingPlan[1].title).toBe('Server Persisted Endurance')
+  })
+
   it('passes contextWorkout to askTrainer when provided', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Good luck with the intervals!' })
     setupStore()

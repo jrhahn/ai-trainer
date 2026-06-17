@@ -79,8 +79,16 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
         },
     )
     assert ask_response.status_code == 200
-    assert ask_response.json()["response"] == "Take it easy tomorrow."
-    assert ask_response.json()["planUpdates"][0]["workoutType"] == "rest"
+    ask_body = ask_response.json()
+    assert ask_body["response"] == "Take it easy tomorrow."
+    assert ask_body["planUpdates"][0]["workoutType"] == "rest"
+    assert ask_body["updatedPlan"][0]["workoutType"] == "rest"
+
+    persisted_plan_response = await client.get(
+        "/api/v1/users/me/plan", headers=auth_headers
+    )
+    assert persisted_plan_response.status_code == 200
+    assert persisted_plan_response.json()["plan"][0]["workoutType"] == "rest"
 
     rate_response = await client.post(
         "/api/v1/ai/rate-workout",

@@ -626,6 +626,7 @@ async def ask_trainer(
 
     now = datetime.now(timezone.utc).isoformat()
     plan_updates = result.get("plan_updates") or []
+    persisted_updated_plan: list[dict] | None = None
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
@@ -714,7 +715,10 @@ async def ask_trainer(
             )
             for day in plan
         ]
-        await crud.upsert_training_plan(db, current_user.id, updated_plan)
+        persisted_plan = await crud.upsert_training_plan(
+            db, current_user.id, updated_plan
+        )
+        persisted_updated_plan = persisted_plan.plan
 
     # Merge RAG retrieval sources into the result.
     # rag_sources contains the full metadata for all retrieved chunks;
@@ -724,6 +728,9 @@ async def ask_trainer(
 
     if ride_label_updates:
         result["ride_label_updates"] = ride_label_updates
+
+    if persisted_updated_plan is not None:
+        result["updated_plan"] = persisted_updated_plan
 
     return schemas.AskTrainerResponse.model_validate(result)
 

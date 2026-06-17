@@ -74,6 +74,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setUserProfile,
     setCoachMemory,
     clearChatHistory,
+    setTrainingPlan,
     updateTrainingDay,
     updateRideMetricLabel,
     pendingCoachMessage,
@@ -88,6 +89,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
+      setTrainingPlan: s.setTrainingPlan,
       updateTrainingDay: s.updateTrainingDay,
       updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
@@ -270,12 +272,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
       const result = await askTrainer(userMsg, authToken, { contextWorkout })
 
       let planUpdateCount = 0
-      if (result.planUpdates && result.planUpdates.length > 0) {
-        for (const update of result.planUpdates) {
+      const planUpdates = result.planUpdates ?? []
+      if (result.updatedPlan) {
+        setTrainingPlan(result.updatedPlan)
+        planUpdateCount = planUpdates.length
+      } else if (planUpdates.length > 0) {
+        for (const update of planUpdates) {
           const { date, ...fields } = update
           updateTrainingDay(date, fields)
         }
-        planUpdateCount = result.planUpdates.length
+        planUpdateCount = planUpdates.length
       }
 
       if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {
