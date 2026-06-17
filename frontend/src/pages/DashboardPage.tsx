@@ -23,7 +23,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
-const SUMMARY_REFRESH_VERSION = 'latest-activity-v5'
+const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -48,13 +48,29 @@ function rideActivityRefreshId(ride: RideMetricPoint): string | number {
   return ride.externalActivityId || ride.stravaActivityId
 }
 
+function normalizeActivityText(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function rideVisibleFingerprint(ride: RideMetricPoint): string {
+  return [
+    normalizeActivityText(ride.sportType),
+    normalizeActivityText(ride.activityName),
+    ride.activityDate,
+    ride.activityStartDatetime ?? '',
+    ride.durationSeconds ?? '',
+  ].join('|')
+}
+
 function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[] {
   const seen = new Set<string>()
   const unique: RideMetricPoint[] = []
   for (const ride of rides) {
-    const key = rideActivityKey(ride)
-    if (seen.has(key)) continue
-    seen.add(key)
+    const identityKey = rideActivityKey(ride)
+    const visibleKey = rideVisibleFingerprint(ride)
+    if (seen.has(identityKey) || seen.has(visibleKey)) continue
+    seen.add(identityKey)
+    seen.add(visibleKey)
     unique.push(ride)
   }
   return unique

@@ -191,6 +191,34 @@ describe('DashboardPage — recent rides', () => {
     expect(await screen.findByText('weighttrainingKrafttraining')).toBeInTheDocument()
     expect(screen.getAllByText('weighttrainingKrafttraining')).toHaveLength(1)
   })
+
+  it('deduplicates identical visible activity rows even when imported ids differ', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'weighttrainingKrafttraining',
+          sportType: 'WeightTraining',
+          durationSeconds: 2220,
+          stravaActivityId: 7629419622326427000,
+          externalActivityId: 'intervals-activity-a',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'weighttrainingKrafttraining',
+          sportType: 'WeightTraining',
+          durationSeconds: 2220,
+          stravaActivityId: 7629419622326427463,
+          externalActivityId: 'intervals-activity-b',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('weighttrainingKrafttraining')).toBeInTheDocument()
+    expect(screen.getAllByText('weighttrainingKrafttraining')).toHaveLength(1)
+    expect(screen.getByText('37 min')).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -411,7 +439,7 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('does not refresh again once the visible recent activity set was summarized', async () => {
-    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v5:strava:9003')
+    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v6:strava:9003')
     setupStore({
       riderAssessment: {
         riderType: 'allrounder',
