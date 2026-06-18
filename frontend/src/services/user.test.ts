@@ -511,12 +511,19 @@ describe('submitRideFeedback', () => {
       rpe: 4,
       legs: 'fresh',
       intent: 'recovery',
+      planMatchFeedback: 'mostly_matched',
     })
 
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9002', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: { rpe: 4, legs: 'fresh', intent: 'recovery', note: undefined },
+      body: {
+        rpe: 4,
+        legs: 'fresh',
+        intent: 'recovery',
+        planMatchFeedback: 'mostly_matched',
+        note: undefined,
+      },
     })
   })
 })

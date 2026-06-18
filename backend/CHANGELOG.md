@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-06-18
+
+### Added
+
+- **Persistent ride match feedback** (`schemas.py`, `routers/users.py`) —
+  ride-feedback submissions can now include an athlete plan-match correction,
+  which is stored in `ride_metrics.label_override` and returned with the
+  updated ride so the frontend can persistently correct badges after feedback.
+
 ## [0.37.0] - 2026-06-18
 
 ### Changed

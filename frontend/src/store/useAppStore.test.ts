@@ -32,7 +32,7 @@ vi.mock('../services/user', () => ({
 }))
 
 import { useAppStore } from './useAppStore'
-import type { ChatMessage, WorkoutFeedback, TrainingDay } from './useAppStore'
+import type { ChatMessage, RideMetricPoint, WorkoutFeedback, TrainingDay } from './useAppStore'
 
 const mockFeedback: WorkoutFeedback = {
   actualDurationMinutes: 60,
@@ -71,6 +71,32 @@ describe('chatHistory actions', () => {
     useAppStore.getState().addChatMessage(msg)
     useAppStore.getState().clearChatHistory()
     expect(useAppStore.getState().chatHistory).toEqual([])
+  })
+})
+
+describe('ride metric actions', () => {
+  it('replaces a ride metric with the updated server copy', () => {
+    const ride: RideMetricPoint = {
+      stravaActivityId: 42,
+      activityDate: '2026-06-18',
+      sportType: 'Ride',
+      labelOverride: 'Needs work',
+    }
+    useAppStore.getState().setRideMetricsHistory([ride])
+
+    useAppStore.getState().updateRideMetric({
+      ...ride,
+      userNote: 'RPE 8/10 | plan match: matched plan',
+      labelOverride: 'Solid',
+    })
+
+    expect(useAppStore.getState().rideMetricsHistory[0]).toEqual(
+      expect.objectContaining({
+        stravaActivityId: 42,
+        userNote: 'RPE 8/10 | plan match: matched plan',
+        labelOverride: 'Solid',
+      }),
+    )
   })
 })
 

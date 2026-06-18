@@ -5,7 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.26.3] - 2026-06-18
+## [0.27.0] - 2026-06-18
+
+### Added
+
+- **Persistent ride match feedback** (`src/components/RideFeedbackForm.tsx`,
+  `src/pages/DashboardPage.tsx`, `src/store/useAppStore.ts`) — recent
+  activities now expose ride feedback from the Dashboard, including an explicit
+  plan-match correction that updates the persisted activity badge returned by
+  the backend.
 
 ### Fixed
 

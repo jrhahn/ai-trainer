@@ -773,6 +773,11 @@ class RideFeedbackRequest(CamelModel):
     note: Optional[str] = None
     """Optional free-text note."""
 
+    plan_match_feedback: Optional[
+        Literal["matched", "mostly_matched", "not_matched"]
+    ] = None
+    """Optional athlete correction for how well the activity matched the plan."""
+
 
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""

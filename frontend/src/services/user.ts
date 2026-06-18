@@ -257,6 +257,7 @@ export async function submitRideFeedback(
     rpe: number
     legs: 'fresh' | 'normal' | 'heavy'
     intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
+    planMatchFeedback?: 'matched' | 'mostly_matched' | 'not_matched'
     note?: string
   },
 ): Promise<{

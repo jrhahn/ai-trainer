@@ -8,6 +8,7 @@ import {
   CloudSnow,
   CloudSun,
   Clock,
+  MessageSquare,
   Sun,
 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -16,6 +17,7 @@ import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
+import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
@@ -363,7 +365,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -374,6 +376,7 @@ export default function DashboardPage() {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
+      updateRideMetric: s.updateRideMetric,
       setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
@@ -383,6 +386,7 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
+  const [feedbackRide, setFeedbackRide] = useState<RideMetricPoint | null>(null)
 
   useEffect(() => {
     try {
@@ -673,6 +677,16 @@ export default function DashboardPage() {
                         {scoreLabel}
                       </button>
                     )}
+                    {authToken && (
+                      <button
+                        onClick={() => setFeedbackRide(ride)}
+                        title="Add ride feedback"
+                        className="text-gray-400 hover:text-amber-600 transition-colors"
+                        aria-label={`Add feedback for ${ride.activityName ?? 'activity'}`}
+                      >
+                        <MessageSquare size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -687,6 +701,20 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {feedbackRide && (
+        <RideFeedbackForm
+          stravaActivityId={feedbackRide.stravaActivityId}
+          activityDate={feedbackRide.activityDate}
+          activityName={feedbackRide.activityName}
+          sportType={feedbackRide.sportType}
+          onSaved={(data) => {
+            if (data.ride) updateRideMetric(data.ride)
+            setFeedbackRide(null)
+          }}
+          onCancel={() => setFeedbackRide(null)}
+        />
       )}
 
       {/* Ask your coach — takes up the majority of the remaining space */}

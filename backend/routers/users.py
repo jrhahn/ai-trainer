@@ -619,17 +619,38 @@ async def save_ride_feedback(
     on the ``RideMetric`` row.  This note is then automatically included in all
     AI coach prompts via ``ride_metrics_context_section()``.
     """
+    match_labels = {
+        "matched": "Solid",
+        "mostly_matched": "Close",
+        "not_matched": "Off plan",
+    }
+    match_note_labels = {
+        "matched": "matched plan",
+        "mostly_matched": "partly matched plan",
+        "not_matched": "did not match plan",
+    }
     parts = [
         f"RPE {body.rpe}/10",
         f"legs: {body.legs}",
         f"intent: {body.intent}",
     ]
+    if body.plan_match_feedback:
+        parts.append(f"plan match: {match_note_labels[body.plan_match_feedback]}")
     if body.note:
         parts.append(body.note)
     user_note = " | ".join(parts)
+    label_override = (
+        match_labels[body.plan_match_feedback]
+        if body.plan_match_feedback
+        else None
+    )
 
     row = await crud.update_ride_metric_notes(
-        db, current_user.id, strava_activity_id, user_note=user_note
+        db,
+        current_user.id,
+        strava_activity_id,
+        user_note=user_note,
+        label_override=label_override,
     )
     if row is None:
         raise HTTPException(
