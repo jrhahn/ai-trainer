@@ -235,6 +235,65 @@ async def test_recommend_next_session_llm_omits_plan_updates():
     assert result["plan_updates"] is None
 
 
+@pytest.mark.asyncio
+async def test_recommend_next_session_prompt_separates_physiology_and_context():
+    """Prompt should let personal context override physiologically similar options."""
+    captured: dict[str, str] = {}
+    llm_output = json.dumps(
+        {
+            "response": "Your numbers allow intensity, but an easy social ride is the better call today.",
+            "next_session_recommendation": "Replace the VO2 session with an easy social endurance ride.",
+            "recommendation_type": "easier",
+            "planUpdates": None,
+        }
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        captured["system"] = system_prompt
+        captured["user"] = user_msg
+        return llm_output
+
+    with patch.object(ai_service, "_chat", new=fake_chat):
+        result = await ai_service.recommend_next_session(
+            rides=[FakeRideMetric(tsb_after=8.0, user_note="Legs are fine, but motivation is low.")],
+            plan=PLAN_WITH_INTERVALS,
+            profile=PROFILE,
+            rider_assessment={"notes": "Strong aerobic base."},
+            coach_memory="Responds well to low-pressure social rides when motivation drops.",
+            athlete_context={
+                "trainingTendency": "overtrains",
+                "restResponse": "restless",
+                "adherencePattern": "adds_extra",
+                "coachingRisks": ["does too much when fresh"],
+            },
+            athlete_memory_facts=[
+                {
+                    "fact": "Motivation improves after easy group rides",
+                    "category": "motivation",
+                    "sourceSnippet": "User said social rides help them reset.",
+                    "confidence": 0.8,
+                    "status": "active",
+                    "observationCount": 2,
+                }
+            ],
+            ctl=58.0,
+            atl=50.0,
+            tsb=8.0,
+        )
+
+    assert result["recommendation_type"] == "easier"
+    assert "Physiology layer" in captured["system"]
+    assert "Athlete-context layer" in captured["system"]
+    assert "If the physiology layer permits more than one sensible option" in captured["system"]
+    assert "Physiology layer:" in captured["user"]
+    assert "Current training load: CTL (fitness): 58.0 | ATL (fatigue): 50.0 | TSB (form): 8.0" in captured["user"]
+    assert "Athlete-context layer:" in captured["user"]
+    assert "Structured athlete context" in captured["user"]
+    assert "does too much when fresh" in captured["user"]
+    assert "Motivation improves after easy group rides" in captured["user"]
+    assert "social rides help them reset" in captured["user"]
+
+
 # ---------------------------------------------------------------------------
 # Router endpoint tests
 # ---------------------------------------------------------------------------
@@ -448,3 +507,47 @@ async def test_next_ride_recommendation_no_plan_updates_when_keeping(client, aut
     body = response.json()
     assert body["planUpdates"] is None
     assert body["recommendationType"] == "keep_as_planned"
+
+
+@pytest.mark.asyncio
+async def test_next_ride_recommendation_forwards_structured_athlete_context(
+    client, auth_headers, mock_ai_service
+):
+    await client.put(
+        "/api/v1/users/me/athlete-context",
+        headers=auth_headers,
+        json={
+            "trainingTendency": "overtrains",
+            "restResponse": "restless",
+            "adherencePattern": "adds_extra",
+            "coachingRisks": ["does too much when fresh"],
+        },
+    )
+    await client.post(
+        "/api/v1/users/me/athlete-memory-facts",
+        headers=auth_headers,
+        json={
+            "fact": "Motivation improves after easy social rides",
+            "category": "motivation",
+            "sourceSnippet": "User said group rides help them reset.",
+            "confidence": 0.8,
+        },
+    )
+
+    response = await client.post(
+        "/api/v1/ai/next-ride-recommendation",
+        headers=auth_headers,
+        json={},
+    )
+
+    assert response.status_code == 200
+    call_kwargs = mock_ai_service["recommend_next_session"].call_args.kwargs
+    assert call_kwargs["athlete_context"]["trainingTendency"] == "overtrains"
+    assert call_kwargs["athlete_context"]["coachingRisks"] == [
+        "does too much when fresh"
+    ]
+    assert len(call_kwargs["athlete_memory_facts"]) == 1
+    assert (
+        call_kwargs["athlete_memory_facts"][0]["fact"]
+        == "Motivation improves after easy social rides"
+    )

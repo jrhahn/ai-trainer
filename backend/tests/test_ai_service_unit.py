@@ -2425,6 +2425,27 @@ def test_ask_trainer_system_includes_athlete_memory_facts():
     assert "confidence" in prompt
 
 
+def test_ask_trainer_system_includes_two_layer_recommendation_rules():
+    from services.prompts import ask_trainer_plan_updates_rule, ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-18",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    )
+
+    assert "Recommendation reasoning layers" in prompt
+    assert "Physiology layer" in prompt
+    assert "Athlete-context layer" in prompt
+    assert "If two options are physiologically similar" in prompt
+    assert "Keep the final response concise and natural" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
