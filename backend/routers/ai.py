@@ -31,6 +31,7 @@ from services.analysis import (
 )
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
+from services.availability import extract_availability_constraints
 from services.intervals_service import apply_summary_fallback
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
@@ -79,6 +80,109 @@ async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
             event, from_attributes=True
         ).model_dump(by_alias=True)
         for event in events
+    ]
+
+
+async def _active_availability_constraints_for_prompt(
+    db: AsyncSession, user_id: str, timezone_name: str | None
+) -> list[dict]:
+    today = app_today_iso(timezone_name=timezone_name)
+    await crud.deactivate_expired_availability_constraints(
+        db, user_id, today=today
+    )
+    constraints = await crud.list_active_availability_constraints(
+        db, user_id, today=today
+    )
+    return [
+        schemas.AthleteAvailabilityConstraintSchema.model_validate(
+            constraint, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for constraint in constraints
+    ]
+
+
+async def _capture_availability_constraints_from_message(
+    db: AsyncSession,
+    user_id: str,
+    message: str,
+    timezone_name: str | None,
+) -> list[dict]:
+    today = app_today(timezone_name=timezone_name)
+    extracted = extract_availability_constraints(message, today=today)
+    for item in extracted:
+        await crud.upsert_availability_constraint(db, user_id, **item)
+    return await _active_availability_constraints_for_prompt(
+        db, user_id, timezone_name
+    )
+
+
+def _profile_with_availability_constraints(
+    profile: dict, constraints: list[dict]
+) -> dict:
+    if not constraints:
+        return profile
+    return {**profile, "availabilityConstraints": constraints}
+
+
+def _day_violates_availability_constraint(
+    day: dict, constraints: list[dict]
+) -> bool:
+    date_value = day.get("date")
+    if not date_value:
+        return False
+    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
+    duration = day.get("durationMinutes") or day.get("duration_minutes") or 0
+    is_training = workout_type not in {"", "rest"} or int(duration or 0) > 0
+    if not is_training:
+        return False
+    for constraint in constraints:
+        if constraint.get("constraintType") != "no_training":
+            continue
+        if constraint.get("constraintDate") == date_value:
+            return True
+    return False
+
+
+def _sanitize_plan_for_availability_constraints(
+    plan: list[dict], constraints: list[dict]
+) -> list[dict]:
+    if not constraints:
+        return plan
+    sanitized: list[dict] = []
+    for day in plan:
+        if _day_violates_availability_constraint(day, constraints):
+            sanitized.append(
+                {
+                    **day,
+                    "workoutType": "rest",
+                    "title": "Unavailable",
+                    "description": "No training scheduled because of an athlete availability constraint.",
+                    "durationMinutes": 0,
+                    "targetPower": None,
+                    "targetHeartRate": None,
+                    "intervals": None,
+                    "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
+                    "keyFocusPoints": [
+                        "Keep the day free from training",
+                        "Move any missed stimulus to an available day",
+                        "Use the time for recovery or life commitments",
+                    ],
+                }
+            )
+        else:
+            sanitized.append(day)
+    return sanitized
+
+
+def _filter_plan_updates_for_availability_constraints(
+    updates: list[dict], constraints: list[dict]
+) -> list[dict]:
+    if not constraints:
+        return updates
+    return [
+        update
+        for update in updates
+        if not _day_violates_availability_constraint(update, constraints)
     ]
 
 
@@ -480,6 +584,12 @@ async def generate_plan(
     )
     weather_section = await training_weather_context_for_user(db, current_user.id)
     race_events = await _race_events_for_prompt(db, current_user.id)
+    availability_constraints = await _active_availability_constraints_for_prompt(
+        db, current_user.id, timezone_name
+    )
+    profile = _profile_with_availability_constraints(
+        profile, availability_constraints
+    )
     usage_token = begin_token_usage_collection()
     try:
         plan = await ai_service.generate_training_plan(
@@ -496,6 +606,9 @@ async def generate_plan(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
+    plan = _sanitize_plan_for_availability_constraints(
+        plan, availability_constraints
+    )
     await _persist_collected_token_usage(db, current_user, usage_token)
     await crud.upsert_training_plan(db, current_user.id, plan)
     return plan
@@ -525,6 +638,12 @@ async def adapt_plan(
     )
     weather_section = await training_weather_context_for_user(db, current_user.id)
     race_events = await _race_events_for_prompt(db, current_user.id)
+    availability_constraints = await _active_availability_constraints_for_prompt(
+        db, current_user.id, timezone_name
+    )
+    profile = _profile_with_availability_constraints(
+        profile, availability_constraints
+    )
     usage_token = begin_token_usage_collection()
     try:
         updated_plan = await ai_service.adapt_training_plan(
@@ -543,6 +662,9 @@ async def adapt_plan(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
+    updated_plan = _sanitize_plan_for_availability_constraints(
+        updated_plan, availability_constraints
+    )
     await _persist_collected_token_usage(db, current_user, usage_token)
     await crud.upsert_training_plan(db, current_user.id, updated_plan)
     return updated_plan
@@ -562,6 +684,12 @@ async def ask_trainer(
     plan = existing_plan.plan if existing_plan is not None else []
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
+    )
+    availability_constraints = await _capture_availability_constraints_from_message(
+        db, current_user.id, body.question, timezone_name
+    )
+    profile = _profile_with_availability_constraints(
+        profile, availability_constraints
     )
     rider_assessment = None
     if current_user.rider_assessment is not None:
@@ -645,7 +773,10 @@ async def ask_trainer(
 
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
-    plan_updates = result.get("plan_updates") or []
+    plan_updates = _filter_plan_updates_for_availability_constraints(
+        result.get("plan_updates") or [],
+        availability_constraints,
+    )
     persisted_updated_plan: list[dict] | None = None
 
     # --- Phase 7: Persist inferred user ride feedback ---
@@ -767,6 +898,12 @@ async def race_event_feedback(
     plan = existing_plan.plan if existing_plan is not None else []
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
+    )
+    availability_constraints = await _active_availability_constraints_for_prompt(
+        db, current_user.id, timezone_name
+    )
+    profile = _profile_with_availability_constraints(
+        profile, availability_constraints
     )
     rider_assessment = None
     if current_user.rider_assessment is not None:
@@ -1244,6 +1381,12 @@ async def next_ride_recommendation(
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
+    availability_constraints = await _active_availability_constraints_for_prompt(
+        db, current_user.id, timezone_name
+    )
+    profile = _profile_with_availability_constraints(
+        profile, availability_constraints
+    )
 
     rider_assessment = None
     if current_user.rider_assessment is not None:
@@ -1335,7 +1478,10 @@ async def next_ride_recommendation(
     await _persist_collected_token_usage(db, current_user, usage_token)
 
     # --- Apply plan updates using the same logic as ask-trainer ---
-    plan_updates = result.get("plan_updates") or []
+    plan_updates = _filter_plan_updates_for_availability_constraints(
+        result.get("plan_updates") or [],
+        availability_constraints,
+    )
     if plan_updates:
         updates_by_date = {u["date"]: u for u in plan_updates}
         updated_plan = [

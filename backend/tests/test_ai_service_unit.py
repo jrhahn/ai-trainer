@@ -2617,6 +2617,61 @@ def test_ask_trainer_system_checks_constraints_before_plan_updates():
     assert "friday is unavailable for training" in prompt
 
 
+def test_extracts_one_off_friday_availability_constraint():
+    from datetime import date
+
+    from services.availability import extract_availability_constraints
+
+    constraints = extract_availability_constraints(
+        "Freitag habe ich keine Zeit für Training.",
+        today=date(2026, 6, 18),
+    )
+
+    assert constraints == [
+        {
+            "constraint_type": "no_training",
+            "constraint_date": "2026-06-19",
+            "weekday": "friday",
+            "reason": "Athlete said they are unavailable for training.",
+            "source": "Freitag habe ich keine Zeit für Training.",
+            "expires_on": "2026-06-19",
+        }
+    ]
+
+
+def test_availability_constraints_block_training_plan_updates():
+    from routers.ai import _filter_plan_updates_for_availability_constraints
+
+    updates = [
+        {
+            "date": "2026-06-19",
+            "workoutType": "intervals",
+            "title": "VO2 Intervals",
+            "durationMinutes": 60,
+        },
+        {
+            "date": "2026-06-20",
+            "workoutType": "endurance",
+            "title": "Endurance",
+            "durationMinutes": 90,
+        },
+    ]
+    constraints = [
+        {
+            "constraintType": "no_training",
+            "constraintDate": "2026-06-19",
+            "weekday": "friday",
+            "expiresOn": "2026-06-19",
+        }
+    ]
+
+    filtered = _filter_plan_updates_for_availability_constraints(
+        updates, constraints
+    )
+
+    assert [update["date"] for update in filtered] == ["2026-06-20"]
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_prompt_handles_hot_long_ride_as_high_signal():
     """A casual hot long-ride message should be sent with targeted follow-up guidance."""

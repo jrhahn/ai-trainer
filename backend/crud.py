@@ -505,6 +505,102 @@ async def get_prompt_athlete_memory_facts(
 
 
 # ---------------------------------------------------------------------------
+# AthleteAvailabilityConstraint
+# ---------------------------------------------------------------------------
+
+
+async def upsert_availability_constraint(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    constraint_type: str = "no_training",
+    constraint_date: str | None = None,
+    weekday: str | None = None,
+    reason: str = "",
+    source: str = "",
+    expires_on: str | None = None,
+) -> models.AthleteAvailabilityConstraint:
+    """Create or refresh an availability constraint and flush."""
+    existing = await db.scalar(
+        select(models.AthleteAvailabilityConstraint).where(
+            models.AthleteAvailabilityConstraint.user_id == user_id,
+            models.AthleteAvailabilityConstraint.constraint_type == constraint_type,
+            models.AthleteAvailabilityConstraint.constraint_date == constraint_date,
+            models.AthleteAvailabilityConstraint.weekday == weekday,
+            models.AthleteAvailabilityConstraint.active.is_(True),
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if existing is None:
+        existing = models.AthleteAvailabilityConstraint(
+            user_id=user_id,
+            constraint_type=constraint_type,
+            constraint_date=constraint_date,
+            weekday=weekday,
+            reason=reason.strip(),
+            source=source.strip(),
+            expires_on=expires_on,
+            active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(existing)
+    else:
+        existing.reason = reason.strip() or existing.reason
+        existing.source = source.strip() or existing.source
+        existing.expires_on = expires_on or existing.expires_on
+        existing.updated_at = now
+    await db.flush()
+    return existing
+
+
+async def list_active_availability_constraints(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    today: str,
+) -> list[models.AthleteAvailabilityConstraint]:
+    """Return active constraints that have not expired in the athlete timezone."""
+    result = await db.scalars(
+        select(models.AthleteAvailabilityConstraint)
+        .where(
+            models.AthleteAvailabilityConstraint.user_id == user_id,
+            models.AthleteAvailabilityConstraint.active.is_(True),
+            or_(
+                models.AthleteAvailabilityConstraint.expires_on.is_(None),
+                models.AthleteAvailabilityConstraint.expires_on >= today,
+            ),
+        )
+        .order_by(
+            models.AthleteAvailabilityConstraint.constraint_date.asc(),
+            models.AthleteAvailabilityConstraint.created_at.asc(),
+        )
+    )
+    return list(result)
+
+
+async def deactivate_expired_availability_constraints(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    today: str,
+) -> int:
+    """Mark expired one-off constraints inactive."""
+    result = await db.execute(
+        update(models.AthleteAvailabilityConstraint)
+        .where(
+            models.AthleteAvailabilityConstraint.user_id == user_id,
+            models.AthleteAvailabilityConstraint.active.is_(True),
+            models.AthleteAvailabilityConstraint.expires_on.is_not(None),
+            models.AthleteAvailabilityConstraint.expires_on < today,
+        )
+        .values(active=False, updated_at=datetime.now(timezone.utc))
+    )
+    await db.flush()
+    return int(result.rowcount or 0)
+
+
+# ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------
 

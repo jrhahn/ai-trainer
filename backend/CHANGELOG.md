@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ride-feedback submissions can now include an athlete plan-match correction,
   which is stored in `ride_metrics.label_override` and returned with the
   updated ride so the frontend can persistently correct badges after feedback.
+- **Expiring athlete availability constraints** (`models.py`, `crud.py`,
+  `services/availability.py`, `routers/ai.py`) — chat messages such as
+  "Friday I have no time for training" are now captured as structured
+  `athlete_availability_constraints` rows, included in coach prompts while
+  active, and automatically ignored after their expiry date.
 
 ### Changed
 
@@ -22,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory, athlete context, or the current conversation as binding, so workouts
   are not moved onto unavailable days even when that placement would be
   physiologically optimal.
+- **Server-side guard for unavailable days** (`routers/ai.py`) — generated
+  plans, adapted plans, Ask Trainer plan updates, and next-ride recommendation
+  updates are sanitized before persistence so non-rest workouts cannot be saved
+  on active no-training constraint dates.
 
 ## [0.37.0] - 2026-06-18
 
