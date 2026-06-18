@@ -282,6 +282,23 @@ async def review_matched_ride_and_adapt(
             ).model_dump(by_alias=True)
         coach_memory_row = await crud.get_coach_memory(db, user.id)
         coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+        athlete_context_row = await crud.get_athlete_context(db, user.id)
+        athlete_context = (
+            schemas.AthleteContextSchema.model_validate(
+                athlete_context_row, from_attributes=True
+            ).model_dump(by_alias=True)
+            if athlete_context_row is not None
+            else None
+        )
+        athlete_memory_fact_rows = await crud.get_prompt_athlete_memory_facts(
+            db, user.id
+        )
+        athlete_memory_facts = [
+            schemas.AthleteMemoryFactSchema.model_validate(
+                fact, from_attributes=True
+            ).model_dump(by_alias=True, mode="json")
+            for fact in athlete_memory_fact_rows
+        ]
         result = await ai_service.recommend_next_session(
             rides=[ride],
             plan=plan,
@@ -289,6 +306,8 @@ async def review_matched_ride_and_adapt(
             provider=provider,
             rider_assessment=rider_assessment,
             coach_memory=coach_memory,
+            athlete_context=athlete_context,
+            athlete_memory_facts=athlete_memory_facts,
             ctl=float(ride.ctl_after) if ride.ctl_after is not None else None,
             atl=float(ride.atl_after) if ride.atl_after is not None else None,
             tsb=float(ride.tsb_after) if ride.tsb_after is not None else None,

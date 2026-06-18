@@ -1253,6 +1253,23 @@ async def next_ride_recommendation(
 
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+    athlete_context_row = await crud.get_athlete_context(db, current_user.id)
+    athlete_context = (
+        schemas.AthleteContextSchema.model_validate(
+            athlete_context_row, from_attributes=True
+        ).model_dump(by_alias=True)
+        if athlete_context_row is not None
+        else None
+    )
+    athlete_memory_fact_rows = await crud.get_prompt_athlete_memory_facts(
+        db, current_user.id
+    )
+    athlete_memory_facts = [
+        schemas.AthleteMemoryFactSchema.model_validate(
+            fact, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for fact in athlete_memory_fact_rows
+    ]
 
     # --- Resolve the ride(s) to use for the recommendation ---
     if body.strava_activity_id is not None:
@@ -1303,6 +1320,8 @@ async def next_ride_recommendation(
             provider=_provider(current_user),
             rider_assessment=rider_assessment,
             coach_memory=coach_memory,
+            athlete_context=athlete_context,
+            athlete_memory_facts=athlete_memory_facts,
             ctl=ctl,
             atl=atl,
             tsb=tsb,

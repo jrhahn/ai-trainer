@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] - 2026-06-18
+
+### Changed
+
+- **Two-layer coach recommendations** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`, `services/ride_matching.py`) —
+  Ask Trainer and next-session recommendation prompts now explicitly separate
+  physiology inputs (CTL/ATL/TSB, recent load, feedback, planned stimulus) from
+  athlete-context inputs (motivation, rest tolerance, adherence pattern,
+  structured athlete context, and evidence-backed memory facts) so personal
+  context can decide between physiologically similar options.
+
 ## [0.34.0] - 2026-06-18
 
 ### Added

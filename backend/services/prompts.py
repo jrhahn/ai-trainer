@@ -663,6 +663,23 @@ def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     )
 
 
+def recommendation_reasoning_layers_rule() -> str:
+    return (
+        "\n\nRecommendation reasoning layers:\n"
+        "- Separate the decision into two internal layers before recommending a workout.\n"
+        "- Physiology layer: CTL, ATL, TSB, HRV/sleep if provided, recent load, subjective "
+        "fatigue, and the planned training stimulus.\n"
+        "- Athlete-context layer: motivation, rest tolerance, tendency to overdo it, social "
+        "needs, mood, adherence pattern, structured athlete context, and evidence-backed "
+        "memory facts.\n"
+        "- If two options are physiologically similar, choose the one that better fits the "
+        "athlete-context layer, such as an easy/social ride for motivation or recovery when "
+        "the athlete tends to overdo it.\n"
+        "- Keep the final response concise and natural. Do not expose these layer labels "
+        "unless the athlete asks for the reasoning."
+    )
+
+
 def ask_trainer_system(
     profile: dict,
     today: str,
@@ -731,6 +748,8 @@ def ask_trainer_system(
         'in your JSON response. Omit "ride_note_update" entirely when no activity is being described.'
     )
 
+    recommendation_layers_instructions = recommendation_reasoning_layers_rule()
+
     attentive_coach_instructions = (
         "\n\nAttentive coach rules:\n"
         "- Listen closely to what the athlete actually says, including casual or messy messages. "
@@ -792,6 +811,7 @@ def ask_trainer_system(
         f"{classification_section}"
         f"{science_section}"
         f"{feedback_instructions}"
+        f"{recommendation_layers_instructions}"
         f"{attentive_coach_instructions}"
         f"{outlook_instructions}\n\n"
         "Before writing your response, reason through: "
@@ -1465,6 +1485,16 @@ def next_ride_recommendation_system() -> str:
     return (
         f"{COACH_PERSONA} Give a concrete recommendation for the athlete's next training session "
         "based on their recent ride(s) and subjective feedback.\n\n"
+        "Use two internal decision layers:\n"
+        "1. Physiology layer: CTL, ATL, TSB, HRV/sleep if available, recent load, ride feedback, "
+        "and the planned training stimulus.\n"
+        "2. Athlete-context layer: motivation, rest tolerance, tendency to overdo it, social needs, "
+        "mood, adherence pattern, structured athlete context, and evidence-backed memory facts.\n"
+        "If the physiology layer permits more than one sensible option, choose the option that better "
+        "fits the athlete-context layer. For example, choose recovery or an easy/social ride when "
+        "metrics permit intensity but personal context suggests the athlete needs restraint, motivation, "
+        "or a lower-pressure session.\n"
+        "Keep the final response concise and natural; do not expose layer labels unless useful.\n\n"
         "You MUST choose one of the following recommendation types and explain why:\n"
         "- 'keep_as_planned': the next session should proceed exactly as scheduled\n"
         "- 'easier': do the same type of session but reduce intensity or duration\n"
@@ -1491,6 +1521,8 @@ def next_ride_recommendation_user(
     profile: dict | None = None,
     rider_assessment: dict | None = None,
     coach_memory: str | None = None,
+    athlete_context: dict | None = None,
+    athlete_memory_facts: list[dict] | None = None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -1504,16 +1536,28 @@ def next_ride_recommendation_user(
     today = app_today_iso(timezone_name=timezone_name)
 
     parts: list[str] = [f"Today's date: {today}"]
+    athlete_context_parts: list[str] = []
+    physiology_parts: list[str] = []
 
     if profile:
-        parts.append(f"Athlete profile: {json.dumps(profile)}")
+        athlete_context_parts.append(f"Athlete profile: {json.dumps(profile)}")
 
     if rider_assessment:
-        parts.append(f"Rider assessment: {json.dumps(rider_assessment)}")
+        athlete_context_parts.append(
+            f"Rider assessment: {json.dumps(rider_assessment)}"
+        )
+
+    structured_context = athlete_context_section(athlete_context).strip()
+    if structured_context:
+        athlete_context_parts.append(structured_context)
+
+    memory_facts = athlete_memory_facts_section(athlete_memory_facts).strip()
+    if memory_facts:
+        athlete_context_parts.append(memory_facts)
 
     if coach_memory:
         trimmed = coach_memory[-800:]
-        parts.append(f"Coach notes about this athlete:\n{trimmed}")
+        athlete_context_parts.append(f"Coach notes about this athlete:\n{trimmed}")
 
     # Current training load
     load_parts: list[str] = []
@@ -1524,7 +1568,7 @@ def next_ride_recommendation_user(
     if tsb is not None:
         load_parts.append(f"TSB (form): {round(tsb, 1)}")
     if load_parts:
-        parts.append("Current training load: " + " | ".join(load_parts))
+        physiology_parts.append("Current training load: " + " | ".join(load_parts))
 
     # Recent rides with feedback
     if rides:
@@ -1570,9 +1614,9 @@ def next_ride_recommendation_user(
                     f"{matched_snapshot.get('title') or matched_snapshot.get('workoutType', 'planned workout')}"
                 )
             rides_lines.append("  - " + " | ".join(ride_parts))
-        parts.append("\n".join(rides_lines))
+        physiology_parts.append("\n".join(rides_lines))
     else:
-        parts.append("No recent rides available.")
+        physiology_parts.append("No recent rides available.")
 
     # Next planned session(s)
     upcoming = [
@@ -1580,14 +1624,14 @@ def next_ride_recommendation_user(
     ][:3]
     if upcoming:
         next_session = upcoming[0]
-        parts.append(
+        physiology_parts.append(
             f"Next planned session ({next_session.get('date', '?')}): "
             f"{next_session.get('title', 'Unknown')} — {next_session.get('workoutType', '?')}, "
             f"{next_session.get('durationMinutes', '?')} min. "
             f"Description: {next_session.get('description', '')}"
         )
         if len(upcoming) > 1:
-            parts.append(
+            physiology_parts.append(
                 "Following sessions: "
                 + ", ".join(
                     f"{d.get('date')} {d.get('title', d.get('workoutType', '?'))}"
@@ -1595,7 +1639,13 @@ def next_ride_recommendation_user(
                 )
             )
     else:
-        parts.append("No upcoming sessions in the training plan.")
+        physiology_parts.append("No upcoming sessions in the training plan.")
+
+    parts.append("Physiology layer:\n" + "\n\n".join(physiology_parts))
+    if athlete_context_parts:
+        parts.append("Athlete-context layer:\n" + "\n\n".join(athlete_context_parts))
+    else:
+        parts.append("Athlete-context layer:\nNo durable athlete context provided.")
 
     parts.append(
         "\nBased on the recent ride(s) and feedback, give a concrete recommendation "
