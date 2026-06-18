@@ -1232,6 +1232,17 @@ def test_adapt_plan_system_includes_tsb_guidance():
     assert "fatigue" in system.lower() or "recovery" in system.lower()
 
 
+def test_adapt_plan_system_preserves_hard_schedule_constraints():
+    from services.prompts import adapt_plan_system
+
+    system = adapt_plan_system().lower()
+
+    assert "hard athlete constraints" in system
+    assert "unavailable" in system
+    assert "do not schedule training" in system
+    assert "physiologically optimal" in system
+
+
 # ---------------------------------------------------------------------------
 # onboarding race context prompts
 # ---------------------------------------------------------------------------
@@ -2469,6 +2480,17 @@ def test_ask_trainer_system_allows_targeted_questions_for_ambiguous_recommendati
     assert "make the recommendation clear" in prompt
 
 
+def test_next_ride_recommendation_system_preserves_hard_constraints():
+    from services.prompts import next_ride_recommendation_system
+
+    prompt = next_ride_recommendation_system().lower()
+
+    assert "hard athlete availability constraints" in prompt
+    assert "never schedule or recommend training on a constrained" in prompt
+    assert "physiologically optimal" in prompt
+    assert "ask one concise clarifying question" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
@@ -2559,6 +2581,40 @@ def test_ask_trainer_system_includes_attentive_coach_rules():
     assert "hot" in prompt
     assert "wie viel und was hast du" in prompt
     assert "same language" in prompt
+
+
+def test_ask_trainer_plan_updates_rule_preserves_availability_constraints():
+    from services.prompts import ask_trainer_plan_updates_rule
+
+    rule = ask_trainer_plan_updates_rule(None).lower()
+
+    assert "hard athlete constraints" in rule
+    assert "no training on friday" in rule
+    assert "do not schedule workouts on constrained" in rule
+    assert "physiologically optimal" in rule
+
+
+def test_ask_trainer_system_checks_constraints_before_plan_updates():
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-18",
+        last_7_days=[],
+        next_n_days=[
+            {"date": "2026-06-18", "weekday": "Thursday", "workoutType": "intervals"},
+            {"date": "2026-06-19", "weekday": "Friday", "workoutType": "rest"},
+        ],
+        assessment_section="",
+        memory_section="Coach notes about this athlete: Friday is unavailable for training.",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    assert "hard constraint rules" in prompt
+    assert "availability constraints" in prompt
+    assert "do not move workouts onto constrained" in prompt
+    assert "friday is unavailable for training" in prompt
 
 
 @pytest.mark.asyncio

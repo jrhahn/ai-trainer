@@ -427,6 +427,11 @@ def adapt_plan_system() -> str:
         "For future days keep the same date fields. "
         "For any past incomplete days (date before today), reschedule them to upcoming dates "
         "starting from today, distributing the sessions sensibly without overloading consecutive days.\n"
+        "Hard athlete constraints are non-negotiable: if the profile, coach memory, "
+        "athlete context, or recent conversation says the athlete is unavailable on a "
+        "specific date or weekday, do not schedule training there even when it would be "
+        "physiologically optimal. Keep that day as rest or unavailable, and move the "
+        "training stimulus to the best available day instead.\n"
         "Each updated day must include all required TrainingDay fields: "
         '"date", "workoutType", "title", "durationMinutes".\n'
         "Each updated day must also include: "
@@ -570,6 +575,16 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
         "Pick the label that best reflects what actually happened."
     )
+    _constraints_rule = (
+        "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
+        "athlete profile, structured athlete context, evidence-backed memory facts, coach "
+        "memory, and this conversation for availability constraints such as 'no training on "
+        "Friday' or 'I have no time tomorrow'. Do not schedule workouts on constrained dates "
+        "or weekdays, even if moving intensity there would be physiologically optimal. If a "
+        "requested or recommended change conflicts with a constraint, keep that constrained "
+        "day as rest/unavailable and choose the best available day, or ask one concise "
+        "clarifying question if no feasible slot is clear. "
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
@@ -582,6 +597,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             '"targetPower", "targetHeartRate", "intervals", "workoutPurpose", "keyFocusPoints". '
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
+            f"{_constraints_rule}"
             f"{_rich_description_rule} "
             f"{_intervals_rule} "
             f"{_ride_label_rule}"
@@ -595,6 +611,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         '"workoutPurpose", "keyFocusPoints". '
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
+        f"{_constraints_rule}"
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
         f"{_ride_label_rule}"
@@ -800,6 +817,17 @@ def ask_trainer_system(
         "immediate intervention (e.g. dangerously high accumulated fatigue heading into "
         "a hard block)."
     )
+    constraint_instructions = (
+        "\n\nHard constraint rules:\n"
+        "- Treat athlete availability constraints from the profile, structured athlete context, "
+        "evidence-backed memory facts, coach memory, or this conversation as binding. "
+        "Examples: no time Friday, travel day, work commitment, family obligation, no training tomorrow.\n"
+        "- Do not move workouts onto constrained dates or weekdays, even when that would be the "
+        "physiologically optimal placement.\n"
+        "- Before returning planUpdates, explicitly check that every updated training day still "
+        "respects those constraints. If there is no feasible slot, ask one concise clarifying "
+        "question instead of silently violating the constraint."
+    )
 
     return (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
@@ -822,6 +850,7 @@ def ask_trainer_system(
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{attentive_coach_instructions}"
+        f"{constraint_instructions}"
         f"{outlook_instructions}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
@@ -1505,6 +1534,10 @@ def next_ride_recommendation_system() -> str:
         "and the planned training stimulus.\n"
         "2. Athlete-context layer: motivation, rest tolerance, tendency to overdo it, social needs, "
         "mood, adherence pattern, structured athlete context, and evidence-backed memory facts.\n"
+        "Hard athlete availability constraints from coach memory, athlete context, or recent "
+        "conversation are binding: never schedule or recommend training on a constrained date "
+        "or weekday, even when it would be physiologically optimal. Move the stimulus to the "
+        "best available day or ask one concise clarifying question if no feasible slot is clear.\n"
         "If the physiology layer permits more than one sensible option, choose the option that better "
         "fits the athlete-context layer. For example, choose recovery or an easy/social ride when "
         "metrics permit intensity but personal context suggests the athlete needs restraint, motivation, "

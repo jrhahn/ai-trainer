@@ -204,6 +204,22 @@ describe('computeMatchScore', () => {
     expect(matchScoreLabel(score, plan)).toBe('Solid')
   })
 
+  it('does not mark a long VO2 row as needs work when the snapshot only has title and duration', () => {
+    const plan: Partial<TrainingDay> = {
+      workoutType: 'intervals',
+      title: 'VO2 Max Intervals',
+      durationMinutes: 60,
+    }
+
+    const score = computeMatchScore(
+      makeRideForScore({ durationSeconds: 115 * 60, normalizedPowerW: 268, tss: 135 }),
+      plan
+    )
+
+    expect(score).toBeGreaterThanOrEqual(75)
+    expect(matchScoreLabel(score, plan)).toBe('Solid')
+  })
+
   it('marks a low-TSS rest-day activity as recovery effort', () => {
     const plan: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 0 }
     const score = computeMatchScore(makeRideForScore({ durationSeconds: 30 * 60, normalizedPowerW: 120, tss: 18 }), plan)

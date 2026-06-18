@@ -110,6 +110,12 @@ function isStructuredIntervalPlan(plan: Partial<TrainingDay>): boolean {
   return plan.workoutType?.toLowerCase() === 'intervals' && !!plan.intervals?.length
 }
 
+function isIntervalWorkoutPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  const title = plan.title?.toLowerCase() ?? ''
+  return workoutType === 'intervals' || title.includes('interval') || title.includes('vo2')
+}
+
 function scoreDurationMatch(actualSeconds: number, plannedMinutes: number): number {
   const ratio = actualSeconds / 60 / plannedMinutes
   return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
@@ -130,16 +136,21 @@ function scoreStructuredIntervalPower(
   actualPower: number,
   plan: Partial<TrainingDay>
 ): number | null {
-  if (!plan.targetPower) return null
-
-  const targetScore = scoreTargetPower(actualPower, plan.targetPower)
-  if (targetScore >= 90) return targetScore
-
   const intervalPowerValues = plan.intervals
     ?.map((interval) => interval.power)
     .filter((power) => power > 0) ?? []
-  const targetLow = plan.targetPower.low || Math.min(...intervalPowerValues)
-  const targetHigh = plan.targetPower.high || Math.max(...intervalPowerValues)
+  const inferredTarget = plan.targetPower ?? (
+    intervalPowerValues.length > 0
+      ? { low: Math.min(...intervalPowerValues), high: Math.max(...intervalPowerValues) }
+      : null
+  )
+  if (!inferredTarget) return null
+
+  const targetScore = scoreTargetPower(actualPower, inferredTarget)
+  if (targetScore >= 90) return targetScore
+
+  const targetLow = inferredTarget.low
+  const targetHigh = inferredTarget.high
   if (!Number.isFinite(targetLow) || !Number.isFinite(targetHigh) || targetLow <= 0) {
     return targetScore
   }
@@ -180,27 +191,29 @@ export function computeMatchScore(
   }
 
   const parts: number[] = []
+  const intervalWorkout = isIntervalWorkoutPlan(plan)
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
     let durationScore = scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
-    if (isStructuredIntervalPlan(plan)) {
+    if (intervalWorkout) {
       const ratio = ride.durationSeconds / 60 / plan.durationMinutes
-      if (ratio > 1 && ratio <= 1.6) {
+      if (ratio > 1 && ratio <= 2) {
         durationScore = Math.max(durationScore, 40)
       }
     }
     parts.push(durationScore)
   }
 
-  if (actualPower != null && plan.targetPower) {
-    parts.push(
-      isStructuredIntervalPlan(plan)
-        ? (scoreStructuredIntervalPower(actualPower, plan) ?? scoreTargetPower(actualPower, plan.targetPower))
-        : scoreTargetPower(actualPower, plan.targetPower)
-    )
+  if (actualPower != null) {
+    if (intervalWorkout) {
+      const intervalPowerScore = scoreStructuredIntervalPower(actualPower, plan)
+      parts.push(intervalPowerScore ?? (ride.tss != null && ride.tss >= 70 ? 88 : 70))
+    } else if (plan.targetPower) {
+      parts.push(scoreTargetPower(actualPower, plan.targetPower))
+    }
   }
 
-  if (isStructuredIntervalPlan(plan) && parts.length === 2) {
+  if (intervalWorkout && parts.length === 2) {
     return Math.round(parts[0] * 0.25 + parts[1] * 0.75)
   }
 
