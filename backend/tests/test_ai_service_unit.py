@@ -2446,6 +2446,29 @@ def test_ask_trainer_system_includes_two_layer_recommendation_rules():
     assert "Keep the final response concise and natural" in prompt
 
 
+def test_ask_trainer_system_allows_targeted_questions_for_ambiguous_recommendations():
+    from services.prompts import ask_trainer_plan_updates_rule, ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-18",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    )
+
+    assert "ask exactly one short targeted learning question" in prompt
+    assert "materially change the recommendation" in prompt
+    assert "Do you need training stimulus today, or mainly head-clearing?" in prompt
+    assert "Are you restless because you feel fresh" in prompt
+    assert "Would a social ride help you more" in prompt
+    assert "Do not over-ask" in prompt
+    assert "make the recommendation clear" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
@@ -2705,6 +2728,7 @@ def test_update_memory_user_includes_existing_notes_and_exchange():
     assert "Prefers morning rides." in msg
     assert "45 min on weekdays" in msg
     assert "weekday sessions short" in msg
+    assert "recommendation clarification question" in msg
 
 
 def test_update_memory_user_handles_empty_memory():

@@ -675,6 +675,15 @@ def recommendation_reasoning_layers_rule() -> str:
         "- If two options are physiologically similar, choose the one that better fits the "
         "athlete-context layer, such as an easy/social ride for motivation or recovery when "
         "the athlete tends to overdo it.\n"
+        "- If the physiology layer and athlete-context layer leave two meaningfully different "
+        "recommendations plausible, ask exactly one short targeted learning question before "
+        "committing. Use this only when the answer would materially change the recommendation.\n"
+        "- Good targeted questions distinguish the missing context, e.g. 'Do you need training "
+        "stimulus today, or mainly head-clearing?', 'Are you restless because you feel fresh, "
+        "or because you are worried about losing fitness?', or 'Would a social ride help you "
+        "more than another structured session today?'\n"
+        "- Do not over-ask. If recent data, athlete context, or safety/fatigue signals already "
+        "make the recommendation clear, give the recommendation directly.\n"
         "- Keep the final response concise and natural. Do not expose these layer labels "
         "unless the athlete asks for the reasoning."
     )
@@ -924,7 +933,7 @@ def update_memory_user(
     return (
         f"Existing notes:\n{current_memory or '(none)'}\n\n"
         f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
-        "Update the notes with any new important information. If the coach asked a targeted follow-up and the athlete answered it, treat the answer as potentially important coaching context."
+        "Update the notes with any new important information. If the coach asked a targeted follow-up or recommendation clarification question and the athlete answered it, treat the answer as potentially important coaching context."
     )
 
 
@@ -1500,6 +1509,12 @@ def next_ride_recommendation_system() -> str:
         "fits the athlete-context layer. For example, choose recovery or an easy/social ride when "
         "metrics permit intensity but personal context suggests the athlete needs restraint, motivation, "
         "or a lower-pressure session.\n"
+        "When two materially different recommendations remain plausible because personal context is missing, "
+        "ask exactly one short targeted learning question before committing. Use questions like: "
+        "'Do you need training stimulus today, or mainly head-clearing?', 'Are you restless because you feel fresh, "
+        "or because you are worried about losing fitness?', or 'Would a social ride help you more than another "
+        "structured session today?'. Do not ask when physiology, recent feedback, or known athlete context already "
+        "makes the recommendation clear.\n"
         "Keep the final response concise and natural; do not expose layer labels unless useful.\n\n"
         "You MUST choose one of the following recommendation types and explain why:\n"
         "- 'keep_as_planned': the next session should proceed exactly as scheduled\n"
