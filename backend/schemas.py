@@ -365,6 +365,50 @@ class AthleteContextRequest(AthleteContextSchema):
     pass
 
 
+AthleteMemoryFactStatus = Literal["active", "stale", "rejected", "user_confirmed"]
+
+
+class AthleteMemoryFactSchema(CamelModel):
+    id: str
+    fact: str
+    category: str
+    source_snippet: str = ""
+    source_exchange_id: Optional[str] = None
+    first_observed_at: datetime
+    last_confirmed_at: datetime
+    confidence: float
+    status: AthleteMemoryFactStatus
+    observation_count: int
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteMemoryFactsResponse(CamelModel):
+    facts: list[AthleteMemoryFactSchema]
+
+
+class AthleteMemoryFactObservationRequest(CamelModel):
+    fact: str = Field(min_length=1)
+    category: str = "general"
+    source_snippet: str = ""
+    source_exchange_id: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class AthleteMemoryFactUpdateRequest(CamelModel):
+    fact: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = None
+    source_snippet: Optional[str] = None
+    source_exchange_id: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[AthleteMemoryFactStatus] = None
+
+
 # ---------------------------------------------------------------------------
 # AI endpoints
 # ---------------------------------------------------------------------------

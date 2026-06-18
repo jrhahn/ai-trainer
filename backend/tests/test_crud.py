@@ -4,6 +4,8 @@ These tests call crud functions directly against the test database, bypassing
 the HTTP routers, to verify the data-access logic in isolation.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -414,6 +416,140 @@ async def test_upsert_athlete_context_updates_existing(db: AsyncSession) -> None
     assert updated.rest_response == "calm"
     assert updated.motivation_drivers == ["fitness maintenance"]
     assert updated.adherence_pattern == "follows_plan"
+
+
+# ---------------------------------------------------------------------------
+# AthleteMemoryFact
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_observe_athlete_memory_fact_repeated_observations_increase_confidence(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Does too much when fresh",
+        category="training tendency",
+        source_snippet="After a rest day I usually add extra intervals.",
+    )
+    first_confidence = first.confidence
+    second = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="does   too much WHEN fresh",
+        category="training tendency",
+        source_snippet="I felt fresh so I added a second hard set.",
+    )
+
+    assert second.id == first.id
+    assert second.category == "training_tendency"
+    assert second.observation_count == 2
+    assert second.confidence > first_confidence
+    assert second.source_snippet == "I felt fresh so I added a second hard set."
+
+
+@pytest.mark.asyncio
+async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejected(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    included = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Responds well to clear recovery permission",
+        category="coaching",
+        confidence=0.6,
+    )
+    low_confidence = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Maybe dislikes gym work",
+        category="preference",
+        confidence=0.2,
+    )
+    rejected = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Only trains indoors",
+        category="preference",
+        confidence=0.8,
+    )
+    stale = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Often skips Monday sessions",
+        category="adherence",
+        confidence=0.8,
+        observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
+    confirmed = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Uses MTB races as motivation",
+        category="motivation",
+        confidence=0.1,
+        observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, rejected.id, status="rejected"
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, confirmed.id, status="user_confirmed"
+    )
+
+    facts = await crud.get_prompt_athlete_memory_facts(
+        db,
+        user.id,
+        now=datetime(2026, 6, 18, tzinfo=timezone.utc),
+        stale_after_days=90,
+    )
+    fact_ids = {fact.id for fact in facts}
+
+    assert included.id in fact_ids
+    assert confirmed.id in fact_ids
+    assert low_confidence.id not in fact_ids
+    assert rejected.id not in fact_ids
+    assert stale.id not in fact_ids
+
+
+@pytest.mark.asyncio
+async def test_update_athlete_memory_fact_edits_and_rejects_fact(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Does too much when fresh",
+        category="training",
+        confidence=0.7,
+    )
+
+    updated = await crud.update_athlete_memory_fact(
+        db,
+        user.id,
+        fact.id,
+        fact="Adds extra work after rest days",
+        category="coaching risk",
+        confidence=0.8,
+        status="user_confirmed",
+        source_snippet="User corrected the wording.",
+    )
+    assert updated is not None
+    assert updated.fact == "Adds extra work after rest days"
+    assert updated.category == "coaching_risk"
+    assert updated.confidence >= 0.9
+    assert updated.status == "user_confirmed"
+    assert updated.source_snippet == "User corrected the wording."
+
+    rejected = await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="rejected"
+    )
+    assert rejected is not None
+    assert rejected.status == "rejected"
 
 
 # ---------------------------------------------------------------------------

@@ -623,6 +623,46 @@ def athlete_context_section(athlete_context: dict | None) -> str:
     )
 
 
+def athlete_memory_facts_section(facts: list[dict] | None) -> str:
+    if not facts:
+        return ""
+
+    compact_facts: list[dict[str, object]] = []
+    for fact in facts:
+        status = fact.get("status")
+        confidence = float(fact.get("confidence") or 0)
+        if status == "rejected" or status == "stale":
+            continue
+        if status != "user_confirmed" and confidence < 0.5:
+            continue
+        compact: dict[str, object] = {
+            "category": fact.get("category"),
+            "fact": fact.get("fact"),
+            "confidence": round(confidence, 2),
+            "status": status,
+        }
+        source = fact.get("sourceSnippet") or fact.get("source_snippet")
+        if source:
+            compact["evidence"] = str(source)[:240]
+        last_confirmed = fact.get("lastConfirmedAt") or fact.get("last_confirmed_at")
+        if last_confirmed:
+            compact["lastConfirmedAt"] = str(last_confirmed)
+        observations = fact.get("observationCount") or fact.get("observation_count")
+        if observations:
+            compact["observationCount"] = observations
+        compact_facts.append(compact)
+
+    if not compact_facts:
+        return ""
+
+    return (
+        "\n\nEvidence-backed athlete memory facts (durable, vetted): "
+        f"{json.dumps(compact_facts, ensure_ascii=False)}\n"
+        "Use these only when relevant. Treat confidence, evidence, and freshness "
+        "as part of the fact; never infer stronger claims than the stored fact supports."
+    )
+
+
 def ask_trainer_system(
     profile: dict,
     today: str,
@@ -633,6 +673,7 @@ def ask_trainer_system(
     workout_section: str,
     plan_updates_rule: str,
     athlete_context: dict | None = None,
+    athlete_memory_facts: list[dict] | None = None,
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
@@ -667,6 +708,7 @@ def ask_trainer_system(
     )
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
     durable_context_section = athlete_context_section(athlete_context)
+    durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = (
         f"\n\n{race_profile_section}\n" if race_profile_section else ""
@@ -744,6 +786,7 @@ def ask_trainer_system(
         f"{events_section}"
         f"{training_load_section}"
         f"{durable_context_section}"
+        f"{durable_memory_facts_section}"
         f"{memory_section}"
         f"{workout_section}"
         f"{classification_section}"

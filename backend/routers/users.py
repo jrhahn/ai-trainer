@@ -15,6 +15,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -461,6 +462,75 @@ async def save_athlete_context(
         **body.model_dump(),
     )
     return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
+
+
+@router.get(
+    "/athlete-memory-facts", response_model=schemas.AthleteMemoryFactsResponse
+)
+async def list_athlete_memory_facts(
+    include_inactive: bool = Query(False, alias="includeInactive"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteMemoryFactsResponse:
+    facts = await crud.list_athlete_memory_facts(
+        db, current_user.id, include_inactive=include_inactive
+    )
+    return schemas.AthleteMemoryFactsResponse(
+        facts=[
+            schemas.AthleteMemoryFactSchema.model_validate(
+                fact, from_attributes=True
+            )
+            for fact in facts
+        ]
+    )
+
+
+@router.post(
+    "/athlete-memory-facts",
+    response_model=schemas.AthleteMemoryFactSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def observe_athlete_memory_fact(
+    body: schemas.AthleteMemoryFactObservationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteMemoryFactSchema:
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        current_user.id,
+        **body.model_dump(),
+    )
+    return schemas.AthleteMemoryFactSchema.model_validate(
+        fact, from_attributes=True
+    )
+
+
+@router.patch(
+    "/athlete-memory-facts/{fact_id}",
+    response_model=schemas.AthleteMemoryFactSchema,
+)
+async def correct_athlete_memory_fact(
+    fact_id: str,
+    body: schemas.AthleteMemoryFactUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteMemoryFactSchema:
+    try:
+        fact = await crud.update_athlete_memory_fact(
+            db,
+            current_user.id,
+            fact_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if fact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteMemoryFactSchema.model_validate(
+        fact, from_attributes=True
+    )
 
 
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
