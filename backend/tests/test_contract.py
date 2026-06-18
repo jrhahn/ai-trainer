@@ -621,7 +621,58 @@ async def test_coach_memory_contract(client):
 
 
 # ---------------------------------------------------------------------------
-# 9. Auth token shape
+# 9. Structured athlete context contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_context_contract(client):
+    """Athlete context endpoints expose structured camelCase coaching data."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Nora", "email": "nora@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (
+        await client.get("/api/v1/users/me/athlete-context", headers=headers)
+    ).json()
+    assert empty["trainingTendency"] == "unknown"
+    assert empty["motivationDrivers"] == []
+    assert empty["coachingRisks"] == []
+
+    saved = (
+        await client.put(
+            "/api/v1/users/me/athlete-context",
+            headers=headers,
+            json={
+                "trainingTendency": "overtrains",
+                "restResponse": "restless",
+                "motivationDrivers": ["MTB", "race goal"],
+                "adherencePattern": "adds_extra",
+                "strengths": ["VO2max work"],
+                "weaknesses": ["easy days"],
+                "preferredTerrain": ["singletrack"],
+                "preferredSessionTypes": ["VO2max", "MTB skills"],
+                "coachingRisks": ["doing too much when fresh"],
+                "notes": "Needs explicit permission to rest.",
+            },
+        )
+    ).json()
+    assert saved["trainingTendency"] == "overtrains"
+    assert saved["restResponse"] == "restless"
+    assert saved["motivationDrivers"] == ["MTB", "race goal"]
+    assert saved["coachingRisks"] == ["doing too much when fresh"]
+
+    retrieved = (
+        await client.get("/api/v1/users/me/athlete-context", headers=headers)
+    ).json()
+    assert retrieved == saved
+
+
+# ---------------------------------------------------------------------------
+# 10. Auth token shape
 # ---------------------------------------------------------------------------
 
 

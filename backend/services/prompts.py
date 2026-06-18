@@ -601,6 +601,28 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
     )
 
 
+def athlete_context_section(athlete_context: dict | None) -> str:
+    if not athlete_context:
+        return ""
+
+    compact: dict[str, object] = {}
+    for key, value in athlete_context.items():
+        if value in (None, "", [], {}, "unknown"):
+            continue
+        compact[key] = value
+
+    if not compact:
+        return ""
+
+    return (
+        "\n\nStructured athlete context (durable coaching model): "
+        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        "Use this as stable knowledge about how the athlete tends to train, "
+        "respond to rest, stay motivated, and where coaching needs extra care. "
+        "Do not repeat it verbatim; apply it only when relevant."
+    )
+
+
 def ask_trainer_system(
     profile: dict,
     today: str,
@@ -610,6 +632,7 @@ def ask_trainer_system(
     memory_section: str,
     workout_section: str,
     plan_updates_rule: str,
+    athlete_context: dict | None = None,
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
@@ -643,6 +666,7 @@ def ask_trainer_system(
         f"\n\n{metrics_history_section}" if metrics_history_section else ""
     )
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
+    durable_context_section = athlete_context_section(athlete_context)
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = (
         f"\n\n{race_profile_section}\n" if race_profile_section else ""
@@ -719,6 +743,7 @@ def ask_trainer_system(
         f"{metrics_section}"
         f"{events_section}"
         f"{training_load_section}"
+        f"{durable_context_section}"
         f"{memory_section}"
         f"{workout_section}"
         f"{classification_section}"

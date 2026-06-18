@@ -570,6 +570,14 @@ async def ask_trainer(
         ).model_dump(by_alias=True)
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+    athlete_context_row = await crud.get_athlete_context(db, current_user.id)
+    athlete_context = (
+        schemas.AthleteContextSchema.model_validate(
+            athlete_context_row, from_attributes=True
+        ).model_dump(by_alias=True)
+        if athlete_context_row is not None
+        else None
+    )
     chat_messages = await crud.get_chat_messages(db, current_user.id)
     conversation_history = [
         {"role": msg.role, "content": msg.content}
@@ -615,6 +623,7 @@ async def ask_trainer(
             classification=classification,
             metrics_history_section=metrics_section,
             race_events=race_events,
+            athlete_context=athlete_context,
             timezone_name=timezone_name,
         )
     except AIRateLimitError:

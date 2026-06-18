@@ -258,6 +258,58 @@ async def upsert_coach_memory(
 
 
 # ---------------------------------------------------------------------------
+# AthleteContext
+# ---------------------------------------------------------------------------
+
+
+async def get_athlete_context(
+    db: AsyncSession, user_id: str
+) -> models.AthleteContext | None:
+    """Return the structured AthleteContext for a user, or None."""
+    return await db.get(models.AthleteContext, user_id)
+
+
+async def upsert_athlete_context(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    training_tendency: str = "unknown",
+    rest_response: str = "unknown",
+    motivation_drivers: list[str] | None = None,
+    adherence_pattern: str = "unknown",
+    strengths: list[str] | None = None,
+    weaknesses: list[str] | None = None,
+    preferred_terrain: list[str] | None = None,
+    preferred_session_types: list[str] | None = None,
+    coaching_risks: list[str] | None = None,
+    notes: str = "",
+) -> models.AthleteContext:
+    """Create or update a user's structured athlete context and flush."""
+    values = {
+        "training_tendency": training_tendency,
+        "rest_response": rest_response,
+        "motivation_drivers": list(motivation_drivers or []),
+        "adherence_pattern": adherence_pattern,
+        "strengths": list(strengths or []),
+        "weaknesses": list(weaknesses or []),
+        "preferred_terrain": list(preferred_terrain or []),
+        "preferred_session_types": list(preferred_session_types or []),
+        "coaching_risks": list(coaching_risks or []),
+        "notes": notes,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    existing = await get_athlete_context(db, user_id)
+    if existing is None:
+        existing = models.AthleteContext(user_id=user_id, **values)
+        db.add(existing)
+    else:
+        for attr, value in values.items():
+            setattr(existing, attr, value)
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------
 

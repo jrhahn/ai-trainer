@@ -532,6 +532,7 @@ async def ask_trainer(
     classification: dict | None = None,
     metrics_history_section: str = "",
     race_events: list[dict] | None = None,
+    athlete_context: dict | None = None,
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -576,6 +577,7 @@ async def ask_trainer(
         memory_section,
         workout_section,
         plan_updates_rule,
+        athlete_context=athlete_context,
         science_context=science_context or "",
         training_load=training_load,
         classification=classification,
