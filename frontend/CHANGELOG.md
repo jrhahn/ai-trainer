@@ -5,6 +5,16 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.3] - 2026-06-18
+
+### Fixed
+
+- **Interval ride match badges** (`src/pages/DashboardPage.tsx`) —
+  structured interval plans now tolerate extra endurance volume when the
+  overall session intensity is still plausible for the planned interval work,
+  so a well-executed VO2 session embedded in a longer ride is no longer shown
+  as `Needs work` solely because the activity ran long.
+
 ## [0.26.2] - 2026-06-17
 
 ### Fixed

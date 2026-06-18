@@ -104,6 +104,53 @@ function isStrengthPlan(plan: Partial<TrainingDay>): boolean {
   return workoutType === 'strength' && !plan.targetPower
 }
 
+function isStructuredIntervalPlan(plan: Partial<TrainingDay>): boolean {
+  return plan.workoutType?.toLowerCase() === 'intervals' && !!plan.intervals?.length
+}
+
+function scoreDurationMatch(actualSeconds: number, plannedMinutes: number): number {
+  const ratio = actualSeconds / 60 / plannedMinutes
+  return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+}
+
+function scoreTargetPower(actualPower: number, targetPower: { low: number; high: number }): number {
+  const { low, high } = targetPower
+  if (actualPower >= low && actualPower <= high) {
+    return 100
+  }
+
+  const edge = actualPower < low ? low : high
+  const deviation = Math.abs(actualPower - edge) / edge
+  return Math.max(0, Math.round(100 - deviation * 300))
+}
+
+function scoreStructuredIntervalPower(
+  actualPower: number,
+  plan: Partial<TrainingDay>
+): number | null {
+  if (!plan.targetPower) return null
+
+  const targetScore = scoreTargetPower(actualPower, plan.targetPower)
+  if (targetScore >= 90) return targetScore
+
+  const intervalPowerValues = plan.intervals
+    ?.map((interval) => interval.power)
+    .filter((power) => power > 0) ?? []
+  const targetLow = plan.targetPower.low || Math.min(...intervalPowerValues)
+  const targetHigh = plan.targetPower.high || Math.max(...intervalPowerValues)
+  if (!Number.isFinite(targetLow) || !Number.isFinite(targetHigh) || targetLow <= 0) {
+    return targetScore
+  }
+
+  const plausibleSessionFloor = targetLow * 0.75
+  if (actualPower >= plausibleSessionFloor && actualPower <= targetHigh) {
+    const progress = Math.min(1, (actualPower - plausibleSessionFloor) / (targetLow - plausibleSessionFloor))
+    return Math.max(targetScore, Math.round(85 + progress * 10))
+  }
+
+  return targetScore
+}
+
 /** Returns 0-100 match score, or null when not enough data to compare. */
 export function computeMatchScore(
   ride: RideMetricPoint,
@@ -119,8 +166,7 @@ export function computeMatchScore(
     }
     // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
     if (ride.durationSeconds && plan.durationMinutes) {
-      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
-      return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+      return scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
     }
     return 90
   }
@@ -134,19 +180,26 @@ export function computeMatchScore(
   const parts: number[] = []
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
-    const ratio = ride.durationSeconds / 60 / plan.durationMinutes
-    parts.push(Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200)))
+    let durationScore = scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+    if (isStructuredIntervalPlan(plan)) {
+      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      if (ratio > 1 && ratio <= 1.6) {
+        durationScore = Math.max(durationScore, 40)
+      }
+    }
+    parts.push(durationScore)
   }
 
   if (actualPower != null && plan.targetPower) {
-    const { low, high } = plan.targetPower
-    if (actualPower >= low && actualPower <= high) {
-      parts.push(100)
-    } else {
-      const edge = actualPower < low ? low : high
-      const deviation = Math.abs(actualPower - edge) / edge
-      parts.push(Math.max(0, Math.round(100 - deviation * 300)))
-    }
+    parts.push(
+      isStructuredIntervalPlan(plan)
+        ? (scoreStructuredIntervalPower(actualPower, plan) ?? scoreTargetPower(actualPower, plan.targetPower))
+        : scoreTargetPower(actualPower, plan.targetPower)
+    )
+  }
+
+  if (isStructuredIntervalPlan(plan) && parts.length === 2) {
+    return Math.round(parts[0] * 0.25 + parts[1] * 0.75)
   }
 
   return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null

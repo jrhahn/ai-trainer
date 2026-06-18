@@ -180,6 +180,30 @@ describe('computeMatchScore', () => {
     expect(computeMatchScore(ride, basePlan)).toBe(100)
   })
 
+  it('rates a longer VO2 interval ride as solid when the session intensity is plausible', () => {
+    const plan: Partial<TrainingDay> = {
+      workoutType: 'intervals',
+      title: 'VO2 Max',
+      durationMinutes: 80,
+      targetPower: { low: 320, high: 380 },
+      intervals: [
+        { duration: 240, power: 350, rest: 240 },
+        { duration: 240, power: 350, rest: 240 },
+        { duration: 240, power: 350, rest: 240 },
+        { duration: 240, power: 350, rest: 240 },
+        { duration: 240, power: 350, rest: 240 },
+      ],
+    }
+
+    const score = computeMatchScore(
+      makeRideForScore({ durationSeconds: 115 * 60, normalizedPowerW: 268, tss: 135 }),
+      plan
+    )
+
+    expect(score).toBeGreaterThanOrEqual(75)
+    expect(matchScoreLabel(score, plan)).toBe('Solid')
+  })
+
   it('marks a low-TSS rest-day activity as recovery effort', () => {
     const plan: Partial<TrainingDay> = { workoutType: 'rest', durationMinutes: 0 }
     const score = computeMatchScore(makeRideForScore({ durationSeconds: 30 * 60, normalizedPowerW: 120, tss: 18 }), plan)
