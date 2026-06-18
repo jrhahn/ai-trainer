@@ -900,6 +900,10 @@ def update_memory_system() -> str:
         "- Hydration, fueling & heat response: actionable intake patterns and problems for long or hot sessions, such as drink volume, drink type, sodium/carbs, running out of fluids, bonking, cramping, GI issues, or poor heat tolerance.\n"
         "- Preferred workout types: favourite session formats, terrain preferences (e.g. loves hill climbing, prefers long endurance rides).\n"
         "- Recurring issues: repeated problems such as over-pacing endurance rides, skipping cooldowns, abandoning intervals early.\n"
+        "- Psychological training tendencies: durable patterns in the athlete's relationship with training, rest, control, and motivation. "
+        "Capture overtraining vs undertraining bias, nervousness or anxiety after multiple rest days, FOMO around missed rides or group sessions, "
+        "overanalysis, reassurance seeking, needing permission to rest, tendency to do too much when feeling fresh, or psychological benefit from "
+        "specific activities such as MTB or easy/social rides.\n"
         "- FTP & target context: record up to the 5 most recent FTP estimates with approximate dates; drop the oldest when adding a new one. Note current power/HR targets.\n"
         "- Race & event priorities: upcoming events, goal races, priority A/B/C designations, target dates.\n"
         "- Goals & motivations: overall training goals, personal motivations, rider strengths and weaknesses.\n"
@@ -907,7 +911,9 @@ def update_memory_system() -> str:
         "A single event may be stored when it is materially actionable for future coaching, for example "
         "the athlete ran out of drink on a 5-hour ride in >30 C heat or reported a specific hydration/fueling "
         "amount that should shape future long-ride advice. "
-        "Do not store one-off transient details unless they reflect a pattern or actionable risk that will affect future coaching. "
+        "Do not store one-off transient moods, nerves, worries, low motivation, or excitement as permanent psychological traits unless "
+        "the athlete confirms the pattern, it repeats across exchanges, or it creates an actionable risk for recovery, intensity, or rest decisions. "
+        "When storing psychological tendencies, phrase them cautiously with evidence strength, e.g. 'may need reassurance after rest days' rather than overconfident diagnoses. "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 

@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.0] - 2026-06-18
+
+### Changed
+
+- **Psychological training tendencies in coach memory** (`services/prompts.py`)
+  — coach-memory extraction now has an explicit category for durable patterns
+  such as overtraining or undertraining bias, rest anxiety, FOMO, overanalysis,
+  reassurance seeking, needing permission to rest, doing too much when fresh,
+  and psychological benefit from MTB or easy/social rides, while avoiding
+  one-off moods as permanent traits unless repeated, user-confirmed, or
+  actionable for recovery, intensity, or rest decisions.
+
 ## [0.35.0] - 2026-06-18
 
 ### Changed

@@ -2641,6 +2641,22 @@ def test_update_memory_system_includes_recurring_issues():
     assert "recurring" in text or "over-pacing" in text or "repeated" in text
 
 
+def test_update_memory_system_includes_psychological_training_tendencies():
+    """System prompt must capture durable psychological training patterns."""
+    from services.prompts import update_memory_system
+
+    text = update_memory_system().lower()
+    assert "psychological training tendencies" in text
+    assert "overtraining" in text and "undertraining" in text
+    assert "anxiety after multiple rest days" in text or "nervousness" in text
+    assert "fomo" in text
+    assert "overanalysis" in text
+    assert "reassurance" in text
+    assert "permission to rest" in text
+    assert "too much when feeling fresh" in text
+    assert "mtb" in text
+
+
 def test_update_memory_system_includes_ftp_context():
     """System prompt must guide the AI to record FTP history."""
     from services.prompts import update_memory_system
@@ -2665,6 +2681,9 @@ def test_update_memory_system_avoids_transient_details():
     assert "transient" in text or "one-off" in text or "durable" in text
     assert "single event" in text
     assert "5-hour ride" in text
+    assert "one-off transient moods" in text
+    assert "permanent psychological traits" in text
+    assert "confirms the pattern" in text or "repeats across exchanges" in text
 
 
 def test_update_memory_system_uses_coach_persona():
