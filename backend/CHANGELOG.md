@@ -5,6 +5,22 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2026-06-18
+
+### Added
+
+- **Evidence-backed athlete memory facts** (`models.py`, `crud.py`,
+  `routers/users.py`, `schemas.py`,
+  `alembic/versions/20260618_000002_add_athlete_memory_facts.py`) — adds
+  durable per-user coaching facts with category, source snippet/exchange,
+  first-observed and last-confirmed timestamps, confidence, observation count,
+  and active/stale/rejected/user-confirmed status, exposed via
+  `GET/POST/PATCH /users/me/athlete-memory-facts`.
+- **Prompt-safe durable memory filtering** (`crud.py`, `routers/ai.py`,
+  `services/ai_service.py`, `services/prompts.py`) — Ask Trainer now receives
+  only user-confirmed or sufficiently fresh, high-confidence facts, while stale,
+  rejected, or low-confidence observations are omitted from coach prompts.
+
 ## [0.33.0] - 2026-06-18
 
 ### Added

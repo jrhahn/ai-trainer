@@ -672,7 +672,101 @@ async def test_athlete_context_contract(client):
 
 
 # ---------------------------------------------------------------------------
-# 10. Auth token shape
+# 10. Athlete memory facts contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_facts_contract(client):
+    """Athlete memory facts expose evidence, confidence, freshness, and status."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Mia", "email": "mia@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (
+        await client.get("/api/v1/users/me/athlete-memory-facts", headers=headers)
+    ).json()
+    assert empty == {"facts": []}
+
+    created = (
+        await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=headers,
+            json={
+                "fact": "Does too much when fresh",
+                "category": "coaching risk",
+                "sourceSnippet": "I felt fresh so I added more VO2 work.",
+                "sourceExchangeId": "chat-123",
+                "confidence": 0.4,
+            },
+        )
+    ).json()
+    assert created["fact"] == "Does too much when fresh"
+    assert created["category"] == "coaching_risk"
+    assert created["sourceSnippet"] == "I felt fresh so I added more VO2 work."
+    assert created["sourceExchangeId"] == "chat-123"
+    assert created["status"] == "active"
+    assert created["observationCount"] == 1
+    assert "firstObservedAt" in created
+    assert "lastConfirmedAt" in created
+
+    repeated = (
+        await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=headers,
+            json={
+                "fact": "does   too much WHEN fresh",
+                "category": "coaching risk",
+                "sourceSnippet": "Again added extra work after a rest day.",
+            },
+        )
+    ).json()
+    assert repeated["id"] == created["id"]
+    assert repeated["observationCount"] == 2
+    assert repeated["confidence"] > created["confidence"]
+
+    corrected = (
+        await client.patch(
+            f"/api/v1/users/me/athlete-memory-facts/{created['id']}",
+            headers=headers,
+            json={
+                "fact": "Adds extra work after rest days",
+                "status": "user_confirmed",
+            },
+        )
+    ).json()
+    assert corrected["fact"] == "Adds extra work after rest days"
+    assert corrected["status"] == "user_confirmed"
+    assert corrected["confidence"] >= 0.9
+
+    rejected = (
+        await client.patch(
+            f"/api/v1/users/me/athlete-memory-facts/{created['id']}",
+            headers=headers,
+            json={"status": "rejected"},
+        )
+    ).json()
+    assert rejected["status"] == "rejected"
+
+    active_only = (
+        await client.get("/api/v1/users/me/athlete-memory-facts", headers=headers)
+    ).json()
+    assert active_only == {"facts": []}
+    all_facts = (
+        await client.get(
+            "/api/v1/users/me/athlete-memory-facts?includeInactive=true",
+            headers=headers,
+        )
+    ).json()
+    assert all_facts["facts"][0]["id"] == created["id"]
+    assert all_facts["facts"][0]["status"] == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# 11. Auth token shape
 # ---------------------------------------------------------------------------
 
 

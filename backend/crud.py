@@ -6,7 +6,7 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import String, cast, delete, func, or_, select, update
@@ -15,6 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
+
+ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
+ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
+ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE = 0.5
+ATHLETE_MEMORY_STALE_AFTER_DAYS = 90
+ATHLETE_MEMORY_PROMPT_LIMIT = 12
+
+_ATHLETE_MEMORY_ACTIVE_STATUSES = ("active", "user_confirmed")
 
 # ---------------------------------------------------------------------------
 # User
@@ -307,6 +315,193 @@ async def upsert_athlete_context(
             setattr(existing, attr, value)
     await db.flush()
     return existing
+
+
+# ---------------------------------------------------------------------------
+# AthleteMemoryFact
+# ---------------------------------------------------------------------------
+
+
+def _normalise_athlete_memory_fact_key(fact: str) -> str:
+    return " ".join(fact.casefold().split())[:255]
+
+
+def _normalise_athlete_memory_category(category: str | None) -> str:
+    value = (category or "general").strip().lower().replace(" ", "_")
+    return value[:50] or "general"
+
+
+def _clamp_confidence(value: float | None) -> float:
+    if value is None:
+        return ATHLETE_MEMORY_DEFAULT_CONFIDENCE
+    return max(0.0, min(1.0, float(value)))
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+async def get_athlete_memory_fact(
+    db: AsyncSession, user_id: str, fact_id: str
+) -> models.AthleteMemoryFact | None:
+    """Return one athlete memory fact owned by a user."""
+    return await db.scalar(
+        select(models.AthleteMemoryFact).where(
+            models.AthleteMemoryFact.id == fact_id,
+            models.AthleteMemoryFact.user_id == user_id,
+        )
+    )
+
+
+async def list_athlete_memory_facts(
+    db: AsyncSession, user_id: str, *, include_inactive: bool = False
+) -> list[models.AthleteMemoryFact]:
+    """Return stored athlete memory facts for management views."""
+    stmt = select(models.AthleteMemoryFact).where(
+        models.AthleteMemoryFact.user_id == user_id
+    )
+    if not include_inactive:
+        stmt = stmt.where(
+            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_ACTIVE_STATUSES)
+        )
+    result = await db.scalars(
+        stmt.order_by(
+            models.AthleteMemoryFact.status.desc(),
+            models.AthleteMemoryFact.confidence.desc(),
+            models.AthleteMemoryFact.last_confirmed_at.desc(),
+            models.AthleteMemoryFact.id.desc(),
+        )
+    )
+    return list(result)
+
+
+async def observe_athlete_memory_fact(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    fact: str,
+    category: str = "general",
+    source_snippet: str = "",
+    source_exchange_id: str | None = None,
+    confidence: float | None = None,
+    observed_at: datetime | None = None,
+) -> models.AthleteMemoryFact:
+    """Create a fact or strengthen an existing fact from a new observation."""
+    cleaned_fact = fact.strip()
+    if not cleaned_fact:
+        raise ValueError("fact must not be empty")
+    now = observed_at or datetime.now(timezone.utc)
+    normalized_category = _normalise_athlete_memory_category(category)
+    fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+
+    existing = await db.scalar(
+        select(models.AthleteMemoryFact).where(
+            models.AthleteMemoryFact.user_id == user_id,
+            models.AthleteMemoryFact.category == normalized_category,
+            models.AthleteMemoryFact.fact_key == fact_key,
+        )
+    )
+    if existing is None:
+        existing = models.AthleteMemoryFact(
+            user_id=user_id,
+            fact=cleaned_fact,
+            fact_key=fact_key,
+            category=normalized_category,
+            source_snippet=source_snippet.strip(),
+            source_exchange_id=source_exchange_id,
+            first_observed_at=now,
+            last_confirmed_at=now,
+            confidence=_clamp_confidence(confidence),
+            status="active",
+            observation_count=1,
+            updated_at=now,
+        )
+        db.add(existing)
+    else:
+        existing.observation_count += 1
+        existing.last_confirmed_at = now
+        existing.updated_at = now
+        if source_snippet:
+            existing.source_snippet = source_snippet.strip()
+        if source_exchange_id is not None:
+            existing.source_exchange_id = source_exchange_id
+        if existing.status == "stale":
+            existing.status = "active"
+        base_confidence = max(existing.confidence, _clamp_confidence(confidence))
+        existing.confidence = min(
+            1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP
+        )
+    await db.flush()
+    return existing
+
+
+async def update_athlete_memory_fact(
+    db: AsyncSession,
+    user_id: str,
+    fact_id: str,
+    *,
+    fact: str | None = None,
+    category: str | None = None,
+    source_snippet: str | None = None,
+    source_exchange_id: str | None = None,
+    confidence: float | None = None,
+    status: str | None = None,
+) -> models.AthleteMemoryFact | None:
+    """Apply a user correction to an athlete memory fact and flush."""
+    existing = await get_athlete_memory_fact(db, user_id, fact_id)
+    if existing is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    if fact is not None:
+        cleaned_fact = fact.strip()
+        if not cleaned_fact:
+            raise ValueError("fact must not be empty")
+        existing.fact = cleaned_fact
+        existing.fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+    if category is not None:
+        existing.category = _normalise_athlete_memory_category(category)
+    if source_snippet is not None:
+        existing.source_snippet = source_snippet.strip()
+    if source_exchange_id is not None:
+        existing.source_exchange_id = source_exchange_id
+    if confidence is not None:
+        existing.confidence = _clamp_confidence(confidence)
+    if status is not None:
+        existing.status = status
+        if status == "user_confirmed":
+            existing.confidence = max(existing.confidence, 0.9)
+            existing.last_confirmed_at = now
+    existing.updated_at = now
+    await db.flush()
+    return existing
+
+
+async def get_prompt_athlete_memory_facts(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    now: datetime | None = None,
+    min_confidence: float = ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE,
+    stale_after_days: int = ATHLETE_MEMORY_STALE_AFTER_DAYS,
+    limit: int = ATHLETE_MEMORY_PROMPT_LIMIT,
+) -> list[models.AthleteMemoryFact]:
+    """Return only memory facts safe enough to include in coach prompts."""
+    facts = await list_athlete_memory_facts(db, user_id, include_inactive=False)
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=stale_after_days)
+    prompt_facts: list[models.AthleteMemoryFact] = []
+    for fact in facts:
+        if fact.status == "user_confirmed":
+            prompt_facts.append(fact)
+        elif fact.confidence >= min_confidence and _as_aware_utc(
+            fact.last_confirmed_at
+        ) >= cutoff:
+            prompt_facts.append(fact)
+        if len(prompt_facts) >= limit:
+            break
+    return prompt_facts
 
 
 # ---------------------------------------------------------------------------

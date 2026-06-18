@@ -143,6 +143,9 @@ class User(Base):
     athlete_context: Mapped["AthleteContext | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     strava_token: Mapped["StravaToken | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -292,6 +295,46 @@ class AthleteContext(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_context")
+
+
+class AthleteMemoryFact(Base):
+    __tablename__ = "athlete_memory_facts"
+    __table_args__ = (
+        Index(
+            "ix_athlete_memory_facts_user_category_key",
+            "user_id",
+            "category",
+            "fact_key",
+            unique=True,
+        ),
+        Index("ix_athlete_memory_facts_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    fact: Mapped[str] = mapped_column(Text, nullable=False)
+    fact_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    source_snippet: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    source_exchange_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    last_confirmed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    observation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_memory_facts")
 
 
 class StravaToken(Base):

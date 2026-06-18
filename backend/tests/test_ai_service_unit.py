@@ -2353,6 +2353,78 @@ def test_ask_trainer_system_includes_structured_athlete_context():
     assert "stable knowledge" in prompt
 
 
+def test_athlete_memory_facts_section_filters_untrusted_facts():
+    from services.prompts import athlete_memory_facts_section
+
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "Does too much when fresh",
+                "category": "coaching_risk",
+                "sourceSnippet": "Added extra intervals after rest.",
+                "confidence": 0.75,
+                "status": "active",
+                "lastConfirmedAt": "2026-06-18T08:00:00Z",
+                "observationCount": 3,
+            },
+            {
+                "fact": "Maybe dislikes gym work",
+                "category": "preference",
+                "confidence": 0.2,
+                "status": "active",
+            },
+            {
+                "fact": "Only trains indoors",
+                "category": "preference",
+                "confidence": 0.9,
+                "status": "rejected",
+            },
+            {
+                "fact": "Uses MTB races as motivation",
+                "category": "motivation",
+                "confidence": 0.1,
+                "status": "user_confirmed",
+            },
+        ]
+    )
+
+    assert "Evidence-backed athlete memory facts" in section
+    assert "Does too much when fresh" in section
+    assert "Added extra intervals after rest." in section
+    assert "Uses MTB races as motivation" in section
+    assert "Maybe dislikes gym work" not in section
+    assert "Only trains indoors" not in section
+
+
+def test_ask_trainer_system_includes_athlete_memory_facts():
+    from services.prompts import ask_trainer_plan_updates_rule, ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-18",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+        athlete_memory_facts=[
+            {
+                "fact": "Does too much when fresh",
+                "category": "coaching_risk",
+                "sourceSnippet": "Repeatedly added extra work after rest.",
+                "confidence": 0.8,
+                "status": "active",
+            }
+        ],
+    )
+
+    assert "Evidence-backed athlete memory facts" in prompt
+    assert "Does too much when fresh" in prompt
+    assert "Repeatedly added extra work after rest." in prompt
+    assert "confidence" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
