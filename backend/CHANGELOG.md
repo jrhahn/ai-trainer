@@ -5,6 +5,19 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2026-06-18
+
+### Changed
+
+- **Targeted clarification for ambiguous recommendations**
+  (`services/prompts.py`) — Ask Trainer and next-session recommendation prompts
+  can now ask exactly one short learning question when physiology and athlete
+  context leave materially different recommendations plausible, while avoiding
+  extra questions when recent data, known context, or fatigue/safety signals
+  already make the recommendation clear. Answers to recommendation
+  clarification questions are treated as potentially durable coach-memory
+  context.
+
 ## [0.36.0] - 2026-06-18
 
 ### Changed
