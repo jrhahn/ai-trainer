@@ -335,6 +335,36 @@ class CoachMemoryRequest(BaseModel):
     memory: str
 
 
+TrainingTendency = Literal["overtrains", "undertrains", "balanced", "unknown"]
+RestResponse = Literal["calm", "restless", "anxious", "relieved", "unknown"]
+AdherencePattern = Literal[
+    "follows_plan", "negotiates", "adds_extra", "skips", "unknown"
+]
+
+
+class AthleteContextSchema(CamelModel):
+    training_tendency: TrainingTendency = "unknown"
+    rest_response: RestResponse = "unknown"
+    motivation_drivers: list[str] = Field(default_factory=list)
+    adherence_pattern: AdherencePattern = "unknown"
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    preferred_terrain: list[str] = Field(default_factory=list)
+    preferred_session_types: list[str] = Field(default_factory=list)
+    coaching_risks: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteContextRequest(AthleteContextSchema):
+    pass
+
+
 # ---------------------------------------------------------------------------
 # AI endpoints
 # ---------------------------------------------------------------------------

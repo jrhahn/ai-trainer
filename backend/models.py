@@ -135,9 +135,12 @@ class User(Base):
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
-        order_by="ChatMessage.timestamp, ChatMessage.id",
+        order_by="ChatMessage.timestamp, ChatMessage.created_at, ChatMessage.id",
     )
     coach_memory: Mapped["CoachMemory | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    athlete_context: Mapped["AthleteContext | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     strava_token: Mapped["StravaToken | None"] = relationship(
@@ -258,6 +261,37 @@ class CoachMemory(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="coach_memory")
+
+
+class AthleteContext(Base):
+    __tablename__ = "athlete_context"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    training_tendency: Mapped[str] = mapped_column(
+        String(30), default="unknown", nullable=False
+    )
+    rest_response: Mapped[str] = mapped_column(
+        String(30), default="unknown", nullable=False
+    )
+    motivation_drivers: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    adherence_pattern: Mapped[str] = mapped_column(
+        String(30), default="unknown", nullable=False
+    )
+    strengths: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    weaknesses: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    preferred_terrain: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    preferred_session_types: Mapped[Any] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    coaching_risks: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_context")
 
 
 class StravaToken(Base):

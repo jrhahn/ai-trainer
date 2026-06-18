@@ -356,6 +356,67 @@ async def test_upsert_coach_memory_updates_existing(db: AsyncSession) -> None:
 
 
 # ---------------------------------------------------------------------------
+# AthleteContext
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_athlete_context_missing(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    context = await crud.get_athlete_context(db, user.id)
+    assert context is None
+
+
+@pytest.mark.asyncio
+async def test_upsert_athlete_context_creates_new(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    context = await crud.upsert_athlete_context(
+        db,
+        user.id,
+        training_tendency="overtrains",
+        rest_response="restless",
+        motivation_drivers=["MTB", "race goal"],
+        adherence_pattern="adds_extra",
+        strengths=["VO2max work"],
+        weaknesses=["easy days"],
+        preferred_terrain=["singletrack"],
+        preferred_session_types=["VO2max", "MTB skills"],
+        coaching_risks=["doing too much when fresh"],
+        notes="Needs permission to rest.",
+    )
+
+    assert context.training_tendency == "overtrains"
+    assert context.rest_response == "restless"
+    assert context.motivation_drivers == ["MTB", "race goal"]
+    assert context.adherence_pattern == "adds_extra"
+    assert context.coaching_risks == ["doing too much when fresh"]
+
+
+@pytest.mark.asyncio
+async def test_upsert_athlete_context_updates_existing(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.upsert_athlete_context(
+        db,
+        user.id,
+        training_tendency="overtrains",
+        motivation_drivers=["race goal"],
+    )
+    updated = await crud.upsert_athlete_context(
+        db,
+        user.id,
+        training_tendency="balanced",
+        rest_response="calm",
+        motivation_drivers=["fitness maintenance"],
+        adherence_pattern="follows_plan",
+    )
+
+    assert updated.training_tendency == "balanced"
+    assert updated.rest_response == "calm"
+    assert updated.motivation_drivers == ["fitness maintenance"]
+    assert updated.adherence_pattern == "follows_plan"
+
+
+# ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------
 

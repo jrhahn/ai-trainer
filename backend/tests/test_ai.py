@@ -280,6 +280,43 @@ async def test_ask_trainer_with_context_workout_forwards_plan_updates(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
+    client, auth_headers, mock_ai_service
+):
+    save_response = await client.put(
+        "/api/v1/users/me/athlete-context",
+        headers=auth_headers,
+        json={
+            "trainingTendency": "overtrains",
+            "restResponse": "restless",
+            "motivationDrivers": ["MTB", "race goal"],
+            "adherencePattern": "adds_extra",
+            "strengths": ["VO2max work"],
+            "weaknesses": ["easy days"],
+            "preferredTerrain": ["singletrack"],
+            "preferredSessionTypes": ["VO2max"],
+            "coachingRisks": ["doing too much when fresh"],
+            "notes": "Needs explicit permission to rest.",
+        },
+    )
+    assert save_response.status_code == 200
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "What should I watch out for?"},
+    )
+
+    assert response.status_code == 200
+    call_kwargs = mock_ai_service["ask_trainer"].call_args.kwargs
+    assert call_kwargs["athlete_context"]["trainingTendency"] == "overtrains"
+    assert call_kwargs["athlete_context"]["restResponse"] == "restless"
+    assert call_kwargs["athlete_context"]["coachingRisks"] == [
+        "doing too much when fresh"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_intervals_in_prompt_and_plan_updates():
     """intervals must appear in the prompt rule and must be returned in plan_updates."""
     captured_prompt: list[str] = []

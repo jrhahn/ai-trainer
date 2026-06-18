@@ -5,6 +5,22 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2026-06-18
+
+### Added
+
+- **Structured athlete context model** (`models.py`, `crud.py`, `routers/users.py`,
+  `schemas.py`, `alembic/versions/20260618_000001_add_athlete_context.py`) —
+  adds a durable per-user athlete context with training tendency, rest response,
+  motivation drivers, adherence pattern, strengths, weaknesses, preferred
+  terrain/session types, coaching risks, and notes, exposed via
+  `GET/PUT /users/me/athlete-context`.
+- **Athlete context in coach prompts** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`) — Ask Trainer now receives a
+  compact structured athlete-context section alongside existing free-text coach
+  memory so durable coaching traits can guide replies without breaking coach
+  memory behavior.
+
 ## [0.32.6] - 2026-06-17
 
 ### Fixed

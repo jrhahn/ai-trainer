@@ -438,6 +438,31 @@ async def save_coach_memory(
     return schemas.CoachMemoryResponse(memory=memory.memory)
 
 
+@router.get("/athlete-context", response_model=schemas.AthleteContextSchema)
+async def get_athlete_context(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteContextSchema:
+    context = await crud.get_athlete_context(db, current_user.id)
+    if context is None:
+        return schemas.AthleteContextSchema()
+    return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
+
+
+@router.put("/athlete-context", response_model=schemas.AthleteContextSchema)
+async def save_athlete_context(
+    body: schemas.AthleteContextRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteContextSchema:
+    context = await crud.upsert_athlete_context(
+        db,
+        current_user.id,
+        **body.model_dump(),
+    )
+    return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
+
+
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
 async def get_metrics_history(
     db: AsyncSession = Depends(get_db),

@@ -2306,6 +2306,53 @@ def test_ask_trainer_system_includes_outlook_rules():
     assert "planUpdates" in prompt or "plan_updates" in prompt.lower()
 
 
+def test_athlete_context_section_omits_empty_defaults():
+    from services.prompts import athlete_context_section
+
+    assert athlete_context_section(None) == ""
+    assert (
+        athlete_context_section(
+            {
+                "trainingTendency": "unknown",
+                "motivationDrivers": [],
+                "coachingRisks": [],
+                "notes": "",
+            }
+        )
+        == ""
+    )
+
+
+def test_ask_trainer_system_includes_structured_athlete_context():
+    from services.prompts import ask_trainer_plan_updates_rule, ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-05-01",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+        athlete_context={
+            "trainingTendency": "overtrains",
+            "restResponse": "restless",
+            "motivationDrivers": ["MTB", "race goal"],
+            "adherencePattern": "adds_extra",
+            "coachingRisks": ["doing too much when fresh"],
+            "notes": "Needs explicit permission to rest.",
+        },
+    )
+
+    assert "Structured athlete context (durable coaching model)" in prompt
+    assert '"trainingTendency": "overtrains"' in prompt
+    assert '"restResponse": "restless"' in prompt
+    assert '"motivationDrivers": ["MTB", "race goal"]' in prompt
+    assert "doing too much when fresh" in prompt
+    assert "stable knowledge" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
