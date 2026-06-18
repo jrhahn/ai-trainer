@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date as _date
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -624,8 +624,10 @@ async def ask_trainer(
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
 
-    now = datetime.now(timezone.utc).isoformat()
+    user_message_time = datetime.now(timezone.utc)
+    assistant_message_time = user_message_time + timedelta(microseconds=1)
     plan_updates = result.get("plan_updates") or []
+    persisted_updated_plan: list[dict] | None = None
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
@@ -675,14 +677,14 @@ async def ask_trainer(
         current_user.id,
         role="user",
         content=body.question,
-        timestamp=now,
+        timestamp=user_message_time.isoformat(),
     )
     await crud.create_chat_message(
         db,
         current_user.id,
         role="assistant",
         content=result["response"],
-        timestamp=now,
+        timestamp=assistant_message_time.isoformat(),
         plan_update_count=len(plan_updates) if plan_updates else None,
     )
 
@@ -714,7 +716,10 @@ async def ask_trainer(
             )
             for day in plan
         ]
-        await crud.upsert_training_plan(db, current_user.id, updated_plan)
+        persisted_plan = await crud.upsert_training_plan(
+            db, current_user.id, updated_plan
+        )
+        persisted_updated_plan = persisted_plan.plan
 
     # Merge RAG retrieval sources into the result.
     # rag_sources contains the full metadata for all retrieved chunks;
@@ -724,6 +729,9 @@ async def ask_trainer(
 
     if ride_label_updates:
         result["ride_label_updates"] = ride_label_updates
+
+    if persisted_updated_plan is not None:
+        result["updated_plan"] = persisted_updated_plan
 
     return schemas.AskTrainerResponse.model_validate(result)
 

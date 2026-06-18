@@ -5,6 +5,28 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.2] - 2026-06-17
+
+### Fixed
+
+- **Dashboard visible activity dedupe** (`src/pages/DashboardPage.tsx`) —
+  Activities now also collapse identical visible rows by sport, name, date,
+  start time, and duration, covering imported duplicates whose stable source
+  identifiers differ after deployment.
+
+## [0.26.1] - 2026-06-17
+
+### Fixed
+
+- **Dashboard duplicate activity cards** (`src/pages/DashboardPage.tsx`) —
+  recent Activities now deduplicate rows by stable external activity ID when
+  available, falling back to Strava activity ID for rendering, React keys, and
+  latest-summary refresh guards.
+- **AI Coach persisted plan refresh** (`src/components/AIChat.tsx`,
+  `src/services/ai.ts`) — chat plan updates now replace local state with the
+  backend-returned `updatedPlan` after `/ai/ask-trainer` succeeds, while keeping
+  the legacy local patch fallback for older responses.
+
 ## [0.26.0] - 2026-06-16
 
 ### Added

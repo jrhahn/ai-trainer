@@ -479,13 +479,6 @@ class RideLabelUpdateSchema(CamelModel):
     label_override: str
 
 
-class AskTrainerResponse(CamelModel):
-    response: str
-    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
-    sources: Optional[list[Any]] = None
-    ride_label_updates: Optional[list[RideLabelUpdateSchema]] = None
-
-
 class TrainingDaySchema(CamelModel):
     """Enough structure to pass to rateCompletedWorkout; rest stored as opaque JSON."""
 
@@ -502,6 +495,14 @@ class TrainingDaySchema(CamelModel):
     coach_feedback: Optional[str] = None
     workout_purpose: Optional[str] = None
     key_focus_points: Optional[list[str]] = None
+
+
+class AskTrainerResponse(CamelModel):
+    response: str
+    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
+    updated_plan: Optional[list[Any]] = None
+    sources: Optional[list[Any]] = None
+    ride_label_updates: Optional[list[RideLabelUpdateSchema]] = None
 
 
 class RateWorkoutRequest(CamelModel):

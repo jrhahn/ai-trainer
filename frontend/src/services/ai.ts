@@ -47,6 +47,7 @@ export interface RideLabelUpdate {
 export interface AskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
+  updatedPlan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   rideLabelUpdates?: RideLabelUpdate[]
 }
@@ -55,6 +56,8 @@ interface BackendAskTrainerResult {
   response: string
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
+  updatedPlan?: TrainingDay[]
+  updated_plan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   rideLabelUpdates?: RideLabelUpdate[]
   ride_label_updates?: RideLabelUpdate[]
@@ -121,6 +124,7 @@ export async function askTrainer(
   return {
     response: result.response,
     planUpdates: result.planUpdates ?? result.plan_updates,
+    updatedPlan: result.updatedPlan ?? result.updated_plan,
     sources: result.sources,
     rideLabelUpdates: result.rideLabelUpdates ?? result.ride_label_updates,
   }

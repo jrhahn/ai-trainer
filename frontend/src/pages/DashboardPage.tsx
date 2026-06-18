@@ -23,7 +23,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
-const SUMMARY_REFRESH_VERSION = 'latest-activity-v4'
+const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -36,6 +36,44 @@ export function formatDuration(seconds: number | undefined): string {
 export function formatTemperature(value: number | null | undefined): string {
   if (value == null) return ''
   return `${Math.round(value)}°C`
+}
+
+export function rideActivityKey(ride: RideMetricPoint): string {
+  return ride.externalActivityId
+    ? `external:${ride.externalActivityId}`
+    : `strava:${ride.stravaActivityId}`
+}
+
+function rideActivityRefreshId(ride: RideMetricPoint): string | number {
+  return ride.externalActivityId || ride.stravaActivityId
+}
+
+function normalizeActivityText(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function rideVisibleFingerprint(ride: RideMetricPoint): string {
+  return [
+    normalizeActivityText(ride.sportType),
+    normalizeActivityText(ride.activityName),
+    ride.activityDate,
+    ride.activityStartDatetime ?? '',
+    ride.durationSeconds ?? '',
+  ].join('|')
+}
+
+function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[] {
+  const seen = new Set<string>()
+  const unique: RideMetricPoint[] = []
+  for (const ride of rides) {
+    const identityKey = rideActivityKey(ride)
+    const visibleKey = rideVisibleFingerprint(ride)
+    if (seen.has(identityKey) || seen.has(visibleKey)) continue
+    seen.add(identityKey)
+    seen.add(visibleKey)
+    unique.push(ride)
+  }
+  return unique
 }
 
 function WeatherIcon({ condition }: { condition?: string | null }) {
@@ -343,7 +381,7 @@ export default function DashboardPage() {
     )
   const recentWindow = hasNewBeyond3Days ? sevenDaysAgo : threeDaysAgo
 
-  const recentRides = rideMetricsHistory
+  const recentRides = dedupeRideMetricsByActivity(rideMetricsHistory
     .filter((r) => r.activityDate >= recentWindow && r.activityDate <= today)
     .sort((a, b) => {
       const dateOrder = b.activityDate.localeCompare(a.activityDate)
@@ -351,14 +389,15 @@ export default function DashboardPage() {
       const startOrder = (b.activityStartDatetime ?? '').localeCompare(a.activityStartDatetime ?? '')
       if (startOrder !== 0) return startOrder
       return b.stravaActivityId - a.stravaActivityId
-    })
+    }))
 
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
   }
   const latestRecentRide = recentRides[0] ?? null
-  const latestRideActivityKey = latestRecentRide?.externalActivityId || latestRecentRide?.stravaActivityId
+  const latestRideActivityKey = latestRecentRide ? rideActivityKey(latestRecentRide) : ''
+  const latestRideActivityId = latestRecentRide ? rideActivityRefreshId(latestRecentRide) : null
   const latestRideSummaryKey = latestRideActivityKey
     ? `${SUMMARY_REFRESH_VERSION}:${latestRideActivityKey}`
     : ''
@@ -405,7 +444,7 @@ export default function DashboardPage() {
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {
-    if (!authToken || !riderAssessment || !latestRecentRide || !latestRideActivityKey || !latestRideSummaryKey) return
+    if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
     try {
@@ -415,7 +454,7 @@ export default function DashboardPage() {
     }
 
     summaryRefreshKeyRef.current = latestRideSummaryKey
-    const activityIds = [latestRideActivityKey]
+    const activityIds = [latestRideActivityId]
 
     setSummaryLoading(true)
     processPendingFeedbacks(authToken, activityIds)
@@ -433,7 +472,7 @@ export default function DashboardPage() {
         // silently ignore — the existing summary remains available
       })
       .finally(() => setSummaryLoading(false))
-  }, [authToken, latestRecentRide, latestRideActivityKey, latestRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
   return (
     <div className="space-y-5">
@@ -517,7 +556,7 @@ export default function DashboardPage() {
               const scoreBadgeStyle = plan ? matchScoreBadgeStyle(score, plan) : 'bg-gray-100 text-gray-500'
               return (
                 <div
-                  key={ride.stravaActivityId}
+                  key={rideActivityKey(ride)}
                   className="bg-white rounded-lg border border-gray-100 px-3 py-2"
                 >
                   {/* Activity row */}

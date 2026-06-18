@@ -112,6 +112,42 @@ async def test_get_ride_metrics_by_activity_ids_accepts_external_activity_id(
     assert rides[0].activity_name == "Oberursel (Taunus) Mountain Biking"
 
 
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_uses_source_external_identity_for_imports(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=7629419622326427463,
+        activity_source="intervals",
+        external_activity_id="i157147093",
+        activity_date="2026-06-14",
+        activity_start_datetime="2026-06-14T08:19:31",
+        activity_name="Original imported activity",
+        sport_type="MountainBikeRide",
+    )
+    second = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=7629419622326427000,
+        activity_source="intervals",
+        external_activity_id="i157147093",
+        activity_date="2026-06-14",
+        activity_start_datetime="2026-06-14T08:19:31",
+        activity_name="Updated imported activity",
+        sport_type="MountainBikeRide",
+    )
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert second.id == first.id
+    assert second.strava_activity_id == 7629419622326427000
+    assert len(history) == 1
+    assert history[0].activity_name == "Updated imported activity"
+
+
 # ---------------------------------------------------------------------------
 # TrainingPlan
 # ---------------------------------------------------------------------------
@@ -267,7 +303,9 @@ async def test_chat_messages_ordered_by_timestamp(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_messages_with_same_timestamp_are_tiebroken_by_id(db: AsyncSession) -> None:
+async def test_chat_messages_with_same_timestamp_keep_insert_order(
+    db: AsyncSession,
+) -> None:
     user = await _make_user(db)
     first = await crud.create_chat_message(
         db, user.id, role="user", content="First", timestamp="2026-04-10T10:00:00Z"
@@ -276,7 +314,7 @@ async def test_chat_messages_with_same_timestamp_are_tiebroken_by_id(db: AsyncSe
         db, user.id, role="assistant", content="Second", timestamp="2026-04-10T10:00:00Z"
     )
     messages = await crud.get_chat_messages(db, user.id)
-    assert [m.id for m in messages] == sorted([first.id, second.id])
+    assert [m.id for m in messages] == [first.id, second.id]
 
 
 @pytest.mark.asyncio

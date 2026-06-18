@@ -2822,3 +2822,83 @@ async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatc
     assert '"date": "2026-06-16"' in upcoming_section
     assert '"weekday": "Tuesday"' in upcoming_section
     assert '"date": "2026-06-14"' not in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
+    monkeypatch,
+):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 17)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Wednesday, June 17, 2026 (2026-06-17).\n"
+            "- Yesterday was Tuesday, June 16, 2026 (2026-06-16).\n"
+            "- Tomorrow is Thursday, June 18, 2026 (2026-06-18)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Tomorrow is your endurance ride.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "What does tomorrow look like after yesterday's activity?",
+        plan=[
+            {
+                "date": "2026-06-16",
+                "workoutType": "strength",
+                "title": "Krafttraining",
+                "durationMinutes": 45,
+            },
+            {
+                "date": "2026-06-17",
+                "workoutType": "recovery",
+                "title": "Easy Recovery Spin",
+                "durationMinutes": 45,
+            },
+            {
+                "date": "2026-06-18",
+                "workoutType": "endurance",
+                "title": "Aerobic Endurance",
+                "durationMinutes": 90,
+            },
+        ],
+        profile={},
+        metrics_history_section=(
+            "Recent activity history (newest first, historical context only):\n"
+            "- 2026-06-16 Tuesday: Krafttraining, 45 min"
+        ),
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"])
+    assert "Today is Wednesday, June 17, 2026 (2026-06-17)." in system_prompt
+    assert "Yesterday was Tuesday, June 16, 2026 (2026-06-16)." in system_prompt
+    assert "Tomorrow is Thursday, June 18, 2026 (2026-06-18)." in system_prompt
+    assert "Recent activity history (newest first, historical context only)" in system_prompt
+    assert "Last 7 days of training (historical context, not upcoming)" in system_prompt
+    assert "Upcoming plan (today and future only" in system_prompt
+    assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
+    upcoming_section = system_prompt.split("Upcoming plan (today and future only", 1)[1]
+    assert '"date": "2026-06-17"' in upcoming_section
+    assert '"weekday": "Wednesday"' in upcoming_section
+    assert '"relativeDay": "today"' in upcoming_section
+    assert '"date": "2026-06-18"' in upcoming_section
+    assert '"weekday": "Thursday"' in upcoming_section
+    assert '"relativeDay": "tomorrow"' in upcoming_section
