@@ -46,6 +46,9 @@ const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const today = formatLocalDate(new Date())
 const yesterday = formatLocalDate(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))
 const twoDaysAgo = formatLocalDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
+const dayAfterTomorrow = formatLocalDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000))
+const threeDaysFromNow = formatLocalDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000))
 const fourDaysAgo = formatLocalDate(new Date(Date.now() - 4 * 24 * 60 * 60 * 1000))
 const sixDaysAgo = formatLocalDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000))
 
@@ -486,7 +489,6 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('shows "Upcoming" sub-label when both recent rides and plan days exist', async () => {
-    const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
     const planDay: TrainingDay = {
       date: tomorrow,
       workoutType: 'endurance',
@@ -503,7 +505,6 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('does not show "Upcoming" sub-label when there are no recent rides', async () => {
-    const tomorrow = formatLocalDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000))
     const planDay: TrainingDay = {
       date: tomorrow,
       workoutType: 'endurance',
@@ -693,6 +694,95 @@ describe('DashboardPage — plan comparison row', () => {
     expect(await screen.findByText('planned:')).toBeInTheDocument()
     expect(screen.getByText(/Complete Rest Day/)).toBeInTheDocument()
     expect(screen.getByTitle('Ask coach about this match')).toHaveTextContent('OK')
+  })
+
+  it('uses the current same-date training plan over an older matched snapshot', async () => {
+    const rideWithOldSnapshot = makeRide({
+      activityDate: yesterday,
+      activityName: 'Friday Mountain Bike Ride',
+      planMatchStatus: 'auto_matched',
+      matchedPlanDate: yesterday,
+      matchedPlanSnapshot: {
+        date: yesterday,
+        title: 'Complete Rest Day',
+        workoutType: 'rest',
+        durationMinutes: 0,
+      },
+    })
+    setupStore({
+      rideMetricsHistory: [rideWithOldSnapshot],
+      trainingPlan: [
+        {
+          date: yesterday,
+          workoutType: 'recovery',
+          title: 'Easy Recovery Spin',
+          description: 'Keep it easy',
+          durationMinutes: 45,
+          completed: true,
+        },
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('planned:')).toBeInTheDocument()
+    expect(screen.getByText(/Easy Recovery Spin/)).toBeInTheDocument()
+    expect(screen.queryByText(/Complete Rest Day/)).not.toBeInTheDocument()
+  })
+
+  it('removes today from Upcoming when an activity already exists today', async () => {
+    const todaysRide = makeRide({
+      activityDate: today,
+      activityName: 'Today Ride',
+      planMatchStatus: 'auto_matched',
+      matchedPlanDate: today,
+      matchedPlanSnapshot: {
+        date: today,
+        title: 'Complete Rest Day',
+        workoutType: 'rest',
+        durationMinutes: 0,
+      },
+    })
+    setupStore({
+      rideMetricsHistory: [todaysRide],
+      trainingPlan: [
+        {
+          date: today,
+          workoutType: 'recovery',
+          title: 'Today Recovery Spin',
+          description: 'Easy spin',
+          durationMinutes: 45,
+        },
+        {
+          date: tomorrow,
+          workoutType: 'intervals',
+          title: 'Tomorrow VO2 Max Intervals',
+          description: 'Hard intervals',
+          durationMinutes: 60,
+        },
+        {
+          date: dayAfterTomorrow,
+          workoutType: 'rest',
+          title: 'Rest Day',
+          description: 'Recover',
+          durationMinutes: 0,
+        },
+        {
+          date: threeDaysFromNow,
+          workoutType: 'endurance',
+          title: 'Endurance Ride',
+          description: 'Zone 2',
+          durationMinutes: 90,
+        },
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Today Ride')).toBeInTheDocument()
+    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(1)
+    expect(screen.getByText('Upcoming')).toBeInTheDocument()
+    expect(screen.getByText(/Tomorrow VO2 Max Intervals/)).toBeInTheDocument()
+    expect(screen.getByText(/Rest Day/)).toBeInTheDocument()
+    expect(screen.getByText(/Endurance Ride/)).toBeInTheDocument()
   })
 
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {
