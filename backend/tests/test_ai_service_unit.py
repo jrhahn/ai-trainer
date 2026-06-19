@@ -1243,6 +1243,19 @@ def test_adapt_plan_system_preserves_hard_schedule_constraints():
     assert "physiologically optimal" in system
 
 
+def test_adapt_plan_system_includes_hard_session_spacing_rules():
+    from services.prompts import adapt_plan_system
+
+    system = adapt_plan_system().lower()
+
+    assert "hard-session spacing rules" in system
+    assert "actual activity history is authoritative" in system
+    assert "inspect the recent activity history first" in system
+    assert "within roughly 48 hours" in system
+    assert "do not keep, recommend, or create another vo2max" in system
+    assert "use planupdates" in system
+
+
 # ---------------------------------------------------------------------------
 # onboarding race context prompts
 # ---------------------------------------------------------------------------
@@ -2491,6 +2504,19 @@ def test_next_ride_recommendation_system_preserves_hard_constraints():
     assert "ask one concise clarifying question" in prompt
 
 
+def test_next_ride_recommendation_system_includes_hard_session_spacing_rules():
+    from services.prompts import next_ride_recommendation_system
+
+    prompt = next_ride_recommendation_system().lower()
+
+    assert "hard-session spacing rules" in prompt
+    assert "actual activity history is authoritative" in prompt
+    assert "inspect the recent activity history first" in prompt
+    assert "do not keep, recommend, or create another vo2max" in prompt
+    assert "within roughly 48 hours" in prompt
+    assert "move the intensity to a later feasible day" in prompt
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
@@ -2663,6 +2689,39 @@ def test_ask_trainer_system_rest_rules_require_numeric_explanation():
     assert "what each number supports" in prompt
     assert "what it does not support" in prompt
     assert "generic supercompensation or overtraining language" in prompt
+
+
+def test_ask_trainer_system_includes_hard_session_spacing_rules():
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-19",
+        last_7_days=[
+            {"date": "2026-06-18", "workoutType": "intervals", "title": "VO2max intervals"},
+        ],
+        next_n_days=[
+            {"date": "2026-06-20", "workoutType": "intervals", "title": "VO2max intervals"},
+        ],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+        metrics_history_section=(
+            "Recent activity history (newest first):\n"
+            "  2026-06-18 | sport:cycling | interval_vo2max | TSS 135 | TSB +2.1"
+        ),
+    ).lower()
+
+    assert "hard-session spacing rules" in prompt
+    assert "actual activity history is authoritative" in prompt
+    assert "do not keep, recommend, or create another vo2max" in prompt
+    assert "within roughly 48 hours" in prompt
+    assert "upcoming plan violates this spacing" in prompt
+    assert "positive tsb" in prompt
+    assert "2026-06-18 | sport:cycling | interval_vo2max" in prompt
+    assert '"date": "2026-06-20"' in prompt
+    assert '"title": "VO2max intervals"'.lower() in prompt
 
 
 @pytest.mark.asyncio

@@ -73,6 +73,28 @@ Training plan scheduling rules (ALWAYS follow these):
 """
 
 
+def hard_session_spacing_rules() -> str:
+    return (
+        "\n\nHard-session spacing rules (actual activity history is authoritative):\n"
+        "- Before keeping, recommending, or creating any VO2max, HIIT, threshold, sprint, "
+        "or other hard interval session, inspect the recent activity history first, not only "
+        "the upcoming plan.\n"
+        "- Treat actual VO2max/HIIT/threshold/sprint intervals, very high TSS, very high RPE, "
+        "or a ride much harder/longer than planned as a hard session even if the plan label "
+        "said recovery or rest.\n"
+        "- Strength training is not a complete rest day. MTB/recovery rides count as recovery "
+        "only when the available intensity evidence supports that they were genuinely easy.\n"
+        "- Do not keep, recommend, or create another VO2max/HIIT/threshold session for tomorrow "
+        "or within roughly 48 hours of an actual hard session unless there is a clearly stated "
+        "exceptional reason.\n"
+        "- If the current upcoming plan violates this spacing, call out the conflict and use "
+        "planUpdates to replace the near-term hard session with endurance, recovery, or rest, "
+        "or move the intensity to a later feasible day.\n"
+        "- A positive TSB can support endurance or controlled aerobic work, but it does not by "
+        "itself justify back-to-back or near-back-to-back VO2max/HIIT sessions."
+    )
+
+
 # ---------------------------------------------------------------------------
 # analyse_strava_activities prompts
 # ---------------------------------------------------------------------------
@@ -432,6 +454,7 @@ def adapt_plan_system() -> str:
         "specific date or weekday, do not schedule training there even when it would be "
         "physiologically optimal. Keep that day as rest or unavailable, and move the "
         "training stimulus to the best available day instead.\n"
+        f"{hard_session_spacing_rules()}\n"
         "Each updated day must include all required TrainingDay fields: "
         '"date", "workoutType", "title", "durationMinutes".\n'
         "Each updated day must also include: "
@@ -802,6 +825,7 @@ def ask_trainer_system(
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     rest_instructions = rest_recommendation_rules()
+    hard_spacing_instructions = hard_session_spacing_rules()
 
     attentive_coach_instructions = (
         "\n\nAttentive coach rules:\n"
@@ -877,6 +901,7 @@ def ask_trainer_system(
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{rest_instructions}"
+        f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
         f"{constraint_instructions}"
         f"{outlook_instructions}\n\n"
@@ -1584,6 +1609,7 @@ def next_ride_recommendation_system() -> str:
         "- 'move_intensity': postpone any high-intensity work to a later session\n\n"
         "Base your decision on: recent TSS, CTL/ATL/TSB, subjective RPE, leg feel, "
         "and how recent rides compared to the plan.\n\n"
+        f"{hard_session_spacing_rules()}\n\n"
         "Return ONLY a valid JSON object with these fields:\n"
         '- "response": a warm, personal 2-4 sentence coaching message that explains '
         "what you recommend and why\n"
