@@ -299,6 +299,52 @@ async def test_recommend_next_session_prompt_separates_physiology_and_context():
     assert "social rides help them reset" in captured["user"]
 
 
+@pytest.mark.asyncio
+async def test_recommend_next_session_prompt_blocks_repeat_vo2_after_hard_ride():
+    """Prompt should reject tomorrow VO2 when actual recent history already has VO2."""
+    captured: dict[str, str] = {}
+    llm_output = json.dumps(
+        {
+            "response": "Move the VO2 work later and ride endurance tomorrow.",
+            "next_session_recommendation": "Replace tomorrow's VO2max session with endurance.",
+            "recommendation_type": "move_intensity",
+            "planUpdates": None,
+        }
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        captured["system"] = system_prompt
+        captured["user"] = user_msg
+        return llm_output
+
+    with patch.object(ai_service, "_chat", new=fake_chat):
+        await ai_service.recommend_next_session(
+            rides=[
+                FakeRideMetric(
+                    activity_date=TODAY,
+                    ride_purpose="interval_vo2max",
+                    tss=135.0,
+                    duration_seconds=115 * 60,
+                    user_note="VO2max yesterday, RPE 7/10.",
+                    tsb_after=2.1,
+                )
+            ],
+            plan=PLAN_WITH_INTERVALS,
+            profile=PROFILE,
+            ctl=56.0,
+            atl=53.9,
+            tsb=2.1,
+        )
+
+    assert "Hard-session spacing rules" in captured["system"]
+    assert "actual activity history is authoritative" in captured["system"]
+    assert "within roughly 48 hours" in captured["system"]
+    assert "Do not keep, recommend, or create another VO2max" in captured["system"]
+    assert "interval_vo2max" in captured["user"]
+    assert "TSS: 135" in captured["user"]
+    assert "VO2 Intervals" in captured["user"]
+
+
 # ---------------------------------------------------------------------------
 # Router endpoint tests
 # ---------------------------------------------------------------------------

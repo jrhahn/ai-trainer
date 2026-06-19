@@ -5,6 +5,16 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.2] - 2026-06-19
+
+### Fixed
+
+- **Repeat hard-session guard** (`services/prompts.py`) — Ask Trainer,
+  plan adaptation, and next-session recommendations now treat actual recent
+  hard sessions as authoritative before preserving or creating VO2max/HIIT
+  work, so a planned repeat high-intensity day within roughly 48 hours must be
+  moved or replaced unless an explicit exception is justified.
+
 ## [0.38.1] - 2026-06-19
 
 ### Fixed
