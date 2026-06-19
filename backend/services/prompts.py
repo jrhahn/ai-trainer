@@ -706,6 +706,32 @@ def recommendation_reasoning_layers_rule() -> str:
     )
 
 
+def rest_recommendation_rules() -> str:
+    return (
+        "\n\nRest/recovery recommendation rules:\n"
+        "- When the athlete challenges a rest day or asks whether an easy ride is possible, "
+        "make the rest decision from the numbers and context: CTL, ATL, TSB, recent TSS, "
+        "RPE, subjective leg feel, sleep/HRV if provided, recent density, and availability constraints.\n"
+        "- After a hard VO2max or threshold session, require at least one easy/recovery day. "
+        "An unavailable day with no training counts as that recovery day.\n"
+        "- Do not claim two complete rest days are mandatory unless the data supports it: "
+        "examples include strongly negative TSB, ATL clearly above CTL, very high RPE, heavy legs, "
+        "poor sleep/HRV, illness, pain, or a dense recent load block.\n"
+        "- With neutral or positive TSB, ATL near or below CTL, and good subjective feedback "
+        "(e.g. fresh legs), a bounded easy Z2/recovery ride after one full rest day is usually "
+        "acceptable unless a hard constraint or clear fatigue signal says otherwise.\n"
+        "- If the athlete corrected the chronology or availability (for example, the hard workout "
+        "was moved earlier because tomorrow is unavailable), re-evaluate from that corrected "
+        "sequence instead of repeating the previous plan logic.\n"
+        "- When the athlete asks to show the numbers, explicitly state what each number supports "
+        "and what it does not support; avoid generic supercompensation or overtraining language "
+        "unless it is tied to concrete evidence.\n"
+        "- If allowing easy endurance before an upcoming intensity day, set clear limits "
+        "(duration, Z2/recovery intensity, no surges) and make the next hard session conditional "
+        "on morning freshness."
+    )
+
+
 def ask_trainer_system(
     profile: dict,
     today: str,
@@ -775,6 +801,7 @@ def ask_trainer_system(
     )
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
+    rest_instructions = rest_recommendation_rules()
 
     attentive_coach_instructions = (
         "\n\nAttentive coach rules:\n"
@@ -849,6 +876,7 @@ def ask_trainer_system(
         f"{science_section}"
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
+        f"{rest_instructions}"
         f"{attentive_coach_instructions}"
         f"{constraint_instructions}"
         f"{outlook_instructions}\n\n"

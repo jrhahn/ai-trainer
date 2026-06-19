@@ -2617,6 +2617,134 @@ def test_ask_trainer_system_checks_constraints_before_plan_updates():
     assert "friday is unavailable for training" in prompt
 
 
+def test_ask_trainer_system_includes_rest_recommendation_rules():
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-19",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    assert "rest/recovery recommendation rules" in prompt
+    assert "ctl, atl, tsb" in prompt
+    assert "recent tss" in prompt
+    assert "rpe" in prompt
+    assert "subjective leg feel" in prompt
+    assert "one easy/recovery day" in prompt
+    assert "unavailable day with no training counts" in prompt
+    assert "do not claim two complete rest days are mandatory" in prompt
+    assert "neutral or positive tsb" in prompt
+    assert "bounded easy z2/recovery ride" in prompt
+
+
+def test_ask_trainer_system_rest_rules_require_numeric_explanation():
+    from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-19",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    ).lower()
+
+    assert "corrected the chronology or availability" in prompt
+    assert "re-evaluate from that corrected sequence" in prompt
+    assert "show the numbers" in prompt
+    assert "what each number supports" in prompt
+    assert "what it does not support" in prompt
+    assert "generic supercompensation or overtraining language" in prompt
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_rest_prompt_handles_corrected_vo2_timing(monkeypatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 19)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Friday, June 19, 2026 (2026-06-19).\n"
+            "- Yesterday was Thursday, June 18, 2026 (2026-06-18).\n"
+            "- Tomorrow is Saturday, June 20, 2026 (2026-06-20)."
+        ),
+    )
+
+    async def fake_chat_history(
+        provider: str,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        task: str = "coach",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        return json.dumps({"response": "Saturday can be easy Z2.", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "I did the VO2max training yesterday because today I have no time. "
+        "With CTL 56.0, ATL 53.9, TSB +2.1, TSS 135, RPE 7/10 and fresh legs, "
+        "can I do a nice endurance ride tomorrow? Show the numbers.",
+        plan=[
+            {
+                "date": "2026-06-18",
+                "workoutType": "intervals",
+                "title": "VO2max intervals",
+                "durationMinutes": 75,
+            },
+            {
+                "date": "2026-06-19",
+                "workoutType": "rest",
+                "title": "No training available",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-20",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-21",
+                "workoutType": "sweet_spot",
+                "title": "Sweet Spot intervals",
+                "durationMinutes": 90,
+            },
+        ],
+        profile=PROFILE_WITH_FTP,
+        metrics_history_section=(
+            "Current ride-derived load: CTL 56.0, ATL 53.9, TSB +2.1. "
+            "Yesterday: VO2max, TSS 135, RPE 7/10, legs fresh."
+        ),
+        timezone_name="Europe/Berlin",
+    )
+
+    system_prompt = str(captured["system_prompt"]).lower()
+    assert "unavailable day with no training counts" in system_prompt
+    assert "do not claim two complete rest days are mandatory" in system_prompt
+    assert "neutral or positive tsb" in system_prompt
+    assert "bounded easy z2/recovery ride" in system_prompt
+    assert "re-evaluate from that corrected sequence" in system_prompt
+    assert "show the numbers" in system_prompt
+    assert "ctl 56.0, atl 53.9, tsb +2.1" in system_prompt
+    assert "tss 135" in system_prompt
+
+
 def test_extracts_one_off_friday_availability_constraint():
     from datetime import date
 
