@@ -106,10 +106,6 @@ function isStrengthPlan(plan: Partial<TrainingDay>): boolean {
   return workoutType === 'strength' && !plan.targetPower
 }
 
-function isStructuredIntervalPlan(plan: Partial<TrainingDay>): boolean {
-  return plan.workoutType?.toLowerCase() === 'intervals' && !!plan.intervals?.length
-}
-
 function isIntervalWorkoutPlan(plan: Partial<TrainingDay>): boolean {
   const workoutType = plan.workoutType?.toLowerCase()
   const title = plan.title?.toLowerCase() ?? ''

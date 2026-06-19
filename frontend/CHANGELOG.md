@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overall session intensity is still plausible for the planned interval work,
   so a well-executed VO2 session embedded in a longer ride is no longer shown
   as `Needs work` solely because the activity ran long.
+- **Dashboard production build** (`src/pages/DashboardPage.tsx`) — removes the
+  unused structured-interval helper left after the VO2 fallback expansion so
+  strict TypeScript builds no longer fail on `TS6133`.
 
 ## [0.26.2] - 2026-06-17
 
