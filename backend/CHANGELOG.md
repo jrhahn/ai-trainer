@@ -5,6 +5,16 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.1] - 2026-06-19
+
+### Fixed
+
+- **Rest-day coach justification** (`services/prompts.py`) — Ask Trainer now
+  evaluates challenged rest-day recommendations against CTL/ATL/TSB, recent
+  TSS, RPE, subjective freshness, and availability constraints, so a second
+  complete rest day must be justified by concrete fatigue evidence and corrected
+  workout timing is re-evaluated before recommending easy Z2 or full rest.
+
 ## [0.38.0] - 2026-06-18
 
 ### Added
