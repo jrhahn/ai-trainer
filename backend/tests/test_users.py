@@ -461,6 +461,7 @@ async def test_save_ride_feedback_success(client, auth_headers, mock_ai_service)
             "rpe": 7,
             "legs": "heavy",
             "intent": "planned workout",
+            "planMatchFeedback": "matched",
             "note": "Felt tired but pushed through",
         },
     )
@@ -470,7 +471,9 @@ async def test_save_ride_feedback_success(client, auth_headers, mock_ai_service)
     assert "RPE 7/10" in body["userNote"]
     assert "legs: heavy" in body["userNote"]
     assert "intent: planned workout" in body["userNote"]
+    assert "plan match: matched plan" in body["userNote"]
     assert "Felt tired but pushed through" in body["userNote"]
+    assert body["ride"]["labelOverride"] == "Solid"
 
 
 @pytest.mark.asyncio
@@ -586,3 +589,57 @@ async def test_save_ride_feedback_persists_in_history(
     target = next((r for r in rides if r["stravaActivityId"] == 5003), None)
     assert target is not None
     assert "RPE 8/10" in target["userNote"]
+
+
+@pytest.mark.asyncio
+async def test_save_ride_feedback_persists_plan_match_override(
+    client, auth_headers, mock_ai_service
+):
+    """Plan-match feedback updates the persistent ride badge override."""
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 5004,
+                    "name": "Long VO2 Ride",
+                    "type": "Ride",
+                    "distance": 65000,
+                    "movingTime": 6900,
+                    "elapsedTime": 7000,
+                    "totalElevationGain": 600,
+                    "startDate": "2026-06-18T08:00:00Z",
+                    "averageWatts": 230,
+                    "weightedAverageWatts": 268,
+                }
+            ]
+        },
+    )
+
+    response = await client.patch(
+        "/api/v1/users/me/ride-feedback/5004",
+        headers=auth_headers,
+        json={
+            "rpe": 8,
+            "legs": "normal",
+            "intent": "planned workout",
+            "planMatchFeedback": "mostly_matched",
+            "note": "The VO2 intervals were good, the ride just ran long.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "plan match: partly matched plan" in body["userNote"]
+    assert body["ride"]["labelOverride"] == "Close"
+
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
+    target = next(
+        (r for r in history.json()["rides"] if r["stravaActivityId"] == 5004),
+        None,
+    )
+    assert target is not None
+    assert target["labelOverride"] == "Close"

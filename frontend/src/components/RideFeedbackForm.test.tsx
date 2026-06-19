@@ -89,6 +89,9 @@ describe('RideFeedbackForm', () => {
 
   it('shows optional note textarea and Save/Cancel buttons', () => {
     renderForm()
+    expect(screen.getByText('Plan match')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /No override/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Matched plan/i })).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Anything else the coach should know/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /save feedback/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
@@ -116,6 +119,9 @@ describe('RideFeedbackForm', () => {
     // Select "Recovery" intent
     await userEvent.click(screen.getByRole('button', { name: /Recovery/i }))
 
+    // Mark the planned workout as only partly matched
+    await userEvent.click(screen.getByRole('button', { name: /Partly matched/i }))
+
     // Submit the form
     await userEvent.click(screen.getByRole('button', { name: /save feedback/i }))
 
@@ -125,6 +131,7 @@ describe('RideFeedbackForm', () => {
       expect.objectContaining({
         legs: 'heavy',
         intent: 'recovery',
+        planMatchFeedback: 'mostly_matched',
       }),
     )
 

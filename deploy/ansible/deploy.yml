@@ -125,6 +125,29 @@
         dest: "{{ app_dir }}/.env"
         mode: "0600"
 
+    - name: Remove Compose containers with missing image metadata
+      ansible.builtin.shell: |
+        set -eu
+        compose_files="--file compose.yml"
+        if [ -n "{{ authelia_notifier_smtp_address | default('') }}" ]; then
+          compose_files="$compose_files --file compose.smtp.yml"
+        fi
+
+        ids=$(/usr/bin/docker compose --ansi never --project-directory "{{ app_dir }}" $compose_files ps -aq || true)
+        removed=0
+        for id in $ids; do
+          image_id=$(/usr/bin/docker inspect --format='{% raw %}{{.Image}}{% endraw %}' "$id" 2>/dev/null || true)
+          if [ -n "$image_id" ] && ! /usr/bin/docker image inspect "$image_id" >/dev/null 2>&1; then
+            /usr/bin/docker rm -f "$id" >/dev/null
+            removed=$((removed + 1))
+          fi
+        done
+        printf '%s\n' "$removed"
+      args:
+        executable: /bin/sh
+      register: stale_compose_containers
+      changed_when: stale_compose_containers.stdout | int > 0
+
     - name: Build and start Docker services
       community.docker.docker_compose_v2:
         project_src: "{{ app_dir }}"

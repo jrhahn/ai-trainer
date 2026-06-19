@@ -146,6 +146,9 @@ class User(Base):
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
+        relationship(back_populates="user", cascade="all, delete-orphan")
+    )
     strava_token: Mapped["StravaToken | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -335,6 +338,44 @@ class AthleteMemoryFact(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_memory_facts")
+
+
+class AthleteAvailabilityConstraint(Base):
+    __tablename__ = "athlete_availability_constraints"
+    __table_args__ = (
+        Index(
+            "ix_athlete_availability_constraints_user_active",
+            "user_id",
+            "active",
+        ),
+        Index(
+            "ix_athlete_availability_constraints_user_date",
+            "user_id",
+            "constraint_date",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    constraint_type: Mapped[str] = mapped_column(
+        String(30), default="no_training", nullable=False
+    )
+    constraint_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    weekday: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    source: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    expires_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="availability_constraints")
 
 
 class StravaToken(Base):

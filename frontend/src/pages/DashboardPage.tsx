@@ -8,6 +8,7 @@ import {
   CloudSnow,
   CloudSun,
   Clock,
+  MessageSquare,
   Sun,
 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -16,6 +17,7 @@ import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
+import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { adaptTrainingPlan, processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
@@ -104,6 +106,60 @@ function isStrengthPlan(plan: Partial<TrainingDay>): boolean {
   return workoutType === 'strength' && !plan.targetPower
 }
 
+function isIntervalWorkoutPlan(plan: Partial<TrainingDay>): boolean {
+  const workoutType = plan.workoutType?.toLowerCase()
+  const title = plan.title?.toLowerCase() ?? ''
+  return workoutType === 'intervals' || title.includes('interval') || title.includes('vo2')
+}
+
+function scoreDurationMatch(actualSeconds: number, plannedMinutes: number): number {
+  const ratio = actualSeconds / 60 / plannedMinutes
+  return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+}
+
+function scoreTargetPower(actualPower: number, targetPower: { low: number; high: number }): number {
+  const { low, high } = targetPower
+  if (actualPower >= low && actualPower <= high) {
+    return 100
+  }
+
+  const edge = actualPower < low ? low : high
+  const deviation = Math.abs(actualPower - edge) / edge
+  return Math.max(0, Math.round(100 - deviation * 300))
+}
+
+function scoreStructuredIntervalPower(
+  actualPower: number,
+  plan: Partial<TrainingDay>
+): number | null {
+  const intervalPowerValues = plan.intervals
+    ?.map((interval) => interval.power)
+    .filter((power) => power > 0) ?? []
+  const inferredTarget = plan.targetPower ?? (
+    intervalPowerValues.length > 0
+      ? { low: Math.min(...intervalPowerValues), high: Math.max(...intervalPowerValues) }
+      : null
+  )
+  if (!inferredTarget) return null
+
+  const targetScore = scoreTargetPower(actualPower, inferredTarget)
+  if (targetScore >= 90) return targetScore
+
+  const targetLow = inferredTarget.low
+  const targetHigh = inferredTarget.high
+  if (!Number.isFinite(targetLow) || !Number.isFinite(targetHigh) || targetLow <= 0) {
+    return targetScore
+  }
+
+  const plausibleSessionFloor = targetLow * 0.75
+  if (actualPower >= plausibleSessionFloor && actualPower <= targetHigh) {
+    const progress = Math.min(1, (actualPower - plausibleSessionFloor) / (targetLow - plausibleSessionFloor))
+    return Math.max(targetScore, Math.round(85 + progress * 10))
+  }
+
+  return targetScore
+}
+
 /** Returns 0-100 match score, or null when not enough data to compare. */
 export function computeMatchScore(
   ride: RideMetricPoint,
@@ -119,8 +175,7 @@ export function computeMatchScore(
     }
     // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
     if (ride.durationSeconds && plan.durationMinutes) {
-      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
-      return Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200))
+      return scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
     }
     return 90
   }
@@ -132,21 +187,30 @@ export function computeMatchScore(
   }
 
   const parts: number[] = []
+  const intervalWorkout = isIntervalWorkoutPlan(plan)
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
-    const ratio = ride.durationSeconds / 60 / plan.durationMinutes
-    parts.push(Math.max(0, Math.round(100 - Math.abs(1 - ratio) * 200)))
+    let durationScore = scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+    if (intervalWorkout) {
+      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      if (ratio > 1 && ratio <= 2) {
+        durationScore = Math.max(durationScore, 40)
+      }
+    }
+    parts.push(durationScore)
   }
 
-  if (actualPower != null && plan.targetPower) {
-    const { low, high } = plan.targetPower
-    if (actualPower >= low && actualPower <= high) {
-      parts.push(100)
-    } else {
-      const edge = actualPower < low ? low : high
-      const deviation = Math.abs(actualPower - edge) / edge
-      parts.push(Math.max(0, Math.round(100 - deviation * 300)))
+  if (actualPower != null) {
+    if (intervalWorkout) {
+      const intervalPowerScore = scoreStructuredIntervalPower(actualPower, plan)
+      parts.push(intervalPowerScore ?? (ride.tss != null && ride.tss >= 70 ? 88 : 70))
+    } else if (plan.targetPower) {
+      parts.push(scoreTargetPower(actualPower, plan.targetPower))
     }
+  }
+
+  if (intervalWorkout && parts.length === 2) {
+    return Math.round(parts[0] * 0.25 + parts[1] * 0.75)
   }
 
   return parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : null
@@ -310,7 +374,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -321,6 +385,7 @@ export default function DashboardPage() {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
+      updateRideMetric: s.updateRideMetric,
       setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
@@ -330,6 +395,7 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
+  const [feedbackRide, setFeedbackRide] = useState<RideMetricPoint | null>(null)
 
   useEffect(() => {
     try {
@@ -620,6 +686,16 @@ export default function DashboardPage() {
                         {scoreLabel}
                       </button>
                     )}
+                    {authToken && (
+                      <button
+                        onClick={() => setFeedbackRide(ride)}
+                        title="Add ride feedback"
+                        className="text-gray-400 hover:text-amber-600 transition-colors"
+                        aria-label={`Add feedback for ${ride.activityName ?? 'activity'}`}
+                      >
+                        <MessageSquare size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -634,6 +710,20 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {feedbackRide && (
+        <RideFeedbackForm
+          stravaActivityId={feedbackRide.stravaActivityId}
+          activityDate={feedbackRide.activityDate}
+          activityName={feedbackRide.activityName}
+          sportType={feedbackRide.sportType}
+          onSaved={(data) => {
+            if (data.ride) updateRideMetric(data.ride)
+            setFeedbackRide(null)
+          }}
+          onCancel={() => setFeedbackRide(null)}
+        />
       )}
 
       {/* Ask your coach — takes up the majority of the remaining space */}

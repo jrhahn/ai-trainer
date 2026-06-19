@@ -392,6 +392,25 @@ class AthleteMemoryFactsResponse(CamelModel):
     facts: list[AthleteMemoryFactSchema]
 
 
+class AthleteAvailabilityConstraintSchema(CamelModel):
+    id: str
+    constraint_type: str
+    constraint_date: Optional[str] = None
+    weekday: Optional[str] = None
+    reason: str = ""
+    source: str = ""
+    active: bool
+    expires_on: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 class AthleteMemoryFactObservationRequest(CamelModel):
     fact: str = Field(min_length=1)
     category: str = "general"
@@ -772,6 +791,11 @@ class RideFeedbackRequest(CamelModel):
 
     note: Optional[str] = None
     """Optional free-text note."""
+
+    plan_match_feedback: Optional[
+        Literal["matched", "mostly_matched", "not_matched"]
+    ] = None
+    """Optional athlete correction for how well the activity matched the plan."""
 
 
 class RideFeedbackResponse(CamelModel):

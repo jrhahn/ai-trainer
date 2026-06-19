@@ -306,6 +306,7 @@ interface AppState {
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
+  updateRideMetric: (ride: RideMetricPoint) => void
   updateRideMetricLabel: (stravaActivityId: number, labelOverride: string) => void
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
@@ -421,6 +422,12 @@ export const useAppStore = create<AppState>()(
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
+    updateRideMetric: (ride) =>
+      set((state) => ({
+        rideMetricsHistory: state.rideMetricsHistory.map((existing) =>
+          existing.stravaActivityId === ride.stravaActivityId ? ride : existing
+        ),
+      })),
     updateRideMetricLabel: (stravaActivityId, labelOverride) =>
       set((state) => ({
         rideMetricsHistory: state.rideMetricsHistory.map((ride) =>

@@ -8,6 +8,7 @@ import { activityNoun, formatActivityType, isCyclingActivity } from '../utils/ac
 
 export type LegsFeeling = 'fresh' | 'normal' | 'heavy'
 export type RideIntent = 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
+export type PlanMatchFeedback = 'unspecified' | 'matched' | 'mostly_matched' | 'not_matched'
 
 const legsLabels: Record<LegsFeeling, string> = {
   fresh: '🟢 Fresh',
@@ -22,6 +23,13 @@ const intentLabels: Record<RideIntent, string> = {
   'free ride': '🌄 Free ride',
   'free activity': '🌄 Free activity',
   aborted: '❌ Aborted',
+}
+
+const matchLabels: Record<PlanMatchFeedback, string> = {
+  unspecified: 'No override',
+  matched: 'Matched plan',
+  mostly_matched: 'Partly matched',
+  not_matched: 'Off plan',
 }
 
 interface Props {
@@ -87,6 +95,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
   const [rpe, setRpe] = useState(5)
   const [legs, setLegs] = useState<LegsFeeling>('normal')
   const [intent, setIntent] = useState<RideIntent>('planned workout')
+  const [planMatchFeedback, setPlanMatchFeedback] = useState<PlanMatchFeedback>('unspecified')
   const [note, setNote] = useState('')
   const [savedNote, setSavedNote] = useState<string | null>(null)
   const [savedData, setSavedData] = useState<{
@@ -102,6 +111,7 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
         rpe,
         legs,
         intent,
+        planMatchFeedback: planMatchFeedback === 'unspecified' ? undefined : planMatchFeedback,
         note: note.trim() || undefined,
       }),
     onSuccess: (data) => {
@@ -228,6 +238,27 @@ export default function RideFeedbackForm({ stravaActivityId, activityDate, activ
                     }`}
                   >
                     {intentLabels[option]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Plan match correction */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Plan match</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(matchLabels) as PlanMatchFeedback[]).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setPlanMatchFeedback(option)}
+                    className={`py-2 px-2 rounded-lg text-xs font-semibold border transition-colors text-left ${
+                      planMatchFeedback === option
+                        ? 'bg-amber-500 border-amber-500 text-white'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-amber-400'
+                    }`}
+                  >
+                    {matchLabels[option]}
                   </button>
                 ))}
               </div>
