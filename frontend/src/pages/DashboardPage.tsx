@@ -278,6 +278,9 @@ export function planForRide(
   ride: RideMetricPoint,
   trainingPlan: TrainingDay[]
 ): Partial<TrainingDay> | null {
+  const currentPlan = trainingPlan.find((day) => day.date === ride.activityDate)
+  if (currentPlan) return currentPlan
+
   const snapshot = ride.matchedPlanSnapshot ?? null
   const snapshotDate = typeof snapshot?.date === 'string' ? snapshot.date : null
   const staleMatchedDate = !!ride.matchedPlanDate && ride.matchedPlanDate !== ride.activityDate
@@ -287,7 +290,7 @@ export function planForRide(
     return snapshot
   }
 
-  return trainingPlan.find((day) => day.date === ride.activityDate) ?? null
+  return null
 }
 
 
@@ -429,9 +432,6 @@ export default function DashboardPage() {
     ? Math.round((analyzedActivities / importProgress.total) * 100)
     : 0
 
-  // Always show the next 3 upcoming days (today or later)
-  const next3Days = trainingPlan.filter((d) => d.date >= today).slice(0, 3)
-
   const threeDaysAgo = formatLocalDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
   const sevenDaysAgo = formatLocalDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
 
@@ -456,6 +456,14 @@ export default function DashboardPage() {
       if (startOrder !== 0) return startOrder
       return b.stravaActivityId - a.stravaActivityId
     }))
+
+  const hasTodayActivity = recentRides.some((r) => r.activityDate === today)
+
+  // Always show the next 3 upcoming days, but do not repeat today once an activity
+  // has already been logged for today.
+  const next3Days = trainingPlan
+    .filter((d) => d.date >= today && !(hasTodayActivity && d.date === today))
+    .slice(0, 3)
 
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false

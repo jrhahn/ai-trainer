@@ -5,6 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.1] - 2026-06-19
+
+### Fixed
+
+- **Dashboard plan alignment** (`src/pages/DashboardPage.tsx`) — recent
+  activity planned rows now use the current same-date training plan before
+  falling back to stored match snapshots, and today's plan is removed from
+  Upcoming once a same-day activity has already been logged.
+
 ## [0.27.0] - 2026-06-18
 
 ### Added
