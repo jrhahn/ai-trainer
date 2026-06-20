@@ -54,6 +54,30 @@ function normalizeActivityText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function activityFamily(sportType: string | null | undefined): string {
+  const normalized = normalizeActivityText(sportType).replace(/[^a-z0-9]/g, '')
+  if (
+    normalized.includes('ride') ||
+    normalized.includes('cycling') ||
+    normalized.includes('bike')
+  ) {
+    return 'cycling'
+  }
+  if (normalized.includes('weight') || normalized.includes('strength')) return 'strength'
+  if (normalized.includes('run')) return 'running'
+  return normalized || 'activity'
+}
+
+function roundedDurationMinutes(seconds: number | undefined): number | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null
+  return Math.round(seconds / 60)
+}
+
+function normalizedStartMinute(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.slice(0, 16)
+}
+
 function rideVisibleFingerprint(ride: RideMetricPoint): string {
   return [
     normalizeActivityText(ride.sportType),
@@ -64,15 +88,36 @@ function rideVisibleFingerprint(ride: RideMetricPoint): string {
   ].join('|')
 }
 
+function rideNearDuplicateFingerprints(ride: RideMetricPoint): string[] {
+  const durationMin = roundedDurationMinutes(ride.durationSeconds)
+  if (durationMin == null) return []
+
+  const family = activityFamily(ride.sportType)
+  const name = normalizeActivityText(ride.activityName)
+  const startMinute = normalizedStartMinute(ride.activityStartDatetime)
+  const keys: string[] = []
+
+  if (name) keys.push(`name:${family}|${ride.activityDate}|${name}|${durationMin}`)
+  if (startMinute) keys.push(`start:${family}|${ride.activityDate}|${startMinute}|${durationMin}`)
+
+  return keys
+}
+
 function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[] {
   const seen = new Set<string>()
   const unique: RideMetricPoint[] = []
   for (const ride of rides) {
     const identityKey = rideActivityKey(ride)
     const visibleKey = rideVisibleFingerprint(ride)
-    if (seen.has(identityKey) || seen.has(visibleKey)) continue
+    const nearDuplicateKeys = rideNearDuplicateFingerprints(ride)
+    if (
+      seen.has(identityKey) ||
+      seen.has(visibleKey) ||
+      nearDuplicateKeys.some((key) => seen.has(key))
+    ) continue
     seen.add(identityKey)
     seen.add(visibleKey)
+    nearDuplicateKeys.forEach((key) => seen.add(key))
     unique.push(ride)
   }
   return unique

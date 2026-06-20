@@ -222,6 +222,36 @@ describe('DashboardPage — recent rides', () => {
     expect(screen.getAllByText('weighttrainingKrafttraining')).toHaveLength(1)
     expect(screen.getByText('37 min')).toBeInTheDocument()
   })
+
+  it('deduplicates same-day ride rows when source sport labels and start metadata differ', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'Ride',
+          durationSeconds: 3 * 60 * 60,
+          activityStartDatetime: `${today}T08:03:21+02:00`,
+          stravaActivityId: 9101,
+          externalActivityId: 'strava-ride-9101',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'MountainBikeRide',
+          durationSeconds: 3 * 60 * 60 + 12,
+          activityStartDatetime: `${today}T08:03:00`,
+          stravaActivityId: 9102,
+          externalActivityId: 'intervals-ride-9102',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Darmstadt Mountain Biking')).toBeInTheDocument()
+    expect(screen.getAllByText('Darmstadt Mountain Biking')).toHaveLength(1)
+    expect(screen.getByText('3h 0m')).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------

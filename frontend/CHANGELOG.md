@@ -5,6 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.2] - 2026-06-20
+
+### Fixed
+
+- **Dashboard near-duplicate activity rows** (`src/pages/DashboardPage.tsx`) —
+  recent Activities now collapse same-day ride imports with the same normalized
+  name and rounded duration even when source-specific sport labels, start
+  timestamps, or external IDs differ.
+
 ## [0.27.1] - 2026-06-19
 
 ### Fixed
