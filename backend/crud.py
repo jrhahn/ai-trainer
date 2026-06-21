@@ -44,6 +44,26 @@ def _ride_metrics_are_near_duplicates(
     )
 
 
+def _preferred_visible_ride_metric(
+    ride: models.RideMetric,
+    other: models.RideMetric,
+) -> models.RideMetric:
+    ride_duration = ride.duration_seconds or 0
+    other_duration = other.duration_seconds or 0
+    if abs(ride_duration - other_duration) > 15 * 60:
+        return ride if ride_duration > other_duration else other
+    return ride
+
+
+def _should_preserve_existing_near_duplicate(
+    existing: models.RideMetric,
+    incoming_duration_seconds: int | float | None,
+) -> bool:
+    existing_duration = existing.duration_seconds or 0
+    incoming_duration = incoming_duration_seconds or 0
+    return existing_duration - incoming_duration > 15 * 60
+
+
 # ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
@@ -984,6 +1004,11 @@ async def upsert_ride_metric(
         exclude_external_activity_id=normalized_external_id,
     )
     if near_duplicate is not None:
+        if _should_preserve_existing_near_duplicate(
+            near_duplicate,
+            duration_seconds,
+        ):
+            return near_duplicate
         for attr, val in values.items():
             setattr(near_duplicate, attr, val)
         await db.flush()
@@ -1099,10 +1124,19 @@ async def get_ride_metrics_history(
     rides = list(result)
     deduped: list[models.RideMetric] = []
     for ride in rides:
-        if any(
-            _ride_metrics_are_near_duplicates(ride, existing)
-            for existing in deduped
-        ):
+        duplicate_index = next(
+            (
+                index
+                for index, existing in enumerate(deduped)
+                if _ride_metrics_are_near_duplicates(ride, existing)
+            ),
+            None,
+        )
+        if duplicate_index is not None:
+            deduped[duplicate_index] = _preferred_visible_ride_metric(
+                ride,
+                deduped[duplicate_index],
+            )
             continue
         deduped.append(ride)
         if len(deduped) >= limit:

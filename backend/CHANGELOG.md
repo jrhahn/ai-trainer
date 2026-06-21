@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.6] - 2026-06-21
+
+### Fixed
+
+- **Contained duplicate ride imports** (`services/activity_identity.py`,
+  `crud.py`) — same-day cycling imports are now collapsed when a shorter
+  activity is substantially contained within a longer imported activity, while
+  preserving genuinely separate rides with different start windows.
+
 ## [0.38.5] - 2026-06-21
 
 ### Fixed

@@ -294,6 +294,84 @@ async def test_get_ride_metrics_history_collapses_duration_drift_duplicates(
 
 
 @pytest.mark.asyncio
+async def test_get_ride_metrics_history_collapses_contained_ride_duplicate(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    db.add_all(
+        [
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=62301,
+                activity_source="strava",
+                external_activity_id="62301",
+                activity_date="2026-06-20",
+                activity_start_datetime="2026-06-20T09:00:00",
+                activity_name="Darmstadt Road Cycling",
+                sport_type="cycling",
+                duration_seconds=205 * 60,
+            ),
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=62302,
+                activity_source="intervals",
+                external_activity_id="i62302",
+                activity_date="2026-06-20",
+                activity_start_datetime="2026-06-20T09:04:00",
+                activity_name="Darmstadt Mountain Biking",
+                sport_type="MountainBikeRide",
+                duration_seconds=63 * 60,
+            ),
+        ]
+    )
+    await db.flush()
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert len(history) == 1
+    assert history[0].strava_activity_id == 62301
+    assert history[0].duration_seconds == 205 * 60
+
+
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_preserves_longer_contained_duplicate(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=62401,
+        activity_source="strava",
+        external_activity_id="62401",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T09:00:00",
+        activity_name="Darmstadt Road Cycling",
+        sport_type="cycling",
+        duration_seconds=205 * 60,
+    )
+    second = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=62402,
+        activity_source="intervals",
+        external_activity_id="i62402",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T09:04:00",
+        activity_name="Darmstadt Mountain Biking",
+        sport_type="MountainBikeRide",
+        duration_seconds=63 * 60,
+    )
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert second.id == first.id
+    assert second.strava_activity_id == 62401
+    assert second.duration_seconds == 205 * 60
+    assert len(history) == 1
+
+
+@pytest.mark.asyncio
 async def test_upsert_ride_metric_keeps_separate_same_name_rides_with_different_starts(
     db: AsyncSession,
 ) -> None:

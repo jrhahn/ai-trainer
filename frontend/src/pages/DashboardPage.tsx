@@ -26,6 +26,8 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
 const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
+const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
+const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -73,6 +75,42 @@ function roundedDurationMinutes(seconds: number | undefined): number | null {
   return Math.round(seconds / 60)
 }
 
+function activityIdentityTokens(value: string | null | undefined): Set<string> {
+  const generic = new Set([
+    'activity',
+    'bicycling',
+    'bike',
+    'biking',
+    'cycling',
+    'fahrt',
+    'mountain',
+    'mtb',
+    'ride',
+    'road',
+  ])
+  const normalized = normalizeActivityText(value).replace(/[^a-z0-9\s]/g, ' ')
+  return new Set(
+    normalized
+      .split(/\s+/)
+      .filter((token) => token && !generic.has(token) && !/^\d+$/.test(token)),
+  )
+}
+
+function activityNamesCompatible(
+  value: string | null | undefined,
+  other: string | null | undefined
+): boolean {
+  const normalized = normalizeActivityText(value)
+  const otherNormalized = normalizeActivityText(other)
+  if (!normalized || !otherNormalized) return false
+  if (normalized === otherNormalized) return true
+
+  const tokens = activityIdentityTokens(normalized)
+  const otherTokens = activityIdentityTokens(otherNormalized)
+  if (tokens.size === 0 || tokens.size !== otherTokens.size) return false
+  return [...tokens].every((token) => otherTokens.has(token))
+}
+
 function rideVisibleFingerprint(ride: RideMetricPoint): string {
   return [
     normalizeActivityText(ride.sportType),
@@ -108,17 +146,63 @@ function activityStartDistanceMs(
   return Math.abs(start - otherStart)
 }
 
+function normalizedActivityStartMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (!Number.isNaN(parsed)) return parsed
+  const localShape = Date.parse(value.slice(0, 19))
+  return Number.isNaN(localShape) ? null : localShape
+}
+
+function rideTimeIntervalMs(ride: RideMetricPoint): [number, number] | null {
+  const start = normalizedActivityStartMs(ride.activityStartDatetime)
+  if (start == null || !ride.durationSeconds || ride.durationSeconds <= 0) return null
+  return [start, start + ride.durationSeconds * 1000]
+}
+
+function areContainedDuplicateRides(
+  ride: RideMetricPoint,
+  other: RideMetricPoint
+): boolean {
+  const interval = rideTimeIntervalMs(ride)
+  const otherInterval = rideTimeIntervalMs(other)
+  if (!interval || !otherInterval) return false
+
+  const [start, end] = interval
+  const [otherStart, otherEnd] = otherInterval
+  const duration = end - start
+  const otherDuration = otherEnd - otherStart
+  if (duration <= 0 || otherDuration <= 0) return false
+  if (Math.abs(duration - otherDuration) <= 15 * 60 * 1000) return false
+
+  const shorter = Math.min(duration, otherDuration)
+  const overlap = Math.max(0, Math.min(end, otherEnd) - Math.max(start, otherStart))
+  if (overlap / shorter < CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO) return false
+
+  if (duration <= otherDuration) {
+    return (
+      start >= otherStart - CONTAINED_DUPLICATE_TIME_TOLERANCE_MS &&
+      end <= otherEnd + CONTAINED_DUPLICATE_TIME_TOLERANCE_MS
+    )
+  }
+  return (
+    otherStart >= start - CONTAINED_DUPLICATE_TIME_TOLERANCE_MS &&
+    otherEnd <= end + CONTAINED_DUPLICATE_TIME_TOLERANCE_MS
+  )
+}
+
 function areNearDuplicateRides(ride: RideMetricPoint, other: RideMetricPoint): boolean {
   if (ride.activityDate !== other.activityDate) return false
   if (activityFamily(ride.sportType) !== activityFamily(other.sportType)) return false
 
-  const name = normalizeActivityText(ride.activityName)
-  if (!name || name !== normalizeActivityText(other.activityName)) return false
+  if (!activityNamesCompatible(ride.activityName, other.activityName)) return false
 
   const durationMin = roundedDurationMinutes(ride.durationSeconds)
   const otherDurationMin = roundedDurationMinutes(other.durationSeconds)
   if (durationMin == null || otherDurationMin == null) return false
-  if (Math.abs(durationMin - otherDurationMin) > 15) return false
+  if (Math.abs(durationMin - otherDurationMin) > 15) {
+    return areContainedDuplicateRides(ride, other)
+  }
 
   const startDistanceMs = activityStartDistanceMs(
     ride.activityStartDatetime,
@@ -129,17 +213,34 @@ function areNearDuplicateRides(ride: RideMetricPoint, other: RideMetricPoint): b
   return startDistanceMs <= 30 * 60 * 1000
 }
 
+function preferredVisibleRide(
+  ride: RideMetricPoint,
+  other: RideMetricPoint
+): RideMetricPoint {
+  const duration = ride.durationSeconds ?? 0
+  const otherDuration = other.durationSeconds ?? 0
+  if (Math.abs(duration - otherDuration) > 15 * 60) {
+    return duration > otherDuration ? ride : other
+  }
+  return ride
+}
+
 function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[] {
   const seen = new Set<string>()
   const unique: RideMetricPoint[] = []
   for (const ride of rides) {
     const identityKey = rideActivityKey(ride)
     const visibleKey = rideVisibleFingerprint(ride)
-    if (
-      seen.has(identityKey) ||
-      seen.has(visibleKey) ||
-      unique.some((existing) => areNearDuplicateRides(ride, existing))
-    ) continue
+    const duplicateIndex = unique.findIndex((existing) =>
+      areNearDuplicateRides(ride, existing)
+    )
+    if (seen.has(identityKey) || seen.has(visibleKey)) continue
+    if (duplicateIndex >= 0) {
+      unique[duplicateIndex] = preferredVisibleRide(ride, unique[duplicateIndex])
+      seen.add(identityKey)
+      seen.add(visibleKey)
+      continue
+    }
     seen.add(identityKey)
     seen.add(visibleKey)
     unique.push(ride)

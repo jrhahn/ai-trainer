@@ -306,6 +306,36 @@ describe('DashboardPage — recent rides', () => {
     expect(screen.getAllByText('Darmstadt Road Cycling')).toHaveLength(1)
   })
 
+  it('deduplicates contained same-day ride imports and keeps the longer ride', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'MountainBikeRide',
+          durationSeconds: 63 * 60,
+          activityStartDatetime: `${today}T09:04:00`,
+          stravaActivityId: 9231,
+          externalActivityId: 'intervals-ride-9231',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Road Cycling',
+          sportType: 'cycling',
+          durationSeconds: 205 * 60,
+          activityStartDatetime: `${today}T09:00:00`,
+          stravaActivityId: 9232,
+          externalActivityId: 'strava-ride-9232',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Darmstadt Road Cycling')).toBeInTheDocument()
+    expect(screen.queryByText('Darmstadt Mountain Biking')).not.toBeInTheDocument()
+    expect(screen.getByText('3h 25m')).toBeInTheDocument()
+  })
+
   it('keeps same-day equal-duration rides separate when start times differ', async () => {
     setupStore({
       rideMetricsHistory: [
