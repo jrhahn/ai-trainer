@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 
 def normalize_activity_text(value: str | None) -> str:
@@ -38,24 +39,54 @@ def normalized_start_minute(value: str | None) -> str:
     return value[:16]
 
 
-def near_duplicate_fingerprints(
+def _parse_activity_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def are_near_duplicate_activities(
     *,
     activity_date: str,
     sport_type: str | None,
     activity_name: str | None,
     activity_start_datetime: str | None,
     duration_seconds: int | float | None,
-) -> set[str]:
-    duration_min = rounded_duration_minutes(duration_seconds)
-    if duration_min is None:
-        return set()
+    other_activity_date: str,
+    other_sport_type: str | None,
+    other_activity_name: str | None,
+    other_activity_start_datetime: str | None,
+    other_duration_seconds: int | float | None,
+) -> bool:
+    if activity_date != other_activity_date:
+        return False
+    if activity_family(sport_type) != activity_family(other_sport_type):
+        return False
 
-    family = activity_family(sport_type)
     name = normalize_activity_text(activity_name)
-    start_minute = normalized_start_minute(activity_start_datetime)
-    keys: set[str] = set()
-    if name and not start_minute:
-        keys.add(f"name:{family}|{activity_date}|{name}|{duration_min}")
-    if start_minute:
-        keys.add(f"start:{family}|{activity_date}|{start_minute}|{duration_min}")
-    return keys
+    other_name = normalize_activity_text(other_activity_name)
+    if not name or name != other_name:
+        return False
+
+    duration_min = rounded_duration_minutes(duration_seconds)
+    other_duration_min = rounded_duration_minutes(other_duration_seconds)
+    if duration_min is None or other_duration_min is None:
+        return False
+    if abs(duration_min - other_duration_min) > 15:
+        return False
+
+    start = _parse_activity_datetime(activity_start_datetime)
+    other_start = _parse_activity_datetime(other_activity_start_datetime)
+    if start is None or other_start is None:
+        return True
+    if start.tzinfo is not None and other_start.tzinfo is not None:
+        start = start.astimezone(timezone.utc)
+        other_start = other_start.astimezone(timezone.utc)
+    else:
+        start = start.replace(tzinfo=None)
+        other_start = other_start.replace(tzinfo=None)
+
+    return abs((start - other_start).total_seconds()) <= 30 * 60

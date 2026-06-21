@@ -253,6 +253,54 @@ describe('DashboardPage — recent rides', () => {
     expect(screen.getByText('3h 0m')).toBeInTheDocument()
   })
 
+  it('deduplicates same-day ride rows when imported durations drift', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'MountainBikeRide',
+          durationSeconds: 96 * 60,
+          activityStartDatetime: `${today}T08:03:21+02:00`,
+          stravaActivityId: 9211,
+          externalActivityId: 'strava-ride-9211',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'cycling',
+          durationSeconds: 99 * 60,
+          activityStartDatetime: `${today}T08:05:00`,
+          stravaActivityId: 9212,
+          externalActivityId: 'intervals-ride-9212',
+        }),
+        makeRide({
+          activityDate: yesterday,
+          activityName: 'Darmstadt Road Cycling',
+          sportType: 'Ride',
+          durationSeconds: 193 * 60,
+          activityStartDatetime: `${yesterday}T09:00:00+02:00`,
+          stravaActivityId: 9221,
+          externalActivityId: 'strava-ride-9221',
+        }),
+        makeRide({
+          activityDate: yesterday,
+          activityName: 'Darmstadt Road Cycling',
+          sportType: 'cycling',
+          durationSeconds: 205 * 60,
+          activityStartDatetime: `${yesterday}T09:08:00`,
+          stravaActivityId: 9222,
+          externalActivityId: 'intervals-ride-9222',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Darmstadt Mountain Biking')).toBeInTheDocument()
+    expect(screen.getAllByText('Darmstadt Mountain Biking')).toHaveLength(1)
+    expect(screen.getAllByText('Darmstadt Road Cycling')).toHaveLength(1)
+  })
+
   it('keeps same-day equal-duration rides separate when start times differ', async () => {
     setupStore({
       rideMetricsHistory: [

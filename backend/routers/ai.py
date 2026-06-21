@@ -18,7 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.activity_imports import ImportedActivity
-from services.activity_identity import near_duplicate_fingerprints
+from services.activity_identity import are_near_duplicate_activities
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import (
     compare_planned_vs_actual,
@@ -87,23 +87,30 @@ def _dedupe_analysis_activities(
     activities: list[schemas.StravaActivitySchema],
 ) -> list[schemas.StravaActivitySchema]:
     seen_ids: set[int] = set()
-    seen_near_duplicates: set[str] = set()
     deduped: list[schemas.StravaActivitySchema] = []
     for activity in activities:
-        activity_keys = near_duplicate_fingerprints(
-            activity_date=_activity_date_for_analysis(activity),
-            sport_type=activity.sport_type or activity.type,
-            activity_name=activity.name,
-            activity_start_datetime=activity.start_date_local or activity.start_date,
-            duration_seconds=_activity_duration_for_analysis(activity),
-        )
         if activity.id in seen_ids:
             continue
-        if activity_keys and activity_keys.intersection(seen_near_duplicates):
+        if any(
+            are_near_duplicate_activities(
+                activity_date=_activity_date_for_analysis(activity),
+                sport_type=activity.sport_type or activity.type,
+                activity_name=activity.name,
+                activity_start_datetime=activity.start_date_local
+                or activity.start_date,
+                duration_seconds=_activity_duration_for_analysis(activity),
+                other_activity_date=_activity_date_for_analysis(existing),
+                other_sport_type=existing.sport_type or existing.type,
+                other_activity_name=existing.name,
+                other_activity_start_datetime=existing.start_date_local
+                or existing.start_date,
+                other_duration_seconds=_activity_duration_for_analysis(existing),
+            )
+            for existing in deduped
+        ):
             continue
         deduped.append(activity)
         seen_ids.add(activity.id)
-        seen_near_duplicates.update(activity_keys)
     return deduped
 
 
