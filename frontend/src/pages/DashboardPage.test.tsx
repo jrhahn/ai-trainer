@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import {
+  buildMatchCoachPrompt,
   computeMatchScore,
   matchScoreBadgeStyle,
   matchScoreLabel,
@@ -970,5 +971,40 @@ describe('computeMatchScore — rest/no-target plan', () => {
     expect(matchScoreBadgeStyle(35, restPlanWithDuration, 'Additional')).toContain(
       'bg-blue-100'
     )
+  })
+})
+
+describe('computeMatchScore — endurance plan', () => {
+  const endurancePlan: Partial<TrainingDay> = {
+    workoutType: 'endurance',
+    title: 'Long Endurance Ride with Climbing Focus',
+    durationMinutes: 180,
+  }
+
+  it('rates a 3h25 ride against a 3h endurance plan as close, not too much', () => {
+    const ride = {
+      stravaActivityId: 7,
+      sportType: 'Ride',
+      durationSeconds: 205 * 60,
+      tss: 140,
+    } as RideMetricPoint
+    const score = computeMatchScore(ride, endurancePlan)
+    expect(score).toBeGreaterThanOrEqual(60)
+    expect(matchScoreLabel(score, endurancePlan)).toBe('Close')
+  })
+
+  it('anchors coach match prompts to the displayed label and score', () => {
+    const ride = {
+      stravaActivityId: 8,
+      activityName: 'Darmstadt Road Cycling',
+      sportType: 'Ride',
+      durationSeconds: 205 * 60,
+    } as RideMetricPoint
+    const score = computeMatchScore(ride, endurancePlan)
+    const prompt = buildMatchCoachPrompt(ride, endurancePlan, score)
+
+    expect(prompt).toContain('The displayed match label is "Close"')
+    expect(prompt).toContain('with a 72% score')
+    expect(prompt).toContain('do not invent data-quality causes')
   })
 })

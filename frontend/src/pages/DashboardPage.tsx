@@ -398,9 +398,15 @@ export function buildMatchCoachPrompt(
   ].filter(Boolean).join(', ')
 
   const planLabel = plan.title ?? plan.workoutType ?? 'the planned session'
-  const scoreStr = score !== null ? ` The match score came out at ${score}%.` : ''
+  const label = matchScoreLabel(score, plan, ride.labelOverride)
+  const scoreStr = score !== null ? ` with a ${score}% score` : ''
+  const labelStr = [
+    ` The displayed match label is "${label}"${scoreStr}.`,
+    'Treat this as the current app state and do not invent data-quality causes',
+    'unless the activity data explicitly shows that.',
+  ].join(' ')
 
-  return `Just finished "${rideName}" — ${actualParts}. The plan had "${planLabel}" down for ${planParts}.${scoreStr} What's your take — did I execute it well, and anything I should tweak next time?`
+  return `Just finished "${rideName}" — ${actualParts}. The plan had "${planLabel}" down for ${planParts}.${labelStr} What's your take — did I execute it well, and anything I should tweak next time?`
 }
 
 export function splitTrainingSummary(raw: string): {

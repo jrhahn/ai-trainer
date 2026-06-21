@@ -2023,6 +2023,38 @@ def test_ride_metrics_context_section_includes_matched_plan_snapshot():
     assert "Planned workout: Planned Tempo, 80 min" in section
 
 
+def test_ride_metrics_context_section_includes_duration_and_display_label():
+    from services.prompts import ride_metrics_context_section
+
+    class FakeMetric:
+        activity_date = "2026-06-20"
+        ride_purpose = "endurance"
+        sport_type = "cycling"
+        classification_confidence = "high"
+        classification_reason = None
+        duration_seconds = 205 * 60
+        tss = 140
+        normalized_power_w = 210
+        ctl_after = 55.0
+        atl_after = 58.0
+        tsb_after = -3.0
+        summary = "Long endurance ride"
+        coach_note = None
+        user_note = None
+        plan_match_status = "auto_matched"
+        matched_plan_date = "2026-06-20"
+        matched_plan_snapshot = {
+            "title": "Long Endurance Ride with Climbing Focus",
+            "durationMinutes": 180,
+        }
+        label_override = "Close"
+
+    section = ride_metrics_context_section([FakeMetric()])
+    assert "duration 205 min" in section
+    assert "display label:Close" in section
+    assert "Planned workout: Long Endurance Ride with Climbing Focus, 180 min" in section
+
+
 def test_batch_review_user_includes_ambiguous_plan_match():
     from services.prompts import batch_review_user
 

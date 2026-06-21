@@ -5,6 +5,15 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.5] - 2026-06-21
+
+### Fixed
+
+- **Ride label explanations** (`services/prompts.py`) — recent activity context
+  now includes ride duration and displayed match labels, and label explanations
+  explicitly avoid inventing missing-data causes unless activity context supports
+  that claim.
+
 ## [0.38.4] - 2026-06-21
 
 ### Fixed
