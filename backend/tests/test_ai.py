@@ -659,6 +659,57 @@ async def test_analyse_activities_response_shape(client, auth_headers, mock_ai_s
     assert "planUpdates" in body
 
 
+@pytest.mark.asyncio
+async def test_analyse_activities_deduplicates_near_identical_rides(
+    client, auth_headers, mock_ai_service
+):
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 62020,
+                    "name": "Darmstadt Mountain Biking",
+                    "type": "Ride",
+                    "sportType": "Ride",
+                    "distance": 65000,
+                    "movingTime": 10800,
+                    "elapsedTime": 10800,
+                    "totalElevationGain": 900,
+                    "startDate": "2026-06-20T06:19:31Z",
+                    "startDateLocal": "2026-06-20T08:19:31",
+                    "averageWatts": 190,
+                },
+                {
+                    "id": 62021,
+                    "name": "Darmstadt Mountain Biking",
+                    "type": "Ride",
+                    "sportType": "MountainBikeRide",
+                    "distance": 65000,
+                    "movingTime": 10812,
+                    "elapsedTime": 10812,
+                    "totalElevationGain": 900,
+                    "startDate": "2026-06-20T06:19:45Z",
+                    "startDateLocal": "2026-06-20T08:19:45",
+                    "averageWatts": 190,
+                },
+            ]
+        },
+    )
+
+    assert resp.status_code == 200
+    analyse_call = mock_ai_service["analyse_strava_activities"].await_args
+    assert analyse_call is not None
+    assert len(analyse_call.args[0]) == 1
+
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
+    rides = [r for r in history.json()["rides"] if r["activityDate"] == "2026-06-20"]
+    assert len(rides) == 1
+
+
 # ---------------------------------------------------------------------------
 # rideInsights serialisation regression (list vs str)
 # ---------------------------------------------------------------------------

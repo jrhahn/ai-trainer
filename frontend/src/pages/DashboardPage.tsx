@@ -54,6 +54,25 @@ function normalizeActivityText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function activityFamily(sportType: string | null | undefined): string {
+  const normalized = normalizeActivityText(sportType).replace(/[^a-z0-9]/g, '')
+  if (
+    normalized.includes('ride') ||
+    normalized.includes('cycling') ||
+    normalized.includes('bike')
+  ) {
+    return 'cycling'
+  }
+  if (normalized.includes('weight') || normalized.includes('strength')) return 'strength'
+  if (normalized.includes('run')) return 'running'
+  return normalized || 'activity'
+}
+
+function roundedDurationMinutes(seconds: number | undefined): number | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null
+  return Math.round(seconds / 60)
+}
+
 function rideVisibleFingerprint(ride: RideMetricPoint): string {
   return [
     normalizeActivityText(ride.sportType),
@@ -64,13 +83,63 @@ function rideVisibleFingerprint(ride: RideMetricPoint): string {
   ].join('|')
 }
 
+function parseActivityTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function hasExplicitTimezone(value: string | null | undefined): boolean {
+  return /(?:z|[+-]\d\d:?\d\d)$/i.test(value ?? '')
+}
+
+function activityStartDistanceMs(
+  value: string | null | undefined,
+  other: string | null | undefined,
+): number | null {
+  if (!value || !other) return null
+  const bothHaveSameTimezoneShape =
+    hasExplicitTimezone(value) === hasExplicitTimezone(other)
+  const left = bothHaveSameTimezoneShape ? value : value.slice(0, 19)
+  const right = bothHaveSameTimezoneShape ? other : other.slice(0, 19)
+  const start = parseActivityTimestamp(left)
+  const otherStart = parseActivityTimestamp(right)
+  if (start == null || otherStart == null) return null
+  return Math.abs(start - otherStart)
+}
+
+function areNearDuplicateRides(ride: RideMetricPoint, other: RideMetricPoint): boolean {
+  if (ride.activityDate !== other.activityDate) return false
+  if (activityFamily(ride.sportType) !== activityFamily(other.sportType)) return false
+
+  const name = normalizeActivityText(ride.activityName)
+  if (!name || name !== normalizeActivityText(other.activityName)) return false
+
+  const durationMin = roundedDurationMinutes(ride.durationSeconds)
+  const otherDurationMin = roundedDurationMinutes(other.durationSeconds)
+  if (durationMin == null || otherDurationMin == null) return false
+  if (Math.abs(durationMin - otherDurationMin) > 15) return false
+
+  const startDistanceMs = activityStartDistanceMs(
+    ride.activityStartDatetime,
+    other.activityStartDatetime,
+  )
+  if (startDistanceMs == null) return true
+
+  return startDistanceMs <= 30 * 60 * 1000
+}
+
 function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[] {
   const seen = new Set<string>()
   const unique: RideMetricPoint[] = []
   for (const ride of rides) {
     const identityKey = rideActivityKey(ride)
     const visibleKey = rideVisibleFingerprint(ride)
-    if (seen.has(identityKey) || seen.has(visibleKey)) continue
+    if (
+      seen.has(identityKey) ||
+      seen.has(visibleKey) ||
+      unique.some((existing) => areNearDuplicateRides(ride, existing))
+    ) continue
     seen.add(identityKey)
     seen.add(visibleKey)
     unique.push(ride)

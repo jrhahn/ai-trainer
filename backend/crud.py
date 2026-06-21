@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
+from services.activity_identity import are_near_duplicate_activities
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
 ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
@@ -23,6 +24,25 @@ ATHLETE_MEMORY_STALE_AFTER_DAYS = 90
 ATHLETE_MEMORY_PROMPT_LIMIT = 12
 
 _ATHLETE_MEMORY_ACTIVE_STATUSES = ("active", "user_confirmed")
+
+
+def _ride_metrics_are_near_duplicates(
+    ride: models.RideMetric,
+    other: models.RideMetric,
+) -> bool:
+    return are_near_duplicate_activities(
+        activity_date=ride.activity_date,
+        sport_type=ride.sport_type,
+        activity_name=ride.activity_name,
+        activity_start_datetime=ride.activity_start_datetime,
+        duration_seconds=ride.duration_seconds,
+        other_activity_date=other.activity_date,
+        other_sport_type=other.sport_type,
+        other_activity_name=other.activity_name,
+        other_activity_start_datetime=other.activity_start_datetime,
+        other_duration_seconds=other.duration_seconds,
+    )
+
 
 # ---------------------------------------------------------------------------
 # User
@@ -935,6 +955,40 @@ async def upsert_ride_metric(
         summary=summary,
     )
 
+    exact_existing = (
+        await get_ride_metric_by_source(
+            db,
+            user_id,
+            normalized_source,
+            normalized_external_id,
+        )
+        if use_source_key
+        else await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    )
+    if exact_existing is not None:
+        for attr, val in values.items():
+            setattr(exact_existing, attr, val)
+        await db.flush()
+        return exact_existing
+
+    near_duplicate = await get_near_duplicate_ride_metric(
+        db,
+        user_id,
+        activity_date=activity_date,
+        sport_type=sport_type,
+        activity_name=activity_name,
+        activity_start_datetime=activity_start_datetime,
+        duration_seconds=duration_seconds,
+        exclude_strava_activity_id=strava_activity_id,
+        exclude_activity_source=normalized_source,
+        exclude_external_activity_id=normalized_external_id,
+    )
+    if near_duplicate is not None:
+        for attr, val in values.items():
+            setattr(near_duplicate, attr, val)
+        await db.flush()
+        return near_duplicate
+
     conn = await db.connection()
     if conn.dialect.name == "postgresql":
         conflict_keys = (
@@ -1040,9 +1094,20 @@ async def get_ride_metrics_history(
             start_key.desc(),
             models.RideMetric.id.desc(),
         )
-        .limit(limit)
+        .limit(max(limit * 3, limit))
     )
-    return list(result)
+    rides = list(result)
+    deduped: list[models.RideMetric] = []
+    for ride in rides:
+        if any(
+            _ride_metrics_are_near_duplicates(ride, existing)
+            for existing in deduped
+        ):
+            continue
+        deduped.append(ride)
+        if len(deduped) >= limit:
+            break
+    return deduped
 
 
 async def get_ride_metrics_missing_weather(
@@ -1154,6 +1219,61 @@ async def get_ride_metric_by_source(
             models.RideMetric.external_activity_id == external_activity_id,
         )
     )
+
+
+async def get_near_duplicate_ride_metric(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    activity_date: str,
+    sport_type: str | None,
+    activity_name: str | None,
+    activity_start_datetime: str | None,
+    duration_seconds: int | float | None,
+    exclude_strava_activity_id: int | None = None,
+    exclude_activity_source: str | None = None,
+    exclude_external_activity_id: str | None = None,
+) -> models.RideMetric | None:
+    """Return a likely duplicate imported activity for the same user/date."""
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_date == activity_date,
+        )
+        .order_by(
+            models.RideMetric.created_at.desc(),
+            func.coalesce(models.RideMetric.activity_start_datetime, "").desc(),
+            models.RideMetric.id.desc(),
+        )
+    )
+    for ride in result:
+        if (
+            exclude_strava_activity_id is not None
+            and ride.strava_activity_id == exclude_strava_activity_id
+        ):
+            continue
+        if (
+            exclude_activity_source is not None
+            and exclude_external_activity_id is not None
+            and ride.activity_source == exclude_activity_source
+            and ride.external_activity_id == exclude_external_activity_id
+        ):
+            continue
+        if are_near_duplicate_activities(
+            activity_date=activity_date,
+            sport_type=sport_type,
+            activity_name=activity_name,
+            activity_start_datetime=activity_start_datetime,
+            duration_seconds=duration_seconds,
+            other_activity_date=ride.activity_date,
+            other_sport_type=ride.sport_type,
+            other_activity_name=ride.activity_name,
+            other_activity_start_datetime=ride.activity_start_datetime,
+            other_duration_seconds=ride.duration_seconds,
+        ):
+            return ride
+    return None
 
 
 async def get_ride_metric_by_date(

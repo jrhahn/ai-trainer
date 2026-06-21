@@ -122,10 +122,24 @@ async def find_existing_import(
     )
     if existing is not None:
         return existing
-    return await crud.get_ride_metric_by_strava_id(
+    existing = await crud.get_ride_metric_by_strava_id(
         db,
         user_id,
         activity.legacy_metric_id,
+    )
+    if existing is not None:
+        return existing
+    return await crud.get_near_duplicate_ride_metric(
+        db,
+        user_id,
+        activity_date=activity.activity_date,
+        sport_type=activity.sport_type,
+        activity_name=activity.name,
+        activity_start_datetime=activity.start_datetime,
+        duration_seconds=activity.duration_seconds,
+        exclude_strava_activity_id=activity.legacy_metric_id,
+        exclude_activity_source=activity.source,
+        exclude_external_activity_id=activity.source_key,
     )
 
 
