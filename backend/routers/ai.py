@@ -18,6 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services.activity_imports import ImportedActivity
+from services.activity_identity import near_duplicate_fingerprints
 from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
 from services.analysis import (
     compare_planned_vs_actual,
@@ -71,6 +72,39 @@ def _analysis_activity_log_sample(
             }
         )
     return sample
+
+
+def _activity_date_for_analysis(activity: schemas.StravaActivitySchema) -> str:
+    activity_date_source = activity.start_date_local or activity.start_date or ""
+    return activity_date_source[:10] if activity_date_source else ""
+
+
+def _activity_duration_for_analysis(activity: schemas.StravaActivitySchema) -> int:
+    return int(activity.elapsed_time or activity.moving_time or 0)
+
+
+def _dedupe_analysis_activities(
+    activities: list[schemas.StravaActivitySchema],
+) -> list[schemas.StravaActivitySchema]:
+    seen_ids: set[int] = set()
+    seen_near_duplicates: set[str] = set()
+    deduped: list[schemas.StravaActivitySchema] = []
+    for activity in activities:
+        activity_keys = near_duplicate_fingerprints(
+            activity_date=_activity_date_for_analysis(activity),
+            sport_type=activity.sport_type or activity.type,
+            activity_name=activity.name,
+            activity_start_datetime=activity.start_date_local or activity.start_date,
+            duration_seconds=_activity_duration_for_analysis(activity),
+        )
+        if activity.id in seen_ids:
+            continue
+        if activity_keys and activity_keys.intersection(seen_near_duplicates):
+            continue
+        deduped.append(activity)
+        seen_ids.add(activity.id)
+        seen_near_duplicates.update(activity_keys)
+    return deduped
 
 
 async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
@@ -330,12 +364,21 @@ async def analyse_activities(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AnalyseActivitiesResponse:
+    analysis_activities = _dedupe_analysis_activities(body.activities)
     if body.source == "intervals":
         logger.info(
             "Intervals analysis received activities user=%s count=%s sample=%s",
             current_user.id,
+            len(analysis_activities),
+            _analysis_activity_log_sample(analysis_activities),
+        )
+    if len(analysis_activities) != len(body.activities):
+        logger.info(
+            "Activity analysis deduplicated near-identical activities user=%s source=%s received=%s analysed=%s",
+            current_user.id,
+            body.source,
             len(body.activities),
-            _analysis_activity_log_sample(body.activities),
+            len(analysis_activities),
         )
 
     # Fetch per-second stream data for each activity from Strava
@@ -345,7 +388,7 @@ async def analyse_activities(
             access_token = await ensure_fresh_strava_token(
                 current_user.strava_token, db
             )
-            for activity in body.activities:
+            for activity in analysis_activities:
                 streams = await fetch_activity_streams(access_token, activity.id)
                 if streams:
                     streams_by_id[str(activity.id)] = streams
@@ -367,7 +410,7 @@ async def analyse_activities(
 
     activity_payloads: list[dict] = []
     weather_by_id: dict[int, dict] = {}
-    for activity in body.activities:
+    for activity in analysis_activities:
         activity_dict = activity.model_dump()
         weather_fields = await enrich_activity_weather(
             activity_dict,
@@ -440,7 +483,7 @@ async def analyse_activities(
     # Store rides even when FTP is not yet set (TSS/IF will be null) so that
     # a later recalculate-metrics call can fill them in.
     ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
-    if body.activities:
+    if analysis_activities:
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
         seed_ctl = (
             latest_metric.ctl_after
@@ -453,7 +496,7 @@ async def analyse_activities(
             else 0.0
         )
         rides_input = []
-        for activity in body.activities:
+        for activity in analysis_activities:
             a_dict = activity.model_dump()
             start_date: str = a_dict.get("startDate") or a_dict.get("start_date") or ""
             start_date_local: str = (
@@ -544,8 +587,8 @@ async def analyse_activities(
             logger.warning(
                 "Intervals analysis produced no ride inputs user=%s activity_count=%s sample=%s",
                 current_user.id,
-                len(body.activities),
-                _analysis_activity_log_sample(body.activities),
+                len(analysis_activities),
+                _analysis_activity_log_sample(analysis_activities),
             )
 
     await db.flush()

@@ -150,6 +150,85 @@ async def test_upsert_ride_metric_uses_source_external_identity_for_imports(
     assert history[0].activity_name == "Updated imported activity"
 
 
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_reuses_near_duplicate_activity(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=7629419622326427463,
+        activity_source="strava",
+        external_activity_id="7629419622326427463",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T08:19:31",
+        activity_name="Darmstadt Mountain Biking",
+        sport_type="Ride",
+        duration_seconds=10800,
+        summary="first analysis",
+    )
+    second = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=7629419622326427000,
+        activity_source="intervals",
+        external_activity_id="i157147093",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T08:19:45",
+        activity_name="Darmstadt Mountain Biking",
+        sport_type="MountainBikeRide",
+        duration_seconds=10812,
+        summary="canonical analysis",
+    )
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert second.id == first.id
+    assert second.strava_activity_id == 7629419622326427000
+    assert len(history) == 1
+    assert history[0].summary == "canonical analysis"
+
+
+@pytest.mark.asyncio
+async def test_get_ride_metrics_history_collapses_stale_near_duplicates(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    db.add_all(
+        [
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=62001,
+                activity_source="strava",
+                external_activity_id="62001",
+                activity_date="2026-06-20",
+                activity_start_datetime="2026-06-20T08:19:31",
+                activity_name="Darmstadt Mountain Biking",
+                sport_type="Ride",
+                duration_seconds=10800,
+            ),
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=62002,
+                activity_source="intervals",
+                external_activity_id="i157147093",
+                activity_date="2026-06-20",
+                activity_start_datetime="2026-06-20T08:19:45",
+                activity_name="Darmstadt Mountain Biking",
+                sport_type="MountainBikeRide",
+                duration_seconds=10812,
+            ),
+        ]
+    )
+    await db.flush()
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert len(history) == 1
+    assert history[0].strava_activity_id in {62001, 62002}
+
+
 # ---------------------------------------------------------------------------
 # TrainingPlan
 # ---------------------------------------------------------------------------

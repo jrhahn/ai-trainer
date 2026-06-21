@@ -5,6 +5,16 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.3] - 2026-06-20
+
+### Fixed
+
+- **Duplicate activity analysis canonicalization** (`services/activity_identity.py`,
+  `crud.py`, `services/activity_imports.py`, `routers/ai.py`) — same-day ride
+  imports with matching normalized name or start minute and rounded duration now
+  collapse to one canonical ride metric, are hidden from history if stale
+  duplicates already exist, and are deduplicated before activity analysis calls.
+
 ## [0.38.2] - 2026-06-19
 
 ### Fixed
