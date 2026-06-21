@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
-import { computeMatchScore, matchScoreLabel } from './DashboardPage'
+import {
+  computeMatchScore,
+  matchScoreBadgeStyle,
+  matchScoreLabel,
+} from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
@@ -960,5 +964,11 @@ describe('computeMatchScore — rest/no-target plan', () => {
     const ride = { stravaActivityId: 6, sportType: 'Ride' } as RideMetricPoint
     const score = computeMatchScore(ride, restPlanNoData)
     expect(matchScoreLabel(score, restPlanNoData)).toBe('OK')
+  })
+
+  it('uses informational styling for additional-ride override labels', () => {
+    expect(matchScoreBadgeStyle(35, restPlanWithDuration, 'Additional')).toContain(
+      'bg-blue-100'
+    )
   })
 })

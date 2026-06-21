@@ -315,7 +315,21 @@ export function matchScoreLabel(score: number | null, plan: Partial<TrainingDay>
           : 'Needs work'
 }
 
-export function matchScoreBadgeStyle(score: number | null, plan: Partial<TrainingDay>): string {
+export function matchScoreBadgeStyle(
+  score: number | null,
+  plan: Partial<TrainingDay>,
+  labelOverride?: string | null
+): string {
+  if (labelOverride) {
+    const label = labelOverride.toLowerCase()
+    if (label === 'ok') return 'bg-green-100 text-green-700'
+    if (label === 'additional' || label === 'extra') {
+      return 'bg-blue-100 text-blue-700'
+    }
+    if (label === 'too much') return 'bg-red-100 text-red-700'
+    if (label === 'mismatch') return 'bg-orange-100 text-orange-700'
+  }
+
   if (score === null) return 'bg-gray-100 text-gray-500'
 
   if (isRestOrNoTargetPlan(plan)) {
@@ -696,7 +710,9 @@ export default function DashboardPage() {
               const plan = planForRide(ride, trainingPlan)
               const score = plan ? computeMatchScore(ride, plan) : null
               const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
-              const scoreBadgeStyle = plan ? matchScoreBadgeStyle(score, plan) : 'bg-gray-100 text-gray-500'
+              const scoreBadgeStyle = plan
+                ? matchScoreBadgeStyle(score, plan, ride.labelOverride)
+                : 'bg-gray-100 text-gray-500'
               return (
                 <div
                   key={rideActivityKey(ride)}

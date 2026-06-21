@@ -1915,3 +1915,168 @@ async def test_apply_ride_plan_matches_sets_mismatch_label_for_gross_duration_de
     assert by_id[70001].label_override == "Mismatch"
     # Well-matched ride should have no override
     assert by_id[70002].label_override is None
+
+
+@pytest.mark.asyncio
+async def test_apply_ride_plan_matches_accepts_combined_same_day_endurance_rides(
+    client, auth_headers
+):
+    import crud
+    from auth import decode_token
+    from services.ride_matching import apply_ride_plan_matches
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    plan = [
+        {
+            "date": "2026-06-20",
+            "workoutType": "endurance",
+            "title": "Long Endurance Ride",
+            "durationMinutes": 240,
+        }
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=71001,
+            activity_date="2026-06-20",
+            sport_type="Ride",
+            activity_name="Morning Road Cycling",
+            duration_seconds=180 * 60,
+        )
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=71002,
+            activity_date="2026-06-20",
+            sport_type="MountainBikeRide",
+            activity_name="Afternoon Mountain Biking",
+            duration_seconds=60 * 60,
+        )
+
+        reviewed = await apply_ride_plan_matches(db, user_id, plan, [71001, 71002])
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [71001, 71002])
+        by_id = {ride.strava_activity_id: ride for ride in rides}
+
+    assert [ride.strava_activity_id for ride in reviewed] == [71001]
+    assert {ride.plan_match_status for ride in by_id.values()} == {"auto_matched"}
+    assert {ride.label_override for ride in by_id.values()} == {"OK"}
+
+
+@pytest.mark.asyncio
+async def test_apply_ride_plan_matches_labels_easy_extra_ride(
+    client, auth_headers
+):
+    import crud
+    from auth import decode_token
+    from services.ride_matching import apply_ride_plan_matches
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    plan = [
+        {
+            "date": "2026-06-20",
+            "workoutType": "endurance",
+            "title": "Long Endurance Ride with Climbing Focus",
+            "durationMinutes": 180,
+        }
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=72001,
+            activity_date="2026-06-20",
+            sport_type="MountainBikeRide",
+            activity_name="Darmstadt Mountain Biking",
+            duration_seconds=63 * 60,
+            intensity_factor=0.58,
+            tss=32,
+        )
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=72002,
+            activity_date="2026-06-20",
+            sport_type="Ride",
+            activity_name="Darmstadt Road Cycling",
+            duration_seconds=205 * 60,
+            intensity_factor=0.68,
+            tss=140,
+        )
+
+        reviewed = await apply_ride_plan_matches(db, user_id, plan, [72001, 72002])
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [72001, 72002])
+        by_id = {ride.strava_activity_id: ride for ride in rides}
+
+    assert [ride.strava_activity_id for ride in reviewed] == [72002]
+    assert by_id[72002].plan_match_status == "auto_matched"
+    assert by_id[72002].label_override is None
+    assert by_id[72001].plan_match_status == "unmatched"
+    assert by_id[72001].matched_plan_snapshot["title"] == (
+        "Long Endurance Ride with Climbing Focus"
+    )
+    assert by_id[72001].label_override == "Additional"
+
+
+@pytest.mark.asyncio
+async def test_apply_ride_plan_matches_labels_hard_extra_ride_as_too_much(
+    client, auth_headers
+):
+    import crud
+    from auth import decode_token
+    from services.ride_matching import apply_ride_plan_matches
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    plan = [
+        {
+            "date": "2026-06-20",
+            "workoutType": "endurance",
+            "title": "Long Endurance Ride",
+            "durationMinutes": 180,
+        }
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=73001,
+            activity_date="2026-06-20",
+            sport_type="Ride",
+            activity_name="Long Road Ride",
+            duration_seconds=175 * 60,
+            intensity_factor=0.7,
+            tss=135,
+        )
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=73002,
+            activity_date="2026-06-20",
+            sport_type="Ride",
+            activity_name="Evening Threshold Work",
+            duration_seconds=70 * 60,
+            intensity_factor=0.9,
+            tss=95,
+            ride_purpose="interval_threshold",
+        )
+
+        reviewed = await apply_ride_plan_matches(db, user_id, plan, [73001, 73002])
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [73001, 73002])
+        by_id = {ride.strava_activity_id: ride for ride in rides}
+
+    assert [ride.strava_activity_id for ride in reviewed] == [73001]
+    assert by_id[73001].plan_match_status == "auto_matched"
+    assert by_id[73002].plan_match_status == "unmatched"
+    assert by_id[73002].label_override == "Too much"
