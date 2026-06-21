@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Dashboard near-duplicate activity rows** (`src/pages/DashboardPage.tsx`) —
-  recent Activities now collapse same-day ride imports with the same normalized
-  name and rounded duration even when source-specific sport labels, start
-  timestamps, or external IDs differ.
+  recent Activities now collapse same-day ride imports with the same rounded
+  start minute and duration even when source-specific sport labels or external
+  IDs differ, while preserving separate same-name rides that start at different
+  times.
 
 ## [0.27.1] - 2026-06-19
 

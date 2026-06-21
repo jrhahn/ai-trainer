@@ -229,6 +229,43 @@ async def test_get_ride_metrics_history_collapses_stale_near_duplicates(
     assert history[0].strava_activity_id in {62001, 62002}
 
 
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_keeps_separate_same_name_rides_with_different_starts(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=62011,
+        activity_source="fit",
+        external_activity_id="fit-62011",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T08:00:00+00:00",
+        activity_name="FIT Cycling 2026-06-20",
+        sport_type="cycling",
+        duration_seconds=3600,
+    )
+    second = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=62012,
+        activity_source="fit",
+        external_activity_id="fit-62012",
+        activity_date="2026-06-20",
+        activity_start_datetime="2026-06-20T10:00:00+00:00",
+        activity_name="FIT Cycling 2026-06-20",
+        sport_type="cycling",
+        duration_seconds=3600,
+    )
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+
+    assert second.id != first.id
+    assert len(history) == 2
+    assert {ride.strava_activity_id for ride in history} == {62011, 62012}
+
+
 # ---------------------------------------------------------------------------
 # TrainingPlan
 # ---------------------------------------------------------------------------

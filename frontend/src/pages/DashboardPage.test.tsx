@@ -252,6 +252,34 @@ describe('DashboardPage — recent rides', () => {
     expect(screen.getAllByText('Darmstadt Mountain Biking')).toHaveLength(1)
     expect(screen.getByText('3h 0m')).toBeInTheDocument()
   })
+
+  it('keeps same-day equal-duration rides separate when start times differ', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'FIT Cycling',
+          sportType: 'cycling',
+          durationSeconds: 60 * 60,
+          activityStartDatetime: `${today}T08:00:00+00:00`,
+          stravaActivityId: 9201,
+          externalActivityId: 'fit-ride-9201',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'FIT Cycling',
+          sportType: 'cycling',
+          durationSeconds: 60 * 60,
+          activityStartDatetime: `${today}T10:00:00+00:00`,
+          stravaActivityId: 9202,
+          externalActivityId: 'fit-ride-9202',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findAllByText('FIT Cycling')).toHaveLength(2)
+  })
 })
 
 // ---------------------------------------------------------------------------

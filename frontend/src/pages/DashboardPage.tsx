@@ -97,7 +97,9 @@ function rideNearDuplicateFingerprints(ride: RideMetricPoint): string[] {
   const startMinute = normalizedStartMinute(ride.activityStartDatetime)
   const keys: string[] = []
 
-  if (name) keys.push(`name:${family}|${ride.activityDate}|${name}|${durationMin}`)
+  if (name && !startMinute) {
+    keys.push(`name:${family}|${ride.activityDate}|${name}|${durationMin}`)
+  }
   if (startMinute) keys.push(`start:${family}|${ride.activityDate}|${startMinute}|${durationMin}`)
 
   return keys

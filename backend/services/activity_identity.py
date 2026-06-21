@@ -54,7 +54,7 @@ def near_duplicate_fingerprints(
     name = normalize_activity_text(activity_name)
     start_minute = normalized_start_minute(activity_start_datetime)
     keys: set[str] = set()
-    if name:
+    if name and not start_minute:
         keys.add(f"name:{family}|{activity_date}|{name}|{duration_min}")
     if start_minute:
         keys.add(f"start:{family}|{activity_date}|{start_minute}|{duration_min}")
