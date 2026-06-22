@@ -2499,7 +2499,30 @@ def test_ask_trainer_system_includes_two_layer_recommendation_rules():
     assert "Physiology layer" in prompt
     assert "Athlete-context layer" in prompt
     assert "If two options are physiologically similar" in prompt
-    assert "Keep the final response concise and natural" in prompt
+    assert "keep the final response concise and natural" in prompt
+
+
+def test_ask_trainer_system_includes_divergence_rationale_pattern():
+    """Coach must surface a personal-context call when the layers diverge."""
+    from services.prompts import ask_trainer_plan_updates_rule, ask_trainer_system
+
+    prompt = ask_trainer_system(
+        profile={"name": "Alice"},
+        today="2026-06-18",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule=ask_trainer_plan_updates_rule(None),
+    )
+
+    # The "numbers say X, but knowing you I would do Y" divergence pattern.
+    assert "DIVERGE" in prompt
+    assert "knowing how you tend to turn easy" in prompt
+    # Separate structured rationale fields are part of the response contract.
+    assert '"physiologyRationale"' in prompt
+    assert '"contextRationale"' in prompt
 
 
 def test_ask_trainer_system_allows_targeted_questions_for_ambiguous_recommendations():
@@ -2591,6 +2614,80 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     # plan_updates must be absent / empty when the AI does not return them
     assert result.get("plan_updates") is None or result.get("plan_updates") == []
     assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_returns_separate_physiology_and_context_rationale():
+    """The two reasoning layers are surfaced as separate structured fields."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return json.dumps({
+            "response": "On the numbers an easy spin is fine, but knowing you, rest today.",
+            "physiologyRationale": "TSB neutral, an easy Z2 ride would be tolerable",
+            "contextRationale": "tends to turn easy rides hard, so full rest protects recovery",
+            "sources": [],
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="Can I do an easy ride today?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert result["physiology_rationale"] == (
+        "TSB neutral, an easy Z2 ride would be tolerable"
+    )
+    assert result["context_rationale"] == (
+        "tends to turn easy rides hard, so full rest protects recovery"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_personal_context_overrides_metrics_recommendation():
+    """Personal context can override a metrics-only recommendation."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        # Physiology alone would permit a ride; context drives the rest decision.
+        return json.dumps({
+            "response": "The numbers say a Z2 ride is okay, but knowing you I'd rest.",
+            "physiologyRationale": "fresh enough for an easy ride",
+            "contextRationale": "history of overreaching means rest is the safer call",
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="I feel restless, can I squeeze in a ride?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    # The physiology layer permits a ride, but the context layer wins.
+    assert "fresh" in result["physiology_rationale"]
+    assert "rest" in result["context_rationale"]
+    assert "rest" in result["response"].lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_omits_blank_rationale_fields():
+    """Blank rationale fields normalise to None rather than empty strings."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return json.dumps({
+            "response": "Easy endurance today keeps the base building.",
+            "physiologyRationale": "   ",
+            "sources": [],
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="What should I do today?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert result["physiology_rationale"] is None
+    assert result["context_rationale"] is None
 
 
 @pytest.mark.asyncio

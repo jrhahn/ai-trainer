@@ -156,6 +156,8 @@ export interface ChatMessage {
   planUpdateCount?: number
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   failedUserMessage?: string
+  physiologyRationale?: string
+  contextRationale?: string
 }
 
 export interface StravaConnection {

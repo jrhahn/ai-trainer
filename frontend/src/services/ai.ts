@@ -50,6 +50,8 @@ export interface AskTrainerResult {
   updatedPlan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   rideLabelUpdates?: RideLabelUpdate[]
+  physiologyRationale?: string
+  contextRationale?: string
 }
 
 interface BackendAskTrainerResult {
@@ -61,6 +63,10 @@ interface BackendAskTrainerResult {
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   rideLabelUpdates?: RideLabelUpdate[]
   ride_label_updates?: RideLabelUpdate[]
+  physiologyRationale?: string
+  physiology_rationale?: string
+  contextRationale?: string
+  context_rationale?: string
 }
 
 export const MAX_CONVERSATION_HISTORY = 20
@@ -127,6 +133,8 @@ export async function askTrainer(
     updatedPlan: result.updatedPlan ?? result.updated_plan,
     sources: result.sources,
     rideLabelUpdates: result.rideLabelUpdates ?? result.ride_label_updates,
+    physiologyRationale: result.physiologyRationale ?? result.physiology_rationale,
+    contextRationale: result.contextRationale ?? result.context_rationale,
   }
 }
 
