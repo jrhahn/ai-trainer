@@ -119,6 +119,9 @@ class User(Base):
         Boolean, default=True, nullable=False
     )
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    memory_updates_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
 
     # Relationships
     training_plan: Mapped["TrainingPlan | None"] = relationship(

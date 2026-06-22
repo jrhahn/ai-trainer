@@ -1,16 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Brain, Check, CheckCircle2, Pencil, Trash2, X } from 'lucide-react'
+import { Brain, Check, CheckCircle2, Download, Pencil, Trash2, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
+  clearAllMemory,
   confirmAthleteMemoryFact,
   deleteAthleteMemoryFact,
+  exportMemory,
   fetchAthleteMemoryFacts,
+  fetchMemoryPrivacySettings,
   updateAthleteMemoryFact,
+  updateMemoryPrivacySettings,
   type AthleteMemoryFact,
 } from '../services/user'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
+const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
 
 /** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
 function formatCategory(category: string): string {
@@ -179,12 +184,64 @@ function TraitRow({
 
 export default function AthleteTraitsSettings() {
   const authToken = useAppStore((s) => s.authToken)
+  const queryClient = useQueryClient()
+  const [exportError, setExportError] = useState('')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [ATHLETE_TRAITS_QUERY_KEY, authToken],
     queryFn: () => fetchAthleteMemoryFacts(authToken!),
     enabled: !!authToken,
   })
+
+  const { data: privacyData } = useQuery({
+    queryKey: [MEMORY_PRIVACY_QUERY_KEY, authToken],
+    queryFn: () => fetchMemoryPrivacySettings(authToken!),
+    enabled: !!authToken,
+  })
+
+  const toggleMemoryMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      updateMemoryPrivacySettings(authToken!, { memoryUpdatesEnabled: enabled }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [MEMORY_PRIVACY_QUERY_KEY] }),
+  })
+
+  const clearMemoryMutation = useMutation({
+    mutationFn: () => clearAllMemory(authToken!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
+    },
+  })
+
+  const handleClearAll = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'Clear all coaching memory? The coach will forget everything it has learned about you. This cannot be undone.'
+      )
+    ) {
+      return
+    }
+    clearMemoryMutation.mutate()
+  }
+
+  const handleExport = async () => {
+    setExportError('')
+    try {
+      const data = await exportMemory(authToken!)
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'coaching-memory-export.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError('Export failed. Please try again.')
+    }
+  }
 
   const grouped = useMemo(() => {
     const groups = new Map<string, AthleteMemoryFact[]>()
@@ -196,41 +253,102 @@ export default function AthleteTraitsSettings() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [data])
 
+  const memoryEnabled = privacyData?.memoryUpdatesEnabled ?? true
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-        <Brain size={16} /> Learned Athlete Traits
-      </h2>
-      <p className="text-xs text-gray-500 mb-4">
-        Patterns the coach has learned about you. Review, correct, confirm, or
-        remove anything that looks wrong — changes are reflected in future coach
-        advice.
-      </p>
-
-      {isLoading && <p className="text-sm text-gray-400">Loading traits…</p>}
-      {isError && (
-        <p className="text-sm text-red-600">Could not load learned traits.</p>
-      )}
-      {!isLoading && !isError && grouped.length === 0 && (
-        <p className="text-sm text-gray-400">
-          No learned traits yet. As you chat with the coach, it will note
-          patterns here.
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+      <div>
+        <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+          <Brain size={16} /> Learned Athlete Traits
+        </h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Patterns the coach has learned about you. Review, correct, confirm, or
+          remove anything that looks wrong — changes are reflected in future coach
+          advice.
         </p>
-      )}
 
-      <div className="space-y-4">
-        {grouped.map(([category, facts]) => (
-          <div key={category}>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-              {formatCategory(category)}
-            </h3>
-            <ul className="space-y-2">
-              {facts.map((fact) => (
-                <TraitRow key={fact.id} fact={fact} token={authToken!} />
-              ))}
-            </ul>
+        {isLoading && <p className="text-sm text-gray-400">Loading traits…</p>}
+        {isError && (
+          <p className="text-sm text-red-600">Could not load learned traits.</p>
+        )}
+        {!isLoading && !isError && grouped.length === 0 && (
+          <p className="text-sm text-gray-400">
+            No learned traits yet. As you chat with the coach, it will note
+            patterns here.
+          </p>
+        )}
+
+        <div className="space-y-4">
+          {grouped.map(([category, facts]) => (
+            <div key={category}>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+                {formatCategory(category)}
+              </h3>
+              <ul className="space-y-2">
+                {facts.map((fact) => (
+                  <TraitRow key={fact.id} fact={fact} token={authToken!} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Privacy Controls</h3>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="text-sm text-gray-700 font-medium">Learn from conversations</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              When enabled, the coach updates its memory after each chat. When
+              disabled, no new patterns are stored and existing memory is not
+              used in coach responses.
+            </p>
           </div>
-        ))}
+          <button
+            role="switch"
+            aria-checked={memoryEnabled}
+            onClick={() => toggleMemoryMutation.mutate(!memoryEnabled)}
+            disabled={toggleMemoryMutation.isPending}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+              memoryEnabled ? 'bg-blue-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                memoryEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {!memoryEnabled && (
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-1">
+            Memory updates are disabled. The coach will not learn from new conversations
+            and will not use stored patterns in responses.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+          >
+            <Download size={13} /> Export my memory
+          </button>
+          <button
+            onClick={handleClearAll}
+            disabled={clearMemoryMutation.isPending}
+            className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
+          >
+            <Trash2 size={13} /> Clear all memory
+          </button>
+        </div>
+        {clearMemoryMutation.isSuccess && (
+          <p className="text-xs text-green-600 mt-2">All coaching memory cleared.</p>
+        )}
+        {exportError && <p className="text-xs text-red-600 mt-2">{exportError}</p>}
       </div>
     </div>
   )

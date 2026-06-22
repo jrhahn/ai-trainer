@@ -295,6 +295,33 @@ export async function deleteAthleteMemoryFact(token: string, factId: string): Pr
   })
 }
 
+export interface MemoryPrivacySettings {
+  memoryUpdatesEnabled: boolean
+}
+
+export async function fetchMemoryPrivacySettings(token: string): Promise<MemoryPrivacySettings> {
+  return apiFetch<MemoryPrivacySettings>('/users/me/memory-privacy', { token })
+}
+
+export async function updateMemoryPrivacySettings(
+  token: string,
+  settings: MemoryPrivacySettings
+): Promise<MemoryPrivacySettings> {
+  return apiFetch<MemoryPrivacySettings>('/users/me/memory-privacy', {
+    token,
+    method: 'PUT',
+    body: settings,
+  })
+}
+
+export async function clearAllMemory(token: string): Promise<void> {
+  await apiFetch('/users/me/memory', { token, method: 'DELETE' })
+}
+
+export async function exportMemory(token: string): Promise<unknown> {
+  return apiFetch<unknown>('/users/me/memory-export', { token })
+}
+
 export async function fetchMetricsHistory(token: string): Promise<AthleteMetricSnapshot[]> {
   const response = await apiFetch<{ snapshots: AthleteMetricSnapshot[] }>(
     '/users/me/metrics-history',

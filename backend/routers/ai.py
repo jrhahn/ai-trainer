@@ -753,18 +753,21 @@ async def ask_trainer(
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
+    memory_enabled = current_user.memory_updates_enabled
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
-    coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+    coach_memory = (coach_memory_row.memory if coach_memory_row is not None else "") if memory_enabled else ""
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
     athlete_context = (
         schemas.AthleteContextSchema.model_validate(
             athlete_context_row, from_attributes=True
         ).model_dump(by_alias=True)
-        if athlete_context_row is not None
+        if (athlete_context_row is not None and memory_enabled)
         else None
     )
-    athlete_memory_fact_rows = await crud.get_prompt_athlete_memory_facts(
-        db, current_user.id
+    athlete_memory_fact_rows = (
+        await crud.get_prompt_athlete_memory_facts(db, current_user.id)
+        if memory_enabled
+        else []
     )
     athlete_memory_facts = [
         schemas.AthleteMemoryFactSchema.model_validate(
@@ -901,15 +904,16 @@ async def ask_trainer(
         plan_update_count=len(plan_updates) if plan_updates else None,
     )
 
-    # Update coach memory in the background — no need for the user to wait
-    background_tasks.add_task(
-        _update_memory_bg,
-        current_user.id,
-        body.question,
-        result["response"],
-        coach_memory,
-        _provider(current_user),
-    )
+    # Update coach memory in the background only when user has not disabled it
+    if current_user.memory_updates_enabled:
+        background_tasks.add_task(
+            _update_memory_bg,
+            current_user.id,
+            body.question,
+            result["response"],
+            coach_memory,
+            _provider(current_user),
+        )
 
     # Apply plan updates if any
     if plan_updates:
@@ -1491,18 +1495,21 @@ async def next_ride_recommendation(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
 
+    memory_enabled = current_user.memory_updates_enabled
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
-    coach_memory = coach_memory_row.memory if coach_memory_row is not None else ""
+    coach_memory = (coach_memory_row.memory if coach_memory_row is not None else "") if memory_enabled else ""
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
     athlete_context = (
         schemas.AthleteContextSchema.model_validate(
             athlete_context_row, from_attributes=True
         ).model_dump(by_alias=True)
-        if athlete_context_row is not None
+        if (athlete_context_row is not None and memory_enabled)
         else None
     )
-    athlete_memory_fact_rows = await crud.get_prompt_athlete_memory_facts(
-        db, current_user.id
+    athlete_memory_fact_rows = (
+        await crud.get_prompt_athlete_memory_facts(db, current_user.id)
+        if memory_enabled
+        else []
     )
     athlete_memory_facts = [
         schemas.AthleteMemoryFactSchema.model_validate(

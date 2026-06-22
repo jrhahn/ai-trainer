@@ -428,6 +428,27 @@ class AthleteMemoryFactUpdateRequest(CamelModel):
     status: Optional[AthleteMemoryFactStatus] = None
 
 
+class MemoryPrivacySettingsSchema(CamelModel):
+    memory_updates_enabled: bool
+
+
+class MemoryPrivacySettingsRequest(CamelModel):
+    memory_updates_enabled: bool
+
+
+class MemoryExportSchema(CamelModel):
+    exported_at: datetime
+    memory_updates_enabled: bool
+    coach_memory: str
+    athlete_context: Optional[AthleteContextSchema]
+    memory_facts: list[AthleteMemoryFactSchema]
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
 class ExtractAthleteFactsRequest(CamelModel):
     transcript: str = Field(min_length=1)
 
