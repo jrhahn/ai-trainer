@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import datetime
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -2591,6 +2591,52 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     # plan_updates must be absent / empty when the AI does not return them
     assert result.get("plan_updates") is None or result.get("plan_updates") == []
     assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_rejects_empty_response_after_retries():
+    call_count = 0
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return json.dumps({"response": "   ", "sources": []})
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history), \
+            patch.object(ai_service.asyncio, "sleep", new=AsyncMock()):
+        with pytest.raises(ai_service.AIResponseFormatError):
+            await ai_service.ask_trainer(
+                question="Why did the coach not answer?",
+                plan=PLAN_FOR_LOAD_TESTS,
+                profile=PROFILE_WITH_FTP,
+            )
+
+    # Initial attempt + configured retries.
+    assert call_count == ai_service.ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_retries_empty_response_then_succeeds():
+    responses = iter([
+        json.dumps({"response": "   ", "sources": []}),
+        json.dumps({"response": "Here is your plan.", "sources": []}),
+    ])
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return next(responses)
+
+    sleep_mock = AsyncMock()
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history), \
+            patch.object(ai_service.asyncio, "sleep", new=sleep_mock):
+        result = await ai_service.ask_trainer(
+            question="Why did the coach not answer?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert result["response"] == "Here is your plan."
+    # Backed off exactly once before the successful retry.
+    sleep_mock.assert_awaited_once_with(ai_service.ASK_TRAINER_RETRY_BASE_DELAY)
 
 
 def test_ask_trainer_system_includes_response_quality_rules():

@@ -1042,6 +1042,28 @@ async def test_ask_trainer_endpoint_returns_503_on_rate_limit(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_endpoint_rejects_empty_ai_response_without_persisting_chat(
+    client, auth_headers, mock_ai_service
+):
+    from services.ai_service import AIResponseFormatError
+
+    mock_ai_service["ask_trainer"].side_effect = AIResponseFormatError("empty")
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Why did the coach not answer?"},
+    )
+
+    assert response.status_code == 502
+    assert "empty response" in response.json()["detail"].lower()
+
+    chat_response = await client.get("/api/v1/users/me/chat", headers=auth_headers)
+    assert chat_response.status_code == 200
+    assert chat_response.json()["messages"] == []
+
+
+@pytest.mark.asyncio
 async def test_analyse_activities_endpoint_returns_503_on_rate_limit(
     client, auth_headers, mock_ai_service
 ):
