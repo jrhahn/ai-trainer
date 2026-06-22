@@ -596,7 +596,11 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Shape: {"activity_date": "YYYY-MM-DD", "label": "<new label>"}. '
         'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
         '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
-        "Pick the label that best reflects what actually happened."
+        "Pick the label that best reflects what actually happened. "
+        "When explaining a displayed label, rely on the recent activity history, matched "
+        "planned workout, duration, TSS/power/heart-rate evidence, and any explicit display "
+        "label. Do not invent data-quality or missing-stream explanations unless the provided "
+        "activity context explicitly says the data is missing or unreliable."
     )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
@@ -1387,6 +1391,11 @@ def ride_metrics_context_section(
         if tss is not None:
             parts.append(f"TSS {round(tss)}")
 
+        duration_seconds = getattr(m, "duration_seconds", None)
+        if duration_seconds:
+            duration_minutes = max(1, round(duration_seconds / 60))
+            parts.append(f"duration {duration_minutes} min")
+
         weather_temp = getattr(m, "weather_temperature_c", None)
         weather_condition = getattr(m, "weather_condition", None)
         if weather_temp is not None:
@@ -1419,10 +1428,13 @@ def ride_metrics_context_section(
         match_status = getattr(m, "plan_match_status", None)
         matched_date = getattr(m, "matched_plan_date", None)
         matched_snapshot = getattr(m, "matched_plan_snapshot", None)
+        label_override = getattr(m, "label_override", None)
         if match_status and match_status != "unmatched":
             parts.append(f"plan match:{match_status}")
             if matched_date:
                 parts.append(f"planned {matched_date}")
+        if label_override:
+            parts.append(f"display label:{label_override}")
 
         line = " | ".join(parts)
         lines.append(f"  {line}")

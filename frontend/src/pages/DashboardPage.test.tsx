@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
-import { computeMatchScore, matchScoreLabel } from './DashboardPage'
+import {
+  buildMatchCoachPrompt,
+  computeMatchScore,
+  matchScoreBadgeStyle,
+  matchScoreLabel,
+} from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
@@ -299,6 +304,36 @@ describe('DashboardPage — recent rides', () => {
     expect(await screen.findByText('Darmstadt Mountain Biking')).toBeInTheDocument()
     expect(screen.getAllByText('Darmstadt Mountain Biking')).toHaveLength(1)
     expect(screen.getAllByText('Darmstadt Road Cycling')).toHaveLength(1)
+  })
+
+  it('deduplicates contained same-day ride imports and keeps the longer ride', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Mountain Biking',
+          sportType: 'MountainBikeRide',
+          durationSeconds: 63 * 60,
+          activityStartDatetime: `${today}T09:04:00`,
+          stravaActivityId: 9231,
+          externalActivityId: 'intervals-ride-9231',
+        }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Darmstadt Road Cycling',
+          sportType: 'cycling',
+          durationSeconds: 205 * 60,
+          activityStartDatetime: `${today}T09:00:00`,
+          stravaActivityId: 9232,
+          externalActivityId: 'strava-ride-9232',
+        }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Darmstadt Road Cycling')).toBeInTheDocument()
+    expect(screen.queryByText('Darmstadt Mountain Biking')).not.toBeInTheDocument()
+    expect(screen.getByText('3h 25m')).toBeInTheDocument()
   })
 
   it('keeps same-day equal-duration rides separate when start times differ', async () => {
@@ -960,5 +995,46 @@ describe('computeMatchScore — rest/no-target plan', () => {
     const ride = { stravaActivityId: 6, sportType: 'Ride' } as RideMetricPoint
     const score = computeMatchScore(ride, restPlanNoData)
     expect(matchScoreLabel(score, restPlanNoData)).toBe('OK')
+  })
+
+  it('uses informational styling for additional-ride override labels', () => {
+    expect(matchScoreBadgeStyle(35, restPlanWithDuration, 'Additional')).toContain(
+      'bg-blue-100'
+    )
+  })
+})
+
+describe('computeMatchScore — endurance plan', () => {
+  const endurancePlan: Partial<TrainingDay> = {
+    workoutType: 'endurance',
+    title: 'Long Endurance Ride with Climbing Focus',
+    durationMinutes: 180,
+  }
+
+  it('rates a 3h25 ride against a 3h endurance plan as close, not too much', () => {
+    const ride = {
+      stravaActivityId: 7,
+      sportType: 'Ride',
+      durationSeconds: 205 * 60,
+      tss: 140,
+    } as RideMetricPoint
+    const score = computeMatchScore(ride, endurancePlan)
+    expect(score).toBeGreaterThanOrEqual(60)
+    expect(matchScoreLabel(score, endurancePlan)).toBe('Close')
+  })
+
+  it('anchors coach match prompts to the displayed label and score', () => {
+    const ride = {
+      stravaActivityId: 8,
+      activityName: 'Darmstadt Road Cycling',
+      sportType: 'Ride',
+      durationSeconds: 205 * 60,
+    } as RideMetricPoint
+    const score = computeMatchScore(ride, endurancePlan)
+    const prompt = buildMatchCoachPrompt(ride, endurancePlan, score)
+
+    expect(prompt).toContain('The displayed match label is "Close"')
+    expect(prompt).toContain('with a 72% score')
+    expect(prompt).toContain('do not invent data-quality causes')
   })
 })

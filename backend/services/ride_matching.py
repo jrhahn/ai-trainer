@@ -22,6 +22,16 @@ MATCH_AUTO = "auto_matched"
 MATCH_AMBIGUOUS = "ambiguous"
 MATCH_MANUAL = "manual_matched"
 
+LABEL_ADDITIONAL = "Additional"
+LABEL_OK = "OK"
+LABEL_TOO_MUCH = "Too much"
+LABEL_MISMATCH = "Mismatch"
+
+COMBINED_DURATION_MIN_RATIO = 0.8
+COMBINED_DURATION_MAX_RATIO = 1.25
+HARD_EXTRA_INTENSITY_FACTOR = 0.82
+HARD_EXTRA_TSS = 85.0
+
 
 def _is_training_day(day: dict | None) -> bool:
     if not day:
@@ -49,6 +59,119 @@ def _all_plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _plan_duration_minutes(day: dict | None) -> int | None:
+    if not isinstance(day, dict):
+        return None
+    duration = day.get("durationMinutes") or day.get("duration_minutes")
+    try:
+        duration_min = int(duration or 0)
+    except (TypeError, ValueError):
+        return None
+    return duration_min if duration_min > 0 else None
+
+
+def _ride_duration_minutes(ride: models.RideMetric) -> int | None:
+    if not ride.duration_seconds:
+        return None
+    return max(1, round(ride.duration_seconds / 60))
+
+
+def _duration_ratio(
+    duration_min: int | None,
+    plan_duration_min: int | None,
+) -> float | None:
+    if not duration_min or not plan_duration_min:
+        return None
+    return duration_min / plan_duration_min
+
+
+def _duration_mismatch_label(
+    duration_min: int | None,
+    plan_duration_min: int | None,
+) -> str | None:
+    ratio = _duration_ratio(duration_min, plan_duration_min)
+    if ratio is not None and (ratio > 2.5 or ratio < 0.3):
+        return LABEL_MISMATCH
+    return None
+
+
+def _is_structured_hard_plan(day: dict) -> bool:
+    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
+    title = str(day.get("title") or "").lower()
+    description = str(day.get("description") or "").lower()
+    text = " ".join([workout_type, title, description])
+    hard_markers = (
+        "interval",
+        "vo2",
+        "threshold",
+        "anaerobic",
+        "sprint",
+        "hiit",
+        "race",
+    )
+    return any(marker in text for marker in hard_markers)
+
+
+def _is_duration_focused_ride_plan(day: dict, rides: list[models.RideMetric]) -> bool:
+    if _plan_duration_minutes(day) is None or _is_structured_hard_plan(day):
+        return False
+    return all(_is_cycling_ride(ride) for ride in rides)
+
+
+def _is_cycling_ride(ride: models.RideMetric) -> bool:
+    sport_type = str(ride.sport_type or "").lower()
+    return "ride" in sport_type or "cycling" in sport_type or "bike" in sport_type
+
+
+def _combined_duration_matches_plan(
+    rides: list[models.RideMetric],
+    plan_duration_min: int,
+) -> bool:
+    durations = [_ride_duration_minutes(ride) for ride in rides]
+    if any(duration is None for duration in durations):
+        return False
+    total_min = sum(duration or 0 for duration in durations)
+    ratio = total_min / plan_duration_min
+    return COMBINED_DURATION_MIN_RATIO <= ratio <= COMBINED_DURATION_MAX_RATIO
+
+
+def _best_matching_ride(
+    rides: list[models.RideMetric],
+    plan_duration_min: int | None,
+) -> models.RideMetric:
+    if plan_duration_min is None:
+        return max(rides, key=lambda ride: _ride_duration_minutes(ride) or 0)
+    return min(
+        rides,
+        key=lambda ride: (
+            abs((_ride_duration_minutes(ride) or 0) - plan_duration_min),
+            -(_ride_duration_minutes(ride) or 0),
+        ),
+    )
+
+
+def _is_hard_extra_ride(ride: models.RideMetric) -> bool:
+    if (
+        ride.intensity_factor is not None
+        and ride.intensity_factor >= HARD_EXTRA_INTENSITY_FACTOR
+    ):
+        return True
+    if ride.tss is not None and ride.tss >= HARD_EXTRA_TSS:
+        return True
+    if (
+        ride.normalized_power_w is not None
+        and ride.ftp_used is not None
+        and ride.ftp_used > 0
+        and ride.normalized_power_w / ride.ftp_used >= HARD_EXTRA_INTENSITY_FACTOR
+    ):
+        return True
+    purpose = str(ride.ride_purpose or "").lower()
+    return any(
+        marker in purpose
+        for marker in ("interval", "vo2", "threshold", "anaerobic", "sprint", "race")
+    )
 
 
 def _ride_feedback_from_metric(ride: models.RideMetric) -> dict[str, Any]:
@@ -151,12 +274,11 @@ async def apply_ride_plan_matches(
 
         if len(date_rides) == 1:
             ride = date_rides[0]
-            label_override = None
-            plan_duration_min = plan_day.get("durationMinutes") or plan_day.get("duration_minutes")
-            if ride.duration_seconds and plan_duration_min:
-                ratio = (ride.duration_seconds / 60) / plan_duration_min
-                if ratio > 2.5 or ratio < 0.3:
-                    label_override = "Mismatch"
+            plan_duration_min = _plan_duration_minutes(plan_day)
+            label_override = _duration_mismatch_label(
+                _ride_duration_minutes(ride),
+                plan_duration_min,
+            )
             await crud.update_ride_match(
                 db,
                 ride,
@@ -168,15 +290,66 @@ async def apply_ride_plan_matches(
             )
             auto_matched.append(ride)
         else:
-            for ride in date_rides:
-                await crud.update_ride_match(
-                    db,
-                    ride,
-                    status=MATCH_AMBIGUOUS,
-                    matched_plan_date=activity_date,
-                    matched_plan_snapshot=plan_day,
-                    matched_at=None,
+            plan_duration_min = _plan_duration_minutes(plan_day)
+            if (
+                _is_duration_focused_ride_plan(plan_day, date_rides)
+                and plan_duration_min
+            ):
+                best_match = _best_matching_ride(date_rides, plan_duration_min)
+                combined_matches = _combined_duration_matches_plan(
+                    date_rides,
+                    plan_duration_min,
                 )
+
+                for ride in date_rides:
+                    if combined_matches:
+                        await crud.update_ride_match(
+                            db,
+                            ride,
+                            status=MATCH_AUTO,
+                            matched_plan_date=activity_date,
+                            matched_plan_snapshot=plan_day,
+                            matched_at=_utcnow(),
+                            label_override=LABEL_OK,
+                        )
+                    elif ride.strava_activity_id == best_match.strava_activity_id:
+                        await crud.update_ride_match(
+                            db,
+                            ride,
+                            status=MATCH_AUTO,
+                            matched_plan_date=activity_date,
+                            matched_plan_snapshot=plan_day,
+                            matched_at=_utcnow(),
+                            label_override=_duration_mismatch_label(
+                                _ride_duration_minutes(ride),
+                                plan_duration_min,
+                            ),
+                        )
+                    else:
+                        await crud.update_ride_match(
+                            db,
+                            ride,
+                            status=MATCH_UNMATCHED,
+                            matched_plan_date=activity_date,
+                            matched_plan_snapshot=plan_day,
+                            matched_at=None,
+                            label_override=(
+                                LABEL_TOO_MUCH
+                                if _is_hard_extra_ride(ride)
+                                else LABEL_ADDITIONAL
+                            ),
+                        )
+                auto_matched.append(best_match)
+            else:
+                for ride in date_rides:
+                    await crud.update_ride_match(
+                        db,
+                        ride,
+                        status=MATCH_AMBIGUOUS,
+                        matched_plan_date=activity_date,
+                        matched_plan_snapshot=plan_day,
+                        matched_at=None,
+                    )
 
     return auto_matched
 
