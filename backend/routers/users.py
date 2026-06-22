@@ -17,6 +17,7 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
+    Response,
     UploadFile,
     status,
 )
@@ -531,6 +532,21 @@ async def correct_athlete_memory_fact(
     return schemas.AthleteMemoryFactSchema.model_validate(
         fact, from_attributes=True
     )
+
+
+@router.delete(
+    "/athlete-memory-facts/{fact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_memory_fact(
+    fact_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_memory_fact(db, current_user.id, fact_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)

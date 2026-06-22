@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import FitFileUpload from '../components/FitFileUpload'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
@@ -798,6 +799,9 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Learned athlete traits */}
+      <AthleteTraitsSettings />
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">

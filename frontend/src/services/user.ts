@@ -234,6 +234,56 @@ export async function saveCoachMemoryRemote(token: string, memory: string): Prom
   return response.memory
 }
 
+export type AthleteMemoryFactStatus = 'active' | 'stale' | 'rejected' | 'user_confirmed'
+
+export interface AthleteMemoryFact {
+  id: string
+  fact: string
+  category: string
+  sourceSnippet: string
+  sourceExchangeId: string | null
+  firstObservedAt: string
+  lastConfirmedAt: string
+  confidence: number
+  status: AthleteMemoryFactStatus
+  observationCount: number
+  updatedAt: string
+}
+
+export async function fetchAthleteMemoryFacts(token: string): Promise<AthleteMemoryFact[]> {
+  const response = await apiFetch<{ facts: AthleteMemoryFact[] }>(
+    '/users/me/athlete-memory-facts',
+    { token }
+  )
+  return response.facts
+}
+
+export async function updateAthleteMemoryFact(
+  token: string,
+  factId: string,
+  changes: { fact?: string; category?: string; status?: AthleteMemoryFactStatus }
+): Promise<AthleteMemoryFact> {
+  return apiFetch<AthleteMemoryFact>(`/users/me/athlete-memory-facts/${factId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function confirmAthleteMemoryFact(
+  token: string,
+  factId: string
+): Promise<AthleteMemoryFact> {
+  return updateAthleteMemoryFact(token, factId, { status: 'user_confirmed' })
+}
+
+export async function deleteAthleteMemoryFact(token: string, factId: string): Promise<void> {
+  await apiFetch(`/users/me/athlete-memory-facts/${factId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
 export async function fetchMetricsHistory(token: string): Promise<AthleteMetricSnapshot[]> {
   const response = await apiFetch<{ snapshots: AthleteMetricSnapshot[] }>(
     '/users/me/metrics-history',

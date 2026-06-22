@@ -18,6 +18,10 @@ import {
   clearChatHistoryRemote,
   fetchCoachMemory,
   saveCoachMemoryRemote,
+  fetchAthleteMemoryFacts,
+  updateAthleteMemoryFact,
+  confirmAthleteMemoryFact,
+  deleteAthleteMemoryFact,
   deleteCurrentUser,
   recalculateMetrics,
   estimateFTP,
@@ -333,6 +337,55 @@ describe('saveCoachMemoryRemote', () => {
       token: 'tok-123',
       method: 'PUT',
       body: { memory: 'Updated memory.' },
+    })
+  })
+})
+
+describe('athlete memory facts', () => {
+  it('fetches the list and returns the facts array', async () => {
+    const fact = { id: 'f1', fact: 'Likes hills', category: 'preference' }
+    mockApiFetch.mockResolvedValue({ facts: [fact] })
+
+    const result = await fetchAthleteMemoryFacts('tok-123')
+
+    expect(result).toEqual([fact])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-memory-facts', {
+      token: 'tok-123',
+    })
+  })
+
+  it('patches a correction', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'f1', fact: 'Likes long climbs' })
+
+    await updateAthleteMemoryFact('tok-123', 'f1', { fact: 'Likes long climbs' })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-memory-facts/f1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { fact: 'Likes long climbs' },
+    })
+  })
+
+  it('confirms a fact by setting user_confirmed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'f1', status: 'user_confirmed' })
+
+    await confirmAthleteMemoryFact('tok-123', 'f1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-memory-facts/f1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { status: 'user_confirmed' },
+    })
+  })
+
+  it('deletes a fact', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await deleteAthleteMemoryFact('tok-123', 'f1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-memory-facts/f1', {
+      token: 'tok-123',
+      method: 'DELETE',
     })
   })
 })

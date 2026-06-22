@@ -810,6 +810,44 @@ async def test_update_athlete_memory_fact_edits_and_rejects_fact(
     assert rejected.status == "rejected"
 
 
+@pytest.mark.asyncio
+async def test_delete_athlete_memory_fact_removes_fact(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers long endurance rides",
+        category="preference",
+    )
+
+    deleted = await crud.delete_athlete_memory_fact(db, user.id, fact.id)
+    assert deleted is True
+    assert await crud.get_athlete_memory_fact(db, user.id, fact.id) is None
+
+    # Deleting an already-removed fact is a no-op that reports failure.
+    assert await crud.delete_athlete_memory_fact(db, user.id, fact.id) is False
+
+
+@pytest.mark.asyncio
+async def test_delete_athlete_memory_fact_scoped_to_owner(
+    db: AsyncSession,
+) -> None:
+    owner = await _make_user(db)
+    other = await _make_user(db, email="other@example.com")
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        owner.id,
+        fact="Races best in cool weather",
+        category="preference",
+    )
+
+    # A different user cannot delete someone else's fact.
+    assert await crud.delete_athlete_memory_fact(db, other.id, fact.id) is False
+    assert await crud.get_athlete_memory_fact(db, owner.id, fact.id) is not None
+
+
 # ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------

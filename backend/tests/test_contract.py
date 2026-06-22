@@ -764,6 +764,26 @@ async def test_athlete_memory_facts_contract(client):
     assert all_facts["facts"][0]["id"] == created["id"]
     assert all_facts["facts"][0]["status"] == "rejected"
 
+    deleted = await client.delete(
+        f"/api/v1/users/me/athlete-memory-facts/{created['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    after_delete = (
+        await client.get(
+            "/api/v1/users/me/athlete-memory-facts?includeInactive=true",
+            headers=headers,
+        )
+    ).json()
+    assert after_delete == {"facts": []}
+
+    missing = await client.delete(
+        f"/api/v1/users/me/athlete-memory-facts/{created['id']}",
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # 11. Auth token shape

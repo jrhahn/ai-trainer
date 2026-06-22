@@ -5,6 +5,17 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.8] - 2026-06-22
+
+### Added
+
+- **Delete learned athlete traits** (`crud.py`, `routers/users.py`) — new
+  `DELETE /users/me/athlete-memory-facts/{fact_id}` endpoint permanently removes
+  a learned trait, scoped to the owning user (404 when missing). This backs the
+  new Settings UI for reviewing, correcting, confirming, and deleting the
+  personal traits the coach has learned, so coaching memory stays inspectable
+  and correctable.
+
 ## [0.38.7] - 2026-06-22
 
 ### Fixed
