@@ -7,6 +7,7 @@ switch to backend fetches without semantic changes.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import logging
@@ -72,6 +73,12 @@ logger = logging.getLogger(__name__)
 
 class AIResponseFormatError(Exception):
     """Raised when the LLM returns a successful response without usable content."""
+
+
+# Empty/blank coach replies are usually transient provider blips, so retry the
+# call a couple of times with exponential backoff before surfacing the failure.
+ASK_TRAINER_EMPTY_RESPONSE_RETRIES = 2
+ASK_TRAINER_RETRY_BASE_DELAY = 0.5
 
 
 _SLIM_PLAN_KEEP = {
@@ -594,23 +601,38 @@ async def ask_trainer(
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     messages = [*history, {"role": "user", "content": question}]
-    raw = await _chat_history(
-        provider, system_prompt, messages, json_mode=True, task=TASK_COACH
-    )
-    parsed = _parse_ai_json(raw)
 
-    # --- Task 2: Strip "thinking" — never expose internal reasoning to the frontend ---
-    parsed.pop("thinking", None)
-    response = parsed.get("response")
-    if not isinstance(response, str) or not response.strip():
-        raise AIResponseFormatError("AI coach returned an empty response")
+    # Retry empty/blank coach replies with exponential backoff before giving up;
+    # rate-limit errors are not retried here and propagate to the caller.
+    for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
+        raw = await _chat_history(
+            provider, system_prompt, messages, json_mode=True, task=TASK_COACH
+        )
+        parsed = _parse_ai_json(raw)
 
-    return {
-        "response": response.strip(),
-        "plan_updates": parsed.get("planUpdates"),
-        "sources": parsed.get("sources") or [],
-        "ride_note_update": parsed.get("ride_note_update"),
-    }
+        # --- Task 2: Strip "thinking" — never expose internal reasoning ---
+        parsed.pop("thinking", None)
+        response = parsed.get("response")
+        if isinstance(response, str) and response.strip():
+            return {
+                "response": response.strip(),
+                "plan_updates": parsed.get("planUpdates"),
+                "sources": parsed.get("sources") or [],
+                "ride_note_update": parsed.get("ride_note_update"),
+            }
+
+        if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
+            delay = ASK_TRAINER_RETRY_BASE_DELAY * (2**attempt)
+            logger.warning(
+                "AI coach returned an empty response (attempt %d/%d); "
+                "retrying in %.1fs",
+                attempt + 1,
+                ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+    raise AIResponseFormatError("AI coach returned an empty response")
 
 
 async def race_event_feedback(

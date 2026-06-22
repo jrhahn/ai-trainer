@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Empty AI coach responses** (`services/ai_service.py`, `routers/ai.py`) —
-  `/ai/ask-trainer` now rejects blank LLM `response` payloads before persisting
-  chat messages, so transient malformed provider replies surface as retryable
-  request failures instead of empty assistant bubbles.
+  `/ai/ask-trainer` now retries blank LLM `response` payloads (2 retries with
+  0.5s→1s exponential backoff) and rejects them with a 502 before persisting
+  chat messages, so transient malformed provider replies recover automatically
+  or surface as retryable request failures instead of empty assistant bubbles.
 
 ## [0.38.6] - 2026-06-21
 
