@@ -69,6 +69,11 @@ MAX_COACH_MEMORY_CHARS = 800
 
 logger = logging.getLogger(__name__)
 
+
+class AIResponseFormatError(Exception):
+    """Raised when the LLM returns a successful response without usable content."""
+
+
 _SLIM_PLAN_KEEP = {
     "date",
     "workoutType",
@@ -596,9 +601,12 @@ async def ask_trainer(
 
     # --- Task 2: Strip "thinking" — never expose internal reasoning to the frontend ---
     parsed.pop("thinking", None)
+    response = parsed.get("response")
+    if not isinstance(response, str) or not response.strip():
+        raise AIResponseFormatError("AI coach returned an empty response")
 
     return {
-        "response": parsed.get("response", ""),
+        "response": response.strip(),
         "plan_updates": parsed.get("planUpdates"),
         "sources": parsed.get("sources") or [],
         "ride_note_update": parsed.get("ride_note_update"),

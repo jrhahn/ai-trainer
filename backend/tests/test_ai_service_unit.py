@@ -2593,6 +2593,20 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
 
 
+@pytest.mark.asyncio
+async def test_ask_trainer_rejects_empty_response():
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return json.dumps({"response": "   ", "sources": []})
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        with pytest.raises(ai_service.AIResponseFormatError):
+            await ai_service.ask_trainer(
+                question="Why did the coach not answer?",
+                plan=PLAN_FOR_LOAD_TESTS,
+                profile=PROFILE_WITH_FTP,
+            )
+
+
 def test_ask_trainer_system_includes_response_quality_rules():
     """ask_trainer_system must include response quality rules for the response field."""
     from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule

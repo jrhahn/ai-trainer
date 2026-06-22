@@ -19,7 +19,11 @@ from database import async_session_maker, get_db
 from services import ai_service
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
-from services.ai_service import MAX_CONVERSATION_HISTORY, AIRateLimitError
+from services.ai_service import (
+    MAX_CONVERSATION_HISTORY,
+    AIRateLimitError,
+    AIResponseFormatError,
+)
 from services.analysis import (
     compare_planned_vs_actual,
     compute_readiness_score,
@@ -54,6 +58,9 @@ logger = logging.getLogger(__name__)
 _RATE_LIMIT_DETAIL = (
     "The AI service is temporarily unavailable due to rate limiting. "
     "Please try again in a few minutes."
+)
+_AI_RESPONSE_FORMAT_DETAIL = (
+    "The AI service returned an empty response. Please try again."
 )
 
 
@@ -818,6 +825,12 @@ async def ask_trainer(
         finish_token_usage_collection(usage_token)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+    except AIResponseFormatError:
+        finish_token_usage_collection(usage_token)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_AI_RESPONSE_FORMAT_DETAIL,
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
 
