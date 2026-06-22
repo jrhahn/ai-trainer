@@ -3239,6 +3239,98 @@ async def test_update_coach_memory_passes_system_and_user_prompts():
 
 
 # ---------------------------------------------------------------------------
+# extract_athlete_facts — import historical coach conversations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_extract_athlete_facts_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "fact": "Gets anxious after two rest days",
+                    "category": "psychological_tendencies",
+                    "confidence": 0.7,
+                    "sourceSnippet": "I always feel like I'm losing fitness when I rest.",
+                },
+                {
+                    # Confidence above the cap is clamped to 0.9.
+                    "fact": "Prefers long Saturday endurance rides",
+                    "category": "preferred_workouts",
+                    "confidence": 1.5,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.extract_athlete_facts(
+            "Athlete: I hate resting...\nCoach: Why?", provider="openai"
+        )
+
+    assert len(candidates) == 2
+    assert candidates[0]["fact"] == "Gets anxious after two rest days"
+    assert candidates[0]["category"] == "psychological_tendencies"
+    assert candidates[0]["confidence"] == 0.7
+    assert candidates[0]["source_snippet"].startswith("I always feel")
+    # Confidence is clamped to the 0.9 ceiling.
+    assert candidates[1]["confidence"] == 0.9
+    # The transcript reaches the model.
+    assert "I hate resting" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_extract_athlete_facts_dedupes_and_drops_invalid():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "candidates": [
+                {"fact": "Loves climbing", "category": "preferred_workouts", "confidence": 0.6},
+                {"fact": "  loves CLIMBING ", "category": "preferred_workouts", "confidence": 0.8},
+                {"fact": "", "category": "general", "confidence": 0.5},
+                {"category": "general", "confidence": 0.5},
+                "not a dict",
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.extract_athlete_facts("transcript", provider="openai")
+
+    # Duplicate (case/space-insensitive) and invalid entries are removed.
+    assert len(candidates) == 1
+    assert candidates[0]["fact"] == "Loves climbing"
+
+
+@pytest.mark.asyncio
+async def test_extract_athlete_facts_empty_transcript_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.extract_athlete_facts("   ", provider="openai")
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_extract_athlete_facts_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.extract_athlete_facts("transcript", provider="openai")
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
 # Communication style — opener variation rules
 # ---------------------------------------------------------------------------
 

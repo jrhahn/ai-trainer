@@ -453,6 +453,102 @@ async def test_ask_trainer_intervals_forwarded_through_http_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_extract_athlete_facts_endpoint_returns_candidates_without_persisting(
+    client, auth_headers, mock_ai_service
+):
+    """Extraction returns review candidates and persists nothing."""
+    mock_ai_service["extract_athlete_facts"].return_value = [
+        {
+            "fact": "Gets anxious after two rest days",
+            "category": "psychological_tendencies",
+            "confidence": 0.7,
+            "source_snippet": "I feel like I'm losing fitness when I rest.",
+        }
+    ]
+
+    response = await client.post(
+        "/api/v1/ai/extract-athlete-facts",
+        headers=auth_headers,
+        json={"transcript": "Athlete: I hate resting. Coach: Tell me more."},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["candidates"]) == 1
+    candidate = body["candidates"][0]
+    assert candidate["fact"] == "Gets anxious after two rest days"
+    assert candidate["category"] == "psychological_tendencies"
+    assert candidate["confidence"] == 0.7
+    assert candidate["sourceSnippet"] == "I feel like I'm losing fitness when I rest."
+
+    # Nothing was persisted to the athlete memory store during extraction.
+    stored = await client.get(
+        "/api/v1/users/me/athlete-memory-facts?includeInactive=true",
+        headers=auth_headers,
+    )
+    assert stored.json() == {"facts": []}
+
+    # The transcript was forwarded to the extraction service.
+    call_args = mock_ai_service["extract_athlete_facts"].call_args
+    assert "I hate resting" in call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_extract_athlete_facts_endpoint_rejects_empty_transcript(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/extract-athlete-facts",
+        headers=auth_headers,
+        json={"transcript": ""},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_extract_then_accept_persists_fact_available_to_coach(
+    client, auth_headers, mock_ai_service
+):
+    """End-to-end: extracted candidate accepted via observe endpoint persists."""
+    mock_ai_service["extract_athlete_facts"].return_value = [
+        {
+            "fact": "Needs reassurance before hard sessions",
+            "category": "coaching_risk",
+            "confidence": 0.6,
+            "source_snippet": "Am I ready for this one?",
+        }
+    ]
+
+    extracted = await client.post(
+        "/api/v1/ai/extract-athlete-facts",
+        headers=auth_headers,
+        json={"transcript": "Athlete: Am I ready for this one?"},
+    )
+    candidate = extracted.json()["candidates"][0]
+
+    # User accepts the candidate -> persist via the existing observe endpoint.
+    created = await client.post(
+        "/api/v1/users/me/athlete-memory-facts",
+        headers=auth_headers,
+        json={
+            "fact": candidate["fact"],
+            "category": candidate["category"],
+            "sourceSnippet": candidate["sourceSnippet"],
+            "confidence": candidate["confidence"],
+        },
+    )
+    assert created.status_code == 201
+
+    # Accepted fact is now available for coaching.
+    listed = await client.get(
+        "/api/v1/users/me/athlete-memory-facts", headers=auth_headers
+    )
+    facts = listed.json()["facts"]
+    assert len(facts) == 1
+    assert facts[0]["fact"] == "Needs reassurance before hard sessions"
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_endpoint_surfaces_physiology_and_context_rationale(
     client, auth_headers, mock_ai_service
 ):

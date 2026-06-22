@@ -4,6 +4,7 @@ import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Hear
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
+import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
@@ -799,6 +800,9 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Import historical coach conversations */}
+      <ConversationImportSettings />
 
       {/* Learned athlete traits */}
       <AthleteTraitsSettings />

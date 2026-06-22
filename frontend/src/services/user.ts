@@ -258,6 +258,17 @@ export async function fetchAthleteMemoryFacts(token: string): Promise<AthleteMem
   return response.facts
 }
 
+export async function observeAthleteMemoryFact(
+  token: string,
+  fact: { fact: string; category?: string; sourceSnippet?: string; confidence?: number }
+): Promise<AthleteMemoryFact> {
+  return apiFetch<AthleteMemoryFact>('/users/me/athlete-memory-facts', {
+    token,
+    method: 'POST',
+    body: fact,
+  })
+}
+
 export async function updateAthleteMemoryFact(
   token: string,
   factId: string,

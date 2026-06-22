@@ -10,7 +10,7 @@ import {
   type AthleteMemoryFact,
 } from '../services/user'
 
-const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
+export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
 
 /** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
 function formatCategory(category: string): string {
