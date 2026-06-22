@@ -453,6 +453,29 @@ async def test_ask_trainer_intervals_forwarded_through_http_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_endpoint_surfaces_physiology_and_context_rationale(
+    client, auth_headers, mock_ai_service
+):
+    """Rationale layers flow through the endpoint as camelCase response fields."""
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "On the numbers a ride is fine, but knowing you I'd rest.",
+        "physiology_rationale": "fresh enough for an easy ride",
+        "context_rationale": "history of overreaching favours rest",
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Can I ride today?"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["physiologyRationale"] == "fresh enough for an easy ride"
+    assert body["contextRationale"] == "history of overreaching favours rest"
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_plan_change_reflection_in_prompt():
     """When a plan change is requested, the prompt must include honest-reflection instructions."""
     captured_prompt: list[str] = []

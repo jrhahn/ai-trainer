@@ -193,6 +193,41 @@ describe('AIChat', () => {
     })
   })
 
+  it('shows a "Why this advice?" disclosure with both rationale layers', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'On the numbers a ride is fine, but knowing you I would rest.',
+      physiologyRationale: 'fresh enough for an easy ride',
+      contextRationale: 'history of overreaching favours rest',
+    })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Can I ride today?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+    })
+    expect(screen.getByText('fresh enough for an easy ride')).toBeInTheDocument()
+    expect(screen.getByText('history of overreaching favours rest')).toBeInTheDocument()
+  })
+
+  it('omits the rationale disclosure when no rationale is returned', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Easy spin today.' })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'What should I do?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Easy spin today.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Why this advice?')).toBeNull()
+  })
+
   it('only auto-sends a pending coach message once in StrictMode', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Let me unpack that.' })
     setupStore({ pendingCoachMessage: 'Why was my ride so hard?' })

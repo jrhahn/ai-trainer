@@ -81,6 +81,14 @@ ASK_TRAINER_EMPTY_RESPONSE_RETRIES = 2
 ASK_TRAINER_RETRY_BASE_DELAY = 0.5
 
 
+def _clean_rationale(value: object) -> str | None:
+    """Normalise an optional rationale field to a trimmed string or ``None``."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 _SLIM_PLAN_KEEP = {
     "date",
     "workoutType",
@@ -619,6 +627,12 @@ async def ask_trainer(
                 "plan_updates": parsed.get("planUpdates"),
                 "sources": parsed.get("sources") or [],
                 "ride_note_update": parsed.get("ride_note_update"),
+                "physiology_rationale": _clean_rationale(
+                    parsed.get("physiologyRationale")
+                ),
+                "context_rationale": _clean_rationale(
+                    parsed.get("contextRationale")
+                ),
             }
 
         if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:

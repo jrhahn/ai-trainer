@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.9] - 2026-06-22
+
+### Added
+
+- **Transparent physiology vs personal-context rationale** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`, `schemas.py`) — the coach now reasons
+  in two explicit layers and returns separate `physiologyRationale` and
+  `contextRationale` fields from `/ai/ask-trainer`. When the layers diverge, the
+  natural response says so ("the numbers say X, but knowing you I'd do Y"), so the
+  athlete can see when a call is about them rather than the workout file. The chat
+  surfaces this as a compact, collapsible "Why this advice?" disclosure.
+
 ## [0.38.8] - 2026-06-22
 
 ### Added

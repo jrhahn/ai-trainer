@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { WheelEvent } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw } from 'lucide-react'
+import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw, Scale } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -216,6 +216,28 @@ export default function AIChat({ contextWorkout, className }: Props) {
             </ul>
           </div>
         )}
+        {msg.role === 'assistant' && (msg.physiologyRationale || msg.contextRationale) && (
+          <details className="mt-2 border-t border-gray-200 pt-2">
+            <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
+              <Scale size={11} />
+              Why this advice?
+            </summary>
+            <dl className="mt-1 space-y-1">
+              {msg.physiologyRationale && (
+                <div className="text-xs text-gray-500">
+                  <dt className="inline font-medium text-gray-600">The numbers: </dt>
+                  <dd className="inline">{msg.physiologyRationale}</dd>
+                </div>
+              )}
+              {msg.contextRationale && (
+                <div className="text-xs text-gray-500">
+                  <dt className="inline font-medium text-gray-600">Knowing you: </dt>
+                  <dd className="inline">{msg.contextRationale}</dd>
+                </div>
+              )}
+            </dl>
+          </details>
+        )}
         {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
           <button
             onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
@@ -296,6 +318,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
         timestamp: new Date().toISOString(),
         planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
         sources: result.sources?.length ? result.sources : undefined,
+        physiologyRationale: result.physiologyRationale || undefined,
+        contextRationale: result.contextRationale || undefined,
       })
       setLastFailedMessage(null)
 

@@ -186,6 +186,32 @@ describe('askTrainer', () => {
 
     expect(result.sources).toEqual(sources)
   })
+
+  it('maps physiology and context rationale (camelCase)', async () => {
+    mockApiFetch.mockResolvedValue({
+      response: 'On the numbers a ride is fine, but knowing you I would rest.',
+      physiologyRationale: 'fresh enough for an easy ride',
+      contextRationale: 'history of overreaching favours rest',
+    })
+
+    const result = await askTrainer('Can I ride today?', 'token-123')
+
+    expect(result.physiologyRationale).toBe('fresh enough for an easy ride')
+    expect(result.contextRationale).toBe('history of overreaching favours rest')
+  })
+
+  it('maps physiology and context rationale from snake_case', async () => {
+    mockApiFetch.mockResolvedValue({
+      response: 'Rest today.',
+      physiology_rationale: 'tolerable on the numbers',
+      context_rationale: 'rest fits you better',
+    })
+
+    const result = await askTrainer('Can I ride today?', 'token-123')
+
+    expect(result.physiologyRationale).toBe('tolerable on the numbers')
+    expect(result.contextRationale).toBe('rest fits you better')
+  })
 })
 
 describe('fetchRaceEventFeedback', () => {
