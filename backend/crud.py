@@ -519,6 +519,22 @@ async def update_athlete_memory_fact(
     return existing
 
 
+async def delete_athlete_memory_fact(
+    db: AsyncSession, user_id: str, fact_id: str
+) -> bool:
+    """Permanently remove an athlete memory fact owned by a user.
+
+    Returns ``True`` when a row was deleted, ``False`` when no matching fact
+    exists for the user.
+    """
+    existing = await get_athlete_memory_fact(db, user_id, fact_id)
+    if existing is None:
+        return False
+    await db.delete(existing)
+    await db.flush()
+    return True
+
+
 async def get_prompt_athlete_memory_facts(
     db: AsyncSession,
     user_id: str,
