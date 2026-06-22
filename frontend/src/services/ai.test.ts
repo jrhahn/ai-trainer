@@ -12,6 +12,7 @@ import {
   analyseStravaActivities,
   askTrainer,
   adaptTrainingPlan,
+  extractAthleteFacts,
   fetchRaceEventFeedback,
   generateTrainingPlan,
   rateCompletedWorkout,
@@ -211,6 +212,49 @@ describe('askTrainer', () => {
 
     expect(result.physiologyRationale).toBe('tolerable on the numbers')
     expect(result.contextRationale).toBe('rest fits you better')
+  })
+})
+
+describe('extractAthleteFacts', () => {
+  it('posts the transcript and maps candidates (camelCase + snake_case)', async () => {
+    mockApiFetch.mockResolvedValue({
+      candidates: [
+        {
+          fact: 'Gets anxious after rest days',
+          category: 'psychological_tendencies',
+          confidence: 0.7,
+          sourceSnippet: 'I feel like I lose fitness.',
+        },
+        {
+          fact: 'Loves long climbs',
+          source_snippet: 'Nothing beats a big climb.',
+        },
+      ],
+    })
+
+    const result = await extractAthleteFacts('Athlete: I hate resting.', 'token-123')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/extract-athlete-facts', {
+      token: 'token-123',
+      method: 'POST',
+      body: { transcript: 'Athlete: I hate resting.' },
+    })
+    expect(result[0]).toEqual({
+      fact: 'Gets anxious after rest days',
+      category: 'psychological_tendencies',
+      confidence: 0.7,
+      sourceSnippet: 'I feel like I lose fitness.',
+    })
+    // Defaults fill in for a sparse candidate; snake_case snippet is mapped.
+    expect(result[1].category).toBe('general')
+    expect(result[1].confidence).toBe(0.35)
+    expect(result[1].sourceSnippet).toBe('Nothing beats a big climb.')
+  })
+
+  it('returns an empty array when there are no candidates', async () => {
+    mockApiFetch.mockResolvedValue({ candidates: [] })
+    const result = await extractAthleteFacts('nothing here', 'token-123')
+    expect(result).toEqual([])
   })
 })
 

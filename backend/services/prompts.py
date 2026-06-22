@@ -1040,6 +1040,53 @@ def update_memory_user(
 
 
 # ---------------------------------------------------------------------------
+# extract_athlete_facts prompts (import historical coach conversations)
+# ---------------------------------------------------------------------------
+
+
+def extract_athlete_facts_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are mining a historical coaching conversation for "
+        "DURABLE facts about the athlete that should inform future coaching.\n"
+        "Extract only stable, actionable traits and preferences — not one-off events, "
+        "transient moods, or workout-specific details.\n"
+        "Focus on patterns such as: how the athlete responds to rest and hard efforts, "
+        "what motivates them, what they worry about, when they seek reassurance, "
+        "schedule and availability constraints, fueling/hydration/heat patterns, "
+        "preferred and disliked workout types or terrain, recurring training mistakes, "
+        "and psychological tendencies (overtraining bias, FOMO, rest anxiety, "
+        "reassurance seeking, doing too much when fresh).\n"
+        "Use one of these category slugs for each fact: schedule_constraints, "
+        "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
+        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        "Assign a confidence between 0.3 and 0.9 reflecting how strongly the transcript "
+        "supports a DURABLE pattern: repeated or explicitly confirmed patterns score "
+        "higher; single mentions score lower. Never exceed 0.9.\n"
+        "Phrase psychological tendencies cautiously with evidence strength, e.g. "
+        "'may get anxious after two rest days' rather than an overconfident diagnosis.\n"
+        "For each fact include a short verbatim-ish 'sourceSnippet' (<=200 chars) quoting "
+        "or closely paraphrasing the transcript evidence.\n"
+        "Deduplicate: merge near-identical observations into a single fact.\n"
+        "Return up to 20 of the most coaching-relevant facts.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"fact": str, "category": str, "confidence": number, '
+        '"sourceSnippet": str}]}. '
+        "Return an empty candidates array when the transcript contains no durable, "
+        "actionable athlete information."
+    )
+
+
+def extract_athlete_facts_user(transcript: str) -> str:
+    return (
+        "Historical coaching conversation transcript:\n"
+        "-----\n"
+        f"{transcript}\n"
+        "-----\n"
+        "Extract the durable athlete facts as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
 # rate_completed_workout prompts
 # ---------------------------------------------------------------------------
 

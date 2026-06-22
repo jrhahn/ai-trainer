@@ -428,6 +428,21 @@ class AthleteMemoryFactUpdateRequest(CamelModel):
     status: Optional[AthleteMemoryFactStatus] = None
 
 
+class ExtractAthleteFactsRequest(CamelModel):
+    transcript: str = Field(min_length=1)
+
+
+class AthleteFactCandidateSchema(CamelModel):
+    fact: str
+    category: str = "general"
+    confidence: float = 0.35
+    source_snippet: str = ""
+
+
+class ExtractAthleteFactsResponse(CamelModel):
+    candidates: list[AthleteFactCandidateSchema]
+
+
 # ---------------------------------------------------------------------------
 # AI endpoints
 # ---------------------------------------------------------------------------

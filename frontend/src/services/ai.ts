@@ -138,6 +138,41 @@ export async function askTrainer(
   }
 }
 
+export interface AthleteFactCandidate {
+  fact: string
+  category: string
+  confidence: number
+  sourceSnippet: string
+}
+
+interface BackendAthleteFactCandidate {
+  fact: string
+  category?: string
+  confidence?: number
+  sourceSnippet?: string
+  source_snippet?: string
+}
+
+export async function extractAthleteFacts(
+  transcript: string,
+  authToken: string
+): Promise<AthleteFactCandidate[]> {
+  const result = await apiFetch<{ candidates: BackendAthleteFactCandidate[] }>(
+    '/ai/extract-athlete-facts',
+    {
+      token: authToken,
+      method: 'POST',
+      body: { transcript },
+    }
+  )
+  return (result.candidates ?? []).map((c) => ({
+    fact: c.fact,
+    category: c.category ?? 'general',
+    confidence: c.confidence ?? 0.35,
+    sourceSnippet: c.sourceSnippet ?? c.source_snippet ?? '',
+  }))
+}
+
 export async function fetchRaceEventFeedback(
   event: RaceEvent,
   authToken: string,

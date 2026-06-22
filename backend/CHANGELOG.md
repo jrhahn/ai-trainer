@@ -5,6 +5,20 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.10] - 2026-06-22
+
+### Added
+
+- **Import historical coach conversations** (`services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`, `schemas.py`) — new
+  `POST /ai/extract-athlete-facts` runs an extraction prompt over a pasted
+  conversation transcript and returns candidate durable athlete traits
+  (fact, category, confidence, source snippet) **without persisting them**.
+  The athlete reviews candidates in Settings and accepts chosen ones via the
+  existing `POST /users/me/athlete-memory-facts`, after which they feed coach
+  recommendations. Candidates are deduplicated, confidence-capped at 0.9, and
+  the transcript is length-bounded.
+
 ## [0.38.9] - 2026-06-22
 
 ### Added

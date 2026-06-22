@@ -1151,6 +1151,40 @@ async def review_new_rides(
     )
 
 
+@router.post(
+    "/extract-athlete-facts", response_model=schemas.ExtractAthleteFactsResponse
+)
+async def extract_athlete_facts(
+    body: schemas.ExtractAthleteFactsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ExtractAthleteFactsResponse:
+    """Extract candidate durable athlete facts from a pasted conversation.
+
+    Candidates are returned for review only — nothing is persisted here. The
+    client accepts chosen candidates via ``POST /users/me/athlete-memory-facts``.
+    """
+    usage_token = begin_token_usage_collection()
+    try:
+        candidates = await ai_service.extract_athlete_facts(
+            body.transcript,
+            provider=_provider(current_user),
+        )
+    except AIRateLimitError:
+        finish_token_usage_collection(usage_token)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+    await _persist_collected_token_usage(db, current_user, usage_token)
+
+    return schemas.ExtractAthleteFactsResponse(
+        candidates=[
+            schemas.AthleteFactCandidateSchema.model_validate(candidate)
+            for candidate in candidates
+        ]
+    )
+
+
 @router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)
 async def resolve_ride_match(
     body: schemas.ResolveRideMatchRequest,

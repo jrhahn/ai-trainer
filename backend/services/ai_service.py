@@ -51,6 +51,8 @@ from .prompts import (
     ask_trainer_system,
     update_memory_system,
     update_memory_user,
+    extract_athlete_facts_system,
+    extract_athlete_facts_user,
     rate_workout_system,
     rate_workout_user,
     refresh_login_summary_system,
@@ -701,6 +703,75 @@ async def update_coach_memory(
     system_prompt = update_memory_system()
     user_msg = update_memory_user(current_memory, user_message, coach_response)
     return await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
+
+
+# Cap the transcript so a huge paste cannot blow up the prompt / token budget.
+MAX_TRANSCRIPT_CHARS = 24000
+MAX_EXTRACTED_FACT_CANDIDATES = 20
+
+
+def _normalise_fact_candidate(raw: object) -> dict | None:
+    """Validate one extracted candidate; return a clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    fact = raw.get("fact")
+    if not isinstance(fact, str) or not fact.strip():
+        return None
+    category = raw.get("category")
+    category = category.strip() if isinstance(category, str) and category.strip() else "general"
+    try:
+        confidence = float(raw.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = 0.35
+    confidence = max(0.0, min(0.9, confidence))
+    snippet = raw.get("sourceSnippet") or raw.get("source_snippet") or ""
+    snippet = snippet.strip()[:240] if isinstance(snippet, str) else ""
+    return {
+        "fact": fact.strip(),
+        "category": category,
+        "confidence": round(confidence, 2),
+        "source_snippet": snippet,
+    }
+
+
+async def extract_athlete_facts(
+    transcript: str,
+    provider: str = "openai",
+) -> list[dict]:
+    """Extract candidate durable athlete facts from a pasted conversation.
+
+    Returns a list of candidate dicts (``fact``, ``category``, ``confidence``,
+    ``source_snippet``). Candidates are NOT persisted — the caller reviews and
+    accepts them before storage.
+    """
+    cleaned = (transcript or "").strip()
+    if not cleaned:
+        return []
+    cleaned = cleaned[:MAX_TRANSCRIPT_CHARS]
+
+    system_prompt = extract_athlete_facts_system()
+    user_msg = extract_athlete_facts_user(cleaned)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY)
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_fact_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["fact"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_EXTRACTED_FACT_CANDIDATES:
+            break
+    return candidates
 
 
 async def rate_completed_workout(
