@@ -29,7 +29,7 @@ def upgrade() -> None:
                 "memory_updates_enabled",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("1"),
+                server_default=sa.text("true"),
             ),
         )
 

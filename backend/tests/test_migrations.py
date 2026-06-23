@@ -107,6 +107,34 @@ def test_migration_revisions_are_unique():
     )
 
 
+def test_boolean_columns_use_sql_boolean_server_default():
+    """Boolean columns must use 'true'/'false' as server_default, not integers.
+
+    PostgreSQL rejects ``DEFAULT 1`` for a BOOLEAN column with:
+        DatatypeMismatchError: column "x" is of type boolean but default
+        expression is of type integer
+
+    SQLite silently accepts ``DEFAULT 1``, so this bug only surfaces against
+    Postgres.  We catch it by parsing the migration source for the pattern
+    ``sa.text("1")`` or ``sa.text("0")`` used alongside a Boolean column type.
+    """
+    versions_dir = BACKEND_DIR / "alembic" / "versions"
+    bad: list[str] = []
+    for path in sorted(versions_dir.glob("*.py")):
+        source = path.read_text()
+        # Only check files that define a Boolean column
+        if "sa.Boolean()" not in source and "sa.Boolean," not in source:
+            continue
+        # Flag integer literals used as server_default text values
+        import re
+        for match in re.finditer(r'sa\.text\(["\'](\d+)["\']\)', source):
+            bad.append(
+                f"{path.name}: sa.text({match.group(1)!r}) used near a Boolean column "
+                f"— PostgreSQL requires 'true'/'false', not integers"
+            )
+    assert not bad, "\n".join(bad)
+
+
 def test_intervals_auto_sync_has_followup_migration():
     """The Intervals auto-sync column must not be added only by an edited old revision.
 
