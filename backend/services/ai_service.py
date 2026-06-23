@@ -32,7 +32,7 @@ from .llm import (
     TASK_PLAN,
     get_provider,
 )  # re-exported for backward compat
-from .dates import app_date_context, app_today, app_today_iso
+from .dates import app_date_context, app_today, app_today_iso, app_today_stamp
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -615,7 +615,8 @@ async def ask_trainer(
         date_context=date_context,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
-    messages = [*history, {"role": "user", "content": question}]
+    date_stamp = app_today_stamp(timezone_name=timezone_name)
+    messages = [*history, {"role": "user", "content": f"{date_stamp}\n{question}"}]
 
     # Retry empty/blank coach replies with exponential backoff before giving up;
     # rate-limit errors are not retried here and propagate to the caller.

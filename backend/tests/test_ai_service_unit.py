@@ -3041,7 +3041,7 @@ async def test_ask_trainer_prompt_handles_hot_long_ride_as_high_signal():
 
     async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         captured_prompt.append(system_prompt)
-        assert messages[-1]["content"].startswith("so nach dem hike")
+        assert "so nach dem hike" in messages[-1]["content"]
         return json.dumps(
             {
                 "response": "Wie viel und was hast du unterwegs getrunken?",
@@ -3707,6 +3707,58 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
     # Yesterday must be in history, not upcoming
     assert '"date": "2026-06-22"' in history_section
     assert '"date": "2026-06-22"' not in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
+    """ask_trainer() must prepend a date stamp to the user message.
+
+    The date_context block is in the system prompt, far from the actual question
+    when conversation history is long.  An earlier turn that stated a wrong weekday
+    sits closer to the generation point than the system prompt.  Prepending the
+    stamp to the user message keeps an authoritative date immediately adjacent to
+    the question, regardless of how many history turns come before it.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_stamp",
+        lambda timezone_name=None: "[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]",
+    )
+    monkeypatch.setattr(
+        ai_service, "app_date_context",
+        lambda timezone_name=None: "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23).",
+    )
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+        captured["messages"] = messages
+        return json.dumps({"response": "ok", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "What should I do today?",
+        plan=[],
+        profile={},
+        conversation_history=[
+            # Simulate a prior turn that stated a wrong weekday
+            {"role": "assistant", "content": "Tomorrow, Wednesday June 24, is your rest day."},
+        ],
+        timezone_name="Europe/Berlin",
+    )
+
+    messages = captured["messages"]
+    last_user_msg = messages[-1]["content"]
+
+    # Stamp must come first
+    assert last_user_msg.startswith("[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]")
+    # Original question preserved after the stamp
+    assert "What should I do today?" in last_user_msg
+    # Prior wrong assistant turn is in history but the stamp is closer to generation
+    assert any("wrong" in m.get("content", "") or "Wednesday" in m.get("content", "") for m in messages[:-1])
 
 
 @pytest.mark.asyncio
