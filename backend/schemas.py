@@ -449,6 +449,17 @@ class MemoryExportSchema(CamelModel):
     )
 
 
+class AIKeyStatusSchema(CamelModel):
+    provider: str
+    has_openai_key: bool
+    has_gemini_key: bool
+
+
+class AIKeySaveRequest(CamelModel):
+    provider: str
+    api_key: str = Field(min_length=1)
+
+
 class ExtractAthleteFactsRequest(CamelModel):
     transcript: str = Field(min_length=1)
 

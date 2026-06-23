@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from config import settings
 
@@ -125,6 +125,30 @@ class AIRateLimitError(Exception):
     """Raised when the AI provider returns a rate-limit (429) response."""
 
 
+class AIKeyNotConfiguredError(Exception):
+    """Raised when no AI provider key is available for the current user."""
+
+
+# ---------------------------------------------------------------------------
+# Per-request user API key context (BYOK)
+# ---------------------------------------------------------------------------
+
+_BYOK_INACTIVE: Any = object()
+
+_user_ai_keys: ContextVar[dict[str, str | None] | Any] = ContextVar(
+    "user_ai_keys", default=_BYOK_INACTIVE
+)
+
+
+def set_user_ai_keys(keys: dict[str, str | None]) -> Token[dict[str, str | None] | Any]:
+    """Activate BYOK context with *keys* mapping provider name → API key."""
+    return _user_ai_keys.set(keys)
+
+
+def reset_user_ai_keys(token: Token[dict[str, str | None] | Any]) -> None:
+    _user_ai_keys.reset(token)
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     async def chat(self, system: str, user: str, json_mode: bool = False) -> str: ...
@@ -136,11 +160,11 @@ class LLMProvider(Protocol):
 class OpenAIProvider:
     _model: str = OPENAI_MODEL  # class-level default; overridden by __init__
 
-    def __init__(self, model: str = OPENAI_MODEL) -> None:
+    def __init__(self, model: str = OPENAI_MODEL, api_key: str | None = None) -> None:
         from openai import AsyncOpenAI
 
         self._model = model
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self._client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
 
     async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
         kwargs: dict = {}
@@ -175,8 +199,9 @@ class OpenAIProvider:
 class GeminiProvider:
     _model: str = GEMINI_MODEL  # class-level default; overridden by __init__
 
-    def __init__(self, model: str = GEMINI_MODEL) -> None:
+    def __init__(self, model: str = GEMINI_MODEL, api_key: str | None = None) -> None:
         self._model = model
+        self._api_key = api_key or settings.gemini_api_key
 
     @staticmethod
     def _build_config(
@@ -196,7 +221,7 @@ class GeminiProvider:
 
         config = self._build_config(system, json_mode, types)
         try:
-            client = genai.Client(api_key=settings.gemini_api_key)
+            client = genai.Client(api_key=self._api_key)
             async with client.aio as aio_client:
                 response = await aio_client.models.generate_content(
                     model=self._model, contents=user, config=config
@@ -223,7 +248,7 @@ class GeminiProvider:
             for m in messages
         ]
         try:
-            client = genai.Client(api_key=settings.gemini_api_key)
+            client = genai.Client(api_key=self._api_key)
             async with client.aio as aio_client:
                 response = await aio_client.models.generate_content(
                     model=self._model, contents=contents, config=config
@@ -239,15 +264,36 @@ class GeminiProvider:
 def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
     """Return an ``LLMProvider`` for *name* configured for *task*.
 
-    *task* controls which model is selected from settings (see module-level
-    ``TASK_*`` constants).  Falls back to the best available provider when
-    the requested one is not configured.
+    When a per-request BYOK context is active (set via :func:`set_user_ai_keys`)
+    the user's own key is used.  If the user has no key and
+    ``settings.allow_admin_ai_key_fallback`` is False an
+    :class:`AIKeyNotConfiguredError` is raised.  Outside a BYOK context the
+    global settings keys are used unchanged (existing behaviour).
     """
+    ctx = _user_ai_keys.get()
+    if ctx is not _BYOK_INACTIVE:
+        user_key = ctx.get(name) if isinstance(ctx, dict) else None
+        if not user_key:
+            if not settings.allow_admin_ai_key_fallback:
+                raise AIKeyNotConfiguredError(
+                    f"No {name} API key configured. "
+                    "Please add your key in Settings → AI Provider."
+                )
+            return _get_provider_global(name, task)
+        if name == "openai":
+            return OpenAIProvider(model=_resolve_model("openai", task), api_key=user_key)
+        if name == "gemini":
+            return GeminiProvider(model=_resolve_model("gemini", task), api_key=user_key)
+        raise AIKeyNotConfiguredError(f"Unknown AI provider: {name}")
+    return _get_provider_global(name, task)
+
+
+def _get_provider_global(name: str, task: str) -> LLMProvider:
+    """Return a provider using the global (backend-owner) settings keys."""
     if name == "gemini" and settings.gemini_api_key:
         return GeminiProvider(model=_resolve_model("gemini", task))
     if name == "openai" and settings.openai_api_key:
         return OpenAIProvider(model=_resolve_model("openai", task))
-    # Fallback: use whichever key is present
     if settings.gemini_api_key:
         return GeminiProvider(model=_resolve_model("gemini", task))
     if settings.openai_api_key:

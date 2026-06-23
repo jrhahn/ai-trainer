@@ -13,6 +13,7 @@ from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
+from services.llm import AIKeyNotConfiguredError
 from services.plan_maintenance import daily_plan_maintenance_job
 from services.scheduler import InProcessScheduler
 
@@ -88,6 +89,28 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
+        headers=headers or None,
+    )
+
+
+@app.exception_handler(AIKeyNotConfiguredError)
+async def ai_key_not_configured_handler(
+    request: Request, exc: AIKeyNotConfiguredError
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    logger.warning(
+        "AI key not configured on %s %s (request_id=%s): %s",
+        request.method,
+        request.url.path,
+        request_id,
+        str(exc),
+    )
+    headers: dict[str, str] = {}
+    if request_id:
+        headers[_REQUEST_ID_HEADER] = request_id
+    return JSONResponse(
+        status_code=402,
+        content={"detail": str(exc)},
         headers=headers or None,
     )
 

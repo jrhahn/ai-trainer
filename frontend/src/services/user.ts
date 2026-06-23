@@ -322,6 +322,47 @@ export async function exportMemory(token: string): Promise<unknown> {
   return apiFetch<unknown>('/users/me/memory-export', { token })
 }
 
+export interface AIKeyStatus {
+  provider: string
+  hasOpenaiKey: boolean
+  hasGeminiKey: boolean
+}
+
+export async function fetchAIKeyStatus(token: string): Promise<AIKeyStatus> {
+  return apiFetch<AIKeyStatus>('/users/me/ai-key/status', { token })
+}
+
+export async function saveAIKey(
+  token: string,
+  provider: string,
+  apiKey: string,
+): Promise<AIKeyStatus> {
+  return apiFetch<AIKeyStatus>('/users/me/ai-key', {
+    token,
+    method: 'PUT',
+    body: { provider, apiKey },
+  })
+}
+
+export async function deleteAIKey(token: string, provider: string): Promise<void> {
+  await apiFetch(`/users/me/ai-key?provider=${encodeURIComponent(provider)}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
+export async function testAIKey(
+  token: string,
+  provider: string,
+  apiKey: string,
+): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/users/me/ai-key/test', {
+    token,
+    method: 'POST',
+    body: { provider, apiKey },
+  })
+}
+
 export async function fetchMetricsHistory(token: string): Promise<AthleteMetricSnapshot[]> {
   const response = await apiFetch<{ snapshots: AthleteMetricSnapshot[] }>(
     '/users/me/metrics-history',

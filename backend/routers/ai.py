@@ -49,9 +49,26 @@ from services.weather_service import (
     enrich_activity_weather,
     training_weather_context_for_user,
 )
+from services import llm as llm_service
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+
+async def _set_ai_key(
+    current_user: models.User = Depends(auth.get_current_user),
+) -> None:
+    """Router-level dependency: inject per-user API keys into the LLM ContextVar."""
+    keys = {
+        "openai": current_user.user_openai_api_key,
+        "gemini": current_user.user_gemini_api_key,
+    }
+    token = llm_service.set_user_ai_keys(keys)
+    try:
+        yield
+    finally:
+        llm_service.reset_user_ai_keys(token)
+
+
+router = APIRouter(prefix="/ai", tags=["ai"], dependencies=[Depends(_set_ai_key)])
 
 logger = logging.getLogger(__name__)
 

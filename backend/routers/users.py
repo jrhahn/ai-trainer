@@ -33,6 +33,7 @@ from services import ai_service, metrics_service
 from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
+from services import llm as llm_service
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
 from services.ride_matching import (
     apply_ride_plan_matches,
@@ -72,10 +73,10 @@ def _default_provider() -> str:
 
 
 def _provider(user: models.User) -> str:
-    stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
+    stored = user.ai_provider or "openai"
+    if stored == "gemini" and (user.user_gemini_api_key or settings.gemini_api_key):
         return "gemini"
-    if stored == "openai" and settings.openai_api_key:
+    if stored == "openai" and (user.user_openai_api_key or settings.openai_api_key):
         return "openai"
     return _default_provider()
 
@@ -607,6 +608,86 @@ async def export_memory(
             for f in facts
         ],
     )
+
+
+@router.get("/ai-key/status", response_model=schemas.AIKeyStatusSchema)
+async def get_ai_key_status(
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AIKeyStatusSchema:
+    return schemas.AIKeyStatusSchema(
+        provider=current_user.ai_provider or "openai",
+        has_openai_key=bool(current_user.user_openai_api_key),
+        has_gemini_key=bool(current_user.user_gemini_api_key),
+    )
+
+
+@router.put("/ai-key", response_model=schemas.AIKeyStatusSchema)
+async def save_ai_key(
+    body: schemas.AIKeySaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AIKeyStatusSchema:
+    if body.provider == "openai":
+        current_user.user_openai_api_key = body.api_key
+    elif body.provider == "gemini":
+        current_user.user_gemini_api_key = body.api_key
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown provider: {body.provider}",
+        )
+    current_user.ai_provider = body.provider
+    await db.commit()
+    return schemas.AIKeyStatusSchema(
+        provider=current_user.ai_provider,
+        has_openai_key=bool(current_user.user_openai_api_key),
+        has_gemini_key=bool(current_user.user_gemini_api_key),
+    )
+
+
+@router.delete("/ai-key", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ai_key(
+    provider: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    if provider == "openai":
+        current_user.user_openai_api_key = None
+    elif provider == "gemini":
+        current_user.user_gemini_api_key = None
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown provider: {provider}",
+        )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/ai-key/test")
+async def test_ai_key(
+    body: schemas.AIKeySaveRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Validate an API key without storing it."""
+    token = llm_service.set_user_ai_keys({body.provider: body.api_key})
+    try:
+        provider_instance = llm_service.get_provider(
+            body.provider, task=llm_service.TASK_CLASSIFY
+        )
+        await provider_instance.chat("You are a connectivity test.", "Reply with the single word: ok")
+        return {"ok": True}
+    except llm_service.AIKeyNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Key validation failed: {exc}",
+        )
+    finally:
+        llm_service.reset_user_ai_keys(token)
 
 
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)

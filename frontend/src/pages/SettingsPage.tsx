@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import AIKeySettings from '../components/AIKeySettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
@@ -800,6 +801,9 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Per-user AI API key (BYOK) */}
+      <AIKeySettings />
 
       {/* Import historical coach conversations */}
       <ConversationImportSettings />

@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    allow_admin_ai_key_fallback: bool = True
+    """When True (default), AI requests fall back to the backend owner's keys if
+    the user has not configured their own.  Set to False to require every user to
+    supply their own key (BYOK-only mode).
+    """
 
     # ------------------------------------------------------------------
     # AI model selection by task
