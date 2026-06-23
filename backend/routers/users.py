@@ -682,9 +682,10 @@ async def test_ai_key(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         )
     except Exception as exc:
+        logger.warning("AI key validation failed for user %s: %s", current_user.id, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Key validation failed: {exc}",
+            detail="Key validation failed. Check that the key is correct and has the required permissions.",
         )
     finally:
         llm_service.reset_user_ai_keys(token)
