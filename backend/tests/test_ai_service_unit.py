@@ -3707,3 +3707,91 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
     # Yesterday must be in history, not upcoming
     assert '"date": "2026-06-22"' in history_section
     assert '"date": "2026-06-22"' not in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_race_event_feedback_plan_entries_include_relative_day(monkeypatch):
+    """race_event_feedback() must pass today_date to _slim_plan_entry so that
+    upcoming plan entries carry relativeDay ('today', 'tomorrow') context.
+
+    Without today_date the _slim_plan_entry call skips the relativeDay block and
+    the model has no proximity cue — it only sees ISO dates and has to infer
+    "tomorrow" by computing the day-of-week itself, which is an error source.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="coach"):
+        captured["user_msg"] = user_msg
+        return json.dumps({"feedback": "Looks good."})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.race_event_feedback(
+        event={"date": "2026-08-10", "distanceKm": 100},
+        plan=[
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
+            {"date": "2026-06-25", "workoutType": "endurance", "title": "Long Ride", "durationMinutes": 120},
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    user_msg = str(captured["user_msg"])
+    # Today's entry must carry relativeDay so the model knows it's today
+    assert '"relativeDay": "today"' in user_msg
+    # Tomorrow's entry must carry relativeDay
+    assert '"relativeDay": "tomorrow"' in user_msg
+    # Weekday labels must be present
+    assert '"weekday": "Monday"' in user_msg or '"weekday": "Tuesday"' in user_msg
+
+
+@pytest.mark.asyncio
+async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkeypatch):
+    """adapt_training_plan() must enrich incomplete_days with weekday/dateLabel/relativeDay
+    before sending to the prompt.
+
+    Without enrichment the model receives raw ISO dates and must infer weekday names
+    itself — a known error source when reasoning about rescheduling.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="plan"):
+        captured["user_msg"] = user_msg
+        return json.dumps({"updatedDays": []})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.adapt_training_plan(
+        plan=[
+            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45, "completed": True},
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max", "durationMinutes": 60},
+        ],
+        recent_feedback=[],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    user_msg = str(captured["user_msg"])
+    # The completed day should be excluded from incomplete_days
+    assert '"date": "2026-06-22"' not in user_msg or '"completed": true' not in user_msg
+    # Today's incomplete entry must carry weekday and relativeDay
+    assert '"weekday": "Monday"' in user_msg or '"weekday": "Tuesday"' in user_msg
+    assert '"relativeDay": "today"' in user_msg
+    # Tomorrow's entry must carry relativeDay
+    assert '"relativeDay": "tomorrow"' in user_msg

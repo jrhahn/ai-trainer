@@ -480,8 +480,13 @@ async def adapt_training_plan(
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> list[dict]:
-    today = app_today_iso(timezone_name=timezone_name)
-    incomplete_days = [day for day in plan if not day.get("completed")]
+    today_date = app_today(timezone_name=timezone_name)
+    today = today_date.isoformat()
+    incomplete_days = [
+        _slim_plan_entry(day, today_date=today_date)
+        for day in plan
+        if not day.get("completed")
+    ]
     # Always use the user-entered FTP for training load computation.
     ftp = float(profile.get("currentFTP") or 0)
     training_load = compute_training_load(plan, ftp) if ftp > 0 else None
@@ -662,9 +667,10 @@ async def race_event_feedback(
     action: str = "added",
     timezone_name: str | None = None,
 ) -> str:
-    today = app_today_iso(timezone_name=timezone_name)
+    today_date = app_today(timezone_name=timezone_name)
+    today = today_date.isoformat()
     upcoming_plan = [
-        _slim_plan_entry(day)
+        _slim_plan_entry(day, today_date=today_date)
         for day in plan
         if day.get("date", "") >= today and not day.get("completed")
     ][:14]
