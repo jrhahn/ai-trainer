@@ -192,8 +192,7 @@ async def test_test_key_endpoint_fails_with_bad_key(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_user_key_is_active_in_byok_context(client, auth_headers):
-    """When the user has a key set, the BYOK ContextVar contains that key."""
-    # Save a user key first
+    """When the user has a key set, the BYOK ContextVar contains that key during AI requests."""
     await client.put(
         "/api/v1/users/me/ai-key",
         headers=auth_headers,
@@ -202,37 +201,28 @@ async def test_user_key_is_active_in_byok_context(client, auth_headers):
 
     captured_keys: list[dict] = []
 
-    original_get_provider = llm_service.get_provider
-
     def capturing_get_provider(name: str, task: str = llm_service.TASK_COACH):
         ctx = llm_service._user_ai_keys.get()
-        if ctx is not llm_service._BYOK_INACTIVE:
+        if ctx is not llm_service._BYOK_INACTIVE and isinstance(ctx, dict):
             captured_keys.append(dict(ctx))
-        return original_get_provider(name, task)
+        # Return a mock provider that doesn't make real network calls
+        provider = AsyncMock()
+        provider.chat = AsyncMock(return_value='{"category": "general", "needs_science_rag": false}')
+        provider.chat_history = AsyncMock(
+            return_value='{"response": "ok", "plan_updates": [], "newFacts": [], "memory_updated": false, "context_updated": false, "exchangeId": "x"}'
+        )
+        return provider
 
-    mock_ai_service = AsyncMock(
-        return_value={
-            "message": "test",
-            "memory_updated": False,
-            "newFacts": [],
-            "context_updated": False,
-            "exchangeId": "x",
-            "tokensConsumed": 0,
-        }
-    )
-
-    with (
-        patch.object(llm_service, "get_provider", side_effect=capturing_get_provider),
-        patch("services.ai_service.ask_trainer", mock_ai_service),
-    ):
+    with patch("services.ai_service.get_provider", side_effect=capturing_get_provider):
         await client.post(
             "/api/v1/ai/ask-trainer",
             headers=auth_headers,
             json={"question": "How am I doing?"},
         )
 
-    # At least one call should have seen the user's openai key
-    assert any(k.get("openai") == "sk-user-key-abc" for k in captured_keys)
+    assert any(k.get("openai") == "sk-user-key-abc" for k in captured_keys), (
+        f"Expected 'sk-user-key-abc' in captured keys but got: {captured_keys}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -245,9 +235,9 @@ async def test_ai_endpoint_returns_402_when_no_key_and_fallback_disabled(
     client, auth_headers
 ):
     """With allow_admin_ai_key_fallback=False and no user key → 402."""
-    with patch.object(
-        llm_service,
-        "get_provider",
+    # Patch the local reference in ai_service (where it's imported directly)
+    with patch(
+        "services.ai_service.get_provider",
         side_effect=llm_service.AIKeyNotConfiguredError(
             "No openai API key configured. Please add your key in Settings → AI Provider."
         ),
