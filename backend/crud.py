@@ -560,6 +560,20 @@ async def get_prompt_athlete_memory_facts(
     return prompt_facts
 
 
+async def clear_athlete_memory(db: AsyncSession, user_id: str) -> None:
+    """Delete all memory facts and clear coach memory text for a user."""
+    await db.execute(
+        delete(models.AthleteMemoryFact).where(
+            models.AthleteMemoryFact.user_id == user_id
+        )
+    )
+    coach_memory_row = await get_coach_memory(db, user_id)
+    if coach_memory_row is not None:
+        coach_memory_row.memory = ""
+        coach_memory_row.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+
+
 # ---------------------------------------------------------------------------
 # AthleteAvailabilityConstraint
 # ---------------------------------------------------------------------------

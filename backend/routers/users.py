@@ -549,6 +549,66 @@ async def delete_athlete_memory_fact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
+async def get_memory_privacy_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.MemoryPrivacySettingsSchema:
+    return schemas.MemoryPrivacySettingsSchema(
+        memory_updates_enabled=current_user.memory_updates_enabled
+    )
+
+
+@router.put("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
+async def update_memory_privacy_settings(
+    body: schemas.MemoryPrivacySettingsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.MemoryPrivacySettingsSchema:
+    current_user.memory_updates_enabled = body.memory_updates_enabled
+    await db.flush()
+    await db.commit()
+    return schemas.MemoryPrivacySettingsSchema(
+        memory_updates_enabled=current_user.memory_updates_enabled
+    )
+
+
+@router.delete("/memory", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_all_memory(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    await crud.clear_athlete_memory(db, current_user.id)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/memory-export", response_model=schemas.MemoryExportSchema)
+async def export_memory(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.MemoryExportSchema:
+    coach_memory_row = await crud.get_coach_memory(db, current_user.id)
+    athlete_context_row = await crud.get_athlete_context(db, current_user.id)
+    facts = await crud.list_athlete_memory_facts(db, current_user.id, include_inactive=True)
+    return schemas.MemoryExportSchema(
+        exported_at=datetime.now(timezone.utc),
+        memory_updates_enabled=current_user.memory_updates_enabled,
+        coach_memory=coach_memory_row.memory if coach_memory_row is not None else "",
+        athlete_context=(
+            schemas.AthleteContextSchema.model_validate(
+                athlete_context_row, from_attributes=True
+            )
+            if athlete_context_row is not None
+            else None
+        ),
+        memory_facts=[
+            schemas.AthleteMemoryFactSchema.model_validate(f, from_attributes=True)
+            for f in facts
+        ],
+    )
+
+
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
 async def get_metrics_history(
     db: AsyncSession = Depends(get_db),

@@ -3041,7 +3041,7 @@ async def test_ask_trainer_prompt_handles_hot_long_ride_as_high_signal():
 
     async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
         captured_prompt.append(system_prompt)
-        assert messages[-1]["content"].startswith("so nach dem hike")
+        assert "so nach dem hike" in messages[-1]["content"]
         return json.dumps(
             {
                 "response": "Wie viel und was hast du unterwegs getrunken?",
@@ -3650,3 +3650,200 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
     assert '"date": "2026-06-18"' in upcoming_section
     assert '"weekday": "Thursday"' in upcoming_section
     assert '"relativeDay": "tomorrow"' in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
+    """Today's plan entry must appear only in the upcoming section, not in history.
+
+    With ``<= today`` for the history slice, today landed in both the
+    "Last 7 days" and "Upcoming plan" sections.  The model then saw today
+    framed as historical context AND as an upcoming event — causing it to
+    confuse which day was today vs. tomorrow.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Tuesday, June 23, 2026 (2026-06-23).\n"
+            "- Yesterday was Monday, June 22, 2026 (2026-06-22).\n"
+            "- Tomorrow is Wednesday, June 24, 2026 (2026-06-24)."
+        ),
+    )
+
+    async def fake_chat(provider, system_prompt, messages, json_mode=False, task="coach"):
+        captured["system_prompt"] = system_prompt
+        return json.dumps({"response": "ok", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat)
+
+    await ai_service.ask_trainer(
+        "What's today?",
+        plan=[
+            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45},
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    prompt = str(captured["system_prompt"])
+    history_section, upcoming_section = prompt.split("Upcoming plan (today and future only", 1)
+
+    # Today must be in the upcoming section
+    assert '"date": "2026-06-23"' in upcoming_section
+    assert '"relativeDay": "today"' in upcoming_section
+
+    # Today must NOT appear in the history section (would create ambiguous dual framing)
+    assert '"date": "2026-06-23"' not in history_section
+
+    # Yesterday must be in history, not upcoming
+    assert '"date": "2026-06-22"' in history_section
+    assert '"date": "2026-06-22"' not in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
+    """ask_trainer() must prepend a date stamp to the user message.
+
+    The date_context block is in the system prompt, far from the actual question
+    when conversation history is long.  An earlier turn that stated a wrong weekday
+    sits closer to the generation point than the system prompt.  Prepending the
+    stamp to the user message keeps an authoritative date immediately adjacent to
+    the question, regardless of how many history turns come before it.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_stamp",
+        lambda timezone_name=None: "[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]",
+    )
+    monkeypatch.setattr(
+        ai_service, "app_date_context",
+        lambda timezone_name=None: "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23).",
+    )
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+        captured["messages"] = messages
+        return json.dumps({"response": "ok", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    await ai_service.ask_trainer(
+        "What should I do today?",
+        plan=[],
+        profile={},
+        conversation_history=[
+            # Simulate a prior turn that stated a wrong weekday
+            {"role": "assistant", "content": "Tomorrow, Wednesday June 24, is your rest day."},
+        ],
+        timezone_name="Europe/Berlin",
+    )
+
+    messages = captured["messages"]
+    last_user_msg = messages[-1]["content"]
+
+    # Stamp must come first
+    assert last_user_msg.startswith("[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]")
+    # Original question preserved after the stamp
+    assert "What should I do today?" in last_user_msg
+    # Prior wrong assistant turn is in history but the stamp is closer to generation
+    assert any("wrong" in m.get("content", "") or "Wednesday" in m.get("content", "") for m in messages[:-1])
+
+
+@pytest.mark.asyncio
+async def test_race_event_feedback_plan_entries_include_relative_day(monkeypatch):
+    """race_event_feedback() must pass today_date to _slim_plan_entry so that
+    upcoming plan entries carry relativeDay ('today', 'tomorrow') context.
+
+    Without today_date the _slim_plan_entry call skips the relativeDay block and
+    the model has no proximity cue — it only sees ISO dates and has to infer
+    "tomorrow" by computing the day-of-week itself, which is an error source.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="coach"):
+        captured["user_msg"] = user_msg
+        return json.dumps({"feedback": "Looks good."})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.race_event_feedback(
+        event={"date": "2026-08-10", "distanceKm": 100},
+        plan=[
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
+            {"date": "2026-06-25", "workoutType": "endurance", "title": "Long Ride", "durationMinutes": 120},
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    user_msg = str(captured["user_msg"])
+    # Today's entry must carry relativeDay so the model knows it's today
+    assert '"relativeDay": "today"' in user_msg
+    # Tomorrow's entry must carry relativeDay
+    assert '"relativeDay": "tomorrow"' in user_msg
+    # Weekday labels must be present
+    assert '"weekday": "Monday"' in user_msg or '"weekday": "Tuesday"' in user_msg
+
+
+@pytest.mark.asyncio
+async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkeypatch):
+    """adapt_training_plan() must enrich incomplete_days with weekday/dateLabel/relativeDay
+    before sending to the prompt.
+
+    Without enrichment the model receives raw ISO dates and must infer weekday names
+    itself — a known error source when reasoning about rescheduling.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
+    )
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="plan"):
+        captured["user_msg"] = user_msg
+        return json.dumps({"updatedDays": []})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.adapt_training_plan(
+        plan=[
+            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45, "completed": True},
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max", "durationMinutes": 60},
+        ],
+        recent_feedback=[],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    user_msg = str(captured["user_msg"])
+    # The completed day should be excluded from incomplete_days
+    assert '"date": "2026-06-22"' not in user_msg or '"completed": true' not in user_msg
+    # Today's incomplete entry must carry weekday and relativeDay
+    assert '"weekday": "Monday"' in user_msg or '"weekday": "Tuesday"' in user_msg
+    assert '"relativeDay": "today"' in user_msg
+    # Tomorrow's entry must carry relativeDay
+    assert '"relativeDay": "tomorrow"' in user_msg

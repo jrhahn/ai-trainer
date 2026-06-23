@@ -32,7 +32,7 @@ from .llm import (
     TASK_PLAN,
     get_provider,
 )  # re-exported for backward compat
-from .dates import app_date_context, app_today, app_today_iso
+from .dates import app_date_context, app_today, app_today_iso, app_today_stamp
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -480,8 +480,13 @@ async def adapt_training_plan(
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> list[dict]:
-    today = app_today_iso(timezone_name=timezone_name)
-    incomplete_days = [day for day in plan if not day.get("completed")]
+    today_date = app_today(timezone_name=timezone_name)
+    today = today_date.isoformat()
+    incomplete_days = [
+        _slim_plan_entry(day, today_date=today_date)
+        for day in plan
+        if not day.get("completed")
+    ]
     # Always use the user-entered FTP for training load computation.
     ftp = float(profile.get("currentFTP") or 0)
     training_load = compute_training_load(plan, ftp) if ftp > 0 else None
@@ -564,7 +569,7 @@ async def ask_trainer(
     last_7_days = [
         _slim_plan_entry(day, today_date=today_date)
         for day in plan
-        if day.get("date", "") <= today
+        if day.get("date", "") < today
     ][-MAX_PLAN_DAYS_PAST:]
     next_7_days = [
         _slim_plan_entry(day, today_date=today_date)
@@ -610,7 +615,8 @@ async def ask_trainer(
         date_context=date_context,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
-    messages = [*history, {"role": "user", "content": question}]
+    date_stamp = app_today_stamp(timezone_name=timezone_name)
+    messages = [*history, {"role": "user", "content": f"{date_stamp}\n{question}"}]
 
     # Retry empty/blank coach replies with exponential backoff before giving up;
     # rate-limit errors are not retried here and propagate to the caller.
@@ -662,9 +668,10 @@ async def race_event_feedback(
     action: str = "added",
     timezone_name: str | None = None,
 ) -> str:
-    today = app_today_iso(timezone_name=timezone_name)
+    today_date = app_today(timezone_name=timezone_name)
+    today = today_date.isoformat()
     upcoming_plan = [
-        _slim_plan_entry(day)
+        _slim_plan_entry(day, today_date=today_date)
         for day in plan
         if day.get("date", "") >= today and not day.get("completed")
     ][:14]

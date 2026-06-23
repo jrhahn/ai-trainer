@@ -62,6 +62,26 @@ def app_date_context(
     )
 
 
+def app_today_stamp(
+    now: datetime | None = None, timezone_name: str | None = None
+) -> str:
+    """Return a compact one-line date stamp for prepending to user messages.
+
+    Injecting this into the user turn (not just the system prompt) keeps the
+    authoritative date adjacent to the question even when conversation history
+    contains earlier messages that stated a wrong weekday.
+
+    Example: ``[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]``
+    """
+    tz = app_timezone(timezone_name)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    today = current.astimezone(tz).date()
+    tz_label = getattr(tz, "key", str(tz))
+    return f"[{_date_label(today)} · {today.isoformat()} · {tz_label}]"
+
+
 def request_timezone(request: Any) -> str | None:
     """Return the browser-supplied timezone header if present."""
     value = request.headers.get(TIMEZONE_HEADER)
