@@ -564,7 +564,7 @@ async def ask_trainer(
     last_7_days = [
         _slim_plan_entry(day, today_date=today_date)
         for day in plan
-        if day.get("date", "") <= today
+        if day.get("date", "") < today
     ][-MAX_PLAN_DAYS_PAST:]
     next_7_days = [
         _slim_plan_entry(day, today_date=today_date)

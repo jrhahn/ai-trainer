@@ -3650,3 +3650,60 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
     assert '"date": "2026-06-18"' in upcoming_section
     assert '"weekday": "Thursday"' in upcoming_section
     assert '"relativeDay": "tomorrow"' in upcoming_section
+
+
+@pytest.mark.asyncio
+async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
+    """Today's plan entry must appear only in the upcoming section, not in history.
+
+    With ``<= today`` for the history slice, today landed in both the
+    "Last 7 days" and "Upcoming plan" sections.  The model then saw today
+    framed as historical context AND as an upcoming event — causing it to
+    confuse which day was today vs. tomorrow.
+    """
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Tuesday, June 23, 2026 (2026-06-23).\n"
+            "- Yesterday was Monday, June 22, 2026 (2026-06-22).\n"
+            "- Tomorrow is Wednesday, June 24, 2026 (2026-06-24)."
+        ),
+    )
+
+    async def fake_chat(provider, system_prompt, messages, json_mode=False, task="coach"):
+        captured["system_prompt"] = system_prompt
+        return json.dumps({"response": "ok", "sources": []})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat)
+
+    await ai_service.ask_trainer(
+        "What's today?",
+        plan=[
+            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45},
+            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
+            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
+        ],
+        profile={},
+        timezone_name="Europe/Berlin",
+    )
+
+    prompt = str(captured["system_prompt"])
+    history_section, upcoming_section = prompt.split("Upcoming plan (today and future only", 1)
+
+    # Today must be in the upcoming section
+    assert '"date": "2026-06-23"' in upcoming_section
+    assert '"relativeDay": "today"' in upcoming_section
+
+    # Today must NOT appear in the history section (would create ambiguous dual framing)
+    assert '"date": "2026-06-23"' not in history_section
+
+    # Yesterday must be in history, not upcoming
+    assert '"date": "2026-06-22"' in history_section
+    assert '"date": "2026-06-22"' not in upcoming_section
