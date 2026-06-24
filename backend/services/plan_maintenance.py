@@ -15,6 +15,7 @@ from config import settings
 from services import ai_service
 from services.dates import app_today_iso, app_timezone
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
+from services.plan_constraints import sanitize_plan_for_constraints
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
@@ -102,12 +103,26 @@ async def maintain_user_training_plan(
     weather_section = await training_weather_context_for_user(db, user.id)
     race_events = await crud.get_race_events(db, user.id)
 
+    await crud.deactivate_expired_availability_constraints(db, user.id, today=today)
+    constraint_rows = await crud.list_active_availability_constraints(
+        db, user.id, today=today
+    )
+    constraints = [
+        schemas.AthleteAvailabilityConstraintSchema.model_validate(
+            c, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for c in constraint_rows
+    ]
+    profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
+    if constraints:
+        profile = {**profile, "availabilityConstraints": constraints}
+
     usage_token = begin_token_usage_collection()
     try:
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [],
-            schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
+            profile,
             provider=_provider(user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
@@ -120,6 +135,7 @@ async def maintain_user_training_plan(
         if consumed:
             await crud.increment_user_consumed_tokens(db, user, consumed)
 
+    updated_plan = sanitize_plan_for_constraints(updated_plan, constraints)
     if updated_plan == plan:
         return False
     await crud.upsert_training_plan(db, user.id, updated_plan)
