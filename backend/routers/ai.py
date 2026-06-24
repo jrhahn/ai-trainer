@@ -37,6 +37,11 @@ from services.analysis import (
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import extract_availability_constraints
+from services.plan_constraints import (
+    sanitize_plan_for_constraints,
+    filter_plan_updates_for_constraints,
+    day_violates_constraint,
+)
 from services.intervals_service import apply_summary_fallback
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
@@ -192,63 +197,19 @@ def _profile_with_availability_constraints(
 def _day_violates_availability_constraint(
     day: dict, constraints: list[dict]
 ) -> bool:
-    date_value = day.get("date")
-    if not date_value:
-        return False
-    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
-    duration = day.get("durationMinutes") or day.get("duration_minutes") or 0
-    is_training = workout_type not in {"", "rest"} or int(duration or 0) > 0
-    if not is_training:
-        return False
-    for constraint in constraints:
-        if constraint.get("constraintType") != "no_training":
-            continue
-        if constraint.get("constraintDate") == date_value:
-            return True
-    return False
+    return day_violates_constraint(day, constraints)
 
 
 def _sanitize_plan_for_availability_constraints(
     plan: list[dict], constraints: list[dict]
 ) -> list[dict]:
-    if not constraints:
-        return plan
-    sanitized: list[dict] = []
-    for day in plan:
-        if _day_violates_availability_constraint(day, constraints):
-            sanitized.append(
-                {
-                    **day,
-                    "workoutType": "rest",
-                    "title": "Unavailable",
-                    "description": "No training scheduled because of an athlete availability constraint.",
-                    "durationMinutes": 0,
-                    "targetPower": None,
-                    "targetHeartRate": None,
-                    "intervals": None,
-                    "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
-                    "keyFocusPoints": [
-                        "Keep the day free from training",
-                        "Move any missed stimulus to an available day",
-                        "Use the time for recovery or life commitments",
-                    ],
-                }
-            )
-        else:
-            sanitized.append(day)
-    return sanitized
+    return sanitize_plan_for_constraints(plan, constraints)
 
 
 def _filter_plan_updates_for_availability_constraints(
     updates: list[dict], constraints: list[dict]
 ) -> list[dict]:
-    if not constraints:
-        return updates
-    return [
-        update
-        for update in updates
-        if not _day_violates_availability_constraint(update, constraints)
-    ]
+    return filter_plan_updates_for_constraints(updates, constraints)
 
 
 def _next_race_date_from_events(
@@ -374,15 +335,23 @@ async def _auto_adapt_plan(
     try:
         race_events = await _race_events_for_prompt(db, user.id)
         weather_section = await training_weather_context_for_user(db, user.id)
+        availability_constraints = await _active_availability_constraints_for_prompt(
+            db, user.id, timezone_name
+        )
+        profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
+        profile = _profile_with_availability_constraints(profile, availability_constraints)
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [feedback_entry],
-            schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
+            profile,
             provider=provider,
             rider_assessment=rider_assessment,
             race_events=race_events,
             weather_context_section=weather_section,
             timezone_name=timezone_name,
+        )
+        updated_plan = _sanitize_plan_for_availability_constraints(
+            updated_plan, availability_constraints
         )
         await crud.upsert_training_plan(db, user.id, updated_plan)
     except Exception:
@@ -945,7 +914,7 @@ async def ask_trainer(
                         if v is not None
                     },
                 }
-                if day.get("date") in updates_by_date
+                if day.get("date") in updates_by_date and not day.get("completed")
                 else day
             )
             for day in plan

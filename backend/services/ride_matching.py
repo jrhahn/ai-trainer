@@ -14,6 +14,8 @@ import models
 import schemas
 from services import ai_service
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
+from services.dates import app_today_iso
+from services.plan_constraints import filter_plan_updates_for_constraints
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +201,7 @@ def _apply_plan_updates(plan: list[dict], plan_updates: list[dict] | None) -> li
         return None
     return [
         {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
-        if day.get("date") in updates_by_date
+        if day.get("date") in updates_by_date and not day.get("completed")
         else day
         for day in plan
     ]
@@ -486,6 +488,25 @@ async def review_matched_ride_and_adapt(
             tsb=float(ride.tsb_after) if ride.tsb_after is not None else None,
         )
         plan_updates = result.get("plan_updates") or None
+        if plan_updates:
+            # Never modify the day that was just matched — it belongs to the completed ride.
+            if ride.matched_plan_date:
+                plan_updates = [
+                    u for u in plan_updates if u.get("date") != ride.matched_plan_date
+                ]
+            # Enforce availability constraints on remaining updates.
+            constraint_rows = await crud.list_active_availability_constraints(
+                db, user.id, today=app_today_iso()
+            )
+            if constraint_rows:
+                constraints = [
+                    schemas.AthleteAvailabilityConstraintSchema.model_validate(
+                        c, from_attributes=True
+                    ).model_dump(by_alias=True, mode="json")
+                    for c in constraint_rows
+                ]
+                plan_updates = filter_plan_updates_for_constraints(plan_updates, constraints)
+            plan_updates = plan_updates or None
         updated_plan = _apply_plan_updates(plan, plan_updates)
         if updated_plan is not None:
             await crud.upsert_training_plan(db, user.id, updated_plan)
