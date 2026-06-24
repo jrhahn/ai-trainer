@@ -1,5 +1,18 @@
+import glob
 import os
+import sys
 from unittest.mock import AsyncMock
+
+# On NixOS, the dynamic linker reads LD_LIBRARY_PATH only at process startup,
+# so os.environ changes made at runtime never reach dlopen().  If we haven't
+# already re-exec'd with the correct path, do it now — before any C extensions
+# (greenlet, aiosqlite …) are loaded.
+if not os.environ.get("_PYTEST_NIXOS_REEXEC"):
+    _candidates = sorted(glob.glob("/nix/store/*/lib/libstdc++.so.6"))
+    if _candidates:
+        _lib_dir = os.path.dirname(_candidates[0])
+        _env = {**os.environ, "LD_LIBRARY_PATH": _lib_dir, "_PYTEST_NIXOS_REEXEC": "1"}
+        os.execvpe(sys.executable, [sys.executable, "-m", "pytest"] + sys.argv[1:], _env)
 
 import pytest
 import pytest_asyncio

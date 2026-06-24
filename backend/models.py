@@ -122,6 +122,8 @@ class User(Base):
     memory_updates_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    user_openai_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    user_gemini_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # Relationships
     training_plan: Mapped["TrainingPlan | None"] = relationship(

@@ -27,6 +27,10 @@ vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   deleteCurrentUser: mockDeleteCurrentUser,
   estimateFTP: mockEstimateFTP,
+  fetchAIKeyStatus: vi.fn().mockResolvedValue({ provider: 'openai', hasOpenaiKey: false, hasGeminiKey: false }),
+  saveAIKey: vi.fn(),
+  deleteAIKey: vi.fn(),
+  testAIKey: vi.fn(),
 }))
 
 vi.mock('../hooks/useMetricsPipeline', () => ({
@@ -40,6 +44,10 @@ vi.mock('../hooks/useMetricsPipeline', () => ({
 
 vi.mock('../hooks/useImportProgress', () => ({
   useImportProgress: mockImportProgress,
+}))
+
+vi.mock('../components/AIKeySettings', () => ({
+  default: () => <div data-testid="ai-key-settings-stub" />,
 }))
 
 // StravaConnect uses strava services; stub the component

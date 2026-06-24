@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,19 +65,35 @@ class Settings(BaseSettings):
     strava_client_id: str = ""
     strava_client_secret: str = ""
     strava_encryption_key: str = ""
-    """Fernet key for encrypting Strava OAuth tokens at rest.
+    """Fernet key for encrypting OAuth tokens and user API keys at rest.
 
     Generate with:
         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-    When empty, tokens are stored as plaintext (dev/test only).
+    Must be set in production (enforced below).  In development/test it may be
+    omitted, in which case secrets are stored as plaintext.
     """
+
+    @model_validator(mode="after")
+    def _require_encryption_key_in_production(self) -> "Settings":
+        if self.app_env not in ("development", "test") and not self.strava_encryption_key:
+            raise ValueError(
+                "STRAVA_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
+                "Generate one with: "
+                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        return self
 
     # ------------------------------------------------------------------
     # AI providers
     # ------------------------------------------------------------------
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    allow_admin_ai_key_fallback: bool = True
+    """When True (default), AI requests fall back to the backend owner's keys if
+    the user has not configured their own.  Set to False to require every user to
+    supply their own key (BYOK-only mode).
+    """
 
     # ------------------------------------------------------------------
     # AI model selection by task
