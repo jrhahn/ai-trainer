@@ -635,6 +635,7 @@ async def ask_trainer(
                 "plan_updates": parsed.get("planUpdates"),
                 "sources": parsed.get("sources") or [],
                 "ride_note_update": parsed.get("ride_note_update"),
+                "ride_label_update": parsed.get("ride_label_update"),
                 "physiology_rationale": _clean_rationale(
                     parsed.get("physiologyRationale")
                 ),

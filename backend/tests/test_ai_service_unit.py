@@ -3847,3 +3847,41 @@ async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkey
     assert '"relativeDay": "today"' in user_msg
     # Tomorrow's entry must carry relativeDay
     assert '"relativeDay": "tomorrow"' in user_msg
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_returns_ride_label_update(monkeypatch):
+    """ask_trainer() must pass ride_label_update from the LLM response to the caller.
+
+    Previously the field was silently dropped because the return dict only included
+    ride_note_update but not ride_label_update, so the router's result.pop("ride_label_update")
+    always got None and label corrections were never persisted or sent to the frontend.
+    """
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+        return json.dumps({
+            "response": "I've updated your activity label for June 24 to OK.",
+            "ride_label_update": {"activity_date": "2026-06-24", "label": "OK"},
+        })
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    result = await ai_service.ask_trainer(
+        "Please change the label for June 24 to OK.",
+        plan=[],
+        profile={},
+    )
+
+    assert result["ride_label_update"] == {"activity_date": "2026-06-24", "label": "OK"}
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_ride_label_update_is_none_when_absent(monkeypatch):
+    """ride_label_update must be None (not KeyError) when the LLM omits the field."""
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+        return json.dumps({"response": "Great ride today!"})
+
+    monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
+
+    result = await ai_service.ask_trainer("How did I do?", plan=[], profile={})
+
+    assert result.get("ride_label_update") is None
