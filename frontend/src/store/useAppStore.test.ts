@@ -152,6 +152,38 @@ describe('updateTrainingDay', () => {
 })
 
 describe('loadUserData', () => {
+  it('loads available data and sets dataLoadWarning when non-critical requests fail', async () => {
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    mockFetchTrainingPlan.mockResolvedValue([mockDay])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockRejectedValue(new Error('Network error'))
+    mockFetchCoachMemory.mockRejectedValue(new Error('Network error'))
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    await useAppStore.getState().loadUserData('token-123')
+
+    const state = useAppStore.getState()
+    // Core profile still loaded
+    expect(state.userProfile?.email).toBe('alice@example.com')
+    expect(state.trainingPlan).toHaveLength(1)
+    // Failed slices fall back to empty defaults
+    expect(state.chatHistory).toEqual([])
+    expect(state.coachMemory).toBe('')
+    // Warning is surfaced
+    expect(state.dataLoadWarning).toMatch(/chat history/)
+    expect(state.dataLoadWarning).toMatch(/coach memory/)
+    expect(state.isLoadingUserData).toBe(false)
+  })
+
   it('hydrates store state from backend services and merges workout logs into the plan', async () => {
     mockFetchCurrentUser.mockResolvedValue({
       profile: {

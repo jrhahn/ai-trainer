@@ -25,12 +25,14 @@ export default function App() {
   const loadUserData = useAppStore((s) => s.loadUserData)
   const logout = useAppStore((s) => s.logout)
   const setAuthToken = useAppStore((s) => s.setAuthToken)
+  const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
+  const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
   const [isCheckingAutheliaSession, setIsCheckingAutheliaSession] = useState(Boolean(AUTHELIA_URL && !authToken))
 
   useEffect(() => {
     if (authToken) {
-      void loadUserData().catch(() => {})
+      void loadUserData()
     }
   }, [authToken, loadUserData])
 
@@ -112,6 +114,17 @@ export default function App() {
           </Route>
         )}
       </Routes>
+      {dataLoadWarning && !isLoadingUserData && (
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
+          <span>⚠ {dataLoadWarning}</span>
+          <button
+            onClick={clearDataLoadWarning}
+            className="shrink-0 text-amber-600 hover:text-amber-900 font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {showOverlay && (
         <div className="fixed inset-0 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 text-center w-72">

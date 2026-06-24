@@ -278,8 +278,10 @@ interface AppState {
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
   pendingFeedbackRideIds: number[]
+  dataLoadWarning: string | null
 
   setAuthToken: (token: string | null) => void
+  clearDataLoadWarning: () => void
   loadUserData: (tokenOverride?: string) => Promise<void>
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
@@ -339,6 +341,7 @@ const dataState = {
   rideMetricsHistory: [] as RideMetricPoint[],
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
+  dataLoadWarning: null as string | null,
 }
 
 const initialState = {
@@ -372,6 +375,7 @@ export const useAppStore = create<AppState>()(
       persistToken(token)
       set({ authToken: token })
     },
+    clearDataLoadWarning: () => set({ dataLoadWarning: null }),
     logout: () => {
       persistToken(null)
       set(initialState)
@@ -456,11 +460,12 @@ export const useAppStore = create<AppState>()(
       const token = tokenOverride ?? get().authToken
       if (!token) return
 
-      set({ isLoadingUserData: true, loadingStep: 0, authToken: token })
+      set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
-      try {
-        const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
-        const [user, plan, workoutLogs, chatHistory, coachMemory, raceEvents, metricsHistory, rideMetricsHistory] = await Promise.all([
+      const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
+
+      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult] =
+        await Promise.allSettled([
           track(fetchCurrentUser(token)),
           track(fetchTrainingPlan(token)),
           track(fetchWorkoutLogs(token)),
@@ -471,38 +476,58 @@ export const useAppStore = create<AppState>()(
           track(fetchRideMetricsHistory(token)),
         ])
 
-        set({
-          authToken: token,
-          userProfile: user.profile,
-          trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
-          workoutLogs,
-          stravaConnection: user.stravaConnection,
-          intervalsConnection: user.intervalsConnection,
-          riderAssessment: user.riderAssessment,
-          stravaAnalysisComplete: user.stravaAnalysisComplete,
-          lastStravaActivityId: user.lastStravaActivityId ?? null,
-          stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
-          intervalsAnalysisComplete: user.intervalsAnalysisComplete,
-          lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
-          intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled,
-          aiProvider: user.aiProvider,
-          isOnboarded: user.isOnboarded,
-          chatHistory,
-          coachMemory,
-          raceEvents,
-          metricsHistory,
-          rideMetricsHistory,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to load user data'
+      // Auth errors from the user endpoint must clear the session — app can't continue.
+      if (userResult.status === 'rejected') {
+        const message = userResult.reason instanceof Error ? userResult.reason.message : ''
         if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
           persistToken(null)
-          set(initialState)
+          set({ ...initialState, isLoadingUserData: false })
+        } else {
+          set({ isLoadingUserData: false, loadingStep: 0, dataLoadWarning: 'Failed to load your profile. Please refresh the page.' })
         }
-        throw error
-      } finally {
-        set({ isLoadingUserData: false, loadingStep: 0 })
+        return
       }
+
+      const user = userResult.value
+      const workoutLogs = workoutLogsResult.status === 'fulfilled' ? workoutLogsResult.value : {}
+      const plan = planResult.status === 'fulfilled' ? planResult.value : []
+
+      const failed: string[] = []
+      if (planResult.status === 'rejected') failed.push('training plan')
+      if (workoutLogsResult.status === 'rejected') failed.push('workout logs')
+      if (chatHistoryResult.status === 'rejected') failed.push('chat history')
+      if (coachMemoryResult.status === 'rejected') failed.push('coach memory')
+      if (raceEventsResult.status === 'rejected') failed.push('race events')
+      if (metricsHistoryResult.status === 'rejected') failed.push('fitness metrics')
+      if (rideMetricsHistoryResult.status === 'rejected') failed.push('ride history')
+
+      set({
+        authToken: token,
+        userProfile: user.profile,
+        trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
+        workoutLogs,
+        stravaConnection: user.stravaConnection,
+        intervalsConnection: user.intervalsConnection,
+        riderAssessment: user.riderAssessment,
+        stravaAnalysisComplete: user.stravaAnalysisComplete,
+        lastStravaActivityId: user.lastStravaActivityId ?? null,
+        stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
+        intervalsAnalysisComplete: user.intervalsAnalysisComplete,
+        lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
+        intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled,
+        aiProvider: user.aiProvider,
+        isOnboarded: user.isOnboarded,
+        chatHistory: chatHistoryResult.status === 'fulfilled' ? chatHistoryResult.value : [],
+        coachMemory: coachMemoryResult.status === 'fulfilled' ? coachMemoryResult.value : '',
+        raceEvents: raceEventsResult.status === 'fulfilled' ? raceEventsResult.value : [],
+        metricsHistory: metricsHistoryResult.status === 'fulfilled' ? metricsHistoryResult.value : [],
+        rideMetricsHistory: rideMetricsHistoryResult.status === 'fulfilled' ? rideMetricsHistoryResult.value : [],
+        dataLoadWarning: failed.length > 0
+          ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
+          : null,
+        isLoadingUserData: false,
+        loadingStep: 0,
+      })
     },
   })
 )
