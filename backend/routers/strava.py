@@ -10,6 +10,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -104,10 +105,6 @@ def _build_metrics_chain_resilient(
         metrics_chain.append(metric)
 
     return metrics_chain, failed
-
-
-class RefreshRequest(schemas.CamelModel):
-    refresh_token: str
 
 
 class RefreshResponse(schemas.CamelModel):
@@ -241,17 +238,32 @@ async def strava_callback(
 
 @router.post("/auth/strava/refresh", response_model=RefreshResponse)
 async def strava_refresh(
-    body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> RefreshResponse:
+    """Force-refresh the authenticated user's stored Strava token.
+
+    The refresh token comes from the stored row, never from the client, and the
+    row is locked for the refresh so it cannot race the background sync (Strava
+    rotates and invalidates the previous refresh token on every refresh).
+    """
+    token_row = (
+        await db.execute(
+            select(models.StravaToken)
+            .where(models.StravaToken.user_id == current_user.id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if token_row is None:
+        raise HTTPException(status_code=404, detail="Strava not connected")
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{STRAVA_OAUTH_BASE}/oauth/token",
             json={
                 "client_id": _strava_client_id(),
                 "client_secret": _strava_client_secret(),
-                "refresh_token": body.refresh_token,
+                "refresh_token": token_row.refresh_token,
                 "grant_type": "refresh_token",
             },
         )
@@ -260,12 +272,10 @@ async def strava_refresh(
         raise HTTPException(status_code=400, detail="Failed to refresh Strava token")
 
     data = resp.json()
-    token_row = await crud.get_strava_token(db, current_user.id)
-    if token_row is not None:
-        token_row.access_token = data["access_token"]
-        token_row.refresh_token = data["refresh_token"]
-        token_row.expires_at = data["expires_at"]
-        await db.flush()
+    token_row.access_token = data["access_token"]
+    token_row.refresh_token = data["refresh_token"]
+    token_row.expires_at = data["expires_at"]
+    await db.flush()
 
     return RefreshResponse(
         access_token=data["access_token"],

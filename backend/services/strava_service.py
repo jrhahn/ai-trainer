@@ -10,6 +10,7 @@ import time
 
 import httpx
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
@@ -22,7 +23,34 @@ async def ensure_fresh_strava_token(
     token_row: models.StravaToken,
     db: AsyncSession,
 ) -> str:
-    """Return a valid access token, refreshing it first if expired."""
+    """Return a valid access token, refreshing it first if expired.
+
+    Strava rotates the refresh token on every refresh and immediately
+    invalidates the previous one. If two callers (e.g. the background activity
+    sync and a live request) refresh concurrently, the loser persists a token
+    that Strava has already revoked, permanently breaking the connection.
+
+    To serialize refreshes we take a row-level lock on the token before
+    refreshing (``SELECT ... FOR UPDATE``). The lock is held until the
+    surrounding transaction commits, so a second caller blocks until the first
+    has committed its rotated token, then re-reads the row and reuses the
+    fresh token instead of refreshing again.
+    """
+    if token_row.expires_at >= time.time():
+        return token_row.access_token
+
+    # Lock the row so a concurrent refresh for the same user blocks here.
+    locked = (
+        await db.execute(
+            select(models.StravaToken)
+            .where(models.StravaToken.user_id == token_row.user_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if locked is not None:
+        token_row = locked
+
+    # Another caller may have refreshed the token while we waited for the lock.
     if token_row.expires_at >= time.time():
         return token_row.access_token
 

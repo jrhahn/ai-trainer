@@ -237,8 +237,32 @@ async def test_strava_callback_updates_existing_token(client, auth_headers, monk
 # ---------------------------------------------------------------------------
 
 
+async def _seed_strava_token(
+    user_id: str,
+    *,
+    access_token: str = "stale-access",
+    refresh_token: str = "stale-refresh",
+    expires_at: int = 1000000000,
+) -> None:
+    async with async_session_maker() as session:
+        session.add(
+            models.StravaToken(
+                user_id=user_id,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+                athlete_id=7,
+                athlete_name="Rider",
+            )
+        )
+        await session.commit()
+
+
 @pytest.mark.asyncio
 async def test_strava_refresh_success(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id)
+
     fake_refresh_data = {
         "access_token": "refreshed-access",
         "refresh_token": "refreshed-refresh",
@@ -253,7 +277,6 @@ async def test_strava_refresh_success(client, auth_headers, monkeypatch):
     response = await client.post(
         "/api/v1/auth/strava/refresh",
         headers=auth_headers,
-        json={"refreshToken": "old-refresh-token"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -263,6 +286,9 @@ async def test_strava_refresh_success(client, auth_headers, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_strava_refresh_failure_returns_400(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id)
+
     monkeypatch.setattr(
         strava_router.httpx,
         "AsyncClient",
@@ -272,27 +298,64 @@ async def test_strava_refresh_failure_returns_400(client, auth_headers, monkeypa
     response = await client.post(
         "/api/v1/auth/strava/refresh",
         headers=auth_headers,
-        json={"refreshToken": "bad-token"},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_strava_refresh_without_connection_returns_404(client, auth_headers):
+    """Refreshing with no stored Strava connection returns 404, not a refresh."""
+    response = await client.post("/api/v1/auth/strava/refresh", headers=auth_headers)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_strava_refresh_uses_stored_token_not_request_body(
+    client, auth_headers, monkeypatch
+):
+    """The refresh must use the stored refresh token, never a client-supplied one."""
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id, refresh_token="stored-refresh")
+
+    captured: dict = {}
+
+    class CapturingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, *args, **kwargs):
+            captured["json"] = kwargs.get("json")
+            return DummyResponse(
+                200,
+                {
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                    "expires_at": 9999999999,
+                },
+            )
+
+    monkeypatch.setattr(
+        strava_router.httpx, "AsyncClient", lambda: CapturingClient()
+    )
+
+    # Even a forged refresh token in the body must be ignored.
+    response = await client.post(
+        "/api/v1/auth/strava/refresh",
+        headers=auth_headers,
+        json={"refreshToken": "attacker-supplied"},
+    )
+    assert response.status_code == 200
+    assert captured["json"]["refresh_token"] == "stored-refresh"
 
 
 @pytest.mark.asyncio
 async def test_strava_refresh_updates_stored_token(client, auth_headers, monkeypatch):
     """When a StravaToken row exists, it should be updated after a refresh."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
-    async with async_session_maker() as session:
-        session.add(
-            models.StravaToken(
-                user_id=user_id,
-                access_token="stale-access",
-                refresh_token="stale-refresh",
-                expires_at=1000000000,
-                athlete_id=7,
-                athlete_name="Rider",
-            )
-        )
-        await session.commit()
+    await _seed_strava_token(user_id)
 
     fake_refresh_data = {
         "access_token": "fresh-access",
@@ -308,7 +371,6 @@ async def test_strava_refresh_updates_stored_token(client, auth_headers, monkeyp
     await client.post(
         "/api/v1/auth/strava/refresh",
         headers=auth_headers,
-        json={"refreshToken": "stale-refresh"},
     )
 
     async with async_session_maker() as session:
@@ -380,6 +442,83 @@ async def test_ensure_fresh_strava_token_not_expired(monkeypatch):
     async with async_session_maker() as session:
         result = await strava_router.ensure_fresh_strava_token(token_row, session)
     assert result == "still-valid"
+
+
+@pytest.mark.asyncio
+async def test_ensure_fresh_strava_token_refreshes_when_expired(
+    auth_headers, monkeypatch
+):
+    """An expired token is refreshed and the rotated token is persisted."""
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(
+        user_id,
+        access_token="stale-access",
+        refresh_token="stale-refresh",
+        expires_at=int(time.time()) - 3600,
+    )
+
+    fresh = {
+        "access_token": "new-access",
+        "refresh_token": "new-refresh",
+        "expires_at": int(time.time()) + 3600,
+    }
+    monkeypatch.setattr(
+        strava_router.httpx,
+        "AsyncClient",
+        lambda: FakeAsyncHttpClient(DummyResponse(200, fresh)),
+    )
+
+    async with async_session_maker() as session:
+        token_row = await session.get(models.StravaToken, user_id)
+        result = await strava_router.ensure_fresh_strava_token(token_row, session)
+        await session.commit()
+
+    assert result == "new-access"
+    async with async_session_maker() as session:
+        reloaded = await session.get(models.StravaToken, user_id)
+    assert reloaded.refresh_token == "new-refresh"
+
+
+@pytest.mark.asyncio
+async def test_ensure_fresh_strava_token_reuses_token_refreshed_under_lock(
+    auth_headers, monkeypatch
+):
+    """If another caller already refreshed the row while we waited for the lock,
+    reuse the fresh token rather than refreshing again (which would invalidate
+    the just-rotated refresh token)."""
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(
+        user_id,
+        access_token="already-fresh-access",
+        refresh_token="already-fresh-refresh",
+        expires_at=int(time.time()) + 3600,
+    )
+
+    class NeverCalledClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise AssertionError("must not refresh an already-fresh token")
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", NeverCalledClient)
+
+    # A caller holding a stale in-memory view of the token (e.g. loaded before
+    # a concurrent refresh committed) should still pick up the fresh DB row.
+    stale_view = models.StravaToken(
+        user_id=user_id,
+        access_token="stale-access",
+        refresh_token="stale-refresh",
+        expires_at=int(time.time()) - 3600,
+        athlete_id=7,
+    )
+    async with async_session_maker() as session:
+        result = await strava_router.ensure_fresh_strava_token(stale_view, session)
+
+    assert result == "already-fresh-access"
 
 
 @pytest.mark.asyncio
