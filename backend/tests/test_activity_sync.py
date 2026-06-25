@@ -231,6 +231,118 @@ async def test_activity_sync_skips_duplicate_intervals_activity(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_strava_cursor_does_not_advance_past_failed_imports(monkeypatch):
+    """Regression for #301: cursor must only advance to max *successfully imported* ID."""
+    user_id = await _create_user(
+        email="cursor-regression@example.com",
+        strava=True,
+        strava_cursor=100,
+    )
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            # id=102 will fail mapping; id=101 will succeed
+            {
+                "id": 102,
+                "name": "Bad Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-11T08:00:00Z",
+                "start_date_local": "2026-06-11T10:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": 101,
+                "name": "Good Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T08:00:00Z",
+                "start_date_local": "2026-06-10T10:00:00",
+                "elapsed_time": 3600,
+            },
+        ]
+
+    async def fake_fetch_streams(*args, **kwargs):
+        return {"watts": {"data": [200]}, "time": {"data": [0]}}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    async def fake_review(*args, **kwargs):
+        return "ok", []
+
+    original_map = activity_sync._strava_activity_to_imported_activity
+
+    def failing_map(activity, streams, weather):
+        if activity["id"] == 102:
+            return None
+        return original_map(activity, streams, weather)
+
+    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
+    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(activity_sync, "_strava_activity_to_imported_activity", failing_map)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 1
+    assert result.skipped == 1
+    # cursor must not jump to 102 (the failed activity) — only to 101
+    assert user.last_strava_activity_id == 101
+
+
+@pytest.mark.asyncio
+async def test_strava_cursor_stays_put_when_all_activities_fail_mapping(monkeypatch):
+    """Regression for #301: cursor must not move at all when every activity fails mapping."""
+    user_id = await _create_user(
+        email="cursor-allbad@example.com",
+        strava=True,
+        strava_cursor=100,
+    )
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            {
+                "id": 200,
+                "name": "Bad Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T08:00:00Z",
+                "start_date_local": "2026-06-10T10:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
+
+    async def fake_fetch_streams(*args, **kwargs):
+        return {}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
+    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "_strava_activity_to_imported_activity", lambda *_: None)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 0
+    # cursor must remain at 100, not advance to 200
+    assert user.last_strava_activity_id == 100
+
+
+@pytest.mark.asyncio
 async def test_activity_sync_isolates_per_user_source_failures(monkeypatch):
     failing_id = await _create_user(
         email="activity-sync-failing@example.com",

@@ -268,6 +268,7 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
         if isinstance(activity.get("id"), int)
         and activity["id"] > int(user.last_strava_activity_id)
     ]
+    imported_ids: list[int] = []
     imported_activities: list[ImportedActivity] = []
     for activity in new_activities:
         activity_id = int(activity["id"])
@@ -282,12 +283,15 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
             result.skipped += 1
             continue
         imported_activities.append(imported)
+        imported_ids.append(activity_id)
 
     imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
-    if latest_seen > int(user.last_strava_activity_id or 0):
-        user.last_strava_activity_id = latest_seen
+    if imported_ids:
+        max_imported_id = max(imported_ids)
+        if max_imported_id > int(user.last_strava_activity_id or 0):
+            user.last_strava_activity_id = max_imported_id
     logger.info(
         "Strava activity sync user=%s fetched=%s new=%s imported=%s skipped=%s adapted=%s",
         user.id,
