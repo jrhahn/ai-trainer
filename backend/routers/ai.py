@@ -55,7 +55,7 @@ from services.weather_service import (
     training_weather_context_for_user,
 )
 from services import llm as llm_service
-from services.llm import begin_token_usage_collection, finish_token_usage_collection
+from services.llm import begin_token_usage_collection, finish_token_usage_collection, resolve_user_provider
 
 
 async def _set_ai_key(
@@ -240,23 +240,6 @@ def _request_timezone(request: Request) -> str | None:
     return request_timezone(request)
 
 
-def _default_provider() -> str:
-    """Return the best available provider based on configured API keys."""
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
-
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
-        return "gemini"
-    if stored == "openai" and settings.openai_api_key:
-        return "openai"
-    return _default_provider()
-
 
 async def _persist_collected_token_usage(
     db: AsyncSession,
@@ -426,7 +409,7 @@ async def analyse_activities(
     try:
         result = await ai_service.analyse_strava_activities(
             activity_payloads,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             streams_by_id=streams_by_id,
             max_heart_rate=body.max_heart_rate,
             training_plan=training_plan or None,
@@ -579,7 +562,7 @@ async def analyse_activities(
                     current_user,
                     ride,
                     training_plan,
-                    provider=_provider(current_user),
+                    provider=resolve_user_provider(current_user),
                     streams=streams_by_activity_id.get(ride.strava_activity_id),
                 )
 
@@ -637,7 +620,7 @@ async def generate_plan(
     try:
         plan = await ai_service.generate_training_plan(
             profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
             weather_context_section=weather_section,
@@ -693,7 +676,7 @@ async def adapt_plan(
             plan,
             [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
             profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
             weather_context_section=weather_section,
@@ -771,7 +754,7 @@ async def ask_trainer(
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
     usage_token = begin_token_usage_collection()
     classify_task = asyncio.ensure_future(
-        ai_service.classify_question(body.question, provider=_provider(current_user))
+        ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
     )
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     metrics_section = ride_metrics_context_section(
@@ -797,7 +780,7 @@ async def ask_trainer(
             body.question,
             plan,
             profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             rider_assessment=rider_assessment,
             coach_memory=coach_memory,
             conversation_history=conversation_history,
@@ -898,7 +881,7 @@ async def ask_trainer(
             body.question,
             result["response"],
             coach_memory,
-            _provider(current_user),
+            resolve_user_provider(current_user),
         )
 
     # Apply plan updates if any
@@ -974,7 +957,7 @@ async def race_event_feedback(
             body.event.model_dump(by_alias=True),
             plan,
             profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             rider_assessment=rider_assessment,
             race_events=race_events,
             metrics_history_section=metrics_section,
@@ -1050,7 +1033,7 @@ async def rate_workout(
         result = await ai_service.rate_completed_workout(
             body.day.model_dump(by_alias=True),
             profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             stream_delta=stream_delta,
         )
     except AIRateLimitError:
@@ -1077,7 +1060,7 @@ async def rate_workout(
             current_user,
             plan,
             auto_feedback,
-            _provider(current_user),
+            resolve_user_provider(current_user),
             timezone_name=timezone_name,
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
@@ -1121,7 +1104,7 @@ async def review_new_rides(
         review_text = await ai_service.batch_review_rides(
             unreviewed,
             profile=profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             training_plan=training_plan,
             timezone_name=timezone_name,
         )
@@ -1158,7 +1141,7 @@ async def extract_athlete_facts(
     try:
         candidates = await ai_service.extract_athlete_facts(
             body.transcript,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
         )
     except AIRateLimitError:
         finish_token_usage_collection(usage_token)
@@ -1218,7 +1201,7 @@ async def resolve_ride_match(
         current_user,
         ride,
         plan,
-        provider=_provider(current_user),
+        provider=resolve_user_provider(current_user),
         streams=streams,
     )
     await _persist_collected_token_usage(db, current_user, usage_token)
@@ -1421,7 +1404,7 @@ async def refresh_login_summary(
             notes=assessment.notes,
             estimated_ftp=assessment.estimated_ftp,
             training_plan=training_plan or None,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
         )
     except AIRateLimitError:
         finish_token_usage_collection(usage_token)
@@ -1550,7 +1533,7 @@ async def next_ride_recommendation(
             rides=rides,
             plan=plan,
             profile=profile,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             rider_assessment=rider_assessment,
             coach_memory=coach_memory,
             athlete_context=athlete_context,
@@ -1646,7 +1629,7 @@ async def process_pending_feedbacks(
             rides=rides,
             assessment=assessment_dict,
             training_plan=training_plan or None,
-            provider=_provider(current_user),
+            provider=resolve_user_provider(current_user),
             timezone_name=timezone_name,
         )
     except AIRateLimitError:
