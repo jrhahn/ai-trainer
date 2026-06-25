@@ -101,6 +101,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [loading, setLoading] = useState(false)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
+  const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
   const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -323,13 +324,18 @@ export default function AIChat({ contextWorkout, className }: Props) {
       })
       setLastFailedMessage(null)
 
-      // Re-sync coach memory from server (backend updated it inside ask_trainer)
-      fetchCoachMemory(authToken)
-        .then((memory) => setCoachMemory(memory))
-        .catch((err) => console.warn('Failed to re-fetch coach memory:', err))
-      fetchCurrentUser(authToken)
-        .then((user) => setUserProfile(user.profile))
-        .catch((err) => console.warn('Failed to re-fetch user profile:', err))
+      // Re-sync coach memory and profile from server (backend updated both inside ask_trainer).
+      // Retry once on transient failure; show a warning if the refresh still can't complete.
+      const retry = <T,>(fn: () => Promise<T>) => fn().catch(() => fn())
+      const refreshResults = await Promise.allSettled([
+        retry(() => fetchCoachMemory(authToken).then((m) => setCoachMemory(m))),
+        retry(() => fetchCurrentUser(authToken).then((u) => setUserProfile(u.profile))),
+      ])
+      if (refreshResults.some((r) => r.status === 'rejected')) {
+        setStaleRefreshWarning(true)
+      } else {
+        setStaleRefreshWarning(false)
+      }
     } catch {
       setLastFailedMessage(userMsg)
       addChatMessage({
@@ -398,6 +404,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
           )}
         </div>
       </div>
+
+      {/* Stale-refresh warning */}
+      {staleRefreshWarning && (
+        <div className="mx-3 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+          Couldn't refresh coach state — data may be slightly out of date.
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-3 border-b flex gap-2">
