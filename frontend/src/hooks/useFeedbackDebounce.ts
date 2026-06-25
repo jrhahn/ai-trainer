@@ -34,6 +34,10 @@ export function useFeedbackDebounce(): { isPending: boolean } {
   )
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const authTokenRef = useRef(authToken)
+  const riderAssessmentRef = useRef(riderAssessment)
+  authTokenRef.current = authToken
+  riderAssessmentRef.current = riderAssessment
 
   useEffect(() => {
     if (pendingFeedbackRideIds.length === 0) {
@@ -53,19 +57,21 @@ export function useFeedbackDebounce(): { isPending: boolean } {
 
     timerRef.current = setTimeout(async () => {
       timerRef.current = null
-      if (!authToken) return
+      const token = authTokenRef.current
+      if (!token) return
 
       try {
-        const loginSummary = await processPendingFeedbacks(authToken, ids)
+        const loginSummary = await processPendingFeedbacks(token, ids)
         if (loginSummary) {
+          const current = riderAssessmentRef.current
           setRiderAssessment(
-            riderAssessment
-              ? { ...riderAssessment, loginSummary }
+            current
+              ? { ...current, loginSummary }
               : { riderType: 'allrounder', notes: '', loginSummary }
           )
         }
         // Refresh ride metrics so userNote values are up to date
-        const freshMetrics = await fetchRideMetricsHistory(authToken)
+        const freshMetrics = await fetchRideMetricsHistory(token)
         setRideMetricsHistory(freshMetrics)
       } catch {
         // Silently ignore — the user_note is already persisted in the DB
