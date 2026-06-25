@@ -506,4 +506,43 @@ describe('AIChat', () => {
     expect(document.querySelector('em')?.textContent).toBe('easier')
   })
 
+  it('shows a stale-refresh warning when post-chat refresh fails after one retry', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Good question!' })
+    // Both fetches fail on every attempt (two retries each = four total calls each)
+    mockFetchCoachMemory.mockRejectedValue(new Error('network error'))
+    mockFetchCurrentUser.mockRejectedValue(new Error('network error'))
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'How do I train?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't refresh coach state/i)).toBeInTheDocument()
+    })
+  })
+
+  it('clears the stale-refresh warning after a subsequent successful exchange', async () => {
+    mockAskTrainer.mockResolvedValue({ response: 'Good question!' })
+    mockFetchCoachMemory
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockResolvedValue('fresh memory')
+    mockFetchCurrentUser.mockResolvedValue({ profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' } })
+    setupStore()
+    render(<AIChat />)
+
+    // First message → warning appears
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'First question')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await waitFor(() => expect(screen.getByText(/Couldn't refresh coach state/i)).toBeInTheDocument())
+
+    // Second message → refresh succeeds → warning gone
+    await userEvent.type(input, 'Second question')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await waitFor(() => expect(screen.queryByText(/Couldn't refresh coach state/i)).not.toBeInTheDocument())
+  })
+
 })
