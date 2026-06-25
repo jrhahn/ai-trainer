@@ -130,6 +130,25 @@ def test_parse_ai_json_repairs_trailing_comma():
     assert result["key"] == "value"
 
 
+def test_parse_ai_json_logs_warning_when_repair_alters_input(caplog):
+    import logging
+
+    # Truncated JSON — repair_json will close the open string and add missing braces
+    raw = '{"description": "Zone 2 ride with focus on cade'
+    with caplog.at_level(logging.WARNING, logger="backend.services.ai_service"):
+        ai_service._parse_ai_json(raw)
+    assert any("json_repair altered" in r.message for r in caplog.records)
+
+
+def test_parse_ai_json_does_not_log_when_input_is_valid(caplog):
+    import logging
+
+    raw = '{"key": "value"}'
+    with caplog.at_level(logging.WARNING, logger="backend.services.ai_service"):
+        ai_service._parse_ai_json(raw)
+    assert not any("json_repair altered" in r.message for r in caplog.records)
+
+
 # ---------------------------------------------------------------------------
 # _best_n_min_power
 # ---------------------------------------------------------------------------

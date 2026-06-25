@@ -164,6 +164,13 @@ def _parse_ai_json(text: str) -> Any:
     extracted = fenced.group(1).strip() if fenced else text.strip()
     stripped = re.sub(r"(\d+)\s+[a-zA-Z_]+(?=\s*[,}\]\n])", r"\1", extracted)
     repaired = repair_json(stripped)
+    if repaired != stripped:
+        logger.warning(
+            "json_repair altered AI response (original=%d chars, repaired=%d chars); "
+            "result may have truncated or inferred values",
+            len(stripped),
+            len(repaired),
+        )
     return json.loads(repaired)
 
 
