@@ -103,6 +103,7 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
   const updateMetrics = useCallback(
     async (updates: Partial<UserProfile>): Promise<RecalcResult> => {
       if (!authToken || !userProfile) throw new Error('Not authenticated')
+      const profileSnapshot = userProfile
       setIsPending(true)
       setError(null)
       try {
@@ -110,6 +111,7 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
         setUserProfile({ ...userProfile, ...updates })
         return await _recalcCore(updates.currentFTP)
       } catch (e) {
+        setUserProfile(profileSnapshot)
         const msg = e instanceof Error ? e.message : 'Failed to update metrics'
         setError(msg)
         throw e
