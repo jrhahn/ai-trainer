@@ -80,6 +80,30 @@ def _intervals_cursor_matches(activity_id: int, cursor: int) -> bool:
     )
 
 
+def _safe_intervals_cursor(
+    outcomes: list[tuple[int, bool]], current_cursor: int
+) -> int:
+    """Return the furthest cursor position that does not skip a failed import.
+
+    ``outcomes`` lists ``(activity_id, handled_ok)`` for the new activities in
+    newest-first order (the order intervals.icu returns them).  Intervals ids
+    are content hashes, not monotonic counters, so the cursor can only move by
+    list position, not by id magnitude.
+
+    Starting from the oldest new activity (the one adjacent to the current
+    cursor) and moving toward the newest, the cursor advances across an
+    unbroken run of successfully-handled activities and stops at the first
+    failure — so that activity, and everything newer than it, is retried on
+    the next sync instead of being silently skipped (regression guard, #322).
+    """
+    new_cursor = current_cursor
+    for activity_id, handled_ok in reversed(outcomes):
+        if not handled_ok:
+            break
+        new_cursor = activity_id
+    return new_cursor
+
+
 def _sanitize_strava_streams(streams: object) -> dict:
     if not isinstance(streams, dict):
         return {}
@@ -327,13 +351,13 @@ async def sync_intervals_for_user(
         )
         return result
 
-    new_activities: list[dict] = []
+    new_activities: list[tuple[dict, int]] = []
     cursor_found = False
     for activity, activity_id in valid:
         if _intervals_cursor_matches(activity_id, int(user.last_intervals_activity_id)):
             cursor_found = True
             break
-        new_activities.append(activity)
+        new_activities.append((activity, activity_id))
     if not cursor_found:
         logger.info(
             "Intervals activity sync cursor not in recent window user=%s cursor=%s fetched=%s",
@@ -343,13 +367,19 @@ async def sync_intervals_for_user(
         )
 
     imported_activities: list[ImportedActivity] = []
-    for activity in new_activities:
+    # Per-activity outcome in newest-first order so the cursor only advances
+    # across activities that were actually handled (imported or already
+    # present), never past a transient failure — see _safe_intervals_cursor.
+    outcomes: list[tuple[int, bool]] = []
+    for activity, activity_id in new_activities:
         summary_imported = map_activity_to_imported_activity(activity, None, {})
         if summary_imported is None:
             result.skipped += 1
+            outcomes.append((activity_id, False))
             continue
         if await find_existing_import(db, user.id, summary_imported) is not None:
             result.skipped += 1
+            outcomes.append((activity_id, True))
             continue
         detail = await fetch_intervals_activity_detail(
             user.intervals_token.api_key, activity.get("id")
@@ -362,14 +392,19 @@ async def sync_intervals_for_user(
         imported = map_activity_to_imported_activity(activity, detail, streams)
         if imported is None:
             result.skipped += 1
+            outcomes.append((activity_id, False))
             continue
         imported_activities.append(imported)
+        outcomes.append((activity_id, True))
 
     imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
-    if latest_seen != user.last_intervals_activity_id:
-        user.last_intervals_activity_id = latest_seen
+    safe_cursor = _safe_intervals_cursor(
+        outcomes, int(user.last_intervals_activity_id)
+    )
+    if safe_cursor != user.last_intervals_activity_id:
+        user.last_intervals_activity_id = safe_cursor
     logger.info(
         "Intervals activity sync user=%s fetched=%s new=%s imported=%s skipped=%s adapted=%s cursor_found=%s",
         user.id,

@@ -343,6 +343,136 @@ async def test_strava_cursor_stays_put_when_all_activities_fail_mapping(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_intervals_cursor_does_not_advance_past_failed_imports(monkeypatch):
+    """Regression for #322: intervals cursor must stop below the first failed import.
+
+    Intervals ids are content hashes, so the cursor can only move by list
+    position. With a middle activity failing to map, the cursor must stop just
+    below it so the failure — and everything newer — is retried next sync.
+    """
+    user_id = await _create_user(
+        email="intervals-cursor-regression@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("intervals-old"),
+    )
+
+    # Newest-first, exactly as intervals.icu returns them.
+    async def fake_fetch_recent_intervals_activities(*args, **kwargs):
+        return [
+            {
+                "id": "newest",
+                "name": "Newest Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-12T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "bad",
+                "name": "Broken Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-11T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "older-good",
+                "name": "Older Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-10T08:00:00",
+                "elapsed_time": 3600,
+            },
+        ]
+
+    original_map = activity_sync.map_activity_to_imported_activity
+
+    def failing_map(activity, detail, streams):
+        if activity.get("id") == "bad":
+            return None
+        return original_map(activity, detail, streams)
+
+    async def fake_detail(*args, **kwargs):
+        return {}
+
+    async def fake_streams(*args, **kwargs):
+        return {}
+
+    async def fake_persist(db, user, activities):
+        return len(activities), 0
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_intervals_activities",
+        fake_fetch_recent_intervals_activities,
+    )
+    monkeypatch.setattr(activity_sync, "map_activity_to_imported_activity", failing_map)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_streams", fake_streams)
+    monkeypatch.setattr(activity_sync, "_persist_and_adapt", fake_persist)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_intervals_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 2
+    assert result.skipped == 1
+    # cursor must stop at the older good ride, NOT jump to the newest one past
+    # the failed "bad" activity in between
+    assert user.last_intervals_activity_id == intervals_activity_id("older-good")
+    assert user.last_intervals_activity_id != intervals_activity_id("newest")
+
+
+@pytest.mark.asyncio
+async def test_intervals_cursor_stays_put_when_all_activities_fail_mapping(monkeypatch):
+    """Regression for #322: intervals cursor must not move when every import fails."""
+    original_cursor = intervals_activity_id("intervals-old")
+    user_id = await _create_user(
+        email="intervals-cursor-allbad@example.com",
+        intervals=True,
+        intervals_cursor=original_cursor,
+    )
+
+    async def fake_fetch_recent_intervals_activities(*args, **kwargs):
+        return [
+            {
+                "id": "bad-1",
+                "name": "Broken Ride 1",
+                "type": "Ride",
+                "start_date_local": "2026-06-12T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "bad-2",
+                "name": "Broken Ride 2",
+                "type": "Ride",
+                "start_date_local": "2026-06-11T08:00:00",
+                "elapsed_time": 3600,
+            },
+        ]
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_intervals_activities",
+        fake_fetch_recent_intervals_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "map_activity_to_imported_activity", lambda *_: None
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_intervals_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 0
+    # cursor must remain exactly where it was
+    assert user.last_intervals_activity_id == original_cursor
+
+
+@pytest.mark.asyncio
 async def test_activity_sync_isolates_per_user_source_failures(monkeypatch):
     failing_id = await _create_user(
         email="activity-sync-failing@example.com",
