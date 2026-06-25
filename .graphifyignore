@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.git/
+__pycache__/
+*.pyc
+.venv/
+.env
+graphify-out/
+coverage/
+.pytest_cache/
+build/
+# Exclude docs and images — semantic extraction needs an LLM API key.
+# Remove these lines and set ANTHROPIC_API_KEY to include them.
+*.md
+*.mdx
+*.rst
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp
+*.pdf
+*.generated.py
+*.generated.ts
+# YAML and HTML are treated as docs requiring LLM semantic extraction.
+# Remove these lines and set ANTHROPIC_API_KEY to include CI/compose/Ansible files.
+*.yml
+*.yaml
+*.html
