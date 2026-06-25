@@ -72,6 +72,23 @@ beforeEach(() => {
 })
 
 describe('useMetricsPipeline', () => {
+  it('rolls back optimistic profile update when recalculation fails', async () => {
+    mockUpdateCurrentUser.mockResolvedValue(undefined)
+    mockRecalculateMetrics.mockRejectedValue(new Error('recalc boom'))
+
+    const { result } = renderHook(() => useMetricsPipeline())
+
+    await act(async () => {
+      await result.current.updateMetrics({ currentFTP: 300 }).catch(() => {})
+    })
+
+    await waitFor(() => {
+      // FTP must be rolled back to the original 250, not left at the optimistically set 300
+      expect(useAppStore.getState().userProfile?.currentFTP).toBe(250)
+      expect(result.current.error).toBe('recalc boom')
+    })
+  })
+
   it('refreshes rider assessment after recalculation', async () => {
     const { result } = renderHook(() => useMetricsPipeline())
 
