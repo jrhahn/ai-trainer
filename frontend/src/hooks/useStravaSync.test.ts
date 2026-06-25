@@ -266,6 +266,67 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('applies maxHeartRate from analysis hrZones to the user profile', async () => {
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: {
+        ...mockAssessment,
+        hrZones: {
+          zone1: { low: 100, high: 130 },
+          zone2: { low: 130, high: 150 },
+          zone3: { low: 150, high: 165 },
+          zone4: { low: 165, high: 178 },
+          zone5: { low: 178, high: 192 },
+        },
+      },
+      planUpdates: undefined,
+    })
+    // fetchCurrentUser (called by recalculateAll) must return the updated maxHR
+    // to reflect what the backend would return after updateCurrentUser persisted it.
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: { ...baseProfile, maxHeartRate: 192 },
+      riderAssessment: mockAssessment,
+    })
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: { ...baseProfile, maxHeartRate: 180 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      // zone5.high from analysis (192) must have been sent to the backend
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ maxHeartRate: 192 })
+      )
+      // and must be reflected in the store after the full flow completes
+      expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(192)
+    })
+  })
+
+  it('keeps existing maxHeartRate when analysis returns no hrZones', async () => {
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: { ...mockAssessment, hrZones: null },
+      planUpdates: undefined,
+    })
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: { ...baseProfile, maxHeartRate: 185 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(185)
+    })
+  })
+
   it('keeps the freshly analysed login summary after metrics recalculation reloads the user', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({

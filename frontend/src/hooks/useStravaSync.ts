@@ -102,8 +102,7 @@ export function useStravaSync(): UseStravaSyncResult {
 
       const updatedProfile = {
         ...userProfile,
-        currentFTP: userProfile.currentFTP,
-        maxHeartRate: userProfile.maxHeartRate,
+        maxHeartRate: assessment.hrZones?.zone5?.high ?? userProfile.maxHeartRate,
       }
       setUserProfile(updatedProfile)
 
