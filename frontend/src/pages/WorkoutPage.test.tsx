@@ -215,6 +215,7 @@ describe('WorkoutPage', () => {
       date: '2025-01-16',
       workoutType: 'endurance',
       title: 'Endurance Ride',
+      description: 'Easy zone 2 ride',
       durationMinutes: 90,
     }
     // Local store has a stale title for TODAY's workout
