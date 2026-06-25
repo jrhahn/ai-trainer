@@ -30,6 +30,7 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+import models
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -300,3 +301,21 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
         return OpenAIProvider(model=_resolve_model("openai", task))
     logger.warning("No AI provider API key configured; defaulting to GeminiProvider")
     return GeminiProvider(model=_resolve_model("gemini", task))
+
+
+def resolve_user_provider(user: models.User) -> str:
+    """Return the AI provider name to use for *user*.
+
+    Respects the user's stored preference when the matching API key is
+    configured; falls back to the best globally-available provider.
+    """
+    stored = user.ai_provider
+    if stored == "gemini" and settings.gemini_api_key:
+        return "gemini"
+    if stored == "openai" and settings.openai_api_key:
+        return "openai"
+    if settings.gemini_api_key:
+        return "gemini"
+    if settings.openai_api_key:
+        return "openai"
+    return "gemini"

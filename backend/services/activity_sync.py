@@ -32,6 +32,7 @@ from services.ride_matching import (
     apply_ride_plan_matches,
     review_matched_ride_and_adapt,
 )
+from services.llm import resolve_user_provider
 from services.scheduler import ScheduledJob
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
@@ -71,18 +72,6 @@ class ActivitySyncResult:
         self.adapted += source.adapted
         self.failed += source.failed
 
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
-        return "gemini"
-    if stored == "openai" and settings.openai_api_key:
-        return "openai"
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
 
 
 def _intervals_cursor_matches(activity_id: int, cursor: int) -> bool:
@@ -228,7 +217,7 @@ async def _persist_and_adapt(
             user,
             ride_metric,
             training_plan,
-            provider=_provider(user),
+            provider=resolve_user_provider(user),
             streams=streams_by_id.get(ride_metric.strava_activity_id),
         )
         adapted += 1

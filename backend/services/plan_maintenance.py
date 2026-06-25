@@ -14,7 +14,7 @@ import schemas
 from config import settings
 from services import ai_service
 from services.dates import app_today_iso, app_timezone
-from services.llm import begin_token_usage_collection, finish_token_usage_collection
+from services.llm import begin_token_usage_collection, finish_token_usage_collection, resolve_user_provider
 from services.plan_constraints import sanitize_plan_for_constraints
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
@@ -53,18 +53,6 @@ def seconds_until_next_daily_run(
         next_run += timedelta(days=1)
     return max(0.0, (next_run - local_now).total_seconds())
 
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
-        return "gemini"
-    if stored == "openai" and settings.openai_api_key:
-        return "openai"
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
 
 
 def _race_events_for_prompt(events: list[models.RaceEvent]) -> list[dict]:
@@ -123,7 +111,7 @@ async def maintain_user_training_plan(
             plan,
             [],
             profile,
-            provider=_provider(user),
+            provider=resolve_user_provider(user),
             rider_assessment=rider_assessment,
             metrics_history_section=metrics_section,
             weather_context_section=weather_section,
