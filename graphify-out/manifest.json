@@ -275,9 +275,9 @@
     "semantic_hash": "b410dd2f7f65197439d7d40d25c58bfe"
   },
   "backend/services/activity_sync.py": {
-    "mtime": 1781511473.9264557,
-    "ast_hash": "d7c77257208d33f90a0ba6e7ea56339c",
-    "semantic_hash": "d7c77257208d33f90a0ba6e7ea56339c"
+    "mtime": 1782393025.6457686,
+    "ast_hash": "b12cc8b582c82bc028165d1695b7e3b2",
+    "semantic_hash": ""
   },
   "backend/services/ai_service.py": {
     "mtime": 1782384687.967669,
@@ -315,8 +315,8 @@
     "semantic_hash": "063b3a961c43a6443bb4e77b72b465ea"
   },
   "backend/services/plan_maintenance.py": {
-    "mtime": 1782384687.9686692,
-    "ast_hash": "6c3b8b098730e95548fb5b45d2310f33",
+    "mtime": 1782412383.4346657,
+    "ast_hash": "f20094f6f0e4a78188283fa787b41bb0",
     "semantic_hash": ""
   },
   "backend/services/prompts.py": {
@@ -365,9 +365,9 @@
     "semantic_hash": "bb5fde2ea647349615addb939206f0d0"
   },
   "backend/tests/test_activity_sync.py": {
-    "mtime": 1781511473.9274557,
-    "ast_hash": "876ab9e093158e5566ee7e2766000c18",
-    "semantic_hash": "876ab9e093158e5566ee7e2766000c18"
+    "mtime": 1782393394.3040714,
+    "ast_hash": "df0dff20af0110fd5727bc0ed01f016b",
+    "semantic_hash": ""
   },
   "backend/tests/test_ai.py": {
     "mtime": 1782238935.1898153,
@@ -475,9 +475,9 @@
     "semantic_hash": "a863e9dbad4ad9fad98d19307bc21133"
   },
   "backend/tests/test_plan_maintenance.py": {
-    "mtime": 1781511473.9284558,
-    "ast_hash": "62144fcadbc023215faf6dc1c8232378",
-    "semantic_hash": "62144fcadbc023215faf6dc1c8232378"
+    "mtime": 1782412405.6278567,
+    "ast_hash": "bd884d58367e2b91f426d9bde3a24b35",
+    "semantic_hash": ""
   },
   "backend/tests/test_rag.py": {
     "mtime": 1780899973.3521943,
@@ -545,14 +545,14 @@
     "semantic_hash": "0dfdab9fd7b2312872c95e7aa3d5479b"
   },
   "frontend/src/components/AIChat.test.tsx": {
-    "mtime": 1782238935.1998155,
-    "ast_hash": "f0b66a0294af2260dc83aa5a6bc2a937",
-    "semantic_hash": "f0b66a0294af2260dc83aa5a6bc2a937"
+    "mtime": 1782415108.5930603,
+    "ast_hash": "43c55d00ad73a636ceaa29c14fda2660",
+    "semantic_hash": ""
   },
   "frontend/src/components/AIChat.tsx": {
-    "mtime": 1782238935.1998155,
-    "ast_hash": "84cbe4fea0fb155cf9732aac1a83c13b",
-    "semantic_hash": "84cbe4fea0fb155cf9732aac1a83c13b"
+    "mtime": 1782415061.6056447,
+    "ast_hash": "31c3804d0ebf6576cbcaba3c901c362d",
+    "semantic_hash": ""
   },
   "frontend/src/components/AIKeySettings.tsx": {
     "mtime": 1782330158.9570937,
@@ -700,9 +700,9 @@
     "semantic_hash": "dc6de1c910f584b8660aa7fd7b74b68e"
   },
   "frontend/src/hooks/useFeedbackDebounce.ts": {
-    "mtime": 1780899973.3621943,
-    "ast_hash": "9a30222fe5ae7a7abec6a19a37ad45ba",
-    "semantic_hash": "9a30222fe5ae7a7abec6a19a37ad45ba"
+    "mtime": 1782413016.315414,
+    "ast_hash": "9092b8762d4f03522847df5c4f0fc3c5",
+    "semantic_hash": ""
   },
   "frontend/src/hooks/useImportProgress.ts": {
     "mtime": 1781511473.9354558,
@@ -710,24 +710,24 @@
     "semantic_hash": "ec9734d356a6cd6773b713b6ee0be20b"
   },
   "frontend/src/hooks/useMetricsPipeline.test.ts": {
-    "mtime": 1780899973.3621943,
-    "ast_hash": "04efad544903e650dd8d3920ff10876f",
-    "semantic_hash": "04efad544903e650dd8d3920ff10876f"
+    "mtime": 1782414276.497641,
+    "ast_hash": "f6fa302553f4c5fe8c1ccbf012383ec9",
+    "semantic_hash": ""
   },
   "frontend/src/hooks/useMetricsPipeline.ts": {
-    "mtime": 1780899973.3621943,
-    "ast_hash": "8c630b92c871a262cae763118ca581ab",
-    "semantic_hash": "8c630b92c871a262cae763118ca581ab"
+    "mtime": 1782414258.1214747,
+    "ast_hash": "a18c77b9afa0fb4180098ce11e469128",
+    "semantic_hash": ""
   },
   "frontend/src/hooks/useStravaSync.test.ts": {
-    "mtime": 1781719523.6041815,
-    "ast_hash": "e2e3dbfa724cf07b26f426c8ba30df17",
-    "semantic_hash": "e2e3dbfa724cf07b26f426c8ba30df17"
+    "mtime": 1782413648.2830305,
+    "ast_hash": "6da8af93a9113c662932687734598026",
+    "semantic_hash": ""
   },
   "frontend/src/hooks/useStravaSync.ts": {
-    "mtime": 1781719523.6051815,
-    "ast_hash": "dcca8493411921c47cf13ac5e5438fbd",
-    "semantic_hash": "dcca8493411921c47cf13ac5e5438fbd"
+    "mtime": 1782413579.352422,
+    "ast_hash": "ae3ccc020fb3e4109198669a696d5307",
+    "semantic_hash": ""
   },
   "frontend/src/main.tsx": {
     "mtime": 1780899973.3631942,
@@ -815,14 +815,14 @@
     "semantic_hash": "5dca19fa292e9674cb8b56355aa9d005"
   },
   "frontend/src/pages/WorkoutPage.test.tsx": {
-    "mtime": 1780899973.3651943,
-    "ast_hash": "1c672e0c15deee6a07f15b53af88e5ef",
-    "semantic_hash": "1c672e0c15deee6a07f15b53af88e5ef"
+    "mtime": 1782417184.1542468,
+    "ast_hash": "d289fcaa4f35632d9ef87fde751e89fd",
+    "semantic_hash": ""
   },
   "frontend/src/pages/WorkoutPage.tsx": {
-    "mtime": 1780899973.3661942,
-    "ast_hash": "d1ac84e40d2e4cd631f18641e99fda66",
-    "semantic_hash": "d1ac84e40d2e4cd631f18641e99fda66"
+    "mtime": 1782417123.3847148,
+    "ast_hash": "8aeb2619178bf06f867c7011fac8f541",
+    "semantic_hash": ""
   },
   "frontend/src/services/ai.test.ts": {
     "mtime": 1782238935.2028155,

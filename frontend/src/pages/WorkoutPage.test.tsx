@@ -7,14 +7,16 @@ import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
-const { mockRateCompletedWorkout, mockSaveTrainingPlan, mockSaveWorkoutLog } = vi.hoisted(() => ({
+const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
+  mockFetchTrainingPlan: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({ rateCompletedWorkout: mockRateCompletedWorkout }))
 vi.mock('../services/user', () => ({
+  fetchTrainingPlan: mockFetchTrainingPlan,
   saveTrainingPlan: mockSaveTrainingPlan,
   saveWorkoutLog: mockSaveWorkoutLog,
 }))
@@ -50,6 +52,7 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockRateCompletedWorkout.mockResolvedValue('Great session!')
+  mockFetchTrainingPlan.mockResolvedValue([mockDay])
   mockSaveTrainingPlan.mockResolvedValue([])
   mockSaveWorkoutLog.mockResolvedValue(undefined)
 })
@@ -205,5 +208,51 @@ describe('WorkoutPage', () => {
     renderWorkoutPage(TODAY)
 
     expect(screen.queryByText(/Regenerate your plan/i)).not.toBeInTheDocument()
+  })
+
+  it('saves coachFeedback against the latest backend plan, not the local store snapshot', async () => {
+    const otherDay: TrainingDay = {
+      date: '2025-01-16',
+      workoutType: 'endurance',
+      title: 'Endurance Ride',
+      durationMinutes: 90,
+    }
+    // Local store has a stale title for TODAY's workout
+    const staleLocalPlan: TrainingDay[] = [{ ...mockDay, title: 'Stale Local Title' }, otherDay]
+    // Backend has the current plan with an updated title
+    const freshBackendPlan: TrainingDay[] = [{ ...mockDay, title: 'Fresh Backend Title' }, otherDay]
+
+    useAppStore.setState({
+      authToken: 'tok-123',
+      trainingPlan: staleLocalPlan,
+      userProfile: {
+        name: 'Alice',
+        email: 'alice@example.com',
+        bikeType: 'road',
+        trainingGoal: 'general_fitness',
+        followsTrainingPlan: true,
+        fitnessLevel: 'intermediate',
+      },
+    })
+    mockRateCompletedWorkout.mockResolvedValue({
+      feedback: 'Great effort today!',
+      needsAthleteFeedback: false,
+      followUpQuestion: null,
+      suggestedFeedbackTags: [],
+    })
+    mockFetchTrainingPlan.mockResolvedValue(freshBackendPlan)
+
+    renderWorkoutPage(TODAY)
+    await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+
+    await waitFor(() => {
+      expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok-123')
+      // Must save with fresh backend plan, not the stale local snapshot
+      expect(mockSaveTrainingPlan).toHaveBeenCalledWith('tok-123', [
+        { ...freshBackendPlan[0], coachFeedback: 'Great effort today!' },
+        otherDay,
+      ])
+    })
   })
 })
