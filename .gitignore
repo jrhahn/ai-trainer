@@ -58,3 +58,4 @@ deploy/ansible/*.retry
 # Graphify knowledge graph
 graphify-out/cost.json
 graphify-out/graph.html
+graphify-out/cache/

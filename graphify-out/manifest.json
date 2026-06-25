@@ -963,5 +963,20 @@
     "mtime": 1780899973.3681943,
     "ast_hash": "e8a0943e16e0aa835cb29e9d16925f9e",
     "semantic_hash": "e8a0943e16e0aa835cb29e9d16925f9e"
+  },
+  "backend/services/plan_constraints.py": {
+    "mtime": 1782384687.9686692,
+    "ast_hash": "89b63f7723f841862345ed002323ad70",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_plan_constraints.py": {
+    "mtime": 1782384687.970669,
+    "ast_hash": "ee23eeafa99634248bb0d0317b85664d",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_plan_integrity.py": {
+    "mtime": 1782384687.9716692,
+    "ast_hash": "10ea33699114bf300c1127850f18348b",
+    "semantic_hash": ""
   }
 }
