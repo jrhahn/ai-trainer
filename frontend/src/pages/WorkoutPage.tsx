@@ -7,7 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
-import { saveTrainingPlan, saveWorkoutLog } from '../services/user'
+import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
 
@@ -37,13 +37,14 @@ export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay } = useAppStore(
+  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay, setTrainingPlan } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       trainingPlan: s.trainingPlan,
       logWorkout: s.logWorkout,
       userProfile: s.userProfile,
       updateTrainingDay: s.updateTrainingDay,
+      setTrainingPlan: s.setTrainingPlan,
     }))
   )
   const [showForm, setShowForm] = useState(false)
@@ -63,7 +64,12 @@ export default function WorkoutPage() {
     onSuccess: async (rating: WorkoutRatingResult) => {
       if (rating.feedback) {
         updateTrainingDay(day!.date, { coachFeedback: rating.feedback })
-        await saveTrainingPlan(authToken!, useAppStore.getState().trainingPlan)
+        const latestPlan = await fetchTrainingPlan(authToken!)
+        const withFeedback = latestPlan.map((d) =>
+          d.date === day!.date ? { ...d, coachFeedback: rating.feedback } : d
+        )
+        setTrainingPlan(withFeedback)
+        await saveTrainingPlan(authToken!, withFeedback)
       }
     },
   })
