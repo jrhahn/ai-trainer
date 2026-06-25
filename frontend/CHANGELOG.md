@@ -5,6 +5,12 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.6] - 2026-06-25
+
+### Fixed
+
+- **Partial data load no longer blanks the app** (`store/useAppStore.ts`, `App.tsx`) — a single failing endpoint on startup now falls back to an empty default instead of discarding all loaded data; affected slices are named in a dismissable warning banner.
+
 ## [0.27.5] - 2026-06-21
 
 ### Fixed
