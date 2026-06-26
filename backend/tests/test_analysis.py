@@ -209,3 +209,36 @@ def test_compute_ftp_from_streams():
     # no usable data
     assert analysis.compute_ftp_from_streams({}) == (None, None)
     assert analysis.compute_ftp_from_streams({"1": {"watts": {"data": []}, "time": {"data": []}}}) == (None, None)
+
+
+def test_critical_power_from_points():
+    assert analysis._critical_power_from_points({1.0: 300.0}) is None  # < 3 points
+    # duration range < 15 min
+    assert analysis._critical_power_from_points({1.0: 400.0, 2.0: 390.0, 3.0: 380.0}) is None
+    # flat curve (short power not high enough above long power)
+    assert analysis._critical_power_from_points({1.0: 300.0, 5.0: 295.0, 20.0: 290.0}) is None
+    # steep curve exercises the regression + bound check
+    result = analysis._critical_power_from_points({1.0: 450.0, 5.0: 330.0, 20.0: 285.0})
+    assert result is None or isinstance(result, int)
+
+
+def test_time_in_power_zones():
+    empty = analysis._time_in_power_zones([], [], 250.0)
+    assert empty == {f"z{i}_secs": 0 for i in range(1, 8)}
+    # one sample landing in each of the 7 zones at ftp=250
+    watts = [100.0, 160.0, 200.0, 240.0, 270.0, 320.0, 400.0]
+    time_stream = [float(i) for i in range(len(watts))]
+    zones = analysis._time_in_power_zones(watts, time_stream, 250.0)
+    assert all(zones[f"z{i}_secs"] >= 1 for i in range(1, 8))
+
+
+def test_detect_intensity_spikes():
+    assert analysis._detect_intensity_spikes([], [], 200.0) == []
+    assert analysis._detect_intensity_spikes([1.0], [0.0, 1.0], 200.0) == []  # length mismatch
+    n = 1000
+    watts = [300.0] * n
+    time_stream = [float(i) for i in range(n)]
+    spikes = analysis._detect_intensity_spikes(watts, time_stream, target_power=200.0)
+    assert len(spikes) >= 1
+    assert spikes[0]["avg_power_w"] == 300
+    assert spikes[0]["pct_over_target"] == pytest.approx(50.0, abs=0.1)

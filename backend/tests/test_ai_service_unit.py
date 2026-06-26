@@ -3904,3 +3904,45 @@ async def test_ask_trainer_ride_label_update_is_none_when_absent(monkeypatch):
     result = await ai_service.ask_trainer("How did I do?", plan=[], profile={})
 
     assert result.get("ride_label_update") is None
+
+
+# ---------------------------------------------------------------------------
+# analyse_fit_activity (issue #335 coverage)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analyse_fit_activity_cycling_estimates_hr_zones():
+    with patch.object(
+        ai_service,
+        "_chat",
+        new=AsyncMock(return_value='{"riderType": "allrounder", "notes": "Balanced"}'),
+    ):
+        result = await ai_service.analyse_fit_activity(
+            sport_type="cycling",
+            duration_minutes=90,
+            avg_power=210,
+            avg_hr=150,
+            max_heart_rate=190,
+        )
+    assert result["estimatedFTP"] is None  # FTP never estimated
+    assert "hrZones" in result
+    assert result["riderType"] == "allrounder"
+
+
+@pytest.mark.asyncio
+async def test_analyse_fit_activity_running_has_no_hr_zones_without_max_hr():
+    with patch.object(
+        ai_service,
+        "_chat",
+        new=AsyncMock(return_value='{"riderType": "endurance"}'),
+    ):
+        result = await ai_service.analyse_fit_activity(
+            sport_type="running",
+            duration_minutes=40,
+            avg_power=None,
+            avg_hr=140,
+            max_heart_rate=None,
+        )
+    assert result["estimatedFTP"] is None
+    assert "hrZones" not in result
