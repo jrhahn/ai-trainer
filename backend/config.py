@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     authelia_remote_name_header: str = "Remote-Name"
     authelia_internal_url: str = ""
     authelia_users_db_path: str = ""
+    authelia_proxy_secret_header: str = "X-Authelia-Proxy-Secret"
+    """Header carrying the shared secret that the trusted reverse proxy injects."""
+    authelia_proxy_shared_secret: str = ""
+    """Secret the reverse proxy injects (and overwrites on inbound requests) to
+    prove a request transited the proxy.  When set, the backend only trusts
+    ``Remote-*`` headers on requests that carry the matching secret, so a request
+    reaching the backend by any other path (direct container access, SSRF) cannot
+    forge an Authelia identity.  Leave empty to rely solely on network isolation."""
 
     # ------------------------------------------------------------------
     # Strava

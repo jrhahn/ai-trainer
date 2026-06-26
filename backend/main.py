@@ -28,6 +28,7 @@ _REQUEST_ID_HEADER = "X-Request-ID"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
+    _auth.warn_if_authelia_proxy_unprotected()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     scheduler = InProcessScheduler()

@@ -83,6 +83,7 @@ jobs:
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          AUTHELIA_PROXY_SHARED_SECRET: ${{ secrets.AUTHELIA_PROXY_SHARED_SECRET }}
         run: |
           python - <<'PY'
           import json
@@ -101,6 +102,7 @@ jobs:
               "acme_email": os.environ.get("ACME_EMAIL", ""),
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
               "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
+              "authelia_proxy_shared_secret": os.environ.get("AUTHELIA_PROXY_SHARED_SECRET", ""),
           }
 
           with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:
