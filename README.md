@@ -40,6 +40,15 @@ while the app uses its own JWT for API authorization after sign-in. Local Compos
 Authelia notifications in `/data/notification.txt` for password reset and future
 identity-verification flows.
 
+> **Security requirement (Authelia mode):** the backend trusts the
+> `Remote-User`/`Remote-Email`/`Remote-Name` headers, so it must be reachable
+> **only** through the Traefik reverse proxy with the `authelia-api` forward-auth
+> middleware applied (see `compose.yml`). The middleware re-sets those headers
+> from Authelia's verified response, overwriting any client-supplied values.
+> Never publish the backend container on a public interface or route to it by a
+> path that skips that middleware — a client on such a path could forge
+> `Remote-Email` and impersonate any user.
+
 ### Backend (Strava OAuth)
 
 ```bash

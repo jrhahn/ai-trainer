@@ -84,8 +84,12 @@ services:
       AUTHELIA_REMOTE_NAME_HEADER: ${AUTHELIA_REMOTE_NAME_HEADER:-Remote-Name}
       AUTHELIA_INTERNAL_URL: ${AUTHELIA_INTERNAL_URL:-http://authelia:9091}
       AUTHELIA_USERS_DB_PATH: ${AUTHELIA_USERS_DB_PATH:-/authelia-config/users_database.yml}
+    # Bind to localhost only: the backend must be reached exclusively through
+    # Traefik (which applies the Authelia forward-auth middleware below). A
+    # public 0.0.0.0 mapping would expose an auth-free path on which clients can
+    # forge Remote-* headers (see issue #324).
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')\""]
       interval: 10s
@@ -105,6 +109,12 @@ services:
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-https.service=backend
       - traefik.http.routers.backend-https.priority=1000
+      # Authelia must validate the session and (re)set the Remote-* headers,
+      # overwriting any client-supplied values, before the request reaches the
+      # backend. authelia-api returns 401 (not a 302 redirect) so fetch() calls
+      # don't hit CORS errors. The public register route below is intentionally
+      # excluded via its own higher-priority router.
+      - traefik.http.routers.backend-https.middlewares=authelia-api@docker
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
       - traefik.http.routers.backend-public-https.entrypoints=websecure
       - traefik.http.routers.backend-public-https.tls=true
