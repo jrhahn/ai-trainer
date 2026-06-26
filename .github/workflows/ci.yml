@@ -35,7 +35,9 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./frontend/coverage/lcov.info
+          flags: frontend
           fail_ci_if_error: false
 
       - name: Build
@@ -76,6 +78,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: backend/coverage.xml
           flags: backend
           fail_ci_if_error: false
