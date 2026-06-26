@@ -160,4 +160,136 @@ describe('TrainingCalendar', () => {
       },
     ])
   })
+
+  it('deletes an existing race event from a day cell', async () => {
+    const date = monthDate(0, 15)
+    const event = { id: 'race-1', date, startTime: null, distanceKm: 120, elevationM: 1800 }
+    useAppStore.setState({ raceEvents: [event as never] })
+    mockDeleteRaceEventRemote.mockResolvedValue(undefined)
+    const onRemoved = vi.fn()
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents onRaceEventRemoved={onRemoved} />
+      </MemoryRouter>
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: `Calendar day ${date}` }))
+    await user.click(screen.getByRole('button', { name: /Remove race event/i }))
+
+    await waitFor(() =>
+      expect(mockDeleteRaceEventRemote).toHaveBeenCalledWith('tok-123', 'race-1')
+    )
+    expect(useAppStore.getState().raceEvents).toEqual([])
+    expect(onRemoved).toHaveBeenCalledWith(event)
+  })
+
+  it('edits an existing race event', async () => {
+    const date = monthDate(0, 15)
+    const event = { id: 'race-1', date, startTime: null, distanceKm: 120, elevationM: 1800 }
+    useAppStore.setState({ raceEvents: [event as never] })
+    mockUpdateRaceEventRemote.mockResolvedValue({ ...event, distanceKm: 150 })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents />
+      </MemoryRouter>
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: `Calendar day ${date}` }))
+    await user.click(screen.getByRole('button', { name: /Edit race event/i }))
+
+    const distance = screen.getByLabelText(/Distance/)
+    await user.clear(distance)
+    await user.type(distance, '150')
+    await user.click(screen.getByRole('button', { name: /Save event/i }))
+
+    await waitFor(() =>
+      expect(mockUpdateRaceEventRemote).toHaveBeenCalledWith('tok-123', 'race-1', {
+        date,
+        startTime: null,
+        distanceKm: 150,
+        elevationM: 1800,
+      })
+    )
+    expect(useAppStore.getState().raceEvents[0].distanceKm).toBe(150)
+  })
+
+  it('shows an error when saving a race event fails', async () => {
+    const futureDate = monthDate(1, 10)
+    mockCreateRaceEvent.mockRejectedValue(new Error('Save exploded'))
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents />
+      </MemoryRouter>
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /next month/i }))
+    await user.click(screen.getByRole('button', { name: `Calendar day ${futureDate}` }))
+    await user.type(screen.getByLabelText(/Distance/), '120')
+    await user.type(screen.getByLabelText(/Climb/), '1800')
+    await user.click(screen.getByRole('button', { name: /Add event/i }))
+
+    expect(await screen.findByText('Save exploded')).toBeInTheDocument()
+  })
+
+  it('shows an error when deleting a race event fails', async () => {
+    const date = monthDate(0, 15)
+    const event = { id: 'race-1', date, startTime: null, distanceKm: 120, elevationM: 1800 }
+    useAppStore.setState({ raceEvents: [event as never] })
+    mockDeleteRaceEventRemote.mockRejectedValue(new Error('Delete exploded'))
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents />
+      </MemoryRouter>
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: `Calendar day ${date}` }))
+    await user.click(screen.getByRole('button', { name: /Remove race event/i }))
+
+    expect(await screen.findByText('Delete exploded')).toBeInTheDocument()
+    expect(useAppStore.getState().raceEvents).toHaveLength(1)
+  })
+
+  it('closes the event editor and resets the edit form via "New"', async () => {
+    const date = monthDate(0, 15)
+    const event = { id: 'race-1', date, startTime: null, distanceKm: 120, elevationM: 1800 }
+    useAppStore.setState({ raceEvents: [event as never] })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents />
+      </MemoryRouter>
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: `Calendar day ${date}` }))
+    // Enter edit mode, then reset to a blank "New" form
+    await user.click(screen.getByRole('button', { name: /Edit race event/i }))
+    expect(screen.getByLabelText(/Distance/)).toHaveValue(120)
+    await user.click(screen.getByRole('button', { name: /^New$/i }))
+    expect(screen.getByRole('button', { name: /Add event/i })).toBeInTheDocument()
+
+    // Close the editor entirely
+    await user.click(screen.getByRole('button', { name: /Close race event editor/i }))
+    expect(screen.queryByLabelText(/Distance/)).not.toBeInTheDocument()
+  })
+
+  it('navigates to the previous month', async () => {
+    render(
+      <MemoryRouter>
+        <TrainingCalendar editableEvents />
+      </MemoryRouter>
+    )
+    const user = userEvent.setup()
+    // Should not throw and keeps the calendar grid rendered
+    await user.click(screen.getByRole('button', { name: /Previous month/i }))
+    expect(screen.getByText('Mon')).toBeInTheDocument()
+  })
 })
