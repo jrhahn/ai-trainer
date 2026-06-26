@@ -9,12 +9,20 @@ const mockFetch = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockConfirm = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
+const mockFetchPrivacy = vi.hoisted(() => vi.fn())
+const mockUpdatePrivacy = vi.hoisted(() => vi.fn())
+const mockClearAll = vi.hoisted(() => vi.fn())
+const mockExport = vi.hoisted(() => vi.fn())
 
 vi.mock('../services/user', () => ({
   fetchAthleteMemoryFacts: mockFetch,
   updateAthleteMemoryFact: mockUpdate,
   confirmAthleteMemoryFact: mockConfirm,
   deleteAthleteMemoryFact: mockDelete,
+  fetchMemoryPrivacySettings: mockFetchPrivacy,
+  updateMemoryPrivacySettings: mockUpdatePrivacy,
+  clearAllMemory: mockClearAll,
+  exportMemory: mockExport,
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
@@ -54,6 +62,10 @@ function renderComponent() {
 describe('AthleteTraitsSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockFetchPrivacy.mockResolvedValue({ memoryUpdatesEnabled: true })
+    mockUpdatePrivacy.mockResolvedValue({ memoryUpdatesEnabled: false })
+    mockClearAll.mockResolvedValue(undefined)
+    mockExport.mockResolvedValue({ facts: [] })
   })
 
   it('groups learned traits by category', async () => {
@@ -147,5 +159,83 @@ describe('AthleteTraitsSettings', () => {
     await screen.findByText('Adds extra work after rest days')
     expect(screen.queryByRole('button', { name: /confirm trait/i })).toBeNull()
     expect(screen.getByText(/Confirmed/i)).toBeInTheDocument()
+  })
+
+  it('toggles the "learn from conversations" privacy switch', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    const toggle = await screen.findByRole('switch')
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await user.click(toggle)
+
+    await waitFor(() =>
+      expect(mockUpdatePrivacy).toHaveBeenCalledWith('test-token', { memoryUpdatesEnabled: false })
+    )
+  })
+
+  it('shows the disabled banner when memory updates are off', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchPrivacy.mockResolvedValue({ memoryUpdatesEnabled: false })
+    renderComponent()
+
+    expect(await screen.findByText(/Memory updates are disabled/)).toBeInTheDocument()
+  })
+
+  it('clears all memory after the user confirms', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    await user.click(await screen.findByRole('button', { name: /Clear all memory/ }))
+
+    await waitFor(() => expect(mockClearAll).toHaveBeenCalledWith('test-token'))
+    expect(await screen.findByText('All coaching memory cleared.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not clear memory when the user cancels', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    await user.click(await screen.findByRole('button', { name: /Clear all memory/ }))
+
+    expect(mockClearAll).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('exports memory as a downloadable JSON blob', async () => {
+    const user = userEvent.setup()
+    const createUrl = vi.fn(() => 'blob:mock')
+    const revokeUrl = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL: createUrl, revokeObjectURL: revokeUrl })
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    await user.click(await screen.findByRole('button', { name: /Export my memory/ }))
+
+    await waitFor(() => expect(mockExport).toHaveBeenCalledWith('test-token'))
+    expect(createUrl).toHaveBeenCalled()
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows an export error when the export fails', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockExport.mockRejectedValue(new Error('nope'))
+    renderComponent()
+
+    await user.click(await screen.findByRole('button', { name: /Export my memory/ }))
+
+    expect(await screen.findByText('Export failed. Please try again.')).toBeInTheDocument()
   })
 })
