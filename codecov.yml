@@ -1,0 +1,36 @@
+# Codecov configuration — PR-level coverage enforcement.
+# Complements the hard CI floors (vitest `thresholds` + pytest `--cov-fail-under`).
+coverage:
+  status:
+    project:
+      default:
+        # Don't fail the whole project on tiny fluctuations, but block real drops.
+        target: auto
+        threshold: 1%
+      backend:
+        flags: [backend]
+        target: 80%
+        threshold: 1%
+      frontend:
+        flags: [frontend]
+        target: 88%
+        threshold: 1%
+    patch:
+      # New/changed code on a PR must be well covered.
+      default:
+        target: 85%
+        threshold: 5%
+
+flags:
+  backend:
+    paths:
+      - backend/
+    carryforward: true
+  frontend:
+    paths:
+      - frontend/src/
+    carryforward: true
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: false

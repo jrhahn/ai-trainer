@@ -25,6 +25,14 @@ export default defineConfig({
         'src/**/*.test.{ts,tsx}',
         'src/**/*.d.ts',
       ],
+      // Coverage floor — fails `npm run test:coverage` (and CI) on regression.
+      // Set just below the current levels as a ratchet; raise as coverage grows.
+      thresholds: {
+        lines: 89,
+        statements: 85,
+        functions: 86,
+        branches: 75,
+      },
     },
   },
 })

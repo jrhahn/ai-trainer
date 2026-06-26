@@ -27,6 +27,17 @@ import {
   estimateFTP,
   uploadFitFile,
   uploadFitFiles,
+  saveChatMessage,
+  fetchMemoryPrivacySettings,
+  updateMemoryPrivacySettings,
+  clearAllMemory,
+  exportMemory,
+  fetchAIKeyStatus,
+  saveAIKey,
+  deleteAIKey,
+  testAIKey,
+  fetchMetricsHistory,
+  fetchRideMetricsHistory,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -578,5 +589,110 @@ describe('submitRideFeedback', () => {
         note: undefined,
       },
     })
+  })
+})
+
+describe('saveChatMessage', () => {
+  it('POSTs the chat message', async () => {
+    const msg = { role: 'user' as const, content: 'hi', timestamp: '2024-05-01T00:00:00Z' }
+    mockApiFetch.mockResolvedValue({ ...msg, id: 'm1' })
+
+    await saveChatMessage('tok', msg)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/chat', {
+      token: 'tok',
+      method: 'POST',
+      body: msg,
+    })
+  })
+})
+
+describe('memory privacy settings', () => {
+  it('fetches the settings', async () => {
+    mockApiFetch.mockResolvedValue({ memoryUpdatesEnabled: true })
+    const result = await fetchMemoryPrivacySettings('tok')
+    expect(result).toEqual({ memoryUpdatesEnabled: true })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/memory-privacy', { token: 'tok' })
+  })
+
+  it('updates the settings via PUT', async () => {
+    mockApiFetch.mockResolvedValue({ memoryUpdatesEnabled: false })
+    const result = await updateMemoryPrivacySettings('tok', { memoryUpdatesEnabled: false })
+    expect(result.memoryUpdatesEnabled).toBe(false)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/memory-privacy', {
+      token: 'tok',
+      method: 'PUT',
+      body: { memoryUpdatesEnabled: false },
+    })
+  })
+})
+
+describe('clearAllMemory / exportMemory', () => {
+  it('DELETEs all memory', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    await clearAllMemory('tok')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/memory', { token: 'tok', method: 'DELETE' })
+  })
+
+  it('exports memory', async () => {
+    mockApiFetch.mockResolvedValue({ facts: [] })
+    const result = await exportMemory('tok')
+    expect(result).toEqual({ facts: [] })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/memory-export', { token: 'tok' })
+  })
+})
+
+describe('AI key management', () => {
+  it('fetches the key status', async () => {
+    mockApiFetch.mockResolvedValue({ provider: 'openai', hasOpenaiKey: true, hasGeminiKey: false })
+    const result = await fetchAIKeyStatus('tok')
+    expect(result.hasOpenaiKey).toBe(true)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ai-key/status', { token: 'tok' })
+  })
+
+  it('saves a key via PUT', async () => {
+    mockApiFetch.mockResolvedValue({ provider: 'openai', hasOpenaiKey: true, hasGeminiKey: false })
+    await saveAIKey('tok', 'openai', 'sk-123')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ai-key', {
+      token: 'tok',
+      method: 'PUT',
+      body: { provider: 'openai', apiKey: 'sk-123' },
+    })
+  })
+
+  it('deletes a key with the provider query param', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    await deleteAIKey('tok', 'gemini')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ai-key?provider=gemini', {
+      token: 'tok',
+      method: 'DELETE',
+    })
+  })
+
+  it('tests a key via POST', async () => {
+    mockApiFetch.mockResolvedValue({ ok: true })
+    const result = await testAIKey('tok', 'openai', 'sk-123')
+    expect(result.ok).toBe(true)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ai-key/test', {
+      token: 'tok',
+      method: 'POST',
+      body: { provider: 'openai', apiKey: 'sk-123' },
+    })
+  })
+})
+
+describe('metrics history', () => {
+  it('unwraps the snapshots array', async () => {
+    mockApiFetch.mockResolvedValue({ snapshots: [{ recordedAt: '2024-05-01', source: 's' }] })
+    const result = await fetchMetricsHistory('tok')
+    expect(result).toHaveLength(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/metrics-history', { token: 'tok' })
+  })
+
+  it('unwraps the rides array', async () => {
+    mockApiFetch.mockResolvedValue({ rides: [{ stravaActivityId: 1, activityDate: '2024-05-01', sportType: 'cycling' }] })
+    const result = await fetchRideMetricsHistory('tok')
+    expect(result).toHaveLength(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-metrics-history', { token: 'tok' })
   })
 })

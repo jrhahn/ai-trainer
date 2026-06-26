@@ -237,3 +237,136 @@ describe('loadUserData', () => {
     expect(state.intervalsAutoSyncEnabled).toBe(false)
   })
 })
+
+describe('simple setters', () => {
+  it('setAuthToken updates the token', () => {
+    useAppStore.getState().setAuthToken('tok-xyz')
+    expect(useAppStore.getState().authToken).toBe('tok-xyz')
+  })
+
+  it('setCoachMemory, setAiProvider and setOnboarded update state', () => {
+    useAppStore.getState().setCoachMemory('remember this')
+    useAppStore.getState().setAiProvider('gemini')
+    useAppStore.getState().setOnboarded(true)
+    const s = useAppStore.getState()
+    expect(s.coachMemory).toBe('remember this')
+    expect(s.aiProvider).toBe('gemini')
+    expect(s.isOnboarded).toBe(true)
+  })
+
+  it('updates the strava/intervals sync and analysis flags', () => {
+    const a = useAppStore.getState()
+    a.setStravaAnalysisComplete(true)
+    a.setLastStravaActivityId(999)
+    a.setStravaAutoSyncEnabled(false)
+    a.setIntervalsAnalysisComplete(true)
+    a.setLastIntervalsActivityId(42)
+    a.setIntervalsAutoSyncEnabled(false)
+    const s = useAppStore.getState()
+    expect(s.stravaAnalysisComplete).toBe(true)
+    expect(s.lastStravaActivityId).toBe(999)
+    expect(s.stravaAutoSyncEnabled).toBe(false)
+    expect(s.intervalsAnalysisComplete).toBe(true)
+    expect(s.lastIntervalsActivityId).toBe(42)
+    expect(s.intervalsAutoSyncEnabled).toBe(false)
+  })
+
+  it('clearDataLoadWarning resets the warning', () => {
+    useAppStore.setState({ dataLoadWarning: 'oops' })
+    useAppStore.getState().clearDataLoadWarning()
+    expect(useAppStore.getState().dataLoadWarning).toBeNull()
+  })
+
+  it('setPendingCoachMessage stores and clears the message', () => {
+    useAppStore.getState().setPendingCoachMessage('coach says hi')
+    expect(useAppStore.getState().pendingCoachMessage).toBe('coach says hi')
+    useAppStore.getState().setPendingCoachMessage(null)
+    expect(useAppStore.getState().pendingCoachMessage).toBeNull()
+  })
+})
+
+describe('race event actions', () => {
+  const event = (id: string) => ({ id, date: '2026-06-01', distanceKm: 100, elevationM: 1200 }) as never
+
+  it('sets, adds, updates and removes race events', () => {
+    const a = useAppStore.getState()
+    a.setRaceEvents([event('r1')])
+    expect(useAppStore.getState().raceEvents).toHaveLength(1)
+
+    a.addRaceEvent(event('r2'))
+    expect(useAppStore.getState().raceEvents.map((e) => e.id)).toEqual(['r1', 'r2'])
+
+    a.updateRaceEvent({ id: 'r1', date: '2026-07-01', distanceKm: 200, elevationM: 2400 } as never)
+    expect(useAppStore.getState().raceEvents.find((e) => e.id === 'r1')?.distanceKm).toBe(200)
+
+    a.removeRaceEvent('r1')
+    expect(useAppStore.getState().raceEvents.map((e) => e.id)).toEqual(['r2'])
+  })
+})
+
+describe('updateRideMetricLabel', () => {
+  it('sets a label override on the matching ride only', () => {
+    const rides: RideMetricPoint[] = [
+      { stravaActivityId: 1, activityDate: '2024-05-01', sportType: 'cycling' },
+      { stravaActivityId: 2, activityDate: '2024-05-02', sportType: 'cycling' },
+    ]
+    useAppStore.getState().setRideMetricsHistory(rides)
+    useAppStore.getState().updateRideMetricLabel(2, 'Race')
+
+    const history = useAppStore.getState().rideMetricsHistory
+    expect(history.find((r) => r.stravaActivityId === 2)?.labelOverride).toBe('Race')
+    expect(history.find((r) => r.stravaActivityId === 1)?.labelOverride).toBeUndefined()
+  })
+})
+
+describe('toggleExpertMode', () => {
+  it('flips the expert-mode flag', () => {
+    const initial = useAppStore.getState().isExpertMode
+    useAppStore.getState().toggleExpertMode()
+    expect(useAppStore.getState().isExpertMode).toBe(!initial)
+    useAppStore.getState().toggleExpertMode()
+    expect(useAppStore.getState().isExpertMode).toBe(initial)
+  })
+})
+
+describe('logout', () => {
+  it('clears the session back to initial state', () => {
+    useAppStore.setState({ authToken: 'tok', isOnboarded: true })
+    useAppStore.getState().logout()
+    expect(useAppStore.getState().authToken).toBeNull()
+    expect(useAppStore.getState().isOnboarded).toBe(false)
+  })
+})
+
+describe('loadUserData auth handling', () => {
+  it('clears the session on an auth error from the user endpoint', async () => {
+    mockFetchCurrentUser.mockRejectedValue(new Error('Token expired'))
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    await useAppStore.getState().loadUserData('tok-expired')
+
+    expect(useAppStore.getState().authToken).toBeNull()
+    expect(useAppStore.getState().isLoadingUserData).toBe(false)
+  })
+
+  it('surfaces a warning on a non-auth error without clearing the token', async () => {
+    mockFetchCurrentUser.mockRejectedValue(new Error('Server exploded'))
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    await useAppStore.getState().loadUserData('tok-1')
+
+    expect(useAppStore.getState().dataLoadWarning).toMatch(/Failed to load your profile/)
+  })
+})

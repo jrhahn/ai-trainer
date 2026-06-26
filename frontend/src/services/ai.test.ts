@@ -14,8 +14,12 @@ import {
   adaptTrainingPlan,
   extractAthleteFacts,
   fetchRaceEventFeedback,
+  fetchReadinessScore,
+  fetchNextRideRecommendation,
   generateTrainingPlan,
+  processPendingFeedbacks,
   rateCompletedWorkout,
+  refreshLoginSummary,
   resolveRideMatch,
 } from './ai'
 
@@ -340,5 +344,135 @@ describe('resolveRideMatch', () => {
       method: 'POST',
       body: { plannedDate: '2026-05-06', stravaActivityId: 7001 },
     })
+  })
+})
+
+describe('fetchReadinessScore', () => {
+  it('maps the snake_case backend payload to camelCase', async () => {
+    mockApiFetch.mockResolvedValue({
+      score: 72,
+      form_score: 68,
+      fitness_score: 75,
+      ctl: 80,
+      atl: 70,
+      tsb: 10,
+      days_until_race: 5,
+      race_date: '2026-06-01',
+      projected_score: 84,
+      projected_ctl: 85,
+      projected_atl: 72,
+      projected_tsb: 13,
+      recommendations: ['Taper now'],
+    })
+
+    const result = await fetchReadinessScore('tok-123')
+
+    expect(result).toEqual({
+      score: 72,
+      formScore: 68,
+      fitnessScore: 75,
+      ctl: 80,
+      atl: 70,
+      tsb: 10,
+      daysUntilRace: 5,
+      raceDate: '2026-06-01',
+      projectedScore: 84,
+      projectedCtl: 85,
+      projectedAtl: 72,
+      projectedTsb: 13,
+      recommendations: ['Taper now'],
+    })
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/readiness-score', { token: 'tok-123' })
+  })
+
+  it('defaults recommendations to an empty array', async () => {
+    mockApiFetch.mockResolvedValue({
+      score: 50, form_score: 50, fitness_score: 50, ctl: 40, atl: 40, tsb: 0,
+      days_until_race: 0, race_date: null,
+    })
+
+    const result = await fetchReadinessScore('tok-123')
+
+    expect(result.recommendations).toEqual([])
+  })
+})
+
+describe('refreshLoginSummary', () => {
+  it('POSTs and returns the login summary', async () => {
+    mockApiFetch.mockResolvedValue({ loginSummary: 'Welcome back!' })
+
+    const summary = await refreshLoginSummary('tok-123')
+
+    expect(summary).toBe('Welcome back!')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/refresh-login-summary', {
+      token: 'tok-123',
+      method: 'POST',
+    })
+  })
+
+  it('returns an empty string when no summary is present', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(await refreshLoginSummary('tok-123')).toBe('')
+  })
+})
+
+describe('fetchNextRideRecommendation', () => {
+  it('maps the response and includes the activity id when provided', async () => {
+    mockApiFetch.mockResolvedValue({
+      response: 'Go easy',
+      next_session_recommendation: 'Recovery spin',
+      recommendation_type: 'recovery',
+    })
+
+    const result = await fetchNextRideRecommendation('tok-123', 555)
+
+    expect(result).toEqual({
+      response: 'Go easy',
+      nextSessionRecommendation: 'Recovery spin',
+      recommendationType: 'recovery',
+      planUpdates: undefined,
+    })
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/next-ride-recommendation', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { stravaActivityId: 555 },
+    })
+  })
+
+  it('omits the activity id and defaults the type when not provided', async () => {
+    mockApiFetch.mockResolvedValue({
+      response: 'Stick to the plan',
+      next_session_recommendation: 'Planned intervals',
+      recommendation_type: undefined,
+    })
+
+    const result = await fetchNextRideRecommendation('tok-123')
+
+    expect(result.recommendationType).toBe('keep_as_planned')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/next-ride-recommendation', {
+      token: 'tok-123',
+      method: 'POST',
+      body: {},
+    })
+  })
+})
+
+describe('processPendingFeedbacks', () => {
+  it('POSTs the activity ids and returns the login summary', async () => {
+    mockApiFetch.mockResolvedValue({ loginSummary: 'Summary updated' })
+
+    const summary = await processPendingFeedbacks('tok-123', [1, 'abc'])
+
+    expect(summary).toBe('Summary updated')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/process-pending-feedbacks', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { activityIds: [1, 'abc'] },
+    })
+  })
+
+  it('returns an empty string when no summary is returned', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(await processPendingFeedbacks('tok-123', [1])).toBe('')
   })
 })

@@ -426,4 +426,68 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Broken ride/)).toBeInTheDocument()
     expect(screen.getByText(/Stream download failed/)).toBeInTheDocument()
   })
+
+  it('saves a new FTP value and confirms success', async () => {
+    mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, currentFTP: 260 } })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
+    await userEvent.click(screen.getByRole('button', { name: /Save FTP/ }))
+
+    await waitFor(() =>
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { currentFTP: 260 })
+    )
+    expect(await screen.findByText('FTP updated to 260 W.')).toBeInTheDocument()
+  })
+
+  it('shows an error when saving FTP fails', async () => {
+    mockUpdateCurrentUser.mockRejectedValue(new Error('boom'))
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
+    await userEvent.click(screen.getByRole('button', { name: /Save FTP/ }))
+
+    expect(await screen.findByText('Failed to save FTP. Please try again.')).toBeInTheDocument()
+  })
+
+  it('recalculates metrics with the current FTP when confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    await waitFor(() => expect(mockRecalculateAll).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByText('Recalculated 10 activities using FTP 250 W.')
+    ).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not recalculate when the confirm dialog is cancelled', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    expect(mockRecalculateAll).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('logs the user out when Sign Out is clicked', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /Sign Out/ }))
+    expect(useAppStore.getState().authToken).toBeNull()
+  })
+
+  it('reverts and warns when saving the Strava sync setting fails', async () => {
+    mockUpdateCurrentUser.mockRejectedValue(new Error('net down'))
+    setup()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /automatic sync with strava/i }))
+
+    expect(
+      await screen.findByText('Could not save Strava sync setting. Please try again.')
+    ).toBeInTheDocument()
+    expect(useAppStore.getState().stravaAutoSyncEnabled).toBe(true)
+  })
 })
