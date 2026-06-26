@@ -51,5 +51,5 @@ concurrency = ["greenlet"]
 
 [tool.coverage.report]
 # Coverage floor — pytest --cov fails below this. Set a few points below the
-# current level as a ratchet; raise as coverage grows.
-fail_under = 80
+# current level (~90%) as a ratchet; raise as coverage grows.
+fail_under = 88
