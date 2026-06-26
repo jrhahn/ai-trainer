@@ -46,7 +46,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["."]
-omit = ["tests/*", "alembic/*"]
+omit = ["tests/*", "alembic/*", "scripts/*"]
 concurrency = ["greenlet"]
 
 [tool.coverage.report]
