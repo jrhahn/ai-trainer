@@ -33,6 +33,8 @@ AUTHELIA_REMOTE_EMAIL_HEADER = settings.authelia_remote_email_header
 AUTHELIA_REMOTE_NAME_HEADER = settings.authelia_remote_name_header
 AUTHELIA_INTERNAL_URL = settings.authelia_internal_url.rstrip("/")
 AUTHELIA_USERS_DB_PATH = settings.authelia_users_db_path
+AUTHELIA_PROXY_SECRET_HEADER = settings.authelia_proxy_secret_header
+AUTHELIA_PROXY_SHARED_SECRET = settings.authelia_proxy_shared_secret
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _argon2_hasher = PasswordHasher()
@@ -66,6 +68,23 @@ def validate_jwt_secret() -> None:
                 "ignore",
                 category=jwt.InsecureKeyLengthWarning,
             )
+
+
+def warn_if_authelia_proxy_unprotected() -> None:
+    """Warn when Authelia header trust relies solely on network isolation.
+
+    Without AUTHELIA_PROXY_SHARED_SECRET the backend trusts ``Remote-*`` headers
+    on any request that reaches it, so it must be unreachable except through the
+    trusted proxy.  Setting the shared secret adds defense-in-depth that survives
+    a misconfigured network path (see issue #324).
+    """
+    if AUTHELIA_AUTH_ENABLED and not AUTHELIA_PROXY_SHARED_SECRET:
+        logger.warning(
+            "AUTHELIA_AUTH_ENABLED is set but AUTHELIA_PROXY_SHARED_SECRET is "
+            "empty: Remote-* headers are trusted on any request that reaches the "
+            "backend. Ensure the backend is reachable only through the Authelia "
+            "proxy, or set AUTHELIA_PROXY_SHARED_SECRET for defense-in-depth."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -191,12 +210,38 @@ async def get_authelia_user(
     return await _get_or_create_authelia_user(request, db)
 
 
+def _request_from_trusted_proxy(request: Request) -> bool:
+    """Return whether *request* may be trusted to carry Authelia ``Remote-*`` headers.
+
+    When AUTHELIA_PROXY_SHARED_SECRET is configured, the trusted reverse proxy
+    injects it as AUTHELIA_PROXY_SECRET_HEADER and overwrites any client-supplied
+    value, so a request reaching the backend by any other path (direct container
+    access, SSRF) will not carry it.  When the secret is unset the check is a
+    no-op and header trust relies solely on network isolation.
+    """
+    if not AUTHELIA_PROXY_SHARED_SECRET:
+        return True
+    provided = request.headers.get(AUTHELIA_PROXY_SECRET_HEADER)
+    return provided is not None and secrets.compare_digest(
+        provided, AUTHELIA_PROXY_SHARED_SECRET
+    )
+
+
 async def _get_or_create_authelia_user(
     request: Request,
     db: AsyncSession,
 ) -> models.User | None:
     email = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
     if not email:
+        return None
+
+    if not _request_from_trusted_proxy(request):
+        logger.warning(
+            "Ignoring Authelia %s header: request did not arrive via the trusted "
+            "proxy (missing or invalid %s).",
+            AUTHELIA_REMOTE_EMAIL_HEADER,
+            AUTHELIA_PROXY_SECRET_HEADER,
+        )
         return None
 
     user = await crud.get_user_by_email(db, email)

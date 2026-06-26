@@ -48,6 +48,15 @@ identity-verification flows.
 > Never publish the backend container on a public interface or route to it by a
 > path that skips that middleware — a client on such a path could forge
 > `Remote-Email` and impersonate any user.
+>
+> **Defense-in-depth (recommended):** set `AUTHELIA_PROXY_SHARED_SECRET` to a
+> strong random value in `.env`. Traefik injects it as the
+> `AUTHELIA_PROXY_SECRET_HEADER` (default `X-Authelia-Proxy-Secret`) and
+> overwrites any client-supplied copy, and the backend ignores `Remote-*`
+> headers on requests that don't carry the matching secret. This keeps the
+> header trust safe even if another container reaches the backend directly on
+> the Docker network. When the secret is empty the check is skipped and header
+> trust relies solely on the backend being unreachable except via the proxy.
 
 ### Backend (Strava OAuth)
 

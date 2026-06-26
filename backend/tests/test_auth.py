@@ -185,3 +185,90 @@ def test_validate_jwt_secret_suppresses_repeated_dev_short_secret_warning(
         auth.validate_jwt_secret()
 
     assert "Suppressing PyJWT's repeated InsecureKeyLengthWarning" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Trusted-proxy shared secret (issue #324 defense-in-depth)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_authelia_session_accepted_with_proxy_secret(client, monkeypatch):
+    """Remote-* headers are honored when the proxy secret header matches."""
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+
+    response = await client.get(
+        "/api/v1/auth/session",
+        headers={
+            "Remote-Email": "trusted@example.com",
+            "Remote-Name": "Trusted",
+            "X-Authelia-Proxy-Secret": "s3cret-from-proxy",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"
+
+
+@pytest.mark.asyncio
+async def test_authelia_session_rejected_without_proxy_secret(client, monkeypatch):
+    """When a proxy secret is configured, Remote-* headers without it are ignored."""
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+
+    response = await client.get(
+        "/api/v1/auth/session",
+        headers={"Remote-Email": "forged@example.com", "Remote-Name": "Forged"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_authelia_session_rejected_with_wrong_proxy_secret(client, monkeypatch):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+
+    response = await client.get(
+        "/api/v1/auth/session",
+        headers={
+            "Remote-Email": "forged@example.com",
+            "X-Authelia-Proxy-Secret": "wrong-guess",
+        },
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_authelia_session_trusts_headers_when_no_secret_configured(client, monkeypatch):
+    """With no proxy secret set, header trust is unchanged (network-isolation only)."""
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
+
+    response = await client.get(
+        "/api/v1/auth/session",
+        headers={"Remote-Email": "plain@example.com", "Remote-Name": "Plain"},
+    )
+    assert response.status_code == 200
+
+
+def test_warn_if_authelia_proxy_unprotected_logs_when_secret_missing(monkeypatch, caplog):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
+
+    with caplog.at_level("WARNING", logger="auth"):
+        auth.warn_if_authelia_proxy_unprotected()
+
+    assert "AUTHELIA_PROXY_SHARED_SECRET is" in caplog.text
+
+
+def test_warn_if_authelia_proxy_unprotected_silent_when_secret_set(monkeypatch, caplog):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "configured")
+
+    with caplog.at_level("WARNING", logger="auth"):
+        auth.warn_if_authelia_proxy_unprotected()
+
+    assert "AUTHELIA_PROXY_SHARED_SECRET" not in caplog.text
