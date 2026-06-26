@@ -93,3 +93,47 @@ def test_metrics_chain_preserves_normalized_source_fields():
     assert metrics[0]["activity_source"] == "fit"
     assert metrics[0]["external_activity_id"] == "fit-fingerprint"
     assert metrics[0]["source_metadata"] == {"file_id_serial_number": "abc"}
+
+
+# --- ImportedActivity id/key helpers (issue #335) ---
+
+from services.activity_imports import (  # noqa: E402
+    ImportedActivity,
+    synthetic_activity_id,
+)
+
+
+def test_synthetic_activity_id_is_positive_and_stable():
+    a = synthetic_activity_id("intervals", "abc")
+    assert a > 0
+    assert a == synthetic_activity_id("intervals", "abc")
+    assert a != synthetic_activity_id("fit", "abc")
+
+
+def _imported(**kw) -> ImportedActivity:
+    base = dict(
+        source="intervals",
+        external_activity_id="ext-1",
+        name="Ride",
+        start_datetime="2026-05-05T08:00:00",
+        activity_date="2026-05-05",
+    )
+    base.update(kw)
+    return ImportedActivity(**base)
+
+
+def test_source_key_uses_external_id_or_fingerprint():
+    assert _imported(external_activity_id="ext-1").source_key == "ext-1"
+    # without an external id, a deterministic fingerprint is used
+    fp = _imported(external_activity_id=None).source_key
+    assert isinstance(fp, str) and len(fp) == 64
+
+
+def test_legacy_metric_id_paths():
+    # explicit legacy id wins
+    assert _imported(legacy_activity_id=42).legacy_metric_id == 42
+    # strava numeric external id is used directly
+    assert _imported(source="strava", external_activity_id="999", legacy_activity_id=None).legacy_metric_id == 999
+    # strava non-numeric external id falls back to a synthetic id
+    val = _imported(source="strava", external_activity_id="not-a-number", legacy_activity_id=None).legacy_metric_id
+    assert val > 0

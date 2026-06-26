@@ -54,3 +54,28 @@ def test_request_timezone_reads_browser_header():
         headers = {"x-app-timezone": "America/Los_Angeles"}
 
     assert request_timezone(DummyRequest()) == "America/Los_Angeles"
+
+
+# --- additional edge cases (issue #335) ---
+
+import types as _types
+
+from services import dates as _dates
+
+
+def test_app_timezone_falls_back_to_configured_on_invalid_name():
+    tz = _dates.app_timezone("Not/AReal_Zone")
+    # falls back to the configured app timezone (or UTC), never raises
+    assert tz is not None
+
+
+def test_request_timezone_reads_header():
+    req = _types.SimpleNamespace(headers={_dates.TIMEZONE_HEADER: " Europe/Berlin "})
+    assert _dates.request_timezone(req) == "Europe/Berlin"
+
+
+def test_request_timezone_returns_none_without_header():
+    req = _types.SimpleNamespace(headers={})
+    assert _dates.request_timezone(req) is None
+    req2 = _types.SimpleNamespace(headers={_dates.TIMEZONE_HEADER: "   "})
+    assert _dates.request_timezone(req2) is None
