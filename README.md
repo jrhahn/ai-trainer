@@ -40,23 +40,16 @@ while the app uses its own JWT for API authorization after sign-in. Local Compos
 Authelia notifications in `/data/notification.txt` for password reset and future
 identity-verification flows.
 
-> **Security requirement (Authelia mode):** the backend trusts the
-> `Remote-User`/`Remote-Email`/`Remote-Name` headers, so it must be reachable
-> **only** through the Traefik reverse proxy with the `authelia-api` forward-auth
-> middleware applied (see `compose.yml`). The middleware re-sets those headers
-> from Authelia's verified response, overwriting any client-supplied values.
-> Never publish the backend container on a public interface or route to it by a
-> path that skips that middleware — a client on such a path could forge
-> `Remote-Email` and impersonate any user.
->
-> **Defense-in-depth (recommended):** set `AUTHELIA_PROXY_SHARED_SECRET` to a
-> strong random value in `.env`. Traefik injects it as the
-> `AUTHELIA_PROXY_SECRET_HEADER` (default `X-Authelia-Proxy-Secret`) and
-> overwrites any client-supplied copy, and the backend ignores `Remote-*`
-> headers on requests that don't carry the matching secret. This keeps the
-> header trust safe even if another container reaches the backend directly on
-> the Docker network. When the secret is empty the check is skipped and header
-> trust relies solely on the backend being unreachable except via the proxy.
+> **Security note (issue #324):** Authelia is the file-backed **user store**
+> here, not an SSO forward-auth proxy — the backend authenticates with its own
+> JWT issued by `/api/v1/auth/login` and `/register`. The backend must therefore
+> **not** be gated behind Authelia, and it must never trust inbound
+> `Remote-User`/`Remote-Email`/`Remote-Name` identity headers. Traefik strips
+> those headers on the backend routes (`backend-strip-remote` middleware in
+> `compose.yml`) so a client cannot forge them, and the backend port is bound to
+> `127.0.0.1` so it is only reachable through the proxy. The app also ignores
+> `Remote-*` unless a request carries the `AUTHELIA_PROXY_SHARED_SECRET` (which
+> the proxy never injects) as belt-and-suspenders.
 
 ### Backend (Strava OAuth)
 
