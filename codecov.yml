@@ -9,7 +9,7 @@ coverage:
         threshold: 1%
       backend:
         flags: [backend]
-        target: 80%
+        target: 88%
         threshold: 1%
       frontend:
         flags: [frontend]

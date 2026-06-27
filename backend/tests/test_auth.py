@@ -272,3 +272,81 @@ def test_warn_if_authelia_proxy_unprotected_silent_when_secret_set(monkeypatch, 
         auth.warn_if_authelia_proxy_unprotected()
 
     assert "AUTHELIA_PROXY_SHARED_SECRET" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Lower-level auth helpers (issue #335 coverage)
+# ---------------------------------------------------------------------------
+
+import types
+
+import jwt as _jwt
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+
+
+def test_verify_password_returns_false_for_malformed_bcrypt_hash():
+    assert auth.verify_password("whatever", "not-a-real-bcrypt-hash") is False
+
+
+def test_decode_token_missing_sub_raises_401():
+    token = _jwt.encode({"sub": ""}, auth.JWT_SECRET, algorithm=auth.JWT_ALGORITHM)
+    with pytest.raises(HTTPException) as exc:
+        auth.decode_token(token)
+    assert exc.value.status_code == 401
+
+
+def test_decode_token_invalid_raises_401():
+    with pytest.raises(HTTPException):
+        auth.decode_token("not-a-jwt")
+
+
+def _creds(token: str) -> HTTPAuthorizationCredentials:
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+def test_require_admin_rejects_missing_credentials():
+    with pytest.raises(HTTPException) as exc:
+        auth.require_admin(None)
+    assert exc.value.status_code == 401
+
+
+def test_require_admin_rejects_invalid_token():
+    with pytest.raises(HTTPException) as exc:
+        auth.require_admin(_creds("garbage"))
+    assert exc.value.status_code == 401
+
+
+def test_require_admin_rejects_non_admin_role():
+    token = auth.create_access_token("user-1")  # no admin role
+    with pytest.raises(HTTPException) as exc:
+        auth.require_admin(_creds(token))
+    assert exc.value.status_code == 403
+
+
+def test_require_admin_accepts_admin_token():
+    auth.require_admin(_creds(auth.create_admin_token()))  # does not raise
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_authelia_user_returns_existing(monkeypatch):
+    existing = object()
+
+    async def fake_get(db, email):
+        return existing
+
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")  # trust the request
+    monkeypatch.setattr(auth.crud, "get_user_by_email", fake_get)
+
+    request = types.SimpleNamespace(headers={auth.AUTHELIA_REMOTE_EMAIL_HEADER: "a@b.com"})
+    result = await auth._get_or_create_authelia_user(request, db=None)
+    assert result is existing
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_falls_back_to_bearer_without_authelia_header(client, monkeypatch, auth_headers):
+    """In Authelia mode, a request without Remote-Email still authenticates via bearer."""
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+
+    resp = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert resp.status_code == 200
