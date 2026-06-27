@@ -9,7 +9,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -195,15 +195,21 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
 @pytest.mark.asyncio
 async def test_review_matched_ride_respects_availability_constraints(monkeypatch):
     """plan_updates that violate constraints must be dropped."""
+    # Use dates relative to today so the constraint is active (not expired):
+    # review_matched_ride_and_adapt filters constraints against the real today
+    # (it takes no injectable `now`), so hard-coded past dates would be skipped.
+    matched_day = date.today().isoformat()
+    constrained_day = (date.today() + timedelta(days=2)).isoformat()
+
     user_id = await _create_user_with_plan(
         email="constraint-ride@example.com",
-        plan=[_day("2026-06-24", "intervals"), _day("2026-06-26", "endurance")],
-        constraints=[_constraint_row("2026-06-26", "thursday")],
+        plan=[_day(matched_day, "intervals"), _day(constrained_day, "endurance")],
+        constraints=[_constraint_row(constrained_day, "thursday")],
     )
 
     ride = MagicMock(spec=models.RideMetric)
-    ride.matched_plan_date = "2026-06-24"
-    ride.matched_plan_snapshot = _day("2026-06-24", "intervals")
+    ride.matched_plan_date = matched_day
+    ride.matched_plan_snapshot = _day(matched_day, "intervals")
     ride.ctl_after = None
     ride.atl_after = None
     ride.tsb_after = None
@@ -213,14 +219,14 @@ async def test_review_matched_ride_respects_availability_constraints(monkeypatch
     ride.user_note = None
     ride.coach_note = None
 
-    # AI tries to schedule training on constrained Thursday (2026-06-26)
+    # AI tries to schedule training on the constrained day
     recommend_mock = AsyncMock(
         return_value={
-            "response": "Move intensity to Thursday.",
-            "next_session_recommendation": "Intervals Thursday",
+            "response": "Move intensity to the constrained day.",
+            "next_session_recommendation": "Intervals on the constrained day",
             "recommendation_type": "move_intensity",
             "plan_updates": [
-                {"date": "2026-06-26", "workoutType": "intervals", "durationMinutes": 60},
+                {"date": constrained_day, "workoutType": "intervals", "durationMinutes": 60},
             ],
         }
     )
@@ -230,7 +236,7 @@ async def test_review_matched_ride_respects_availability_constraints(monkeypatch
         AsyncMock(return_value={"feedback": ""}),
     )
 
-    plan = [_day("2026-06-24", "intervals"), _day("2026-06-26", "endurance")]
+    plan = [_day(matched_day, "intervals"), _day(constrained_day, "endurance")]
 
     async with TestSessionLocal() as db:
         fresh_user = await crud.get_user_by_id(db, user_id)
@@ -242,8 +248,8 @@ async def test_review_matched_ride_respects_availability_constraints(monkeypatch
 
     saved = await _get_plan(user_id)
     by_date = {d["date"]: d for d in saved}
-    # Thursday is constrained — the AI's update must be blocked
-    assert by_date["2026-06-26"]["workoutType"] == "endurance"
+    # The constrained day must keep its original workout — the AI's update is blocked
+    assert by_date[constrained_day]["workoutType"] == "endurance"
 
 
 # ---------------------------------------------------------------------------
