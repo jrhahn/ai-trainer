@@ -115,25 +115,26 @@ services:
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-https.service=backend
       - traefik.http.routers.backend-https.priority=1000
-      # Authelia must validate the session and (re)set the Remote-* headers,
-      # overwriting any client-supplied values, before the request reaches the
-      # backend. authelia-api returns 401 (not a 302 redirect) so fetch() calls
-      # don't hit CORS errors. The public register route below is intentionally
-      # excluded via its own higher-priority router.
-      #
-      # backend-proxy-secret injects AUTHELIA_PROXY_SHARED_SECRET as a request
-      # header (customRequestHeaders overwrites any client-supplied copy), so the
-      # backend can reject Remote-* headers on requests that did not transit
-      # Traefik. With an empty secret the header is blank and the backend check
-      # is a no-op.
-      - traefik.http.middlewares.backend-proxy-secret.headers.customRequestHeaders.X-Authelia-Proxy-Secret=${AUTHELIA_PROXY_SHARED_SECRET:-}
-      - traefik.http.routers.backend-https.middlewares=authelia-api@docker,backend-proxy-secret@docker
+      # The backend authenticates with its own JWT, issued by /api/v1/auth/login
+      # and /register which verify credentials against the Authelia
+      # users_database.yml user store. Authelia is NOT an SSO forward-auth proxy
+      # here, so the backend must NOT be gated behind it (doing so via the
+      # auth-request endpoint returns 400 to every request and breaks login).
+      # Instead, strip any client-supplied Remote-* identity headers at the proxy
+      # so they can never be forged and trusted by the backend (issue #324).
+      # An empty customRequestHeaders value removes the header.
+      - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-User=
+      - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Email=
+      - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Name=
+      - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Groups=
+      - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
       - traefik.http.routers.backend-public-https.entrypoints=websecure
       - traefik.http.routers.backend-public-https.tls=true
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-public-https.service=backend
       - traefik.http.routers.backend-public-https.priority=3000
+      - traefik.http.routers.backend-public-https.middlewares=backend-strip-remote@docker
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
