@@ -170,14 +170,14 @@
     "semantic_hash": "2e36cc5e31c0411cbffebbc2e234e9b6"
   },
   "backend/auth.py": {
-    "mtime": 1781511473.9234557,
-    "ast_hash": "07f40887f121a4c525ff0fd01d03680c",
-    "semantic_hash": "07f40887f121a4c525ff0fd01d03680c"
+    "mtime": 1782465716.9030979,
+    "ast_hash": "8d0f9c7155414dcb48b725569e531896",
+    "semantic_hash": ""
   },
   "backend/config.py": {
-    "mtime": 1782330158.9430938,
-    "ast_hash": "22e92fea0d8b6033d01b534a394fbc61",
-    "semantic_hash": "22e92fea0d8b6033d01b534a394fbc61"
+    "mtime": 1782465690.7678638,
+    "ast_hash": "addf748207d73a0db217096d806471a3",
+    "semantic_hash": ""
   },
   "backend/crud.py": {
     "mtime": 1782238935.1838152,
@@ -195,9 +195,9 @@
     "semantic_hash": "e589ac8e7444f312e117b9ce7edc925e"
   },
   "backend/main.py": {
-    "mtime": 1782330158.9470937,
-    "ast_hash": "f03c4eb136499a0811006e66bee7765e",
-    "semantic_hash": "f03c4eb136499a0811006e66bee7765e"
+    "mtime": 1782465720.386129,
+    "ast_hash": "e03b0c9e0026c99bf479df0a7ca5156c",
+    "semantic_hash": ""
   },
   "backend/models.py": {
     "mtime": 1782330158.9490938,
@@ -205,9 +205,9 @@
     "semantic_hash": "42d761a35083c6543599a376022cbacf"
   },
   "backend/pyproject.toml": {
-    "mtime": 1782238935.1838152,
-    "ast_hash": "3342669a245daca43016b5a08eb20f23",
-    "semantic_hash": "3342669a245daca43016b5a08eb20f23"
+    "mtime": 1782482588.1867807,
+    "ast_hash": "a8c00bfa443d3adb9de283d67c864f60",
+    "semantic_hash": ""
   },
   "backend/routers/__init__.py": {
     "mtime": 1780899973.3441942,
@@ -220,8 +220,8 @@
     "semantic_hash": "a40a82ce603b3e82d487a5db9e3d5dce"
   },
   "backend/routers/ai.py": {
-    "mtime": 1782384687.966669,
-    "ast_hash": "dd7327ae21a349662a1f7e6efc496c18",
+    "mtime": 1782419912.634275,
+    "ast_hash": "75c06102b166194c202bf61329bfd8bf",
     "semantic_hash": ""
   },
   "backend/routers/auth_router.py": {
@@ -235,9 +235,9 @@
     "semantic_hash": "3377fe83458365ff2af878ac728c4046"
   },
   "backend/routers/strava.py": {
-    "mtime": 1781511473.9254558,
-    "ast_hash": "aedee249cb2292c2f46df62c71f7615a",
-    "semantic_hash": "aedee249cb2292c2f46df62c71f7615a"
+    "mtime": 1782423429.3457317,
+    "ast_hash": "28d7c296d79cd9335d5e5324695b58b5",
+    "semantic_hash": ""
   },
   "backend/routers/users.py": {
     "mtime": 1782330158.9510937,
@@ -275,13 +275,13 @@
     "semantic_hash": "b410dd2f7f65197439d7d40d25c58bfe"
   },
   "backend/services/activity_sync.py": {
-    "mtime": 1782393025.6457686,
-    "ast_hash": "b12cc8b582c82bc028165d1695b7e3b2",
+    "mtime": 1782461001.2215114,
+    "ast_hash": "721fd2bfcad733f2090fc4a022117bd3",
     "semantic_hash": ""
   },
   "backend/services/ai_service.py": {
-    "mtime": 1782384687.967669,
-    "ast_hash": "495ae745be2dff6e7887ba8e1697d6da",
+    "mtime": 1782419282.172628,
+    "ast_hash": "bede61e65f85329587ccda220cbda5c7",
     "semantic_hash": ""
   },
   "backend/services/analysis.py": {
@@ -305,9 +305,9 @@
     "semantic_hash": "815186c66938a7d32ee30763789cddc9"
   },
   "backend/services/llm.py": {
-    "mtime": 1782330158.9540937,
-    "ast_hash": "18b7effdd1177655c0e096650a90d982",
-    "semantic_hash": "18b7effdd1177655c0e096650a90d982"
+    "mtime": 1782419866.2038507,
+    "ast_hash": "0146de34b267662402d938f2797603a2",
+    "semantic_hash": ""
   },
   "backend/services/metrics_service.py": {
     "mtime": 1780899973.3471942,
@@ -315,8 +315,8 @@
     "semantic_hash": "063b3a961c43a6443bb4e77b72b465ea"
   },
   "backend/services/plan_maintenance.py": {
-    "mtime": 1782412383.4346657,
-    "ast_hash": "f20094f6f0e4a78188283fa787b41bb0",
+    "mtime": 1782419942.0155427,
+    "ast_hash": "9d84bf37374f5ac859ed426b99d1a6b6",
     "semantic_hash": ""
   },
   "backend/services/prompts.py": {
@@ -340,9 +340,9 @@
     "semantic_hash": "faffd95320d6dc5688271f54a224cd68"
   },
   "backend/services/strava_service.py": {
-    "mtime": 1780899973.3481941,
-    "ast_hash": "30b9554dd8a2906969000aab014f638b",
-    "semantic_hash": "30b9554dd8a2906969000aab014f638b"
+    "mtime": 1782423429.3457317,
+    "ast_hash": "1c3278ba379395deb3b93803d0c3aeb7",
+    "semantic_hash": ""
   },
   "backend/services/weather_service.py": {
     "mtime": 1780899973.3481941,
@@ -360,13 +360,13 @@
     "semantic_hash": "73ff57894769557732258e9a93005026"
   },
   "backend/tests/test_activity_imports.py": {
-    "mtime": 1781511473.9274557,
-    "ast_hash": "bb5fde2ea647349615addb939206f0d0",
-    "semantic_hash": "bb5fde2ea647349615addb939206f0d0"
+    "mtime": 1782481883.219223,
+    "ast_hash": "2c0e68d5c843763fe8d2c79d216f322d",
+    "semantic_hash": ""
   },
   "backend/tests/test_activity_sync.py": {
-    "mtime": 1782393394.3040714,
-    "ast_hash": "df0dff20af0110fd5727bc0ed01f016b",
+    "mtime": 1782461001.2215114,
+    "ast_hash": "1a5c1662089581c3a64834edd0151578",
     "semantic_hash": ""
   },
   "backend/tests/test_ai.py": {
@@ -375,9 +375,9 @@
     "semantic_hash": "1a36f7895814925bfb4cc91921fa7c59"
   },
   "backend/tests/test_ai_provider.py": {
-    "mtime": 1780899973.3491943,
-    "ast_hash": "864116c30e8f6641a492b51c1d05289c",
-    "semantic_hash": "864116c30e8f6641a492b51c1d05289c"
+    "mtime": 1782420028.6173296,
+    "ast_hash": "6d13376c4f1f60c0fd6aeefa3a46b3c6",
+    "semantic_hash": ""
   },
   "backend/tests/test_ai_router_coverage.py": {
     "mtime": 1780899973.3491943,
@@ -385,14 +385,14 @@
     "semantic_hash": "4a5f976e04e5ad90bc721154385e630f"
   },
   "backend/tests/test_ai_service_unit.py": {
-    "mtime": 1782384687.970669,
-    "ast_hash": "21ec6ab87507210e5cf462f64bdf1b19",
+    "mtime": 1782481010.2248018,
+    "ast_hash": "b34d8149bcb791ff375e1a941db52d83",
     "semantic_hash": ""
   },
   "backend/tests/test_auth.py": {
-    "mtime": 1781511473.9284558,
-    "ast_hash": "34226a72a0465eaf121ed470a4f5ee36",
-    "semantic_hash": "34226a72a0465eaf121ed470a4f5ee36"
+    "mtime": 1782480923.2347546,
+    "ast_hash": "70d13dd3a0fb892c5cad00213e4b07c5",
+    "semantic_hash": ""
   },
   "backend/tests/test_auth_router_authelia.py": {
     "mtime": 1780899973.3501942,
@@ -420,9 +420,9 @@
     "semantic_hash": "04040f2bb4627434834ac91d3f5e38fd"
   },
   "backend/tests/test_dates.py": {
-    "mtime": 1780899973.3501942,
-    "ast_hash": "265bee3e4af700437820d543a72feb36",
-    "semantic_hash": "265bee3e4af700437820d543a72feb36"
+    "mtime": 1782481826.2376416,
+    "ast_hash": "d8ab28e47f5332e746473a5ced5a3d6e",
+    "semantic_hash": ""
   },
   "backend/tests/test_e2e_coaching_scenario.py": {
     "mtime": 1780899973.3501942,
@@ -495,9 +495,9 @@
     "semantic_hash": "804faacdf28ea8b310b0e01aacf86228"
   },
   "backend/tests/test_strava_extended.py": {
-    "mtime": 1780899973.3521943,
-    "ast_hash": "0ea5b3e6e6f0df1e8a88463f7f5acca3",
-    "semantic_hash": "0ea5b3e6e6f0df1e8a88463f7f5acca3"
+    "mtime": 1782423429.3467317,
+    "ast_hash": "724faebcdfba32edb3b82b6e9aaf17c9",
+    "semantic_hash": ""
   },
   "backend/tests/test_users.py": {
     "mtime": 1782238935.1938155,
@@ -515,9 +515,9 @@
     "semantic_hash": "2590b296e55b7ee37bb03db12f9a0df3"
   },
   "backend/tests/test_weather_service.py": {
-    "mtime": 1780899973.3531942,
-    "ast_hash": "0f422395980e20ca096e888b7bf58ea4",
-    "semantic_hash": "0f422395980e20ca096e888b7bf58ea4"
+    "mtime": 1782479523.5869486,
+    "ast_hash": "9b2b172025a46023652e1c15efc0b820",
+    "semantic_hash": ""
   },
   "backend/tests/test_workouts.py": {
     "mtime": 1780899973.3531942,
@@ -560,9 +560,9 @@
     "semantic_hash": "bdef1bff1d678225431d10098ff2c4cb"
   },
   "frontend/src/components/AthleteTraitsSettings.test.tsx": {
-    "mtime": 1782238935.1998155,
-    "ast_hash": "aa3f9e60d15b5bcb8c8004cf578d5fb6",
-    "semantic_hash": "aa3f9e60d15b5bcb8c8004cf578d5fb6"
+    "mtime": 1782473537.451838,
+    "ast_hash": "2ac4823fc99682e8610f25ecc1658bb8",
+    "semantic_hash": ""
   },
   "frontend/src/components/AthleteTraitsSettings.tsx": {
     "mtime": 1782238935.1998155,
@@ -655,9 +655,9 @@
     "semantic_hash": "80347530f28cd9c9a6392218a1218d71"
   },
   "frontend/src/components/TrainingCalendar.test.tsx": {
-    "mtime": 1780899973.3611944,
-    "ast_hash": "2c5182557e5fcfe0255e568225f79887",
-    "semantic_hash": "2c5182557e5fcfe0255e568225f79887"
+    "mtime": 1782474333.5684767,
+    "ast_hash": "0081437c838d51f0f52590b2e9e9e12d",
+    "semantic_hash": ""
   },
   "frontend/src/components/TrainingCalendar.tsx": {
     "mtime": 1780899973.3611944,
@@ -795,9 +795,9 @@
     "semantic_hash": "3949c2fb6253b0437a8723fc1cca3ddd"
   },
   "frontend/src/pages/SettingsPage.test.tsx": {
-    "mtime": 1782330158.958094,
-    "ast_hash": "87770e378e85b8315f01a6406ce825a7",
-    "semantic_hash": "87770e378e85b8315f01a6406ce825a7"
+    "mtime": 1782473871.2474747,
+    "ast_hash": "03cebf981b6cfe0cb1bd78dc702d11d6",
+    "semantic_hash": ""
   },
   "frontend/src/pages/SettingsPage.tsx": {
     "mtime": 1782330158.9600937,
@@ -815,8 +815,8 @@
     "semantic_hash": "5dca19fa292e9674cb8b56355aa9d005"
   },
   "frontend/src/pages/WorkoutPage.test.tsx": {
-    "mtime": 1782417184.1542468,
-    "ast_hash": "d289fcaa4f35632d9ef87fde751e89fd",
+    "mtime": 1782417756.9552557,
+    "ast_hash": "92bc9d21e88d1f0de497b25ff2e38f1a",
     "semantic_hash": ""
   },
   "frontend/src/pages/WorkoutPage.tsx": {
@@ -825,9 +825,9 @@
     "semantic_hash": ""
   },
   "frontend/src/services/ai.test.ts": {
-    "mtime": 1782238935.2028155,
-    "ast_hash": "9d48237f2ff9c000038efb42d849ae80",
-    "semantic_hash": "9d48237f2ff9c000038efb42d849ae80"
+    "mtime": 1782472802.2038255,
+    "ast_hash": "56d726f92026b1089910d1009ed5e144",
+    "semantic_hash": ""
   },
   "frontend/src/services/ai.ts": {
     "mtime": 1782238935.2028155,
@@ -870,9 +870,9 @@
     "semantic_hash": "b47ba89a27bba5ce00f62298397c3997"
   },
   "frontend/src/services/user.test.ts": {
-    "mtime": 1782238935.2028155,
-    "ast_hash": "8ef82ac04abc875348047f574505532a",
-    "semantic_hash": "8ef82ac04abc875348047f574505532a"
+    "mtime": 1782472857.6633608,
+    "ast_hash": "e5e7638fb9eeffa46feb79d28d13d11c",
+    "semantic_hash": ""
   },
   "frontend/src/services/user.ts": {
     "mtime": 1782330158.961094,
@@ -880,9 +880,9 @@
     "semantic_hash": "ddcbee8379856e1f044e79cb622f8443"
   },
   "frontend/src/store/useAppStore.test.ts": {
-    "mtime": 1782384687.973669,
-    "ast_hash": "b78edb3feb4609216f094a00d465d9d5",
-    "semantic_hash": "b78edb3feb4609216f094a00d465d9d5"
+    "mtime": 1782473047.22018,
+    "ast_hash": "2adc1797c7b0ba3f782c13f8c1f22bac",
+    "semantic_hash": ""
   },
   "frontend/src/store/useAppStore.ts": {
     "mtime": 1782384687.9746692,
@@ -955,9 +955,9 @@
     "semantic_hash": "70bdd0a673bcfc0e828080b306e7c680"
   },
   "frontend/vite.config.ts": {
-    "mtime": 1780899973.3681943,
-    "ast_hash": "383a09b4ce74e14831ba34b33ec07a67",
-    "semantic_hash": "383a09b4ce74e14831ba34b33ec07a67"
+    "mtime": 1782474957.6237814,
+    "ast_hash": "1777e4e445b8e78738d05f4e98a6da57",
+    "semantic_hash": ""
   },
   "frontend/vitest.integration.config.ts": {
     "mtime": 1780899973.3681943,
@@ -977,6 +977,91 @@
   "backend/tests/test_plan_integrity.py": {
     "mtime": 1782384687.9716692,
     "ast_hash": "10ea33699114bf300c1127850f18348b",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/TodayCard.test.tsx": {
+    "mtime": 1782469213.6607647,
+    "ast_hash": "4c8efaa47f207bc71f890bc623e104ad",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/TrainingStatusBadge.test.tsx": {
+    "mtime": 1782469226.6218812,
+    "ast_hash": "9cb87c9e8f5be7f3a6b310fecddd49e2",
+    "semantic_hash": ""
+  },
+  "frontend/src/hooks/useFeedbackDebounce.test.ts": {
+    "mtime": 1782469268.044254,
+    "ast_hash": "90d159f05b528594c95b53eb1fd8318f",
+    "semantic_hash": ""
+  },
+  "frontend/src/services/intervals.test.ts": {
+    "mtime": 1782469176.6414316,
+    "ast_hash": "c1ddef55d324510a37a101b774f13a31",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/AIKeySettings.test.tsx": {
+    "mtime": 1782469482.3851833,
+    "ast_hash": "718365257b2f592983dffdf1b0d1e3ed",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/RaceReadinessCard.test.tsx": {
+    "mtime": 1782469436.9727745,
+    "ast_hash": "7e17acf665a1716b2b78049349e9cd79",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/FitFileUpload.test.tsx": {
+    "mtime": 1782469604.515283,
+    "ast_hash": "aea3cecb3ea9f304b68b9b837d20f1d0",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/Layout.test.tsx": {
+    "mtime": 1782469644.1116395,
+    "ast_hash": "9435285ce0c1b2a7f9e55de94f942c3b",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/ProgressionChart.test.tsx": {
+    "mtime": 1782473434.653865,
+    "ast_hash": "4a54a7867005709f603477bbfc39188c",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/TrainingLoadChart.test.tsx": {
+    "mtime": 1782472465.4865324,
+    "ast_hash": "aeb67a8707366c0a6e2b11072f29a06d",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/charts/LineChart.test.tsx": {
+    "mtime": 1782472435.1262307,
+    "ast_hash": "1cddb812bb0b8a483232d75bb0e0d4c0",
+    "semantic_hash": ""
+  },
+  "frontend/src/pages/AdminPage.test.tsx": {
+    "mtime": 1782472386.2427428,
+    "ast_hash": "402ac5c78e4f023639d6b8f81013cbe4",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_admin.py": {
+    "mtime": 1782479790.6531937,
+    "ast_hash": "433223e8950848432ab19da0772f530f",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_intervals_service.py": {
+    "mtime": 1782479685.8472955,
+    "ast_hash": "89ccc69f2be061f998c5c08657bd3030",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_analysis.py": {
+    "mtime": 1782480763.2240493,
+    "ast_hash": "9a3f0d0db1ecfcc011682f3986a886e3",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_availability.py": {
+    "mtime": 1782481810.5914814,
+    "ast_hash": "b1daca1d0d0025d8b8e0c08bceef3f13",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_strava_service.py": {
+    "mtime": 1782482553.425342,
+    "ast_hash": "09d43992108a1c14949f444a6658a555",
     "semantic_hash": ""
   }
 }
