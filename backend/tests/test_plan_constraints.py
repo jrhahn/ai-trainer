@@ -112,3 +112,58 @@ def test_filter_empty_constraints_returns_all_updates():
 def test_filter_all_violating_returns_empty():
     updates = [_day("2026-06-26")]
     assert filter_plan_updates_for_constraints(updates, [_constraint("2026-06-26")]) == []
+
+
+# ---------------------------------------------------------------------------
+# required_workout (positive) constraints
+# ---------------------------------------------------------------------------
+
+
+def _required(date: str, workout_type: str = "endurance", min_minutes: int = 120) -> dict:
+    return {
+        "constraintType": "required_workout",
+        "constraintDate": date,
+        "requiredWorkout": {
+            "workoutType": workout_type,
+            "minDurationMinutes": min_minutes,
+        },
+    }
+
+
+def test_sanitize_coerces_rest_day_to_required_workout():
+    plan = [{"date": "2026-07-04", "workoutType": "rest", "durationMinutes": 0}]
+    result = sanitize_plan_for_constraints(plan, [_required("2026-07-04")])
+    assert result[0]["workoutType"] == "endurance"
+    assert result[0]["durationMinutes"] == 120
+
+
+def test_sanitize_bumps_too_short_required_day():
+    plan = [{"date": "2026-07-04", "workoutType": "endurance", "durationMinutes": 60}]
+    result = sanitize_plan_for_constraints(plan, [_required("2026-07-04")])
+    assert result[0]["workoutType"] == "endurance"
+    assert result[0]["durationMinutes"] == 120
+
+
+def test_sanitize_overrides_wrong_type_but_keeps_longer_duration():
+    plan = [{"date": "2026-07-04", "workoutType": "intervals", "durationMinutes": 180}]
+    result = sanitize_plan_for_constraints(plan, [_required("2026-07-04")])
+    assert result[0]["workoutType"] == "endurance"
+    assert result[0]["durationMinutes"] == 180  # already exceeds the floor
+
+
+def test_sanitize_leaves_satisfying_required_day_untouched():
+    day = {
+        "date": "2026-07-04",
+        "workoutType": "endurance",
+        "durationMinutes": 150,
+        "title": "Long ride",
+    }
+    result = sanitize_plan_for_constraints([day], [_required("2026-07-04")])
+    assert result[0] == day
+
+
+def test_no_training_takes_precedence_over_required_on_same_day():
+    plan = [{"date": "2026-07-04", "workoutType": "endurance", "durationMinutes": 30}]
+    constraints = [_constraint("2026-07-04"), _required("2026-07-04")]
+    result = sanitize_plan_for_constraints(plan, constraints)
+    assert result[0]["workoutType"] == "rest"

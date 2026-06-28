@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "backend/crud.py": {
-    "mtime": 1782238935.1838152,
-    "ast_hash": "9c284fec6f4224c4a972ed91c5b12766",
-    "semantic_hash": "9c284fec6f4224c4a972ed91c5b12766"
+    "mtime": 1782661010.2861352,
+    "ast_hash": "1a2aaa331fd4c53f6ae351b3f9c94789",
+    "semantic_hash": ""
   },
   "backend/database.py": {
     "mtime": 1780899973.342194,
@@ -200,12 +200,12 @@
     "semantic_hash": ""
   },
   "backend/models.py": {
-    "mtime": 1782330158.9490938,
-    "ast_hash": "42d761a35083c6543599a376022cbacf",
-    "semantic_hash": "42d761a35083c6543599a376022cbacf"
+    "mtime": 1782660967.2297096,
+    "ast_hash": "ffafea726f26cf80d02d5bbd9b5fcbc3",
+    "semantic_hash": ""
   },
   "backend/pyproject.toml": {
-    "mtime": 1782482588.1867807,
+    "mtime": 1782584795.1902423,
     "ast_hash": "a8c00bfa443d3adb9de283d67c864f60",
     "semantic_hash": ""
   },
@@ -220,8 +220,8 @@
     "semantic_hash": "a40a82ce603b3e82d487a5db9e3d5dce"
   },
   "backend/routers/ai.py": {
-    "mtime": 1782419912.634275,
-    "ast_hash": "75c06102b166194c202bf61329bfd8bf",
+    "mtime": 1782587069.5725503,
+    "ast_hash": "1dcaea55ff0409307d1855907362cffc",
     "semantic_hash": ""
   },
   "backend/routers/auth_router.py": {
@@ -240,14 +240,14 @@
     "semantic_hash": ""
   },
   "backend/routers/users.py": {
-    "mtime": 1782330158.9510937,
-    "ast_hash": "a41079e6ac5c674167035e61be168a72",
-    "semantic_hash": "a41079e6ac5c674167035e61be168a72"
+    "mtime": 1782586676.3523862,
+    "ast_hash": "3f1bcaa1624da56a53def5cd40854cd0",
+    "semantic_hash": ""
   },
   "backend/schemas.py": {
-    "mtime": 1782330158.9530938,
-    "ast_hash": "795a2b9e28b6e7980dfc555287fe4986",
-    "semantic_hash": "795a2b9e28b6e7980dfc555287fe4986"
+    "mtime": 1782660995.8329923,
+    "ast_hash": "1481ff5496fbb73c187077cfb0b081cc",
+    "semantic_hash": ""
   },
   "backend/scripts/__init__.py": {
     "mtime": 1780899973.3461943,
@@ -290,9 +290,9 @@
     "semantic_hash": "1b80f84eee242cdf607ac595e109fc0f"
   },
   "backend/services/availability.py": {
-    "mtime": 1782238935.1878154,
-    "ast_hash": "fe8c1d9c6a6bd861d683ca6195c40dc8",
-    "semantic_hash": "fe8c1d9c6a6bd861d683ca6195c40dc8"
+    "mtime": 1782661114.889165,
+    "ast_hash": "614e08b47cbd72c90770249566c923e2",
+    "semantic_hash": ""
   },
   "backend/services/dates.py": {
     "mtime": 1782238935.1878154,
@@ -315,8 +315,8 @@
     "semantic_hash": "063b3a961c43a6443bb4e77b72b465ea"
   },
   "backend/services/plan_maintenance.py": {
-    "mtime": 1782419942.0155427,
-    "ast_hash": "9d84bf37374f5ac859ed426b99d1a6b6",
+    "mtime": 1782586702.2196343,
+    "ast_hash": "17f12b8e1887ae8f9e84a334fde525ad",
     "semantic_hash": ""
   },
   "backend/services/prompts.py": {
@@ -330,8 +330,8 @@
     "semantic_hash": "bb2d773b8fbc22f186de02a39cb1fb5e"
   },
   "backend/services/ride_matching.py": {
-    "mtime": 1782384687.969669,
-    "ast_hash": "2a8addc41726e80288fb90e1936b6055",
+    "mtime": 1782586819.6227896,
+    "ast_hash": "e3c3c7a450c28ba266a84913c8a8acd8",
     "semantic_hash": ""
   },
   "backend/services/scheduler.py": {
@@ -360,7 +360,7 @@
     "semantic_hash": "73ff57894769557732258e9a93005026"
   },
   "backend/tests/test_activity_imports.py": {
-    "mtime": 1782481883.219223,
+    "mtime": 1782584795.1912422,
     "ast_hash": "2c0e68d5c843763fe8d2c79d216f322d",
     "semantic_hash": ""
   },
@@ -385,12 +385,12 @@
     "semantic_hash": "4a5f976e04e5ad90bc721154385e630f"
   },
   "backend/tests/test_ai_service_unit.py": {
-    "mtime": 1782481010.2248018,
+    "mtime": 1782584795.1942422,
     "ast_hash": "b34d8149bcb791ff375e1a941db52d83",
     "semantic_hash": ""
   },
   "backend/tests/test_auth.py": {
-    "mtime": 1782480923.2347546,
+    "mtime": 1782584795.1962423,
     "ast_hash": "70d13dd3a0fb892c5cad00213e4b07c5",
     "semantic_hash": ""
   },
@@ -420,7 +420,7 @@
     "semantic_hash": "04040f2bb4627434834ac91d3f5e38fd"
   },
   "backend/tests/test_dates.py": {
-    "mtime": 1782481826.2376416,
+    "mtime": 1782584795.1962423,
     "ast_hash": "d8ab28e47f5332e746473a5ced5a3d6e",
     "semantic_hash": ""
   },
@@ -515,7 +515,7 @@
     "semantic_hash": "2590b296e55b7ee37bb03db12f9a0df3"
   },
   "backend/tests/test_weather_service.py": {
-    "mtime": 1782479523.5869486,
+    "mtime": 1782584795.2002423,
     "ast_hash": "9b2b172025a46023652e1c15efc0b820",
     "semantic_hash": ""
   },
@@ -965,18 +965,18 @@
     "semantic_hash": "e8a0943e16e0aa835cb29e9d16925f9e"
   },
   "backend/services/plan_constraints.py": {
-    "mtime": 1782384687.9686692,
-    "ast_hash": "89b63f7723f841862345ed002323ad70",
+    "mtime": 1782661052.584552,
+    "ast_hash": "f6503b555995975fa3c3ac2d4589a318",
     "semantic_hash": ""
   },
   "backend/tests/test_plan_constraints.py": {
-    "mtime": 1782384687.970669,
-    "ast_hash": "ee23eeafa99634248bb0d0317b85664d",
+    "mtime": 1782661160.5436132,
+    "ast_hash": "1bc91114ac533fed7da94b4f5d39da8e",
     "semantic_hash": ""
   },
   "backend/tests/test_plan_integrity.py": {
-    "mtime": 1782384687.9716692,
-    "ast_hash": "10ea33699114bf300c1127850f18348b",
+    "mtime": 1782586056.500426,
+    "ast_hash": "658eb0e730e507f7966f6209f6972047",
     "semantic_hash": ""
   },
   "frontend/src/components/TodayCard.test.tsx": {
@@ -1040,28 +1040,43 @@
     "semantic_hash": ""
   },
   "backend/tests/test_admin.py": {
-    "mtime": 1782479790.6531937,
+    "mtime": 1782584795.1922424,
     "ast_hash": "433223e8950848432ab19da0772f530f",
     "semantic_hash": ""
   },
   "backend/tests/test_intervals_service.py": {
-    "mtime": 1782479685.8472955,
+    "mtime": 1782584795.1972423,
     "ast_hash": "89ccc69f2be061f998c5c08657bd3030",
     "semantic_hash": ""
   },
   "backend/tests/test_analysis.py": {
-    "mtime": 1782480763.2240493,
+    "mtime": 1782584795.1952424,
     "ast_hash": "9a3f0d0db1ecfcc011682f3986a886e3",
     "semantic_hash": ""
   },
   "backend/tests/test_availability.py": {
-    "mtime": 1782481810.5914814,
-    "ast_hash": "b1daca1d0d0025d8b8e0c08bceef3f13",
+    "mtime": 1782661173.7687428,
+    "ast_hash": "09c6ac594a7c8abd68678fdeeed4a811",
     "semantic_hash": ""
   },
   "backend/tests/test_strava_service.py": {
-    "mtime": 1782482553.425342,
+    "mtime": 1782584795.1982424,
     "ast_hash": "09d43992108a1c14949f444a6658a555",
+    "semantic_hash": ""
+  },
+  "backend/services/plan_pipeline.py": {
+    "mtime": 1782586655.2431839,
+    "ast_hash": "f29cea43b2dbd3db9848d638907351ea",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_plan_pipeline.py": {
+    "mtime": 1782661205.9870584,
+    "ast_hash": "cb00a51891986d756450e7e12ecce324",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/20260628_000001_add_required_workout_to_constraints.py": {
+    "mtime": 1782660978.3198195,
+    "ast_hash": "6ce422bc52e3fea6f686267e98c715ed",
     "semantic_hash": ""
   }
 }

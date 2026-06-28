@@ -401,6 +401,7 @@ class AthleteAvailabilityConstraintSchema(CamelModel):
     source: str = ""
     active: bool
     expires_on: Optional[str] = None
+    required_workout: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

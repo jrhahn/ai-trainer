@@ -15,7 +15,7 @@ import schemas
 from services import ai_service
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
-from services.plan_constraints import filter_plan_updates_for_constraints
+from services import plan_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,12 @@ LABEL_ADDITIONAL = "Additional"
 LABEL_OK = "OK"
 LABEL_TOO_MUCH = "Too much"
 LABEL_MISMATCH = "Mismatch"
+
+# Labels produced by automatic ride↔plan matching. These are recomputed live on
+# every match pass, so they may be freely overwritten. Any *other* non-null label
+# (subjective rider feedback like "Solid"/"Close"/"Off plan", or an explicit coach
+# label) is sticky and must survive re-matching.
+AUTO_LABELS = frozenset({LABEL_ADDITIONAL, LABEL_OK, LABEL_TOO_MUCH, LABEL_MISMATCH})
 
 COMBINED_DURATION_MIN_RATIO = 0.8
 COMBINED_DURATION_MAX_RATIO = 1.25
@@ -97,6 +103,21 @@ def _duration_mismatch_label(
     if ratio is not None and (ratio > 2.5 or ratio < 0.3):
         return LABEL_MISMATCH
     return None
+
+
+def _resolve_label(ride: models.RideMetric, auto_label: str | None) -> str | None:
+    """Decide the label to persist when (re-)matching ``ride``.
+
+    Automatic match labels are recomputed on every pass and reflect the *current*
+    ride and the *current* matched plan day, so they stay live. Subjective rider
+    feedback and explicit coach labels are sticky: they are preserved and never
+    clobbered by a re-match (which would otherwise reset them — often to ``None``
+    — on the next page reload).
+    """
+    existing = ride.label_override
+    if existing is not None and existing not in AUTO_LABELS:
+        return existing
+    return auto_label
 
 
 def _is_structured_hard_plan(day: dict) -> bool:
@@ -193,18 +214,9 @@ def _ride_feedback_from_metric(ride: models.RideMetric) -> dict[str, Any]:
     return feedback
 
 
-def _apply_plan_updates(plan: list[dict], plan_updates: list[dict] | None) -> list[dict] | None:
-    if not plan_updates:
-        return None
-    updates_by_date = {u["date"]: u for u in plan_updates if u.get("date")}
-    if not updates_by_date:
-        return None
-    return [
-        {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
-        if day.get("date") in updates_by_date and not day.get("completed")
-        else day
-        for day in plan
-    ]
+# Canonical implementation lives in the shared pipeline; kept as an alias so the
+# per-day merge logic never diverges between this module and the pipeline.
+_apply_plan_updates = plan_pipeline.apply_plan_updates
 
 
 async def apply_ride_plan_matches(
@@ -252,6 +264,7 @@ async def apply_ride_plan_matches(
                         matched_plan_date=activity_date if display_plan_day else None,
                         matched_plan_snapshot=display_plan_day,
                         matched_at=ride.matched_at or _utcnow(),
+                        label_override=_resolve_label(ride, None),
                     )
                 else:
                     await crud.update_ride_match(
@@ -260,6 +273,7 @@ async def apply_ride_plan_matches(
                         status=MATCH_UNMATCHED,
                         matched_plan_date=activity_date if display_plan_day else None,
                         matched_plan_snapshot=display_plan_day,
+                        label_override=_resolve_label(ride, None),
                     )
             continue
 
@@ -271,6 +285,7 @@ async def apply_ride_plan_matches(
                     status=MATCH_UNMATCHED,
                     matched_plan_date=activity_date if display_plan_day else None,
                     matched_plan_snapshot=display_plan_day,
+                    label_override=_resolve_label(ride, None),
                 )
             continue
 
@@ -288,7 +303,7 @@ async def apply_ride_plan_matches(
                 matched_plan_date=activity_date,
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
-                label_override=label_override,
+                label_override=_resolve_label(ride, label_override),
             )
             auto_matched.append(ride)
         else:
@@ -312,7 +327,7 @@ async def apply_ride_plan_matches(
                             matched_plan_date=activity_date,
                             matched_plan_snapshot=plan_day,
                             matched_at=_utcnow(),
-                            label_override=LABEL_OK,
+                            label_override=_resolve_label(ride, LABEL_OK),
                         )
                     elif ride.strava_activity_id == best_match.strava_activity_id:
                         await crud.update_ride_match(
@@ -322,9 +337,12 @@ async def apply_ride_plan_matches(
                             matched_plan_date=activity_date,
                             matched_plan_snapshot=plan_day,
                             matched_at=_utcnow(),
-                            label_override=_duration_mismatch_label(
-                                _ride_duration_minutes(ride),
-                                plan_duration_min,
+                            label_override=_resolve_label(
+                                ride,
+                                _duration_mismatch_label(
+                                    _ride_duration_minutes(ride),
+                                    plan_duration_min,
+                                ),
                             ),
                         )
                     else:
@@ -335,10 +353,11 @@ async def apply_ride_plan_matches(
                             matched_plan_date=activity_date,
                             matched_plan_snapshot=plan_day,
                             matched_at=None,
-                            label_override=(
+                            label_override=_resolve_label(
+                                ride,
                                 LABEL_TOO_MUCH
                                 if _is_hard_extra_ride(ride)
-                                else LABEL_ADDITIONAL
+                                else LABEL_ADDITIONAL,
                             ),
                         )
                 auto_matched.append(best_match)
@@ -351,6 +370,7 @@ async def apply_ride_plan_matches(
                         matched_plan_date=activity_date,
                         matched_plan_snapshot=plan_day,
                         matched_at=None,
+                        label_override=_resolve_label(ride, None),
                     )
 
     return auto_matched
@@ -383,9 +403,15 @@ async def resolve_manual_match(
                 matched_plan_date=planned_date,
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
+                label_override=_resolve_label(ride, None),
             )
         else:
-            await crud.update_ride_match(db, ride, status=MATCH_UNMATCHED)
+            await crud.update_ride_match(
+                db,
+                ride,
+                status=MATCH_UNMATCHED,
+                label_override=_resolve_label(ride, None),
+            )
 
     return selected
 
@@ -494,22 +520,13 @@ async def review_matched_ride_and_adapt(
                 plan_updates = [
                     u for u in plan_updates if u.get("date") != ride.matched_plan_date
                 ]
-            # Enforce availability constraints on remaining updates.
-            constraint_rows = await crud.list_active_availability_constraints(
-                db, user.id, today=app_today_iso()
-            )
-            if constraint_rows:
-                constraints = [
-                    schemas.AthleteAvailabilityConstraintSchema.model_validate(
-                        c, from_attributes=True
-                    ).model_dump(by_alias=True, mode="json")
-                    for c in constraint_rows
-                ]
-                plan_updates = filter_plan_updates_for_constraints(plan_updates, constraints)
             plan_updates = plan_updates or None
-        updated_plan = _apply_plan_updates(plan, plan_updates)
-        if updated_plan is not None:
-            await crud.upsert_training_plan(db, user.id, updated_plan)
+        if plan_updates:
+            # Constraint enforcement, completed-day protection, user-edit merge
+            # and persistence are all owned by the shared pipeline.
+            await plan_pipeline.commit_plan_updates(
+                db, user, plan_updates, base_plan=plan
+            )
     except Exception:
         logger.warning("Matched ride plan adaptation failed", exc_info=True)
 

@@ -1,16 +1,16 @@
-# Graph Report - ai-trainer  (2026-06-27)
+# Graph Report - ai-trainer  (2026-06-28)
 
 ## Corpus Check
-- 213 files · ~178,176 words
+- 216 files · ~180,479 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2895 nodes · 5588 edges · 163 communities (148 shown, 15 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 243 edges (avg confidence: 0.76)
+- 2948 nodes · 5690 edges · 187 communities (154 shown, 33 thin omitted)
+- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 244 edges (avg confidence: 0.76)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b6874340`
+- Built from commit: `e4009e52`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -134,6 +134,29 @@
 - [[_COMMUNITY_Community 160|Community 160]]
 - [[_COMMUNITY_Community 161|Community 161]]
 - [[_COMMUNITY_Community 162|Community 162]]
+- [[_COMMUNITY_Community 163|Community 163]]
+- [[_COMMUNITY_Community 164|Community 164]]
+- [[_COMMUNITY_Community 165|Community 165]]
+- [[_COMMUNITY_Community 167|Community 167]]
+- [[_COMMUNITY_Community 168|Community 168]]
+- [[_COMMUNITY_Community 169|Community 169]]
+- [[_COMMUNITY_Community 170|Community 170]]
+- [[_COMMUNITY_Community 171|Community 171]]
+- [[_COMMUNITY_Community 172|Community 172]]
+- [[_COMMUNITY_Community 173|Community 173]]
+- [[_COMMUNITY_Community 174|Community 174]]
+- [[_COMMUNITY_Community 175|Community 175]]
+- [[_COMMUNITY_Community 176|Community 176]]
+- [[_COMMUNITY_Community 177|Community 177]]
+- [[_COMMUNITY_Community 178|Community 178]]
+- [[_COMMUNITY_Community 179|Community 179]]
+- [[_COMMUNITY_Community 180|Community 180]]
+- [[_COMMUNITY_Community 181|Community 181]]
+- [[_COMMUNITY_Community 182|Community 182]]
+- [[_COMMUNITY_Community 183|Community 183]]
+- [[_COMMUNITY_Community 184|Community 184]]
+- [[_COMMUNITY_Community 185|Community 185]]
+- [[_COMMUNITY_Community 186|Community 186]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `User` - 97 edges
@@ -141,11 +164,11 @@
 3. `CamelModel` - 61 edges
 4. `_make_user()` - 61 edges
 5. `apiFetch()` - 46 edges
-6. `decode_token()` - 42 edges
-7. `RideMetric` - 42 edges
+6. `RideMetric` - 43 edges
+7. `decode_token()` - 42 edges
 8. `ask_trainer_system()` - 31 edges
 9. `TrainingDay` - 30 edges
-10. `ask_trainer_plan_updates_rule()` - 25 edges
+10. `apply_ride_plan_matches()` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `test_disabled_memory_not_returned_in_prompt_facts()` --calls--> `decode_token()`  [INFERRED]
@@ -162,27 +185,27 @@
 ## Import Cycles
 - None detected.
 
-## Communities (163 total, 15 thin omitted)
+## Communities (187 total, 33 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (121): Unit tests for services/ai_service.py helper functions., When targetPower is given, TSS should use mid-point for IF calculation., Score and component scores must be in [0, 100]., TSB near +10 with high CTL should produce a high score., TSB ≤ -30 should give form_score 0., Zero CTL and zero ATL (TSB=0) → form_score=50, fitness_score=0, score=32.5., thinking' must be stripped from the return value and never reach the frontend., When classify says needs_science_rag=False, the effective science context is emp (+113 more)
+Nodes (122): Unit tests for services/ai_service.py helper functions., When targetPower is given, TSS should use mid-point for IF calculation., Score and component scores must be in [0, 100]., TSB near +10 with high CTL should produce a high score., TSB ≤ -30 should give form_score 0., Zero CTL and zero ATL (TSB=0) → form_score=50, fitness_score=0, score=32.5., thinking' must be stripped from the return value and never reach the frontend., When classify says needs_science_rag=False, the effective science context is emp (+114 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.05
 Nodes (75): _activity_sport_type(), adapt_training_plan(), AIResponseFormatError, analyse_fit_activity(), analyse_strava_activities(), ask_trainer(), batch_review_rides(), _chat() (+67 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.04
-Nodes (91): AdaptPlanRequest, AIKeySaveRequest, AIKeyStatusSchema, AnalyseActivitiesRequest, AnalyseActivitiesResponse, AskTrainerRequest, AskTrainerResponse, AthleteAvailabilityConstraintSchema (+83 more)
+Cohesion: 0.08
+Nodes (43): AdaptPlanRequest, AIKeySaveRequest, AIKeyStatusSchema, AnalyseActivitiesRequest, AskTrainerRequest, AskTrainerResponse, AthleteAvailabilityConstraintSchema, AthleteContextRequest (+35 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.07
-Nodes (24): mockRecalculateAll, { mockTriggerImport, mockGetProgress }, StoreState, { mockGetStravaAuthUrl, mockDisconnectStrava }, Props, history(), snapshot(), { mockProcessPendingFeedbacks, mockFetchRideMetricsHistory } (+16 more)
+Cohesion: 0.06
+Nodes (29): LineChart(), LineChartProps, mockRecalculateAll, { mockTriggerImport, mockGetProgress }, StoreState, { mockGetStravaAuthUrl, mockDisconnectStrava }, rideMetricsHistory, TrainingLoadChart() (+21 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.06
-Nodes (43): Props, workoutDay, WORKOUT_COLORS, effortLabels, Props, strengthEffortLabels, baseDay, AnalysisStatus (+35 more)
+Nodes (43): Props, workoutDay, WORKOUT_COLORS, effortLabels, Props, strengthEffortLabels, baseDay, plannedWorkoutMatchesActivity() (+35 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -190,15 +213,15 @@ Nodes (65): AsyncSession, db(), _make_ride(), _make_user(), Unit tests for the c
 
 ### Community 6 - "Community 6"
 Cohesion: 0.06
-Nodes (45): AIKeySettings(), Provider, PROVIDERS, { mockFetchStatus, mockSaveKey, mockDeleteKey, mockTestKey }, AthleteTraitsSettings(), formatDate(), TraitRow(), FitFileUpload() (+37 more)
+Nodes (47): AIChat(), ChatExchange, groupMessagesIntoExchanges(), MARKDOWN_COMPONENTS, Props, AIKeySettings(), Provider, PROVIDERS (+39 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.06
-Nodes (45): ask_trainer_plan_updates_rule(), ask_trainer_system(), generate_plan_user(), race_profile_context_section(), Return race context from the profile when a race was entered during setup., Return the planUpdates rule string for the ask_trainer system prompt., recommendation_reasoning_layers_rule(), The ask_trainer system prompt must contain outlook handling instructions. (+37 more)
+Cohesion: 0.04
+Nodes (62): ask_trainer_plan_updates_rule(), ask_trainer_system(), race_profile_context_section(), Return race context from the profile when a race was entered during setup., Return the planUpdates rule string for the ask_trainer system prompt., recommendation_reasoning_layers_rule(), rest_recommendation_rules(), The ask_trainer system prompt must contain outlook handling instructions. (+54 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.07
-Nodes (41): AthleteMemoryFact, _activity_key_filters(), _as_aware_utc(), _clamp_confidence(), create_race_event(), deactivate_expired_availability_constraints(), delete_all_ride_metrics(), delete_athlete_memory_fact() (+33 more)
+Cohesion: 0.09
+Nodes (31): AthleteMemoryFact, _activity_key_filters(), _as_aware_utc(), _clamp_confidence(), deactivate_expired_availability_constraints(), delete_all_ride_metrics(), delete_athlete_memory_fact(), delete_athlete_metric_snapshots() (+23 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.12
@@ -213,16 +236,16 @@ Cohesion: 0.09
 Nodes (4): Unit tests for the pure computational helpers in services/analysis.py., _steady_ride(), test_compute_ftp_from_streams(), test_estimate_ftp_over_time_produces_curve()
 
 ### Community 12 - "Community 12"
-Cohesion: 0.05
-Nodes (43): build_last_ride_feedback(), get_effective_ftp(), _last_ride_recommendation(), Return the best available FTP value for *user*.      Priority order: explicit *f, Coverage tests for services/llm.py and services/metrics_service.py.  Covers: - g, OpenAIProvider.chat with json_mode=True passes response_format., OpenAIProvider.chat_history passes conversation messages to the API., GeminiProvider.chat raises AIRateLimitError when the API returns 429. (+35 more)
+Cohesion: 0.14
+Nodes (11): Coverage tests for services/llm.py and services/metrics_service.py.  Covers: - g, OpenAIProvider.chat with json_mode=True passes response_format., OpenAIProvider.chat_history passes conversation messages to the API., GeminiProvider.chat_history returns text for multi-turn conversations., When neither key is set, returns GeminiProvider with a warning log., OpenAIProvider.chat calls the OpenAI API and returns text., test_gemini_provider_chat_history_success(), test_get_provider_returns_gemini_when_no_keys() (+3 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.08
-Nodes (46): TokenResponse, Path, admin_delete_user(), _admin_enabled(), admin_login(), admin_users(), AdminLoginRequest, AdminUsersResponse (+38 more)
+Cohesion: 0.12
+Nodes (35): TokenResponse, Path, _create_authelia_user(), login(), Authentication routes., Verify credentials directly against Authelia's file-based users_database.yml., Append a new user entry to Authelia's file-based users_database.yml., register() (+27 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.11
-Nodes (55): Attach a correlation ID to every request/response cycle.      Reads the incoming, request_id_middleware(), HTTPException, Request, _active_availability_constraints_for_prompt(), adapt_plan(), analyse_activities(), ask_trainer() (+47 more)
+Cohesion: 0.12
+Nodes (50): http_exception_handler(), Log every HTTP error with correlation metadata, then return the standard respons, HTTPException, Request, _active_availability_constraints_for_prompt(), adapt_plan(), analyse_activities(), _analysis_activity_log_sample() (+42 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.04
@@ -233,12 +256,12 @@ Cohesion: 0.04
 Nodes (42): Frontend/backend API contract integration tests.  These tests simulate the exact, POST /users/me/upload-fit/bulk imports multiple FIT files in one request., Bulk FIT upload reports duplicate and invalid files without aborting the batch., GET /users/me must return every camelCase key that BackendUserResponse     (fron, The frontend StravaActivity interface uses snake_case property names     (moving, The backend should accept camelCase aliases too (used in the existing test suite, GET /users/me/plan and PUT /users/me/plan must use the { plan: [...] }     envel, POST /users/me/workouts/{date} must accept the WorkoutFeedbackSchema     camelCa (+34 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.27
-Nodes (13): _activity_id_matches_cursor(), _activity_log_entry(), _activity_log_sample(), _activity_response(), _activity_response_log_sample(), get_intervals_activities(), _hashed_activity_id(), _intervals_activity_window() (+5 more)
+Cohesion: 0.32
+Nodes (11): _activity_id_matches_cursor(), _activity_log_entry(), _activity_log_sample(), _activity_response(), _activity_response_log_sample(), get_intervals_activities(), _hashed_activity_id(), _intervals_activity_window() (+3 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.08
-Nodes (30): get_athlete_context(), get_training_plan(), Return the TrainingPlan for a user, or None., Create or replace the training plan for a user and flush., Return the structured AthleteContext for a user, or None., Create or update a user's structured athlete context and flush., upsert_athlete_context(), upsert_training_plan() (+22 more)
+Cohesion: 0.09
+Nodes (31): get_athlete_context(), get_training_plan(), get_workout_log_by_date(), get_workout_logs(), Return the TrainingPlan for a user, or None., Create or replace the training plan for a user and flush., Return all WorkoutLog rows for a user., Return the WorkoutLog for a specific user/date, or None. (+23 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.08
@@ -249,20 +272,20 @@ Cohesion: 0.05
 Nodes (28): GET /metrics-history returns an empty list for a new user., analyse-activities should create a per-ride metric visible in /ride-metrics-hist, estimate-ftp on a brand-new account with no rides returns null FTP., estimate-ftp returns FTP from the user profile (current_ftp)., recalculate-metrics should create one AthleteMetricSnapshot per ride, not just o, GET /ride-metrics-history returns an empty list for a new user., After analyse-activities, ride-metrics-history should include per-ride CTL/ATL/T, PATCH ride-feedback saves structured feedback as a formatted user_note. (+20 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.08
-Nodes (22): buildDefaults(), DEFAULT_FTP, FitnessMetricsCard(), MetricField, METRICS, baseProfile, mockUpdateCurrentUser, ProgressionChart() (+14 more)
+Cohesion: 0.06
+Nodes (38): buildDefaults(), DEFAULT_FTP, FitnessMetricsCard(), MetricField, METRICS, baseProfile, mockUpdateCurrentUser, Layout() (+30 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.23
-Nodes (21): day_violates_constraint(), filter_plan_updates_for_constraints(), Shared plan constraint enforcement — importable from both routers and services., sanitize_plan_for_constraints(), _constraint(), _day(), Unit tests for services/plan_constraints.py., test_day_without_date_does_not_violate() (+13 more)
+Cohesion: 0.10
+Nodes (19): ChatHistoryResponse, CoachMemoryRequest, FitUploadResponse, ImportHistoryResponse, LoginRequest, MetricsHistoryResponse, _password_personal_fragments(), PlanRequest (+11 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.07
-Nodes (32): get_all_ride_metrics_ordered(), get_latest_ride_metric(), get_latest_ride_metric_with_location(), get_near_duplicate_ride_metric(), get_ride_metric_by_date(), get_ride_metric_by_source(), get_ride_metric_by_strava_id(), get_ride_metrics_by_date() (+24 more)
+Cohesion: 0.13
+Nodes (26): _all_plan_days_by_date(), apply_ride_plan_matches(), _best_matching_ride(), _combined_duration_matches_plan(), _duration_mismatch_label(), _duration_ratio(), _is_cycling_ride(), _is_duration_focused_ride_plan() (+18 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.06
-Nodes (39): AuthShell(), AuthShellProps, highlights, Layout(), navItems, mockToggleExpertMode, mockUseImportProgress, useImportProgress() (+31 more)
+Cohesion: 0.08
+Nodes (23): AuthShell(), AuthShellProps, highlights, AuthCallbackPage(), { mockGetSessionToken, mockLoadUserData }, mockNavigate, LoginPage(), createTestQueryClient() (+15 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.08
@@ -273,24 +296,16 @@ Cohesion: 0.07
 Nodes (31): Tests for per-task model defaults and provider model selection.  Covers: - Confi, _resolve_model returns the correct model for each Gemini task., Unknown task names fall back to the module-level default constants., Unknown provider names fall back to OPENAI_MODEL., OpenAIProvider created for TASK_COACH uses the configured coach model., OpenAIProvider created for TASK_CLASSIFY uses the cheap classify model., GeminiProvider created for a task uses the configured model., When falling back to an available provider, it still uses the task model. (+23 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.15
-Nodes (7): FormData, OnboardingPage(), PersistedProgress, readOnboardingProgress(), baseProfile, {
-  mockGenerateTrainingPlan,
-  mockAnalyseStravaActivities,
-  mockUpdateCurrentUser,
-  mockSaveTrainingPlan,
-  mockGetStravaActivities,
-  mockGetStravaAuthUrl,
-  mockDisconnectStrava,
-}, saveTrainingPlan()
+Cohesion: 0.09
+Nodes (32): create_admin_token(), hash_password(), Password hashing, JWT creation/verification, and FastAPI auth dependency., Return a short-lived JWT that grants admin panel access., Return whether *request* may be trusted to carry Authelia ``Remote-*`` headers., Validate JWT_SECRET strength for the configured runtime environment., Warn when Authelia header trust relies solely on network isolation.      Without, _request_from_trusted_proxy() (+24 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.10
 Nodes (30): _backfill_ride_weather_bg(), Background weather backfill so dashboard hydration reads stored data immediately, fetch_activity_detail(), fetch_activity_streams(), Strava token management and stream-fetching helpers.  Extracted from ``routers/s, Fetch a single Strava activity summary/detail payload., Fetch per-second timeseries streams for a single Strava activity.      Returns a, _activity_hour() (+22 more)
 
 ### Community 29 - "Community 29"
-Cohesion: 0.05
-Nodes (55): date, _event_date(), _next_race_date(), app_date_context(), app_timezone(), app_today(), app_today_iso(), app_today_stamp() (+47 more)
+Cohesion: 0.08
+Nodes (35): date, _event_date(), _next_race_date(), app_date_context(), app_timezone(), app_today(), app_today_iso(), app_today_stamp() (+27 more)
 
 ### Community 30 - "Community 30"
 Cohesion: 0.07
@@ -298,19 +313,19 @@ Nodes (27): _embed(), _make_openai(), Retrieval-Augmented Generation helper for 
 
 ### Community 31 - "Community 31"
 Cohesion: 0.07
-Nodes (21): Extra coverage tests for routers/ai.py.  Exercises endpoints and helpers that ar, review_new_rides returns empty review when there are no unreviewed rides., review_new_rides calls batch_review_rides when unreviewed rides exist., refresh_knowledge returns 200 with status=started when OPENAI_API_KEY is set., refresh_knowledge returns 503 when OPENAI_API_KEY is not configured., refresh_login_summary returns 404 when the user has no rider assessment., refresh_login_summary generates and returns a login summary., rate_workout triggers plan adaptation when flag_for_adaptation is True. (+13 more)
+Nodes (30): AIRateLimitError, Raised when the AI provider returns a rate-limit (429) response., _chat must propagate AIRateLimitError raised by the LLM provider., The /ask-trainer endpoint must return HTTP 503 when AIRateLimitError is raised., The /analyse-activities endpoint must return HTTP 503 when AIRateLimitError is r, Extra coverage tests for routers/ai.py.  Exercises endpoints and helpers that ar, readiness_score uses FTP from rider assessment when available., review_new_rides returns empty review when there are no unreviewed rides. (+22 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.50
-Nodes (4): Response for POST /users/me/recalculate-metrics., RecalculateMetricsResponse, Recompute TSS, CTL, ATL, and TSB for all stored rides using a given FTP., recalculate_metrics()
+Cohesion: 0.20
+Nodes (6): FitFileUpload(), FitFileUploadProps, mockUploadFitFiles, FitBulkUploadResponse, FitUploadFileResult, uploadFitFiles()
 
 ### Community 33 - "Community 33"
-Cohesion: 0.17
-Nodes (12): _auto_rate_ride(), Generate a coach note for a completed ride by comparing it against the plan., compare_planned_vs_actual(), compute_hr_drift(), _detect_intensity_spikes(), _normalized_power(), Compare planned workout targets against actual Strava stream data.      Args:, Return the linear-regression slope (bpm per sample) of HR over a segment.      A (+4 more)
+Cohesion: 0.08
+Nodes (24): best_n_min_power(), _best_power_points(), build_rule_based_summary(), compute_hr_drift(), compute_readiness_recommendations(), compute_readiness_score(), _detect_intensity_spikes(), hr_corrected_ftp() (+16 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.10
-Nodes (35): datetime, _activities_are_temporally_contained(), activity_family(), activity_identity_tokens(), _activity_interval(), activity_names_compatible(), are_near_duplicate_activities(), normalize_activity_text() (+27 more)
+Cohesion: 0.09
+Nodes (45): _coerce_day_to_required(), day_satisfies_required_workout(), day_violates_constraint(), filter_plan_updates_for_constraints(), Shared plan constraint enforcement — importable from both routers and services., Return the required-workout spec pinned to ``day``'s date, if any., Whether ``day`` already meets the required workout type and duration floor., Lift ``day`` up to the required workout, preserving the optimizer's extras. (+37 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.10
@@ -321,8 +336,8 @@ Nodes (16): DAYS, emptyForm(), formatIsoDate(), Props, RaceEventForm, formatIsoD
 }, mockNavigate (+8 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.14
-Nodes (15): apply_ctl_atl_decay(), build_ride_metrics_chain(), build_rule_based_summary(), classify_ride_purpose(), compute_ride_tss(), detect_intervals(), Compute Training Stress Score for a single ride.      TSS = (duration_s × NP²) /, Advance CTL/ATL by ``gap_days``, applying zero-TSS decay for silent days     the (+7 more)
+Cohesion: 0.16
+Nodes (11): classify_ride_purpose(), detect_intervals(), Detect interval blocks in a power stream relative to FTP.      An interval is a, Estimate ride duration from a Strava-style time stream., Classify the overall purpose/category of a ride.      Categories (aligned with p, _stream_duration_seconds(), Verify each of the three synthetic rides gets the expected classification., 15-min easy ride at 50 % FTP → short_easy_spin. (+3 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.13
@@ -337,28 +352,28 @@ Cohesion: 0.10
 Nodes (16): DummyResponse, FakeAsyncHttpClient, ImportFlowHttpClient, Minimal httpx.AsyncClient stub for token exchange., Full 'Connect to Strava' integration test.      Simulates the exact flow a user, AsyncClient stub for background import pagination + stream fetches., test_connect_to_strava_end_to_end(), test_disconnect_strava_removes_token() (+8 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.11
-Nodes (35): Any, BasicAuth, Exception, _as_datetime(), _as_float(), _as_int(), _average_int(), _fit_field_map() (+27 more)
+Cohesion: 0.15
+Nodes (27): Any, BasicAuth, Exception, IntervalsConnectionResponse, IntervalsCredentialsRequest, run_intervals_import(), apply_summary_fallback(), fetch_activity_detail() (+19 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.09
 Nodes (11): Coverage tests for routers/users.py endpoints not covered by test_users.py.  Cov, Returns estimated_ftp=None and source='none' when no FTP is set., Returns current_ftp when it is set on the user profile., POST /workouts/{date} persists a log; GET /workouts returns it., recalculate-metrics returns 400 when no FTP is available., recalculate-metrics succeeds when ftp_override is provided., test_estimate_ftp_with_current_ftp(), test_estimate_ftp_with_no_current_ftp() (+3 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.18
-Nodes (17): activityFamily(), activityIdentityTokens(), activityNamesCompatible(), activityStartDistanceMs(), areContainedDuplicateRides(), areNearDuplicateRides(), dedupeRideMetricsByActivity(), hasExplicitTimezone() (+9 more)
+Cohesion: 0.06
+Nodes (47): baseDay, mockNavigate, typeColors, WorkoutCard(), activityFamily(), activityIdentityTokens(), activityNamesCompatible(), activityStartDistanceMs() (+39 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.43
-Nodes (6): Training metrics recalculation service.  Extracts the CTL/ATL/TSB chain-rebuild, Recompute TSS/CTL/ATL/TSB for all stored rides.      When *ftp_override* is give, _rebuild_metric_snapshots(), _recalculate_metric_chain(), recalculate_metrics_for_user(), _refresh_rider_assessment_feedback()
-
-### Community 44 - "Community 44"
 Cohesion: 0.16
 Nodes (22): async_sessionmaker, AsyncOpenAI, _chunk_text(), _embed_batch(), _fetch_s2_papers(), _get_encoder(), ingest_seed_corpus(), ingest_semantic_scholar() (+14 more)
 
+### Community 44 - "Community 44"
+Cohesion: 0.17
+Nodes (12): _duration_ms(), InProcessScheduler, JobRun, Small in-process scheduler for recurring backend jobs.  This scheduler is intent, Register and run recurring jobs in the FastAPI process., ScheduledJob, SleepFn, Task (+4 more)
+
 ### Community 45 - "Community 45"
-Cohesion: 0.24
-Nodes (12): buildRideFeedbackChatMessages(), intentLabels, LegsFeeling, legsLabels, matchLabels, PlanMatchFeedback, RideFeedbackForm(), RideIntent (+4 more)
+Cohesion: 0.14
+Nodes (17): buildRideFeedbackChatMessages(), intentLabels, LegsFeeling, legsLabels, matchLabels, PlanMatchFeedback, Props, RideFeedbackForm() (+9 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.11
@@ -373,47 +388,44 @@ Cohesion: 0.24
 Nodes (17): intervals_activity_id(), Return a stable signed-bigint-safe id for an Intervals.icu activity., _create_user(), _day(), _get_user(), Regression for #301: cursor must only advance to max *successfully imported* ID., Regression for #301: cursor must not move at all when every activity fails mappi, Regression for #322: intervals cursor must stop below the first failed import. (+9 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.16
-Nodes (15): ActivitySource, fallback_fingerprint(), find_existing_import(), ImportedActivity, Source-neutral imported activity normalization.  The rest of the app still expos, Return a positive legacy BIGINT id for non-Strava source identifiers., synthetic_activity_id(), to_ride_inputs() (+7 more)
+Cohesion: 0.14
+Nodes (18): ActivitySource, fallback_fingerprint(), find_existing_import(), ImportedActivity, Source-neutral imported activity normalization.  The rest of the app still expos, Return a positive legacy BIGINT id for non-Strava source identifiers., synthetic_activity_id(), to_ride_inputs() (+10 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.11
 Nodes (17): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, moduleResolution, noEmit (+9 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.22
-Nodes (17): best_n_min_power(), _best_power_points(), compute_ftp_from_streams(), _critical_power_from_points(), _duration_hr_is_hard_enough(), estimate_ftp_over_time(), _ftp_candidates_from_power_duration_points(), _in_window() (+9 more)
+Cohesion: 0.23
+Nodes (13): compute_ftp_from_streams(), _critical_power_from_points(), _duration_hr_is_hard_enough(), estimate_ftp_over_time(), _ftp_candidates_from_power_duration_points(), _in_window(), _power_window_is_steady_enough(), Estimate FTP and threshold HR from activity stream data.      Uses demonstrated (+5 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.10
 Nodes (20): rate_workout_system(), rate_workout_system must embed COACH_PERSONA., rate_workout_system() prompt must include the follow-up dialogue instructions., rate_workout_system() must still mention feedback and flag_for_adaptation fields, rate_workout_system must include response quality rules for the feedback field., rate_workout_system must contain an example for a short recovery spin., rate_workout_system must contain an example for an over-paced endurance ride., rate_workout_system must contain an example for a missed or aborted workout. (+12 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.18
-Nodes (11): RefreshKnowledgeResponse, RideMetricHistoryResponse, BackgroundTasks, Background task: run the cycling science knowledge base ingestion., Queue a background refresh of the cycling science knowledge base.      Runs the, refresh_knowledge(), _run_knowledge_refresh(), import_intervals_history() (+3 more)
+Cohesion: 0.22
+Nodes (9): BackgroundTasks, Queue a background refresh of the cycling science knowledge base.      Runs the, refresh_knowledge(), import_intervals_history(), import_strava_history(), Start a background import of recent Strava activities.      Returns 202 immediat, get_ride_metrics_history(), Return the most recent 90 per-ride CTL/ATL/TSB records in chronological order. (+1 more)
 
 ### Community 54 - "Community 54"
 Cohesion: 0.17
 Nodes (15): ScriptDirectory, _get_script_dir(), Tests that verify the Alembic migration chain is well-formed.  These tests do no, Each revision ID must be unique within the migration history., Boolean columns must use 'true'/'false' as server_default, not integers.      Po, The Intervals auto-sync column must not be added only by an edited old revision., Alembic must see exactly one head revision.      Multiple heads cause ``alembic, Every revision must have at most one parent (no branch points).      A branching (+7 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.14
-Nodes (20): IntervalsConnect(), {
-  mockDisconnectIntervals,
-  mockSaveIntervalsConnection,
-}, apiFetch(), ApiFetchOptions, AUTHELIA_URL, BACKEND_URL, generateRequestId(), getBrowserTimezone() (+12 more)
+Cohesion: 0.31
+Nodes (11): _activities_are_temporally_contained(), activity_family(), activity_identity_tokens(), _activity_interval(), activity_names_compatible(), are_near_duplicate_activities(), normalize_activity_text(), _normalized_activity_datetime() (+3 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.12
 Nodes (12): Extended user endpoint tests: coach memory, strava connection in profile., A JWT with a past expiry should be rejected with 401., A completely garbage token should be rejected with 401., A valid JWT whose user has since been deleted should return 401., A request with no Authorization header should return 401., After an analysis, the user profile should include the rider assessment., test_expired_token_returns_401(), test_get_me_includes_rider_assessment() (+4 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.13
-Nodes (16): create_admin_token(), get_authelia_user(), get_current_user(), _get_or_create_authelia_user(), hash_password(), Password hashing, JWT creation/verification, and FastAPI auth dependency., Return a short-lived JWT that grants admin panel access., FastAPI dependency — raises 401/403 unless the request carries a valid admin JWT (+8 more)
+Cohesion: 0.16
+Nodes (19): extract_availability_constraints(), _next_weekday(), _parse_duration_minutes(), Structured athlete availability constraints., Extract high-confidence availability constraints from athlete text.      Handles, Best-effort minutes from phrasing like '3 hours', '2,5 std', '90 min'., Return [(date_iso, weekday_label)] for every day mentioned in the text., _target_dates() (+11 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.09
-Nodes (42): AthleteAvailabilityConstraint, _all_plan_days_by_date(), _apply_plan_updates(), apply_ride_plan_matches(), _best_matching_ride(), _combined_duration_matches_plan(), _duration_mismatch_label(), _duration_ratio() (+34 more)
+Cohesion: 0.14
+Nodes (28): list_active_availability_constraints(), Create or refresh an availability constraint and flush., Return active constraints that have not expired in the athlete timezone., upsert_availability_constraint(), AthleteAvailabilityConstraint, _add_ride(), _constraint_row(), _create_user_with_plan() (+20 more)
 
 ### Community 59 - "Community 59"
 Cohesion: 0.19
@@ -421,19 +433,19 @@ Nodes (14): batch_review_user(), Build the user message for a batch ride review.
 
 ### Community 60 - "Community 60"
 Cohesion: 0.06
-Nodes (14): _creds(), When Authelia is enabled but the internal URL / users-DB path are not set,     t, Remote-* headers are honored when the proxy secret header matches., When a proxy secret is configured, Remote-* headers without it are ignored., With no proxy secret set, header trust is unchanged (network-isolation only)., In Authelia mode, a request without Remote-Email still authenticates via bearer., test_authelia_mode_returns_503_when_not_configured(), test_authelia_session_accepted_with_proxy_secret() (+6 more)
+Nodes (17): FastAPI dependency — raises 401/403 unless the request carries a valid admin JWT, require_admin(), HTTPAuthorizationCredentials, _creds(), When Authelia is enabled but the internal URL / users-DB path are not set,     t, Remote-* headers are honored when the proxy secret header matches., When a proxy secret is configured, Remote-* headers without it are ignored., With no proxy secret set, header trust is unchanged (network-isolation only). (+9 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.13
-Nodes (14): _constant_watts_stream(), End-to-end verification scenario for the AI Coach (Task 11).  This module tests, Verify each of the three synthetic rides gets the expected classification., 15-min easy ride at 50 % FTP → short_easy_spin., 90-min ride at 65 % FTP → endurance., 60-min ride at 80 % FTP → tempo (over-paced for an endurance day)., Verify that ``build_ride_metrics_chain`` returns correct ride_purpose and     cl, All three rides get the right classification from build_ride_metrics_chain. (+6 more)
+Cohesion: 0.20
+Nodes (9): _constant_watts_stream(), End-to-end verification scenario for the AI Coach (Task 11).  This module tests, Verify that ``build_ride_metrics_chain`` returns correct ride_purpose and     cl, All three rides get the right classification from build_ride_metrics_chain., Short easy ride should produce a much lower TSS than the endurance ride., Exercise the complete coaching loop (steps 1–12) via the HTTP API.      AI servi, Return a minimal Strava-style stream dict with constant wattage., test_coaching_loop_end_to_end() (+1 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.24
-Nodes (6): _attribute_int(), _gemini_total_tokens(), GeminiProvider, _openai_total_tokens(), OpenAIProvider, _record_token_usage()
+Cohesion: 0.19
+Nodes (10): _attribute_int(), _gemini_total_tokens(), GeminiProvider, _openai_total_tokens(), OpenAIProvider, LLM provider abstraction.  Adds a thin Protocol layer so the rest of the codebas, Activate BYOK context with *keys* mapping provider name → API key., _record_token_usage() (+2 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.17
-Nodes (9): mockClearAll, mockConfirm, mockDelete, mockExport, mockFetch, mockFetchPrivacy, mockUpdate, mockUpdatePrivacy (+1 more)
+Cohesion: 0.18
+Nodes (8): mockClearAll, mockConfirm, mockDelete, mockExport, mockFetch, mockFetchPrivacy, mockUpdate, mockUpdatePrivacy
 
 ### Community 64 - "Community 64"
 Cohesion: 0.19
@@ -448,20 +460,28 @@ Cohesion: 0.20
 Nodes (6): get_settings(), Centralised application configuration.  All environment variables are declared h, Return CORS origins parsed from the (possibly comma-separated) FRONTEND_URL., Return the public base URL for this server (used as Strava callback root)., Settings, BaseSettings
 
 ### Community 67 - "Community 67"
-Cohesion: 0.24
-Nodes (4): _admin_headers(), HTTP tests for the admin router., test_admin_delete_user(), test_admin_users_lists_registered_users()
+Cohesion: 0.15
+Nodes (7): FormData, OnboardingPage(), PersistedProgress, readOnboardingProgress(), baseProfile, {
+  mockGenerateTrainingPlan,
+  mockAnalyseStravaActivities,
+  mockUpdateCurrentUser,
+  mockSaveTrainingPlan,
+  mockGetStravaActivities,
+  mockGetStravaAuthUrl,
+  mockDisconnectStrava,
+}, saveTrainingPlan()
 
 ### Community 68 - "Community 68"
 Cohesion: 0.17
-Nodes (12): _duration_ms(), InProcessScheduler, JobRun, Small in-process scheduler for recurring backend jobs.  This scheduler is intent, Register and run recurring jobs in the FastAPI process., ScheduledJob, SleepFn, Task (+4 more)
+Nodes (12): StravaImportSummaryProps, failureSignature(), hasSameProgress(), INITIAL_PROGRESS, listeners, normalizeProgress(), pollOnce(), publish() (+4 more)
 
 ### Community 69 - "Community 69"
 Cohesion: 0.18
 Nodes (11): Build a compact structured-text block from a list of RideMetric ORM objects., ride_metrics_context_section(), For high-confidence rides the reason sub-line should not appear., If classification_confidence is absent the section should still render., test_ride_metrics_context_section_high_confidence_omits_reason_line(), test_ride_metrics_context_section_includes_duration_and_display_label(), test_ride_metrics_context_section_includes_matched_plan_snapshot(), test_ride_metrics_context_section_low_confidence_shows_reason() (+3 more)
 
 ### Community 71 - "Community 71"
-Cohesion: 0.19
-Nodes (13): buildMatchCoachPrompt(), computeMatchScore(), formatDuration(), isIntervalWorkoutPlan(), isRestOrNoTargetPlan(), isStrengthPlan(), matchScoreBadgeStyle(), matchScoreLabel() (+5 more)
+Cohesion: 0.20
+Nodes (10): Protocol, AIKeyNotConfiguredError, get_provider(), _get_provider_global(), LLMProvider, Return the configured model name for *provider_name* and *task*., Raised when no AI provider key is available for the current user., Return an ``LLMProvider`` for *name* configured for *task*.      When a per-requ (+2 more)
 
 ### Community 72 - "Community 72"
 Cohesion: 0.20
@@ -476,16 +496,16 @@ Cohesion: 0.08
 Nodes (22): decode_token(), Return user_id or raise HTTP 401., A single unreviewed ride triggers a batch review and marks it as reviewed., Multiple unreviewed rides must all be passed to batch_review_rides and then mark, After rides are reviewed a second call to the endpoint returns nothing new., The endpoint must return HTTP 503 when AIRateLimitError is raised., A ride that is >2.5× longer than the planned duration gets label_override='Misma, test_analyse_activities_auto_matches_single_planned_ride() (+14 more)
 
 ### Community 75 - "Community 75"
-Cohesion: 0.14
-Nodes (10): baseProfile, dayAfterTomorrow, fourDaysAgo, { mockAdaptTrainingPlan, mockProcessPendingFeedbacks, mockRefreshLoginSummary }, sixDaysAgo, threeDaysFromNow, today, tomorrow (+2 more)
+Cohesion: 0.26
+Nodes (11): admin_delete_user(), _admin_enabled(), admin_login(), admin_users(), AdminLoginRequest, AdminUsersResponse, AdminUserStat, Admin panel routes.  Requires the ``ADMIN_PASSWORD`` env var to be set.  Exposes (+3 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.25
-Nodes (6): Protocol, _get_provider_global(), LLMProvider, Return the configured model name for *provider_name* and *task*., Return a provider using the global (backend-owner) settings keys., _resolve_model()
+Cohesion: 0.50
+Nodes (4): _auto_rate_ride(), Generate a coach note for a completed ride by comparing it against the plan., compare_planned_vs_actual(), Compare planned workout targets against actual Strava stream data.      Args:
 
 ### Community 77 - "Community 77"
-Cohesion: 0.32
-Nodes (7): _normalise_strava_sport_type(), Mirrors the TypeScript StravaActivity interface., StravaActivitySchema, _activity_date_for_analysis(), _activity_duration_for_analysis(), _analysis_activity_log_sample(), _dedupe_analysis_activities()
+Cohesion: 0.24
+Nodes (4): _admin_headers(), HTTP tests for the admin router., test_admin_delete_user(), test_admin_users_lists_registered_users()
 
 ### Community 78 - "Community 78"
 Cohesion: 0.38
@@ -496,16 +516,16 @@ Cohesion: 0.17
 Nodes (7): AdminUsersResponse, AdminUserStat, fmt(), StatCard(), mockApiFetch, statsResponse, user
 
 ### Community 80 - "Community 80"
-Cohesion: 0.21
-Nodes (10): ai_key_not_configured_handler(), http_exception_handler(), lifespan(), Log request validation failures without echoing request bodies into logs., Log every HTTP error with correlation metadata, then return the standard respons, validation_exception_handler(), FastAPI, JSONResponse (+2 more)
+Cohesion: 0.24
+Nodes (8): ai_key_not_configured_handler(), lifespan(), Log request validation failures without echoing request bodies into logs., validation_exception_handler(), FastAPI, JSONResponse, RequestValidationError, activity_sync_job()
 
 ### Community 81 - "Community 81"
-Cohesion: 0.22
-Nodes (12): FitUploadResponse, FitBulkUploadResponse, FitUploadFileResult, _analyse_fit_import(), _fit_file_parser_or_503(), _ParsedFitActivity, Ingest one .fit file and store workout plus normalized ride metrics., Import multiple .fit files, reporting success, duplicate, and failure per file. (+4 more)
+Cohesion: 0.13
+Nodes (20): FitBulkUploadResponse, FitUploadFileResult, _analyse_fit_import(), _as_datetime(), _as_float(), _as_int(), _average_int(), _fit_field_map() (+12 more)
 
 ### Community 82 - "Community 82"
-Cohesion: 0.18
-Nodes (11): AIChat(), ChatExchange, groupMessagesIntoExchanges(), MARKDOWN_COMPONENTS, Props, clearChatHistoryRemote(), fetchCoachMemory(), ChatMessage (+3 more)
+Cohesion: 0.38
+Nodes (9): datetime, daily_plan_maintenance_job(), has_stale_incomplete_days(), maintain_user_training_plan(), PlanMaintenanceResult, _race_events_for_prompt(), Backend-owned daily maintenance for stale training plans., run_daily_plan_maintenance() (+1 more)
 
 ### Community 83 - "Community 83"
 Cohesion: 0.67
@@ -516,28 +536,31 @@ Cohesion: 0.53
 Nodes (4): _column_names(), _dedupe_source_external_rows(), _index_names(), upgrade()
 
 ### Community 86 - "Community 86"
-Cohesion: 0.40
-Nodes (5): AthleteMetricSnapshot, create_athlete_metric_snapshot(), get_athlete_metric_history(), Insert a new AthleteMetricSnapshot row and flush.      ``recorded_at`` defaults, Return the most recent *limit* AthleteMetricSnapshot rows for a user, oldest fir
+Cohesion: 0.07
+Nodes (32): get_all_ride_metrics_ordered(), get_latest_ride_metric(), get_latest_ride_metric_with_location(), get_near_duplicate_ride_metric(), get_ride_metric_by_date(), get_ride_metric_by_source(), get_ride_metric_by_strava_id(), get_ride_metrics_by_date() (+24 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.50
-Nodes (5): get_rider_assessment(), Return the RiderAssessment for a user, or None., Create or update the RiderAssessment for a user and flush.      For updates, ``r, upsert_rider_assessment(), RiderAssessment
+Cohesion: 0.17
+Nodes (12): build_last_ride_feedback(), _last_ride_recommendation(), Training metrics recalculation service.  Extracts the CTL/ATL/TSB chain-rebuild, Falls back gracefully when no power or load metrics are present., test_build_last_ride_feedback_with_full_metrics(), test_build_last_ride_feedback_with_no_power(), test_last_ride_recommendation_default(), test_last_ride_recommendation_high_fatigue() (+4 more)
 
 ### Community 88 - "Community 88"
 Cohesion: 0.26
-Nodes (11): ActivitySyncResult, fetch_recent_strava_activities(), _intervals_cursor_matches(), Backend-owned activity sync and plan adaptation., Return the furthest cursor position that does not skip a failed import.      ``o, run_activity_sync(), _safe_intervals_cursor(), _sanitize_strava_streams() (+3 more)
+Nodes (13): ActivitySyncResult, fetch_recent_strava_activities(), _intervals_cursor_matches(), _persist_and_adapt(), Backend-owned activity sync and plan adaptation., Return the furthest cursor position that does not skip a failed import.      ``o, run_activity_sync(), _safe_intervals_cursor() (+5 more)
 
 ### Community 89 - "Community 89"
-Cohesion: 0.11
-Nodes (22): StravaConnect(), StravaConnectProps, StravaImportSummaryProps, failureSignature(), hasSameProgress(), INITIAL_PROGRESS, listeners, normalizeProgress() (+14 more)
+Cohesion: 0.09
+Nodes (34): IntervalsConnect(), {
+  mockDisconnectIntervals,
+  mockSaveIntervalsConnection,
+}, StravaConnect(), StravaConnectProps, AnalysisStatus, UseStravaSyncResult, apiFetch(), ApiFetchOptions (+26 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.10
 Nodes (10): _async_return(), _FakeResp, _patch_httpx(), test_fetch_activity_weather_handles_error_response(), test_fetch_activity_weather_handles_no_hourly(), test_fetch_activity_weather_old_date_uses_archive(), test_fetch_activity_weather_recent_uses_forecast(), test_fetch_activity_weather_returns_none_when_no_data_at_index() (+2 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.21
-Nodes (6): LineChart(), LineChartProps, Props, rideMetricsHistory, TrainingLoadChart(), RideMetricPoint
+Cohesion: 0.40
+Nodes (5): AthleteMetricSnapshot, create_athlete_metric_snapshot(), get_athlete_metric_history(), Insert a new AthleteMetricSnapshot row and flush.      ``recorded_at`` defaults, Return the most recent *limit* AthleteMetricSnapshot rows for a user, oldest fir
 
 ### Community 128 - "Community 128"
 Cohesion: 0.50
@@ -552,8 +575,8 @@ Cohesion: 0.40
 Nodes (5): create_chat_message(), get_chat_messages(), Return all ChatMessages for a user in persisted conversation order., Create a ChatMessage, flush, and return the persisted instance., ChatMessage
 
 ### Community 131 - "Community 131"
-Cohesion: 0.23
-Nodes (7): baseDay, mockNavigate, typeColors, WorkoutCard(), WorkoutPage(), formatLocalDate(), parseLocalDate()
+Cohesion: 0.20
+Nodes (10): apply_ctl_atl_decay(), compute_ride_tss(), Compute Training Stress Score for a single ride.      TSS = (duration_s × NP²) /, Advance CTL/ATL by ``gap_days``, applying zero-TSS decay for silent days     the, _recalculate_metric_chain(), Rides without normalized power get null TSS but still update CTL/ATL., Multi-ride chain with a date gap applies correct decay., test_recalculate_metric_chain_gap_between_rides() (+2 more)
 
 ### Community 132 - "Community 132"
 Cohesion: 0.22
@@ -563,57 +586,77 @@ Nodes (7): CandidateRow(), ConversationImportSettings(), formatCategory(), mockE
 Cohesion: 0.09
 Nodes (23): update_memory_system(), System prompt must guide the AI to capture schedule constraints., System prompt must guide the AI to capture subjective fatigue / intensity respon, System prompt must guide the AI to retain actionable hydration/fueling context., System prompt must guide the AI to capture preferred workout types., System prompt must guide the AI to capture recurring coaching issues., System prompt must capture durable psychological training patterns., System prompt must guide the AI to record FTP history. (+15 more)
 
-### Community 134 - "Community 134"
-Cohesion: 0.36
-Nodes (8): daily_plan_maintenance_job(), has_stale_incomplete_days(), maintain_user_training_plan(), PlanMaintenanceResult, _race_events_for_prompt(), Backend-owned daily maintenance for stale training plans., run_daily_plan_maintenance(), seconds_until_next_daily_run()
-
 ### Community 135 - "Community 135"
 Cohesion: 0.06
-Nodes (77): create_user(), get_user_by_email(), get_user_by_email_simple(), get_user_by_id(), get_users_with_training_plans(), increment_user_consumed_tokens(), Return onboarded users that have a persisted training plan., Create a new User, flush, and return the persisted instance. (+69 more)
+Nodes (81): get_authelia_user(), get_current_user(), _get_or_create_authelia_user(), create_user(), get_user_by_email(), get_user_by_email_simple(), get_user_by_id(), get_users_with_training_plans() (+73 more)
 
 ### Community 136 - "Community 136"
-Cohesion: 0.33
-Nodes (6): delete_strava_token(), get_strava_token(), Return the StravaToken for a user, or None., Create or update the StravaToken for a user and flush., Delete the StravaToken for a user if it exists and flush., upsert_strava_token()
+Cohesion: 0.28
+Nodes (9): create_race_event(), delete_race_event(), get_race_event(), get_race_events(), update_race_event(), RaceEvent, _format_race_event_for_memory(), _merge_race_events_into_memory() (+1 more)
 
 ### Community 137 - "Community 137"
 Cohesion: 0.33
-Nodes (7): clear_athlete_memory(), get_coach_memory(), Return the CoachMemory for a user, or None., Create or update the CoachMemory for a user and flush., Delete all memory facts and clear coach memory text for a user., upsert_coach_memory(), CoachMemory
+Nodes (6): clear_athlete_memory(), get_coach_memory(), Return the CoachMemory for a user, or None., Create or update the CoachMemory for a user and flush., Delete all memory facts and clear coach memory text for a user., upsert_coach_memory()
 
 ### Community 138 - "Community 138"
-Cohesion: 0.33
-Nodes (7): get_workout_log_by_date(), get_workout_logs(), Return all WorkoutLog rows for a user., Return the WorkoutLog for a specific user/date, or None., Create or update a WorkoutLog for a user/date and flush., upsert_workout_log(), WorkoutLog
+Cohesion: 0.38
+Nodes (4): EncryptedString, Transparently encrypts/decrypts string values using Fernet symmetric encryption., Fernet, TypeDecorator
 
 ### Community 139 - "Community 139"
-Cohesion: 0.33
-Nodes (4): mockAddChatMessage, mockAddPendingFeedbackRide, mockSaveChatMessage, mockSubmit
+Cohesion: 0.38
+Nodes (6): _normalise_strava_sport_type(), Mirrors the TypeScript StravaActivity interface., StravaActivitySchema, _activity_date_for_analysis(), _activity_duration_for_analysis(), _dedupe_analysis_activities()
 
 ### Community 140 - "Community 140"
-Cohesion: 0.10
-Nodes (21): AIRateLimitError, Raised when the AI provider returns a rate-limit (429) response., _chat must propagate AIRateLimitError raised by the LLM provider., _chat_history must propagate AIRateLimitError raised by the LLM provider., The /ask-trainer endpoint must return HTTP 503 when AIRateLimitError is raised., The /analyse-activities endpoint must return HTTP 503 when AIRateLimitError is r, The /generate-plan endpoint must return HTTP 503 when AIRateLimitError is raised, review_new_rides returns HTTP 503 when the AI rate limit is hit. (+13 more)
+Cohesion: 0.33
+Nodes (6): delete_strava_token(), get_strava_token(), Return the StravaToken for a user, or None., Create or update the StravaToken for a user and flush., Delete the StravaToken for a user if it exists and flush., upsert_strava_token()
 
 ### Community 142 - "Community 142"
+Cohesion: 0.33
+Nodes (6): get_effective_ftp(), Return the best available FTP value for *user*.      Priority order: explicit *f, test_get_effective_ftp_ignores_zero_override(), test_get_effective_ftp_returns_none_when_no_ftp(), test_get_effective_ftp_uses_current_ftp_when_no_override(), test_get_effective_ftp_uses_override()
+
+### Community 156 - "Community 156"
+Cohesion: 0.50
+Nodes (5): get_rider_assessment(), Return the RiderAssessment for a user, or None., Create or update the RiderAssessment for a user and flush.      For updates, ``r, upsert_rider_assessment(), RiderAssessment
+
+### Community 158 - "Community 158"
+Cohesion: 0.50
+Nodes (3): get_db(), Async SQLAlchemy engine and session dependency., FastAPI dependency: yields an AsyncSession per request.
+
+### Community 161 - "Community 161"
+Cohesion: 0.33
+Nodes (4): ask_trainer persists ride notes when the response includes ride_note_update., readiness_score returns a valid score when there is no ride data yet., test_ask_trainer_persists_ride_note_update(), test_readiness_score_no_ride_data()
+
+### Community 162 - "Community 162"
+Cohesion: 0.50
+Nodes (3): Mirrors the TypeScript UserProfile interface., Build a ``UserProfileSchema`` from an ORM ``User`` instance., UserProfileSchema
+
+### Community 163 - "Community 163"
 Cohesion: 0.50
 Nodes (3): classify_ride_confidence_and_reason(), Return (confidence, reason) for a ride classification.      confidence: ``'high', short_easy_spin always returns 'low' confidence.
+
+### Community 164 - "Community 164"
+Cohesion: 0.50
+Nodes (4): Requesting 'openai' but only gemini key present → falls back to gemini., Requesting 'gemini' but only openai key present → falls back to openai., test_get_provider_falls_back_to_gemini_when_both_set(), test_get_provider_falls_back_to_openai_when_only_openai_key_set()
 
 ## Knowledge Gaps
 - **218 isolated node(s):** `entrypoint.sh script`, `ai-trainer-backend`, `name`, `private`, `version` (+213 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **33 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ActivitySource` connect `Community 49` to `Community 4`?**
-  _High betweenness centrality (0.241) - this node is a cross-community bridge._
+- **Why does `ActivitySource` connect `Community 49` to `Community 89`?**
+  _High betweenness centrality (0.261) - this node is a cross-community bridge._
 - **What connects `Password hashing, JWT creation/verification, and FastAPI auth dependency.`, `Validate JWT_SECRET strength for the configured runtime environment.`, `Warn when Authelia header trust relies solely on network isolation.      Without` to the rest of the system?**
-  _821 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _841 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.01015228426395939 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.010101010101010102 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.04982456140350877 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.03574561403508772 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08484848484848485 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.07307692307692308 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05505279034690799 - nodes in this community are weakly interconnected._
 - **Should `Community 4` be split into smaller, more focused modules?**
-  _Cohesion score 0.05764411027568922 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05649350649350649 - nodes in this community are weakly interconnected._
