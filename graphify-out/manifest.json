@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "backend/crud.py": {
-    "mtime": 1782661010.2861352,
-    "ast_hash": "1a2aaa331fd4c53f6ae351b3f9c94789",
+    "mtime": 1782663807.815314,
+    "ast_hash": "cf904775bb499912b054f3337d5bc571",
     "semantic_hash": ""
   },
   "backend/database.py": {
@@ -195,8 +195,8 @@
     "semantic_hash": "e589ac8e7444f312e117b9ce7edc925e"
   },
   "backend/main.py": {
-    "mtime": 1782465720.386129,
-    "ast_hash": "e03b0c9e0026c99bf479df0a7ca5156c",
+    "mtime": 1782663932.2995572,
+    "ast_hash": "a16a435cda1e1f2eab1665835cd058bd",
     "semantic_hash": ""
   },
   "backend/models.py": {
@@ -220,8 +220,8 @@
     "semantic_hash": "a40a82ce603b3e82d487a5db9e3d5dce"
   },
   "backend/routers/ai.py": {
-    "mtime": 1782587069.5725503,
-    "ast_hash": "1dcaea55ff0409307d1855907362cffc",
+    "mtime": 1782663913.8213727,
+    "ast_hash": "3c216ab94a666fde95667050cd431ef7",
     "semantic_hash": ""
   },
   "backend/routers/auth_router.py": {
@@ -1065,18 +1065,33 @@
     "semantic_hash": ""
   },
   "backend/services/plan_pipeline.py": {
-    "mtime": 1782586655.2431839,
-    "ast_hash": "f29cea43b2dbd3db9848d638907351ea",
+    "mtime": 1782663888.6811218,
+    "ast_hash": "9c249a949fee070065161517c2e39567",
     "semantic_hash": ""
   },
   "backend/tests/test_plan_pipeline.py": {
-    "mtime": 1782661205.9870584,
-    "ast_hash": "cb00a51891986d756450e7e12ecce324",
+    "mtime": 1782664017.5094066,
+    "ast_hash": "d07b569297f36eee2152b9d2466e3078",
     "semantic_hash": ""
   },
   "backend/alembic/versions/20260628_000001_add_required_workout_to_constraints.py": {
     "mtime": 1782660978.3198195,
     "ast_hash": "6ce422bc52e3fea6f686267e98c715ed",
+    "semantic_hash": ""
+  },
+  "backend/services/pipeline_graph.py": {
+    "mtime": 1782663783.9410753,
+    "ast_hash": "d642dcbed598fc7729d72e344e21a2ae",
+    "semantic_hash": ""
+  },
+  "backend/services/summary_pipeline.py": {
+    "mtime": 1782663851.44775,
+    "ast_hash": "5335d930cacbb1f2aa84b4c3f8eee378",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_pipeline_graph.py": {
+    "mtime": 1782663993.1031635,
+    "ast_hash": "9ebbb0bbfe00869e105130d9fcafe6f7",
     "semantic_hash": ""
   }
 }

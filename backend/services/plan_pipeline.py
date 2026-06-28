@@ -27,12 +27,20 @@ import crud
 import models
 import schemas
 from services.dates import app_today_iso
+from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     sanitize_plan_for_constraints,
 )
+# Importing summary_pipeline registers the downstream "summary" node, so any plan
+# write — wherever it originates — invalidates the login summary. The import is
+# acyclic: summary_pipeline does not depend on this module.
+from services import summary_pipeline  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+# Register this pipeline as the root "plan" node in the DAG.
+pipeline_graph.register("plan")
 
 
 def apply_plan_updates(
@@ -133,6 +141,9 @@ async def _enforce_and_persist(
     if current_row is not None and merged == current_plan:
         return current_plan
     await crud.upsert_training_plan(db, user.id, merged)
+    # The plan changed: cascade to downstream pipelines (e.g. invalidate the
+    # login summary so it is regenerated from the new plan on next load).
+    await pipeline_graph.notify_changed("plan", db=db, user=user)
     return merged
 
 

@@ -830,6 +830,20 @@ async def upsert_rider_assessment(
     return assessment
 
 
+async def invalidate_login_summary(db: AsyncSession, user_id: str) -> bool:
+    """Clear the stored login summary so it is regenerated on next load.
+
+    Returns True when an existing non-empty summary was cleared. Used by the
+    summary pipeline when the training plan changes.
+    """
+    assessment = await get_rider_assessment(db, user_id)
+    if assessment is None or assessment.login_summary is None:
+        return False
+    assessment.login_summary = None
+    await db.flush()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # AthleteMetricSnapshot
 # ---------------------------------------------------------------------------

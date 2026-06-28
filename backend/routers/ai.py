@@ -18,6 +18,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services import plan_pipeline
+from services import summary_pipeline
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
 from services.ai_service import (
@@ -1357,25 +1358,16 @@ async def refresh_login_summary(
     ``login_summary`` is ``None`` — e.g. because the column was added after
     their last Strava sync.  The summary is persisted and returned.
     """
-    assessment = current_user.rider_assessment
-    if assessment is None:
+    if current_user.rider_assessment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    existing_plan = await crud.get_training_plan(db, current_user.id)
-    training_plan = existing_plan.plan if existing_plan is not None else None
-
     usage_token = begin_token_usage_collection()
     try:
-        login_summary = await ai_service.generate_login_summary(
-            ride_insights=assessment.ride_insights,
-            last_ride_feedback=assessment.last_ride_feedback,
-            notes=assessment.notes,
-            estimated_ftp=assessment.estimated_ftp,
-            training_plan=training_plan or None,
-            provider=resolve_user_provider(current_user),
+        login_summary = await summary_pipeline.regenerate(
+            db, current_user, provider=resolve_user_provider(current_user)
         )
     except AIRateLimitError:
         finish_token_usage_collection(usage_token)
@@ -1383,14 +1375,6 @@ async def refresh_login_summary(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
-
-    if login_summary:
-        await crud.upsert_rider_assessment(
-            db,
-            current_user.id,
-            estimated_ftp=assessment.estimated_ftp,
-            login_summary=login_summary,
-        )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
 

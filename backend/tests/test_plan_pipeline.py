@@ -12,7 +12,7 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import plan_pipeline
+from services import plan_pipeline, summary_pipeline
 from tests.conftest import TestSessionLocal
 
 
@@ -149,3 +149,82 @@ async def test_commit_plan_enforces_required_workout():
     day = next(x for x in merged if x["date"] == d)
     assert day["workoutType"] == "endurance"
     assert day["durationMinutes"] == 120
+
+
+@pytest.mark.asyncio
+async def test_plan_change_invalidates_login_summary():
+    """A real plan change clears the login summary so it regenerates on load."""
+    d = "2026-07-20"
+    user_id = await _create_user("pipe-summary@example.com", [_day(d, "endurance")])
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(
+            db,
+            user_id,
+            estimated_ftp=250,
+            rider_type="allrounder",
+            login_summary="Old summary based on the previous plan.",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, [_day(d, "intervals")], base_plan=[_day(d, "endurance")]
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert assessment.login_summary is None
+
+
+@pytest.mark.asyncio
+async def test_no_op_plan_write_keeps_login_summary():
+    """An unchanged plan write must not invalidate the summary."""
+    d = "2026-07-21"
+    plan = [_day(d, "endurance")]
+    user_id = await _create_user("pipe-summary-noop@example.com", plan)
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=250, rider_type="allrounder",
+            login_summary="Still valid summary.",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(db, user, plan, base_plan=plan)
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert assessment.login_summary == "Still valid summary."
+
+
+@pytest.mark.asyncio
+async def test_summary_regenerate_persists(monkeypatch):
+    """summary_pipeline.regenerate writes a freshly generated summary."""
+    d = "2026-07-22"
+    user_id = await _create_user("pipe-regen@example.com", [_day(d, "endurance")])
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=250, rider_type="allrounder",
+        )
+        await db.commit()
+
+    async def fake_generate(**_):
+        return "Fresh summary built from the current plan."
+
+    monkeypatch.setattr(
+        summary_pipeline.ai_service, "generate_login_summary", fake_generate
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await summary_pipeline.regenerate(db, user, provider="gemini")
+        await db.commit()
+
+    assert result == "Fresh summary built from the current plan."
+    async with TestSessionLocal() as db:
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert assessment.login_summary == "Fresh summary built from the current plan."
