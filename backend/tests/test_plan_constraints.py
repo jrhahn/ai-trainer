@@ -167,3 +167,25 @@ def test_no_training_takes_precedence_over_required_on_same_day():
     constraints = [_constraint("2026-07-04"), _required("2026-07-04")]
     result = sanitize_plan_for_constraints(plan, constraints)
     assert result[0]["workoutType"] == "rest"
+
+
+def test_required_workout_applies_target_power_from_spec():
+    constraint = {
+        "constraintType": "required_workout",
+        "constraintDate": "2026-07-04",
+        "requiredWorkout": {
+            "workoutType": "endurance",
+            "minDurationMinutes": 120,
+            "targetPower": 180,
+        },
+    }
+    plan = [{"date": "2026-07-04", "workoutType": "rest", "durationMinutes": 0}]
+    result = sanitize_plan_for_constraints(plan, [constraint])
+    assert result[0]["targetPower"] == 180
+
+
+def test_required_workout_ignores_day_without_date():
+    constraint = _required("2026-07-04")
+    plan = [{"workoutType": "rest", "durationMinutes": 0}]  # no date -> no match
+    result = sanitize_plan_for_constraints(plan, [constraint])
+    assert result[0] == plan[0]

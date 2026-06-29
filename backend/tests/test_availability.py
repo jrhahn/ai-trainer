@@ -70,6 +70,14 @@ def test_long_session_duration_is_parsed():
     assert required and required[0]["required_workout"]["minDurationMinutes"] == 180
 
 
+def test_long_session_duration_in_minutes_is_parsed():
+    result = extract_availability_constraints(
+        "long ride on saturday, 90 min", today=TODAY
+    )
+    required = [r for r in result if r["constraint_type"] == "required_workout"]
+    assert required and required[0]["required_workout"]["minDurationMinutes"] == 90
+
+
 def test_plain_training_mention_creates_no_required_constraint():
     # "training" alone is not a long-session phrase.
     result = extract_availability_constraints("I love training on saturday", today=TODAY)

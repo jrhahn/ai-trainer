@@ -74,6 +74,27 @@ async def test_notify_changed_passes_context():
     assert received == [{"value": 42}]
 
 
+@pytest.mark.asyncio
+async def test_notify_changed_swallows_downstream_handler_errors():
+    g = PipelineGraph()
+
+    async def boom(**_):
+        raise RuntimeError("downstream failure")
+
+    g.register("a")
+    g.register("b", depends_on=("a",), on_upstream_changed=boom)
+    # A failing downstream handler must not propagate to the upstream caller.
+    await g.notify_changed("a")
+
+
+@pytest.mark.asyncio
+async def test_notify_changed_skips_dependents_without_handler():
+    g = PipelineGraph()
+    g.register("a")
+    g.register("b", depends_on=("a",))  # registered but no change handler
+    await g.notify_changed("a")  # must not raise
+
+
 def test_registered_app_graph_is_acyclic():
     # Importing the pipelines registers the real nodes on the global graph.
     import services.plan_pipeline  # noqa: F401

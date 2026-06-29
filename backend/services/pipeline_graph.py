@@ -99,7 +99,7 @@ class PipelineGraph:
                 continue
             try:
                 await handler(**context)
-            except Exception:  # pragma: no cover - defensive
+            except Exception:
                 logger.warning(
                     "Pipeline %r downstream handler %r failed",
                     name,

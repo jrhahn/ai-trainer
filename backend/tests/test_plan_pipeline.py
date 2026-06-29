@@ -47,6 +47,71 @@ async def _create_user(email: str, plan: list[dict]) -> str:
         return user.id
 
 
+def test_apply_plan_updates_ignores_updates_without_date():
+    assert (
+        plan_pipeline.apply_plan_updates(
+            [_day("2026-07-01")], [{"workoutType": "rest"}]
+        )
+        is None
+    )
+
+
+def test_merge_keeps_user_added_day_absent_from_proposal():
+    base: list[dict] = []
+    proposed = [_day("2026-07-01", "endurance")]
+    current = [_day("2026-07-01", "endurance"), _day("2026-07-02", "intervals")]
+    merged = plan_pipeline.merge_preserving_user_edits(base, proposed, current)
+    assert "2026-07-02" in {d["date"] for d in merged}
+
+
+def test_merge_keeps_user_edited_day_dropped_by_proposal():
+    base = [_day("2026-07-02", "endurance")]
+    proposed = [_day("2026-07-01", "endurance")]  # 07-02 dropped by proposal
+    current = [_day("2026-07-02", "intervals")]  # but user edited 07-02
+    merged = plan_pipeline.merge_preserving_user_edits(base, proposed, current)
+    kept = next((d for d in merged if d["date"] == "2026-07-02"), None)
+    assert kept is not None and kept["workoutType"] == "intervals"
+
+
+@pytest.mark.asyncio
+async def test_upsert_availability_constraint_updates_required_workout():
+    user_id = await _create_user("crud-req@example.com", [])
+    for minutes in (90, 150):
+        async with TestSessionLocal() as db:
+            await crud.upsert_availability_constraint(
+                db,
+                user_id,
+                constraint_type="required_workout",
+                constraint_date="2026-07-05",
+                expires_on="2026-07-05",
+                required_workout={"workoutType": "endurance", "minDurationMinutes": minutes},
+            )
+            await db.commit()
+
+    async with TestSessionLocal() as db:
+        rows = await crud.list_active_availability_constraints(
+            db, user_id, today="2026-07-01"
+        )
+    required = [r for r in rows if r.constraint_type == "required_workout"]
+    assert len(required) == 1  # second call updated, not inserted
+    assert required[0].required_workout["minDurationMinutes"] == 150
+
+
+@pytest.mark.asyncio
+async def test_invalidate_login_summary_is_noop_when_absent():
+    user_id = await _create_user("crud-inval@example.com", [])
+    async with TestSessionLocal() as db:
+        # No rider assessment at all.
+        assert await crud.invalidate_login_summary(db, user_id) is False
+        # Assessment exists but has no summary.
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=200, rider_type="allrounder"
+        )
+        await db.commit()
+    async with TestSessionLocal() as db:
+        assert await crud.invalidate_login_summary(db, user_id) is False
+
+
 @pytest.mark.asyncio
 async def test_commit_plan_enforces_no_training_constraint():
     """A proposed training day on a hard no_training date is forced to rest."""
@@ -118,6 +183,26 @@ async def test_commit_plan_updates_drops_constraint_violating_update():
 
     day = next(x for x in merged if x["date"] == d)
     assert day["workoutType"] == "rest"
+
+
+@pytest.mark.asyncio
+async def test_commit_plan_updates_applies_valid_update():
+    """A non-violating per-day update is applied through the pipeline."""
+    d = "2026-07-19"
+    user_id = await _create_user("pipe-updates-ok@example.com", [_day(d, "rest", duration=0)])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "intervals", "durationMinutes": 75}],
+            base_plan=[_day(d, "rest", duration=0)],
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == d)
+    assert day["workoutType"] == "intervals"
+    assert day["durationMinutes"] == 75
 
 
 @pytest.mark.asyncio
@@ -228,3 +313,11 @@ async def test_summary_regenerate_persists(monkeypatch):
     async with TestSessionLocal() as db:
         assessment = await crud.get_rider_assessment(db, user_id)
         assert assessment.login_summary == "Fresh summary built from the current plan."
+
+
+@pytest.mark.asyncio
+async def test_summary_regenerate_returns_none_without_assessment():
+    user_id = await _create_user("pipe-noassess@example.com", [])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert await summary_pipeline.regenerate(db, user, provider="gemini") is None
