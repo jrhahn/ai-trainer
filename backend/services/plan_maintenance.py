@@ -15,7 +15,7 @@ from config import settings
 from services import ai_service
 from services.dates import app_today_iso, app_timezone
 from services.llm import begin_token_usage_collection, finish_token_usage_collection, resolve_user_provider
-from services.plan_constraints import sanitize_plan_for_constraints
+from services import plan_pipeline
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
@@ -123,49 +123,19 @@ async def maintain_user_training_plan(
         if consumed:
             await crud.increment_user_consumed_tokens(db, user, consumed)
 
-    updated_plan = sanitize_plan_for_constraints(updated_plan, constraints)
-
-    # Re-read plan to detect concurrent user edits made during the AI call.
-    # For each day, keep the AI's version only if the user hasn't changed it.
-    current_row = await crud.get_training_plan(db, user.id)
-    current_plan = current_row.plan if current_row is not None else []
-    original_by_date = {d["date"]: d for d in plan}
-    current_by_date = {d["date"]: d for d in current_plan}
-
-    merged: list[dict] = []
-    ai_dates: set[str] = set()
-    for day in updated_plan:
-        date = day["date"]
-        ai_dates.add(date)
-        original = original_by_date.get(date)
-        current = current_by_date.get(date)
-        if original is not None and current is not None and original == current:
-            # Unchanged since our read — apply AI update.
-            merged.append(day)
-        elif current is not None and original != current:
-            # User edited this day concurrently — keep their version.
-            merged.append(current)
-        else:
-            # AI added a brand-new date, or user deleted the day — apply AI.
-            merged.append(day)
-
-    for date, current_day in current_by_date.items():
-        if date not in ai_dates:
-            original_day = original_by_date.get(date)
-            if original_day is None:
-                # User added a day the AI doesn't know about — keep it.
-                merged.append(current_day)
-            elif current_day != original_day:
-                # User edited a day the AI removed/rescheduled — keep user's version.
-                merged.append(current_day)
-            # else: day unchanged and AI removed it — let AI win.
-
-    merged.sort(key=lambda d: d["date"])
-
-    if merged == current_plan:
-        return False
-    await crud.upsert_training_plan(db, user.id, merged)
-    return True
+    # Hard-constraint enforcement, concurrent-edit protection and persistence
+    # are owned by the shared plan pipeline so every trigger behaves identically.
+    before_row = await crud.get_training_plan(db, user.id)
+    before_plan = before_row.plan if before_row is not None else []
+    merged = await plan_pipeline.commit_plan(
+        db,
+        user,
+        updated_plan,
+        base_plan=plan,
+        now=now,
+        timezone_name=timezone_name,
+    )
+    return merged != before_plan
 
 
 async def run_daily_plan_maintenance(

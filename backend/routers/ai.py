@@ -17,6 +17,8 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services import plan_pipeline
+from services import summary_pipeline
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
 from services.ai_service import (
@@ -37,11 +39,7 @@ from services.analysis import (
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import extract_availability_constraints
-from services.plan_constraints import (
-    sanitize_plan_for_constraints,
-    filter_plan_updates_for_constraints,
-    day_violates_constraint,
-)
+from services.plan_constraints import filter_plan_updates_for_constraints
 from services.intervals_service import apply_summary_fallback
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
@@ -194,18 +192,6 @@ def _profile_with_availability_constraints(
     return {**profile, "availabilityConstraints": constraints}
 
 
-def _day_violates_availability_constraint(
-    day: dict, constraints: list[dict]
-) -> bool:
-    return day_violates_constraint(day, constraints)
-
-
-def _sanitize_plan_for_availability_constraints(
-    plan: list[dict], constraints: list[dict]
-) -> list[dict]:
-    return sanitize_plan_for_constraints(plan, constraints)
-
-
 def _filter_plan_updates_for_availability_constraints(
     updates: list[dict], constraints: list[dict]
 ) -> list[dict]:
@@ -333,10 +319,9 @@ async def _auto_adapt_plan(
             weather_context_section=weather_section,
             timezone_name=timezone_name,
         )
-        updated_plan = _sanitize_plan_for_availability_constraints(
-            updated_plan, availability_constraints
+        await plan_pipeline.commit_plan(
+            db, user, updated_plan, base_plan=plan, timezone_name=timezone_name
         )
-        await crud.upsert_training_plan(db, user.id, updated_plan)
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
 
@@ -632,11 +617,12 @@ async def generate_plan(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
-    plan = _sanitize_plan_for_availability_constraints(
-        plan, availability_constraints
-    )
     await _persist_collected_token_usage(db, current_user, usage_token)
-    await crud.upsert_training_plan(db, current_user.id, plan)
+    existing_plan = await crud.get_training_plan(db, current_user.id)
+    base_plan = existing_plan.plan if existing_plan is not None else []
+    plan = await plan_pipeline.commit_plan(
+        db, current_user, plan, base_plan=base_plan, timezone_name=timezone_name
+    )
     return plan
 
 
@@ -688,11 +674,10 @@ async def adapt_plan(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
-    updated_plan = _sanitize_plan_for_availability_constraints(
-        updated_plan, availability_constraints
-    )
     await _persist_collected_token_usage(db, current_user, usage_token)
-    await crud.upsert_training_plan(db, current_user.id, updated_plan)
+    updated_plan = await plan_pipeline.commit_plan(
+        db, current_user, updated_plan, base_plan=plan, timezone_name=timezone_name
+    )
     return updated_plan
 
 
@@ -884,28 +869,15 @@ async def ask_trainer(
             resolve_user_provider(current_user),
         )
 
-    # Apply plan updates if any
+    # Apply plan updates if any — through the shared constraint-respecting pipeline.
     if plan_updates:
-        updates_by_date = {u["date"]: u for u in plan_updates}
-        updated_plan = [
-            (
-                {
-                    **day,
-                    **{
-                        k: v
-                        for k, v in updates_by_date[day["date"]].items()
-                        if v is not None
-                    },
-                }
-                if day.get("date") in updates_by_date and not day.get("completed")
-                else day
-            )
-            for day in plan
-        ]
-        persisted_plan = await crud.upsert_training_plan(
-            db, current_user.id, updated_plan
+        persisted_updated_plan = await plan_pipeline.commit_plan_updates(
+            db,
+            current_user,
+            plan_updates,
+            base_plan=plan,
+            timezone_name=timezone_name,
         )
-        persisted_updated_plan = persisted_plan.plan
 
     # Merge RAG retrieval sources into the result.
     # rag_sources contains the full metadata for all retrieved chunks;
@@ -1386,25 +1358,16 @@ async def refresh_login_summary(
     ``login_summary`` is ``None`` — e.g. because the column was added after
     their last Strava sync.  The summary is persisted and returned.
     """
-    assessment = current_user.rider_assessment
-    if assessment is None:
+    if current_user.rider_assessment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    existing_plan = await crud.get_training_plan(db, current_user.id)
-    training_plan = existing_plan.plan if existing_plan is not None else None
-
     usage_token = begin_token_usage_collection()
     try:
-        login_summary = await ai_service.generate_login_summary(
-            ride_insights=assessment.ride_insights,
-            last_ride_feedback=assessment.last_ride_feedback,
-            notes=assessment.notes,
-            estimated_ftp=assessment.estimated_ftp,
-            training_plan=training_plan or None,
-            provider=resolve_user_provider(current_user),
+        login_summary = await summary_pipeline.regenerate(
+            db, current_user, provider=resolve_user_provider(current_user)
         )
     except AIRateLimitError:
         finish_token_usage_collection(usage_token)
@@ -1412,14 +1375,6 @@ async def refresh_login_summary(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
-
-    if login_summary:
-        await crud.upsert_rider_assessment(
-            db,
-            current_user.id,
-            estimated_ftp=assessment.estimated_ftp,
-            login_summary=login_summary,
-        )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
 
@@ -1556,23 +1511,13 @@ async def next_ride_recommendation(
         availability_constraints,
     )
     if plan_updates:
-        updates_by_date = {u["date"]: u for u in plan_updates}
-        updated_plan = [
-            (
-                {
-                    **day,
-                    **{
-                        k: v
-                        for k, v in updates_by_date[day["date"]].items()
-                        if v is not None
-                    },
-                }
-                if day.get("date") in updates_by_date
-                else day
-            )
-            for day in plan
-        ]
-        await crud.upsert_training_plan(db, current_user.id, updated_plan)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            current_user,
+            plan_updates,
+            base_plan=plan,
+            timezone_name=timezone_name,
+        )
 
     validated_updates = (
         [schemas.PlanDayUpdateSchema.model_validate(u) for u in plan_updates]

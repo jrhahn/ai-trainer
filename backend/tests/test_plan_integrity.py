@@ -18,7 +18,12 @@ import crud
 import models
 from auth import hash_password
 from services import plan_maintenance
-from services.ride_matching import _apply_plan_updates, review_matched_ride_and_adapt
+from services.ride_matching import (
+    LABEL_MISMATCH,
+    _apply_plan_updates,
+    apply_ride_plan_matches,
+    review_matched_ride_and_adapt,
+)
 from tests.conftest import TestSessionLocal
 
 
@@ -323,3 +328,101 @@ async def test_maintenance_passes_constraints_in_profile(monkeypatch):
     assert "availabilityConstraints" in captured_profile
     dates = [c["constraintDate"] for c in captured_profile["availabilityConstraints"]]
     assert thursday in dates
+
+
+# ---------------------------------------------------------------------------
+# apply_ride_plan_matches: label stickiness ("Auto live, Feedback sticky")
+# ---------------------------------------------------------------------------
+
+
+async def _add_ride(
+    user_id: str,
+    *,
+    strava_activity_id: int,
+    activity_date: str,
+    duration_seconds: int,
+    label_override: str | None = None,
+) -> None:
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=strava_activity_id,
+            activity_date=activity_date,
+            duration_seconds=duration_seconds,
+        )
+        if label_override is not None:
+            await crud.update_ride_metric_notes(
+                db, user_id, strava_activity_id, label_override=label_override
+            )
+        await db.commit()
+
+
+async def _ride_label(user_id: str, strava_activity_id: int) -> str | None:
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_activity_ids(
+            db, user_id, [strava_activity_id]
+        )
+        assert rides
+        return rides[0].label_override
+
+
+async def _run_match(user_id: str, strava_activity_id: int) -> None:
+    async with TestSessionLocal() as db:
+        plan = await crud.get_training_plan(db, user_id)
+        await apply_ride_plan_matches(db, user_id, plan.plan, [strava_activity_id])
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_matching_preserves_subjective_feedback_label():
+    """A rider-feedback label must survive re-matching (Feedback sticky)."""
+    plan_date = "2026-06-20"
+    user_id = await _create_user_with_plan(
+        email="sticky-feedback@example.com",
+        plan=[_day(plan_date, "endurance")],
+    )
+    # 10-min ride against a 60-min plan day -> auto would label it "Mismatch".
+    await _add_ride(
+        user_id,
+        strava_activity_id=70001,
+        activity_date=plan_date,
+        duration_seconds=600,
+        label_override="Solid",  # subjective rider feedback, not an auto label
+    )
+
+    await _run_match(user_id, 70001)
+
+    assert await _ride_label(user_id, 70001) == "Solid"
+
+
+@pytest.mark.asyncio
+async def test_matching_keeps_auto_label_live():
+    """Auto match labels reflect the current ride/plan and are never frozen."""
+    plan_date = "2026-06-20"
+    user_id = await _create_user_with_plan(
+        email="auto-live@example.com",
+        plan=[_day(plan_date, "endurance")],
+    )
+    # Grossly short ride -> auto label "Mismatch".
+    await _add_ride(
+        user_id,
+        strava_activity_id=70002,
+        activity_date=plan_date,
+        duration_seconds=600,
+    )
+    await _run_match(user_id, 70002)
+    assert await _ride_label(user_id, 70002) == LABEL_MISMATCH
+
+    # Ride now fits the plan duration -> stale auto label must clear on re-match.
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=70002,
+            activity_date=plan_date,
+            duration_seconds=3600,
+        )
+        await db.commit()
+    await _run_match(user_id, 70002)
+    assert await _ride_label(user_id, 70002) is None

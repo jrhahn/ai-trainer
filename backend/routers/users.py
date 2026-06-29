@@ -30,6 +30,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
+from services import plan_pipeline
 from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
@@ -261,8 +262,15 @@ async def save_plan(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
-    plan = await crud.upsert_training_plan(db, current_user.id, body.plan)
-    return schemas.PlanResponse(plan=plan.plan)
+    # Route the manual edit through the shared pipeline so hard availability
+    # constraints are enforced and concurrent edits are protected, instead of
+    # blindly persisting whatever the client sent.
+    existing = await crud.get_training_plan(db, current_user.id)
+    base_plan = existing.plan if existing is not None else []
+    merged = await plan_pipeline.commit_plan(
+        db, current_user, body.plan, base_plan=base_plan
+    )
+    return schemas.PlanResponse(plan=merged)
 
 
 @router.get("/workouts")

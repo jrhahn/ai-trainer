@@ -14,6 +14,7 @@ from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
 from services.llm import AIKeyNotConfiguredError
+from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
 from services.scheduler import InProcessScheduler
 
@@ -29,6 +30,8 @@ _REQUEST_ID_HEADER = "X-Request-ID"
 async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
     _auth.warn_if_authelia_proxy_unprotected()
+    # Fail fast if the pipeline dependency graph is not a DAG.
+    pipeline_graph.validate()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     scheduler = InProcessScheduler()

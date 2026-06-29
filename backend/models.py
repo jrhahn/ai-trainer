@@ -373,6 +373,10 @@ class AthleteAvailabilityConstraint(Base):
     source: Mapped[str] = mapped_column(Text, default="", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expires_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # For positive ("required_workout") constraints: the session that must be
+    # present on the constrained day, e.g. {"workoutType": "endurance",
+    # "minDurationMinutes": 120}. Null for negative ("no_training") constraints.
+    required_workout: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )

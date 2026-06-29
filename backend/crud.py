@@ -589,6 +589,7 @@ async def upsert_availability_constraint(
     reason: str = "",
     source: str = "",
     expires_on: str | None = None,
+    required_workout: dict | None = None,
 ) -> models.AthleteAvailabilityConstraint:
     """Create or refresh an availability constraint and flush."""
     existing = await db.scalar(
@@ -610,6 +611,7 @@ async def upsert_availability_constraint(
             reason=reason.strip(),
             source=source.strip(),
             expires_on=expires_on,
+            required_workout=required_workout,
             active=True,
             created_at=now,
             updated_at=now,
@@ -619,6 +621,8 @@ async def upsert_availability_constraint(
         existing.reason = reason.strip() or existing.reason
         existing.source = source.strip() or existing.source
         existing.expires_on = expires_on or existing.expires_on
+        if required_workout is not None:
+            existing.required_workout = required_workout
         existing.updated_at = now
     await db.flush()
     return existing
@@ -824,6 +828,20 @@ async def upsert_rider_assessment(
             assessment.login_summary = login_summary
     await db.flush()
     return assessment
+
+
+async def invalidate_login_summary(db: AsyncSession, user_id: str) -> bool:
+    """Clear the stored login summary so it is regenerated on next load.
+
+    Returns True when an existing non-empty summary was cleared. Used by the
+    summary pipeline when the training plan changes.
+    """
+    assessment = await get_rider_assessment(db, user_id)
+    if assessment is None or assessment.login_summary is None:
+        return False
+    assessment.login_summary = None
+    await db.flush()
+    return True
 
 
 # ---------------------------------------------------------------------------
