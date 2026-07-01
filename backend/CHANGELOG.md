@@ -5,6 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-07-01
+
+### Added
+
+- **Per-day training-plan change history** (`models.py`, `crud.py`,
+  `services/plan_pipeline.py`, Alembic `20260701_000001`) — a new append-only
+  `plan_day_history` table records one row per changed plan day per write,
+  capturing the day before and after and which trigger caused it (manual save,
+  coach chat, ride review, nightly maintenance, …). The live plan stays in
+  `TrainingPlan.plan` and the UI still reads only the latest version; this log is
+  for analytics and learning athlete behaviour (#343). Automated changes blocked
+  by a user pin or a completed day (#342/#345) are logged with `applied=False` as
+  an "attempted correction" signal, and the recorded source is the real trigger
+  so manual and coach-chat edits stay distinguishable. New `crud` helpers
+  `record_plan_day_changes` / `list_plan_day_history` back future analytics
+  surfaces.
+
 ## [0.38.11] - 2026-07-01
 
 ### Fixed
