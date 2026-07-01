@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 import crud
+import routers.ai as ai_router
 from database import async_session_maker
+from tests.conftest import TestSessionLocal
 
 
 # ---------------------------------------------------------------------------
@@ -218,3 +220,47 @@ async def test_disabled_memory_not_returned_in_prompt_facts(client, auth_headers
     assert export["memoryUpdatesEnabled"] is False
     # Facts are still stored — they're just not used in prompts
     assert len(export["memoryFacts"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Background coach-memory update concurrency (#346)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_memory_update_does_not_clobber_concurrent_edit(monkeypatch):
+    """A coach-memory edit made while the model is generating must survive (#346).
+
+    The background task must rebase onto the athlete's concurrent edit instead of
+    overwriting it with an update derived from a stale request-time snapshot.
+    """
+    async with TestSessionLocal() as s:
+        user = await crud.create_user(
+            s, email="mem-race@example.com", name="Racer", hashed_password="h"
+        )
+        await crud.upsert_coach_memory(s, user.id, "ORIGINAL")
+        await s.commit()
+        user_id = user.id
+
+    calls = {"n": 0}
+
+    async def fake_update(current_memory, user_message, coach_response, provider="openai"):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # Athlete edits their memory in-app while the model is "generating".
+            async with TestSessionLocal() as s:
+                await crud.upsert_coach_memory(s, user_id, "ATHLETE-EDIT")
+                await s.commit()
+        return f"{current_memory} + turn"
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    async with TestSessionLocal() as s:
+        row = await crud.get_coach_memory(s, user_id)
+
+    # The stale overwrite ("ORIGINAL + turn") must not win; the retry rebased on
+    # the athlete's concurrent edit.
+    assert row.memory == "ATHLETE-EDIT + turn"
+    assert calls["n"] == 2  # first attempt hit the conflict and retried

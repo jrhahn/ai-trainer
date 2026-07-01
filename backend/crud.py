@@ -358,6 +358,34 @@ async def upsert_coach_memory(
     return existing
 
 
+async def update_coach_memory_if_unchanged(
+    db: AsyncSession, user_id: str, *, expected: str, new: str
+) -> bool:
+    """Set memory to ``new`` only if it still equals ``expected``.
+
+    Returns True when applied, False when the stored value has diverged from
+    ``expected`` (a concurrent edit) so the caller can retry against a fresh
+    base. The row is locked ``FOR UPDATE`` for the read-check-write, so a
+    concurrent write from another transaction is never silently overwritten
+    (#346). Handles the create case (no row yet) only when ``expected`` is empty.
+    """
+    existing = await db.get(models.CoachMemory, user_id, with_for_update=True)
+    if existing is None:
+        if expected:
+            # We based our update on a non-empty memory that no longer exists —
+            # treat as a conflict rather than resurrecting stale content.
+            return False
+        db.add(models.CoachMemory(user_id=user_id, memory=new))
+        await db.flush()
+        return True
+    if existing.memory != expected:
+        return False
+    existing.memory = new
+    existing.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # AthleteContext
 # ---------------------------------------------------------------------------
