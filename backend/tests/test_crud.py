@@ -1244,3 +1244,52 @@ async def test_list_plan_day_history_filters_by_date(db: AsyncSession) -> None:
     only_first = await crud.list_plan_day_history(db, user.id, date="2026-05-01")
     assert len(only_first) == 1
     assert only_first[0].date == "2026-05-01"
+
+
+# ---------------------------------------------------------------------------
+# CoachMemory compare-and-set (#346)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_coach_memory_if_unchanged_creates_when_absent(db: AsyncSession) -> None:
+    user = await _make_user(db, "cas-create@example.com")
+    applied = await crud.update_coach_memory_if_unchanged(
+        db, user.id, expected="", new="fresh"
+    )
+    assert applied is True
+    assert (await crud.get_coach_memory(db, user.id)).memory == "fresh"
+
+
+@pytest.mark.asyncio
+async def test_update_coach_memory_if_unchanged_applies_on_match(db: AsyncSession) -> None:
+    user = await _make_user(db, "cas-match@example.com")
+    await crud.upsert_coach_memory(db, user.id, "base")
+    applied = await crud.update_coach_memory_if_unchanged(
+        db, user.id, expected="base", new="updated"
+    )
+    assert applied is True
+    assert (await crud.get_coach_memory(db, user.id)).memory == "updated"
+
+
+@pytest.mark.asyncio
+async def test_update_coach_memory_if_unchanged_rejects_on_conflict(db: AsyncSession) -> None:
+    user = await _make_user(db, "cas-conflict@example.com")
+    await crud.upsert_coach_memory(db, user.id, "current")
+    applied = await crud.update_coach_memory_if_unchanged(
+        db, user.id, expected="stale-base", new="overwrite"
+    )
+    assert applied is False
+    assert (await crud.get_coach_memory(db, user.id)).memory == "current"
+
+
+@pytest.mark.asyncio
+async def test_update_coach_memory_if_unchanged_no_create_when_expected_nonempty(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db, "cas-nocreate@example.com")
+    applied = await crud.update_coach_memory_if_unchanged(
+        db, user.id, expected="something", new="new"
+    )
+    assert applied is False
+    assert await crud.get_coach_memory(db, user.id) is None

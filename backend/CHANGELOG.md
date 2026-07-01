@@ -5,6 +5,20 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.3] - 2026-07-01
+
+### Fixed
+
+- **Coach-memory background update no longer clobbers concurrent edits**
+  (`routers/ai.py`, `crud.py`) — after a chat, the background memory update based
+  its rewrite on the memory snapshot captured at request time and blind-overwrote
+  the row, so an edit the athlete made via `PUT /coach-memory` while the model was
+  generating was silently lost (#346). The task now re-reads the current memory as
+  its base and writes with a row-locked compare-and-set
+  (`crud.update_coach_memory_if_unchanged`), retrying against the fresh value on a
+  detected concurrent edit. New helper is atomic (`SELECT … FOR UPDATE`), so a
+  committed edit from another transaction is never overwritten.
+
 ## [0.39.2] - 2026-07-01
 
 ### Tests

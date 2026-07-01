@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 import crud
+import routers.ai as ai_router
 from database import async_session_maker
+from services.llm import AIRateLimitError
+from tests.conftest import TestSessionLocal
 
 
 # ---------------------------------------------------------------------------
@@ -218,3 +223,151 @@ async def test_disabled_memory_not_returned_in_prompt_facts(client, auth_headers
     assert export["memoryUpdatesEnabled"] is False
     # Facts are still stored — they're just not used in prompts
     assert len(export["memoryFacts"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Background coach-memory update concurrency (#346)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_memory_update_does_not_clobber_concurrent_edit(monkeypatch):
+    """A coach-memory edit made while the model is generating must survive (#346).
+
+    The background task must rebase onto the athlete's concurrent edit instead of
+    overwriting it with an update derived from a stale request-time snapshot.
+    """
+    async with TestSessionLocal() as s:
+        user = await crud.create_user(
+            s, email="mem-race@example.com", name="Racer", hashed_password="h"
+        )
+        await crud.upsert_coach_memory(s, user.id, "ORIGINAL")
+        await s.commit()
+        user_id = user.id
+
+    calls = {"n": 0}
+
+    async def fake_update(current_memory, user_message, coach_response, provider="openai"):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # Athlete edits their memory in-app while the model is "generating".
+            async with TestSessionLocal() as s:
+                await crud.upsert_coach_memory(s, user_id, "ATHLETE-EDIT")
+                await s.commit()
+        return f"{current_memory} + turn"
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    async with TestSessionLocal() as s:
+        row = await crud.get_coach_memory(s, user_id)
+
+    # The stale overwrite ("ORIGINAL + turn") must not win; the retry rebased on
+    # the athlete's concurrent edit.
+    assert row.memory == "ATHLETE-EDIT + turn"
+    assert calls["n"] == 2  # first attempt hit the conflict and retried
+
+
+async def _seed_memory_user(email: str, memory: str) -> str:
+    async with TestSessionLocal() as s:
+        user = await crud.create_user(
+            s, email=email, name="Mem", hashed_password="h"
+        )
+        await crud.upsert_coach_memory(s, user.id, memory)
+        await s.commit()
+        return user.id
+
+
+async def _current_memory(user_id: str) -> str:
+    async with TestSessionLocal() as s:
+        row = await crud.get_coach_memory(s, user_id)
+        return row.memory if row is not None else ""
+
+
+@pytest.mark.asyncio
+async def test_memory_update_noop_when_unchanged(monkeypatch):
+    """When the model returns the same memory, nothing is written (single call)."""
+    user_id = await _seed_memory_user("mem-noop@example.com", "SAME")
+    calls = {"n": 0}
+
+    async def fake_update(current_memory, *a, **k):
+        calls["n"] += 1
+        return current_memory  # unchanged
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert calls["n"] == 1
+    assert await _current_memory(user_id) == "SAME"
+
+
+@pytest.mark.asyncio
+async def test_memory_update_noop_when_empty(monkeypatch):
+    """An empty model result is treated as a no-op and never written."""
+    user_id = await _seed_memory_user("mem-empty@example.com", "KEEP")
+
+    async def fake_update(*a, **k):
+        return ""
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert await _current_memory(user_id) == "KEEP"
+
+
+@pytest.mark.asyncio
+async def test_memory_update_abandons_after_repeated_conflicts(monkeypatch, caplog):
+    """If every attempt races a fresh edit, the task gives up without clobbering."""
+    user_id = await _seed_memory_user("mem-abandon@example.com", "EDIT-0")
+    calls = {"n": 0}
+
+    async def fake_update(current_memory, *a, **k):
+        calls["n"] += 1
+        # Every generation races a new athlete edit, so the compare-and-set
+        # always finds a diverged value.
+        async with TestSessionLocal() as s:
+            await crud.upsert_coach_memory(s, user_id, f"EDIT-{calls['n']}")
+            await s.commit()
+        return f"{current_memory} + turn"
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    with caplog.at_level(logging.INFO, logger="routers.ai"):
+        await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert calls["n"] == ai_router._MEMORY_UPDATE_MAX_ATTEMPTS
+    assert "abandoned after repeated concurrent edits" in caplog.text
+    # The last concurrent edit stands; the stale rewrite never won.
+    assert await _current_memory(user_id) == f"EDIT-{calls['n']}"
+
+
+@pytest.mark.asyncio
+async def test_memory_update_rate_limit_is_swallowed(monkeypatch, caplog):
+    """An AI rate-limit error is logged and leaves memory untouched."""
+    user_id = await _seed_memory_user("mem-ratelimit@example.com", "STAY")
+
+    async def fake_update(*a, **k):
+        raise AIRateLimitError("429")
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    with caplog.at_level(logging.INFO, logger="routers.ai"):
+        await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert "rate limit" in caplog.text.lower()
+    assert await _current_memory(user_id) == "STAY"
+
+
+@pytest.mark.asyncio
+async def test_memory_update_generic_error_is_swallowed(monkeypatch, caplog):
+    """An unexpected error is logged as a warning and does not raise or write."""
+    user_id = await _seed_memory_user("mem-error@example.com", "STAY")
+
+    async def fake_update(*a, **k):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    with caplog.at_level(logging.WARNING, logger="routers.ai"):
+        await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert "background update failed" in caplog.text
+    assert await _current_memory(user_id) == "STAY"

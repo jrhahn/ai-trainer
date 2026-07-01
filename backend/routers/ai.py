@@ -265,22 +265,46 @@ async def _auto_rate_ride(
         return None
 
 
+_MEMORY_UPDATE_MAX_ATTEMPTS = 3
+
+
 async def _update_memory_bg(
     user_id: str,
     question: str,
     response: str,
-    current_memory: str,
     provider: str,
 ) -> None:
-    """Background task: update coach memory after the chat response is sent."""
+    """Background task: update coach memory after the chat response is sent.
+
+    Re-reads the current memory as the base for each attempt and writes it back
+    with an atomic compare-and-set, so a coach-memory edit the athlete makes
+    while the model is still generating is never clobbered by a stale
+    request-time snapshot (#346). On a detected concurrent edit it retries
+    against the fresh memory, up to a small bound.
+    """
     try:
-        updated_memory = await ai_service.update_coach_memory(
-            current_memory, question, response, provider=provider
-        )
-        if updated_memory and updated_memory != current_memory:
+        for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
             async with async_session_maker() as session:
-                await crud.upsert_coach_memory(session, user_id, updated_memory)
-                await session.commit()
+                row = await crud.get_coach_memory(session, user_id)
+                base_memory = row.memory if row is not None else ""
+
+            updated_memory = await ai_service.update_coach_memory(
+                base_memory, question, response, provider=provider
+            )
+            if not updated_memory or updated_memory == base_memory:
+                return
+
+            async with async_session_maker() as session:
+                applied = await crud.update_coach_memory_if_unchanged(
+                    session, user_id, expected=base_memory, new=updated_memory
+                )
+                if applied:
+                    await session.commit()
+                    return
+            # The memory changed under us while generating — retry on the fresh base.
+        logger.info(
+            "Coach memory update abandoned after repeated concurrent edits"
+        )
     except AIRateLimitError:
         logger.info("Coach memory update skipped due to AI rate limit")
     except Exception:
@@ -868,7 +892,6 @@ async def ask_trainer(
             current_user.id,
             body.question,
             result["response"],
-            coach_memory,
             resolve_user_provider(current_user),
         )
 
