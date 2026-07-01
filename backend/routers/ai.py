@@ -320,7 +320,8 @@ async def _auto_adapt_plan(
             timezone_name=timezone_name,
         )
         await plan_pipeline.commit_plan(
-            db, user, updated_plan, base_plan=plan, timezone_name=timezone_name
+            db, user, updated_plan, base_plan=plan, source="auto_adapt",
+            timezone_name=timezone_name,
         )
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
@@ -621,7 +622,8 @@ async def generate_plan(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
     plan = await plan_pipeline.commit_plan(
-        db, current_user, plan, base_plan=base_plan, timezone_name=timezone_name
+        db, current_user, plan, base_plan=base_plan, source="generate",
+        timezone_name=timezone_name,
     )
     return plan
 
@@ -676,7 +678,8 @@ async def adapt_plan(
         )
     await _persist_collected_token_usage(db, current_user, usage_token)
     updated_plan = await plan_pipeline.commit_plan(
-        db, current_user, updated_plan, base_plan=plan, timezone_name=timezone_name
+        db, current_user, updated_plan, base_plan=plan, source="adapt",
+        timezone_name=timezone_name,
     )
     return updated_plan
 
@@ -876,6 +879,7 @@ async def ask_trainer(
             current_user,
             plan_updates,
             base_plan=plan,
+            source="coach_chat",
             timezone_name=timezone_name,
         )
 
@@ -1516,6 +1520,7 @@ async def next_ride_recommendation(
             current_user,
             plan_updates,
             base_plan=plan,
+            source="next_ride",
             timezone_name=timezone_name,
         )
 

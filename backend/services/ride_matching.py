@@ -525,7 +525,7 @@ async def review_matched_ride_and_adapt(
             # Constraint enforcement, completed-day protection, user-edit merge
             # and persistence are all owned by the shared pipeline.
             await plan_pipeline.commit_plan_updates(
-                db, user, plan_updates, base_plan=plan
+                db, user, plan_updates, base_plan=plan, source="ride_review"
             )
     except Exception:
         logger.warning("Matched ride plan adaptation failed", exc_info=True)

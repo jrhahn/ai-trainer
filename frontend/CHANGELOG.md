@@ -5,6 +5,17 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.7] - 2026-07-01
+
+### Changed
+
+- **Training days carry a server-set `source` marker** (`store/useAppStore.ts`) —
+  the `TrainingDay` type gains an optional, read-only `source` field that the
+  backend stamps to record which trigger last set a day ("user" for a manual
+  save or coach-chat change, which pins the day against automated overwrites; see
+  backend #342). No UI behavior change; keeps the client type in sync with the
+  API and updates the plan round-trip integration test accordingly.
+
 ## [0.27.6] - 2026-06-25
 
 ### Fixed

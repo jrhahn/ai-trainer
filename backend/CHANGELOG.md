@@ -5,6 +5,32 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.11] - 2026-07-01
+
+### Fixed
+
+- **Manual plan edits no longer silently reverted by automated triggers**
+  (`services/plan_pipeline.py`, `schemas.py`, `routers/ai.py`, `routers/users.py`,
+  `services/plan_maintenance.py`, `services/ride_matching.py`) — background
+  triggers (post-ride review, nightly maintenance, workout-rating auto-adapt)
+  could overwrite a day the athlete had set manually, because the pipeline's
+  concurrent-edit guard only detected edits made in the read→write window; an
+  edit persisted before the trigger read the plan was baked into its baseline and
+  treated as fair game (#342). Each day now carries a persistent `source` marker:
+  user-authored triggers (manual save, coach chat) pin changed days as `"user"`,
+  and background triggers may not overwrite a pinned, not-yet-completed day.
+  User-requested replans (generate, adapt, next-ride) stay authoritative. The
+  `source` is threaded from all eight trigger call sites via a single
+  `PLAN_SOURCES` registry, and only content-changed days are re-stamped so no-op
+  writes cause no plan churn or summary invalidation.
+- **Completed workout days protected on the full-plan path**
+  (`services/plan_pipeline.py`) — the per-day update path already skipped
+  completed days, but the full-plan path never consulted the `completed` marker,
+  so a background full-plan write could have the model rewrite a completed day or
+  drop it entirely when the proposal omitted it (#345). Background triggers now
+  restore every currently-completed day unchanged and never drop it; user edits
+  still bypass the guard so they can set and correct completed days and feedback.
+
 ## [0.38.10] - 2026-06-22
 
 ### Added

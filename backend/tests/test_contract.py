@@ -380,10 +380,16 @@ async def test_plan_response_shape(client):
             json={"plan": plan_days},
         )
     ).json()
-    assert saved == {"plan": plan_days}
+    # A manual save pins each day as a user edit (#342); content is otherwise
+    # unchanged.
+    assert all(day["source"] == "user" for day in saved["plan"])
+    stripped = [
+        {k: v for k, v in day.items() if k != "source"} for day in saved["plan"]
+    ]
+    assert stripped == plan_days
 
     retrieved = (await client.get("/api/v1/users/me/plan", headers=headers)).json()
-    assert retrieved == {"plan": plan_days}
+    assert retrieved == saved
 
 
 # ---------------------------------------------------------------------------

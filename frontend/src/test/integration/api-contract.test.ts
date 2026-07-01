@@ -173,7 +173,15 @@ describe('training plan service ↔ backend', () => {
       },
     ]
     const saved = await saveTrainingPlan(token, planDays)
-    expect(saved).toEqual(planDays)
+    // The backend pins each manually saved day as a user edit so automated
+    // triggers can't overwrite it (#342); content is otherwise unchanged.
+    expect(saved.every((day) => day.source === 'user')).toBe(true)
+    const withoutSource = saved.map((day) => {
+      const copy = { ...day }
+      delete copy.source
+      return copy
+    })
+    expect(withoutSource).toEqual(planDays)
   })
 
   it('fetchTrainingPlan retrieves the saved plan', async () => {
