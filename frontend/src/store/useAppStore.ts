@@ -139,6 +139,12 @@ export interface TrainingDay {
   coachFeedback?: string
   workoutPurpose?: string
   keyFocusPoints?: string[]
+  /**
+   * Server-set marker of which trigger last set this day. "user" means a manual
+   * edit / coach-chat change, which pins the day against automated overwrites
+   * (see backend services/plan_pipeline.py). Read-only from the client.
+   */
+  source?: string
 }
 
 export interface RaceEvent {
