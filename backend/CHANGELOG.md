@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.1] - 2026-07-01
+
+### Added
+
+- **Admin endpoint to inspect plan-day history** (`routers/admin.py`) — new
+  `GET /admin/users/{user_id}/plan-history` (admin-authenticated, optional
+  `?date=` filter and `limit`) returns a user's per-day plan change log newest
+  first, each entry showing the day before/after, the trigger, and whether it was
+  applied or blocked. Backs debugging of plan changes (e.g. "why did today revert
+  after a ride?") and a future analytics surface. Reuses
+  `crud.list_plan_day_history` (#343).
+
 ## [0.39.0] - 2026-07-01
 
 ### Added
