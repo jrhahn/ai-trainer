@@ -89,6 +89,41 @@ async def test_create_and_list_race_events(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_race_event_sync_preserves_user_coach_memory(client, auth_headers):
+    """Syncing race context into coach memory must keep the athlete's own notes (#346)."""
+    await client.put(
+        "/api/v1/users/me/coach-memory",
+        headers=auth_headers,
+        json={"memory": "Prefers morning rides. Hates the trainer."},
+    )
+
+    create_resp = await client.post(
+        "/api/v1/users/me/race-events",
+        headers=auth_headers,
+        json={"date": "2026-08-15", "distanceKm": 120.0, "elevationM": 1800},
+    )
+    assert create_resp.status_code == 200
+
+    memory = (
+        await client.get("/api/v1/users/me/coach-memory", headers=auth_headers)
+    ).json()["memory"]
+    # The athlete's free-text notes survive, and the race section is appended.
+    assert "Prefers morning rides. Hates the trainer." in memory
+    assert "Race calendar:" in memory
+
+    # Deleting the event refreshes the section without dropping the notes.
+    event_id = create_resp.json()["id"]
+    await client.delete(
+        f"/api/v1/users/me/race-events/{event_id}", headers=auth_headers
+    )
+    after = (
+        await client.get("/api/v1/users/me/coach-memory", headers=auth_headers)
+    ).json()["memory"]
+    assert "Prefers morning rides. Hates the trainer." in after
+    assert "Race calendar:" not in after  # no events left
+
+
+@pytest.mark.asyncio
 async def test_update_race_event(client, auth_headers):
     create_resp = await client.post(
         "/api/v1/users/me/race-events",

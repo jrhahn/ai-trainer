@@ -5,6 +5,19 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.4] - 2026-07-02
+
+### Fixed
+
+- **Race-context sync no longer risks clobbering a concurrent coach-memory edit**
+  (`routers/users.py`, `crud.py`) — `_sync_race_context` (run on race-event
+  create/update/delete) did an unlocked read-modify-write of the coach memory to
+  refresh its race section, so a `PUT /coach-memory` landing in the same instant
+  could be lost. The read now locks the row (`crud.get_coach_memory(...,
+  for_update=True)`, `SELECT … FOR UPDATE`), serialising the merge against
+  concurrent writers. Closes the last instance of the stale-snapshot clobber
+  class (#342/#345/#346).
+
 ## [0.39.3] - 2026-07-01
 
 ### Fixed

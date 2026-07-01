@@ -204,7 +204,11 @@ async def _sync_race_context(
 ) -> list[models.RaceEvent]:
     events = await crud.get_race_events(db, current_user.id)
     _sync_profile_next_race(current_user, events)
-    existing_memory = await crud.get_coach_memory(db, current_user.id)
+    # Lock the row for the read-modify-write so a concurrent coach-memory edit
+    # (e.g. PUT /coach-memory) can't be clobbered by this merge (#346).
+    existing_memory = await crud.get_coach_memory(
+        db, current_user.id, for_update=True
+    )
     merged_memory = _merge_race_events_into_memory(
         existing_memory.memory if existing_memory is not None else "",
         events,

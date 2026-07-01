@@ -1293,3 +1293,19 @@ async def test_update_coach_memory_if_unchanged_no_create_when_expected_nonempty
     )
     assert applied is False
     assert await crud.get_coach_memory(db, user.id) is None
+
+
+@pytest.mark.asyncio
+async def test_get_coach_memory_for_update_returns_row(db: AsyncSession) -> None:
+    user = await _make_user(db, "cm-lock@example.com")
+    await crud.upsert_coach_memory(db, user.id, "notes")
+
+    locked = await crud.get_coach_memory(db, user.id, for_update=True)
+    assert locked is not None
+    assert locked.memory == "notes"
+
+
+@pytest.mark.asyncio
+async def test_get_coach_memory_for_update_missing_is_none(db: AsyncSession) -> None:
+    user = await _make_user(db, "cm-lock-missing@example.com")
+    assert await crud.get_coach_memory(db, user.id, for_update=True) is None
