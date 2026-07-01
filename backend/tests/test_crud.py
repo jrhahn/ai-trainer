@@ -1180,3 +1180,67 @@ async def test_mark_rides_as_reviewed_only_affects_given_ids(db: AsyncSession) -
     unreviewed = await crud.get_unreviewed_ride_metrics(db, user.id)
     assert len(unreviewed) == 1
     assert unreviewed[0].strava_activity_id == 5002
+
+
+# ---------------------------------------------------------------------------
+# PlanDayHistory
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_record_plan_day_changes_empty_is_noop(db: AsyncSession) -> None:
+    user = await _make_user(db, "hist-empty@example.com")
+
+    rows = await crud.record_plan_day_changes(db, user.id, [], "coach_chat")
+
+    assert rows == []
+    assert await crud.list_plan_day_history(db, user.id) == []
+
+
+@pytest.mark.asyncio
+async def test_record_plan_day_changes_inserts_rows(db: AsyncSession) -> None:
+    user = await _make_user(db, "hist-insert@example.com")
+    changes = [
+        {
+            "date": "2026-05-01",
+            "old_day": None,
+            "new_day": {"workoutType": "endurance"},
+            "applied": True,
+        },
+        {
+            "date": "2026-05-02",
+            "old_day": {"workoutType": "vo2max"},
+            "new_day": {"workoutType": "recovery"},
+            # "applied" omitted → defaults to True
+        },
+    ]
+
+    rows = await crud.record_plan_day_changes(db, user.id, changes, "ride_review")
+
+    assert len(rows) == 2
+    assert all(r.source == "ride_review" for r in rows)
+    assert all(r.applied is True for r in rows)  # default applied when omitted
+
+    stored = await crud.list_plan_day_history(db, user.id)
+    assert {r.date for r in stored} == {"2026-05-01", "2026-05-02"}
+    by_date = {r.date: r for r in stored}
+    assert by_date["2026-05-01"].old_day is None
+    assert by_date["2026-05-02"].new_day == {"workoutType": "recovery"}
+
+
+@pytest.mark.asyncio
+async def test_list_plan_day_history_filters_by_date(db: AsyncSession) -> None:
+    user = await _make_user(db, "hist-filter@example.com")
+    await crud.record_plan_day_changes(
+        db,
+        user.id,
+        [
+            {"date": "2026-05-01", "old_day": None, "new_day": {}, "applied": True},
+            {"date": "2026-05-02", "old_day": None, "new_day": {}, "applied": False},
+        ],
+        "coach_chat",
+    )
+
+    only_first = await crud.list_plan_day_history(db, user.id, date="2026-05-01")
+    assert len(only_first) == 1
+    assert only_first[0].date == "2026-05-01"

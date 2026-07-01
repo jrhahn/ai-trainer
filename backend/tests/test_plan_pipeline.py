@@ -379,6 +379,91 @@ async def test_unknown_source_is_rejected():
 
 
 @pytest.mark.asyncio
+async def test_plan_change_records_day_history():
+    """An applied change appends a history row with the trigger and diff (#343)."""
+    d = "2026-09-01"
+    base = [_day(d, "endurance")]
+    user_id = await _create_user("hist-applied@example.com", base)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=base,
+            source="coach_chat",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rows = await crud.list_plan_day_history(db, user_id)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.date == d
+    assert row.source == "coach_chat"  # the real trigger, not the "user" stamp
+    assert row.applied is True
+    assert row.old_day["workoutType"] == "endurance"
+    assert row.new_day["workoutType"] == "vo2max"
+
+
+@pytest.mark.asyncio
+async def test_blocked_automated_change_records_unapplied_history():
+    """A pin-blocked automated change is logged with applied=False (#343)."""
+    d = "2026-09-02"
+    base = [_day(d, "endurance")]
+    user_id = await _create_user("hist-blocked@example.com", base)
+
+    # User pins the day via coach chat.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db, user, [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=base, source="coach_chat",
+        )
+        await db.commit()
+
+    # Automated ride-review tries to revert it — blocked, but logged.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        await plan_pipeline.commit_plan_updates(
+            db, user, [{"date": d, "workoutType": "recovery", "durationMinutes": 30}],
+            base_plan=current, source="ride_review",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        blocked = [
+            r for r in await crud.list_plan_day_history(db, user_id) if not r.applied
+        ]
+
+    assert len(blocked) == 1
+    assert blocked[0].source == "ride_review"
+    assert blocked[0].old_day["workoutType"] == "vo2max"  # what stayed
+    assert blocked[0].new_day["workoutType"] == "recovery"  # what was wanted
+
+
+@pytest.mark.asyncio
+async def test_noop_plan_write_records_no_history():
+    """An unchanged write must not append history rows."""
+    d = "2026-09-03"
+    plan = [_day(d, "endurance")]
+    user_id = await _create_user("hist-noop@example.com", plan)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(db, user, plan, base_plan=plan, source="adapt")
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rows = await crud.list_plan_day_history(db, user_id)
+
+    assert rows == []
+
+
+@pytest.mark.asyncio
 async def test_summary_regenerate_persists(monkeypatch):
     """summary_pipeline.regenerate writes a freshly generated summary."""
     d = "2026-07-22"

@@ -5,6 +5,44 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.2] - 2026-07-01
+
+### Tests
+
+- **Cover the plan-day history data layer** (`tests/test_crud.py`) — direct tests
+  for `crud.record_plan_day_changes` (the empty-changes no-op guard, row
+  insertion, and the `applied` default) and `crud.list_plan_day_history`'s date
+  filter (#343).
+
+## [0.39.1] - 2026-07-01
+
+### Added
+
+- **Admin endpoint to inspect plan-day history** (`routers/admin.py`) — new
+  `GET /admin/users/{user_id}/plan-history` (admin-authenticated, optional
+  `?date=` filter and `limit`) returns a user's per-day plan change log newest
+  first, each entry showing the day before/after, the trigger, and whether it was
+  applied or blocked. Backs debugging of plan changes (e.g. "why did today revert
+  after a ride?") and a future analytics surface. Reuses
+  `crud.list_plan_day_history` (#343).
+
+## [0.39.0] - 2026-07-01
+
+### Added
+
+- **Per-day training-plan change history** (`models.py`, `crud.py`,
+  `services/plan_pipeline.py`, Alembic `20260701_000001`) — a new append-only
+  `plan_day_history` table records one row per changed plan day per write,
+  capturing the day before and after and which trigger caused it (manual save,
+  coach chat, ride review, nightly maintenance, …). The live plan stays in
+  `TrainingPlan.plan` and the UI still reads only the latest version; this log is
+  for analytics and learning athlete behaviour (#343). Automated changes blocked
+  by a user pin or a completed day (#342/#345) are logged with `applied=False` as
+  an "attempted correction" signal, and the recorded source is the real trigger
+  so manual and coach-chat edits stay distinguishable. New `crud` helpers
+  `record_plan_day_changes` / `list_plan_day_history` back future analytics
+  surfaces.
+
 ## [0.38.11] - 2026-07-01
 
 ### Fixed

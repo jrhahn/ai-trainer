@@ -62,6 +62,60 @@ async def test_admin_users_lists_registered_users(client, admin_enabled, auth_he
 
 
 @pytest.mark.asyncio
+async def test_admin_plan_history_requires_admin_token(client, admin_enabled):
+    resp = await client.get("/api/v1/admin/users/some-id/plan-history")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_plan_history_unknown_user_404(client, admin_enabled):
+    headers = await _admin_headers(client)
+    resp = await client.get("/api/v1/admin/users/no-such-user/plan-history", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_plan_history_returns_recorded_changes(client, admin_enabled, auth_headers):
+    # A manual plan save records per-day history (source "user_edit").
+    plan = [
+        {
+            "date": "2026-05-01",
+            "workoutType": "endurance",
+            "title": "Z2 Ride",
+            "description": "Easy aerobic ride",
+            "durationMinutes": 90,
+        }
+    ]
+    save = await client.put("/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan})
+    assert save.status_code == 200
+
+    headers = await _admin_headers(client)
+    listing = await client.get("/api/v1/admin/users", headers=headers)
+    user_id = next(
+        u["id"] for u in listing.json()["users"] if u["email"] == "rider@example.com"
+    )
+
+    resp = await client.get(f"/api/v1/admin/users/{user_id}/plan-history", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["userId"] == user_id
+    assert data["total"] == 1
+    entry = data["entries"][0]
+    assert entry["date"] == "2026-05-01"
+    assert entry["source"] == "user_edit"
+    assert entry["applied"] is True
+    assert entry["oldDay"] is None  # first save: no prior version
+    assert entry["newDay"]["workoutType"] == "endurance"
+
+    # Date filter narrows the result set.
+    empty = await client.get(
+        f"/api/v1/admin/users/{user_id}/plan-history?date=2020-01-01", headers=headers
+    )
+    assert empty.status_code == 200
+    assert empty.json()["total"] == 0
+
+
+@pytest.mark.asyncio
 async def test_admin_delete_user(client, admin_enabled, auth_headers):
     headers = await _admin_headers(client)
 

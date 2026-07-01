@@ -198,6 +198,35 @@ class TrainingPlan(Base):
     user: Mapped["User"] = relationship(back_populates="training_plan")
 
 
+class PlanDayHistory(Base):
+    """Append-only log of every change to a single training-plan day.
+
+    One row per changed day per plan write, capturing the day before and after
+    and which trigger caused it (see ``services/plan_pipeline.PLAN_SOURCES``).
+    The live plan stays in ``TrainingPlan.plan``; this table is for analytics and
+    learning athlete behaviour and is never read on the hot path. An
+    ``applied=False`` row records an automated change that was *blocked* by a
+    user pin or a completed day — an "attempted correction" signal. See #343.
+    """
+
+    __tablename__ = "plan_day_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    old_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    new_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    __table_args__ = (Index("ix_plan_day_history_user_date", "user_id", "date"),)
+
+
 class WorkoutLog(Base):
     __tablename__ = "workout_logs"
 

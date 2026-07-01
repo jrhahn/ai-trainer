@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
+import crud
 import models
 import schemas
 from config import settings
@@ -54,6 +56,22 @@ class AdminUsersResponse(schemas.CamelModel):
     users: list[AdminUserStat]
     total_users: int
     total_tokens: int
+
+
+class AdminPlanDayHistoryEntry(schemas.CamelModel):
+    id: str
+    date: str
+    source: str
+    applied: bool
+    recorded_at: datetime
+    old_day: Any | None
+    new_day: Any | None
+
+
+class AdminPlanDayHistoryResponse(schemas.CamelModel):
+    user_id: str
+    entries: list[AdminPlanDayHistoryEntry]
+    total: int
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +180,47 @@ async def admin_users(db: AsyncSession = Depends(get_db)) -> AdminUsersResponse:
         users=user_stats,
         total_users=len(user_stats),
         total_tokens=sum(u.consumed_tokens for u in user_stats),
+    )
+
+
+@router.get(
+    "/users/{user_id}/plan-history",
+    response_model=AdminPlanDayHistoryResponse,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_plan_day_history(
+    user_id: str,
+    date: str | None = None,
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+) -> AdminPlanDayHistoryResponse:
+    """Return a user's per-day plan change log, newest first (for debugging).
+
+    Optionally filter to a single ``date`` (ISO ``YYYY-MM-DD``). Each entry shows
+    the day before/after and which trigger caused it; ``applied=false`` entries
+    are automated changes that a user pin or a completed day blocked. See #343.
+    """
+    _admin_enabled()
+    user = await db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    rows = await crud.list_plan_day_history(db, user_id, date=date, limit=max(1, limit))
+    return AdminPlanDayHistoryResponse(
+        user_id=user_id,
+        entries=[
+            AdminPlanDayHistoryEntry(
+                id=row.id,
+                date=row.date,
+                source=row.source,
+                applied=row.applied,
+                recorded_at=row.recorded_at,
+                old_day=row.old_day,
+                new_day=row.new_day,
+            )
+            for row in rows
+        ],
+        total=len(rows),
     )
 
 
