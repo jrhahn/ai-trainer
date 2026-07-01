@@ -53,33 +53,39 @@ USER_SOURCE = "user"
 class PlanSource:
     """Describes the behaviour of one trigger that mutates the plan.
 
-    ``name`` is stamped onto the days this trigger actually changes (so future
-    triggers can see who last set a day). ``respect_pins`` is True for automated
-    triggers, which must never overwrite a user-pinned, not-yet-completed day.
+    ``trigger`` is the call-site identifier, recorded verbatim in the plan-day
+    history (#343). ``name`` is stamped onto the days this trigger actually
+    changes (so future triggers can see who last set a day) and pins the day when
+    it equals ``"user"``. ``respect_pins`` is True for automated triggers, which
+    must never overwrite a user-pinned, not-yet-completed day.
     """
 
+    trigger: str
     name: str
     respect_pins: bool
 
 
-# Every call site passes one of these keys. Keeping the mapping here (rather than
-# a bare string per caller) makes the pin policy for all eight triggers auditable
-# in one place. See #342.
-PLAN_SOURCES: dict[str, PlanSource] = {
+# (stamp name, respect_pins) per trigger; the trigger key is injected below so it
+# is recorded in history without being duplicated. Keeping this in one place makes
+# the pin policy for all eight triggers auditable at a glance. See #342 / #343.
+_SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # User-authored: stamp days "user" (pinning them). They created the intent.
-    "user_edit": PlanSource(USER_SOURCE, respect_pins=False),
-    "coach_chat": PlanSource(USER_SOURCE, respect_pins=False),
-    # User-requested adaptations: authoritative, may reset existing pins. These
-    # are explicit user actions ("(re)generate my plan", "recommend my next
-    # ride"), so overwriting a prior pin is the expected outcome.
-    "generate": PlanSource("generate", respect_pins=False),
-    "adapt": PlanSource("adapt", respect_pins=False),
-    "next_ride": PlanSource("next_ride", respect_pins=False),
-    # Background/automatic: must respect user pins, and are never themselves
-    # pinned. These are the triggers that caused the silent revert in #342.
-    "auto_adapt": PlanSource("auto_adapt", respect_pins=True),
-    "nightly_maintenance": PlanSource("nightly_maintenance", respect_pins=True),
-    "ride_review": PlanSource("ride_review", respect_pins=True),
+    "user_edit": (USER_SOURCE, False),
+    "coach_chat": (USER_SOURCE, False),
+    # User-requested adaptations: authoritative, may reset existing pins. Explicit
+    # user actions ("(re)generate my plan", "recommend my next ride").
+    "generate": ("generate", False),
+    "adapt": ("adapt", False),
+    "next_ride": ("next_ride", False),
+    # Background/automatic: must respect user pins, never themselves pinned. These
+    # are the triggers that caused the silent revert in #342.
+    "auto_adapt": ("auto_adapt", True),
+    "nightly_maintenance": ("nightly_maintenance", True),
+    "ride_review": ("ride_review", True),
+}
+PLAN_SOURCES: dict[str, PlanSource] = {
+    key: PlanSource(trigger=key, name=name, respect_pins=respect)
+    for key, (name, respect) in _SOURCE_POLICY.items()
 }
 
 
@@ -265,6 +271,54 @@ async def load_active_constraints(
     ]
 
 
+def _content_differs(a: dict | None, b: dict | None) -> bool:
+    """Whether two day dicts differ in workout content (ignoring ``source``).
+
+    One side missing counts as a change (a day added or removed).
+    """
+    if a is None or b is None:
+        return a is not b
+    return _day_content(a) != _day_content(b)
+
+
+def _plan_day_changes(
+    current_plan: list[dict],
+    merged: list[dict],
+    proposal: list[dict],
+    source: PlanSource,
+) -> list[dict]:
+    """Build per-day history records for one plan write (#343).
+
+    Emits an ``applied=True`` record for every date whose content actually
+    changed, and — for pin-respecting (automated) triggers — an
+    ``applied=False`` record for every existing day the proposal wanted to
+    change but that was kept unchanged (blocked by a user pin or a completed
+    day). ``source`` re-stamps alone never count as a change.
+    """
+    current_by = {d["date"]: d for d in current_plan if d.get("date")}
+    merged_by = {d["date"]: d for d in merged if d.get("date")}
+    changes: list[dict] = []
+    for date in sorted(set(current_by) | set(merged_by)):
+        cur, new = current_by.get(date), merged_by.get(date)
+        if _content_differs(cur, new):
+            changes.append(
+                {"date": date, "old_day": cur, "new_day": new, "applied": True}
+            )
+    if source.respect_pins:
+        for day in proposal:
+            date = day.get("date")
+            cur = current_by.get(date) if date else None
+            if cur is None:
+                continue
+            if _content_differs(cur, day) and not _content_differs(
+                cur, merged_by.get(date)
+            ):
+                changes.append(
+                    {"date": date, "old_day": cur, "new_day": day, "applied": False}
+                )
+    return changes
+
+
 async def _enforce_and_persist(
     db: AsyncSession,
     user: models.User,
@@ -277,12 +331,20 @@ async def _enforce_and_persist(
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
     current_row = await crud.get_training_plan(db, user.id)
     current_plan = current_row.plan if current_row is not None else []
+    # The sanitized proposal before edit-protection — what the trigger "wanted",
+    # used to log automated changes that a pin/completed-day then blocked.
+    proposal = enforced
     if source.respect_pins:
         enforced = _protect_user_pinned_days(enforced, current_plan)
     merged = merge_preserving_user_edits(base_plan, enforced, current_plan)
     if source.respect_pins:
         merged = _preserve_completed_days(merged, current_plan)
     merged = _stamp_source(merged, current_plan, source)
+    # Record per-day history (append-only) before the early no-op return so that
+    # a fully-blocked automated write still logs its attempted corrections.
+    changes = _plan_day_changes(current_plan, merged, proposal, source)
+    if changes:
+        await crud.record_plan_day_changes(db, user.id, changes, source.trigger)
     if current_row is not None and merged == current_plan:
         return current_plan
     await crud.upsert_training_plan(db, user.id, merged)

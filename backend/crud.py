@@ -166,6 +166,59 @@ async def upsert_training_plan(
 
 
 # ---------------------------------------------------------------------------
+# PlanDayHistory
+# ---------------------------------------------------------------------------
+
+
+async def record_plan_day_changes(
+    db: AsyncSession,
+    user_id: str,
+    changes: list[dict],
+    source: str,
+) -> list[models.PlanDayHistory]:
+    """Append one PlanDayHistory row per per-day change and flush.
+
+    Each ``changes`` entry is ``{"date", "old_day", "new_day", "applied"}``.
+    ``applied`` defaults to True. No-op when ``changes`` is empty.
+    """
+    if not changes:
+        return []
+    rows = [
+        models.PlanDayHistory(
+            user_id=user_id,
+            date=change["date"],
+            old_day=change.get("old_day"),
+            new_day=change.get("new_day"),
+            source=source,
+            applied=change.get("applied", True),
+        )
+        for change in changes
+    ]
+    db.add_all(rows)
+    await db.flush()
+    return rows
+
+
+async def list_plan_day_history(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    date: str | None = None,
+    limit: int | None = None,
+) -> list[models.PlanDayHistory]:
+    """Return a user's plan-day change log, newest first, optionally by date."""
+    stmt = select(models.PlanDayHistory).where(
+        models.PlanDayHistory.user_id == user_id
+    )
+    if date is not None:
+        stmt = stmt.where(models.PlanDayHistory.date == date)
+    stmt = stmt.order_by(models.PlanDayHistory.recorded_at.desc())
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(await db.scalars(stmt))
+
+
+# ---------------------------------------------------------------------------
 # WorkoutLog
 # ---------------------------------------------------------------------------
 
