@@ -128,6 +128,37 @@ def _protect_user_pinned_days(
     return result
 
 
+def _preserve_completed_days(
+    plan: list[dict], current_plan: list[dict]
+) -> list[dict]:
+    """Restore every completed day from the current plan, unchanged.
+
+    A completed day is historical fact and must never be rewritten or dropped by
+    an automated trigger (#345). The per-day update path already skips completed
+    days (see ``apply_plan_updates``); this closes the same gap on the full-plan
+    path, where the LLM can return a different version of a completed day, or omit
+    it entirely (which ``merge_preserving_user_edits`` would then drop). User edits
+    are not routed through here, so they can still set/correct completed days.
+    """
+    completed_by_date = {
+        d["date"]: d for d in current_plan if d.get("completed") and d.get("date")
+    }
+    if not completed_by_date:
+        return plan
+    result: list[dict] = []
+    seen: set[str] = set()
+    for day in plan:
+        date = day.get("date")
+        result.append(completed_by_date[date] if date in completed_by_date else day)
+        if date is not None:
+            seen.add(date)
+    for date, day in completed_by_date.items():
+        if date not in seen:
+            result.append(day)
+    result.sort(key=lambda d: d["date"])
+    return result
+
+
 def _stamp_source(
     plan: list[dict], current_plan: list[dict], source: PlanSource
 ) -> list[dict]:
@@ -249,6 +280,8 @@ async def _enforce_and_persist(
     if source.respect_pins:
         enforced = _protect_user_pinned_days(enforced, current_plan)
     merged = merge_preserving_user_edits(base_plan, enforced, current_plan)
+    if source.respect_pins:
+        merged = _preserve_completed_days(merged, current_plan)
     merged = _stamp_source(merged, current_plan, source)
     if current_row is not None and merged == current_plan:
         return current_plan

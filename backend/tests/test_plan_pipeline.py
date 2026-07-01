@@ -300,6 +300,72 @@ async def test_generate_overrides_user_pin():
 
 
 @pytest.mark.asyncio
+async def test_automated_full_plan_cannot_overwrite_completed_day():
+    """A background full-plan write must not rewrite a completed day (#345)."""
+    d = "2026-08-05"
+    completed = _day(d, "intervals", completed=True)
+    user_id = await _create_user("pipe-completed@example.com", [completed])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day(d, "recovery", duration=30)],  # nightly LLM proposes a change
+            base_plan=[completed],
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "intervals"  # the completed day is untouched
+    assert day["completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_automated_full_plan_cannot_drop_completed_day():
+    """A completed day omitted by the proposal must be kept, not dropped (#345)."""
+    done = _day("2026-08-06", "endurance", completed=True)
+    future = _day("2026-08-07", "endurance")
+    user_id = await _create_user("pipe-completed-drop@example.com", [done, future])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day("2026-08-07", "intervals")],  # proposal omits the completed day
+            base_plan=[done, future],
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    dates = {x["date"] for x in result}
+    assert "2026-08-06" in dates  # completed day survives
+    assert next(x for x in result if x["date"] == "2026-08-07")["workoutType"] == "intervals"
+
+
+@pytest.mark.asyncio
+async def test_user_edit_can_still_modify_completed_day():
+    """Completed-day protection is only for automated triggers, not user edits."""
+    d = "2026-08-08"
+    completed = _day(d, "intervals", completed=True)
+    user_id = await _create_user("pipe-completed-user@example.com", [completed])
+
+    edited = {**_day(d, "endurance", completed=True), "feedback": {"perceivedEffort": 7}}
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan(
+            db, user, [edited], base_plan=[completed], source="user_edit"
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "endurance"  # the user's correction is applied
+    assert day["feedback"] == {"perceivedEffort": 7}
+
+
+@pytest.mark.asyncio
 async def test_unknown_source_is_rejected():
     """A typo'd source must fail loudly rather than silently mis-pin."""
     user_id = await _create_user("pipe-badsource@example.com", [_day("2026-08-04")])
