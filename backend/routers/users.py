@@ -268,7 +268,7 @@ async def save_plan(
     existing = await crud.get_training_plan(db, current_user.id)
     base_plan = existing.plan if existing is not None else []
     merged = await plan_pipeline.commit_plan(
-        db, current_user, body.plan, base_plan=base_plan
+        db, current_user, body.plan, base_plan=base_plan, source="user_edit"
     )
     return schemas.PlanResponse(plan=merged)
 

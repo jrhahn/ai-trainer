@@ -636,6 +636,10 @@ class TrainingDaySchema(CamelModel):
     coach_feedback: Optional[str] = None
     workout_purpose: Optional[str] = None
     key_focus_points: Optional[list[str]] = None
+    # Server-authoritative marker of which trigger last set this day. "user"
+    # means a manual edit / coach-chat change and pins the day against automated
+    # overwrites; see services/plan_pipeline.py. Clients cannot set this.
+    source: Optional[str] = None
 
 
 class AskTrainerResponse(CamelModel):

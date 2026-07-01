@@ -61,7 +61,8 @@ async def test_commit_plan_enforces_no_training_constraint():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         merged = await plan_pipeline.commit_plan(
-            db, user, [_day(d, "intervals")], base_plan=[_day(d, "intervals")]
+            db, user, [_day(d, "intervals")], base_plan=[_day(d, "intervals")],
+            source="adapt",
         )
         await db.commit()
 
@@ -86,7 +87,7 @@ async def test_commit_plan_preserves_concurrent_user_edit():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         merged = await plan_pipeline.commit_plan(
-            db, user, [_day(d, "intervals")], base_plan=base
+            db, user, [_day(d, "intervals")], base_plan=base, source="adapt"
         )
         await db.commit()
 
@@ -113,6 +114,7 @@ async def test_commit_plan_updates_drops_constraint_violating_update():
             user,
             [{"date": d, "workoutType": "intervals", "durationMinutes": 90}],
             base_plan=base,
+            source="coach_chat",
         )
         await db.commit()
 
@@ -143,6 +145,7 @@ async def test_commit_plan_enforces_required_workout():
             user,
             [_day(d, "rest", duration=0)],
             base_plan=[_day(d, "rest", duration=0)],
+            source="adapt",
         )
         await db.commit()
 
@@ -169,7 +172,8 @@ async def test_plan_change_invalidates_login_summary():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await plan_pipeline.commit_plan(
-            db, user, [_day(d, "intervals")], base_plan=[_day(d, "endurance")]
+            db, user, [_day(d, "intervals")], base_plan=[_day(d, "endurance")],
+            source="adapt",
         )
         await db.commit()
 
@@ -193,12 +197,119 @@ async def test_no_op_plan_write_keeps_login_summary():
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await plan_pipeline.commit_plan(db, user, plan, base_plan=plan)
+        await plan_pipeline.commit_plan(db, user, plan, base_plan=plan, source="adapt")
         await db.commit()
 
     async with TestSessionLocal() as db:
         assessment = await crud.get_rider_assessment(db, user_id)
         assert assessment.login_summary == "Still valid summary."
+
+
+@pytest.mark.asyncio
+async def test_coach_chat_pins_day_against_automated_overwrite():
+    """The reported bug: an automated trigger must not revert a user-set day (#342).
+
+    A recovery day is changed to VO2max via coach chat (pinning it). A later
+    ride-review adaptation proposing "easy recovery spin" must leave it alone.
+    """
+    d = "2026-08-01"
+    base = [_day(d, "endurance")]
+    user_id = await _create_user("pipe-pin@example.com", base)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        pinned = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=base,
+            source="coach_chat",
+        )
+        await db.commit()
+    assert next(x for x in pinned if x["date"] == d)["source"] == "user"
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        result = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "recovery", "durationMinutes": 30}],
+            base_plan=current,
+            source="ride_review",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "vo2max"  # the user's pinned edit survives
+    assert day["source"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_automated_trigger_updates_unpinned_day():
+    """An automated trigger may still change a day the user never touched."""
+    d = "2026-08-02"
+    base = [_day(d, "endurance")]
+    user_id = await _create_user("pipe-unpinned@example.com", base)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "recovery", "durationMinutes": 30}],
+            base_plan=base,
+            source="ride_review",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "recovery"
+    assert day["source"] == "ride_review"
+
+
+@pytest.mark.asyncio
+async def test_generate_overrides_user_pin():
+    """A user-requested full replan is authoritative and may reset pins."""
+    d = "2026-08-03"
+    user_id = await _create_user("pipe-generate@example.com", [_day(d, "endurance")])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=[_day(d, "endurance")],
+            source="coach_chat",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        result = await plan_pipeline.commit_plan(
+            db, user, [_day(d, "rest", duration=0)], base_plan=current,
+            source="generate",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "rest"  # the full replan wins
+    assert day["source"] == "generate"
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_is_rejected():
+    """A typo'd source must fail loudly rather than silently mis-pin."""
+    user_id = await _create_user("pipe-badsource@example.com", [_day("2026-08-04")])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        with pytest.raises(ValueError):
+            await plan_pipeline.commit_plan(
+                db, user, [_day("2026-08-04")], base_plan=[_day("2026-08-04")],
+                source="not_a_real_trigger",
+            )
 
 
 @pytest.mark.asyncio

@@ -132,6 +132,7 @@ async def maintain_user_training_plan(
         user,
         updated_plan,
         base_plan=plan,
+        source="nightly_maintenance",
         now=now,
         timezone_name=timezone_name,
     )
