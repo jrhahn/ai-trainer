@@ -339,8 +339,17 @@ async def delete_chat_messages(db: AsyncSession, user_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def get_coach_memory(db: AsyncSession, user_id: str) -> models.CoachMemory | None:
-    """Return the CoachMemory for a user, or None."""
+async def get_coach_memory(
+    db: AsyncSession, user_id: str, *, for_update: bool = False
+) -> models.CoachMemory | None:
+    """Return the CoachMemory for a user, or None.
+
+    Set ``for_update`` to lock the row (``SELECT … FOR UPDATE``) so a
+    read-modify-write of the memory serialises against concurrent writers and
+    cannot lose a committed edit (#346).
+    """
+    if for_update:
+        return await db.get(models.CoachMemory, user_id, with_for_update=True)
     return await db.get(models.CoachMemory, user_id)
 
 
