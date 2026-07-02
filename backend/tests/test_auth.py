@@ -350,3 +350,69 @@ async def test_get_current_user_falls_back_to_bearer_without_authelia_header(cli
 
     resp = await client.get("/api/v1/users/me", headers=auth_headers)
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Password hashing scheme (#329)
+# ---------------------------------------------------------------------------
+
+
+def test_hash_password_uses_argon2():
+    hashed = auth.hash_password("Str0ng!Pass")
+    assert hashed.startswith("$argon2")
+    assert auth.verify_password("Str0ng!Pass", hashed) is True
+    assert auth.verify_password("wrong", hashed) is False
+
+
+def test_verify_password_still_accepts_legacy_bcrypt():
+    import bcrypt
+
+    legacy = bcrypt.hashpw(b"Str0ng!Pass", bcrypt.gensalt()).decode("utf-8")
+    assert auth.verify_password("Str0ng!Pass", legacy) is True
+    assert auth.verify_password("nope", legacy) is False
+
+
+def test_password_needs_rehash():
+    import bcrypt
+
+    legacy = bcrypt.hashpw(b"pw", bcrypt.gensalt()).decode("utf-8")
+    assert auth.password_needs_rehash(legacy) is True
+    assert auth.password_needs_rehash(auth.hash_password("pw")) is False
+    # A non-hash string is treated as needing a rehash rather than crashing.
+    assert auth.password_needs_rehash("not-a-hash") is True
+
+
+def test_long_password_not_truncated_by_argon2():
+    # bcrypt ignores everything past 72 bytes; argon2 must hash the full input.
+    prefix = "a" * 72
+    hashed = auth.hash_password(prefix + "SECRET")
+    assert auth.verify_password(prefix + "SECRET", hashed) is True
+    assert auth.verify_password(prefix + "OTHER", hashed) is False
+
+
+@pytest.mark.asyncio
+async def test_login_rehashes_legacy_bcrypt_to_argon2(client):
+    import bcrypt
+
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    legacy = bcrypt.hashpw(b"Str0ng!Pass", bcrypt.gensalt()).decode("utf-8")
+    async with TestSessionLocal() as db:
+        user = await crud.create_user(
+            db, email="legacy@example.com", name="Legacy", hashed_password=legacy
+        )
+        await db.commit()
+        user_id = user.id
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "legacy@example.com", "password": "Str0ng!Pass"},
+    )
+    assert resp.status_code == 200
+
+    async with TestSessionLocal() as db:
+        refreshed = await crud.get_user_by_id(db, user_id)
+    # The bcrypt hash was transparently upgraded to argon2 on login.
+    assert refreshed.hashed_password.startswith("$argon2")
+    assert auth.verify_password("Str0ng!Pass", refreshed.hashed_password) is True
