@@ -18,6 +18,7 @@ from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsAuthError,
+    IntervalsDataUnavailable,
     apply_summary_fallback,
     fetch_activity_detail,
     fetch_activity_streams,
@@ -393,6 +394,23 @@ async def run_intervals_import(
                     rides.append(ride)
             except IntervalsAuthError:
                 raise
+            except IntervalsDataUnavailable as exc:
+                # Transient failure: surface for retry instead of importing an
+                # activity with missing stream/detail data as if complete (#352).
+                logger.warning(
+                    "Intervals.icu streams/detail unavailable (transient) user=%s activity=%s error=%s",
+                    user_id,
+                    _activity_log_entry(activity),
+                    exc,
+                )
+                failed.append(
+                    {
+                        "activity_id": None,
+                        "activity_name": activity.get("name"),
+                        "activity_date": None,
+                        "reason": "Streams temporarily unavailable — retry the import",
+                    }
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Intervals.icu activity processing failed user=%s activity=%s error=%s",

@@ -5,6 +5,22 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.6] - 2026-07-02
+
+### Fixed
+
+- **Transient intervals.icu fetch failures no longer imported as degraded activities**
+  (`services/intervals_service.py`, `services/activity_sync.py`, `routers/intervals.py`)
+  — the parallel of #325 for intervals.icu. `fetch_activity_streams` and
+  `fetch_activity_detail` returned `{}` for both a genuine empty response and a
+  transient 429/5xx/network error, so a blip permanently imported an activity with
+  missing stream/detail data and advanced the cursor past it (#352). They now
+  raise `IntervalsDataUnavailable` on transient failures; background sync marks the
+  activity unhandled so `_safe_intervals_cursor` holds the cursor for a retry, and
+  bulk import surfaces it in `failed_activities` instead of importing degraded
+  data. A genuine empty/absent response (permanent non-success) still returns
+  `{}` and imports summary-only.
+
 ## [0.39.5] - 2026-07-02
 
 ### Fixed

@@ -42,6 +42,23 @@ def _patch_client(monkeypatch, resp):
     monkeypatch.setattr(isvc.httpx, "AsyncClient", _FakeClient)
 
 
+def _patch_client_raising(monkeypatch, exc):
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None, auth=None):
+            raise exc
+
+    monkeypatch.setattr(isvc.httpx, "AsyncClient", _FakeClient)
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
@@ -213,11 +230,22 @@ async def test_fetch_activity_detail_paths(monkeypatch):
     _patch_client(monkeypatch, _FakeResp(200, ["not a dict"]))
     assert await isvc.fetch_activity_detail("key", 9) == {}
 
+    # Permanent non-success (404) means the activity has no detail — empty dict.
     _patch_client(monkeypatch, _FakeResp(404))
     assert await isvc.fetch_activity_detail("key", 9) == {}
 
     _patch_client(monkeypatch, _FakeResp(403))
     with pytest.raises(isvc.IntervalsAuthError):
+        await isvc.fetch_activity_detail("key", 9)
+
+    # Transient errors must raise so callers can retry (#352).
+    for status in (429, 500, 503):
+        _patch_client(monkeypatch, _FakeResp(status))
+        with pytest.raises(isvc.IntervalsDataUnavailable):
+            await isvc.fetch_activity_detail("key", 9)
+
+    _patch_client_raising(monkeypatch, httpx.ConnectTimeout("boom"))
+    with pytest.raises(isvc.IntervalsDataUnavailable):
         await isvc.fetch_activity_detail("key", 9)
 
 
@@ -229,8 +257,22 @@ async def test_fetch_activity_streams_paths(monkeypatch):
     _patch_client(monkeypatch, _FakeResp(200, "scalar"))
     assert await isvc.fetch_activity_streams("key", 9) == {}
 
+    # A transient 5xx now raises instead of silently returning {} (#352).
     _patch_client(monkeypatch, _FakeResp(500))
+    with pytest.raises(isvc.IntervalsDataUnavailable):
+        await isvc.fetch_activity_streams("key", 9)
+
+    _patch_client(monkeypatch, _FakeResp(429))
+    with pytest.raises(isvc.IntervalsDataUnavailable):
+        await isvc.fetch_activity_streams("key", 9)
+
+    # A permanent non-success (404) still returns {} (genuinely no streams).
+    _patch_client(monkeypatch, _FakeResp(404))
     assert await isvc.fetch_activity_streams("key", 9) == {}
+
+    _patch_client_raising(monkeypatch, httpx.ReadTimeout("boom"))
+    with pytest.raises(isvc.IntervalsDataUnavailable):
+        await isvc.fetch_activity_streams("key", 9)
 
     _patch_client(monkeypatch, _FakeResp(401))
     with pytest.raises(isvc.IntervalsAuthError):
