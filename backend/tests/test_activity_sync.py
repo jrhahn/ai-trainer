@@ -298,6 +298,66 @@ async def test_strava_cursor_does_not_advance_past_failed_imports(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_strava_transient_stream_failure_not_imported_and_retried(monkeypatch):
+    """A transient stream failure must not import degraded data or advance past it (#325)."""
+    from services.strava_service import StravaStreamUnavailable
+
+    user_id = await _create_user(
+        email="stream-transient@example.com", strava=True, strava_cursor=100
+    )
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            {
+                "id": 101,
+                "name": "Good Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T08:00:00Z",
+                "start_date_local": "2026-06-10T10:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": 102,
+                "name": "Streams down",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-11T08:00:00Z",
+                "start_date_local": "2026-06-11T10:00:00",
+                "elapsed_time": 3600,
+            },
+        ]
+
+    async def fake_fetch_streams(access_token, activity_id):
+        if activity_id == 102:
+            raise StravaStreamUnavailable("429")
+        return {"watts": {"data": [200]}, "time": {"data": [0]}}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    async def fake_review(*args, **kwargs):
+        return "ok", []
+
+    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
+    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 1  # only the good ride
+    assert result.skipped == 1  # the transient one is skipped, not imported degraded
+    # cursor must not advance to/past 102, so it is retried next tick
+    assert user.last_strava_activity_id == 101
+
+
+@pytest.mark.asyncio
 async def test_strava_cursor_stays_put_when_all_activities_fail_mapping(monkeypatch):
     """Regression for #301: cursor must not move at all when every activity fails mapping."""
     user_id = await _create_user(

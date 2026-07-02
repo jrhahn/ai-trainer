@@ -5,6 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.5] - 2026-07-02
+
+### Fixed
+
+- **Transient Strava stream failures no longer imported as empty-stream activities**
+  (`services/strava_service.py`, `services/activity_sync.py`, `routers/strava.py`) —
+  `fetch_activity_streams` returned `{}` for both "activity genuinely has no
+  streams" and a transient 429/5xx/timeout, so a blip during stream download
+  permanently imported an activity with no power/HR data, silently corrupting
+  TSS/CTL/ATL/TSB with no retry (#325). A new `fetch_activity_streams_strict`
+  raises `StravaStreamUnavailable` on transient failures (the existing lenient
+  wrapper still returns `{}` for enrichment paths). Background sync now skips such
+  an activity and holds the cursor below it so it is retried next tick instead of
+  being lost; bulk history import skips it (counted in `skipped`) rather than
+  baking in degraded data. A genuine no-streams response (2xx-empty / permanent
+  4xx) is still imported summary-only as before.
+
 ## [0.39.4] - 2026-07-02
 
 ### Fixed
