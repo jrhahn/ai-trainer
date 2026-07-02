@@ -193,6 +193,11 @@ async def login(
     if user is None or not auth.verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+    # Transparently upgrade a legacy bcrypt (or outdated) hash to the current
+    # Argon2 scheme now that we have the plaintext and it verified (#329).
+    if auth.password_needs_rehash(user.hashed_password):
+        user.hashed_password = auth.hash_password(body.password)
+
     user.last_login = datetime.now(timezone.utc)
     token = auth.create_access_token(user.id)
     return schemas.TokenResponse(access_token=token)

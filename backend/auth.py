@@ -93,7 +93,14 @@ def warn_if_authelia_proxy_unprotected() -> None:
 
 
 def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    """Hash a password with Argon2id.
+
+    Argon2 (unlike bcrypt) has no 72-byte input limit, so long passphrases are
+    hashed in full. Legacy bcrypt hashes are still accepted by
+    ``verify_password`` and upgraded on successful login (see
+    ``password_needs_rehash``). See #329.
+    """
+    return _argon2_hasher.hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -106,6 +113,20 @@ def verify_password(plain: str, hashed: str) -> bool:
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
     except ValueError:
+        return False
+
+
+def password_needs_rehash(hashed: str) -> bool:
+    """Whether a stored hash should be replaced after a successful verify.
+
+    True for any non-Argon2 (legacy bcrypt) hash, or an Argon2 hash made with
+    out-of-date parameters, so callers can transparently upgrade it on login.
+    """
+    if not hashed.startswith("$argon2"):
+        return True
+    try:
+        return _argon2_hasher.check_needs_rehash(hashed)
+    except Argon2Error:
         return False
 
 

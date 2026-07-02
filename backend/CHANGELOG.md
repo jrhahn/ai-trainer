@@ -5,6 +5,19 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.7] - 2026-07-02
+
+### Fixed
+
+- **Passwords now hashed with Argon2id, with transparent upgrade on login**
+  (`auth.py`, `routers/auth_router.py`) — an Argon2 hasher was configured but every
+  new password was hashed with bcrypt, which silently truncates input to 72 bytes
+  (weakening long passphrases) while the Argon2 path was dead code (#329).
+  `hash_password` now uses Argon2id (no length limit); `verify_password` still
+  accepts legacy bcrypt hashes, and a new `password_needs_rehash` lets the login
+  flow re-hash a bcrypt (or outdated-parameter) credential to Argon2 after a
+  successful verify, so stored hashes converge on the stronger scheme over time.
+
 ## [0.39.6] - 2026-07-02
 
 ### Fixed
