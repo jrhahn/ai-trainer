@@ -381,6 +381,7 @@ async def _run_import_background(
                 activity_name = activity.get("name")
 
                 streams: dict = {}
+                stream_transient_failure = False
                 try:
                     resp = await _get_with_retry(
                         client,
@@ -390,11 +391,28 @@ async def _run_import_background(
                     )
                     if resp.is_success:
                         streams = _sanitize_streams(resp.json())
+                    elif resp.status_code == 429 or resp.status_code >= 500:
+                        # Transient error survived the retry — don't import degraded.
+                        stream_transient_failure = True
+                    # else: permanent non-success → activity genuinely has no
+                    # streams; import summary-only data as before.
                 except Exception:  # noqa: BLE001
-                    logger.info(
-                        "Stream download failed for Strava activity %s; importing summary data only",
+                    stream_transient_failure = True
+
+                if stream_transient_failure:
+                    # Skip rather than bake in stream-less data as if complete;
+                    # re-running the import (idempotent upsert) will pick it up
+                    # once Strava recovers (#325).
+                    logger.warning(
+                        "Transient stream download failure for Strava activity %s; "
+                        "skipping to avoid a degraded import",
                         activity_id,
                     )
+                    skipped += 1
+                    _import_progress[user_id]["skipped"] = skipped
+                    _import_progress[user_id]["processed"] = idx + 1
+                    continue
+
                 weather_fields = await enrich_activity_weather(
                     activity, streams=streams
                 )

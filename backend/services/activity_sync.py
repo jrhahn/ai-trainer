@@ -36,8 +36,9 @@ from services.llm import resolve_user_provider
 from services.scheduler import ScheduledJob
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
+    StravaStreamUnavailable,
     ensure_fresh_strava_token,
-    fetch_activity_streams as fetch_strava_activity_streams,
+    fetch_activity_streams_strict as fetch_strava_activity_streams,
 )
 from services.weather_service import enrich_activity_weather
 
@@ -283,9 +284,26 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
     ]
     imported_ids: list[int] = []
     imported_activities: list[ImportedActivity] = []
+    retry_barrier: int | None = None  # smallest id we must not advance past (#325)
     for activity in new_activities:
         activity_id = int(activity["id"])
-        raw_streams = await fetch_strava_activity_streams(access_token, activity_id)
+        try:
+            raw_streams = await fetch_strava_activity_streams(access_token, activity_id)
+        except StravaStreamUnavailable:
+            # Transient Strava failure: don't import degraded (stream-less) data
+            # and don't advance the cursor past this activity, so it is retried
+            # on a later tick instead of being silently lost.
+            logger.warning(
+                "Strava streams unavailable (transient) user=%s activity=%s; "
+                "leaving for retry",
+                user.id,
+                activity_id,
+            )
+            result.skipped += 1
+            retry_barrier = (
+                activity_id if retry_barrier is None else min(retry_barrier, activity_id)
+            )
+            continue
         streams = _sanitize_strava_streams(raw_streams)
         weather = await enrich_activity_weather(activity, streams=streams)
         imported = _strava_activity_to_imported_activity(activity, streams, weather)
@@ -301,8 +319,14 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
     imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
-    if imported_ids:
-        max_imported_id = max(imported_ids)
+    # Advance the cursor, but never to or past an activity still awaiting retry.
+    advanceable = (
+        [i for i in imported_ids if i < retry_barrier]
+        if retry_barrier is not None
+        else imported_ids
+    )
+    if advanceable:
+        max_imported_id = max(advanceable)
         if max_imported_id > int(user.last_strava_activity_id or 0):
             user.last_strava_activity_id = max_imported_id
     logger.info(

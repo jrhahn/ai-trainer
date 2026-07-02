@@ -89,9 +89,19 @@ class ImportFlowHttpClient:
             )
 
         if "/activities/222/streams" in url:
-            raise RuntimeError("download failed for activity 222")
+            # Genuine "no streams" (permanent 404) — imported summary-only.
+            return DummyResponse(404, {})
 
         return DummyResponse(404, {})
+
+
+class TransientStreamHttpClient(ImportFlowHttpClient):
+    """Like ImportFlowHttpClient but activity 222's streams fail transiently."""
+
+    async def get(self, url, params=None, headers=None):
+        if "/activities/222/streams" in url:
+            return DummyResponse(500, {})
+        return await super().get(url, params=params, headers=headers)
 
 
 def test_sanitize_streams_keeps_latlng_points():
@@ -281,9 +291,10 @@ async def test_connect_to_strava_end_to_end(client, auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_import_background_keeps_activity_when_stream_download_fails(
+async def test_import_background_keeps_activity_with_no_streams(
     auth_headers, monkeypatch
 ):
+    """An activity that genuinely has no streams (permanent 404) is imported summary-only."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
 
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
@@ -311,6 +322,35 @@ async def test_import_background_keeps_activity_when_stream_download_fails(
     assert rides_by_id[111].sport_type == "Hike"
     assert rides_by_id[222].sport_type == "Ride"
     assert rides_by_id[222].ride_purpose == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_import_background_skips_activity_on_transient_stream_failure(
+    auth_headers, monkeypatch
+):
+    """A transient stream failure (5xx) skips the activity rather than importing it degraded (#325)."""
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", TransientStreamHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
+    )
+
+    progress = strava_router._import_progress[user_id]
+    assert progress["status"] == "done"
+    assert progress["total"] == 2
+    assert progress["skipped"] == 1  # activity 222 skipped, not imported degraded
+    assert progress["imported"] == 1
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+    # Only the good activity is persisted; 222 is left for a re-import.
+    assert {ride.strava_activity_id for ride in rides} == {111}
 
 
 @pytest.mark.asyncio

@@ -78,23 +78,63 @@ async def ensure_fresh_strava_token(
     return token_row.access_token
 
 
-async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
-    """Fetch per-second timeseries streams for a single Strava activity.
+class StravaStreamUnavailable(Exception):
+    """Streams could not be fetched due to a transient error (429/5xx/network).
 
-    Returns a dict keyed by stream type (e.g. ``"watts"``, ``"heartrate"``)
-    whose values are Strava stream objects with a ``data`` list.  Returns an
-    empty dict if the activity has no stream data or the request fails.
+    Raised by :func:`fetch_activity_streams_strict` so import paths can retry
+    instead of silently persisting an activity with no stream data. A genuine
+    "activity has no streams" response (2xx empty, or a permanent 4xx) is *not*
+    an error and still returns ``{}``. See #325.
+    """
+
+
+def _is_transient_stream_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+async def fetch_activity_streams_strict(access_token: str, activity_id: int) -> dict:
+    """Fetch per-second timeseries streams, distinguishing transient failures.
+
+    Returns a dict keyed by stream type (e.g. ``"watts"``, ``"heartrate"``), or
+    ``{}`` when the activity genuinely has no streams. Raises
+    :class:`StravaStreamUnavailable` on a transient failure (rate limit, server
+    error, or network error) so the caller can retry rather than import degraded
+    data (#325).
     """
     keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}/streams",
-            params={"keys": keys, "key_by_type": "true"},
-            headers={"Authorization": f"Bearer {access_token}"},
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{STRAVA_OAUTH_BASE}/api/v3/activities/{activity_id}/streams",
+                params={"keys": keys, "key_by_type": "true"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.RequestError as exc:
+        raise StravaStreamUnavailable(
+            f"stream request failed for activity {activity_id}: {exc}"
+        ) from exc
+    if _is_transient_stream_status(resp.status_code):
+        raise StravaStreamUnavailable(
+            f"transient Strava status {resp.status_code} for activity {activity_id}"
         )
     if not resp.is_success:
         return {}
-    return resp.json()
+    data = resp.json()
+    return data if isinstance(data, dict) else {}
+
+
+async def fetch_activity_streams(access_token: str, activity_id: int) -> dict:
+    """Best-effort stream fetch: returns ``{}`` on any failure.
+
+    Use for enrichment paths (ride analysis, weather) where missing streams are
+    acceptable. Import paths that must not persist degraded data should use
+    :func:`fetch_activity_streams_strict` and handle
+    :class:`StravaStreamUnavailable`.
+    """
+    try:
+        return await fetch_activity_streams_strict(access_token, activity_id)
+    except StravaStreamUnavailable:
+        return {}
 
 
 async def fetch_activity_detail(access_token: str, activity_id: int) -> dict:
