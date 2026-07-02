@@ -24,6 +24,21 @@ class IntervalsAPIError(Exception):
     """Raised when Intervals.icu returns an unexpected API failure."""
 
 
+class IntervalsDataUnavailable(Exception):
+    """Streams/detail couldn't be fetched due to a transient error (429/5xx/network).
+
+    Raised by :func:`fetch_activity_streams` / :func:`fetch_activity_detail` so
+    import paths can retry rather than persist an activity with missing data. A
+    genuine empty/absent response (permanent non-success) still returns ``{}``.
+    Standalone (not an ``IntervalsAPIError``) so it does not trip the fatal
+    import-level handler. See #352 (parallels #325).
+    """
+
+
+def _is_transient_intervals_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
 def intervals_auth(api_key: str) -> httpx.BasicAuth:
     return httpx.BasicAuth("API_KEY", api_key)
 
@@ -80,14 +95,23 @@ async def fetch_recent_activities(
 
 
 async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{INTERVALS_API_BASE}/activity/{activity_id}",
-            params={"intervals": "false"},
-            auth=intervals_auth(api_key),
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{INTERVALS_API_BASE}/activity/{activity_id}",
+                params={"intervals": "false"},
+                auth=intervals_auth(api_key),
+            )
+    except httpx.RequestError as exc:
+        raise IntervalsDataUnavailable(
+            f"detail request failed for activity {activity_id}: {exc}"
+        ) from exc
     if resp.status_code in (401, 403):
         raise IntervalsAuthError("Intervals.icu credentials were rejected")
+    if _is_transient_intervals_status(resp.status_code):
+        raise IntervalsDataUnavailable(
+            f"transient Intervals.icu status {resp.status_code} for activity {activity_id}"
+        )
     if not resp.is_success:
         return {}
     data = resp.json()
@@ -95,14 +119,23 @@ async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any
 
 
 async def fetch_activity_streams(api_key: str, activity_id: Any) -> dict[str, Any]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{INTERVALS_API_BASE}/activity/{activity_id}/streams",
-            params={"types": INTERVALS_STREAM_TYPES},
-            auth=intervals_auth(api_key),
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{INTERVALS_API_BASE}/activity/{activity_id}/streams",
+                params={"types": INTERVALS_STREAM_TYPES},
+                auth=intervals_auth(api_key),
+            )
+    except httpx.RequestError as exc:
+        raise IntervalsDataUnavailable(
+            f"stream request failed for activity {activity_id}: {exc}"
+        ) from exc
     if resp.status_code in (401, 403):
         raise IntervalsAuthError("Intervals.icu credentials were rejected")
+    if _is_transient_intervals_status(resp.status_code):
+        raise IntervalsDataUnavailable(
+            f"transient Intervals.icu status {resp.status_code} for activity {activity_id}"
+        )
     if not resp.is_success:
         return {}
     data = resp.json()

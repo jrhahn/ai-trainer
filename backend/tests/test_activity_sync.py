@@ -484,6 +484,53 @@ async def test_intervals_cursor_does_not_advance_past_failed_imports(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_intervals_transient_stream_failure_not_imported_and_retried(monkeypatch):
+    """A transient intervals failure skips the activity and holds the cursor (#352)."""
+    from services.intervals_service import IntervalsDataUnavailable
+
+    user_id = await _create_user(
+        email="intervals-transient@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("intervals-old"),
+    )
+
+    async def fake_fetch_recent_intervals_activities(*args, **kwargs):
+        return [
+            {"id": "newest", "name": "Newest", "type": "Ride", "start_date_local": "2026-06-12T08:00:00", "elapsed_time": 3600},
+            {"id": "bad", "name": "Streams down", "type": "Ride", "start_date_local": "2026-06-11T08:00:00", "elapsed_time": 3600},
+            {"id": "older-good", "name": "Older", "type": "Ride", "start_date_local": "2026-06-10T08:00:00", "elapsed_time": 3600},
+        ]
+
+    async def fake_detail(*args, **kwargs):
+        return {}
+
+    async def fake_streams(api_key, activity_id):
+        if activity_id == "bad":
+            raise IntervalsDataUnavailable("429")
+        return {}
+
+    async def fake_persist(db, user, activities):
+        return len(activities), 0
+
+    monkeypatch.setattr(activity_sync, "fetch_recent_intervals_activities", fake_fetch_recent_intervals_activities)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_streams", fake_streams)
+    monkeypatch.setattr(activity_sync, "_persist_and_adapt", fake_persist)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_intervals_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 2  # newest + older-good
+    assert result.skipped == 1  # "bad" transiently failed — not imported degraded
+    # cursor must stop below "bad" so it (and everything newer) is retried
+    assert user.last_intervals_activity_id == intervals_activity_id("older-good")
+
+
+@pytest.mark.asyncio
 async def test_intervals_cursor_stays_put_when_all_activities_fail_mapping(monkeypatch):
     """Regression for #322: intervals cursor must not move when every import fails."""
     original_cursor = intervals_activity_id("intervals-old")

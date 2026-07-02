@@ -20,6 +20,7 @@ from services.activity_imports import (
 )
 from services.dates import app_today
 from services.intervals_service import (
+    IntervalsDataUnavailable,
     fetch_activity_detail as fetch_intervals_activity_detail,
     fetch_activity_streams as fetch_intervals_activity_streams,
     fetch_recent_activities as fetch_recent_intervals_activities,
@@ -405,14 +406,28 @@ async def sync_intervals_for_user(
             result.skipped += 1
             outcomes.append((activity_id, True))
             continue
-        detail = await fetch_intervals_activity_detail(
-            user.intervals_token.api_key, activity.get("id")
-        )
-        streams = sanitize_intervals_streams(
-            await fetch_intervals_activity_streams(
+        try:
+            detail = await fetch_intervals_activity_detail(
                 user.intervals_token.api_key, activity.get("id")
             )
-        )
+            streams = sanitize_intervals_streams(
+                await fetch_intervals_activity_streams(
+                    user.intervals_token.api_key, activity.get("id")
+                )
+            )
+        except IntervalsDataUnavailable:
+            # Transient intervals.icu failure: don't import degraded data, and
+            # mark this activity unhandled so the cursor stops before it and it
+            # is retried on a later tick (#352).
+            logger.warning(
+                "Intervals streams/detail unavailable (transient) user=%s "
+                "activity=%s; leaving for retry",
+                user.id,
+                activity_id,
+            )
+            result.skipped += 1
+            outcomes.append((activity_id, False))
+            continue
         imported = map_activity_to_imported_activity(activity, detail, streams)
         if imported is None:
             result.skipped += 1

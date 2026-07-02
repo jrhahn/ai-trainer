@@ -325,3 +325,61 @@ async def test_intervals_import_summary_only_when_streams_missing(
     assert ride.normalized_power_w == 190
     assert ride.tss == 42.0
     assert ride.ride_purpose == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_intervals_import_skips_activity_on_transient_failure(
+    auth_headers, monkeypatch
+):
+    """A transient intervals failure is surfaced in failed_activities, not imported degraded (#352)."""
+    from services.intervals_service import IntervalsDataUnavailable
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        return [
+            {
+                "id": "i-transient",
+                "name": "Streams down",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T08:00:00",
+                "moving_time": 3600,
+            }
+        ]
+
+    async def fake_fetch_activity_detail(*args, **kwargs):
+        return {}
+
+    async def fake_fetch_activity_streams(*args, **kwargs):
+        raise IntervalsDataUnavailable("transient 429")
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_detail", fake_fetch_activity_detail
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_streams", fake_fetch_activity_streams
+    )
+
+    await intervals_router.run_intervals_import(
+        user_id=user_id,
+        api_key="secret",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=250,
+    )
+
+    progress = intervals_router._intervals_import_progress[user_id]
+    assert progress["status"] == "done"
+    assert progress["imported"] == 0
+    assert len(progress["failed_activities"]) == 1
+    assert "retry" in progress["failed_activities"][0]["reason"].lower()
+
+    async with async_session_maker() as session:
+        ride = await session.scalar(
+            select(models.RideMetric).where(models.RideMetric.user_id == user_id)
+        )
+    assert ride is None  # nothing imported with degraded data
