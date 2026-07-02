@@ -5,6 +5,28 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.8] - 2026-07-02
+
+### Fixed
+
+- **Import-progress state is now bounded and its start guard is race-free**
+  (`routers/strava.py`, `routers/intervals.py`, `services/progress_store.py`) —
+  the per-user Strava and intervals.icu import-progress dicts were written per
+  user and never evicted, growing unbounded over a long-running process. Completed
+  (`done`/`error`) entries are now evicted on a TTL and capped in size
+  (`prune_progress`), and the "is an import already running?" check-and-set is a
+  single synchronous step (`try_mark_running`) so it can't be raced on the event
+  loop (#326). This is a single-replica fix; cross-replica correctness is
+  intentionally out of scope.
+
+### Docs
+
+- **Multi-replica limitations** (`docs/multi_replica.md`) — documents the
+  single-replica assumptions (in-process scheduler, Strava OAuth state, import
+  progress) that break with more than one backend replica, what is already safe
+  across replicas (DB-backed token refresh, coach memory, plan writes), and what
+  a real horizontal-scaling effort would require (#326).
+
 ## [0.39.7] - 2026-07-02
 
 ### Fixed

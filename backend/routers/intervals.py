@@ -26,11 +26,14 @@ from services.intervals_service import (
     map_activity_to_ride_input,
     sanitize_intervals_streams,
 )
+from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.ride_matching import apply_ride_plan_matches
 
 router = APIRouter(tags=["intervals"])
 logger = logging.getLogger(__name__)
 
+# In-process, single-replica only (see docs/multi_replica.md); bounded via
+# prune_progress so completed entries don't accumulate forever (#326).
 _intervals_import_progress: dict[str, dict] = {}
 
 
@@ -282,9 +285,8 @@ async def import_intervals_history(
     if token is None:
         raise HTTPException(status_code=404, detail="Intervals.icu not connected")
 
-    current_progress = _intervals_import_progress.get(current_user.id, {})
-    if current_progress.get("status") == "running":
-        return {"status": "already_running"}
+    # Drop stale completed entries so the store can't grow without bound (#326).
+    prune_progress(_intervals_import_progress)
 
     months = max(1, min(months, 24))
     oldest, newest = _intervals_activity_window(months)
@@ -292,15 +294,22 @@ async def import_intervals_history(
     if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
         ftp = float(current_user.rider_assessment.estimated_ftp)
 
-    _intervals_import_progress[current_user.id] = {
-        "status": "running",
-        "total": 0,
-        "processed": 0,
-        "imported": 0,
-        "skipped": 0,
-        "failed_activities": [],
-        "error": "",
-    }
+    # Atomically claim the running slot: bail if an import is already running.
+    started = try_mark_running(
+        _intervals_import_progress,
+        current_user.id,
+        {
+            "status": "running",
+            "total": 0,
+            "processed": 0,
+            "imported": 0,
+            "skipped": 0,
+            "failed_activities": [],
+            "error": "",
+        },
+    )
+    if not started:
+        return {"status": "already_running"}
     background_tasks.add_task(
         run_intervals_import,
         user_id=current_user.id,
@@ -317,6 +326,7 @@ async def import_intervals_history(
 async def get_intervals_import_progress(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ImportProgressResponse:
+    prune_progress(_intervals_import_progress)
     progress = _intervals_import_progress.get(current_user.id)
     if progress is None:
         return schemas.ImportProgressResponse(status="idle")
@@ -477,7 +487,7 @@ async def run_intervals_import(
             failed[:10],
         )
 
-        _intervals_import_progress[user_id] = {
+        _intervals_import_progress[user_id] = mark_finished({
             "status": "done",
             "total": len(activities),
             "processed": len(activities),
@@ -485,9 +495,9 @@ async def run_intervals_import(
             "skipped": len(failed),
             "failed_activities": failed,
             "error": "",
-        }
+        })
     except IntervalsAuthError as exc:
-        _intervals_import_progress[user_id] = {
+        _intervals_import_progress[user_id] = mark_finished({
             "status": "error",
             "total": 0,
             "processed": 0,
@@ -495,9 +505,9 @@ async def run_intervals_import(
             "skipped": 0,
             "failed_activities": [],
             "error": str(exc),
-        }
+        })
     except IntervalsAPIError as exc:
-        _intervals_import_progress[user_id] = {
+        _intervals_import_progress[user_id] = mark_finished({
             "status": "error",
             "total": 0,
             "processed": 0,
@@ -505,13 +515,13 @@ async def run_intervals_import(
             "skipped": 0,
             "failed_activities": [],
             "error": str(exc),
-        }
+        })
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "Intervals.icu import failed for user %s: %s", user_id, exc, exc_info=True
         )
         prev = _intervals_import_progress.get(user_id, {})
-        _intervals_import_progress[user_id] = {
+        _intervals_import_progress[user_id] = mark_finished({
             "status": "error",
             "total": prev.get("total", 0),
             "processed": prev.get("processed", 0),
@@ -519,4 +529,4 @@ async def run_intervals_import(
             "skipped": prev.get("skipped", 0),
             "failed_activities": prev.get("failed_activities", []),
             "error": str(exc),
-        }
+        })

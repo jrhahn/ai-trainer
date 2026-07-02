@@ -22,6 +22,7 @@ from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
+from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
@@ -35,7 +36,9 @@ _oauth_states: dict[str, tuple[str, float]] = {}
 
 logger = logging.getLogger(__name__)
 
-# Per-user background import progress  {user_id: {status, total, processed, skipped, error}}
+# Per-user background import progress  {user_id: {status, total, processed, skipped, error}}.
+# In-process, single-replica only (see docs/multi_replica.md); bounded via
+# prune_progress so completed entries don't accumulate forever (#326).
 _import_progress: dict[int, dict] = {}
 
 
@@ -491,14 +494,14 @@ async def _run_import_background(
                         )
                     await db.commit()
 
-        _import_progress[user_id] = {
+        _import_progress[user_id] = mark_finished({
             "status": "done",
             "total": len(all_activities),
             "processed": len(all_activities),
             "imported": len(metrics_chain),
             "skipped": skipped,
             "error": "",
-        }
+        })
     except Exception as exc:  # noqa: BLE001
         prev = _import_progress.get(user_id, {})
         logger.error(
@@ -509,14 +512,14 @@ async def _run_import_background(
             exc,
             exc_info=True,
         )
-        _import_progress[user_id] = {
+        _import_progress[user_id] = mark_finished({
             "status": "error",
             "total": prev.get("total", 0),
             "processed": prev.get("processed", 0),
             "imported": prev.get("imported", 0),
             "skipped": prev.get("skipped", 0),
             "error": str(exc),
-        }
+        })
 
 
 @router.get("/strava/activities")
@@ -585,20 +588,25 @@ async def import_strava_history(
         (datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp()
     )
 
-    # Prevent stacking duplicate background tasks: if one is already running, bail out.
-    current_progress = _import_progress.get(current_user.id, {})
-    if current_progress.get("status") == "running":
-        return {"status": "already_running"}
+    # Drop stale completed entries so the store can't grow without bound (#326).
+    prune_progress(_import_progress)
 
-    # Mark started immediately so the progress endpoint sees "running" right away
-    _import_progress[current_user.id] = {
-        "status": "running",
-        "total": 0,
-        "processed": 0,
-        "imported": 0,
-        "skipped": 0,
-        "error": "",
-    }
+    # Atomically claim the running slot: if one is already running, bail out
+    # without stacking a duplicate background task.
+    started = try_mark_running(
+        _import_progress,
+        current_user.id,
+        {
+            "status": "running",
+            "total": 0,
+            "processed": 0,
+            "imported": 0,
+            "skipped": 0,
+            "error": "",
+        },
+    )
+    if not started:
+        return {"status": "already_running"}
 
     background_tasks.add_task(
         _run_import_background,
@@ -619,6 +627,7 @@ async def get_import_progress(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ImportProgressResponse:
     """Return the current background import progress for the authenticated user."""
+    prune_progress(_import_progress)
     progress = _import_progress.get(current_user.id)
     if progress is None:
         return schemas.ImportProgressResponse(status="idle")
