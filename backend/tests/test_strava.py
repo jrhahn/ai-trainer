@@ -488,3 +488,90 @@ async def test_import_background_replace_existing_overwrites_prior_rows(
     assert all(r.strava_activity_id != 9999 for r in rides)
     assert {ride.strava_activity_id for ride in rides} == {111, 222}
     assert all(s.source != "manual_recalculate" for s in snapshots)
+
+
+# ---------------------------------------------------------------------------
+# Import endpoints: start guard, progress polling, error status (#326)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_strava_token(user_id: str, *, expires_at: int = 9999999999) -> None:
+    async with async_session_maker() as session:
+        session.add(
+            models.StravaToken(
+                user_id=user_id,
+                access_token="tok",
+                refresh_token="ref",
+                expires_at=expires_at,
+                athlete_id=7,
+                athlete_name="Rider",
+            )
+        )
+        await session.commit()
+
+
+class _RaisingHttpClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+
+@pytest.mark.asyncio
+async def test_import_strava_history_starts(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id)
+    strava_router._import_progress.pop(user_id, None)
+    monkeypatch.setattr(strava_router, "_run_import_background", AsyncMock())
+
+    resp = await client.post("/api/v1/strava/import-history", headers=auth_headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "started"
+    assert strava_router._import_progress[user_id]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_import_strava_history_already_running(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id)
+    strava_router._import_progress[user_id] = {"status": "running"}
+    monkeypatch.setattr(strava_router, "_run_import_background", AsyncMock())
+
+    resp = await client.post("/api/v1/strava/import-history", headers=auth_headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "already_running"
+
+
+@pytest.mark.asyncio
+async def test_get_import_progress_reports_status_then_idle(client, auth_headers):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    strava_router._import_progress[user_id] = strava_router.mark_finished(
+        {"status": "done", "total": 2, "processed": 2, "imported": 2, "skipped": 0, "error": ""}
+    )
+
+    resp = await client.get("/api/v1/strava/import-progress", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "done"
+
+    strava_router._import_progress.pop(user_id, None)
+    idle = await client.get("/api/v1/strava/import-progress", headers=auth_headers)
+    assert idle.json()["status"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_import_background_sets_error_status_on_failure(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", _RaisingHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0
+    )
+
+    progress = strava_router._import_progress[user_id]
+    assert progress["status"] == "error"
+    assert "boom" in progress["error"]
+    assert "finished_at" in progress  # terminal entry stamped for TTL eviction
