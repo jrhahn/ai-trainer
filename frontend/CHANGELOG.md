@@ -5,6 +5,17 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.8] - 2026-07-04
+
+### Fixed
+
+- **Import-progress polling no longer freezes when an unrelated consumer unmounts**
+  (`hooks/useImportProgress.ts`) — the shared poll timer was stopped whenever *any*
+  polling consumer unmounted (`else if (poll)`), killing live updates for every
+  other listener. Polling consumers are now reference-counted, so the timer stops
+  only when the last one unmounts; full teardown still happens when no listeners
+  remain (#328).
+
 ## [0.27.7] - 2026-07-01
 
 ### Changed
