@@ -20,6 +20,10 @@ let sharedProgress: ImportProgress = INITIAL_PROGRESS
 let sharedAuthToken: string | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pollInFlight = false
+// Number of mounted consumers that requested polling. The shared timer runs
+// while this is > 0 and only stops when the last polling consumer unmounts, so
+// one consumer unmounting can't freeze live updates for the others (#328).
+let pollCount = 0
 const listeners = new Set<(progress: ImportProgress) => void>()
 
 function failureSignature(progress: ImportProgress): string {
@@ -108,18 +112,24 @@ export function useImportProgress(options: UseImportProgressOptions = {}) {
     listeners.add(setProgress)
     setProgress(sharedProgress)
     if (poll) {
+      pollCount += 1
       startPolling()
     }
 
     return () => {
       listeners.delete(setProgress)
+      if (poll) {
+        pollCount = Math.max(0, pollCount - 1)
+      }
       if (listeners.size === 0) {
         stopPolling()
+        pollCount = 0
         // Reset shared cache so the next consumer starts from a clean state
         // rather than seeing stale progress from a previous session.
         sharedProgress = INITIAL_PROGRESS
         sharedAuthToken = null
-      } else if (poll) {
+      } else if (pollCount === 0) {
+        // Listeners remain but none want live updates any more.
         stopPolling()
       }
     }
