@@ -269,8 +269,13 @@ async def test_automated_trigger_updates_unpinned_day():
 
 
 @pytest.mark.asyncio
-async def test_generate_overrides_user_pin():
-    """A user-requested full replan is authoritative and may reset pins."""
+async def test_generate_respects_user_pin():
+    """A ``generate`` write must not overwrite a user-pinned day (#359).
+
+    ``generate`` has no manual UI caller — the frontend fires it automatically
+    during activity sync — so it is a pin-respecting trigger. A full replan that
+    proposes a different workout for a coach-chat-pinned day must leave it alone.
+    """
     d = "2026-08-03"
     user_id = await _create_user("pipe-generate@example.com", [_day(d, "endurance")])
 
@@ -295,8 +300,83 @@ async def test_generate_overrides_user_pin():
         await db.commit()
 
     day = next(x for x in result if x["date"] == d)
-    assert day["workoutType"] == "rest"  # the full replan wins
-    assert day["source"] == "generate"
+    assert day["workoutType"] == "vo2max"  # the user's pinned edit survives
+    assert day["source"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_adapt_on_stale_plan_preserves_pinned_day():
+    """The reported bug: on-load ``adapt`` must not revert a coach-chat pin (#359).
+
+    The frontend auto-fires ``adapt`` on a stale-plan dashboard load. A pinned day
+    that the adaptation proposes to change must survive.
+    """
+    d = "2026-08-04"
+    user_id = await _create_user("pipe-adapt-pin@example.com", [_day(d, "endurance")])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=[_day(d, "endurance")],
+            source="coach_chat",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        result = await plan_pipeline.commit_plan(
+            db, user, [_day(d, "recovery", duration=30)], base_plan=current,
+            source="adapt",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "vo2max"  # the user's pinned edit survives
+    assert day["source"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_generate_preserves_omitted_pinned_day():
+    """A full replan that drops a pinned future date must keep that day (#359).
+
+    ``generate`` can shift the plan window and omit a pinned day entirely;
+    ``_preserve_pinned_days`` re-appends it so the user's edit is never lost.
+    """
+    pinned = "2026-08-06"
+    other = "2026-08-07"
+    user_id = await _create_user(
+        "pipe-generate-omit@example.com", [_day(pinned, "endurance"), _day(other, "endurance")]
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": pinned, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=[_day(pinned, "endurance"), _day(other, "endurance")],
+            source="coach_chat",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        # The replan omits the pinned date entirely.
+        result = await plan_pipeline.commit_plan(
+            db, user, [_day(other, "tempo")], base_plan=current,
+            source="generate",
+        )
+        await db.commit()
+
+    day = next((x for x in result if x["date"] == pinned), None)
+    assert day is not None  # the omitted pinned day is restored
+    assert day["workoutType"] == "vo2max"
+    assert day["source"] == "user"
 
 
 @pytest.mark.asyncio
