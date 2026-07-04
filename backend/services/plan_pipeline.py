@@ -72,13 +72,17 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # User-authored: stamp days "user" (pinning them). They created the intent.
     "user_edit": (USER_SOURCE, False),
     "coach_chat": (USER_SOURCE, False),
-    # User-requested adaptations: authoritative, may reset existing pins. Explicit
-    # user actions ("(re)generate my plan", "recommend my next ride").
-    "generate": ("generate", False),
-    "adapt": ("adapt", False),
+    # User-requested, on-demand: authoritative, may reset existing pins. Fired only
+    # by an explicit user request for a recommendation ("recommend my next ride").
     "next_ride": ("next_ride", False),
     # Background/automatic: must respect user pins, never themselves pinned. These
-    # are the triggers that caused the silent revert in #342.
+    # are the triggers that caused the silent revert in #342. Note generate/adapt live
+    # here despite once being labelled "user-requested": they have no manual UI caller —
+    # the frontend fires them automatically (adapt on stale-plan dashboard load, generate
+    # during activity sync), so treating them as authoritative let an on-load/on-sync
+    # write clobber coach-chat/manual pins. See #359.
+    "generate": ("generate", True),
+    "adapt": ("adapt", True),
     "auto_adapt": ("auto_adapt", True),
     "nightly_maintenance": ("nightly_maintenance", True),
     "ride_review": ("ride_review", True),
@@ -161,6 +165,35 @@ def _preserve_completed_days(
     for date, day in completed_by_date.items():
         if date not in seen:
             result.append(day)
+    result.sort(key=lambda d: d["date"])
+    return result
+
+
+def _preserve_pinned_days(
+    plan: list[dict], current_plan: list[dict]
+) -> list[dict]:
+    """Restore user-pinned, not-yet-completed days the proposal dropped entirely.
+
+    ``_protect_user_pinned_days`` only guards pinned days the proposal still
+    *contains*; a full regenerate can shift the date window and omit a pinned
+    future day altogether (#359). This closes that gap on the full-plan path by
+    re-appending any ``source == "user"``, not-completed day that ``plan`` lost.
+    Completed pinned days are already covered by ``_preserve_completed_days``.
+    """
+    pinned_by_date = {
+        d["date"]: d
+        for d in current_plan
+        if d.get("source") == USER_SOURCE
+        and not d.get("completed")
+        and d.get("date")
+    }
+    if not pinned_by_date:
+        return plan
+    present = {d.get("date") for d in plan}
+    missing = [day for date, day in pinned_by_date.items() if date not in present]
+    if not missing:
+        return plan
+    result = plan + missing
     result.sort(key=lambda d: d["date"])
     return result
 
@@ -339,6 +372,7 @@ async def _enforce_and_persist(
     merged = merge_preserving_user_edits(base_plan, enforced, current_plan)
     if source.respect_pins:
         merged = _preserve_completed_days(merged, current_plan)
+        merged = _preserve_pinned_days(merged, current_plan)
     merged = _stamp_source(merged, current_plan, source)
     # Record per-day history (append-only) before the early no-op return so that
     # a fully-blocked automated write still logs its attempted corrections.
