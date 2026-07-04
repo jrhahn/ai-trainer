@@ -11,7 +11,6 @@ import {
   MAX_CONVERSATION_HISTORY,
   analyseStravaActivities,
   askTrainer,
-  adaptTrainingPlan,
   extractAthleteFacts,
   fetchRaceEventFeedback,
   fetchReadinessScore,
@@ -131,22 +130,6 @@ describe('generateTrainingPlan', () => {
       token: 'token-123',
       method: 'POST',
       body: {},
-    })
-  })
-})
-
-describe('adaptTrainingPlan', () => {
-  it('returns the adapted plan from the backend', async () => {
-    const updatedDay = { ...makeDay('2024-05-02'), durationMinutes: 45 }
-    mockApiFetch.mockResolvedValue([updatedDay])
-
-    const result = await adaptTrainingPlan([], 'token-123')
-
-    expect(result[0].durationMinutes).toBe(45)
-    expect(mockApiFetch).toHaveBeenCalledWith('/ai/adapt-plan', {
-      token: 'token-123',
-      method: 'POST',
-      body: { recentFeedback: [] },
     })
   })
 })

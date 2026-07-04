@@ -5,6 +5,23 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.9] - 2026-07-04
+
+### Removed
+
+- **`POST /ai/adapt-plan` endpoint and `AdaptPlanRequest` schema** (`routers/ai.py`,
+  `schemas.py`) — the route's only consumer was the frontend dashboard's on-load
+  auto-adapt, which fired whenever the plan had a past incomplete day. That call
+  duplicated `nightly_maintenance` (runs 02:00 daily), which reschedules stale days
+  via the same `ai_service.adapt_training_plan` call with identical pin protection.
+  A day only becomes "past incomplete" at the midnight rollover, which the 02:00 job
+  always catches before the next load, so the on-load call was redundant (extra AI
+  tokens plus a redundant plan write) — and was the trigger that surfaced the
+  pin-clobber bug in #359. Stale days are now rescheduled solely by nightly
+  maintenance. The `adapt_training_plan` / `adapt_plan_*` prompts and the `adapt`
+  source in `plan_pipeline` are unchanged — still used by nightly maintenance and
+  the flagged-workout `_auto_adapt_plan` trigger (#361).
+
 ## [0.39.8] - 2026-07-02
 
 ### Fixed

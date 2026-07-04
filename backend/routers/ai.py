@@ -652,62 +652,6 @@ async def generate_plan(
     return plan
 
 
-@router.post("/adapt-plan")
-async def adapt_plan(
-    body: schemas.AdaptPlanRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-) -> list[dict]:
-    timezone_name = _request_timezone(request)
-    existing_plan = await crud.get_training_plan(db, current_user.id)
-    plan = existing_plan.plan if existing_plan is not None else []
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
-        by_alias=True
-    )
-    rider_assessment = None
-    if current_user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
-            current_user.rider_assessment, from_attributes=True
-        ).model_dump(by_alias=True)
-    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(
-        recent_metrics, timezone_name=timezone_name
-    )
-    weather_section = await training_weather_context_for_user(db, current_user.id)
-    race_events = await _race_events_for_prompt(db, current_user.id)
-    availability_constraints = await _active_availability_constraints_for_prompt(
-        db, current_user.id, timezone_name
-    )
-    profile = _profile_with_availability_constraints(
-        profile, availability_constraints
-    )
-    usage_token = begin_token_usage_collection()
-    try:
-        updated_plan = await ai_service.adapt_training_plan(
-            plan,
-            [feedback.model_dump(by_alias=True) for feedback in body.recent_feedback],
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            metrics_history_section=metrics_section,
-            weather_context_section=weather_section,
-            race_events=race_events,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
-    updated_plan = await plan_pipeline.commit_plan(
-        db, current_user, updated_plan, base_plan=plan, source="adapt",
-        timezone_name=timezone_name,
-    )
-    return updated_plan
-
-
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)
 async def ask_trainer(
     body: schemas.AskTrainerRequest,

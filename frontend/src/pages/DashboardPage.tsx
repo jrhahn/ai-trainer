@@ -20,7 +20,7 @@ import ProgressionChart from '../components/ProgressionChart'
 import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
-import { adaptTrainingPlan, processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
+import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
@@ -567,14 +567,13 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, setTrainingPlan, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       stravaConnection: s.stravaConnection,
       isExpertMode: s.isExpertMode,
-      setTrainingPlan: s.setTrainingPlan,
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
@@ -583,7 +582,6 @@ export default function DashboardPage() {
     }))
   )
 
-  const adaptationTriggeredRef = useRef(false)
   const summaryTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -665,26 +663,6 @@ export default function DashboardPage() {
   const latestRideSummaryKey = latestRideActivityKey
     ? `${SUMMARY_REFRESH_VERSION}:${latestRideActivityKey}`
     : ''
-
-  // If there are past incomplete days the plan is stale — ask the AI coach to
-  // reschedule them so the athlete always has current upcoming sessions.
-  const hasStalePlan =
-    trainingPlan.length > 0 && trainingPlan.some((d) => d.date < today && !d.completed)
-
-  useEffect(() => {
-    if (!hasStalePlan) {
-      // Reset so a future stale state can trigger adaptation again
-      adaptationTriggeredRef.current = false
-      return
-    }
-    if (!authToken || adaptationTriggeredRef.current) return
-    adaptationTriggeredRef.current = true
-    adaptTrainingPlan([], authToken)
-      .then((updatedPlan) => setTrainingPlan(updatedPlan))
-      .catch(() => {
-        // keep existing plan on error; ref stays true to avoid infinite retries
-      })
-  }, [hasStalePlan, authToken, setTrainingPlan])
 
   // Auto-generate loginSummary once if the user has a riderAssessment but no summary yet,
   // or if the stored summary looks truncated (no bullet points / too short).

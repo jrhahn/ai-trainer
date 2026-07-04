@@ -7,7 +7,7 @@ Exercises endpoints and helpers that are missing from the base test_ai.py suite:
 - review_new_rides endpoint
 - refresh_knowledge endpoint
 - refresh_login_summary endpoint
-- 503 rate-limit paths for analyse_activities, generate_plan, adapt_plan,
+- 503 rate-limit paths for analyse_activities, generate_plan,
   ask_trainer, race_event_feedback, review_new_rides, refresh_login_summary
 - Auto-adapt plan when flag_for_adaptation=True
 - Ask-trainer with ride_note_update persisting a note
@@ -522,29 +522,6 @@ async def test_generate_plan_503_on_rate_limit(client, auth_headers, mock_ai_ser
     )
     assert response.status_code == 503
     mock_ai_service["generate_training_plan"].side_effect = None
-
-
-@pytest.mark.asyncio
-async def test_adapt_plan_503_on_rate_limit(client, auth_headers, mock_ai_service):
-    mock_ai_service["adapt_training_plan"].side_effect = AIRateLimitError(
-        "rate limited"
-    )
-    response = await client.post(
-        "/api/v1/ai/adapt-plan",
-        headers=auth_headers,
-        json={
-            "recentFeedback": [
-                {
-                    "actualDurationMinutes": 60,
-                    "perceivedEffort": 3,
-                    "notes": "",
-                    "completedAt": "2026-04-10T10:00:00Z",
-                }
-            ]
-        },
-    )
-    assert response.status_code == 503
-    mock_ai_service["adapt_training_plan"].side_effect = None
 
 
 @pytest.mark.asyncio
