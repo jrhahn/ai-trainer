@@ -16,14 +16,12 @@ import { formatLocalDate } from '../utils/workout'
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockAdaptTrainingPlan, mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
-  mockAdaptTrainingPlan: vi.fn(),
+const { mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
-  adaptTrainingPlan: mockAdaptTrainingPlan,
   processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
 }))
@@ -107,7 +105,6 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   localStorage.clear()
   vi.clearAllMocks()
-  mockAdaptTrainingPlan.mockResolvedValue([])
   mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
 })

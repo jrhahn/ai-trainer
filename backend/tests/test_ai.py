@@ -54,23 +54,6 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     assert generate_response.status_code == 200
     assert generate_response.json()[0]["title"] == "Endurance Ride"
 
-    adapt_response = await client.post(
-        "/api/v1/ai/adapt-plan",
-        headers=auth_headers,
-        json={
-            "recentFeedback": [
-                {
-                    "actualDurationMinutes": 60,
-                    "perceivedEffort": 4,
-                    "notes": "Hard",
-                    "completedAt": "2026-04-10T10:00:00Z",
-                }
-            ],
-        },
-    )
-    assert adapt_response.status_code == 200
-    assert adapt_response.json()[0]["workoutType"] == "recovery"
-
     ask_response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,

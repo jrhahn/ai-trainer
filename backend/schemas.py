@@ -581,10 +581,6 @@ class GeneratePlanRequest(CamelModel):
     pass
 
 
-class AdaptPlanRequest(CamelModel):
-    recent_feedback: list[WorkoutFeedbackSchema]
-
-
 class AskTrainerRequest(CamelModel):
     question: str
     context_workout: Optional[Any] = None

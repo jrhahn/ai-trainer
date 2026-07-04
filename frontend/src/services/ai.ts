@@ -5,7 +5,6 @@ import type {
   RideMetricPoint,
   StravaActivity,
   TrainingDay,
-  WorkoutFeedback,
 } from '../store/useAppStore'
 import { apiFetch } from './api'
 
@@ -99,17 +98,6 @@ export async function generateTrainingPlan(authToken: string): Promise<TrainingD
     token: authToken,
     method: 'POST',
     body: {},
-  })
-}
-
-export async function adaptTrainingPlan(
-  recentFeedback: WorkoutFeedback[],
-  authToken: string
-): Promise<TrainingDay[]> {
-  return apiFetch<TrainingDay[]>('/ai/adapt-plan', {
-    token: authToken,
-    method: 'POST',
-    body: { recentFeedback },
   })
 }
 
