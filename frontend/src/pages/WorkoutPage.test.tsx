@@ -61,10 +61,36 @@ beforeEach(() => {
 })
 
 describe('WorkoutPage', () => {
-  it('shows "Workout not found" when the date has no matching day', () => {
-    useAppStore.setState({ trainingPlan: [] })
-    renderWorkoutPage('2099-01-01')
-    expect(screen.getByText('Workout not found.')).toBeInTheDocument()
+  it('shows the change history for a date outside the current plan window', async () => {
+    // A completed/past day gets pruned from the rolling plan window, but its
+    // history still exists — the page must surface it, not dead-end (#357).
+    const prunedDate = '2099-01-01'
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([
+      {
+        id: 'h1',
+        date: prunedDate,
+        source: 'coach_chat',
+        applied: true,
+        recordedAt: '2099-01-01T10:00:00Z',
+        oldDay: null,
+        newDay: { workoutType: 'endurance', title: 'Zone 2 Ride' },
+      },
+    ])
+
+    renderWorkoutPage(prunedDate)
+
+    // The dead-end message is gone; the fallback explains the day left the plan.
+    expect(screen.queryByText('Workout not found.')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/no longer part of your current plan/i),
+    ).toBeInTheDocument()
+
+    // History auto-loads for an out-of-window day (no manual expand needed).
+    expect(
+      await screen.findByText('Coach chat: Added endurance — Zone 2 Ride'),
+    ).toBeInTheDocument()
+    expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', prunedDate)
   })
 
   it('renders workout details when the day exists in the plan', () => {
