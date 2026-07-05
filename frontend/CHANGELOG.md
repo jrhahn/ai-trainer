@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — each workout day gains a collapsible "Change history" timeline explaining why
   it changed (with blocked automated attempts marked "kept your version"), and the
   dashboard gains a "Recent plan changes" analytics panel (totals, top triggers,
-  recent timeline). Backed by the new `/users/me/plan-history[/stats]` endpoints;
+  a per-training-day timeline) shown in expert mode. Backed by the new
+  `/users/me/plan-history[/stats]` endpoints;
   friendly trigger labels are derived client-side (#357).
 
 ### Fixed

@@ -914,8 +914,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Recent plan changes / override analytics (#357) */}
-      {authToken && <PlanChangesPanel authToken={authToken} />}
+      {/* Recent plan changes / override analytics — expert mode only (#357) */}
+      {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
 
       {/* Athlete progression charts — expert mode only */}
       {isExpertMode && <ProgressionChart />}

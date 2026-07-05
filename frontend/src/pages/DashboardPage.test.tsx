@@ -701,6 +701,22 @@ describe('DashboardPage — ProgressionChart', () => {
   })
 })
 
+describe('DashboardPage — PlanChangesPanel', () => {
+  it('does not render the plan-changes panel in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('plan-changes-panel')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the plan-changes panel when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('plan-changes-panel')).toBeInTheDocument()
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Plan comparison row & score badge
 // ---------------------------------------------------------------------------
