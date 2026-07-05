@@ -69,9 +69,10 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
         </div>
       )}
 
-      {/* Recent timeline */}
-      <ul className="space-y-2.5">
-        {recent.slice(0, 6).map((entry) => (
+      {/* Recent timeline — scrollable so the full log is reachable, not just
+          the newest few (#357). */}
+      <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+        {recent.map((entry) => (
           <li key={entry.id} className="flex items-start gap-2.5">
             <span
               className={`mt-1 shrink-0 w-2 h-2 rounded-full ${

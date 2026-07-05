@@ -77,4 +77,24 @@ describe('PlanChangesPanel', () => {
       screen.getByText('Auto-adaptation wanted to type intervals → recovery but kept your version'),
     ).toBeInTheDocument()
   })
+
+  it('renders every fetched entry (no 6-item cap) so the scrollable list is complete', async () => {
+    const many: PlanDayHistoryEntry[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `h${i}`,
+      date: `2026-05-${String(i + 1).padStart(2, '0')}`,
+      source: 'user_edit',
+      applied: true,
+      recordedAt: `2026-05-${String(i + 1).padStart(2, '0')}T10:00:00Z`,
+      oldDay: { title: `Old ${i}` },
+      newDay: { title: `New ${i}` },
+    }))
+    mockFetchStats.mockResolvedValue({ ...stats, total: 12 })
+    mockFetchHistory.mockResolvedValue(many)
+    renderPanel()
+
+    // The 12th entry (well past the old 6-item cap) must still be rendered.
+    expect(
+      await screen.findByText('Your edit: title “Old 11” → “New 11”'),
+    ).toBeInTheDocument()
+  })
 })
