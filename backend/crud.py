@@ -1414,6 +1414,26 @@ async def update_ride_metric_notes(
     return row
 
 
+async def set_ride_feel_legs(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+    legs: str | None,
+) -> models.RideMetric | None:
+    """Set (or clear, when ``legs`` is None) the athlete's leg-freshness rating.
+
+    Unlike :func:`update_ride_metric_notes`, this always assigns the value so a
+    dashboard tap can clear a prior rating.  It never touches ``user_note`` or
+    any other field, so it cannot clobber notes captured conversationally.
+    Returns the updated row, or None if not found.
+    """
+    row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    if row is None:
+        return None
+    row.feel_legs = legs
+    return row
+
+
 async def get_ride_metric_by_strava_id(
     db: AsyncSession,
     user_id: str,

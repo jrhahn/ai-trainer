@@ -36,10 +36,7 @@ from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
 from services import llm as llm_service
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
-from services.ride_matching import (
-    apply_ride_plan_matches,
-    review_matched_ride_and_adapt,
-)
+from services.ride_matching import apply_ride_plan_matches
 from services.weather_service import backfill_missing_ride_weather
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -870,45 +867,20 @@ async def save_ride_feedback(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RideFeedbackResponse:
-    """Save structured post-ride subjective feedback for a specific Strava activity.
+    """Set the athlete's quick "how the legs felt" rating for a Strava activity.
 
-    The four feedback fields (RPE, legs feeling, intent, optional note) are
-    formatted into a single human-readable ``user_note`` string that is stored
-    on the ``RideMetric`` row.  This note is then automatically included in all
-    AI coach prompts via ``ride_metrics_context_section()``.
+    This is the one-tap dashboard signal.  It writes only the ``feel_legs``
+    column (``None`` clears it), so it never clobbers notes captured
+    conversationally via the coach chat.  When set, ``feel_legs`` is surfaced to
+    every AI coach prompt via ``ride_metrics_context_section()``.  Richer
+    feedback — perceived effort, notes, plan-match corrections — is captured in
+    conversation with the coach, not here.
     """
-    match_labels = {
-        "matched": "Solid",
-        "mostly_matched": "Close",
-        "not_matched": "Off plan",
-    }
-    match_note_labels = {
-        "matched": "matched plan",
-        "mostly_matched": "partly matched plan",
-        "not_matched": "did not match plan",
-    }
-    parts = [
-        f"RPE {body.rpe}/10",
-        f"legs: {body.legs}",
-        f"intent: {body.intent}",
-    ]
-    if body.plan_match_feedback:
-        parts.append(f"plan match: {match_note_labels[body.plan_match_feedback]}")
-    if body.note:
-        parts.append(body.note)
-    user_note = " | ".join(parts)
-    label_override = (
-        match_labels[body.plan_match_feedback]
-        if body.plan_match_feedback
-        else None
-    )
-
-    row = await crud.update_ride_metric_notes(
+    row = await crud.set_ride_feel_legs(
         db,
         current_user.id,
         strava_activity_id,
-        user_note=user_note,
-        label_override=label_override,
+        body.legs,
     )
     if row is None:
         raise HTTPException(
@@ -916,34 +888,8 @@ async def save_ride_feedback(
             detail="Ride not found",
         )
 
-    coach_note = None
-    plan_updates = None
-    if (
-        row.plan_match_status in {"auto_matched", "manual_matched"}
-        and row.matched_plan_date
-    ):
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        plan = existing_plan.plan if existing_plan is not None else []
-        usage_token = begin_token_usage_collection()
-        coach_note, raw_plan_updates = await review_matched_ride_and_adapt(
-            db,
-            current_user,
-            row,
-            plan,
-            provider=_provider(current_user),
-        )
-        await _persist_collected_token_usage(db, current_user, usage_token)
-        plan_updates = (
-            [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_plan_updates]
-            if raw_plan_updates
-            else None
-        )
-
     return schemas.RideFeedbackResponse(
         strava_activity_id=strava_activity_id,
-        user_note=user_note,
-        coach_note=coach_note,
-        plan_updates=plan_updates,
         ride=schemas.RideMetricSchema.model_validate(row, from_attributes=True),
     )
 

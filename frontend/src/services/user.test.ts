@@ -584,54 +584,38 @@ describe('fit uploads', () => {
   })
 })
 
-describe('submitRideFeedback', () => {
-  it('patches the ride-feedback endpoint with structured data', async () => {
+describe('setRideLegs', () => {
+  it('patches the ride-feedback endpoint with the legs rating', async () => {
     mockApiFetch.mockResolvedValue({
       stravaActivityId: 9001,
-      userNote: 'RPE 7/10 | legs: heavy | intent: planned workout | Felt strong',
+      ride: { stravaActivityId: 9001, feelLegs: 'heavy' },
     })
 
-    const { submitRideFeedback } = await import('./user')
-    const result = await submitRideFeedback('tok-abc', 9001, {
-      rpe: 7,
-      legs: 'heavy',
-      intent: 'planned workout',
-      note: 'Felt strong',
-    })
+    const { setRideLegs } = await import('./user')
+    const result = await setRideLegs('tok-abc', 9001, 'heavy')
 
     expect(result.stravaActivityId).toBe(9001)
-    expect(result.userNote).toContain('RPE 7/10')
+    expect(result.ride?.feelLegs).toBe('heavy')
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9001', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: { rpe: 7, legs: 'heavy', intent: 'planned workout', note: 'Felt strong' },
+      body: { legs: 'heavy' },
     })
   })
 
-  it('omits note when undefined', async () => {
+  it('sends null to clear the legs rating', async () => {
     mockApiFetch.mockResolvedValue({
       stravaActivityId: 9002,
-      userNote: 'RPE 4/10 | legs: fresh | intent: recovery',
+      ride: { stravaActivityId: 9002, feelLegs: null },
     })
 
-    const { submitRideFeedback } = await import('./user')
-    await submitRideFeedback('tok-abc', 9002, {
-      rpe: 4,
-      legs: 'fresh',
-      intent: 'recovery',
-      planMatchFeedback: 'mostly_matched',
-    })
+    const { setRideLegs } = await import('./user')
+    await setRideLegs('tok-abc', 9002, null)
 
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9002', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: {
-        rpe: 4,
-        legs: 'fresh',
-        intent: 'recovery',
-        planMatchFeedback: 'mostly_matched',
-        note: undefined,
-      },
+      body: { legs: null },
     })
   })
 })

@@ -800,6 +800,7 @@ class RideMetricSchema(CamelModel):
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
+    feel_legs: Optional[str] = None
     label_override: Optional[str] = None
     plan_match_status: str = "unmatched"
     matched_plan_date: Optional[str] = None
@@ -817,44 +818,22 @@ class RideMetricHistoryResponse(BaseModel):
 
 
 class RideFeedbackRequest(CamelModel):
-    """Structured post-ride feedback submitted by the athlete.
+    """Quick post-ride "how the legs felt" signal set from the dashboard.
 
-    The four fields are combined into a single human-readable ``user_note``
-    string that is stored on the ``RideMetric`` row and shown to the coach.
+    This is the only structured field captured by tapping an activity.  Richer
+    feedback (perceived effort, free-text notes, plan-match corrections) is
+    captured conversationally through the coach chat, not here.  ``legs`` may be
+    ``None`` to clear a previously set value.
     """
 
-    rpe: int = Field(ge=1, le=10)
-    """Perceived effort on a 1–10 scale (1 = very easy, 10 = maximal)."""
-
-    legs: Literal["fresh", "normal", "heavy"]
-    """Subjective leg-freshness rating."""
-
-    intent: Literal[
-        "planned workout",
-        "recovery",
-        "commute",
-        "free ride",
-        "free activity",
-        "aborted",
-    ]
-    """What the athlete intended this activity to be."""
-
-    note: Optional[str] = None
-    """Optional free-text note."""
-
-    plan_match_feedback: Optional[
-        Literal["matched", "mostly_matched", "not_matched"]
-    ] = None
-    """Optional athlete correction for how well the activity matched the plan."""
+    legs: Optional[Literal["fresh", "normal", "heavy"]] = None
+    """Subjective leg-freshness rating, or ``None`` to clear it."""
 
 
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""
 
     strava_activity_id: int
-    user_note: str
-    coach_note: Optional[str] = None
-    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     ride: Optional[RideMetricSchema] = None
 
 

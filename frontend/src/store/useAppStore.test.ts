@@ -98,6 +98,29 @@ describe('ride metric actions', () => {
       }),
     )
   })
+
+  it('sets and clears feelLegs without touching other fields', () => {
+    const ride: RideMetricPoint = {
+      stravaActivityId: 77,
+      activityDate: '2026-06-20',
+      sportType: 'Ride',
+      userNote: 'Chatted with coach',
+    }
+    useAppStore.getState().setRideMetricsHistory([ride])
+
+    useAppStore.getState().updateRideMetricLegs(77, 'heavy')
+    expect(useAppStore.getState().rideMetricsHistory[0]).toEqual(
+      expect.objectContaining({
+        stravaActivityId: 77,
+        feelLegs: 'heavy',
+        userNote: 'Chatted with coach',
+      }),
+    )
+
+    useAppStore.getState().updateRideMetricLegs(77, null)
+    expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBeNull()
+    expect(useAppStore.getState().rideMetricsHistory[0].userNote).toBe('Chatted with coach')
+  })
 })
 
 describe('coachMemory actions', () => {

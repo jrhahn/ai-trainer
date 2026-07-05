@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import {
@@ -16,14 +16,19 @@ import { formatLocalDate } from '../utils/workout'
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
+const { mockProcessPendingFeedbacks, mockRefreshLoginSummary, mockSetRideLegs } = vi.hoisted(() => ({
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
+  mockSetRideLegs: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
   processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
+}))
+
+vi.mock('../services/user', () => ({
+  setRideLegs: mockSetRideLegs,
 }))
 
 vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
@@ -111,6 +116,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
+  mockSetRideLegs.mockResolvedValue({ stravaActivityId: 0, ride: null })
 })
 
 // ---------------------------------------------------------------------------
@@ -1053,5 +1059,54 @@ describe('computeMatchScore — endurance plan', () => {
     expect(prompt).toContain('The displayed match label is "Close"')
     expect(prompt).toContain('with a 72% score')
     expect(prompt).toContain('do not invent data-quality causes')
+  })
+})
+
+describe('DashboardPage — leg-feel control', () => {
+  it('persists a leg-feel tap and optimistically updates the store', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ stravaActivityId: 555, activityDate: yesterday })],
+    })
+    renderDashboard()
+
+    const heavy = await screen.findByRole('button', { name: 'Legs felt Heavy' })
+    fireEvent.click(heavy)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 555, 'heavy')
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBe('heavy'),
+    )
+  })
+
+  it('clears the rating when the active feel is tapped again', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ stravaActivityId: 556, activityDate: yesterday, feelLegs: 'fresh' }),
+      ],
+    })
+    renderDashboard()
+
+    const fresh = await screen.findByRole('button', { name: 'Legs felt Fresh' })
+    fireEvent.click(fresh)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 556, null)
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBeNull(),
+    )
+  })
+
+  it('reverts the optimistic update when the request fails', async () => {
+    mockSetRideLegs.mockRejectedValueOnce(new Error('network'))
+    setupStore({
+      rideMetricsHistory: [makeRide({ stravaActivityId: 557, activityDate: yesterday })],
+    })
+    renderDashboard()
+
+    const normal = await screen.findByRole('button', { name: 'Legs felt Normal' })
+    fireEvent.click(normal)
+
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs ?? null).toBeNull(),
+    )
   })
 })
