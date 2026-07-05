@@ -17,6 +17,7 @@ import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
+import PlanChangesPanel from '../components/PlanChangesPanel'
 import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
@@ -912,6 +913,9 @@ export default function DashboardPage() {
           className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
         />
       </div>
+
+      {/* Recent plan changes / override analytics — expert mode only (#357) */}
+      {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
 
       {/* Athlete progression charts — expert mode only */}
       {isExpertMode && <ProgressionChart />}

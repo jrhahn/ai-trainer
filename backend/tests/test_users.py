@@ -643,3 +643,131 @@ async def test_save_ride_feedback_persists_plan_match_override(
     )
     assert target is not None
     assert target["labelOverride"] == "Close"
+
+
+# ---------------------------------------------------------------------------
+# Athlete-facing plan-day history / analytics (#357)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_plan_history(user_id: str, changes: list[dict], source: str) -> None:
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as db:
+        await crud.record_plan_day_changes(db, user_id, changes, source)
+        await db.commit()
+
+
+async def _current_user_id(client, headers: dict[str, str]) -> str:
+    resp = await client.get("/api/v1/users/me", headers=headers)
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_plan_history_requires_auth(client):
+    resp = await client.get("/api/v1/users/me/plan-history")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plan_history_returns_only_current_user_rows(client, auth_headers):
+    me_id = await _current_user_id(client, auth_headers)
+
+    # A second registered user with their own history must never leak through.
+    other = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Other", "email": "other@example.com", "password": "Str0ng!Pass"},
+    )
+    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    other_id = await _current_user_id(client, other_headers)
+
+    await _seed_plan_history(
+        me_id,
+        [{"date": "2026-05-01", "old_day": None, "new_day": {"title": "Mine"}}],
+        "coach_chat",
+    )
+    await _seed_plan_history(
+        other_id,
+        [{"date": "2026-05-01", "old_day": None, "new_day": {"title": "Theirs"}}],
+        "coach_chat",
+    )
+
+    resp = await client.get("/api/v1/users/me/plan-history", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["entries"][0]["newDay"]["title"] == "Mine"
+    assert data["entries"][0]["source"] == "coach_chat"
+
+
+@pytest.mark.asyncio
+async def test_plan_history_date_filter_and_blocked_flag(client, auth_headers):
+    me_id = await _current_user_id(client, auth_headers)
+    await _seed_plan_history(
+        me_id,
+        [{"date": "2026-05-01", "old_day": None, "new_day": {"title": "A"}}],
+        "user_edit",
+    )
+    # A blocked automated attempt (a user pin kept the day) — applied=False.
+    await _seed_plan_history(
+        me_id,
+        [
+            {
+                "date": "2026-05-02",
+                "old_day": {"title": "A"},
+                "new_day": {"title": "B"},
+                "applied": False,
+            }
+        ],
+        "ride_review",
+    )
+
+    all_rows = await client.get("/api/v1/users/me/plan-history", headers=auth_headers)
+    assert all_rows.json()["total"] == 2
+
+    blocked = next(
+        e for e in all_rows.json()["entries"] if e["source"] == "ride_review"
+    )
+    assert blocked["applied"] is False
+
+    filtered = await client.get(
+        "/api/v1/users/me/plan-history?date=2026-05-02", headers=auth_headers
+    )
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["entries"][0]["date"] == "2026-05-02"
+
+
+@pytest.mark.asyncio
+async def test_plan_history_stats_aggregates(client, auth_headers):
+    me_id = await _current_user_id(client, auth_headers)
+    await _seed_plan_history(
+        me_id,
+        [
+            {"date": "2026-05-01", "old_day": None, "new_day": {"t": 1}},
+            {"date": "2026-05-01", "old_day": {"t": 1}, "new_day": {"t": 2}},
+        ],
+        "coach_chat",
+    )
+    await _seed_plan_history(
+        me_id,
+        [
+            {
+                "date": "2026-05-02",
+                "old_day": {"t": 2},
+                "new_day": {"t": 3},
+                "applied": False,
+            }
+        ],
+        "auto_adapt",
+    )
+
+    resp = await client.get("/api/v1/users/me/plan-history/stats", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 3
+    assert data["bySource"] == {"coach_chat": 2, "auto_adapt": 1}
+    assert data["appliedCount"] == 2
+    assert data["blockedCount"] == 1
+    # 2026-05-01 has the most changes, so it leads the ranking.
+    assert data["mostChangedDates"][0] == {"date": "2026-05-01", "count": 2}

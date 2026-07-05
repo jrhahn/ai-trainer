@@ -7,11 +7,12 @@ import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
-const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog } = vi.hoisted(() => ({
+const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
+  mockFetchPlanHistory: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({ rateCompletedWorkout: mockRateCompletedWorkout }))
@@ -19,6 +20,7 @@ vi.mock('../services/user', () => ({
   fetchTrainingPlan: mockFetchTrainingPlan,
   saveTrainingPlan: mockSaveTrainingPlan,
   saveWorkoutLog: mockSaveWorkoutLog,
+  fetchPlanHistory: mockFetchPlanHistory,
 }))
 
 // AIChat is heavy - stub it out
@@ -55,13 +57,40 @@ beforeEach(() => {
   mockFetchTrainingPlan.mockResolvedValue([mockDay])
   mockSaveTrainingPlan.mockResolvedValue([])
   mockSaveWorkoutLog.mockResolvedValue(undefined)
+  mockFetchPlanHistory.mockResolvedValue([])
 })
 
 describe('WorkoutPage', () => {
-  it('shows "Workout not found" when the date has no matching day', () => {
-    useAppStore.setState({ trainingPlan: [] })
-    renderWorkoutPage('2099-01-01')
-    expect(screen.getByText('Workout not found.')).toBeInTheDocument()
+  it('shows the change history for a date outside the current plan window', async () => {
+    // A completed/past day gets pruned from the rolling plan window, but its
+    // history still exists — the page must surface it, not dead-end (#357).
+    const prunedDate = '2099-01-01'
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([
+      {
+        id: 'h1',
+        date: prunedDate,
+        source: 'coach_chat',
+        applied: true,
+        recordedAt: '2099-01-01T10:00:00Z',
+        oldDay: null,
+        newDay: { workoutType: 'endurance', title: 'Zone 2 Ride' },
+      },
+    ])
+
+    renderWorkoutPage(prunedDate)
+
+    // The dead-end message is gone; the fallback explains the day left the plan.
+    expect(screen.queryByText('Workout not found.')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/no longer part of your current plan/i),
+    ).toBeInTheDocument()
+
+    // History auto-loads for an out-of-window day (no manual expand needed).
+    expect(
+      await screen.findByText('Coach chat: Added endurance — Zone 2 Ride'),
+    ).toBeInTheDocument()
+    expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', prunedDate)
   })
 
   it('renders workout details when the day exists in the plan', () => {
@@ -255,5 +284,52 @@ describe('WorkoutPage', () => {
         otherDay,
       ])
     })
+  })
+
+  it('loads the change history for the day when expanded, marking blocked attempts', async () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([
+      {
+        id: 'h1',
+        date: TODAY,
+        source: 'coach_chat',
+        applied: true,
+        recordedAt: '2025-01-15T10:00:00Z',
+        oldDay: null,
+        newDay: { workoutType: 'intervals', title: 'VO2max Intervals' },
+      },
+      {
+        id: 'h2',
+        date: TODAY,
+        source: 'auto_adapt',
+        applied: false,
+        recordedAt: '2025-01-15T12:00:00Z',
+        oldDay: { workoutType: 'intervals' },
+        newDay: { workoutType: 'recovery' },
+      },
+    ])
+
+    renderWorkoutPage(TODAY)
+    // History is lazy — only fetched once the section is opened.
+    expect(mockFetchPlanHistory).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /change history/i }))
+
+    expect(await screen.findByText('Coach chat: Added intervals — VO2max Intervals')).toBeInTheDocument()
+    expect(
+      screen.getByText('Auto-adaptation wanted to type intervals → recovery but kept your version'),
+    ).toBeInTheDocument()
+    expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', TODAY)
+  })
+
+  it('shows an empty-state message when the day has no recorded changes', async () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([])
+
+    renderWorkoutPage(TODAY)
+    await userEvent.click(screen.getByRole('button', { name: /change history/i }))
+
+    expect(
+      await screen.findByText('No recorded changes for this day yet.'),
+    ).toBeInTheDocument()
   })
 })

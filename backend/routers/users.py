@@ -251,6 +251,41 @@ async def delete_me(
     return {"status": "deleted"}
 
 
+class PlanDayHistoryEntry(schemas.CamelModel):
+    """One athlete-visible plan-day change (see #343 / #357).
+
+    ``source`` is the raw trigger key (``coach_chat``, ``ride_review``, …); the
+    frontend maps it to a friendly label. ``applied=False`` marks an automated
+    change that a user pin or completed day blocked ("attempted but kept").
+    """
+
+    id: str
+    date: str
+    source: str
+    applied: bool
+    recorded_at: datetime
+    old_day: Any | None
+    new_day: Any | None
+
+
+class PlanDayHistoryResponse(schemas.CamelModel):
+    entries: list[PlanDayHistoryEntry]
+    total: int
+
+
+class PlanDayHistoryDateCount(schemas.CamelModel):
+    date: str
+    count: int
+
+
+class PlanDayHistoryStatsResponse(schemas.CamelModel):
+    by_source: dict[str, int]
+    applied_count: int
+    blocked_count: int
+    most_changed_dates: list[PlanDayHistoryDateCount]
+    total: int
+
+
 @router.get("/plan", response_model=schemas.PlanResponse)
 async def get_plan(
     db: AsyncSession = Depends(get_db),
@@ -275,6 +310,59 @@ async def save_plan(
         db, current_user, body.plan, base_plan=base_plan, source="user_edit"
     )
     return schemas.PlanResponse(plan=merged)
+
+
+@router.get("/plan-history", response_model=PlanDayHistoryResponse)
+async def get_plan_history(
+    date: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> PlanDayHistoryResponse:
+    """Return the athlete's own per-day plan change log, newest first.
+
+    Optionally filter to a single ``date`` (ISO ``YYYY-MM-DD``). Each entry shows
+    the day before/after and which trigger caused it; ``applied=false`` entries
+    are automated changes a user pin or completed day blocked. See #343 / #357.
+    """
+    rows = await crud.list_plan_day_history(
+        db, current_user.id, date=date, limit=limit
+    )
+    return PlanDayHistoryResponse(
+        entries=[
+            PlanDayHistoryEntry(
+                id=row.id,
+                date=row.date,
+                source=row.source,
+                applied=row.applied,
+                recorded_at=row.recorded_at,
+                old_day=row.old_day,
+                new_day=row.new_day,
+            )
+            for row in rows
+        ],
+        total=len(rows),
+    )
+
+
+@router.get("/plan-history/stats", response_model=PlanDayHistoryStatsResponse)
+async def get_plan_history_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> PlanDayHistoryStatsResponse:
+    """Aggregate the athlete's plan-change log: counts by trigger, applied vs
+    blocked, and the most-changed days. Read-only analytics. See #357."""
+    stats = await crud.plan_day_history_stats(db, current_user.id)
+    return PlanDayHistoryStatsResponse(
+        by_source=stats["by_source"],
+        applied_count=stats["applied_count"],
+        blocked_count=stats["blocked_count"],
+        most_changed_dates=[
+            PlanDayHistoryDateCount(date=d["date"], count=d["count"])
+            for d in stats["most_changed_dates"]
+        ],
+        total=stats["total"],
+    )
 
 
 @router.get("/workouts")

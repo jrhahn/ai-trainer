@@ -152,6 +152,45 @@ export async function saveTrainingPlan(token: string, plan: TrainingDay[]): Prom
   return response.plan
 }
 
+/**
+ * One athlete-visible plan-day change (issue #357). `source` is the raw backend
+ * trigger key (`coach_chat`, `ride_review`, …) — map it via utils/planHistory.
+ * `applied === false` marks an automated change a user pin / completed day blocked.
+ */
+export interface PlanDayHistoryEntry {
+  id: string
+  date: string
+  source: string
+  applied: boolean
+  recordedAt: string
+  oldDay: Partial<TrainingDay> | null
+  newDay: Partial<TrainingDay> | null
+}
+
+export interface PlanDayHistoryStats {
+  bySource: Record<string, number>
+  appliedCount: number
+  blockedCount: number
+  mostChangedDates: Array<{ date: string; count: number }>
+  total: number
+}
+
+export async function fetchPlanHistory(
+  token: string,
+  date?: string,
+): Promise<PlanDayHistoryEntry[]> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  const response = await apiFetch<{ entries: PlanDayHistoryEntry[]; total: number }>(
+    `/users/me/plan-history${query}`,
+    { token },
+  )
+  return response.entries
+}
+
+export async function fetchPlanHistoryStats(token: string): Promise<PlanDayHistoryStats> {
+  return apiFetch<PlanDayHistoryStats>('/users/me/plan-history/stats', { token })
+}
+
 export async function fetchWorkoutLogs(token: string): Promise<Record<string, WorkoutFeedback>> {
   return apiFetch<Record<string, WorkoutFeedback>>('/users/me/workouts', { token })
 }

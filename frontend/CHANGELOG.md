@@ -5,6 +5,28 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-07-05
+
+### Added
+
+- **Athlete-facing plan-change history & analytics** (`pages/WorkoutPage.tsx`,
+  `components/PlanChangesPanel.tsx`, `utils/planHistory.ts`, `services/user.ts`)
+  — each workout day gains a collapsible "Change history" timeline explaining why
+  it changed (with blocked automated attempts marked "kept your version"), and the
+  dashboard gains a "Recent plan changes" analytics panel (totals, top triggers,
+  a per-training-day timeline) shown in expert mode. Backed by the new
+  `/users/me/plan-history[/stats]` endpoints;
+  friendly trigger labels are derived client-side (#357).
+
+### Fixed
+
+- **Change history is reachable for days outside the current plan window**
+  (`pages/WorkoutPage.tsx`) — a completed/past day is pruned from the rolling plan
+  window, and `WorkoutPage` previously dead-ended on "Workout not found." for any
+  date missing from the store, hiding its change history even though the log still
+  existed. Such dates now render a lightweight fallback that auto-opens the change
+  history for that day instead (#357).
+
 ## [0.27.8] - 2026-07-04
 
 ### Fixed

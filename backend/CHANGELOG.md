@@ -5,6 +5,22 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0] - 2026-07-05
+
+### Added
+
+- **Athlete-facing plan-change history & analytics** (`routers/users.py`, `crud.py`)
+  — two new endpoints scoped to the current user surface the append-only
+  `plan_day_history` log (previously admin-read only, #343):
+  `GET /users/me/plan-history` (optional `?date=`, newest-first) returns the
+  per-day change timeline including blocked automated attempts (`applied=false`,
+  where a user pin or completed day kept the athlete's version), and
+  `GET /users/me/plan-history/stats` returns aggregate analytics
+  (changes by trigger, applied-vs-blocked counts, most-changed days) via the new
+  grouped-SQL `crud.plan_day_history_stats`. Trigger keys are returned raw; the
+  frontend owns friendly labelling. The live plan still comes from
+  `TrainingPlan.plan` — this is read-only history (#357).
+
 ## [0.39.9] - 2026-07-04
 
 ### Removed
