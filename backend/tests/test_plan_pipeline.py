@@ -206,6 +206,40 @@ async def test_no_op_plan_write_keeps_login_summary():
 
 
 @pytest.mark.asyncio
+async def test_assessment_change_invalidates_login_summary():
+    """An assessment-input change (no plan change) clears the login summary so it
+    regenerates on load — the summary depends on the assessment, not just the
+    plan (#370)."""
+    from services import assessment_pipeline
+
+    d = "2026-07-23"
+    user_id = await _create_user("pipe-assess-summary@example.com", [_day(d, "endurance")])
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(
+            db,
+            user_id,
+            estimated_ftp=250,
+            rider_type="allrounder",
+            login_summary="Old summary based on the previous FTP.",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        # Simulate an assessment-input write followed by the pipeline notify that
+        # every such writer now performs (e.g. metrics recalc, .fit upload).
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=280, rider_type="allrounder",
+        )
+        await assessment_pipeline.notify_changed(db, user)
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert assessment.login_summary is None
+
+
+@pytest.mark.asyncio
 async def test_coach_chat_pins_day_against_automated_overwrite():
     """The reported bug: an automated trigger must not revert a user-set day (#342).
 

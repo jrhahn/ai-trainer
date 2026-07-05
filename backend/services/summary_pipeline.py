@@ -1,10 +1,11 @@
 """Login-summary pipeline: keeps the dashboard "recent training summary" fresh.
 
 The login summary is produced by an LLM from the rider assessment *and the
-current training plan*, so it goes stale whenever the plan changes. This module
-is a pipeline node that depends on the ``plan`` pipeline: when the plan changes
-the summary is invalidated (cleared), and it is lazily regenerated on the next
-dashboard load (the frontend re-requests it when it is missing).
+current training plan*, so it goes stale whenever either input changes. This
+module is a pipeline node that depends on the ``plan`` and ``assessment``
+pipelines: when an upstream input changes the summary is invalidated (cleared),
+and it is lazily regenerated on the next dashboard load (the frontend
+re-requests it when it is missing).
 
 Regeneration is an LLM call, so invalidation is intentionally cheap and the
 expensive work is deferred to load time — this debounces the many rapid plan
@@ -66,13 +67,16 @@ async def invalidate(db: AsyncSession, user: models.User) -> bool:
     return await crud.invalidate_login_summary(db, user.id)
 
 
-async def _on_plan_changed(*, db: AsyncSession, user: models.User, **_: object) -> None:
-    """Pipeline hook: the plan changed upstream, so the summary is now stale."""
+async def _on_upstream_changed(
+    *, db: AsyncSession, user: models.User, **_: object
+) -> None:
+    """Pipeline hook: an upstream input (plan or assessment) changed, so the
+    summary is now stale."""
     await invalidate(db, user)
 
 
 graph.register(
     PIPELINE_NAME,
-    depends_on=("plan",),
-    on_upstream_changed=_on_plan_changed,
+    depends_on=("plan", "assessment"),
+    on_upstream_changed=_on_upstream_changed,
 )

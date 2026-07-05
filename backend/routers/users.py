@@ -30,6 +30,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
+from services import assessment_pipeline
 from services import plan_pipeline
 from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
 from services.activity_imports import ImportedActivity, find_existing_import
@@ -1249,6 +1250,9 @@ async def _analyse_fit_import(
             ride_insights=ai_result.get("rideInsights"),
             last_ride_feedback=ai_result.get("lastRideFeedback"),
         )
+        # These fields feed the login summary but no fresh summary was generated
+        # here; mark it stale so it regenerates on the next dashboard load.
+        await assessment_pipeline.notify_changed(db, current_user)
 
     return ai_result
 
