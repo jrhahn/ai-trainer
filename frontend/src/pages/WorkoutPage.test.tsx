@@ -294,4 +294,16 @@ describe('WorkoutPage', () => {
     ).toBeInTheDocument()
     expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', TODAY)
   })
+
+  it('shows an empty-state message when the day has no recorded changes', async () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([])
+
+    renderWorkoutPage(TODAY)
+    await userEvent.click(screen.getByRole('button', { name: /change history/i }))
+
+    expect(
+      await screen.findByText('No recorded changes for this day yet.'),
+    ).toBeInTheDocument()
+  })
 })

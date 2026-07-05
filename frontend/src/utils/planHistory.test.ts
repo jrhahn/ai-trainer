@@ -20,6 +20,21 @@ describe('summarizeDayChange', () => {
     )
   })
 
+  it('describes a removed day', () => {
+    expect(summarizeDayChange({ workoutType: 'intervals', title: 'VO2max' }, null)).toBe(
+      'Removed intervals — VO2max',
+    )
+  })
+
+  it('falls back to "workout" when an added/removed day has no type or title', () => {
+    expect(summarizeDayChange(null, {})).toBe('Added workout')
+    expect(summarizeDayChange({}, null)).toBe('Removed workout')
+  })
+
+  it('returns "No change" when both days are null', () => {
+    expect(summarizeDayChange(null, null)).toBe('No change')
+  })
+
   it('describes changed fields', () => {
     const summary = summarizeDayChange(
       { workoutType: 'endurance', durationMinutes: 90 },
@@ -27,6 +42,27 @@ describe('summarizeDayChange', () => {
     )
     expect(summary).toContain('type endurance → recovery')
     expect(summary).toContain('duration 90 → 45 min')
+  })
+
+  it('describes a title change', () => {
+    expect(
+      summarizeDayChange({ title: 'Old title' }, { title: 'New title' }),
+    ).toBe('title “Old title” → “New title”')
+  })
+
+  it('renders em-dash placeholders for missing fields on either side', () => {
+    const summary = summarizeDayChange(
+      { workoutType: 'endurance', title: 'A', durationMinutes: 60 },
+      {},
+    )
+    expect(summary).toContain('type endurance → —')
+    expect(summary).toContain('title “A” → “—”')
+    expect(summary).toContain('duration 60 → — min')
+  })
+
+  it('falls back to "Minor adjustment" when the compared fields are unchanged', () => {
+    const day = { workoutType: 'endurance' as const, title: 'A', durationMinutes: 60 }
+    expect(summarizeDayChange(day, { ...day })).toBe('Minor adjustment')
   })
 })
 
