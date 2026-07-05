@@ -1518,6 +1518,11 @@ def ride_metrics_context_section(
         if coach_note:
             lines.append(f'    Coach: "{coach_note}"')
 
+        # Quick leg-freshness the athlete tapped on the dashboard (may be unset)
+        feel_legs = getattr(m, "feel_legs", None)
+        if feel_legs:
+            lines.append(f"    Athlete legs: {feel_legs}")
+
         # User note — flag if missing and the ride was recent (last 3 days)
         user_note = getattr(m, "user_note", None)
         activity_date_str = str(getattr(m, "activity_date", ""))
@@ -1532,7 +1537,7 @@ def ride_metrics_context_section(
             days_ago = 99
         if user_note:
             lines.append(f'    Athlete: "{user_note}"')
-        elif days_ago <= 3:
+        elif not feel_legs and days_ago <= 3:
             lines.append(
                 "    [no athlete feedback — consider asking how this ride felt]"
             )

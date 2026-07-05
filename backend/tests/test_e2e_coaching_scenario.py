@@ -42,8 +42,8 @@ To run the *live* scenario against a real AI provider:
        (add realistic Strava stream data in ``streams_by_id`` if available).
     6. POST ``/api/v1/ai/review-new-rides`` — expect all three rides mentioned and
        a follow-up question about the short ride.
-    7. PATCH ``/api/v1/users/me/ride-feedback/<short_ride_id>`` with intent=aborted
-       and note "legs felt heavy".
+    7. PATCH ``/api/v1/users/me/ride-feedback/<short_ride_id>`` with legs=heavy
+       (the quick "how the legs felt" tap; richer feedback is conversational).
     8. POST ``/api/v1/ai/next-ride-recommendation`` — expect a recovery or easier
        recommendation with a plan update for tomorrow.
     9. Verify GET ``/api/v1/users/me/plan`` shows the updated entry.
@@ -426,30 +426,20 @@ async def test_coaching_loop_end_to_end(client, auth_headers, monkeypatch):
     assert second_review.json()["rideCount"] == 0
 
     # ------------------------------------------------------------------
-    # Steps 7 & 8: Athlete says "I cut it short, legs felt heavy."
-    # The app stores the subjective note via the ride-feedback endpoint.
+    # Steps 7 & 8: Athlete taps "heavy legs" on the short ride. This is the
+    # quick structured signal stored as feel_legs; any richer explanation
+    # ("I cut it short") is captured conversationally with the coach.
     # ------------------------------------------------------------------
 
     feedback_response = await client.patch(
         f"/api/v1/users/me/ride-feedback/{SHORT_EASY_RIDE_ID}",
         headers=auth_headers,
-        json={
-            "rpe": 3,
-            "legs": "heavy",
-            "intent": "aborted",
-            "note": "I cut it short, legs felt heavy.",
-        },
+        json={"legs": "heavy"},
     )
     assert feedback_response.status_code == 200
     feedback_body = feedback_response.json()
     assert feedback_body["stravaActivityId"] == SHORT_EASY_RIDE_ID
-
-    # The stored note should contain the athlete's explanation.
-    # The backend formats the note as "RPE 3/10 | legs: heavy | intent: aborted | <note>",
-    # so "heavy" comes from the legs field and "aborted" from the intent field.
-    stored_note = feedback_body["userNote"]
-    assert "heavy" in stored_note
-    assert "aborted" in stored_note
+    assert feedback_body["ride"]["feelLegs"] == "heavy"
 
     # ------------------------------------------------------------------
     # Steps 9 & 10: Coach recommends reducing tomorrow's ride.

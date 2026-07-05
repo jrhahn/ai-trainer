@@ -418,32 +418,19 @@ export async function fetchRideMetricsHistory(token: string): Promise<RideMetric
   return response.rides
 }
 
-export async function submitRideFeedback(
+/**
+ * Set (or clear, with `legs: null`) the athlete's quick "how the legs felt"
+ * rating for a ride. Everything richer is captured conversationally with the
+ * coach, so this is the only structured field set directly from the dashboard.
+ */
+export async function setRideLegs(
   token: string,
   stravaActivityId: number,
-  feedback: {
-    rpe: number
-    legs: 'fresh' | 'normal' | 'heavy'
-    intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
-    planMatchFeedback?: 'matched' | 'mostly_matched' | 'not_matched'
-    note?: string
-  },
-): Promise<{
-  stravaActivityId: number
-  userNote: string
-  coachNote?: string | null
-  planUpdates?: Partial<TrainingDay>[]
-  ride?: RideMetricPoint | null
-}> {
-  return apiFetch<{
-    stravaActivityId: number
-    userNote: string
-    coachNote?: string | null
-    planUpdates?: Partial<TrainingDay>[]
-    ride?: RideMetricPoint | null
-  }>(
+  legs: 'fresh' | 'normal' | 'heavy' | null,
+): Promise<{ stravaActivityId: number; ride?: RideMetricPoint | null }> {
+  return apiFetch<{ stravaActivityId: number; ride?: RideMetricPoint | null }>(
     `/users/me/ride-feedback/${stravaActivityId}`,
-    { token, method: 'PATCH', body: feedback },
+    { token, method: 'PATCH', body: { legs } },
   )
 }
 

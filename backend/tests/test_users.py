@@ -431,9 +431,8 @@ async def test_ride_metrics_history_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_success(client, auth_headers, mock_ai_service):
-    """PATCH ride-feedback saves structured feedback as a formatted user_note."""
-    # First create a ride metric via analyse-activities.
+async def test_save_ride_feedback_sets_legs(client, auth_headers, mock_ai_service):
+    """PATCH ride-feedback stores the quick leg-freshness rating."""
     await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -457,30 +456,19 @@ async def test_save_ride_feedback_success(client, auth_headers, mock_ai_service)
     response = await client.patch(
         "/api/v1/users/me/ride-feedback/5001",
         headers=auth_headers,
-        json={
-            "rpe": 7,
-            "legs": "heavy",
-            "intent": "planned workout",
-            "planMatchFeedback": "matched",
-            "note": "Felt tired but pushed through",
-        },
+        json={"legs": "heavy"},
     )
     assert response.status_code == 200
     body = response.json()
     assert body["stravaActivityId"] == 5001
-    assert "RPE 7/10" in body["userNote"]
-    assert "legs: heavy" in body["userNote"]
-    assert "intent: planned workout" in body["userNote"]
-    assert "plan match: matched plan" in body["userNote"]
-    assert "Felt tired but pushed through" in body["userNote"]
-    assert body["ride"]["labelOverride"] == "Solid"
+    assert body["ride"]["feelLegs"] == "heavy"
+    # The quick tap must never fabricate a free-text note.
+    assert body["ride"]["userNote"] is None
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_without_optional_note(
-    client, auth_headers, mock_ai_service
-):
-    """PATCH ride-feedback works without the optional note field."""
+async def test_save_ride_feedback_clears_legs(client, auth_headers, mock_ai_service):
+    """Sending legs=null clears a previously set rating."""
     await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -501,16 +489,67 @@ async def test_save_ride_feedback_without_optional_note(
         },
     )
 
-    response = await client.patch(
+    set_resp = await client.patch(
         "/api/v1/users/me/ride-feedback/5002",
         headers=auth_headers,
-        json={"rpe": 4, "legs": "fresh", "intent": "recovery"},
+        json={"legs": "fresh"},
+    )
+    assert set_resp.json()["ride"]["feelLegs"] == "fresh"
+
+    clear_resp = await client.patch(
+        "/api/v1/users/me/ride-feedback/5002",
+        headers=auth_headers,
+        json={"legs": None},
+    )
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["ride"]["feelLegs"] is None
+
+
+@pytest.mark.asyncio
+async def test_save_ride_feedback_does_not_clobber_user_note(
+    client, auth_headers, mock_ai_service
+):
+    """A quick legs tap must not overwrite a note captured conversationally."""
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 5005,
+                    "name": "Coffee Ride",
+                    "type": "Ride",
+                    "distance": 20000,
+                    "movingTime": 1800,
+                    "elapsedTime": 1900,
+                    "totalElevationGain": 50,
+                    "startDate": "2026-04-23T07:00:00Z",
+                    "averageWatts": 120,
+                }
+            ]
+        },
+    )
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user_id = me.json()["id"]
+    async with TestSessionLocal() as db:
+        await crud.update_ride_metric_notes(
+            db, user_id, 5005, user_note="Felt great, chatted with coach"
+        )
+        await db.commit()
+
+    response = await client.patch(
+        "/api/v1/users/me/ride-feedback/5005",
+        headers=auth_headers,
+        json={"legs": "fresh"},
     )
     assert response.status_code == 200
     body = response.json()
-    assert "RPE 4/10" in body["userNote"]
-    assert "legs: fresh" in body["userNote"]
-    assert "intent: recovery" in body["userNote"]
+    assert body["ride"]["feelLegs"] == "fresh"
+    assert body["ride"]["userNote"] == "Felt great, chatted with coach"
 
 
 @pytest.mark.asyncio
@@ -519,18 +558,18 @@ async def test_save_ride_feedback_not_found(client, auth_headers):
     response = await client.patch(
         "/api/v1/users/me/ride-feedback/999999",
         headers=auth_headers,
-        json={"rpe": 5, "legs": "normal", "intent": "free ride"},
+        json={"legs": "normal"},
     )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_invalid_rpe(client, auth_headers):
-    """PATCH ride-feedback rejects RPE values outside 1–10."""
+async def test_save_ride_feedback_invalid_legs(client, auth_headers):
+    """PATCH ride-feedback rejects leg values outside the allowed set."""
     response = await client.patch(
         "/api/v1/users/me/ride-feedback/12345",
         headers=auth_headers,
-        json={"rpe": 11, "legs": "normal", "intent": "recovery"},
+        json={"legs": "exhausted"},
     )
     assert response.status_code == 422
 
@@ -540,7 +579,7 @@ async def test_save_ride_feedback_requires_auth(client):
     """PATCH ride-feedback requires authentication."""
     response = await client.patch(
         "/api/v1/users/me/ride-feedback/5001",
-        json={"rpe": 6, "legs": "normal", "intent": "planned workout"},
+        json={"legs": "normal"},
     )
     assert response.status_code == 401
 
@@ -549,7 +588,7 @@ async def test_save_ride_feedback_requires_auth(client):
 async def test_save_ride_feedback_persists_in_history(
     client, auth_headers, mock_ai_service
 ):
-    """After saving feedback, ride-metrics-history reflects the user_note."""
+    """After saving legs feedback, ride-metrics-history reflects it."""
     await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
@@ -573,76 +612,16 @@ async def test_save_ride_feedback_persists_in_history(
     await client.patch(
         "/api/v1/users/me/ride-feedback/5003",
         headers=auth_headers,
-        json={
-            "rpe": 8,
-            "legs": "normal",
-            "intent": "planned workout",
-            "note": "Great session",
-        },
+        json={"legs": "normal"},
     )
 
     history = await client.get(
         "/api/v1/users/me/ride-metrics-history", headers=auth_headers
     )
     rides = history.json()["rides"]
-    # Find the specific ride we submitted feedback for
     target = next((r for r in rides if r["stravaActivityId"] == 5003), None)
     assert target is not None
-    assert "RPE 8/10" in target["userNote"]
-
-
-@pytest.mark.asyncio
-async def test_save_ride_feedback_persists_plan_match_override(
-    client, auth_headers, mock_ai_service
-):
-    """Plan-match feedback updates the persistent ride badge override."""
-    await client.post(
-        "/api/v1/ai/analyse-activities",
-        headers=auth_headers,
-        json={
-            "activities": [
-                {
-                    "id": 5004,
-                    "name": "Long VO2 Ride",
-                    "type": "Ride",
-                    "distance": 65000,
-                    "movingTime": 6900,
-                    "elapsedTime": 7000,
-                    "totalElevationGain": 600,
-                    "startDate": "2026-06-18T08:00:00Z",
-                    "averageWatts": 230,
-                    "weightedAverageWatts": 268,
-                }
-            ]
-        },
-    )
-
-    response = await client.patch(
-        "/api/v1/users/me/ride-feedback/5004",
-        headers=auth_headers,
-        json={
-            "rpe": 8,
-            "legs": "normal",
-            "intent": "planned workout",
-            "planMatchFeedback": "mostly_matched",
-            "note": "The VO2 intervals were good, the ride just ran long.",
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "plan match: partly matched plan" in body["userNote"]
-    assert body["ride"]["labelOverride"] == "Close"
-
-    history = await client.get(
-        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
-    )
-    target = next(
-        (r for r in history.json()["rides"] if r["stravaActivityId"] == 5004),
-        None,
-    )
-    assert target is not None
-    assert target["labelOverride"] == "Close"
+    assert target["feelLegs"] == "normal"
 
 
 # ---------------------------------------------------------------------------

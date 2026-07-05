@@ -243,6 +243,7 @@ export interface RideMetricPoint {
   normalizedPowerW?: number
   coachNote?: string | null
   userNote?: string | null
+  feelLegs?: 'fresh' | 'normal' | 'heavy' | null
   labelOverride?: string | null
   planMatchStatus?: 'unmatched' | 'auto_matched' | 'ambiguous' | 'manual_matched'
   matchedPlanDate?: string | null
@@ -318,6 +319,10 @@ interface AppState {
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
   updateRideMetric: (ride: RideMetricPoint) => void
   updateRideMetricLabel: (stravaActivityId: number, labelOverride: string) => void
+  updateRideMetricLegs: (
+    stravaActivityId: number,
+    feelLegs: 'fresh' | 'normal' | 'heavy' | null,
+  ) => void
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
   toggleExpertMode: () => void
@@ -445,6 +450,14 @@ export const useAppStore = create<AppState>()(
         rideMetricsHistory: state.rideMetricsHistory.map((ride) =>
           ride.stravaActivityId === stravaActivityId
             ? { ...ride, labelOverride }
+            : ride
+        ),
+      })),
+    updateRideMetricLegs: (stravaActivityId, feelLegs) =>
+      set((state) => ({
+        rideMetricsHistory: state.rideMetricsHistory.map((ride) =>
+          ride.stravaActivityId === stravaActivityId
+            ? { ...ride, feelLegs }
             : ride
         ),
       })),

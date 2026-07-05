@@ -8,7 +8,6 @@ import {
   CloudSnow,
   CloudSun,
   Clock,
-  MessageSquare,
   Sun,
 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -18,10 +17,10 @@ import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
-import RideFeedbackForm from '../components/RideFeedbackForm'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
+import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
@@ -29,6 +28,13 @@ const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
 const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
+
+// Quick leg-freshness ratings tappable directly on each activity card.
+const LEG_FEELINGS = [
+  { value: 'fresh', emoji: '🟢', label: 'Fresh' },
+  { value: 'normal', emoji: '🟡', label: 'Normal' },
+  { value: 'heavy', emoji: '🔴', label: 'Heavy' },
+] as const
 
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
@@ -568,7 +574,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -578,7 +584,7 @@ export default function DashboardPage() {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
-      updateRideMetric: s.updateRideMetric,
+      updateRideMetricLegs: s.updateRideMetricLegs,
       setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
@@ -587,7 +593,19 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
-  const [feedbackRide, setFeedbackRide] = useState<RideMetricPoint | null>(null)
+
+  // Quick "how the legs felt" tap on an activity card. Optimistically update the
+  // store, persist to the backend, and revert on failure. Tapping the active
+  // rating again clears it (back to unset, which is ignored everywhere).
+  const handleSetLegs = (ride: RideMetricPoint, legs: 'fresh' | 'normal' | 'heavy') => {
+    if (!authToken) return
+    const next = ride.feelLegs === legs ? null : legs
+    const previous = ride.feelLegs ?? null
+    updateRideMetricLegs(ride.stravaActivityId, next)
+    void setRideLegs(authToken, ride.stravaActivityId, next).catch(() => {
+      updateRideMetricLegs(ride.stravaActivityId, previous)
+    })
+  }
 
   useEffect(() => {
     try {
@@ -866,14 +884,32 @@ export default function DashboardPage() {
                       </button>
                     )}
                     {authToken && (
-                      <button
-                        onClick={() => setFeedbackRide(ride)}
-                        title="Add ride feedback"
-                        className="text-gray-400 hover:text-amber-600 transition-colors"
-                        aria-label={`Add feedback for ${ride.activityName ?? 'activity'}`}
+                      <div
+                        className="flex items-center gap-0.5 flex-shrink-0"
+                        role="group"
+                        aria-label="How did your legs feel?"
                       >
-                        <MessageSquare size={13} />
-                      </button>
+                        {LEG_FEELINGS.map((feel) => {
+                          const active = ride.feelLegs === feel.value
+                          return (
+                            <button
+                              key={feel.value}
+                              type="button"
+                              onClick={() => handleSetLegs(ride, feel.value)}
+                              title={`Legs: ${feel.label}`}
+                              aria-label={`Legs felt ${feel.label}`}
+                              aria-pressed={active}
+                              className={`text-xs leading-none px-1.5 py-1 rounded transition-all ${
+                                active
+                                  ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
+                                  : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
+                              }`}
+                            >
+                              {feel.emoji}
+                            </button>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -889,20 +925,6 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
-      )}
-
-      {feedbackRide && (
-        <RideFeedbackForm
-          stravaActivityId={feedbackRide.stravaActivityId}
-          activityDate={feedbackRide.activityDate}
-          activityName={feedbackRide.activityName}
-          sportType={feedbackRide.sportType}
-          onSaved={(data) => {
-            if (data.ride) updateRideMetric(data.ride)
-            setFeedbackRide(null)
-          }}
-          onCancel={() => setFeedbackRide(null)}
-        />
       )}
 
       {/* Ask your coach — takes up the majority of the remaining space */}
