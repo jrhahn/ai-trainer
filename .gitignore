@@ -55,7 +55,7 @@ docker-compose.override.yml
 # Deploy / Ansible
 deploy/ansible/*.retry
 
-# Graphify knowledge graph
-graphify-out/cost.json
-graphify-out/graph.html
-graphify-out/cache/
+# Graphify knowledge graph — regenerable artifact, rebuilt locally by the
+# post-commit/post-checkout git hooks (graphify hook install). Not tracked to
+# avoid stale committed copies and large graph.json diffs on every code PR.
+graphify-out/
