@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from services import assessment_pipeline
 from services.analysis import apply_ctl_atl_decay, compute_ride_tss
 
 logger = logging.getLogger(__name__)
@@ -140,8 +141,9 @@ async def _refresh_rider_assessment_feedback(
         hr_zones=user.rider_assessment.hr_zones,
         ride_insights=user.rider_assessment.ride_insights,
         last_ride_feedback=build_last_ride_feedback(latest_metric, ftp_value),
-        login_summary=user.rider_assessment.login_summary,
     )
+    # last_ride_feedback feeds the login summary; mark it stale so it regenerates.
+    await assessment_pipeline.notify_changed(db, user)
 
 
 def _recalculate_metric_chain(
