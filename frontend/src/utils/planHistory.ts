@@ -74,3 +74,32 @@ export function describeEntry(entry: PlanDayHistoryEntry): string {
   }
   return `${label} wanted to ${summary.toLowerCase()} but kept your version`
 }
+
+/** One training day's worth of change entries, newest change first. */
+export interface PlanHistoryDayGroup {
+  date: string
+  entries: PlanDayHistoryEntry[]
+}
+
+/**
+ * Group history entries by their training-day `date` so the athlete sees the
+ * changes made to each day together. Day groups are ordered by date descending
+ * (latest training day first); within a day, entries keep newest-change-first
+ * order (they arrive newest-first from the API).
+ */
+export function groupEntriesByDate(
+  entries: PlanDayHistoryEntry[],
+): PlanHistoryDayGroup[] {
+  const byDate = new Map<string, PlanDayHistoryEntry[]>()
+  for (const entry of entries) {
+    const group = byDate.get(entry.date)
+    if (group) {
+      group.push(entry)
+    } else {
+      byDate.set(entry.date, [entry])
+    }
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
+    .map(([date, group]) => ({ date, entries: group }))
+}

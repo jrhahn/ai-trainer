@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { describeEntry, sourceLabel, summarizeDayChange } from './planHistory'
+import {
+  describeEntry,
+  groupEntriesByDate,
+  sourceLabel,
+  summarizeDayChange,
+} from './planHistory'
 import type { PlanDayHistoryEntry } from '../services/user'
 
 describe('sourceLabel', () => {
@@ -85,5 +90,33 @@ describe('describeEntry', () => {
     expect(describeEntry({ ...base, applied: false })).toBe(
       'Auto-adaptation wanted to type endurance → recovery but kept your version',
     )
+  })
+})
+
+describe('groupEntriesByDate', () => {
+  const entry = (id: string, date: string): PlanDayHistoryEntry => ({
+    id,
+    date,
+    source: 'user_edit',
+    applied: true,
+    recordedAt: `${date}T10:00:00Z`,
+    oldDay: null,
+    newDay: { workoutType: 'endurance' },
+  })
+
+  it('groups entries by training day, latest day first, preserving entry order', () => {
+    const groups = groupEntriesByDate([
+      entry('a', '2026-05-02'),
+      entry('b', '2026-05-01'),
+      entry('c', '2026-05-02'),
+    ])
+
+    expect(groups.map((g) => g.date)).toEqual(['2026-05-02', '2026-05-01'])
+    expect(groups[0].entries.map((e) => e.id)).toEqual(['a', 'c'])
+    expect(groups[1].entries.map((e) => e.id)).toEqual(['b'])
+  })
+
+  it('returns an empty array for no entries', () => {
+    expect(groupEntriesByDate([])).toEqual([])
   })
 })

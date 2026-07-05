@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { History, ShieldCheck } from 'lucide-react'
 import { fetchPlanHistory, fetchPlanHistoryStats } from '../services/user'
-import { describeEntry, sourceLabel } from '../utils/planHistory'
+import { describeEntry, groupEntriesByDate, sourceLabel } from '../utils/planHistory'
 import { parseLocalDate } from '../utils/workout'
 
 interface PlanChangesPanelProps {
@@ -30,6 +30,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
   const topSources = Object.entries(stats.bySource)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
+  const dayGroups = groupEntriesByDate(recent)
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -69,30 +70,39 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
         </div>
       )}
 
-      {/* Recent timeline — scrollable so the full log is reachable, not just
-          the newest few (#357). */}
-      <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-        {recent.map((entry) => (
-          <li key={entry.id} className="flex items-start gap-2.5">
-            <span
-              className={`mt-1 shrink-0 w-2 h-2 rounded-full ${
-                entry.applied ? 'bg-amber-400' : 'bg-gray-300'
-              }`}
-            />
-            <div className="min-w-0">
-              <p className={`text-sm ${entry.applied ? 'text-gray-700' : 'text-gray-500 italic'}`}>
-                {describeEntry(entry)}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {parseLocalDate(entry.date).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </p>
-            </div>
-          </li>
+      {/* Timeline grouped by training day, scrollable so the full log is
+          reachable — one section per calendar day (#357). */}
+      <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+        {dayGroups.map((group) => (
+          <div key={group.date}>
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">
+              {parseLocalDate(group.date).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </p>
+            <ul className="space-y-2.5">
+              {group.entries.map((entry) => (
+                <li key={entry.id} className="flex items-start gap-2.5">
+                  <span
+                    className={`mt-1 shrink-0 w-2 h-2 rounded-full ${
+                      entry.applied ? 'bg-amber-400' : 'bg-gray-300'
+                    }`}
+                  />
+                  <p
+                    className={`text-sm min-w-0 ${
+                      entry.applied ? 'text-gray-700' : 'text-gray-500 italic'
+                    }`}
+                  >
+                    {describeEntry(entry)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }
