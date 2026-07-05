@@ -218,6 +218,56 @@ async def list_plan_day_history(
     return list(await db.scalars(stmt))
 
 
+async def plan_day_history_stats(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    top_dates: int = 5,
+) -> dict[str, Any]:
+    """Aggregate a user's plan-day change log for the athlete analytics view.
+
+    Returns counts grouped in SQL (no per-row Python loops):
+    ``by_source`` (changes per trigger), ``applied_count`` / ``blocked_count``
+    (an ``applied=False`` row is an automated change a user pin or completed day
+    blocked — see #343), ``most_changed_dates`` (the ``top_dates`` dates with the
+    most changes, newest count first) and ``total``. See #357.
+    """
+    hist = models.PlanDayHistory
+    base = select(hist).where(hist.user_id == user_id).subquery()
+
+    by_source_rows = await db.execute(
+        select(base.c.source, func.count()).group_by(base.c.source)
+    )
+    by_source = {source: count for source, count in by_source_rows.all()}
+
+    applied_rows = await db.execute(
+        select(base.c.applied, func.count()).group_by(base.c.applied)
+    )
+    applied_count = 0
+    blocked_count = 0
+    for applied, count in applied_rows.all():
+        if applied:
+            applied_count = count
+        else:
+            blocked_count = count
+
+    date_rows = await db.execute(
+        select(base.c.date, func.count().label("n"))
+        .group_by(base.c.date)
+        .order_by(func.count().desc(), base.c.date.desc())
+        .limit(top_dates)
+    )
+    most_changed_dates = [{"date": date, "count": n} for date, n in date_rows.all()]
+
+    return {
+        "by_source": by_source,
+        "applied_count": applied_count,
+        "blocked_count": blocked_count,
+        "most_changed_dates": most_changed_dates,
+        "total": applied_count + blocked_count,
+    }
+
+
 # ---------------------------------------------------------------------------
 # WorkoutLog
 # ---------------------------------------------------------------------------

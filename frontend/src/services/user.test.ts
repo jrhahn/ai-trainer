@@ -38,6 +38,8 @@ import {
   testAIKey,
   fetchMetricsHistory,
   fetchRideMetricsHistory,
+  fetchPlanHistory,
+  fetchPlanHistoryStats,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -189,6 +191,48 @@ describe('saveTrainingPlan', () => {
       method: 'PUT',
       body: { plan: [day] },
     })
+  })
+})
+
+describe('fetchPlanHistory', () => {
+  it('returns the entries array', async () => {
+    mockApiFetch.mockResolvedValue({
+      entries: [{ id: 'h1', date: '2026-05-01', source: 'coach_chat', applied: true }],
+      total: 1,
+    })
+
+    const result = await fetchPlanHistory('tok-123')
+
+    expect(result).toHaveLength(1)
+    expect(result[0].source).toBe('coach_chat')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history', { token: 'tok-123' })
+  })
+
+  it('appends an encoded date query when provided', async () => {
+    mockApiFetch.mockResolvedValue({ entries: [], total: 0 })
+
+    await fetchPlanHistory('tok-123', '2026-05-01')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history?date=2026-05-01', {
+      token: 'tok-123',
+    })
+  })
+})
+
+describe('fetchPlanHistoryStats', () => {
+  it('returns the stats object', async () => {
+    mockApiFetch.mockResolvedValue({
+      bySource: { coach_chat: 2 },
+      appliedCount: 2,
+      blockedCount: 1,
+      mostChangedDates: [{ date: '2026-05-01', count: 2 }],
+      total: 3,
+    })
+
+    const result = await fetchPlanHistoryStats('tok-123')
+
+    expect(result.total).toBe(3)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history/stats', { token: 'tok-123' })
   })
 })
 

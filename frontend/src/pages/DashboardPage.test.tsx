@@ -36,6 +36,10 @@ vi.mock('../components/ProgressionChart', () => ({
   default: () => <div data-testid="progression-chart" />,
 }))
 
+vi.mock('../components/PlanChangesPanel', () => ({
+  default: () => <div data-testid="plan-changes-panel" />,
+}))
+
 vi.mock('../components/AIChat', () => ({
   default: () => <div data-testid="ai-chat" />,
 }))

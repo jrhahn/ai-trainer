@@ -7,11 +7,12 @@ import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
-const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog } = vi.hoisted(() => ({
+const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
+  mockFetchPlanHistory: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({ rateCompletedWorkout: mockRateCompletedWorkout }))
@@ -19,6 +20,7 @@ vi.mock('../services/user', () => ({
   fetchTrainingPlan: mockFetchTrainingPlan,
   saveTrainingPlan: mockSaveTrainingPlan,
   saveWorkoutLog: mockSaveWorkoutLog,
+  fetchPlanHistory: mockFetchPlanHistory,
 }))
 
 // AIChat is heavy - stub it out
@@ -55,6 +57,7 @@ beforeEach(() => {
   mockFetchTrainingPlan.mockResolvedValue([mockDay])
   mockSaveTrainingPlan.mockResolvedValue([])
   mockSaveWorkoutLog.mockResolvedValue(undefined)
+  mockFetchPlanHistory.mockResolvedValue([])
 })
 
 describe('WorkoutPage', () => {
@@ -255,5 +258,40 @@ describe('WorkoutPage', () => {
         otherDay,
       ])
     })
+  })
+
+  it('loads the change history for the day when expanded, marking blocked attempts', async () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([
+      {
+        id: 'h1',
+        date: TODAY,
+        source: 'coach_chat',
+        applied: true,
+        recordedAt: '2025-01-15T10:00:00Z',
+        oldDay: null,
+        newDay: { workoutType: 'intervals', title: 'VO2max Intervals' },
+      },
+      {
+        id: 'h2',
+        date: TODAY,
+        source: 'auto_adapt',
+        applied: false,
+        recordedAt: '2025-01-15T12:00:00Z',
+        oldDay: { workoutType: 'intervals' },
+        newDay: { workoutType: 'recovery' },
+      },
+    ])
+
+    renderWorkoutPage(TODAY)
+    // History is lazy — only fetched once the section is opened.
+    expect(mockFetchPlanHistory).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /change history/i }))
+
+    expect(await screen.findByText('Coach chat: Added intervals — VO2max Intervals')).toBeInTheDocument()
+    expect(
+      screen.getByText('Auto-adaptation wanted to type intervals → recovery but kept your version'),
+    ).toBeInTheDocument()
+    expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', TODAY)
   })
 })
