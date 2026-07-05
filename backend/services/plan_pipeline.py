@@ -33,9 +33,12 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     sanitize_plan_for_constraints,
 )
-# Importing summary_pipeline registers the downstream "summary" node, so any plan
-# write — wherever it originates — invalidates the login summary. The import is
-# acyclic: summary_pipeline does not depend on this module.
+# Importing these registers the downstream nodes on the "plan" node, so any plan
+# write — wherever it originates — fans out to them: summary_pipeline invalidates
+# the login summary, ride_match_pipeline refreshes ride↔plan snapshots for the
+# changed dates (#364). Neither module imports this one at load time, so the
+# imports stay acyclic (ride_match_pipeline defers its ride_matching import).
+from services import ride_match_pipeline  # noqa: F401
 from services import summary_pipeline  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -382,9 +385,17 @@ async def _enforce_and_persist(
     if current_row is not None and merged == current_plan:
         return current_plan
     await crud.upsert_training_plan(db, user.id, merged)
-    # The plan changed: cascade to downstream pipelines (e.g. invalidate the
-    # login summary so it is regenerated from the new plan on next load).
-    await pipeline_graph.notify_changed("plan", db=db, user=user)
+    # The plan changed: cascade to downstream pipelines (invalidate the login
+    # summary so it regenerates from the new plan, and refresh ride↔plan snapshots
+    # for the days whose content actually changed). ``changes`` also carries
+    # applied=False (blocked) records, which are not real content changes, so
+    # filter to applied ones.
+    changed_dates = sorted(
+        {c["date"] for c in changes if c.get("applied") and c.get("date")}
+    )
+    await pipeline_graph.notify_changed(
+        "plan", db=db, user=user, dates=changed_dates
+    )
     return merged
 
 

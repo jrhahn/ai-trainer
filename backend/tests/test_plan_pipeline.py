@@ -570,3 +570,74 @@ async def test_summary_regenerate_persists(monkeypatch):
     async with TestSessionLocal() as db:
         assessment = await crud.get_rider_assessment(db, user_id)
         assert assessment.login_summary == "Fresh summary built from the current plan."
+
+
+@pytest.mark.asyncio
+async def test_plan_change_refreshes_ride_snapshot():
+    """A plan change re-matches rides on the changed date, refreshing the stale
+    ``matched_plan_snapshot`` so the dashboard fallback stays correct (#364)."""
+    from services.ride_matching import apply_ride_plan_matches
+
+    d = "2026-07-02"
+    user_id = await _create_user("pipe-ridesnap@example.com", [_day(d, "endurance")])
+
+    # Import a ride for that date and match it against the original plan.
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=91001, activity_date=d,
+            duration_seconds=3600,
+        )
+        await db.commit()
+    async with TestSessionLocal() as db:
+        plan_row = await crud.get_training_plan(db, user_id)
+        await apply_ride_plan_matches(db, user_id, plan_row.plan, [91001])
+        await db.commit()
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [91001])
+        assert rides[0].matched_plan_snapshot["workoutType"] == "endurance"
+
+    # Coach edits the same day -> the plan change must fan out to the ride-match
+    # pipeline and refresh the already-imported ride's snapshot.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db, user,
+            [{"date": d, "workoutType": "intervals", "title": "New Intervals",
+              "description": "Session", "durationMinutes": 75}],
+            base_plan=[_day(d, "endurance")],
+            source="coach_chat",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [91001])
+        assert rides[0].matched_plan_snapshot["workoutType"] == "intervals"
+        assert rides[0].matched_plan_date == d
+
+
+@pytest.mark.asyncio
+async def test_no_op_plan_write_does_not_refresh_snapshots():
+    """A no-op plan write must not re-match rides (no changed dates fan out)."""
+    from unittest.mock import AsyncMock
+
+    from services import ride_match_pipeline
+
+    d = "2026-07-03"
+    plan = [_day(d, "endurance")]
+    user_id = await _create_user("pipe-ridesnap-noop@example.com", plan)
+
+    called = AsyncMock()
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        # Patch the module-level refresh so we can assert it is never invoked.
+        original = ride_match_pipeline.refresh
+        ride_match_pipeline.refresh = called
+        try:
+            await plan_pipeline.commit_plan(
+                db, user, plan, base_plan=plan, source="adapt"
+            )
+        finally:
+            ride_match_pipeline.refresh = original
+        await db.commit()
+
+    called.assert_not_called()

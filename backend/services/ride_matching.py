@@ -376,6 +376,30 @@ async def apply_ride_plan_matches(
     return auto_matched
 
 
+async def refresh_matches_for_dates(
+    db: AsyncSession,
+    user_id: str,
+    plan: list[dict] | None,
+    dates: list[str],
+) -> list[models.RideMetric]:
+    """Re-run plan matching for every ride on ``dates`` against the current plan.
+
+    Snapshots (``matched_plan_snapshot`` / ``matched_plan_date``) are captured
+    only at ride-import time, so a ride already imported for a date keeps a stale
+    (or NULL) snapshot when the plan for that date later changes. This refreshes
+    those rides from the current plan — driven by the plan-change pipeline — so a
+    completed ride keeps the latest planned workout *before* the day rolls off the
+    rolling window and the dashboard falls back to the snapshot (#364).
+    """
+    activity_ids: list[int] = []
+    for activity_date in dates:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, activity_date)
+        activity_ids.extend(ride.strava_activity_id for ride in rides)
+    if not activity_ids:
+        return []
+    return await apply_ride_plan_matches(db, user_id, plan, activity_ids)
+
+
 async def resolve_manual_match(
     db: AsyncSession,
     user_id: str,

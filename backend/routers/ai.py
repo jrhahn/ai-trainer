@@ -770,6 +770,27 @@ async def ask_trainer(
     )
     persisted_updated_plan: list[dict] | None = None
 
+    # Coach honesty: ``commit_plan_updates`` only patches days already present in
+    # the plan, so an update for a date the plan no longer contains (e.g. a past
+    # day that rolled off the window) is a silent no-op. Don't let the model claim
+    # success for a change that was never saved — append a correction to the reply
+    # (also stored on the assistant message below) and drop the dead update. Only
+    # do this when a plan exists; with no plan at all there is no window to reason
+    # about. (#364)
+    if plan_updates and plan:
+        plan_dates = {d.get("date") for d in plan if isinstance(d, dict)}
+        unresolved_dates = sorted(
+            {u.get("date") for u in plan_updates if u.get("date")} - plan_dates
+        )
+        if unresolved_dates:
+            joined = ", ".join(unresolved_dates)
+            result["response"] = (
+                f"{result['response']}\n\n"
+                f"(Note: I could not update {joined} — that day is not part of your "
+                f"current training plan, so no change was saved.)"
+            )
+            plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
+
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
     if ride_note_update and isinstance(ride_note_update, dict):

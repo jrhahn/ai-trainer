@@ -263,6 +263,60 @@ async def test_ask_trainer_with_context_workout_forwards_plan_updates(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_flags_no_op_update_for_absent_day(
+    client, auth_headers, mock_ai_service
+):
+    """A coach plan_update for a date not in the plan is a silent no-op; the reply
+    must not claim success for a change that was never saved (#364)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-10",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 90,
+                }
+            ],
+        )
+        await db.commit()
+
+    # The model confidently claims success but targets a date absent from the plan.
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Done — I switched that day to intervals.",
+        "plan_updates": [
+            {
+                "date": "2026-05-03",
+                "workoutType": "intervals",
+                "title": "VO2 Intervals",
+                "description": "5x4",
+                "durationMinutes": 60,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Switch May 3 to intervals"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "2026-05-03" in body["response"]
+    assert "could not update" in body["response"].lower()
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
     client, auth_headers, mock_ai_service
 ):
