@@ -98,6 +98,8 @@ _SLIM_PLAN_KEEP = {
     "title",
     "durationMinutes",
     "duration_minutes",
+    "durationMinMinutes",
+    "durationMaxMinutes",
     "targetPower",
     "target_power",
     "completed",

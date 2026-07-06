@@ -20,6 +20,8 @@ export interface PlanDayUpdate {
   title?: string
   description?: string
   durationMinutes?: number
+  durationMinMinutes?: number
+  durationMaxMinutes?: number
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
   intervals?: TrainingDay['intervals']

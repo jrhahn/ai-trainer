@@ -38,7 +38,7 @@ describe('TodayCard', () => {
     renderCard(TODAY, [workoutDay])
     expect(screen.getByText('VO2max Intervals')).toBeInTheDocument()
     expect(screen.getByText('intervals')).toBeInTheDocument()
-    expect(screen.getByText('60 min')).toBeInTheDocument()
+    expect(screen.getByText('1h')).toBeInTheDocument()
   })
 
   it('links to the workout detail page', () => {

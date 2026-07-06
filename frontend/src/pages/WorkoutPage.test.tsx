@@ -99,7 +99,7 @@ describe('WorkoutPage', () => {
 
     expect(screen.getByText('VO2max Intervals')).toBeInTheDocument()
     expect(screen.getByText('5x4min at 120% FTP')).toBeInTheDocument()
-    expect(screen.getByText(/60 minutes/)).toBeInTheDocument()
+    expect(screen.getByText(/1h/)).toBeInTheDocument()
     expect(screen.getByText(/300.*340W/)).toBeInTheDocument()
   })
 

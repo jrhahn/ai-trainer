@@ -10,6 +10,7 @@ import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
+import { formatPlanDuration } from '../utils/planDuration'
 import { describeEntry, sourceLabel } from '../utils/planHistory'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
 
@@ -266,7 +267,7 @@ export default function WorkoutPage() {
         <div className="flex flex-wrap gap-4 mb-4">
           <div className="flex items-center gap-1.5 text-sm text-gray-600">
             <Clock size={16} className="text-amber-500" />
-            {day.durationMinutes} minutes
+            {formatPlanDuration(day)}
           </div>
           {day.targetPower && (
             <div className="flex items-center gap-1.5 text-sm text-gray-600">

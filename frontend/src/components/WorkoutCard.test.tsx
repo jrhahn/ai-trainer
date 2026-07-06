@@ -36,7 +36,12 @@ describe('WorkoutCard', () => {
 
   it('renders the duration', () => {
     renderCard(baseDay)
-    expect(screen.getByText(/60 min/)).toBeInTheDocument()
+    expect(screen.getByText(/1h/)).toBeInTheDocument()
+  })
+
+  it('renders a duration window as a range', () => {
+    renderCard({ ...baseDay, durationMinMinutes: 150, durationMaxMinutes: 180 })
+    expect(screen.getByText(/2\.5–3h/)).toBeInTheDocument()
   })
 
   it('renders target power when provided', () => {
