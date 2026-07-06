@@ -281,6 +281,99 @@ describe('TrainingCalendar', () => {
     expect(screen.queryByLabelText(/Distance/)).not.toBeInTheDocument()
   })
 
+  it('overlays logged activities when showLoggedActivities is set', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'unmatched',
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('1h 0m')).toBeInTheDocument()
+    expect(screen.getByTitle(/Logged: ride · 1h 0m \(unplanned\)/)).toBeInTheDocument()
+  })
+
+  it('does not overlay logged activities without the prop', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText('1h 0m')).not.toBeInTheDocument()
+  })
+
+  it('marks a logged ride as matched when it is tied to a planned day', () => {
+    const date = monthDate(0, 12)
+    useAppStore.setState({
+      trainingPlan: [makeDay(date, 'intervals')],
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: date,
+          durationSeconds: 5400,
+          planMatchStatus: 'auto_matched',
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTitle(/matched to plan/)).toBeInTheDocument()
+  })
+
+  it('navigates to the workout day when a logged-only day is clicked', async () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: `Calendar day ${rideDate}` }))
+    expect(mockNavigate).toHaveBeenCalledWith(`/workout/${rideDate}`)
+  })
+
   it('navigates to the previous month', async () => {
     render(
       <MemoryRouter>

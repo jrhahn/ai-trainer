@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  Activity,
   CalendarDays,
   CheckCircle,
   ChevronLeft,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import type { RaceEvent, TrainingDay } from '../store/useAppStore'
+import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import { formatPlanDuration } from '../utils/planDuration'
@@ -46,9 +47,43 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 interface Props {
   editableEvents?: boolean
+  /** Overlay logged (actual) activities from rideMetricsHistory on each day (#369). */
+  showLoggedActivities?: boolean
   onRaceEventAdded?: (event: RaceEvent) => void
   onRaceEventRemoved?: (event: RaceEvent) => void
   onRaceEventUpdated?: (event: RaceEvent) => void
+}
+
+/** Short duration label for a logged ride, e.g. "1h 5m" or "45m". */
+function formatLoggedDuration(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return ''
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+/** Colour + label describing how a logged ride lines up with the plan (#369). */
+function loggedRideStatus(
+  ride: RideMetricPoint,
+  hasPlan: boolean
+): { dot: string; label: string } {
+  switch (ride.planMatchStatus) {
+    case 'auto_matched':
+    case 'manual_matched':
+      return { dot: 'bg-emerald-500', label: 'matched to plan' }
+    case 'ambiguous':
+      return { dot: 'bg-amber-500', label: 'ambiguous match' }
+    default:
+      return hasPlan
+        ? { dot: 'bg-sky-500', label: 'unmatched' }
+        : { dot: 'bg-sky-500', label: 'unplanned' }
+  }
+}
+
+function rideKey(ride: RideMetricPoint): string {
+  return ride.externalActivityId
+    ? `external:${ride.externalActivityId}`
+    : `strava:${ride.stravaActivityId}`
 }
 
 interface RaceEventForm {
@@ -97,6 +132,7 @@ function formatDistance(value: number): string {
 
 export default function TrainingCalendar({
   editableEvents = false,
+  showLoggedActivities = false,
   onRaceEventAdded,
   onRaceEventRemoved,
   onRaceEventUpdated,
@@ -106,6 +142,7 @@ export default function TrainingCalendar({
     authToken,
     plan,
     raceEvents,
+    rideMetricsHistory,
     addRaceEvent,
     removeRaceEvent,
     updateRaceEvent,
@@ -114,6 +151,7 @@ export default function TrainingCalendar({
       authToken: s.authToken,
       plan: s.trainingPlan,
       raceEvents: s.raceEvents,
+      rideMetricsHistory: s.rideMetricsHistory,
       addRaceEvent: s.addRaceEvent,
       removeRaceEvent: s.removeRaceEvent,
       updateRaceEvent: s.updateRaceEvent,
@@ -136,6 +174,15 @@ export default function TrainingCalendar({
     return grouped
   }, [raceEvents])
 
+  const ridesByDate = useMemo(() => {
+    const grouped: Record<string, RideMetricPoint[]> = {}
+    if (!showLoggedActivities) return grouped
+    for (const ride of rideMetricsHistory) {
+      grouped[ride.activityDate] = [...(grouped[ride.activityDate] ?? []), ride]
+    }
+    return grouped
+  }, [rideMetricsHistory, showLoggedActivities])
+
   const monthLabel = visibleMonth.toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric',
@@ -147,9 +194,15 @@ export default function TrainingCalendar({
     const monday = new Date(firstCalendarDate)
     monday.setDate(firstCalendarDate.getDate() - ((dayOfWeek + 6) % 7))
 
-    const result: Array<Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }>> = []
+    type Cell = {
+      date: string
+      day: TrainingDay | null
+      events: RaceEvent[]
+      rides: RideMetricPoint[]
+    }
+    const result: Cell[][] = []
     for (let w = 0; w < 6; w++) {
-      const week: Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }> = []
+      const week: Cell[] = []
       for (let d = 0; d < 7; d++) {
         const date = new Date(monday)
         date.setDate(monday.getDate() + w * 7 + d)
@@ -158,12 +211,13 @@ export default function TrainingCalendar({
           date: iso,
           day: plan.find((p) => p.date === iso) ?? null,
           events: racesByDate[iso] ?? [],
+          rides: ridesByDate[iso] ?? [],
         })
       }
       result.push(week)
     }
     return result
-  }, [plan, racesByDate, visibleMonth])
+  }, [plan, racesByDate, ridesByDate, visibleMonth])
 
   const selectedEvents = selectedDate ? racesByDate[selectedDate] ?? [] : []
   const selectedPlanDay = selectedDate ? plan.find((day) => day.date === selectedDate) : null
@@ -279,11 +333,19 @@ export default function TrainingCalendar({
         </div>
         {weeks.map((week, wi) => (
           <div key={wi} className="grid grid-cols-7 border-b last:border-b-0">
-            {week.map(({ date, day, events }) => {
+            {week.map(({ date, day, events, rides }) => {
               const isToday = date === today
               const isPast = date < today
               const isVisibleMonth = parseLocalDate(date).getMonth() === visibleMonth.getMonth()
               const baseColor = day ? typeColors[day.workoutType] : 'bg-gray-50 text-gray-500 border-gray-200'
+              // A planned session in the past with nothing logged and no completion mark.
+              const isMissed =
+                showLoggedActivities &&
+                Boolean(day) &&
+                isPast &&
+                !day?.completed &&
+                rides.length === 0 &&
+                day?.workoutType !== 'rest'
               return (
                 <button
                   key={date}
@@ -292,11 +354,11 @@ export default function TrainingCalendar({
                   onClick={() => {
                     if (editableEvents) {
                       openEventEditor(date)
-                    } else if (day) {
-                      navigate(`/workout/${day.date}`)
+                    } else if (day || rides.length > 0) {
+                      navigate(`/workout/${date}`)
                     }
                   }}
-                  className={`min-h-[104px] border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
+                  className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
                     isToday ? 'ring-2 ring-inset ring-amber-500' : ''
                   } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !day.completed ? 'opacity-60' : ''}`}
                 >
@@ -313,9 +375,35 @@ export default function TrainingCalendar({
                       {day.workoutType !== 'rest' && (
                         <p className="text-xs opacity-70">{formatPlanDuration(day)}</p>
                       )}
+                      {isMissed && (
+                        <p className="text-[10px] font-semibold text-red-600">missed</p>
+                      )}
                     </>
                   ) : (
                     <p className="text-xs text-gray-400 mt-5">{editableEvents ? 'Add race' : ''}</p>
+                  )}
+                  {rides.length > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {rides.slice(0, 2).map((ride) => {
+                        const status = loggedRideStatus(ride, Boolean(day))
+                        const duration = formatLoggedDuration(ride.durationSeconds)
+                        const sport = ride.sportType.toLowerCase().replace(/_/g, ' ')
+                        return (
+                          <div
+                            key={rideKey(ride)}
+                            title={`Logged: ${sport}${duration ? ` · ${duration}` : ''} (${status.label})`}
+                            className="flex items-center gap-1 rounded border border-gray-200 bg-white/80 px-1 py-0.5 text-[10px] font-medium text-gray-700"
+                          >
+                            <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${status.dot}`} />
+                            <Activity size={9} className="flex-shrink-0 text-gray-500" />
+                            <span className="truncate">{duration || sport}</span>
+                          </div>
+                        )
+                      })}
+                      {rides.length > 2 && (
+                        <p className="text-[10px] font-semibold text-gray-500">+{rides.length - 2} more</p>
+                      )}
+                    </div>
                   )}
                   {events.length > 0 && (
                     <div className="absolute left-1.5 right-1.5 bottom-1.5 space-y-1">
