@@ -131,6 +131,13 @@ export interface TrainingDay {
   title: string
   description: string
   durationMinutes: number
+  /**
+   * Optional planned-duration window (#368). A single value is the degenerate
+   * window durationMinMinutes === durationMaxMinutes; when both are set,
+   * durationMinutes is the midpoint. Use utils/planDuration helpers to read them.
+   */
+  durationMinMinutes?: number
+  durationMaxMinutes?: number
   targetPower?: { low: number; high: number }
   targetHeartRate?: { low: number; high: number }
   intervals?: Array<{ duration: number; power: number; rest: number }>

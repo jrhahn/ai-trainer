@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import type { TrainingDay } from '../store/useAppStore'
+import { formatPlanDuration } from '../utils/planDuration'
 
 const WORKOUT_COLORS: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-500',
@@ -57,7 +58,7 @@ export default function TodayCard({ today, trainingPlan }: Props) {
         </p>
         <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
           {todayWorkout.durationMinutes > 0 && (
-            <span>{todayWorkout.durationMinutes} min</span>
+            <span>{formatPlanDuration(todayWorkout)}</span>
           )}
           {todayWorkout.targetPower && (
             <span>{todayWorkout.targetPower.low}–{todayWorkout.targetPower.high} W</span>

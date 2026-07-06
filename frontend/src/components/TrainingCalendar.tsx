@@ -20,6 +20,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, TrainingDay } from '../store/useAppStore'
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
+import { formatPlanDuration } from '../utils/planDuration'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -310,7 +311,7 @@ export default function TrainingCalendar({
                       <div className="text-base leading-none mb-0.5">{typeEmoji[day.workoutType]}</div>
                       <p className="text-xs font-medium leading-tight truncate">{day.title}</p>
                       {day.workoutType !== 'rest' && (
-                        <p className="text-xs opacity-70">{day.durationMinutes}m</p>
+                        <p className="text-xs opacity-70">{formatPlanDuration(day)}</p>
                       )}
                     </>
                   ) : (

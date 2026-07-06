@@ -358,7 +358,12 @@ def generate_plan_system() -> str:
         'verb — e.g. ["Keep cadence between 88-95 rpm throughout", "HR must stay below 158 bpm '
         '(Zone 3); back off if it creeps higher", "Breathe rhythmically — aim for a 3-in/2-out '
         'pattern on climbs"]).\n'
-        'Optional fields: "targetPower" (object with "low" and "high" integer fields in watts), '
+        'Optional fields: "durationMinMinutes" and "durationMaxMinutes" (integers) to '
+        "prescribe a duration *window* instead of a single value — use these for endurance "
+        "and base sessions that are naturally a range (e.g. a 2.5–3h endurance ride: "
+        "durationMinMinutes 150, durationMaxMinutes 180), and set durationMinutes to the "
+        "midpoint. Keep structured interval/threshold/VO2 sessions to a single durationMinutes. "
+        '"targetPower" (object with "low" and "high" integer fields in watts), '
         '"targetHeartRate" (object with "low" and "high" integer fields in bpm), '
         '"intervals" (array of objects with "duration" (integer seconds), '
         '"power" (integer watts), "rest" (integer seconds)).\n'
@@ -457,6 +462,9 @@ def adapt_plan_system() -> str:
         f"{hard_session_spacing_rules()}\n"
         "Each updated day must include all required TrainingDay fields: "
         '"date", "workoutType", "title", "durationMinutes".\n'
+        "For endurance/base sessions that are naturally a window you may also set "
+        '"durationMinMinutes" and "durationMaxMinutes" (integers, with durationMinutes as '
+        "the midpoint); keep structured interval sessions to a single durationMinutes.\n"
         "Each updated day must also include: "
         '"description" (a 2-4 sentence summary using the athlete\'s actual FTP and threshold HR to '
         "state exact power/HR targets — always translate percentages to absolute numbers), "

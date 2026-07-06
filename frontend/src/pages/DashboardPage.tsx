@@ -22,6 +22,7 @@ import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
 import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
+import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
@@ -352,7 +353,8 @@ export function computeMatchScore(
     }
     // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
     if (ride.durationSeconds && plan.durationMinutes) {
-      return scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+      // A prescribed duration window makes any in-range actual on-target (#368).
+      return scoreDurationMatch(ride.durationSeconds, effectivePlannedMinutes(plan, ride.durationSeconds))
     }
     return 90
   }
@@ -360,16 +362,18 @@ export function computeMatchScore(
   // Strength/non-power plans: score purely on duration completion (0–100 %).
   if (isStrengthPlan(plan)) {
     if (!ride.durationSeconds || !plan.durationMinutes) return 90
-    return Math.min(100, Math.round((ride.durationSeconds / 60 / plan.durationMinutes) * 100))
+    const planned = effectivePlannedMinutes(plan, ride.durationSeconds)
+    return Math.min(100, Math.round((ride.durationSeconds / 60 / planned) * 100))
   }
 
   const parts: number[] = []
   const intervalWorkout = isIntervalWorkoutPlan(plan)
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
-    let durationScore = scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+    const planned = effectivePlannedMinutes(plan, ride.durationSeconds)
+    let durationScore = scoreDurationMatch(ride.durationSeconds, planned)
     if (intervalWorkout) {
-      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      const ratio = ride.durationSeconds / 60 / planned
       if (ratio > 1 && ratio <= 2) {
         durationScore = Math.max(durationScore, 40)
       }
@@ -501,7 +505,7 @@ export function buildMatchCoachPrompt(
   ].filter(Boolean).join(', ')
 
   const planParts = [
-    plan.durationMinutes ? `${plan.durationMinutes} min` : null,
+    plan.durationMinutes ? formatPlanDuration(plan) : null,
     plan.targetPower ? `${plan.targetPower.low}–${plan.targetPower.high}W` : null,
   ].filter(Boolean).join(', ')
 
@@ -865,7 +869,7 @@ export default function DashboardPage() {
                       {plan ? (
                         <>
                           {plan.title ?? plan.workoutType}
-                          {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
+                          {plan.durationMinutes ? ` · ${formatPlanDuration(plan)}` : ''}
                           {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
                         </>
                       ) : (

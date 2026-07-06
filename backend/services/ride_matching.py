@@ -15,6 +15,7 @@ import schemas
 from services import ai_service
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
+from services.duration_range import duration_range
 from services import plan_pipeline
 
 logger = logging.getLogger(__name__)
@@ -95,10 +96,20 @@ def _duration_ratio(
     return duration_min / plan_duration_min
 
 
+def _plan_duration_range(day: dict | None) -> tuple[int | None, int | None]:
+    """The planned duration window ``(lo, hi)`` for ``day`` (#368)."""
+    return duration_range(day)
+
+
 def _duration_mismatch_label(
     duration_min: int | None,
     plan_duration_min: int | None,
+    plan_range: tuple[int | None, int | None] = (None, None),
 ) -> str | None:
+    lo, hi = plan_range
+    # A prescribed window makes any actual inside it on-target — never a mismatch.
+    if duration_min is not None and lo is not None and hi is not None and lo <= duration_min <= hi:
+        return None
     ratio = _duration_ratio(duration_min, plan_duration_min)
     if ratio is not None and (ratio > 2.5 or ratio < 0.3):
         return LABEL_MISMATCH
@@ -295,6 +306,7 @@ async def apply_ride_plan_matches(
             label_override = _duration_mismatch_label(
                 _ride_duration_minutes(ride),
                 plan_duration_min,
+                _plan_duration_range(plan_day),
             )
             await crud.update_ride_match(
                 db,
@@ -342,6 +354,7 @@ async def apply_ride_plan_matches(
                                 _duration_mismatch_label(
                                     _ride_duration_minutes(ride),
                                     plan_duration_min,
+                                    _plan_duration_range(plan_day),
                                 ),
                             ),
                         )

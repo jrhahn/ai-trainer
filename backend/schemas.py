@@ -592,6 +592,10 @@ class PlanDayUpdateSchema(CamelModel):
     title: Optional[str] = None
     description: Optional[str] = None
     duration_minutes: Optional[int] = None
+    # Optional planned-duration window (#368). A single value is the degenerate
+    # window min == max; when both are set, duration_minutes is the midpoint.
+    duration_min_minutes: Optional[int] = None
+    duration_max_minutes: Optional[int] = None
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
@@ -624,6 +628,9 @@ class TrainingDaySchema(CamelModel):
     title: str
     description: str
     duration_minutes: int
+    # Optional planned-duration window (#368); see PlanDayUpdateSchema.
+    duration_min_minutes: Optional[int] = None
+    duration_max_minutes: Optional[int] = None
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None

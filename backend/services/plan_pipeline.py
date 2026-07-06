@@ -28,6 +28,7 @@ import crud
 import models
 import schemas
 from services.dates import app_today_iso
+from services.duration_range import normalize_duration_fields
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
     filter_plan_updates_for_constraints,
@@ -367,6 +368,10 @@ async def _enforce_and_persist(
     constraints: list[dict],
     source: PlanSource,
 ) -> list[dict]:
+    # Give every proposed day coherent duration fields before anything reads
+    # them: a prescribed window (min/max) gets an ordered range and a derived
+    # midpoint scalar; single-value days pass through untouched (#368).
+    proposed_plan = [normalize_duration_fields(day) for day in proposed_plan]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
     current_row = await crud.get_training_plan(db, user.id)
     current_plan = current_row.plan if current_row is not None else []

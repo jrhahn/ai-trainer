@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Clock, Zap, Heart } from 'lucide-react'
 import type { TrainingDay } from '../store/useAppStore'
 import { parseLocalDate } from '../utils/workout'
+import { formatPlanDuration } from '../utils/planDuration'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -47,7 +48,7 @@ export default function WorkoutCard({
         <span className="text-xs text-gray-700 font-medium flex-1 truncate">{day.title}</span>
         <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
           <Clock size={11} />
-          {day.durationMinutes} min
+          {formatPlanDuration(day)}
         </span>
         {day.completed && <CheckCircle size={14} className="text-green-500 flex-shrink-0" />}
       </div>
@@ -83,7 +84,7 @@ export default function WorkoutCard({
       <h3 className="font-semibold text-gray-900 text-sm leading-snug">{day.title}</h3>
       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
         <span className="flex items-center gap-1">
-          <Clock size={12} /> {day.durationMinutes} min
+          <Clock size={12} /> {formatPlanDuration(day)}
         </span>
         {day.targetPower && (
           <span className="flex items-center gap-1">
