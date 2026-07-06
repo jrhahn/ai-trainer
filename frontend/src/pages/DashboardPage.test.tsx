@@ -1025,6 +1025,33 @@ describe('computeMatchScore — rest/no-target plan', () => {
       'bg-blue-100'
     )
   })
+
+  it('scores an in-window ride on a duration range as fully on-target (#368)', () => {
+    // 2.75h ride vs a 2.5–3h endurance window → any in-range duration is on-target.
+    const rangePlan: Partial<TrainingDay> = {
+      workoutType: 'rest',
+      durationMinutes: 165,
+      durationMinMinutes: 150,
+      durationMaxMinutes: 180,
+    }
+    const ride = { stravaActivityId: 9, sportType: 'Ride', durationSeconds: 165 * 60 } as RideMetricPoint
+    expect(computeMatchScore(ride, rangePlan)).toBe(100)
+  })
+})
+
+describe('computeMatchScore — strength plan', () => {
+  const strengthPlan: Partial<TrainingDay> = { workoutType: 'strength', durationMinutes: 60 }
+
+  it('scores purely on duration completion', () => {
+    const ride = { stravaActivityId: 10, sportType: 'WeightTraining', durationSeconds: 30 * 60 } as RideMetricPoint
+    // 30 min of a 60-min plan → 50 %.
+    expect(computeMatchScore(ride, strengthPlan)).toBe(50)
+  })
+
+  it('caps a longer-than-planned session at 100 %', () => {
+    const ride = { stravaActivityId: 11, sportType: 'WeightTraining', durationSeconds: 90 * 60 } as RideMetricPoint
+    expect(computeMatchScore(ride, strengthPlan)).toBe(100)
+  })
 })
 
 describe('computeMatchScore — endurance plan', () => {

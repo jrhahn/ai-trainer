@@ -115,9 +115,10 @@ def normalize_duration_fields(day: dict) -> dict:
     if lo_e is None and hi_e is None:
         # No window intent — leave the single-value day exactly as-is.
         return day
+    # An explicit positive bound exists (checked above), so the window always
+    # resolves — the assert documents that invariant for the type checker.
     lo, hi = duration_range(day)
-    if lo is None or hi is None:
-        return day
+    assert lo is not None and hi is not None
     normalized = {
         k: v
         for k, v in day.items()

@@ -45,6 +45,15 @@ def test_duration_range_rest_day_is_none():
     assert duration_range({}) == (None, None)
 
 
+def test_duration_range_non_dict_is_none():
+    assert duration_range(None) == (None, None)
+    assert duration_range("nope") == (None, None)  # type: ignore[arg-type]
+
+
+def test_representative_minutes_none_without_duration():
+    assert representative_minutes({"durationMinutes": 0}) is None
+
+
 def test_representative_minutes_is_window_midpoint():
     assert representative_minutes({"durationMinMinutes": 150, "durationMaxMinutes": 180}) == 165
 
@@ -73,6 +82,10 @@ def test_duration_on_target_none_without_plan_duration():
 def test_normalize_leaves_single_value_day_untouched():
     day = {"date": "2026-07-10", "durationMinutes": 90, "title": "Ride"}
     assert normalize_duration_fields(day) == day
+
+
+def test_normalize_non_dict_is_returned_unchanged():
+    assert normalize_duration_fields(None) is None  # type: ignore[arg-type]
 
 
 def test_normalize_orders_window_and_derives_midpoint_scalar():
