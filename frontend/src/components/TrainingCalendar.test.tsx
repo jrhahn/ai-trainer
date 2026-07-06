@@ -351,6 +351,139 @@ describe('TrainingCalendar', () => {
     expect(screen.getByTitle(/matched to plan/)).toBeInTheDocument()
   })
 
+  it('falls back to the sport label for a logged ride without a duration', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Virtual_Ride',
+          activityDate: rideDate,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    // No duration -> shows the sport label, and the title omits the duration part.
+    expect(screen.getByText('virtual ride')).toBeInTheDocument()
+    expect(screen.getByTitle('Logged: virtual ride (unplanned)')).toBeInTheDocument()
+  })
+
+  it('formats a sub-hour logged ride in minutes', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 1800,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('30m')).toBeInTheDocument()
+  })
+
+  it('labels ambiguous, manually matched, and unmatched-with-plan rides', () => {
+    const ambiguousDate = monthDate(0, 10)
+    const manualDate = monthDate(0, 11)
+    const unmatchedDate = monthDate(0, 12)
+    useAppStore.setState({
+      trainingPlan: [makeDay(unmatchedDate, 'endurance')],
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          externalActivityId: 'ext-1',
+          sportType: 'Ride',
+          activityDate: ambiguousDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'ambiguous',
+        } as never,
+        {
+          stravaActivityId: 2,
+          sportType: 'Ride',
+          activityDate: manualDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'manual_matched',
+        } as never,
+        {
+          stravaActivityId: 3,
+          sportType: 'Ride',
+          activityDate: unmatchedDate,
+          durationSeconds: 3600,
+          planMatchStatus: undefined,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTitle(/ambiguous match/)).toBeInTheDocument()
+    expect(screen.getByTitle(/matched to plan/)).toBeInTheDocument()
+    // A ride with no match status but a plan on that day reads as "unmatched".
+    expect(screen.getByTitle(/\(unmatched\)/)).toBeInTheDocument()
+  })
+
+  it('collapses more than two logged rides on a day into an overflow count', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [1, 2, 3, 4].map(
+        (id) =>
+          ({
+            stravaActivityId: id,
+            sportType: 'Ride',
+            activityDate: rideDate,
+            durationSeconds: 3600,
+          }) as never
+      ),
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('+2 more')).toBeInTheDocument()
+  })
+
+  it('flags a planned past day with nothing logged as missed', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00'))
+    try {
+      useAppStore.setState({
+        trainingPlan: [makeDay('2026-07-10', 'endurance')],
+        rideMetricsHistory: [],
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar showLoggedActivities />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('missed')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('navigates to the workout day when a logged-only day is clicked', async () => {
     const rideDate = monthDate(0, 12)
     useAppStore.setState({
