@@ -17,6 +17,7 @@ import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
+import TrainingCalendar from '../components/TrainingCalendar'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
@@ -939,6 +940,16 @@ export default function DashboardPage() {
           className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
         />
       </div>
+
+      {/* Plan-vs-logged month calendar — expert mode only (#369) */}
+      {isExpertMode && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Training calendar
+          </h2>
+          <TrainingCalendar showLoggedActivities />
+        </div>
+      )}
 
       {/* Recent plan changes / override analytics — expert mode only (#357) */}
       {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}

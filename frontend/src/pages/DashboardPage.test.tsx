@@ -45,6 +45,10 @@ vi.mock('../components/PlanChangesPanel', () => ({
   default: () => <div data-testid="plan-changes-panel" />,
 }))
 
+vi.mock('../components/TrainingCalendar', () => ({
+  default: () => <div data-testid="training-calendar" />,
+}))
+
 vi.mock('../components/AIChat', () => ({
   default: () => <div data-testid="ai-chat" />,
 }))
@@ -720,6 +724,22 @@ describe('DashboardPage — PlanChangesPanel', () => {
     setupStore({ isExpertMode: true })
     renderDashboard()
     expect(await screen.findByTestId('plan-changes-panel')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage — TrainingCalendar', () => {
+  it('does not render the training calendar in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the training calendar when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
   })
 })
 
