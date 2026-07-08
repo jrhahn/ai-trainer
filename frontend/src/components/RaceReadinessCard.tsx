@@ -194,11 +194,26 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
       {data.recommendations.length > 0 && (
         <div className="border-t border-gray-100 pt-3">
           <p className="text-xs font-semibold text-gray-500 mb-1.5">What to do next</p>
-          <ul className="space-y-1">
-            {data.recommendations.map((tip) => (
-              <li key={tip} className="flex items-start gap-1.5 text-xs text-gray-700">
-                <span className="text-purple-400 mt-0.5">•</span>
-                <span>{tip}</span>
+          <ul className="space-y-2.5">
+            {data.recommendations.map((rec) => (
+              <li key={rec.recommendation} className="text-xs text-gray-700">
+                <div className="flex items-start gap-1.5">
+                  <span className="text-purple-400 mt-0.5">•</span>
+                  <span className="font-medium">{rec.recommendation}</span>
+                </div>
+                {rec.reasoning.length > 0 && (
+                  <ul className="mt-1 ml-4 space-y-0.5">
+                    {rec.reasoning.map((why) => (
+                      <li
+                        key={why}
+                        className="flex items-start gap-1.5 text-[11px] text-gray-500"
+                      >
+                        <span className="text-gray-300 mt-0.5">–</span>
+                        <span>{why}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

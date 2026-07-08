@@ -345,7 +345,9 @@ describe('fetchReadinessScore', () => {
       projected_ctl: 85,
       projected_atl: 72,
       projected_tsb: 13,
-      recommendations: ['Taper now'],
+      recommendations: [
+        { recommendation: 'Taper now', reasoning: ['TSB is 10.0', 'Research: taper lifts form'] },
+      ],
     })
 
     const result = await fetchReadinessScore('tok-123')
@@ -363,7 +365,9 @@ describe('fetchReadinessScore', () => {
       projectedCtl: 85,
       projectedAtl: 72,
       projectedTsb: 13,
-      recommendations: ['Taper now'],
+      recommendations: [
+        { recommendation: 'Taper now', reasoning: ['TSB is 10.0', 'Research: taper lifts form'] },
+      ],
     })
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/readiness-score', { token: 'tok-123' })
   })

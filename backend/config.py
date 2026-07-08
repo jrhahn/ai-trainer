@@ -126,6 +126,17 @@ class Settings(BaseSettings):
     gemini_feedback_model: str = "gemini-2.5-flash"
 
     # ------------------------------------------------------------------
+    # Readiness recommendations
+    #
+    # How the coach's personal observations of the athlete (athlete-memory
+    # facts) are matched to readiness recommendations:
+    #   "llm"     – ask the LLM which recommendation each observation supports
+    #               (nuanced, default; falls back to keyword on any failure)
+    #   "keyword" – deterministic keyword/theme matching (no LLM call)
+    # ------------------------------------------------------------------
+    readiness_observation_matching: str = "llm"
+
+    # ------------------------------------------------------------------
     # Computed helpers
     # ------------------------------------------------------------------
 

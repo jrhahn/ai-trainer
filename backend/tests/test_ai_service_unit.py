@@ -670,6 +670,77 @@ async def test_generate_training_plan_calls_chat():
 
 
 @pytest.mark.asyncio
+async def test_match_observations_to_recommendations_routes_by_llm():
+    """LLM matcher routes each observation to its assigned recommendation index."""
+    recs = [
+        {"recommendation": "Prioritise recovery rides."},
+        {"recommendation": "Add one long endurance ride."},
+    ]
+    observations = [
+        "Athlete overreaches when feeling fresh.",
+        "Tends to skip long rides.",
+    ]
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps(
+            {
+                "assignments": [
+                    {"observationIndex": 0, "recommendationIndex": 0},
+                    {"observationIndex": 1, "recommendationIndex": 1},
+                ]
+            }
+        )
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.match_observations_to_recommendations(
+            recs, observations, provider="openai"
+        )
+
+    assert result == {
+        0: ["Athlete overreaches when feeling fresh."],
+        1: ["Tends to skip long rides."],
+    }
+
+
+@pytest.mark.asyncio
+async def test_match_observations_omitted_or_null_falls_back_to_primary():
+    """Observations the model omits or marks irrelevant land on the primary rec."""
+    recs = [{"recommendation": "A"}, {"recommendation": "B"}]
+    observations = ["relevant to B", "irrelevant", "never mentioned"]
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps(
+            {
+                "assignments": [
+                    {"observationIndex": 0, "recommendationIndex": 1},
+                    {"observationIndex": 1, "recommendationIndex": None},
+                    # observationIndex 2 omitted entirely
+                ]
+            }
+        )
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.match_observations_to_recommendations(
+            recs, observations, provider="openai"
+        )
+
+    assert result[1] == ["relevant to B"]
+    # Irrelevant + omitted both fall back to the primary recommendation, in order.
+    assert result[0] == ["irrelevant", "never mentioned"]
+
+
+@pytest.mark.asyncio
+async def test_match_observations_empty_inputs_skip_llm():
+    """No observations or recommendations → no LLM call, empty assignments."""
+    with patch.object(ai_service, "_chat", side_effect=AssertionError("should not call")):
+        assert await ai_service.match_observations_to_recommendations([], ["x"]) == {}
+        assert (
+            await ai_service.match_observations_to_recommendations([{"recommendation": "A"}], [])
+            == {}
+        )
+
+
+@pytest.mark.asyncio
 async def test_adapt_training_plan_calls_chat():
     """adapt_training_plan should merge AI updated days into the plan."""
     plan = [

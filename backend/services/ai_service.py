@@ -53,6 +53,8 @@ from .prompts import (
     update_memory_user,
     extract_athlete_facts_system,
     extract_athlete_facts_user,
+    match_observations_system,
+    match_observations_user,
     rate_workout_system,
     rate_workout_user,
     refresh_login_summary_system,
@@ -789,6 +791,65 @@ async def extract_athlete_facts(
         if len(candidates) >= MAX_EXTRACTED_FACT_CANDIDATES:
             break
     return candidates
+
+
+async def match_observations_to_recommendations(
+    recommendations: list[dict],
+    observations: list[str],
+    provider: str = "openai",
+) -> dict[int, list[str]]:
+    """Route athlete observations to recommendations using the LLM.
+
+    Given the day's ``recommendations`` (each with a ``recommendation`` text)
+    and the coach's ``observations`` of the athlete, ask the model which
+    recommendation each observation best supports.
+
+    Returns ``{recommendation_index: [observation, ...]}`` — the same shape as
+    :func:`services.analysis.keyword_observation_assignments` — preserving
+    observation order. Observations the model marks irrelevant (or returns
+    invalidly) fall back to the primary recommendation (index 0) so the coach's
+    knowledge is never silently dropped.
+    """
+    if not recommendations or not observations:
+        return {}
+
+    system_prompt = match_observations_system()
+    user_msg = match_observations_user(recommendations, observations)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    raw_assignments = parsed.get("assignments") if isinstance(parsed, dict) else None
+    routed: dict[int, list[str]] = {}
+    matched_observations: set[int] = set()
+    if isinstance(raw_assignments, list):
+        for item in raw_assignments:
+            if not isinstance(item, dict):
+                continue
+            obs_index = item.get("observationIndex")
+            rec_index = item.get("recommendationIndex")
+            if not isinstance(obs_index, int) or not (
+                0 <= obs_index < len(observations)
+            ):
+                continue
+            matched_observations.add(obs_index)
+            if not isinstance(rec_index, int) or not (
+                0 <= rec_index < len(recommendations)
+            ):
+                rec_index = 0  # irrelevant/invalid → keep on the primary rec
+            routed.setdefault(rec_index, []).append(obs_index)
+
+    # Any observation the model omitted also falls back to the primary rec.
+    for obs_index in range(len(observations)):
+        if obs_index not in matched_observations:
+            routed.setdefault(0, []).append(obs_index)
+
+    # Emit observations in their original order per recommendation.
+    return {
+        rec_index: [observations[i] for i in sorted(obs_indexes)]
+        for rec_index, obs_indexes in routed.items()
+    }
 
 
 async def rate_completed_workout(

@@ -704,6 +704,20 @@ class MetricsHistoryResponse(BaseModel):
     snapshots: list[AthleteMetricSnapshotSchema]
 
 
+class ReadinessRecommendation(BaseModel):
+    """A single readiness recommendation together with the evidence behind it.
+
+    Each recommendation is transparent about *why* it was made: ``reasoning``
+    holds short supporting-evidence bullets that combine the athlete's current
+    metrics with the sports-science rationale for the advice.
+    """
+
+    recommendation: str
+    """The actionable advice, e.g. "Prioritise 2–3 easy recovery rides this week."."""
+    reasoning: list[str] = []
+    """Supporting-evidence bullets explaining why the recommendation was made."""
+
+
 class ReadinessScoreResponse(BaseModel):
     """Response for the GET /ai/readiness-score endpoint."""
 
@@ -731,8 +745,8 @@ class ReadinessScoreResponse(BaseModel):
     """Projected ATL at race day."""
     projected_tsb: Optional[float] = None
     """Projected TSB at race day."""
-    recommendations: list[str] = []
-    """Short, actionable bullet-point tips to improve race readiness."""
+    recommendations: list[ReadinessRecommendation] = []
+    """Actionable tips to improve race readiness, each with its supporting evidence."""
 
 
 # ---------------------------------------------------------------------------
