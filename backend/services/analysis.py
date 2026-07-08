@@ -705,6 +705,40 @@ def compute_readiness_score(
     }
 
 
+# --- Knowledge-source categories for recommendation reasoning (issue #377) ---
+# Every reasoning bullet is tagged with where its knowledge comes from so the
+# athlete can tell a personal observation apart from established sports science
+# and from the coach's own read of the numbers.
+SOURCE_PERSONAL_OBSERVATION = "personal_observation"
+"""A habit/tendency the coach has observed about *this* athlete."""
+SOURCE_SCIENTIFIC_EVIDENCE = "scientific_evidence"
+"""General sports-science findings that apply to any athlete."""
+SOURCE_COACH_INFERENCE = "coach_inference"
+"""The coach's interpretation of the athlete's current metrics."""
+
+_SCIENTIFIC_EVIDENCE_PREFIX = "Research: "
+
+
+def reasoning_item(source: str, text: str) -> dict:
+    """Build a source-tagged reasoning bullet ``{"source": ..., "text": ...}``."""
+    return {"source": source, "text": text}
+
+
+def _classify_reasoning(text: str) -> dict:
+    """Tag a raw reasoning string with its knowledge source.
+
+    Bullets prefixed with ``Research:`` state general sports science and are
+    tagged :data:`SOURCE_SCIENTIFIC_EVIDENCE` (the prefix is stripped, since the
+    source label now conveys it). Everything else is the coach reading the
+    athlete's current numbers — :data:`SOURCE_COACH_INFERENCE`.
+    """
+    if text.startswith(_SCIENTIFIC_EVIDENCE_PREFIX):
+        return reasoning_item(
+            SOURCE_SCIENTIFIC_EVIDENCE, text[len(_SCIENTIFIC_EVIDENCE_PREFIX) :]
+        )
+    return reasoning_item(SOURCE_COACH_INFERENCE, text)
+
+
 _OBSERVATION_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
     "recovery": (
         "recover",
@@ -783,17 +817,20 @@ def keyword_observation_assignments(
 def attach_observation_assignments(
     recs: list[dict], assignments: dict[int, list[str]]
 ) -> None:
-    """Prepend routed observations as ``Personal observation:`` reasoning bullets.
+    """Prepend routed observations as personal-observation reasoning bullets.
 
-    Personal observations lead the reasoning, ahead of the metric and
-    scientific-evidence bullets. ``assignments`` maps a recommendation index to
-    the observation strings destined for it (see
+    Personal observations lead the reasoning, ahead of the coach-inference and
+    scientific-evidence bullets, and are tagged
+    :data:`SOURCE_PERSONAL_OBSERVATION`. ``assignments`` maps a recommendation
+    index to the observation strings destined for it (see
     :func:`keyword_observation_assignments`).
     """
     for index, observations in assignments.items():
         if not (0 <= index < len(recs)) or not observations:
             continue
-        bullets = [f"Personal observation: {obs}" for obs in observations]
+        bullets = [
+            reasoning_item(SOURCE_PERSONAL_OBSERVATION, obs) for obs in observations
+        ]
         recs[index]["reasoning"] = bullets + recs[index]["reasoning"]
 
 
@@ -816,12 +853,16 @@ def build_readiness_recommendations(
     Recommendations are derived from the athlete's current CTL (fitness), ATL
     (fatigue), TSB (form), overall score, and the time left until race day.
     Every recommendation is transparent about *why* it was made: each carries
-    ``reasoning`` bullets pairing the athlete's **current metrics** with the
-    **scientific rationale** behind the tip.
+    ``reasoning`` bullets pairing the coach's read of the athlete's **current
+    metrics** (:data:`SOURCE_COACH_INFERENCE`) with the **scientific rationale**
+    behind the tip (:data:`SOURCE_SCIENTIFIC_EVIDENCE`). Personal observations
+    are woven in later by :func:`attach_observation_assignments`.
 
-    Returns a list of ``{"recommendation": str, "reasoning": list[str],
-    "theme": str}`` dicts. ``theme`` is an internal routing tag for matching
-    personal observations; call :func:`finalize_recommendations` to strip it.
+    Returns a list of ``{"recommendation": str, "reasoning": list[dict],
+    "theme": str}`` dicts, where each reasoning bullet is a source-tagged
+    ``{"source": str, "text": str}`` item. ``theme`` is an internal routing tag
+    for matching personal observations; call :func:`finalize_recommendations`
+    to strip it.
     """
     recs: list[dict] = []
 
@@ -1010,6 +1051,10 @@ def build_readiness_recommendations(
             ],
         )
 
+    # Tag each raw bullet with its knowledge source (issue #377).
+    for rec in recs:
+        rec["reasoning"] = [_classify_reasoning(text) for text in rec["reasoning"]]
+
     return recs
 
 
@@ -1028,7 +1073,8 @@ def compute_readiness_recommendations(
     route ``observations`` — free-text athlete-memory facts — to the most
     relevant recommendation. For LLM-based matching, compose the building blocks
     directly (see ``routers/ai.py``). Returns a list of
-    ``{"recommendation": str, "reasoning": list[str]}`` dicts.
+    ``{"recommendation": str, "reasoning": list[dict]}`` dicts, where each
+    reasoning bullet is a source-tagged ``{"source": str, "text": str}`` item.
     """
     recs = build_readiness_recommendations(ctl, atl, tsb, score, days_until_race)
     if observations:

@@ -145,11 +145,15 @@ def test_compute_readiness_recommendations_include_supporting_evidence():
         assert rec["recommendation"]
         # Each recommendation carries supporting-evidence reasoning bullets.
         assert len(rec["reasoning"]) >= 2
-        joined = " ".join(rec["reasoning"]).lower()
-        # Scientific evidence is cited alongside the athlete's metrics.
-        assert "research" in joined
+        sources = {bullet["source"] for bullet in rec["reasoning"]}
+        # Scientific evidence and the coach's read of the metrics are both cited.
+        assert analysis.SOURCE_SCIENTIFIC_EVIDENCE in sources
+        assert analysis.SOURCE_COACH_INFERENCE in sources
+        # The "Research:" prefix is dropped in favour of the source tag.
+        for bullet in rec["reasoning"]:
+            assert not bullet["text"].startswith("Research:")
 
-    reasoning_text = " ".join(w for rec in recs for w in rec["reasoning"])
+    reasoning_text = " ".join(b["text"] for rec in recs for b in rec["reasoning"])
     # Current metrics are surfaced with their concrete values.
     assert "-12.3" in reasoning_text  # TSB
     assert "45.0" in reasoning_text  # CTL
@@ -171,19 +175,28 @@ def test_compute_readiness_recommendations_weave_in_personal_observations():
         ],
     )
 
-    def reasoning_for(substr: str) -> list[str]:
+    def reasoning_for(substr: str) -> list[dict]:
         return next(r["reasoning"] for r in recs if substr in r["recommendation"])
 
-    # Race-nerves observation lands on a race-themed recommendation…
-    race_reasoning = " ".join(reasoning_for("optimal for racing"))
-    assert "Personal observation: Athlete gets nervous" in race_reasoning
-    # …and the consistency flaw lands on the fitness-themed recommendation.
-    fitness_reasoning = " ".join(reasoning_for("consistent training and avoid gaps"))
-    assert "Personal observation: Tends to skip easy endurance" in fitness_reasoning
+    def personal_texts(substr: str) -> list[str]:
+        return [
+            b["text"]
+            for b in reasoning_for(substr)
+            if b["source"] == analysis.SOURCE_PERSONAL_OBSERVATION
+        ]
 
-    # Personal observations lead the reasoning, ahead of the metric bullet.
+    # Race-nerves observation lands on a race-themed recommendation…
+    assert "Athlete gets nervous and starts races too fast." in personal_texts(
+        "optimal for racing"
+    )
+    # …and the consistency flaw lands on the fitness-themed recommendation.
+    assert "Tends to skip easy endurance rides when motivation dips." in personal_texts(
+        "consistent training and avoid gaps"
+    )
+
+    # Personal observations lead the reasoning, ahead of the coach-inference bullet.
     race_bullets = reasoning_for("optimal for racing")
-    assert race_bullets[0].startswith("Personal observation:")
+    assert race_bullets[0]["source"] == analysis.SOURCE_PERSONAL_OBSERVATION
 
 
 def test_compute_readiness_recommendations_unmatched_observation_falls_back():
@@ -192,9 +205,10 @@ def test_compute_readiness_recommendations_unmatched_observation_falls_back():
         ctl=90, atl=70, tsb=15, score=60, days_until_race=0,
         observations=["Prefers riding in the morning before work."],
     )
-    assert recs[0]["reasoning"][0] == (
-        "Personal observation: Prefers riding in the morning before work."
-    )
+    assert recs[0]["reasoning"][0] == {
+        "source": analysis.SOURCE_PERSONAL_OBSERVATION,
+        "text": "Prefers riding in the morning before work.",
+    }
 
 
 def test_project_training_load_from_seed():

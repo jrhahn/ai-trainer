@@ -2,7 +2,29 @@ import { useQuery } from '@tanstack/react-query'
 import { Target, TrendingUp, Zap, Calendar, Info } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
-import type { ReadinessScore } from '../services/ai'
+import type { ReadinessScore, ReasoningSource } from '../services/ai'
+
+// Knowledge-source labels for recommendation reasoning (issue #377). Each
+// bullet is tagged so the athlete can tell a personal observation about
+// themselves apart from general sports science and the coach's read of the
+// numbers.
+const REASONING_SOURCE_META: Record<
+  ReasoningSource,
+  { label: string; className: string }
+> = {
+  personal_observation: {
+    label: 'Personal observation',
+    className: 'bg-purple-50 text-purple-600 border border-purple-100',
+  },
+  scientific_evidence: {
+    label: 'Scientific evidence',
+    className: 'bg-blue-50 text-blue-600 border border-blue-100',
+  },
+  coach_inference: {
+    label: 'Coach inference',
+    className: 'bg-gray-100 text-gray-600 border border-gray-200',
+  },
+}
 
 // ---------------------------------------------------------------------------
 // Explanation panel — shown to the right of the score
@@ -202,16 +224,26 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
                   <span className="font-medium">{rec.recommendation}</span>
                 </div>
                 {rec.reasoning.length > 0 && (
-                  <ul className="mt-1 ml-4 space-y-0.5">
-                    {rec.reasoning.map((why) => (
-                      <li
-                        key={why}
-                        className="flex items-start gap-1.5 text-[11px] text-gray-500"
-                      >
-                        <span className="text-gray-300 mt-0.5">–</span>
-                        <span>{why}</span>
-                      </li>
-                    ))}
+                  <ul className="mt-1 ml-4 space-y-1">
+                    {rec.reasoning.map((why) => {
+                      const meta = REASONING_SOURCE_META[why.source]
+                      return (
+                        <li
+                          key={`${why.source}:${why.text}`}
+                          className="flex items-start gap-1.5 text-[11px] text-gray-500"
+                        >
+                          <span className="text-gray-300 mt-0.5">–</span>
+                          <span>
+                            <span
+                              className={`mr-1.5 rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide ${meta.className}`}
+                            >
+                              {meta.label}
+                            </span>
+                            {why.text}
+                          </span>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </li>

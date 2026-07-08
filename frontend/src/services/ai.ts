@@ -209,9 +209,19 @@ export async function rateCompletedWorkout(
   }
 }
 
+export type ReasoningSource =
+  | 'personal_observation'
+  | 'scientific_evidence'
+  | 'coach_inference'
+
+export interface ReasoningItem {
+  source: ReasoningSource
+  text: string
+}
+
 export interface ReadinessRecommendation {
   recommendation: string
-  reasoning: string[]
+  reasoning: ReasoningItem[]
 }
 
 export interface ReadinessScore {
@@ -230,9 +240,29 @@ export interface ReadinessScore {
   recommendations: ReadinessRecommendation[]
 }
 
+interface BackendReasoningItem {
+  source?: string
+  text?: string
+}
+
 interface BackendReadinessRecommendation {
   recommendation: string
-  reasoning?: string[]
+  reasoning?: BackendReasoningItem[]
+}
+
+const REASONING_SOURCES: readonly ReasoningSource[] = [
+  'personal_observation',
+  'scientific_evidence',
+  'coach_inference',
+]
+
+function normalizeReasoning(items?: BackendReasoningItem[]): ReasoningItem[] {
+  return (items ?? []).map((item) => {
+    const source = REASONING_SOURCES.includes(item.source as ReasoningSource)
+      ? (item.source as ReasoningSource)
+      : 'coach_inference'
+    return { source, text: item.text ?? '' }
+  })
 }
 
 interface BackendReadinessScore {
@@ -268,7 +298,7 @@ export async function fetchReadinessScore(authToken: string): Promise<ReadinessS
     projectedTsb: raw.projected_tsb,
     recommendations: (raw.recommendations ?? []).map((rec) => ({
       recommendation: rec.recommendation,
-      reasoning: rec.reasoning ?? [],
+      reasoning: normalizeReasoning(rec.reasoning),
     })),
   }
 }

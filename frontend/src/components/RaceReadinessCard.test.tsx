@@ -95,13 +95,17 @@ describe('RaceReadinessCard', () => {
     expect(screen.getByText(/CTL:/)).toBeInTheDocument()
   })
 
-  it('lists recommendations with their supporting evidence', async () => {
+  it('lists recommendations with source-tagged supporting evidence', async () => {
     mockFetchReadinessScore.mockResolvedValue(
       makeScore({
         recommendations: [
           {
             recommendation: 'Taper this week',
-            reasoning: ['TSB is 12.0', 'Research: taper lifts race-day form'],
+            reasoning: [
+              { source: 'personal_observation', text: 'You start races too fast' },
+              { source: 'coach_inference', text: 'TSB is 12.0' },
+              { source: 'scientific_evidence', text: 'taper lifts race-day form' },
+            ],
           },
           { recommendation: 'Sleep 8h', reasoning: [] },
         ],
@@ -112,7 +116,11 @@ describe('RaceReadinessCard', () => {
     expect(screen.getByText('Sleep 8h')).toBeInTheDocument()
     // Supporting-evidence reasoning is rendered alongside the recommendation.
     expect(screen.getByText('TSB is 12.0')).toBeInTheDocument()
-    expect(screen.getByText('Research: taper lifts race-day form')).toBeInTheDocument()
+    expect(screen.getByText('taper lifts race-day form')).toBeInTheDocument()
+    // Each bullet is labelled with its knowledge source (issue #377).
+    expect(screen.getByText('Personal observation')).toBeInTheDocument()
+    expect(screen.getByText('Coach inference')).toBeInTheDocument()
+    expect(screen.getByText('Scientific evidence')).toBeInTheDocument()
   })
 
   it('labels a low score as Rest Needed', async () => {

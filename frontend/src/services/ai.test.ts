@@ -346,7 +346,13 @@ describe('fetchReadinessScore', () => {
       projected_atl: 72,
       projected_tsb: 13,
       recommendations: [
-        { recommendation: 'Taper now', reasoning: ['TSB is 10.0', 'Research: taper lifts form'] },
+        {
+          recommendation: 'Taper now',
+          reasoning: [
+            { source: 'coach_inference', text: 'TSB is 10.0' },
+            { source: 'scientific_evidence', text: 'taper lifts form' },
+          ],
+        },
       ],
     })
 
@@ -366,7 +372,13 @@ describe('fetchReadinessScore', () => {
       projectedAtl: 72,
       projectedTsb: 13,
       recommendations: [
-        { recommendation: 'Taper now', reasoning: ['TSB is 10.0', 'Research: taper lifts form'] },
+        {
+          recommendation: 'Taper now',
+          reasoning: [
+            { source: 'coach_inference', text: 'TSB is 10.0' },
+            { source: 'scientific_evidence', text: 'taper lifts form' },
+          ],
+        },
       ],
     })
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/readiness-score', { token: 'tok-123' })
@@ -381,6 +393,25 @@ describe('fetchReadinessScore', () => {
     const result = await fetchReadinessScore('tok-123')
 
     expect(result.recommendations).toEqual([])
+  })
+
+  it('falls back to coach_inference for an unknown reasoning source', async () => {
+    mockApiFetch.mockResolvedValue({
+      score: 50, form_score: 50, fitness_score: 50, ctl: 40, atl: 40, tsb: 0,
+      days_until_race: 0, race_date: null,
+      recommendations: [
+        {
+          recommendation: 'Keep going',
+          reasoning: [{ source: 'mystery', text: 'unknown origin' }],
+        },
+      ],
+    })
+
+    const result = await fetchReadinessScore('tok-123')
+
+    expect(result.recommendations[0].reasoning).toEqual([
+      { source: 'coach_inference', text: 'unknown origin' },
+    ])
   })
 })
 
