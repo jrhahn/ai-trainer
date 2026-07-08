@@ -3421,6 +3421,101 @@ async def test_extract_athlete_facts_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_insights — infer durable patterns from training history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "fact": "Performs best after one recovery day",
+                    "category": "fatigue_response",
+                    "confidence": 0.6,
+                    "sourceSnippet": "Strong sessions followed rest days on 05-03 and 05-10.",
+                },
+                {
+                    # Confidence above the cap is clamped to 0.9.
+                    "fact": "Tolerates heat well",
+                    "category": "general",
+                    "confidence": 1.4,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_facts=["Prefers morning rides"],
+            provider="openai",
+        )
+
+    assert [c["fact"] for c in candidates] == [
+        "Performs best after one recovery day",
+        "Tolerates heat well",
+    ]
+    assert candidates[1]["confidence"] == 0.9
+    # History and the existing-facts guard both reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "Prefers morning rides" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights("   ", provider="openai")
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"fact": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.5},
+            {"fact": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.7},
+        ]
+        candidates += [
+            {"fact": f"Pattern {i}", "category": "general", "confidence": 0.4}
+            for i in range(ai_service.MAX_GENERATED_INSIGHTS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights(
+            "history", provider="openai"
+        )
+
+    facts = [c["fact"] for c in candidates]
+    assert facts.count("Fades late in long rides") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_INSIGHTS
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights("history", provider="openai")
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
 # Communication style — opener variation rules
 # ---------------------------------------------------------------------------
 

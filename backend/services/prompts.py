@@ -1104,6 +1104,63 @@ def extract_athlete_facts_user(transcript: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_insights prompts
+# ---------------------------------------------------------------------------
+
+
+def generate_athlete_insights_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are periodically reviewing an athlete's accumulated "
+        "training history to INFER durable insights that should inform future "
+        "coaching. Unlike facts the athlete states directly, these are patterns you "
+        "deduce from the objective record — so phrase them as data-supported "
+        "observations, not certainties.\n"
+        "Look for repeatable patterns across activities, for example:\n"
+        "- how the athlete responds to rest (e.g. performs best after one recovery day)\n"
+        "- environmental effects (e.g. performs better outdoors, tolerates heat well)\n"
+        "- pacing habits within a session (e.g. consistently negative-splits VO2 intervals)\n"
+        "- how load, sleep, or feedback correlates with performance or how a ride felt\n"
+        "- workout types or terrain where the athlete over- or under-performs\n"
+        "- recurring execution issues (e.g. drifts above target power on long endurance rides).\n"
+        "Only report a pattern when at least two activities support it; a single ride is "
+        "an event, not an insight. Ignore one-off results and normal day-to-day variation.\n"
+        "Do NOT restate insights already present in the provided existing observations, "
+        "and do not simply echo a single ride's coach/athlete note — synthesise across rides.\n"
+        "Use one of these category slugs for each insight: fatigue_response, "
+        "fueling_hydration, preferred_workouts, recurring_issues, "
+        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        "Assign a confidence between 0.3 and 0.9 reflecting how strongly the history "
+        "supports a DURABLE pattern: many consistent activities score higher, a pattern "
+        "seen only twice scores low. Never exceed 0.9 — these are inferred, not confirmed.\n"
+        "For each insight include a 'sourceSnippet' (<=200 chars) citing the concrete "
+        "evidence from the history (e.g. dates, metrics, or the number of rides).\n"
+        "Return up to 8 of the most coaching-relevant insights.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"fact": str, "category": str, "confidence": number, '
+        '"sourceSnippet": str}]}. '
+        "Return an empty candidates array when the history is too thin or shows no "
+        "durable pattern."
+    )
+
+
+def generate_athlete_insights_user(
+    metrics_section: str, existing_facts: list[str] | None = None
+) -> str:
+    existing = existing_facts or []
+    existing_section = (
+        "Existing observations already on file (do not repeat these):\n"
+        + "\n".join(f"- {fact}" for fact in existing)
+        if existing
+        else "No observations are on file yet."
+    )
+    return (
+        f"{metrics_section}\n\n"
+        f"{existing_section}\n\n"
+        "Infer new durable athlete insights from this training history as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
 # match_observations_to_recommendations prompts
 # ---------------------------------------------------------------------------
 
