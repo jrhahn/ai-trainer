@@ -53,6 +53,8 @@ from .prompts import (
     update_memory_user,
     extract_athlete_facts_system,
     extract_athlete_facts_user,
+    generate_athlete_insights_system,
+    generate_athlete_insights_user,
     match_observations_system,
     match_observations_user,
     rate_workout_system,
@@ -789,6 +791,54 @@ async def extract_athlete_facts(
         seen.add(dedupe_key)
         candidates.append(candidate)
         if len(candidates) >= MAX_EXTRACTED_FACT_CANDIDATES:
+            break
+    return candidates
+
+
+MAX_GENERATED_INSIGHTS = 8
+
+
+async def generate_athlete_insights(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    provider: str = "openai",
+) -> list[dict]:
+    """Infer durable athlete insights from a training-history context block.
+
+    ``metrics_section`` is a structured-text summary of recent activities (see
+    :func:`services.prompts.ride_metrics_context_section`). ``existing_facts`` are
+    the athlete's current observations, passed so the model avoids repeating them.
+
+    Returns a list of candidate dicts (``fact``, ``category``, ``confidence``,
+    ``source_snippet``), deduplicated and capped. Candidates are NOT persisted —
+    the caller decides how to store them.
+    """
+    if not metrics_section.strip():
+        return []
+
+    system_prompt = generate_athlete_insights_system()
+    user_msg = generate_athlete_insights_user(metrics_section, existing_facts)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_fact_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["fact"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_GENERATED_INSIGHTS:
             break
     return candidates
 
