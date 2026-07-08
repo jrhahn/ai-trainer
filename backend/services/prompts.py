@@ -739,10 +739,16 @@ def recommendation_reasoning_layers_rule() -> str:
         "more than another structured session today?'\n"
         "- Do not over-ask. If recent data, athlete context, or safety/fatigue signals already "
         "make the recommendation clear, give the recommendation directly.\n"
+        "- These two layers are distinct knowledge sources: the physiology layer is your "
+        "COACH INFERENCE from the athlete's numbers, and the athlete-context layer is a "
+        "PERSONAL OBSERVATION about this specific athlete. Any sports-science you rely on is "
+        'a third source — cite it in "sources" — so the athlete can always tell where a '
+        "claim comes from.\n"
         "- Always record your two-layer reasoning in the JSON fields "
         '"physiologyRationale" (one short phrase on what the numbers/load/freshness alone '
-        'suggest) and "contextRationale" (one short phrase on what personal context — rest '
-        "response, motivation, overtraining tendency, social needs, preferences — suggests). "
+        "suggest — your coach inference) and \"contextRationale\" (one short phrase on what "
+        "personal context — rest response, motivation, overtraining tendency, social needs, "
+        "preferences — suggests, i.e. a personal observation). "
         "Leave a field as an empty string only when that layer genuinely adds nothing.\n"
         "- When the two layers AGREE, keep the final response concise and natural and do not "
         "expose the layer labels.\n"
@@ -997,9 +1003,9 @@ def ask_trainer_system(
         '- "thinking": your internal reasoning (required, but never shown to the athlete)\n'
         '- "response": your natural language answer as a string (required)\n'
         '- "physiologyRationale": one short phrase capturing what the load/freshness/fatigue '
-        "numbers alone suggest (use \"\" when not applicable)\n"
+        "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
-        "suggests (use \"\" when not applicable)\n"
+        "suggests — a personal observation (use \"\" when not applicable)\n"
         '- "sources": an array of source titles you referenced from the science research section '
         "(omit or use [] if no research was cited)\n"
         '- "ride_note_update": optional object — only include when the athlete is describing a specific ride\n'

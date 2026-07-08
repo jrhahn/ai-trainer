@@ -2,29 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Target, TrendingUp, Zap, Calendar, Info } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
-import type { ReadinessScore, ReasoningSource } from '../services/ai'
-
-// Knowledge-source labels for recommendation reasoning (issue #377). Each
-// bullet is tagged so the athlete can tell a personal observation about
-// themselves apart from general sports science and the coach's read of the
-// numbers.
-const REASONING_SOURCE_META: Record<
-  ReasoningSource,
-  { label: string; className: string }
-> = {
-  personal_observation: {
-    label: 'Personal observation',
-    className: 'bg-purple-50 text-purple-600 border border-purple-100',
-  },
-  scientific_evidence: {
-    label: 'Scientific evidence',
-    className: 'bg-blue-50 text-blue-600 border border-blue-100',
-  },
-  coach_inference: {
-    label: 'Coach inference',
-    className: 'bg-gray-100 text-gray-600 border border-gray-200',
-  },
-}
+import type { ReadinessScore } from '../services/ai'
+import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
 
 // ---------------------------------------------------------------------------
 // Explanation panel — shown to the right of the score
@@ -234,9 +213,7 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
                         >
                           <span className="text-gray-300 mt-0.5">–</span>
                           <span>
-                            <span
-                              className={`mr-1.5 rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide ${meta.className}`}
-                            >
+                            <span className={`mr-1.5 ${REASONING_BADGE_CLASS} ${meta.className}`}>
                               {meta.label}
                             </span>
                             {why.text}
