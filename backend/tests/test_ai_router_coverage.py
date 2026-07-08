@@ -98,6 +98,34 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_readiness_score_includes_personal_observations(client, auth_headers):
+    """Recommendations weave in the coach's persisted observations of the athlete."""
+    # Seed a high-confidence athlete-memory fact (prompt threshold is 0.5).
+    created = await client.post(
+        "/api/v1/users/me/athlete-memory-facts",
+        headers=auth_headers,
+        json={
+            "fact": "Tends to skip easy endurance rides when motivation dips.",
+            "category": "behaviour",
+            "confidence": 0.9,
+        },
+    )
+    assert created.status_code == 201
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+
+    all_reasoning = [
+        line for rec in body["recommendations"] for line in rec["reasoning"]
+    ]
+    assert any(
+        "Personal observation: Tends to skip easy endurance rides" in line
+        for line in all_reasoning
+    )
+
+
+@pytest.mark.asyncio
 async def test_readiness_score_with_race_events(client, auth_headers):
     """readiness_score includes days_until_race when race events exist."""
     from datetime import date, timedelta

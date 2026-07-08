@@ -705,32 +705,122 @@ def compute_readiness_score(
     }
 
 
+_OBSERVATION_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "recovery": (
+        "recover",
+        "rest",
+        "fatigue",
+        "tired",
+        "overtrain",
+        "burnout",
+        "sleep",
+        "sick",
+        "illness",
+        "injur",
+        "sore",
+    ),
+    "freshness": ("fresh", "overreach", "impatient", "eager", "too hard", "goes hard"),
+    "intensity": (
+        "interval",
+        "intensity",
+        "vo2",
+        "threshold",
+        "hard session",
+        "avoid hard",
+        "hate hard",
+    ),
+    "race": ("race", "taper", "nervous", "anxi", "peak", "event", "compet", "pacing"),
+    "fitness": (
+        "consist",
+        "skip",
+        "miss",
+        "motivat",
+        "volume",
+        "endurance",
+        "long ride",
+        "base",
+        "lazy",
+        "commit",
+    ),
+}
+
+
+def _attach_personal_observations(recs: list[dict], observations: list[str]) -> None:
+    """Weave the coach's knowledge of the athlete into recommendation reasoning.
+
+    Each observation (a persisted athlete-memory fact — a habit, tendency or
+    flaw) is attached to the recommendation whose theme it best matches, so the
+    advice reflects *this* athlete and not just the numbers.  Observations that
+    match no active theme are surfaced on the primary recommendation as general
+    context rather than dropped.  Personal observations are prepended so they
+    lead the reasoning, ahead of the metric and scientific-evidence bullets.
+    """
+    if not recs or not observations:
+        return
+
+    theme_to_rec: dict[str, dict] = {}
+    for rec in recs:
+        theme_to_rec.setdefault(rec["_theme"], rec)
+
+    per_rec: dict[int, list[str]] = {id(rec): [] for rec in recs}
+    seen: set[str] = set()
+    for observation in observations:
+        text = observation.casefold()
+        if text in seen:
+            continue
+        seen.add(text)
+        target = None
+        for theme, keywords in _OBSERVATION_THEME_KEYWORDS.items():
+            if theme in theme_to_rec and any(k in text for k in keywords):
+                target = theme_to_rec[theme]
+                break
+        if target is None:
+            target = recs[0]
+        per_rec[id(target)].append(f"Personal observation: {observation}")
+
+    for rec in recs:
+        bullets = per_rec[id(rec)]
+        if bullets:
+            rec["reasoning"] = bullets + rec["reasoning"]
+
+
 def compute_readiness_recommendations(
     ctl: float,
     atl: float,
     tsb: float,
     score: float,
     days_until_race: int,
+    observations: list[str] | None = None,
 ) -> list[dict]:
     """Generate actionable recommendations, each explained with supporting evidence.
 
     Recommendations are derived from the athlete's current CTL (fitness), ATL
     (fatigue), TSB (form), overall score, and the time left until race day.
 
-    Every recommendation is transparent about *why* it was made: alongside the
-    advice we attach ``reasoning`` bullets that pair the athlete's **current
-    metrics** with the **scientific rationale** behind the tip.  Returns a list
-    of ``{"recommendation": str, "reasoning": list[str]}`` dicts.
+    Every recommendation is transparent about *why* it was made. Alongside the
+    advice we attach ``reasoning`` bullets that combine, where available:
+
+    * **personal observations** — the coach's persisted knowledge of the
+      athlete's habits, tendencies and flaws (``observations``);
+    * the athlete's **current metrics**;
+    * the **scientific rationale** behind the tip.
+
+    ``observations`` are free-text athlete-memory facts; each is routed to the
+    most relevant recommendation.  Returns a list of
+    ``{"recommendation": str, "reasoning": list[str]}`` dicts.
     """
     recs: list[dict] = []
 
-    def add(recommendation: str, reasoning: list[str]) -> None:
-        recs.append({"recommendation": recommendation, "reasoning": reasoning})
+    def add(recommendation: str, theme: str, reasoning: list[str]) -> None:
+        recs.append(
+            {"recommendation": recommendation, "reasoning": reasoning, "_theme": theme}
+        )
 
     # --- TSB / form feedback ---
     if tsb < -20:
         add(
             "You are heavily fatigued — prioritise 2–3 easy recovery rides this week.",
+            "recovery",
             [
                 f"Your Training Stress Balance (TSB) is {tsb:.1f}, well below the −20 fatigue threshold.",
                 "Deeply negative form means acute fatigue is outpacing your fitness base.",
@@ -740,6 +830,7 @@ def compute_readiness_recommendations(
     elif tsb < -10:
         add(
             "Fatigue is elevated — include at least one full rest day before intensity work.",
+            "recovery",
             [
                 f"TSB is {tsb:.1f}, in the elevated-fatigue band (−20 to −10).",
                 "Training hard while under-recovered raises injury and illness risk without adding fitness.",
@@ -749,6 +840,7 @@ def compute_readiness_recommendations(
     elif tsb < 0:
         add(
             "Slight fatigue: balance training stress with adequate sleep and nutrition.",
+            "recovery",
             [
                 f"TSB is {tsb:.1f} — mildly negative, so you are carrying a little fatigue.",
                 "This is a normal, productive training zone as long as recovery keeps pace.",
@@ -758,6 +850,7 @@ def compute_readiness_recommendations(
     elif tsb <= 10:
         add(
             "Form is neutral — good time for quality interval sessions to build fitness.",
+            "intensity",
             [
                 f"TSB is {tsb:.1f}, in the neutral 0–10 range.",
                 "You are fresh enough to hit target power but not so tapered that you would waste the freshness.",
@@ -767,6 +860,7 @@ def compute_readiness_recommendations(
     elif tsb <= 20:
         add(
             "Form is optimal for racing. Maintain with short openers; avoid heavy loads.",
+            "race",
             [
                 f"TSB is {tsb:.1f}, inside the +5 to +15 peak-form window (extended to +20 here).",
                 "This is the freshness sweet spot where power and fatigue resistance peak together.",
@@ -776,6 +870,7 @@ def compute_readiness_recommendations(
     else:
         add(
             "You are very fresh — consider adding some intensity to avoid detraining.",
+            "freshness",
             [
                 f"TSB is {tsb:.1f}, above +20 — you are carrying very little fatigue.",
                 "Excess freshness usually means training load has dropped too far and fitness may start to fade.",
@@ -787,6 +882,7 @@ def compute_readiness_recommendations(
     if ctl < 30:
         add(
             "Build your fitness base with consistent 45–90 min rides 3–4 times per week.",
+            "fitness",
             [
                 f"Your Chronic Training Load (CTL) is {ctl:.1f}, indicating a low fitness base.",
                 "Consistency matters more than intensity at this stage.",
@@ -796,6 +892,7 @@ def compute_readiness_recommendations(
     elif ctl < 60:
         add(
             "Add one longer endurance ride per week (2–3 h) to raise your fitness base.",
+            "fitness",
             [
                 f"CTL is {ctl:.1f} — a developing base with room to grow.",
                 "A weekly long ride is the most efficient way to lift chronic load without overreaching.",
@@ -805,6 +902,7 @@ def compute_readiness_recommendations(
     elif ctl < 80:
         add(
             "Fitness is solid — focus on quality over quantity; one hard session per week.",
+            "fitness",
             [
                 f"CTL is {ctl:.1f}, a solid fitness base.",
                 "Further gains now come from sharpening intensity rather than piling on volume.",
@@ -814,6 +912,7 @@ def compute_readiness_recommendations(
     else:
         add(
             "High fitness level — protect your CTL with consistent training and avoid gaps.",
+            "fitness",
             [
                 f"CTL is {ctl:.1f}, a high fitness level.",
                 "The priority shifts from building to defending the fitness you have.",
@@ -826,6 +925,7 @@ def compute_readiness_recommendations(
         if days_until_race > 21:
             add(
                 f"{days_until_race} days to race: now is the time to accumulate training load.",
+                "race",
                 [
                     f"There are {days_until_race} days until race day — outside the taper window.",
                     "Fitness built now still has time to be absorbed before you peak.",
@@ -835,6 +935,7 @@ def compute_readiness_recommendations(
         elif days_until_race > 10:
             add(
                 f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity.",
+                "race",
                 [
                     f"Race day is {days_until_race} days out, the start of the taper window.",
                     "Cutting volume while keeping intensity sheds fatigue without losing fitness.",
@@ -844,6 +945,7 @@ def compute_readiness_recommendations(
         elif days_until_race > 3:
             add(
                 f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep.",
+                "race",
                 [
                     f"Only {days_until_race} days remain — deep in the taper.",
                     "Short race-pace efforts maintain sharpness while fatigue continues to clear.",
@@ -854,6 +956,7 @@ def compute_readiness_recommendations(
             plural = "s" if days_until_race != 1 else ""
             add(
                 f"{days_until_race} day{plural} to race: rest up, eat well, and visualise your race plan.",
+                "race",
                 [
                     f"Race day is {days_until_race} day{plural} away.",
                     "There is no fitness left to gain — the goal now is to arrive fresh and fuelled.",
@@ -863,6 +966,7 @@ def compute_readiness_recommendations(
     elif days_until_race == 0:
         add(
             "Race day! Warm up well and trust your training.",
+            "race",
             [
                 "The race is today.",
                 "A structured warm-up primes your cardiovascular and neuromuscular systems for a fast start.",
@@ -874,6 +978,7 @@ def compute_readiness_recommendations(
     if score < 40:
         add(
             "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days.",
+            "fitness",
             [
                 f"Your readiness score is {score:.0f}, below the 40 mark.",
                 "Both fitness and form need work to reach a race-ready state.",
@@ -883,12 +988,18 @@ def compute_readiness_recommendations(
     elif score < 65:
         add(
             "You are on track — keep consistent training and manage fatigue leading up to race day.",
+            "fitness",
             [
                 f"Your readiness score is {score:.0f}, in the on-track 40–65 band.",
                 "Steady progress with controlled fatigue will carry you toward race readiness.",
                 "Research: consistency plus fatigue management is the most reliable route to peaking on time.",
             ],
         )
+
+    # Weave in the coach's knowledge of the athlete, then drop internal tagging.
+    _attach_personal_observations(recs, observations or [])
+    for rec in recs:
+        rec.pop("_theme", None)
 
     return recs
 

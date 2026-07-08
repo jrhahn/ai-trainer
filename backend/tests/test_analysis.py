@@ -157,6 +157,46 @@ def test_compute_readiness_recommendations_include_supporting_evidence():
     assert "14 days" in reasoning_text  # days until race
 
 
+def test_compute_readiness_recommendations_weave_in_personal_observations():
+    """Observations about the athlete are routed to the matching recommendation."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=90,
+        atl=70,
+        tsb=15,  # optimal-form / "race" theme active
+        score=60,
+        days_until_race=14,  # taper window / "race" theme active
+        observations=[
+            "Athlete gets nervous and starts races too fast.",
+            "Tends to skip easy endurance rides when motivation dips.",
+        ],
+    )
+
+    def reasoning_for(substr: str) -> list[str]:
+        return next(r["reasoning"] for r in recs if substr in r["recommendation"])
+
+    # Race-nerves observation lands on a race-themed recommendation…
+    race_reasoning = " ".join(reasoning_for("optimal for racing"))
+    assert "Personal observation: Athlete gets nervous" in race_reasoning
+    # …and the consistency flaw lands on the fitness-themed recommendation.
+    fitness_reasoning = " ".join(reasoning_for("consistent training and avoid gaps"))
+    assert "Personal observation: Tends to skip easy endurance" in fitness_reasoning
+
+    # Personal observations lead the reasoning, ahead of the metric bullet.
+    race_bullets = reasoning_for("optimal for racing")
+    assert race_bullets[0].startswith("Personal observation:")
+
+
+def test_compute_readiness_recommendations_unmatched_observation_falls_back():
+    """An observation matching no active theme still surfaces on the primary rec."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=90, atl=70, tsb=15, score=60, days_until_race=0,
+        observations=["Prefers riding in the morning before work."],
+    )
+    assert recs[0]["reasoning"][0] == (
+        "Personal observation: Prefers riding in the morning before work."
+    )
+
+
 def test_project_training_load_from_seed():
     # ftp guard returns the seed unchanged
     guard = analysis.project_training_load_from_seed([], 0, seed_ctl=50, seed_atl=40)

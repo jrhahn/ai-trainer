@@ -1199,6 +1199,15 @@ async def readiness_score(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
 
+    # --- Load the coach's personal observations of the athlete ---
+    # Only prompt-safe facts, and only when the athlete has memory enabled.
+    observation_facts = (
+        await crud.get_prompt_athlete_memory_facts(db, current_user.id)
+        if current_user.memory_updates_enabled
+        else []
+    )
+    observations = [fact.fact for fact in observation_facts]
+
     # --- Resolve FTP (rider assessment takes precedence over profile) ---
     ftp = 0.0
     if current_user.rider_assessment is not None:
@@ -1297,6 +1306,7 @@ async def readiness_score(
             tsb=current_result["tsb"],
             score=current_result["score"],
             days_until_race=days_until_race,
+            observations=observations,
         ),
     )
 
