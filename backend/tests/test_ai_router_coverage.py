@@ -107,8 +107,15 @@ async def _seed_observation(client, auth_headers, fact: str) -> None:
     assert created.status_code == 201
 
 
-def _reasoning_lines(body: dict) -> list[str]:
-    return [line for rec in body["recommendations"] for line in rec["reasoning"]]
+def _reasoning_lines(body: dict) -> list[dict]:
+    return [bullet for rec in body["recommendations"] for bullet in rec["reasoning"]]
+
+
+def _has_personal_observation(body: dict, snippet: str) -> bool:
+    return any(
+        bullet["source"] == "personal_observation" and snippet in bullet["text"]
+        for bullet in _reasoning_lines(body)
+    )
 
 
 @pytest.mark.asyncio
@@ -133,9 +140,8 @@ async def test_readiness_score_keyword_observation_matching(
 
     response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     assert response.status_code == 200
-    assert any(
-        "Personal observation: Tends to skip easy endurance rides" in line
-        for line in _reasoning_lines(response.json())
+    assert _has_personal_observation(
+        response.json(), "Tends to skip easy endurance rides"
     )
 
 
@@ -162,10 +168,10 @@ async def test_readiness_score_llm_observation_matching(
     response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
-    assert (
-        body["recommendations"][-1]["reasoning"][0]
-        == "Personal observation: Prefers riding solo in the mornings."
-    )
+    assert body["recommendations"][-1]["reasoning"][0] == {
+        "source": "personal_observation",
+        "text": "Prefers riding solo in the mornings.",
+    }
 
 
 @pytest.mark.asyncio
@@ -187,9 +193,8 @@ async def test_readiness_score_llm_matching_falls_back_on_error(
 
     response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     assert response.status_code == 200
-    assert any(
-        "Personal observation: Tends to skip easy endurance rides" in line
-        for line in _reasoning_lines(response.json())
+    assert _has_personal_observation(
+        response.json(), "Tends to skip easy endurance rides"
     )
 
 

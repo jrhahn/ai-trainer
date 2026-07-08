@@ -211,6 +211,11 @@ describe('AIChat', () => {
     })
     expect(screen.getByText('fresh enough for an easy ride')).toBeInTheDocument()
     expect(screen.getByText('history of overreaching favours rest')).toBeInTheDocument()
+    // Layers are labelled with the shared knowledge-source vocabulary (#377):
+    // the physiology read is a coach inference, the context read a personal
+    // observation — the same labels the readiness card uses.
+    expect(screen.getByText('Coach inference')).toBeInTheDocument()
+    expect(screen.getByText('Personal observation')).toBeInTheDocument()
   })
 
   it('omits the rationale disclosure when no rationale is returned', async () => {

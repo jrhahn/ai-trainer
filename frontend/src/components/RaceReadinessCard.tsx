@@ -3,6 +3,7 @@ import { Target, TrendingUp, Zap, Calendar, Info } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
 import type { ReadinessScore } from '../services/ai'
+import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
 
 // ---------------------------------------------------------------------------
 // Explanation panel — shown to the right of the score
@@ -202,16 +203,24 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
                   <span className="font-medium">{rec.recommendation}</span>
                 </div>
                 {rec.reasoning.length > 0 && (
-                  <ul className="mt-1 ml-4 space-y-0.5">
-                    {rec.reasoning.map((why) => (
-                      <li
-                        key={why}
-                        className="flex items-start gap-1.5 text-[11px] text-gray-500"
-                      >
-                        <span className="text-gray-300 mt-0.5">–</span>
-                        <span>{why}</span>
-                      </li>
-                    ))}
+                  <ul className="mt-1 ml-4 space-y-1">
+                    {rec.reasoning.map((why) => {
+                      const meta = REASONING_SOURCE_META[why.source]
+                      return (
+                        <li
+                          key={`${why.source}:${why.text}`}
+                          className="flex items-start gap-1.5 text-[11px] text-gray-500"
+                        >
+                          <span className="text-gray-300 mt-0.5">–</span>
+                          <span>
+                            <span className={`mr-1.5 ${REASONING_BADGE_CLASS} ${meta.className}`}>
+                              {meta.label}
+                            </span>
+                            {why.text}
+                          </span>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </li>

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
+import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
 import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
@@ -224,15 +225,31 @@ export default function AIChat({ contextWorkout, className }: Props) {
               Why this advice?
             </summary>
             <dl className="mt-1 space-y-1">
+              {/* Rationale layers map onto the shared knowledge sources (#377):
+                  the physiology read is a coach inference, the personal-context
+                  read is a personal observation. Cited science, when any, shows
+                  in the Sources block above as the scientific-evidence source. */}
               {msg.physiologyRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">The numbers: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.coach_inference.className}`}
+                    >
+                      {REASONING_SOURCE_META.coach_inference.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.physiologyRationale}</dd>
                 </div>
               )}
               {msg.contextRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">Knowing you: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.personal_observation.className}`}
+                    >
+                      {REASONING_SOURCE_META.personal_observation.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.contextRationale}</dd>
                 </div>
               )}

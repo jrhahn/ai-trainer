@@ -704,18 +704,32 @@ class MetricsHistoryResponse(BaseModel):
     snapshots: list[AthleteMetricSnapshotSchema]
 
 
+class ReasoningItem(BaseModel):
+    """A single supporting-evidence bullet, tagged with its knowledge source.
+
+    The ``source`` distinguishes where the knowledge comes from (issue #377) so
+    the athlete can tell a personal observation about themselves apart from
+    established sports science and from the coach's read of their metrics.
+    """
+
+    source: str
+    """One of ``personal_observation``, ``scientific_evidence``, ``coach_inference``."""
+    text: str
+    """The reasoning bullet itself, without any source-label prefix."""
+
+
 class ReadinessRecommendation(BaseModel):
     """A single readiness recommendation together with the evidence behind it.
 
     Each recommendation is transparent about *why* it was made: ``reasoning``
-    holds short supporting-evidence bullets that combine the athlete's current
-    metrics with the sports-science rationale for the advice.
+    holds short supporting-evidence bullets, each tagged with its knowledge
+    source (personal observation, scientific evidence, or coach inference).
     """
 
     recommendation: str
     """The actionable advice, e.g. "Prioritise 2–3 easy recovery rides this week."."""
-    reasoning: list[str] = []
-    """Supporting-evidence bullets explaining why the recommendation was made."""
+    reasoning: list[ReasoningItem] = []
+    """Source-tagged supporting-evidence bullets explaining the recommendation."""
 
 
 class ReadinessScoreResponse(BaseModel):
