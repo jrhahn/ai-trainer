@@ -273,7 +273,12 @@ export async function saveCoachMemoryRemote(token: string, memory: string): Prom
   return response.memory
 }
 
-export type AthleteMemoryFactStatus = 'active' | 'stale' | 'rejected' | 'user_confirmed'
+export type AthleteMemoryFactStatus =
+  | 'active'
+  | 'stale'
+  | 'archived'
+  | 'rejected'
+  | 'user_confirmed'
 
 export interface AthleteMemoryFact {
   id: string

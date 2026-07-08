@@ -27,8 +27,16 @@ ATHLETE_MEMORY_PROMPT_LIMIT = 12
 ATHLETE_MEMORY_DECAY_GRACE_DAYS = 30
 ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY = 0.01
 ATHLETE_MEMORY_STALE_CONFIDENCE = 0.3
+# Once an unconfirmed observation has gone unmentioned this long it is archived:
+# retained for audit and revival, but hidden from coach prompts and the default
+# management view. A fresh observation revives it.
+ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS = 180
 
 _ATHLETE_MEMORY_ACTIVE_STATUSES = ("active", "user_confirmed")
+# Unconfirmed statuses whose confidence still decays / that can be archived.
+_ATHLETE_MEMORY_DECAYABLE_STATUSES = ("active", "stale")
+# Statuses a fresh observation revives back to ``active``.
+_ATHLETE_MEMORY_REVIVABLE_STATUSES = ("stale", "archived")
 
 
 def _ride_metrics_are_near_duplicates(
@@ -543,26 +551,41 @@ async def get_athlete_memory_fact(
 async def apply_athlete_memory_confidence_decay(
     db: AsyncSession, user_id: str, *, now: datetime | None = None
 ) -> int:
-    """Erode confidence in stale, unconfirmed observations.
+    """Erode confidence in stale observations and archive obsolete ones.
 
     Active facts that have not been re-observed within
     ``ATHLETE_MEMORY_DECAY_GRACE_DAYS`` lose confidence linearly for each
     additional day of silence. Once confidence falls below
     ``ATHLETE_MEMORY_STALE_CONFIDENCE`` the fact is marked ``stale`` so it drops
-    out of coach prompts; a fresh observation revives it. ``user_confirmed``
-    facts are vetted by the athlete and never decay. Returns the number of facts
-    whose confidence changed.
+    out of coach prompts. If it then stays unmentioned until
+    ``ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS`` have passed since its last
+    confirmation, it is ``archived`` — retained for audit and revival but hidden
+    from the default management view. A fresh observation revives a stale or
+    archived fact. ``user_confirmed`` facts are vetted by the athlete and never
+    decay or archive. Returns the number of facts whose status or confidence
+    changed.
     """
     reference = now or datetime.now(timezone.utc)
     facts = await db.scalars(
         select(models.AthleteMemoryFact).where(
             models.AthleteMemoryFact.user_id == user_id,
-            models.AthleteMemoryFact.status == "active",
+            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_DECAYABLE_STATUSES),
         )
     )
     changed = 0
     for fact in facts:
         idle_days = (reference - _as_aware_utc(fact.last_confirmed_at)).days
+        # Archive observations that have gone unmentioned for a long time. This
+        # is keyed purely on elapsed time, so it is deterministic regardless of
+        # how often decay is applied.
+        if idle_days >= ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS:
+            fact.status = "archived"
+            fact.updated_at = reference
+            changed += 1
+            continue
+        # Stale facts hold their eroded confidence until they are archived.
+        if fact.status != "active":
+            continue
         decay_days = idle_days - ATHLETE_MEMORY_DECAY_GRACE_DAYS
         if decay_days <= 0:
             continue
@@ -658,9 +681,14 @@ async def observe_athlete_memory_fact(
             existing.source_snippet = source_snippet.strip()
         if source_exchange_id is not None:
             existing.source_exchange_id = source_exchange_id
-        if existing.status == "stale":
+        revived = existing.status in _ATHLETE_MEMORY_REVIVABLE_STATUSES
+        if revived:
             existing.status = "active"
         base_confidence = max(existing.confidence, _clamp_confidence(confidence))
+        # A revived observation may have decayed to near-zero; refresh it to at
+        # least the default so fresh evidence is trusted again.
+        if revived:
+            base_confidence = max(base_confidence, ATHLETE_MEMORY_DEFAULT_CONFIDENCE)
         existing.confidence = min(
             1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP
         )
