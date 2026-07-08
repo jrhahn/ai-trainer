@@ -1098,6 +1098,50 @@ def extract_athlete_facts_user(transcript: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# match_observations_to_recommendations prompts
+# ---------------------------------------------------------------------------
+
+
+def match_observations_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are deciding how the coach's durable observations "
+        "about an athlete (habits, tendencies, flaws) should support today's "
+        "training recommendations.\n"
+        "For EACH observation, pick the single recommendation it most directly "
+        "reinforces or qualifies — the one where knowing this about the athlete "
+        "most changes how the advice should be received.\n"
+        "Use the zero-based index of the recommendation. If an observation is not "
+        "relevant to any recommendation, use null.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"assignments": [{"observationIndex": int, "recommendationIndex": int|null}]}. '
+        "Include exactly one entry per observation."
+    )
+
+
+def match_observations_user(
+    recommendations: list[dict], observations: list[str]
+) -> str:
+    rec_lines = "\n".join(
+        f"{index}. {rec.get('recommendation', '')}"
+        for index, rec in enumerate(recommendations)
+    )
+    obs_lines = "\n".join(
+        f"{index}. {observation}" for index, observation in enumerate(observations)
+    )
+    return (
+        "Today's recommendations (index. text):\n"
+        "-----\n"
+        f"{rec_lines}\n"
+        "-----\n"
+        "Observations about the athlete (index. text):\n"
+        "-----\n"
+        f"{obs_lines}\n"
+        "-----\n"
+        "Match each observation to the recommendation it best supports."
+    )
+
+
+# ---------------------------------------------------------------------------
 # rate_completed_workout prompts
 # ---------------------------------------------------------------------------
 

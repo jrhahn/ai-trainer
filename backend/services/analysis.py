@@ -745,75 +745,89 @@ _OBSERVATION_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _attach_personal_observations(recs: list[dict], observations: list[str]) -> None:
-    """Weave the coach's knowledge of the athlete into recommendation reasoning.
+def keyword_observation_assignments(
+    recs: list[dict], observations: list[str]
+) -> dict[int, list[str]]:
+    """Route each observation to a recommendation index by keyword/theme matching.
 
-    Each observation (a persisted athlete-memory fact — a habit, tendency or
-    flaw) is attached to the recommendation whose theme it best matches, so the
-    advice reflects *this* athlete and not just the numbers.  Observations that
-    match no active theme are surfaced on the primary recommendation as general
-    context rather than dropped.  Personal observations are prepended so they
-    lead the reasoning, ahead of the metric and scientific-evidence bullets.
+    Deterministic, no LLM call. Each observation (a persisted athlete-memory
+    fact — a habit, tendency or flaw) is assigned to the recommendation whose
+    theme its text best matches. Observations that match no active theme fall
+    back to the primary recommendation (index 0) rather than being dropped.
+
+    Returns ``{recommendation_index: [observation, ...]}`` preserving order.
     """
+    assignments: dict[int, list[str]] = {}
     if not recs or not observations:
-        return
+        return assignments
 
-    theme_to_rec: dict[str, dict] = {}
-    for rec in recs:
-        theme_to_rec.setdefault(rec["_theme"], rec)
+    theme_to_index: dict[str, int] = {}
+    for index, rec in enumerate(recs):
+        theme_to_index.setdefault(rec.get("theme", ""), index)
 
-    per_rec: dict[int, list[str]] = {id(rec): [] for rec in recs}
     seen: set[str] = set()
     for observation in observations:
         text = observation.casefold()
         if text in seen:
             continue
         seen.add(text)
-        target = None
+        target = 0
         for theme, keywords in _OBSERVATION_THEME_KEYWORDS.items():
-            if theme in theme_to_rec and any(k in text for k in keywords):
-                target = theme_to_rec[theme]
+            if theme in theme_to_index and any(k in text for k in keywords):
+                target = theme_to_index[theme]
                 break
-        if target is None:
-            target = recs[0]
-        per_rec[id(target)].append(f"Personal observation: {observation}")
+        assignments.setdefault(target, []).append(observation)
+    return assignments
 
+
+def attach_observation_assignments(
+    recs: list[dict], assignments: dict[int, list[str]]
+) -> None:
+    """Prepend routed observations as ``Personal observation:`` reasoning bullets.
+
+    Personal observations lead the reasoning, ahead of the metric and
+    scientific-evidence bullets. ``assignments`` maps a recommendation index to
+    the observation strings destined for it (see
+    :func:`keyword_observation_assignments`).
+    """
+    for index, observations in assignments.items():
+        if not (0 <= index < len(recs)) or not observations:
+            continue
+        bullets = [f"Personal observation: {obs}" for obs in observations]
+        recs[index]["reasoning"] = bullets + recs[index]["reasoning"]
+
+
+def finalize_recommendations(recs: list[dict]) -> list[dict]:
+    """Drop internal theme tagging, leaving the public recommendation shape."""
     for rec in recs:
-        bullets = per_rec[id(rec)]
-        if bullets:
-            rec["reasoning"] = bullets + rec["reasoning"]
+        rec.pop("theme", None)
+    return recs
 
 
-def compute_readiness_recommendations(
+def build_readiness_recommendations(
     ctl: float,
     atl: float,
     tsb: float,
     score: float,
     days_until_race: int,
-    observations: list[str] | None = None,
 ) -> list[dict]:
-    """Generate actionable recommendations, each explained with supporting evidence.
+    """Build the base readiness recommendations, before personal observations.
 
     Recommendations are derived from the athlete's current CTL (fitness), ATL
     (fatigue), TSB (form), overall score, and the time left until race day.
+    Every recommendation is transparent about *why* it was made: each carries
+    ``reasoning`` bullets pairing the athlete's **current metrics** with the
+    **scientific rationale** behind the tip.
 
-    Every recommendation is transparent about *why* it was made. Alongside the
-    advice we attach ``reasoning`` bullets that combine, where available:
-
-    * **personal observations** — the coach's persisted knowledge of the
-      athlete's habits, tendencies and flaws (``observations``);
-    * the athlete's **current metrics**;
-    * the **scientific rationale** behind the tip.
-
-    ``observations`` are free-text athlete-memory facts; each is routed to the
-    most relevant recommendation.  Returns a list of
-    ``{"recommendation": str, "reasoning": list[str]}`` dicts.
+    Returns a list of ``{"recommendation": str, "reasoning": list[str],
+    "theme": str}`` dicts. ``theme`` is an internal routing tag for matching
+    personal observations; call :func:`finalize_recommendations` to strip it.
     """
     recs: list[dict] = []
 
     def add(recommendation: str, theme: str, reasoning: list[str]) -> None:
         recs.append(
-            {"recommendation": recommendation, "reasoning": reasoning, "_theme": theme}
+            {"recommendation": recommendation, "reasoning": reasoning, "theme": theme}
         )
 
     # --- TSB / form feedback ---
@@ -996,12 +1010,31 @@ def compute_readiness_recommendations(
             ],
         )
 
-    # Weave in the coach's knowledge of the athlete, then drop internal tagging.
-    _attach_personal_observations(recs, observations or [])
-    for rec in recs:
-        rec.pop("_theme", None)
-
     return recs
+
+
+def compute_readiness_recommendations(
+    ctl: float,
+    atl: float,
+    tsb: float,
+    score: float,
+    days_until_race: int,
+    observations: list[str] | None = None,
+) -> list[dict]:
+    """Build readiness recommendations and weave in personal observations.
+
+    Convenience wrapper around :func:`build_readiness_recommendations` that uses
+    deterministic keyword matching (:func:`keyword_observation_assignments`) to
+    route ``observations`` — free-text athlete-memory facts — to the most
+    relevant recommendation. For LLM-based matching, compose the building blocks
+    directly (see ``routers/ai.py``). Returns a list of
+    ``{"recommendation": str, "reasoning": list[str]}`` dicts.
+    """
+    recs = build_readiness_recommendations(ctl, atl, tsb, score, days_until_race)
+    if observations:
+        assignments = keyword_observation_assignments(recs, observations)
+        attach_observation_assignments(recs, assignments)
+    return finalize_recommendations(recs)
 
 
 def _project_training_load(

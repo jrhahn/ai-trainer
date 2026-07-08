@@ -29,7 +29,10 @@ from services.ai_service import (
 from services.analysis import (
     compare_planned_vs_actual,
     compute_readiness_score,
-    compute_readiness_recommendations,
+    build_readiness_recommendations,
+    keyword_observation_assignments,
+    attach_observation_assignments,
+    finalize_recommendations,
     compute_training_load,
     _project_training_load,
     project_training_load_from_seed,
@@ -1287,6 +1290,33 @@ async def readiness_score(
         projected_atl = projected_load["atl"]
         projected_tsb = projected_load["tsb"]
 
+    # --- Build recommendations, then weave in the coach's observations ---
+    recommendations = build_readiness_recommendations(
+        ctl=current_result["ctl"],
+        atl=current_result["atl"],
+        tsb=current_result["tsb"],
+        score=current_result["score"],
+        days_until_race=days_until_race,
+    )
+    if observations:
+        assignments: dict[int, list[str]] | None = None
+        if settings.readiness_observation_matching == "llm":
+            try:
+                assignments = await ai_service.match_observations_to_recommendations(
+                    recommendations,
+                    observations,
+                    provider=resolve_user_provider(current_user),
+                )
+            except Exception:
+                logger.exception(
+                    "LLM observation matching failed; falling back to keyword matching"
+                )
+                assignments = None
+        if assignments is None:
+            assignments = keyword_observation_assignments(recommendations, observations)
+        attach_observation_assignments(recommendations, assignments)
+    finalize_recommendations(recommendations)
+
     return schemas.ReadinessScoreResponse(
         score=current_result["score"],
         form_score=current_result["form_score"],
@@ -1300,14 +1330,7 @@ async def readiness_score(
         projected_ctl=projected_ctl,
         projected_atl=projected_atl,
         projected_tsb=projected_tsb,
-        recommendations=compute_readiness_recommendations(
-            ctl=current_result["ctl"],
-            atl=current_result["atl"],
-            tsb=current_result["tsb"],
-            score=current_result["score"],
-            days_until_race=days_until_race,
-            observations=observations,
-        ),
+        recommendations=recommendations,
     )
 
 

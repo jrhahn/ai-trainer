@@ -97,31 +97,99 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
         assert rec["reasoning"]
 
 
-@pytest.mark.asyncio
-async def test_readiness_score_includes_personal_observations(client, auth_headers):
-    """Recommendations weave in the coach's persisted observations of the athlete."""
-    # Seed a high-confidence athlete-memory fact (prompt threshold is 0.5).
+async def _seed_observation(client, auth_headers, fact: str) -> None:
+    """Persist a high-confidence athlete-memory fact (prompt threshold is 0.5)."""
     created = await client.post(
         "/api/v1/users/me/athlete-memory-facts",
         headers=auth_headers,
-        json={
-            "fact": "Tends to skip easy endurance rides when motivation dips.",
-            "category": "behaviour",
-            "confidence": 0.9,
-        },
+        json={"fact": fact, "category": "behaviour", "confidence": 0.9},
     )
     assert created.status_code == 201
+
+
+def _reasoning_lines(body: dict) -> list[str]:
+    return [line for rec in body["recommendations"] for line in rec["reasoning"]]
+
+
+@pytest.mark.asyncio
+async def test_readiness_score_keyword_observation_matching(
+    client, auth_headers, monkeypatch
+):
+    """With keyword matching configured, observations weave in without any LLM call."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(
+        ai_router.settings, "readiness_observation_matching", "keyword"
+    )
+    # If keyword mode is honoured the LLM matcher must never be called.
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        AsyncMock(side_effect=AssertionError("LLM matcher must not be called")),
+    )
+    await _seed_observation(
+        client, auth_headers, "Tends to skip easy endurance rides when motivation dips."
+    )
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
+    assert any(
+        "Personal observation: Tends to skip easy endurance rides" in line
+        for line in _reasoning_lines(response.json())
+    )
+
+
+@pytest.mark.asyncio
+async def test_readiness_score_llm_observation_matching(
+    client, auth_headers, monkeypatch
+):
+    """Default LLM matching routes observations via the matcher's assignments."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(ai_router.settings, "readiness_observation_matching", "llm")
+
+    async def fake_matcher(recommendations, observations, provider="openai"):
+        # Route every observation onto the last recommendation.
+        return {len(recommendations) - 1: list(observations)}
+
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        fake_matcher,
+    )
+    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
 
     response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
+    assert (
+        body["recommendations"][-1]["reasoning"][0]
+        == "Personal observation: Prefers riding solo in the mornings."
+    )
 
-    all_reasoning = [
-        line for rec in body["recommendations"] for line in rec["reasoning"]
-    ]
+
+@pytest.mark.asyncio
+async def test_readiness_score_llm_matching_falls_back_on_error(
+    client, auth_headers, monkeypatch
+):
+    """If the LLM matcher raises, keyword matching still surfaces observations."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(ai_router.settings, "readiness_observation_matching", "llm")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        AsyncMock(side_effect=RuntimeError("llm down")),
+    )
+    await _seed_observation(
+        client, auth_headers, "Tends to skip easy endurance rides when motivation dips."
+    )
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
     assert any(
         "Personal observation: Tends to skip easy endurance rides" in line
-        for line in all_reasoning
+        for line in _reasoning_lines(response.json())
     )
 
 
