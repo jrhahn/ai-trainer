@@ -796,6 +796,96 @@ async def test_athlete_memory_confirmed_facts_do_not_decay(db: AsyncSession) -> 
 
 
 @pytest.mark.asyncio
+async def test_athlete_memory_archives_obsolete_observation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers gravel over road",
+        category="preference",
+        confidence=0.6,
+        observed_at=observed_at,
+    )
+
+    # Just before the archive window the fact has decayed but is still on file.
+    before = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS - 1)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=before)
+    assert fact.status in {"active", "stale"}
+
+    # Past the archive window an unmentioned observation is archived.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 1
+    assert fact.status == "archived"
+
+    # Archiving is idempotent: a second pass reports no further change.
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+
+    # Archived facts drop out of the default management view but remain on file.
+    active = await crud.list_athlete_memory_facts(db, user.id, now=later)
+    assert fact.id not in {f.id for f in active}
+    all_facts = await crud.list_athlete_memory_facts(
+        db, user.id, include_inactive=True, now=later
+    )
+    assert fact.id in {f.id for f in all_facts}
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_archived_fact_revived_by_observation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Trains best in the evening",
+        category="preference",
+        confidence=0.5,
+        observed_at=observed_at,
+    )
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 10)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later)
+    assert fact.status == "archived"
+
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Trains best in the evening",
+        category="preference",
+        observed_at=later,
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    # Fresh evidence refreshes confidence back above the default floor.
+    assert revived.confidence >= crud.ATHLETE_MEMORY_DEFAULT_CONFIDENCE
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confirmed_facts_not_archived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Aims for a sub-9-hour gran fondo",
+        category="motivation",
+        confidence=0.7,
+        observed_at=observed_at,
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 100)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "user_confirmed"
+
+
+@pytest.mark.asyncio
 async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejected(
     db: AsyncSession,
 ) -> None:

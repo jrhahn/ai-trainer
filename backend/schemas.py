@@ -365,7 +365,9 @@ class AthleteContextRequest(AthleteContextSchema):
     pass
 
 
-AthleteMemoryFactStatus = Literal["active", "stale", "rejected", "user_confirmed"]
+AthleteMemoryFactStatus = Literal[
+    "active", "stale", "archived", "rejected", "user_confirmed"
+]
 
 
 class AthleteMemoryFactSchema(CamelModel):
