@@ -22,6 +22,11 @@ ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
 ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE = 0.5
 ATHLETE_MEMORY_STALE_AFTER_DAYS = 90
 ATHLETE_MEMORY_PROMPT_LIMIT = 12
+# Confidence in an unconfirmed observation erodes once it has gone unmentioned
+# for a grace period, so the coach trusts fresh evidence over old assumptions.
+ATHLETE_MEMORY_DECAY_GRACE_DAYS = 30
+ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY = 0.01
+ATHLETE_MEMORY_STALE_CONFIDENCE = 0.3
 
 _ATHLETE_MEMORY_ACTIVE_STATUSES = ("active", "user_confirmed")
 
@@ -535,10 +540,56 @@ async def get_athlete_memory_fact(
     )
 
 
+async def apply_athlete_memory_confidence_decay(
+    db: AsyncSession, user_id: str, *, now: datetime | None = None
+) -> int:
+    """Erode confidence in stale, unconfirmed observations.
+
+    Active facts that have not been re-observed within
+    ``ATHLETE_MEMORY_DECAY_GRACE_DAYS`` lose confidence linearly for each
+    additional day of silence. Once confidence falls below
+    ``ATHLETE_MEMORY_STALE_CONFIDENCE`` the fact is marked ``stale`` so it drops
+    out of coach prompts; a fresh observation revives it. ``user_confirmed``
+    facts are vetted by the athlete and never decay. Returns the number of facts
+    whose confidence changed.
+    """
+    reference = now or datetime.now(timezone.utc)
+    facts = await db.scalars(
+        select(models.AthleteMemoryFact).where(
+            models.AthleteMemoryFact.user_id == user_id,
+            models.AthleteMemoryFact.status == "active",
+        )
+    )
+    changed = 0
+    for fact in facts:
+        idle_days = (reference - _as_aware_utc(fact.last_confirmed_at)).days
+        decay_days = idle_days - ATHLETE_MEMORY_DECAY_GRACE_DAYS
+        if decay_days <= 0:
+            continue
+        decayed = _clamp_confidence(
+            fact.confidence - ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY * decay_days
+        )
+        if decayed >= fact.confidence:
+            continue
+        fact.confidence = decayed
+        fact.updated_at = reference
+        if decayed < ATHLETE_MEMORY_STALE_CONFIDENCE:
+            fact.status = "stale"
+        changed += 1
+    if changed:
+        await db.flush()
+    return changed
+
+
 async def list_athlete_memory_facts(
-    db: AsyncSession, user_id: str, *, include_inactive: bool = False
+    db: AsyncSession,
+    user_id: str,
+    *,
+    include_inactive: bool = False,
+    now: datetime | None = None,
 ) -> list[models.AthleteMemoryFact]:
     """Return stored athlete memory facts for management views."""
+    await apply_athlete_memory_confidence_decay(db, user_id, now=now)
     stmt = select(models.AthleteMemoryFact).where(
         models.AthleteMemoryFact.user_id == user_id
     )
@@ -685,8 +736,11 @@ async def get_prompt_athlete_memory_facts(
     limit: int = ATHLETE_MEMORY_PROMPT_LIMIT,
 ) -> list[models.AthleteMemoryFact]:
     """Return only memory facts safe enough to include in coach prompts."""
-    facts = await list_athlete_memory_facts(db, user_id, include_inactive=False)
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=stale_after_days)
+    reference = now or datetime.now(timezone.utc)
+    facts = await list_athlete_memory_facts(
+        db, user_id, include_inactive=False, now=reference
+    )
+    cutoff = reference - timedelta(days=stale_after_days)
     prompt_facts: list[models.AthleteMemoryFact] = []
     for fact in facts:
         if fact.status == "user_confirmed":

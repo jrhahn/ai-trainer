@@ -711,7 +711,10 @@ def athlete_memory_facts_section(facts: list[dict] | None) -> str:
         "\n\nEvidence-backed athlete memory facts (durable, vetted): "
         f"{json.dumps(compact_facts, ensure_ascii=False)}\n"
         "Use these only when relevant. Treat confidence, evidence, and freshness "
-        "as part of the fact; never infer stronger claims than the stored fact supports."
+        "as part of the fact; never infer stronger claims than the stored fact supports. "
+        "Weight recommendations toward higher-confidence facts; lean on lower-confidence "
+        "ones tentatively, and prefer verifying them with a short question over acting on "
+        "them as settled."
     )
 
 

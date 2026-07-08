@@ -4,7 +4,7 @@ These tests call crud functions directly against the test database, bypassing
 the HTTP routers, to verify the data-access logic in isolation.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -707,6 +707,92 @@ async def test_observe_athlete_memory_fact_repeated_observations_increase_confid
     assert second.observation_count == 2
     assert second.confidence > first_confidence
     assert second.source_snippet == "I felt fresh so I added a second hard set."
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confidence_decays_after_grace_period(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers morning rides",
+        category="preference",
+        confidence=0.7,
+        observed_at=observed_at,
+    )
+
+    # Within the grace window confidence is untouched.
+    fresh = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=fresh) == 0
+    assert fact.confidence == 0.7
+
+    # Past the grace window it erodes linearly with idle days.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 20)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 1
+    assert fact.confidence == pytest.approx(
+        0.7 - crud.ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY * 20
+    )
+    assert fact.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_decay_marks_fact_stale_and_observation_revives_it(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Skips long rides in winter",
+        category="adherence",
+        confidence=0.4,
+        observed_at=observed_at,
+    )
+
+    # Enough idle days to fall below the stale threshold.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 40)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later)
+    assert fact.status == "stale"
+    assert fact.confidence < crud.ATHLETE_MEMORY_STALE_CONFIDENCE
+
+    # A fresh observation revives the fact and rebuilds confidence.
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Skips long rides in winter",
+        category="adherence",
+        observed_at=later,
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    assert revived.confidence > 0.0
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confirmed_facts_do_not_decay(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Races cyclocross every autumn",
+        category="motivation",
+        confidence=0.7,
+        observed_at=observed_at,
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    confirmed_confidence = fact.confidence
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 200)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "user_confirmed"
+    assert fact.confidence == confirmed_confidence
 
 
 @pytest.mark.asyncio
