@@ -209,6 +209,11 @@ export async function rateCompletedWorkout(
   }
 }
 
+export interface ReadinessRecommendation {
+  recommendation: string
+  reasoning: string[]
+}
+
 export interface ReadinessScore {
   score: number
   formScore: number
@@ -222,7 +227,12 @@ export interface ReadinessScore {
   projectedCtl?: number | null
   projectedAtl?: number | null
   projectedTsb?: number | null
-  recommendations: string[]
+  recommendations: ReadinessRecommendation[]
+}
+
+interface BackendReadinessRecommendation {
+  recommendation: string
+  reasoning?: string[]
 }
 
 interface BackendReadinessScore {
@@ -238,7 +248,7 @@ interface BackendReadinessScore {
   projected_ctl?: number | null
   projected_atl?: number | null
   projected_tsb?: number | null
-  recommendations?: string[]
+  recommendations?: BackendReadinessRecommendation[]
 }
 
 export async function fetchReadinessScore(authToken: string): Promise<ReadinessScore> {
@@ -256,7 +266,10 @@ export async function fetchReadinessScore(authToken: string): Promise<ReadinessS
     projectedCtl: raw.projected_ctl,
     projectedAtl: raw.projected_atl,
     projectedTsb: raw.projected_tsb,
-    recommendations: raw.recommendations ?? [],
+    recommendations: (raw.recommendations ?? []).map((rec) => ({
+      recommendation: rec.recommendation,
+      reasoning: rec.reasoning ?? [],
+    })),
   }
 }
 

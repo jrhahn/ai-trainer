@@ -711,92 +711,186 @@ def compute_readiness_recommendations(
     tsb: float,
     score: float,
     days_until_race: int,
-) -> list[str]:
-    """Generate short, actionable bullet-point recommendations to improve race readiness.
+) -> list[dict]:
+    """Generate actionable recommendations, each explained with supporting evidence.
 
     Recommendations are derived from the athlete's current CTL (fitness), ATL
     (fatigue), TSB (form), overall score, and the time left until race day.
 
-    Returns a list of short strings — each is one bullet point.
+    Every recommendation is transparent about *why* it was made: alongside the
+    advice we attach ``reasoning`` bullets that pair the athlete's **current
+    metrics** with the **scientific rationale** behind the tip.  Returns a list
+    of ``{"recommendation": str, "reasoning": list[str]}`` dicts.
     """
-    tips: list[str] = []
+    recs: list[dict] = []
+
+    def add(recommendation: str, reasoning: list[str]) -> None:
+        recs.append({"recommendation": recommendation, "reasoning": reasoning})
 
     # --- TSB / form feedback ---
     if tsb < -20:
-        tips.append(
-            "You are heavily fatigued — prioritise 2–3 easy recovery rides this week."
+        add(
+            "You are heavily fatigued — prioritise 2–3 easy recovery rides this week.",
+            [
+                f"Your Training Stress Balance (TSB) is {tsb:.1f}, well below the −20 fatigue threshold.",
+                "Deeply negative form means acute fatigue is outpacing your fitness base.",
+                "Research: adaptation happens during recovery, not during the overload itself — riding easy lets you absorb the load.",
+            ],
         )
     elif tsb < -10:
-        tips.append(
-            "Fatigue is elevated — include at least one full rest day before intensity work."
+        add(
+            "Fatigue is elevated — include at least one full rest day before intensity work.",
+            [
+                f"TSB is {tsb:.1f}, in the elevated-fatigue band (−20 to −10).",
+                "Training hard while under-recovered raises injury and illness risk without adding fitness.",
+                "Research: a rest day restores glycogen and neuromuscular readiness so the next hard session lands cleanly.",
+            ],
         )
     elif tsb < 0:
-        tips.append(
-            "Slight fatigue: balance training stress with adequate sleep and nutrition."
+        add(
+            "Slight fatigue: balance training stress with adequate sleep and nutrition.",
+            [
+                f"TSB is {tsb:.1f} — mildly negative, so you are carrying a little fatigue.",
+                "This is a normal, productive training zone as long as recovery keeps pace.",
+                "Research: sleep and fuelling are the primary levers that convert training stress into adaptation.",
+            ],
         )
     elif tsb <= 10:
-        tips.append(
-            "Form is neutral — good time for quality interval sessions to build fitness."
+        add(
+            "Form is neutral — good time for quality interval sessions to build fitness.",
+            [
+                f"TSB is {tsb:.1f}, in the neutral 0–10 range.",
+                "You are fresh enough to hit target power but not so tapered that you would waste the freshness.",
+                "Research: high-quality intervals performed in a rested state drive the biggest VO2max and threshold gains.",
+            ],
         )
     elif tsb <= 20:
-        tips.append(
-            "Form is optimal for racing. Maintain with short openers; avoid heavy loads."
+        add(
+            "Form is optimal for racing. Maintain with short openers; avoid heavy loads.",
+            [
+                f"TSB is {tsb:.1f}, inside the +5 to +15 peak-form window (extended to +20 here).",
+                "This is the freshness sweet spot where power and fatigue resistance peak together.",
+                "Research: short opener efforts keep the legs sharp without eroding the form you have built.",
+            ],
         )
     else:
-        tips.append(
-            "You are very fresh — consider adding some intensity to avoid detraining."
+        add(
+            "You are very fresh — consider adding some intensity to avoid detraining.",
+            [
+                f"TSB is {tsb:.1f}, above +20 — you are carrying very little fatigue.",
+                "Excess freshness usually means training load has dropped too far and fitness may start to fade.",
+                "Research: detraining begins within ~1–2 weeks of reduced load, so a stimulus preserves fitness.",
+            ],
         )
 
     # --- CTL / fitness feedback ---
     if ctl < 30:
-        tips.append(
-            "Build your fitness base with consistent 45–90 min rides 3–4 times per week."
+        add(
+            "Build your fitness base with consistent 45–90 min rides 3–4 times per week.",
+            [
+                f"Your Chronic Training Load (CTL) is {ctl:.1f}, indicating a low fitness base.",
+                "Consistency matters more than intensity at this stage.",
+                "Research: aerobic base built from frequent steady rides raises mitochondrial density and fat oxidation.",
+            ],
         )
     elif ctl < 60:
-        tips.append(
-            "Add one longer endurance ride per week (2–3 h) to raise your fitness base."
+        add(
+            "Add one longer endurance ride per week (2–3 h) to raise your fitness base.",
+            [
+                f"CTL is {ctl:.1f} — a developing base with room to grow.",
+                "A weekly long ride is the most efficient way to lift chronic load without overreaching.",
+                "Research: extended endurance rides expand plasma volume and capillary density, raising sustainable CTL.",
+            ],
         )
     elif ctl < 80:
-        tips.append(
-            "Fitness is solid — focus on quality over quantity; one hard session per week."
+        add(
+            "Fitness is solid — focus on quality over quantity; one hard session per week.",
+            [
+                f"CTL is {ctl:.1f}, a solid fitness base.",
+                "Further gains now come from sharpening intensity rather than piling on volume.",
+                "Research: with a mature base, polarised training (mostly easy plus targeted hard efforts) yields the best returns.",
+            ],
         )
     else:
-        tips.append(
-            "High fitness level — protect your CTL with consistent training and avoid gaps."
+        add(
+            "High fitness level — protect your CTL with consistent training and avoid gaps.",
+            [
+                f"CTL is {ctl:.1f}, a high fitness level.",
+                "The priority shifts from building to defending the fitness you have.",
+                "Research: CTL decays roughly twice as fast as it builds, so training gaps are costly at this level.",
+            ],
         )
 
     # --- Race-specific advice ---
     if days_until_race > 0:
         if days_until_race > 21:
-            tips.append(
-                f"{days_until_race} days to race: now is the time to accumulate training load."
+            add(
+                f"{days_until_race} days to race: now is the time to accumulate training load.",
+                [
+                    f"There are {days_until_race} days until race day — outside the taper window.",
+                    "Fitness built now still has time to be absorbed before you peak.",
+                    "Research: meaningful CTL gains take 4+ weeks, so this is the window to add load.",
+                ],
             )
         elif days_until_race > 10:
-            tips.append(
-                f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity."
+            add(
+                f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity.",
+                [
+                    f"Race day is {days_until_race} days out, the start of the taper window.",
+                    "Cutting volume while keeping intensity sheds fatigue without losing fitness.",
+                    "Research: taper meta-analyses show a ~20–50 % volume reduction over 1–3 weeks maximises performance.",
+                ],
             )
         elif days_until_race > 3:
-            tips.append(
-                f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep."
+            add(
+                f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep.",
+                [
+                    f"Only {days_until_race} days remain — deep in the taper.",
+                    "Short race-pace efforts maintain sharpness while fatigue continues to clear.",
+                    "Research: TSB rises most in the final week of a taper, which is what lifts race-day form.",
+                ],
             )
         else:
-            tips.append(
-                f"{days_until_race} day{'s' if days_until_race != 1 else ''} to race: rest up, eat well, and visualise your race plan."
+            plural = "s" if days_until_race != 1 else ""
+            add(
+                f"{days_until_race} day{plural} to race: rest up, eat well, and visualise your race plan.",
+                [
+                    f"Race day is {days_until_race} day{plural} away.",
+                    "There is no fitness left to gain — the goal now is to arrive fresh and fuelled.",
+                    "Research: full glycogen stores and quality sleep in the final days are strong predictors of race performance.",
+                ],
             )
     elif days_until_race == 0:
-        tips.append("Race day! Warm up well and trust your training.")
+        add(
+            "Race day! Warm up well and trust your training.",
+            [
+                "The race is today.",
+                "A structured warm-up primes your cardiovascular and neuromuscular systems for a fast start.",
+                "Research: your fitness is fixed now — execution and pacing determine the outcome.",
+            ],
+        )
 
     # --- Overall score nudge ---
     if score < 40:
-        tips.append(
-            "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days."
+        add(
+            "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days.",
+            [
+                f"Your readiness score is {score:.0f}, below the 40 mark.",
+                "Both fitness and form need work to reach a race-ready state.",
+                "Research: a well-timed taper on top of a solid base is what pushes readiness into the target range.",
+            ],
         )
     elif score < 65:
-        tips.append(
-            "You are on track — keep consistent training and manage fatigue leading up to race day."
+        add(
+            "You are on track — keep consistent training and manage fatigue leading up to race day.",
+            [
+                f"Your readiness score is {score:.0f}, in the on-track 40–65 band.",
+                "Steady progress with controlled fatigue will carry you toward race readiness.",
+                "Research: consistency plus fatigue management is the most reliable route to peaking on time.",
+            ],
         )
 
-    return tips
+    return recs
 
 
 def _project_training_load(

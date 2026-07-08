@@ -106,28 +106,55 @@ def test_compute_readiness_score_bands(tsb, expected_band):
     assert result["days_until_race"] == 5
 
 
+def _texts(recs: list[dict]) -> list[str]:
+    return [r["recommendation"] for r in recs]
+
+
 def test_compute_readiness_recommendations_covers_all_branches():
     # Heavy fatigue + low fitness + far race + low score
-    tips = analysis.compute_readiness_recommendations(ctl=20, atl=90, tsb=-25, score=30, days_until_race=30)
+    recs = analysis.compute_readiness_recommendations(ctl=20, atl=90, tsb=-25, score=30, days_until_race=30)
+    tips = _texts(recs)
     assert any("heavily fatigued" in t for t in tips)
     assert any("base" in t for t in tips)
 
     # Optimal form + high fitness + taper window + on-track score
-    tips2 = analysis.compute_readiness_recommendations(ctl=90, atl=70, tsb=15, score=60, days_until_race=14)
+    tips2 = _texts(analysis.compute_readiness_recommendations(ctl=90, atl=70, tsb=15, score=60, days_until_race=14))
     assert any("optimal" in t.lower() for t in tips2)
     assert any("taper" in t.lower() for t in tips2)
 
     # Very fresh + race day
-    tips3 = analysis.compute_readiness_recommendations(ctl=50, atl=20, tsb=30, score=80, days_until_race=0)
+    tips3 = _texts(analysis.compute_readiness_recommendations(ctl=50, atl=20, tsb=30, score=80, days_until_race=0))
     assert any("Race day" in t for t in tips3)
 
     # Mid fatigue branches + 3-10 day window
-    tips4 = analysis.compute_readiness_recommendations(ctl=45, atl=55, tsb=-12, score=70, days_until_race=7)
+    tips4 = _texts(analysis.compute_readiness_recommendations(ctl=45, atl=55, tsb=-12, score=70, days_until_race=7))
     assert any("rest day" in t.lower() for t in tips4)
 
     # slight fatigue + last-days window
-    tips5 = analysis.compute_readiness_recommendations(ctl=65, atl=66, tsb=-3, score=70, days_until_race=2)
+    tips5 = _texts(analysis.compute_readiness_recommendations(ctl=65, atl=66, tsb=-3, score=70, days_until_race=2))
     assert any("rest up" in t.lower() for t in tips5)
+
+
+def test_compute_readiness_recommendations_include_supporting_evidence():
+    """Every recommendation must explain why: metric values + scientific rationale."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=45, atl=55, tsb=-12.3, score=52, days_until_race=14
+    )
+    assert recs, "expected at least one recommendation"
+    for rec in recs:
+        assert rec["recommendation"]
+        # Each recommendation carries supporting-evidence reasoning bullets.
+        assert len(rec["reasoning"]) >= 2
+        joined = " ".join(rec["reasoning"]).lower()
+        # Scientific evidence is cited alongside the athlete's metrics.
+        assert "research" in joined
+
+    reasoning_text = " ".join(w for rec in recs for w in rec["reasoning"])
+    # Current metrics are surfaced with their concrete values.
+    assert "-12.3" in reasoning_text  # TSB
+    assert "45.0" in reasoning_text  # CTL
+    assert "52" in reasoning_text  # readiness score
+    assert "14 days" in reasoning_text  # days until race
 
 
 def test_project_training_load_from_seed():

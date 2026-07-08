@@ -90,6 +90,11 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
     assert "tsb" in body
     assert "recommendations" in body
     assert isinstance(body["recommendations"], list)
+    # Each recommendation explains itself with supporting-evidence reasoning.
+    for rec in body["recommendations"]:
+        assert rec["recommendation"]
+        assert isinstance(rec["reasoning"], list)
+        assert rec["reasoning"]
 
 
 @pytest.mark.asyncio

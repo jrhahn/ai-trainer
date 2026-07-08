@@ -95,13 +95,24 @@ describe('RaceReadinessCard', () => {
     expect(screen.getByText(/CTL:/)).toBeInTheDocument()
   })
 
-  it('lists recommendations when present', async () => {
+  it('lists recommendations with their supporting evidence', async () => {
     mockFetchReadinessScore.mockResolvedValue(
-      makeScore({ recommendations: ['Taper this week', 'Sleep 8h'] })
+      makeScore({
+        recommendations: [
+          {
+            recommendation: 'Taper this week',
+            reasoning: ['TSB is 12.0', 'Research: taper lifts race-day form'],
+          },
+          { recommendation: 'Sleep 8h', reasoning: [] },
+        ],
+      })
     )
     renderCard()
     expect(await screen.findByText('Taper this week')).toBeInTheDocument()
     expect(screen.getByText('Sleep 8h')).toBeInTheDocument()
+    // Supporting-evidence reasoning is rendered alongside the recommendation.
+    expect(screen.getByText('TSB is 12.0')).toBeInTheDocument()
+    expect(screen.getByText('Research: taper lifts race-day form')).toBeInTheDocument()
   })
 
   it('labels a low score as Rest Needed', async () => {
