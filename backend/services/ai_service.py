@@ -61,6 +61,10 @@ from .prompts import (
     generate_athlete_insights_user,
     generate_validation_experiments_system,
     generate_validation_experiments_user,
+    generate_athlete_predictions_system,
+    generate_athlete_predictions_user,
+    evaluate_athlete_predictions_system,
+    evaluate_athlete_predictions_user,
     match_observations_system,
     match_observations_user,
     rate_workout_system,
@@ -804,6 +808,7 @@ async def extract_athlete_facts(
 MAX_GENERATED_INSIGHTS = 8
 MAX_GENERATED_HYPOTHESES = 5
 MAX_GENERATED_EXPERIMENTS = 5
+MAX_GENERATED_PREDICTIONS = 5
 
 
 async def generate_athlete_insights(
@@ -1000,6 +1005,159 @@ async def generate_validation_experiments(
         if len(candidates) >= MAX_GENERATED_EXPERIMENTS:
             break
     return candidates
+
+
+def _normalise_prediction_candidate(raw: object) -> dict | None:
+    """Validate one generated prediction; return a clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    prediction = raw.get("prediction")
+    if not isinstance(prediction, str) or not prediction.strip():
+        return None
+    expected = raw.get("expectedOutcome") or raw.get("expected_outcome")
+    if not isinstance(expected, str) or not expected.strip():
+        return None
+    horizon = raw.get("horizon")
+    horizon = horizon.strip()[:60] if isinstance(horizon, str) else ""
+    category = raw.get("category")
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
+    try:
+        confidence = float(raw.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = 0.5
+    confidence = max(0.0, min(1.0, confidence))
+    return {
+        "prediction": prediction.strip()[:240],
+        "expected_outcome": expected.strip()[:240],
+        "horizon": horizon,
+        "confidence": round(confidence, 2),
+        "category": category,
+    }
+
+
+async def generate_athlete_predictions(
+    metrics_section: str,
+    existing_predictions: list[str] | None = None,
+    provider: str = "openai",
+) -> list[dict]:
+    """Make explicit, checkable predictions from a training-history context block.
+
+    ``metrics_section`` is a structured-text summary of recent activities (see
+    :func:`services.prompts.ride_metrics_context_section`). ``existing_predictions``
+    are the claims already on file, passed so the model avoids repeating them.
+
+    Returns a list of candidate dicts (``prediction``, ``expected_outcome``,
+    ``horizon``, ``confidence``, ``category``), deduplicated on the prediction
+    text and capped. Candidates are NOT persisted — the caller decides how to
+    store them.
+    """
+    if not metrics_section.strip():
+        return []
+
+    system_prompt = generate_athlete_predictions_system()
+    user_msg = generate_athlete_predictions_user(
+        metrics_section, existing_predictions
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_prediction_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["prediction"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_GENERATED_PREDICTIONS:
+            break
+    return candidates
+
+
+def _normalise_prediction_evaluation(raw: object) -> dict | None:
+    """Validate one prediction verdict; return a clean dict or ``None``.
+
+    Verdicts other than ``correct``/``incorrect`` (e.g. ``unknown``) are dropped
+    so an un-scorable prediction is simply left pending.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        index = int(raw.get("index"))
+    except (TypeError, ValueError):
+        return None
+    if index < 0:
+        return None
+    verdict = raw.get("verdict")
+    if not isinstance(verdict, str):
+        return None
+    verdict = verdict.strip().lower()
+    if verdict not in ("correct", "incorrect"):
+        return None
+    actual = raw.get("actualOutcome") or raw.get("actual_outcome") or ""
+    actual = actual.strip()[:240] if isinstance(actual, str) else ""
+    return {
+        "index": index,
+        "correct": verdict == "correct",
+        "actual_outcome": actual,
+    }
+
+
+async def evaluate_athlete_predictions(
+    metrics_section: str,
+    predictions: list[dict[str, str]],
+    provider: str = "openai",
+) -> list[dict]:
+    """Score pending predictions against recent training data.
+
+    ``predictions`` is the ordered list of pending predictions (each a dict with
+    ``prediction``, ``expected_outcome`` and ``horizon``); the returned verdicts
+    reference them by zero-based ``index``. Only predictions the evidence can
+    actually settle are returned — each as ``index``, ``correct`` (bool) and
+    ``actual_outcome``. Verdicts are NOT persisted; the caller applies them.
+    """
+    if not metrics_section.strip() or not predictions:
+        return []
+
+    system_prompt = evaluate_athlete_predictions_system()
+    user_msg = evaluate_athlete_predictions_user(metrics_section, predictions)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    evaluations_raw = (
+        parsed.get("evaluations") if isinstance(parsed, dict) else None
+    )
+    if not isinstance(evaluations_raw, list):
+        return []
+
+    evaluations: list[dict] = []
+    seen: set[int] = set()
+    for item in evaluations_raw:
+        evaluation = _normalise_prediction_evaluation(item)
+        if evaluation is None:
+            continue
+        if evaluation["index"] >= len(predictions):
+            continue
+        if evaluation["index"] in seen:
+            continue
+        seen.add(evaluation["index"])
+        evaluations.append(evaluation)
+    return evaluations
 
 
 async def detect_athlete_fact_contradictions(

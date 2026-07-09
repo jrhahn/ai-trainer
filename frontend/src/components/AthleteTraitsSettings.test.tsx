@@ -7,6 +7,8 @@ import type {
   AthleteExperiment,
   AthleteHypothesis,
   AthleteMemoryFact,
+  AthletePrediction,
+  AthletePredictionsResult,
 } from '../services/user'
 
 const mockFetch = vi.hoisted(() => vi.fn())
@@ -25,6 +27,10 @@ const mockFetchExperiments = vi.hoisted(() => vi.fn())
 const mockCompleteExperiment = vi.hoisted(() => vi.fn())
 const mockDismissExperiment = vi.hoisted(() => vi.fn())
 const mockDeleteExperiment = vi.hoisted(() => vi.fn())
+const mockFetchPredictions = vi.hoisted(() => vi.fn())
+const mockMarkPredictionCorrect = vi.hoisted(() => vi.fn())
+const mockMarkPredictionIncorrect = vi.hoisted(() => vi.fn())
+const mockDeletePrediction = vi.hoisted(() => vi.fn())
 
 vi.mock('../services/user', () => ({
   fetchAthleteMemoryFacts: mockFetch,
@@ -43,6 +49,10 @@ vi.mock('../services/user', () => ({
   completeValidationExperiment: mockCompleteExperiment,
   dismissValidationExperiment: mockDismissExperiment,
   deleteValidationExperiment: mockDeleteExperiment,
+  fetchAthletePredictions: mockFetchPredictions,
+  markPredictionCorrect: mockMarkPredictionCorrect,
+  markPredictionIncorrect: mockMarkPredictionIncorrect,
+  deleteAthletePrediction: mockDeletePrediction,
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
@@ -103,6 +113,35 @@ function makeExperiment(
   }
 }
 
+function makePrediction(
+  overrides: Partial<AthletePrediction> = {},
+): AthletePrediction {
+  return {
+    id: 'pred-1',
+    prediction: 'The athlete will be fully recovered tomorrow',
+    expectedOutcome: 'Resting HR back to baseline',
+    actualOutcome: null,
+    horizon: 'tomorrow',
+    category: 'fatigue_response',
+    confidence: 0.6,
+    status: 'pending',
+    createdAt: '2026-06-01T00:00:00Z',
+    evaluatedAt: null,
+    updatedAt: '2026-06-10T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function makePredictionsResult(
+  overrides: Partial<AthletePredictionsResult> = {},
+): AthletePredictionsResult {
+  return {
+    predictions: [makePrediction()],
+    accuracy: { evaluated: 3, correct: 2, accuracy: 2 / 3 },
+    ...overrides,
+  }
+}
+
 function renderComponent() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -123,6 +162,10 @@ describe('AthleteTraitsSettings', () => {
     mockExport.mockResolvedValue({ facts: [] })
     mockFetchHypotheses.mockResolvedValue([])
     mockFetchExperiments.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue({
+      predictions: [],
+      accuracy: { evaluated: 0, correct: 0, accuracy: null },
+    })
   })
 
   it('groups learned traits by category', async () => {
@@ -400,6 +443,85 @@ describe('AthleteTraitsSettings', () => {
 
     await screen.findByText(/No learned traits yet/i)
     expect(screen.queryByText('Suggested Experiments')).toBeNull()
+  })
+
+  it('renders a prediction with its expected outcome and accuracy summary', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    renderComponent()
+
+    expect(
+      await screen.findByText('The athlete will be fully recovered tomorrow'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Predictions')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Confirmed if: Resting HR back to baseline/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/2 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/67% accuracy/)).toBeInTheDocument()
+  })
+
+  it('marks a prediction correct', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    mockMarkPredictionCorrect.mockResolvedValue(
+      makePrediction({ status: 'correct' }),
+    )
+    renderComponent()
+
+    await screen.findByText('The athlete will be fully recovered tomorrow')
+    await user.click(
+      screen.getByRole('button', { name: /mark prediction correct/i }),
+    )
+
+    await waitFor(() =>
+      expect(mockMarkPredictionCorrect).toHaveBeenCalledWith('test-token', 'pred-1'),
+    )
+  })
+
+  it('marks a prediction incorrect', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    mockMarkPredictionIncorrect.mockResolvedValue(
+      makePrediction({ status: 'incorrect' }),
+    )
+    renderComponent()
+
+    await screen.findByText('The athlete will be fully recovered tomorrow')
+    await user.click(
+      screen.getByRole('button', { name: /mark prediction incorrect/i }),
+    )
+
+    await waitFor(() =>
+      expect(mockMarkPredictionIncorrect).toHaveBeenCalledWith('test-token', 'pred-1'),
+    )
+  })
+
+  it('deletes a prediction after confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockFetch.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    mockDeletePrediction.mockResolvedValue(undefined)
+    renderComponent()
+
+    await screen.findByText('The athlete will be fully recovered tomorrow')
+    await user.click(screen.getByRole('button', { name: /delete prediction/i }))
+
+    await waitFor(() =>
+      expect(mockDeletePrediction).toHaveBeenCalledWith('test-token', 'pred-1'),
+    )
+    confirmSpy.mockRestore()
+  })
+
+  it('does not show the predictions section when there are none', async () => {
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    await screen.findByText(/No learned traits yet/i)
+    expect(screen.queryByText('Predictions')).toBeNull()
   })
 
   it('toggles the "learn from conversations" privacy switch', async () => {

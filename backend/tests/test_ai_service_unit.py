@@ -3717,6 +3717,229 @@ async def test_generate_validation_experiments_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_predictions — make checkable, forward-looking predictions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "prediction": "The athlete will be fully recovered tomorrow",
+                    "expectedOutcome": "Resting HR back to baseline, ready for intensity",
+                    "horizon": "tomorrow",
+                    "confidence": 0.7,
+                    "category": "fatigue_response",
+                },
+                {
+                    # Missing horizon defaults to empty; confidence clamps to 1.0.
+                    "prediction": "Fatigue forces an easier week within 10 days",
+                    "expectedOutcome": "A drop in weekly TSS",
+                    "confidence": 1.4,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_predictions=["The athlete will PR the local climb"],
+            provider="openai",
+        )
+
+    assert [c["prediction"] for c in candidates] == [
+        "The athlete will be fully recovered tomorrow",
+        "Fatigue forces an easier week within 10 days",
+    ]
+    assert candidates[0]["horizon"] == "tomorrow"
+    assert candidates[1]["horizon"] == ""
+    assert candidates[1]["confidence"] == 1.0
+    # History and existing predictions both reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "PR the local climb" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_requires_expected_outcome():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "candidates": [
+                {"prediction": "Something vague", "confidence": 0.5},
+                {
+                    "prediction": "Will hit interval targets",
+                    "expectedOutcome": "Completes all reps at target power",
+                    "confidence": 0.6,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    # The candidate without an expected outcome cannot be checked and is dropped.
+    assert [c["prediction"] for c in candidates] == ["Will hit interval targets"]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"prediction": "Recovers by tomorrow", "expectedOutcome": "HR baseline", "confidence": 0.6},
+            {"prediction": " recovers BY tomorrow ", "expectedOutcome": "HR baseline", "confidence": 0.7},
+        ]
+        candidates += [
+            {"prediction": f"Prediction {i}", "expectedOutcome": "outcome", "confidence": 0.5}
+            for i in range(ai_service.MAX_GENERATED_PREDICTIONS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    predictions = [c["prediction"] for c in candidates]
+    assert predictions.count("Recovers by tomorrow") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_PREDICTIONS
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
+# evaluate_athlete_predictions — score pending predictions against the data
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_returns_scored_verdicts():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "evaluations": [
+                {"index": 0, "verdict": "correct", "actualOutcome": "HR back to baseline on 05-11"},
+                {"index": 1, "verdict": "incorrect", "actualOutcome": "Still fatigued, missed targets"},
+                # 'unknown' verdicts are dropped so the prediction stays pending.
+                {"index": 2, "verdict": "unknown", "actualOutcome": "Too early to tell"},
+            ]
+        })
+
+    predictions = [
+        {"prediction": "Recovered tomorrow", "expected_outcome": "HR baseline", "horizon": "tomorrow"},
+        {"prediction": "Hits VO2 targets", "expected_outcome": "All reps at power", "horizon": "next ride"},
+        {"prediction": "Easier week soon", "expected_outcome": "TSS drop", "horizon": "2 weeks"},
+    ]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "Recent activity history:\n  2026-05-11 | ...",
+            predictions,
+            provider="openai",
+        )
+
+    assert evaluations == [
+        {"index": 0, "correct": True, "actual_outcome": "HR back to baseline on 05-11"},
+        {"index": 1, "correct": False, "actual_outcome": "Still fatigued, missed targets"},
+    ]
+    # The predictions and their expected outcomes reach the model.
+    assert "Recovered tomorrow" in captured[0][1]
+    assert "HR baseline" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_no_predictions_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", [], provider="openai"
+        )
+
+    assert evaluations == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_drops_out_of_range_and_dupes():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "evaluations": [
+                {"index": 0, "verdict": "correct", "actualOutcome": "ok"},
+                {"index": 0, "verdict": "incorrect", "actualOutcome": "dupe ignored"},
+                {"index": 9, "verdict": "correct", "actualOutcome": "out of range"},
+            ]
+        })
+
+    predictions = [
+        {"prediction": "p0", "expected_outcome": "o0", "horizon": ""},
+    ]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", predictions, provider="openai"
+        )
+
+    assert evaluations == [{"index": 0, "correct": True, "actual_outcome": "ok"}]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    predictions = [{"prediction": "p0", "expected_outcome": "o0", "horizon": ""}]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", predictions, provider="openai"
+        )
+
+    assert evaluations == []
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions — flag stored facts fresh data disagrees with
 # ---------------------------------------------------------------------------
 

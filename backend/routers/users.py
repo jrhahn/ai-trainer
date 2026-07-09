@@ -776,6 +776,78 @@ async def delete_validation_experiment(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get(
+    "/predictions", response_model=schemas.AthletePredictionsResponse
+)
+async def list_athlete_predictions(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePredictionsResponse:
+    predictions = await crud.list_athlete_predictions(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    evaluated, correct = await crud.get_athlete_prediction_accuracy(
+        db, current_user.id
+    )
+    return schemas.AthletePredictionsResponse(
+        predictions=[
+            schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
+            for p in predictions
+        ],
+        accuracy=schemas.AthletePredictionAccuracy(
+            evaluated=evaluated,
+            correct=correct,
+            accuracy=(correct / evaluated) if evaluated else None,
+        ),
+    )
+
+
+@router.patch(
+    "/predictions/{prediction_id}",
+    response_model=schemas.AthletePredictionSchema,
+)
+async def update_athlete_prediction(
+    prediction_id: str,
+    body: schemas.AthletePredictionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePredictionSchema:
+    try:
+        prediction = await crud.update_athlete_prediction(
+            db,
+            current_user.id,
+            prediction_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if prediction is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthletePredictionSchema.model_validate(
+        prediction, from_attributes=True
+    )
+
+
+@router.delete(
+    "/predictions/{prediction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_prediction(
+    prediction_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_prediction(
+        db, current_user.id, prediction_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
 async def get_memory_privacy_settings(
     db: AsyncSession = Depends(get_db),
@@ -824,6 +896,9 @@ async def export_memory(
     experiments = await crud.list_athlete_experiments(
         db, current_user.id, include_resolved=True
     )
+    predictions = await crud.list_athlete_predictions(
+        db, current_user.id, include_resolved=True
+    )
     return schemas.MemoryExportSchema(
         exported_at=datetime.now(timezone.utc),
         memory_updates_enabled=current_user.memory_updates_enabled,
@@ -846,6 +921,10 @@ async def export_memory(
         experiments=[
             schemas.AthleteExperimentSchema.model_validate(e, from_attributes=True)
             for e in experiments
+        ],
+        predictions=[
+            schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
+            for p in predictions
         ],
     )
 
