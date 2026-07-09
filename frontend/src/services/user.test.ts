@@ -22,6 +22,11 @@ import {
   updateAthleteMemoryFact,
   confirmAthleteMemoryFact,
   deleteAthleteMemoryFact,
+  fetchValidationExperiments,
+  updateValidationExperiment,
+  completeValidationExperiment,
+  dismissValidationExperiment,
+  deleteValidationExperiment,
   deleteCurrentUser,
   recalculateMetrics,
   estimateFTP,
@@ -442,6 +447,84 @@ describe('athlete memory facts', () => {
       token: 'tok-123',
       method: 'DELETE',
     })
+  })
+})
+
+describe('validation experiments', () => {
+  it('fetches the list and returns the experiments array', async () => {
+    const experiment = {
+      id: 'exp-1',
+      protocol: 'Perform a 30-minute threshold test.',
+    }
+    mockApiFetch.mockResolvedValue({ experiments: [experiment] })
+
+    const result = await fetchValidationExperiments('tok-123')
+
+    expect(result).toEqual([experiment])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/validation-experiments', {
+      token: 'tok-123',
+    })
+  })
+
+  it('patches an edit', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', protocol: 'Shorter recoveries' })
+
+    await updateValidationExperiment('tok-123', 'exp-1', {
+      protocol: 'Shorter recoveries',
+    })
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { protocol: 'Shorter recoveries' },
+      },
+    )
+  })
+
+  it('completes an experiment by setting completed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', status: 'completed' })
+
+    await completeValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { status: 'completed' },
+      },
+    )
+  })
+
+  it('dismisses an experiment by setting dismissed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', status: 'dismissed' })
+
+    await dismissValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { status: 'dismissed' },
+      },
+    )
+  })
+
+  it('deletes an experiment', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await deleteValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'DELETE',
+      },
+    )
   })
 })
 

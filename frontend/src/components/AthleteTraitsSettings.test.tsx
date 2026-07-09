@@ -343,6 +343,56 @@ describe('AthleteTraitsSettings', () => {
     )
   })
 
+  it('deletes an experiment after confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockDeleteExperiment.mockResolvedValue(undefined)
+    renderComponent()
+
+    await screen.findByText(
+      'Repeat the gym session and compare HR on the next easy ride.',
+    )
+    await user.click(screen.getByRole('button', { name: /delete experiment/i }))
+
+    await waitFor(() =>
+      expect(mockDeleteExperiment).toHaveBeenCalledWith('test-token', 'exp-1'),
+    )
+    confirmSpy.mockRestore()
+  })
+
+  it('does not delete an experiment when the confirm dialog is cancelled', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    renderComponent()
+
+    await screen.findByText(
+      'Repeat the gym session and compare HR on the next easy ride.',
+    )
+    await user.click(screen.getByRole('button', { name: /delete experiment/i }))
+
+    expect(mockDeleteExperiment).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('surfaces an error when completing an experiment fails', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockCompleteExperiment.mockRejectedValue(new Error('nope'))
+    renderComponent()
+
+    await screen.findByText(
+      'Repeat the gym session and compare HR on the next easy ride.',
+    )
+    await user.click(screen.getByRole('button', { name: /complete experiment/i }))
+
+    expect(await screen.findByText('nope')).toBeInTheDocument()
+  })
+
   it('does not show the experiments section when there are none', async () => {
     mockFetch.mockResolvedValue([])
     mockFetchExperiments.mockResolvedValue([])
