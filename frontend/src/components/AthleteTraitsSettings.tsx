@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Brain, Check, CheckCircle2, Download, Pencil, Trash2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Brain,
+  Check,
+  CheckCircle2,
+  Download,
+  Pencil,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   clearAllMemory,
@@ -78,6 +87,7 @@ function TraitRow({
   const isBusy =
     saveMutation.isPending || confirmMutation.isPending || deleteMutation.isPending
   const isConfirmed = fact.status === 'user_confirmed'
+  const needsValidation = fact.status === 'needs_validation'
 
   const handleSave = () => {
     const trimmed = draft.trim()
@@ -134,10 +144,20 @@ function TraitRow({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm text-gray-900">{fact.fact}</p>
+            {needsValidation && fact.contradictionNote && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 mt-1.5">
+                {fact.contradictionNote}
+              </p>
+            )}
             <p className="text-[11px] text-gray-400 mt-1">
               {isConfirmed && (
                 <span className="inline-flex items-center gap-0.5 text-green-600 font-medium mr-2">
                   <CheckCircle2 size={11} /> Confirmed
+                </span>
+              )}
+              {needsValidation && (
+                <span className="inline-flex items-center gap-0.5 text-amber-600 font-medium mr-2">
+                  <AlertTriangle size={11} /> Needs validation
                 </span>
               )}
               Updated {formatDate(fact.updatedAt)}

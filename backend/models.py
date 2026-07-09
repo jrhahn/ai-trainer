@@ -366,6 +366,9 @@ class AthleteMemoryFact(Base):
     )
     confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    # Set when fresh training evidence contradicts this fact: a human-readable
+    # reason surfaced to the athlete so they can validate or correct the fact.
+    contradiction_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     observation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False

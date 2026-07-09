@@ -366,7 +366,7 @@ class AthleteContextRequest(AthleteContextSchema):
 
 
 AthleteMemoryFactStatus = Literal[
-    "active", "stale", "archived", "rejected", "user_confirmed"
+    "active", "stale", "archived", "rejected", "user_confirmed", "needs_validation"
 ]
 
 
@@ -380,6 +380,7 @@ class AthleteMemoryFactSchema(CamelModel):
     last_confirmed_at: datetime
     confidence: float
     status: AthleteMemoryFactStatus
+    contradiction_note: Optional[str] = None
     observation_count: int
     updated_at: datetime
 

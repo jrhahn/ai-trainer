@@ -51,6 +51,8 @@ from .prompts import (
     ask_trainer_system,
     update_memory_system,
     update_memory_user,
+    detect_contradictions_system,
+    detect_contradictions_user,
     extract_athlete_facts_system,
     extract_athlete_facts_user,
     generate_athlete_insights_system,
@@ -841,6 +843,55 @@ async def generate_athlete_insights(
         if len(candidates) >= MAX_GENERATED_INSIGHTS:
             break
     return candidates
+
+
+async def detect_athlete_fact_contradictions(
+    metrics_section: str,
+    facts: list[str],
+    provider: str = "openai",
+) -> list[dict]:
+    """Find stored athlete facts that recent training data contradicts.
+
+    ``metrics_section`` is a structured-text summary of recent activities (see
+    :func:`services.prompts.ride_metrics_context_section`). ``facts`` are the
+    athlete's current stored observations, passed in list order; the model
+    references each by its zero-based index.
+
+    Returns a list of ``{"factIndex": int, "reason": str}`` dicts — one per fact
+    the evidence disagrees with — with indices validated against ``facts`` and
+    deduplicated (first reason wins). Returns an empty list when nothing is
+    contradicted. Nothing is persisted; the caller decides how to act.
+    """
+    if not metrics_section.strip() or not facts:
+        return []
+
+    system_prompt = detect_contradictions_system()
+    user_msg = detect_contradictions_user(metrics_section, facts)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    raw_items = parsed.get("contradictions") if isinstance(parsed, dict) else None
+    if not isinstance(raw_items, list):
+        return []
+
+    contradictions: list[dict] = []
+    seen: set[int] = set()
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        index = item.get("factIndex")
+        if isinstance(index, bool) or not isinstance(index, int):
+            continue
+        if not (0 <= index < len(facts)) or index in seen:
+            continue
+        reason = item.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            continue
+        seen.add(index)
+        contradictions.append({"factIndex": index, "reason": reason.strip()[:500]})
+    return contradictions
 
 
 async def match_observations_to_recommendations(

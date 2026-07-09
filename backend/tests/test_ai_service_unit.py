@@ -3516,6 +3516,91 @@ async def test_generate_athlete_insights_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# detect_athlete_fact_contradictions — flag stored facts fresh data disagrees with
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_returns_valid_indexed_reasons():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "contradictions": [
+                {"factIndex": 0, "reason": "Held 400 W for 5x4 min — above stored 320 W FTP."},
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "Recent activity history:\n  2026-07-05 | 5x4 min @ 400 W",
+            ["FTP is around 320 W", "Prefers morning rides"],
+            provider="openai",
+        )
+
+    assert contradictions == [
+        {"factIndex": 0, "reason": "Held 400 W for 5x4 min — above stored 320 W FTP."}
+    ]
+    # Both the history and the numbered facts reach the model.
+    assert "400 W" in captured[0][1]
+    assert "0. FTP is around 320 W" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_drops_out_of_range_and_blank():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "contradictions": [
+                {"factIndex": 5, "reason": "out of range"},
+                {"factIndex": 0, "reason": "  "},
+                {"factIndex": 1, "reason": "Contradicted by the data."},
+                {"factIndex": 1, "reason": "duplicate index, ignored"},
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "history", ["fact a", "fact b"], provider="openai"
+        )
+
+    assert contradictions == [{"factIndex": 1, "reason": "Contradicted by the data."}]
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_skips_model_without_facts_or_history():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        assert await ai_service.detect_athlete_fact_contradictions(
+            "history", [], provider="openai"
+        ) == []
+        assert await ai_service.detect_athlete_fact_contradictions(
+            "   ", ["a fact"], provider="openai"
+        ) == []
+
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "history", ["a fact"], provider="openai"
+        )
+
+    assert contradictions == []
+
+
+# ---------------------------------------------------------------------------
 # Communication style — opener variation rules
 # ---------------------------------------------------------------------------
 
