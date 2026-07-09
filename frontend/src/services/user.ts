@@ -404,6 +404,75 @@ export async function deleteAthleteHypothesis(
   })
 }
 
+export type AthleteExperimentStatus = 'suggested' | 'completed' | 'dismissed'
+
+export interface AthleteExperiment {
+  id: string
+  hypothesisId: string | null
+  question: string
+  protocol: string
+  rationale: string
+  category: string
+  status: AthleteExperimentStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchValidationExperiments(
+  token: string
+): Promise<AthleteExperiment[]> {
+  const response = await apiFetch<{ experiments: AthleteExperiment[] }>(
+    '/users/me/validation-experiments',
+    { token }
+  )
+  return response.experiments
+}
+
+export async function updateValidationExperiment(
+  token: string,
+  experimentId: string,
+  changes: {
+    question?: string
+    protocol?: string
+    rationale?: string
+    category?: string
+    status?: AthleteExperimentStatus
+  }
+): Promise<AthleteExperiment> {
+  return apiFetch<AthleteExperiment>(
+    `/users/me/validation-experiments/${experimentId}`,
+    {
+      token,
+      method: 'PATCH',
+      body: changes,
+    }
+  )
+}
+
+export async function completeValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<AthleteExperiment> {
+  return updateValidationExperiment(token, experimentId, { status: 'completed' })
+}
+
+export async function dismissValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<AthleteExperiment> {
+  return updateValidationExperiment(token, experimentId, { status: 'dismissed' })
+}
+
+export async function deleteValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<void> {
+  await apiFetch(`/users/me/validation-experiments/${experimentId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
 export interface MemoryPrivacySettings {
   memoryUpdatesEnabled: boolean
 }

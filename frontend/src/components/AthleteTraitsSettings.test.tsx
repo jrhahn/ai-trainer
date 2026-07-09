@@ -3,7 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteTraitsSettings from './AthleteTraitsSettings'
-import type { AthleteHypothesis, AthleteMemoryFact } from '../services/user'
+import type {
+  AthleteExperiment,
+  AthleteHypothesis,
+  AthleteMemoryFact,
+} from '../services/user'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
@@ -17,6 +21,10 @@ const mockFetchHypotheses = vi.hoisted(() => vi.fn())
 const mockConfirmHypothesis = vi.hoisted(() => vi.fn())
 const mockRefuteHypothesis = vi.hoisted(() => vi.fn())
 const mockDeleteHypothesis = vi.hoisted(() => vi.fn())
+const mockFetchExperiments = vi.hoisted(() => vi.fn())
+const mockCompleteExperiment = vi.hoisted(() => vi.fn())
+const mockDismissExperiment = vi.hoisted(() => vi.fn())
+const mockDeleteExperiment = vi.hoisted(() => vi.fn())
 
 vi.mock('../services/user', () => ({
   fetchAthleteMemoryFacts: mockFetch,
@@ -31,6 +39,10 @@ vi.mock('../services/user', () => ({
   confirmAthleteHypothesis: mockConfirmHypothesis,
   refuteAthleteHypothesis: mockRefuteHypothesis,
   deleteAthleteHypothesis: mockDeleteHypothesis,
+  fetchValidationExperiments: mockFetchExperiments,
+  completeValidationExperiment: mockCompleteExperiment,
+  dismissValidationExperiment: mockDismissExperiment,
+  deleteValidationExperiment: mockDeleteExperiment,
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
@@ -74,6 +86,23 @@ function makeHypothesis(
   }
 }
 
+function makeExperiment(
+  overrides: Partial<AthleteExperiment> = {},
+): AthleteExperiment {
+  return {
+    id: 'exp-1',
+    hypothesisId: 'hyp-1',
+    question: 'Does upper-body strength suppress next-day HR?',
+    protocol: 'Repeat the gym session and compare HR on the next easy ride.',
+    rationale: 'A clear HR drop would confirm it.',
+    category: 'fatigue_response',
+    status: 'suggested',
+    createdAt: '2026-06-01T00:00:00Z',
+    updatedAt: '2026-06-10T00:00:00Z',
+    ...overrides,
+  }
+}
+
 function renderComponent() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -93,6 +122,7 @@ describe('AthleteTraitsSettings', () => {
     mockClearAll.mockResolvedValue(undefined)
     mockExport.mockResolvedValue({ facts: [] })
     mockFetchHypotheses.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([])
   })
 
   it('groups learned traits by category', async () => {
@@ -257,6 +287,69 @@ describe('AthleteTraitsSettings', () => {
 
     await screen.findByText(/No learned traits yet/i)
     expect(screen.queryByText('Working Hypotheses')).toBeNull()
+  })
+
+  it('renders a suggested experiment with its question', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    renderComponent()
+
+    expect(
+      await screen.findByText(
+        'Repeat the gym session and compare HR on the next easy ride.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Suggested Experiments')).toBeInTheDocument()
+    expect(
+      screen.getByText('Does upper-body strength suppress next-day HR?'),
+    ).toBeInTheDocument()
+  })
+
+  it('completes an experiment', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockCompleteExperiment.mockResolvedValue(
+      makeExperiment({ status: 'completed' }),
+    )
+    renderComponent()
+
+    await screen.findByText(
+      'Repeat the gym session and compare HR on the next easy ride.',
+    )
+    await user.click(screen.getByRole('button', { name: /complete experiment/i }))
+
+    await waitFor(() =>
+      expect(mockCompleteExperiment).toHaveBeenCalledWith('test-token', 'exp-1'),
+    )
+  })
+
+  it('dismisses an experiment', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockDismissExperiment.mockResolvedValue(
+      makeExperiment({ status: 'dismissed' }),
+    )
+    renderComponent()
+
+    await screen.findByText(
+      'Repeat the gym session and compare HR on the next easy ride.',
+    )
+    await user.click(screen.getByRole('button', { name: /dismiss experiment/i }))
+
+    await waitFor(() =>
+      expect(mockDismissExperiment).toHaveBeenCalledWith('test-token', 'exp-1'),
+    )
+  })
+
+  it('does not show the experiments section when there are none', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([])
+    renderComponent()
+
+    await screen.findByText(/No learned traits yet/i)
+    expect(screen.queryByText('Suggested Experiments')).toBeNull()
   })
 
   it('toggles the "learn from conversations" privacy switch', async () => {

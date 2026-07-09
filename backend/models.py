@@ -154,6 +154,9 @@ class User(Base):
     athlete_hypotheses: Mapped[list["AthleteHypothesis"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    validation_experiments: Mapped[list["AthleteExperiment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
@@ -429,6 +432,61 @@ class AthleteHypothesis(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_hypotheses")
+
+
+class AthleteExperiment(Base):
+    """A concrete validation experiment the coach proposes to resolve uncertainty.
+
+    When a question about an athlete stays unsettled — most often because an
+    :class:`AthleteHypothesis` still ``needs validation`` — the coach proposes a
+    small, repeatable experiment the athlete can actually run rather than guessing
+    (e.g. "compare both bikes using identical power pedals" or "repeat the VO2
+    session with shorter recoveries"). Each experiment records the open question,
+    the protocol to run, and what a result would tell the coach; completing or
+    dismissing it resolves the suggestion.
+    """
+
+    __tablename__ = "validation_experiments"
+    __table_args__ = (
+        Index(
+            "ix_validation_experiments_user_key",
+            "user_id",
+            "protocol_key",
+            unique=True,
+        ),
+        Index("ix_validation_experiments_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # Soft reference to the hypothesis this experiment aims to validate, if any.
+    # Kept as a plain column (not a hard FK) so resolving or deleting a hypothesis
+    # never orphans a still-useful experiment.
+    hypothesis_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The open question / uncertainty the experiment is designed to settle.
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # The concrete protocol the athlete should run.
+    protocol: Mapped[str] = mapped_column(Text, nullable=False)
+    protocol_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    # What a result would tell the coach (expected signal / decision rule).
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # suggested (awaiting the athlete) -> completed | dismissed.
+    status: Mapped[str] = mapped_column(
+        String(20), default="suggested", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="validation_experiments")
 
 
 class AthleteAvailabilityConstraint(Base):
