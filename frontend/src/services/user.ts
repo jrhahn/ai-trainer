@@ -341,6 +341,69 @@ export async function deleteAthleteMemoryFact(token: string, factId: string): Pr
   })
 }
 
+export type AthleteHypothesisStatus = 'proposed' | 'confirmed' | 'refuted'
+
+export interface AthleteHypothesis {
+  id: string
+  statement: string
+  category: string
+  rationale: string
+  confidence: number
+  evidenceCount: number
+  status: AthleteHypothesisStatus
+  firstProposedAt: string
+  updatedAt: string
+}
+
+export async function fetchAthleteHypotheses(token: string): Promise<AthleteHypothesis[]> {
+  const response = await apiFetch<{ hypotheses: AthleteHypothesis[] }>(
+    '/users/me/athlete-hypotheses',
+    { token }
+  )
+  return response.hypotheses
+}
+
+export async function updateAthleteHypothesis(
+  token: string,
+  hypothesisId: string,
+  changes: {
+    statement?: string
+    category?: string
+    rationale?: string
+    status?: AthleteHypothesisStatus
+  }
+): Promise<AthleteHypothesis> {
+  return apiFetch<AthleteHypothesis>(`/users/me/athlete-hypotheses/${hypothesisId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function confirmAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<AthleteHypothesis> {
+  return updateAthleteHypothesis(token, hypothesisId, { status: 'confirmed' })
+}
+
+export async function refuteAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<AthleteHypothesis> {
+  return updateAthleteHypothesis(token, hypothesisId, { status: 'refuted' })
+}
+
+export async function deleteAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<void> {
+  await apiFetch(`/users/me/athlete-hypotheses/${hypothesisId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
 export interface MemoryPrivacySettings {
   memoryUpdatesEnabled: boolean
 }

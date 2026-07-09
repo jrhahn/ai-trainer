@@ -6,24 +6,32 @@ import {
   Check,
   CheckCircle2,
   Download,
+  FlaskConical,
   Pencil,
+  ThumbsDown,
   Trash2,
   X,
 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   clearAllMemory,
+  confirmAthleteHypothesis,
   confirmAthleteMemoryFact,
+  deleteAthleteHypothesis,
   deleteAthleteMemoryFact,
   exportMemory,
+  fetchAthleteHypotheses,
   fetchAthleteMemoryFacts,
   fetchMemoryPrivacySettings,
+  refuteAthleteHypothesis,
   updateAthleteMemoryFact,
   updateMemoryPrivacySettings,
+  type AthleteHypothesis,
   type AthleteMemoryFact,
 } from '../services/user'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
+export const ATHLETE_HYPOTHESES_QUERY_KEY = 'athlete-hypotheses'
 const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
 
 /** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
@@ -202,6 +210,109 @@ function TraitRow({
   )
 }
 
+function HypothesisRow({
+  hypothesis,
+  token,
+}: {
+  hypothesis: AthleteHypothesis
+  token: string
+}) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState('')
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
+    // Confirming a hypothesis promotes it into a learned trait, so refresh both.
+    queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
+  }
+
+  const confirmMutation = useMutation({
+    mutationFn: () => confirmAthleteHypothesis(token, hypothesis.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to confirm hypothesis'),
+  })
+
+  const refuteMutation = useMutation({
+    mutationFn: () => refuteAthleteHypothesis(token, hypothesis.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to dismiss hypothesis'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAthleteHypothesis(token, hypothesis.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to delete hypothesis'),
+  })
+
+  const isBusy =
+    confirmMutation.isPending || refuteMutation.isPending || deleteMutation.isPending
+
+  const handleDelete = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Delete this hypothesis? The coach will stop tracking it.')
+    ) {
+      return
+    }
+    deleteMutation.mutate()
+  }
+
+  return (
+    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-900">{hypothesis.statement}</p>
+          {hypothesis.rationale && (
+            <p className="text-[11px] text-gray-500 mt-1">{hypothesis.rationale}</p>
+          )}
+          <p className="text-[11px] text-gray-400 mt-1">
+            <span className="inline-flex items-center gap-0.5 text-indigo-600 font-medium mr-2">
+              <FlaskConical size={11} /> Needs validation
+            </span>
+            confidence {Math.round(hypothesis.confidence * 100)}%
+            {' · '}
+            {hypothesis.evidenceCount}{' '}
+            {hypothesis.evidenceCount === 1 ? 'observation' : 'observations'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => confirmMutation.mutate()}
+            disabled={isBusy}
+            title="Confirm this hypothesis — it becomes a learned trait"
+            aria-label="Confirm hypothesis"
+            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+          >
+            <CheckCircle2 size={15} />
+          </button>
+          <button
+            onClick={() => refuteMutation.mutate()}
+            disabled={isBusy}
+            title="Dismiss this hypothesis"
+            aria-label="Dismiss hypothesis"
+            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+          >
+            <ThumbsDown size={15} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isBusy}
+            title="Delete this hypothesis"
+            aria-label="Delete hypothesis"
+            className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+    </li>
+  )
+}
+
 export default function AthleteTraitsSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
@@ -210,6 +321,12 @@ export default function AthleteTraitsSettings() {
   const { data, isLoading, isError } = useQuery({
     queryKey: [ATHLETE_TRAITS_QUERY_KEY, authToken],
     queryFn: () => fetchAthleteMemoryFacts(authToken!),
+    enabled: !!authToken,
+  })
+
+  const { data: hypotheses } = useQuery({
+    queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY, authToken],
+    queryFn: () => fetchAthleteHypotheses(authToken!),
     enabled: !!authToken,
   })
 
@@ -230,6 +347,7 @@ export default function AthleteTraitsSettings() {
     mutationFn: () => clearAllMemory(authToken!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
     },
   })
 
@@ -313,6 +431,28 @@ export default function AthleteTraitsSettings() {
           ))}
         </div>
       </div>
+
+      {hypotheses && hypotheses.length > 0 && (
+        <div className="border-t border-gray-100 pt-5">
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+            <FlaskConical size={16} /> Working Hypotheses
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Testable ideas the coach is tracking but hasn't confirmed yet. Confirm
+            one to turn it into a learned trait, or dismiss it if it doesn't hold
+            up.
+          </p>
+          <ul className="space-y-2">
+            {hypotheses.map((hypothesis) => (
+              <HypothesisRow
+                key={hypothesis.id}
+                hypothesis={hypothesis}
+                token={authToken!}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="border-t border-gray-100 pt-5">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">Privacy Controls</h3>

@@ -3516,6 +3516,108 @@ async def test_generate_athlete_insights_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_hypotheses — form explicit, testable ideas from history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "statement": "Upper-body strength suppresses next-day HR response",
+                    "category": "fatigue_response",
+                    "confidence": 0.38,
+                    "rationale": "HR ~8 bpm low the day after gym on 05-03 and 05-10.",
+                },
+                {
+                    # Confidence above the hypothesis cap is clamped to 0.6.
+                    "statement": "Rides stronger in the second half of a block",
+                    "category": "general",
+                    "confidence": 0.95,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_facts=["Prefers morning rides"],
+            existing_hypotheses=["Fuels poorly on long rides"],
+            provider="openai",
+        )
+
+    assert [c["statement"] for c in candidates] == [
+        "Upper-body strength suppresses next-day HR response",
+        "Rides stronger in the second half of a block",
+    ]
+    assert candidates[0]["confidence"] == 0.38
+    assert candidates[1]["confidence"] == 0.6
+    # History, existing facts, and existing hypotheses all reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "Prefers morning rides" in captured[0][1]
+    assert "Fuels poorly on long rides" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"statement": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.4},
+            {"statement": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.5},
+        ]
+        candidates += [
+            {"statement": f"Idea {i}", "category": "general", "confidence": 0.3}
+            for i in range(ai_service.MAX_GENERATED_HYPOTHESES + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "history", provider="openai"
+        )
+
+    statements = [c["statement"] for c in candidates]
+    assert statements.count("Fades late in long rides") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_HYPOTHESES
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "history", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions — flag stored facts fresh data disagrees with
 # ---------------------------------------------------------------------------
 

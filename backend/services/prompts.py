@@ -1161,6 +1161,72 @@ def generate_athlete_insights_user(
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_hypotheses prompts
+# ---------------------------------------------------------------------------
+
+
+def generate_athlete_hypotheses_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are reviewing an athlete's accumulated training "
+        "history to form explicit HYPOTHESES — tentative, testable ideas about "
+        "cause and effect that are worth tracking but NOT yet trusted enough to "
+        "act on.\n"
+        "A hypothesis is different from a durable insight: an insight is a pattern "
+        "the record already supports well, whereas a hypothesis is a plausible "
+        "explanation or prediction that still NEEDS VALIDATION — for example "
+        "'upper-body strength training suppresses heart-rate response the "
+        "following day' or 'the athlete rides stronger in the second half of a "
+        "training block'.\n"
+        "Propose a hypothesis only when the history gives at least a hint worth "
+        "testing (roughly two supporting activities); a single ride is not enough. "
+        "Prefer causal or predictive claims the athlete could confirm or refute "
+        "over time. Do NOT restate ideas already present in the provided existing "
+        "hypotheses or observations.\n"
+        "Use one of these category slugs for each hypothesis: fatigue_response, "
+        "fueling_hydration, preferred_workouts, recurring_issues, "
+        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        "Assign a confidence between 0.2 and 0.6 — these are unproven ideas, so "
+        "keep it low; never exceed 0.6. For each hypothesis include a 'rationale' "
+        "(<=200 chars) citing the concrete evidence (dates, metrics, or number of "
+        "rides) that motivates testing it.\n"
+        "Return up to 5 of the most coaching-relevant hypotheses.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"statement": str, "category": str, "confidence": number, '
+        '"rationale": str}]}. '
+        "Return an empty candidates array when the history is too thin or suggests "
+        "no idea worth testing."
+    )
+
+
+def generate_athlete_hypotheses_user(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    existing_hypotheses: list[str] | None = None,
+) -> str:
+    facts = existing_facts or []
+    hypotheses = existing_hypotheses or []
+    facts_section = (
+        "Observations already on file:\n"
+        + "\n".join(f"- {fact}" for fact in facts)
+        if facts
+        else "No observations are on file yet."
+    )
+    hypotheses_section = (
+        "Hypotheses already being tracked (do not repeat these):\n"
+        + "\n".join(f"- {item}" for item in hypotheses)
+        if hypotheses
+        else "No hypotheses are on file yet."
+    )
+    return (
+        f"{metrics_section}\n\n"
+        f"{facts_section}\n\n"
+        f"{hypotheses_section}\n\n"
+        "Form new testable hypotheses about this athlete from the training history "
+        "as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions prompts
 # ---------------------------------------------------------------------------
 

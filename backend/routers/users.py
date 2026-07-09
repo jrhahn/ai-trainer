@@ -648,6 +648,70 @@ async def delete_athlete_memory_fact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get(
+    "/athlete-hypotheses", response_model=schemas.AthleteHypothesesResponse
+)
+async def list_athlete_hypotheses(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHypothesesResponse:
+    hypotheses = await crud.list_athlete_hypotheses(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteHypothesesResponse(
+        hypotheses=[
+            schemas.AthleteHypothesisSchema.model_validate(h, from_attributes=True)
+            for h in hypotheses
+        ]
+    )
+
+
+@router.patch(
+    "/athlete-hypotheses/{hypothesis_id}",
+    response_model=schemas.AthleteHypothesisSchema,
+)
+async def update_athlete_hypothesis(
+    hypothesis_id: str,
+    body: schemas.AthleteHypothesisUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHypothesisSchema:
+    try:
+        hypothesis = await crud.update_athlete_hypothesis(
+            db,
+            current_user.id,
+            hypothesis_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if hypothesis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteHypothesisSchema.model_validate(
+        hypothesis, from_attributes=True
+    )
+
+
+@router.delete(
+    "/athlete-hypotheses/{hypothesis_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_hypothesis(
+    hypothesis_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_hypothesis(
+        db, current_user.id, hypothesis_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
 async def get_memory_privacy_settings(
     db: AsyncSession = Depends(get_db),
@@ -690,6 +754,9 @@ async def export_memory(
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
     facts = await crud.list_athlete_memory_facts(db, current_user.id, include_inactive=True)
+    hypotheses = await crud.list_athlete_hypotheses(
+        db, current_user.id, include_resolved=True
+    )
     return schemas.MemoryExportSchema(
         exported_at=datetime.now(timezone.utc),
         memory_updates_enabled=current_user.memory_updates_enabled,
@@ -704,6 +771,10 @@ async def export_memory(
         memory_facts=[
             schemas.AthleteMemoryFactSchema.model_validate(f, from_attributes=True)
             for f in facts
+        ],
+        hypotheses=[
+            schemas.AthleteHypothesisSchema.model_validate(h, from_attributes=True)
+            for h in hypotheses
         ],
     )
 

@@ -1153,6 +1153,140 @@ async def test_delete_athlete_memory_fact_scoped_to_owner(
 
 
 # ---------------------------------------------------------------------------
+# AthleteHypothesis
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_propose_athlete_hypothesis_creates_proposed(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Upper-body strength training suppresses next-day HR response",
+        category="fatigue response",
+        rationale="HR ~8 bpm low on the two days after gym sessions.",
+        confidence=0.38,
+    )
+
+    assert hypothesis.id is not None
+    assert hypothesis.status == "proposed"
+    assert hypothesis.category == "fatigue_response"
+    assert hypothesis.evidence_count == 1
+    assert hypothesis.confidence == pytest.approx(0.38)
+
+
+@pytest.mark.asyncio
+async def test_propose_athlete_hypothesis_strengthens_on_repeat(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Rides stronger in the second half of a block",
+        category="general",
+        confidence=0.3,
+    )
+    first_confidence = first.confidence
+    second = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="rides   STRONGER in the second half of a block",
+        category="general",
+        rationale="Two more blocks show the same rising trend.",
+    )
+
+    assert second.id == first.id
+    assert second.evidence_count == 2
+    assert second.confidence > first_confidence
+    assert second.rationale == "Two more blocks show the same rising trend."
+
+
+@pytest.mark.asyncio
+async def test_confirm_hypothesis_promotes_to_memory_fact(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Performs best with two recovery days before a race",
+        category="fatigue_response",
+        rationale="Best results followed a two-day taper twice.",
+        confidence=0.4,
+    )
+
+    updated = await crud.update_athlete_hypothesis(
+        db, user.id, hypothesis.id, status="confirmed"
+    )
+    assert updated is not None
+    assert updated.status == "confirmed"
+    assert updated.confidence >= crud.ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE
+
+    # Confirming promotes the statement into a durable memory fact.
+    facts = await crud.list_athlete_memory_facts(db, user.id)
+    assert any(
+        fact.fact == "Performs best with two recovery days before a race"
+        for fact in facts
+    )
+
+
+@pytest.mark.asyncio
+async def test_refuted_hypothesis_hidden_then_revived_by_evidence(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Struggles on back-to-back hard days",
+        category="fatigue_response",
+    )
+    await crud.update_athlete_hypothesis(
+        db, user.id, hypothesis.id, status="refuted"
+    )
+
+    # Refuted hypotheses drop out of the default (open) list.
+    open_only = await crud.list_athlete_hypotheses(db, user.id)
+    assert open_only == []
+    assert len(await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)) == 1
+
+    # Fresh supporting evidence reopens the question.
+    revived = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Struggles on back-to-back hard days",
+        category="fatigue_response",
+    )
+    assert revived.id == hypothesis.id
+    assert revived.status == "proposed"
+    assert revived.evidence_count == 2
+
+
+@pytest.mark.asyncio
+async def test_delete_athlete_hypothesis_scoped_to_owner(db: AsyncSession) -> None:
+    owner = await _make_user(db)
+    other = await _make_user(db, email="other@example.com")
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db, owner.id, statement="Fuels poorly on long rides", category="fueling"
+    )
+
+    assert await crud.delete_athlete_hypothesis(db, other.id, hypothesis.id) is False
+    assert await crud.delete_athlete_hypothesis(db, owner.id, hypothesis.id) is True
+    assert await crud.get_athlete_hypothesis(db, owner.id, hypothesis.id) is None
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_hypotheses(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.propose_athlete_hypothesis(
+        db, user.id, statement="Prefers hilly terrain", category="preference"
+    )
+
+    await crud.clear_athlete_memory(db, user.id)
+    assert await crud.list_athlete_hypotheses(db, user.id, include_resolved=True) == []
+
+
+# ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------
 
