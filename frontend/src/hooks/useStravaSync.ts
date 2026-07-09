@@ -5,7 +5,7 @@ import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
 import { analyseStravaActivities, generateTrainingPlan, refreshLoginSummary } from '../services/ai'
-import { saveTrainingPlan, updateCurrentUser } from '../services/user'
+import { fetchTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
@@ -25,7 +25,6 @@ export function useStravaSync(): UseStravaSyncResult {
   const {
     authToken,
     userProfile,
-    trainingPlan,
     stravaConnection,
     intervalsConnection,
     stravaAnalysisComplete,
@@ -45,7 +44,6 @@ export function useStravaSync(): UseStravaSyncResult {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      trainingPlan: s.trainingPlan,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
@@ -133,18 +131,18 @@ export function useStravaSync(): UseStravaSyncResult {
       }
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
-        // For new activities, apply targeted plan updates rather than regenerating the whole plan
-        const updatesByDate = Object.fromEntries(planUpdates.map((u) => [u.date, u]))
-        const updatedPlan = trainingPlan.map((day) =>
-          updatesByDate[day.date] ? { ...day, ...updatesByDate[day.date] } : day
-        )
-        setTrainingPlan(updatedPlan)
-        // Persist the updated plan
-        await saveTrainingPlan(authToken, updatedPlan)
+        // The backend already persisted these targeted updates through the shared
+        // pin/completed-respecting pipeline (source="ride_review"). Re-fetch the
+        // authoritative plan rather than PUTting our in-memory snapshot back: that
+        // reverted concurrent edits and bypassed pin/completed-day protection,
+        // rewriting pinned/completed days (stale-snapshot clobber, #399).
+        const freshPlan = await fetchTrainingPlan(authToken)
+        setTrainingPlan(freshPlan)
       } else {
-        // First-time analysis or no targeted updates → regenerate the full plan
+        // First-time analysis or no targeted updates → regenerate the full plan.
+        // generateTrainingPlan already persists server-side (source="generate"),
+        // so we only mirror the persisted result into local state.
         const updatedPlan = await generateTrainingPlan(authToken)
-        await saveTrainingPlan(authToken, updatedPlan)
         setTrainingPlan(updatedPlan)
       }
 
