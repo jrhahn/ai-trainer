@@ -596,6 +596,22 @@ async def analyse_activities(
         if raw_updates
         else None
     )
+    # Persist the plan adaptations here, through the shared constraint- and
+    # pin-respecting pipeline (source="ride_review", respect_pins=True, completed
+    # days skipped). Previously these were returned unpersisted and the client
+    # PUT its whole in-memory plan back via /users/me/plan (source="user_edit"),
+    # which reverted concurrent edits and bypassed pin/completed-day protection —
+    # a stale-snapshot clobber that rewrote pinned/completed days (#399).
+    if raw_updates:
+        plan_row = await crud.get_training_plan(db, current_user.id)
+        base_plan = plan_row.plan if plan_row is not None else []
+        await plan_pipeline.commit_plan_updates(
+            db,
+            current_user,
+            raw_updates,
+            base_plan=base_plan,
+            source="ride_review",
+        )
     return schemas.AnalyseActivitiesResponse(
         assessment=assessment_schema, plan_updates=plan_updates
     )

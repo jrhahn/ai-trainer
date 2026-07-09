@@ -2172,3 +2172,87 @@ async def test_apply_ride_plan_matches_labels_hard_extra_ride_as_too_much(
     assert by_id[73001].plan_match_status == "auto_matched"
     assert by_id[73002].plan_match_status == "unmatched"
     assert by_id[73002].label_override == "Too much"
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_persists_updates_without_clobbering_protected_days(
+    client, auth_headers, mock_ai_service
+):
+    """analyse-activities persists ride-review plan updates through the shared
+    pin/completed-respecting pipeline (source="ride_review"), instead of leaving
+    them for a full-plan client PUT that reverted concurrent edits and rewrote
+    protected days (stale-snapshot clobber, #399).
+
+    A completed day must stay untouched; an open, un-pinned day may be adapted
+    and is persisted server-side without any /users/me/plan PUT from the client.
+    """
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    plan = [
+        {
+            "date": "2026-04-10",
+            "workoutType": "intervals",
+            "title": "VO2 Max Intervals",
+            "description": "Hard intervals",
+            "durationMinutes": 60,
+            "completed": True,
+        },
+        {
+            "date": "2026-04-12",
+            "workoutType": "endurance",
+            "title": "Endurance Ride",
+            "description": "Steady aerobic",
+            "durationMinutes": 90,
+        },
+    ]
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        await crud.upsert_training_plan(db, user.id, plan)
+        await db.commit()
+
+    # The ride-review analysis proposes downgrading BOTH days to recovery.
+    mock_ai_service["analyse_strava_activities"].return_value = {
+        "estimatedFTP": 250,
+        "riderType": "allrounder",
+        "notes": "n",
+        "rideInsights": "i",
+        "lastRideFeedback": "f",
+        "planUpdates": [
+            {"date": "2026-04-10", "workoutType": "recovery", "title": "Active Recovery"},
+            {"date": "2026-04-12", "workoutType": "recovery", "title": "Active Recovery"},
+        ],
+    }
+
+    # Post an activity on a date outside the plan so it does not auto-match a plan
+    # day (keeps the test focused on the planUpdates persistence path).
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 77,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-01T08:00:00Z",
+                    "averageWatts": 200,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        saved = (await crud.get_training_plan(db, user.id)).plan
+    by_date = {d["date"]: d for d in saved}
+    # Completed day is historical fact — never rewritten by the automated update.
+    assert by_date["2026-04-10"]["workoutType"] == "intervals"
+    assert by_date["2026-04-10"]["title"] == "VO2 Max Intervals"
+    # Open day was adapted and persisted server-side (no client PUT needed).
+    assert by_date["2026-04-12"]["workoutType"] == "recovery"
