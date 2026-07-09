@@ -461,6 +461,52 @@ class AthleteExperimentUpdateRequest(CamelModel):
     status: Optional[AthleteExperimentStatus] = None
 
 
+AthletePredictionStatus = Literal["pending", "correct", "incorrect"]
+
+
+class AthletePredictionSchema(CamelModel):
+    id: str
+    prediction: str
+    expected_outcome: str
+    actual_outcome: Optional[str] = None
+    horizon: str = ""
+    category: str
+    confidence: float
+    status: AthletePredictionStatus
+    created_at: datetime
+    evaluated_at: Optional[datetime] = None
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePredictionAccuracy(CamelModel):
+    """Coaching-quality summary: how many predictions were checked and hit."""
+
+    evaluated: int
+    correct: int
+    accuracy: Optional[float] = None
+
+
+class AthletePredictionsResponse(CamelModel):
+    predictions: list[AthletePredictionSchema]
+    accuracy: AthletePredictionAccuracy
+
+
+class AthletePredictionUpdateRequest(CamelModel):
+    prediction: Optional[str] = Field(default=None, min_length=1)
+    expected_outcome: Optional[str] = Field(default=None, min_length=1)
+    actual_outcome: Optional[str] = None
+    horizon: Optional[str] = None
+    category: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[AthletePredictionStatus] = None
+
+
 class AthleteAvailabilityConstraintSchema(CamelModel):
     id: str
     constraint_type: str
@@ -514,6 +560,7 @@ class MemoryExportSchema(CamelModel):
     memory_facts: list[AthleteMemoryFactSchema]
     hypotheses: list[AthleteHypothesisSchema] = []
     experiments: list[AthleteExperimentSchema] = []
+    predictions: list[AthletePredictionSchema] = []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

@@ -1280,6 +1280,115 @@ def generate_validation_experiments_user(
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_predictions prompts
+# ---------------------------------------------------------------------------
+
+
+def generate_athlete_predictions_system() -> str:
+    return (
+        f"{COACH_PERSONA} To keep yourself honest and measure your coaching "
+        "quality, you make explicit, forward-looking PREDICTIONS about the "
+        "athlete that can later be checked against what actually happens.\n"
+        "A good prediction is specific, time-bound, and falsifiable — for example "
+        "'the athlete will be fully recovered and ready for a hard session "
+        "tomorrow', 'the athlete will hit the interval targets in the next VO2 "
+        "workout', or 'fatigue will force an easier week within the next 10 "
+        "days'. Avoid vague statements you could never score as right or wrong.\n"
+        "For each prediction provide a 'prediction' (the claim, <=200 chars), an "
+        "'expectedOutcome' (<=200 chars, the concrete, observable result that "
+        "would confirm it and how you would check it), a 'horizon' (<=60 chars, "
+        "when it can be checked, e.g. 'tomorrow' or 'within 2 weeks'), a "
+        "'confidence' between 0.3 and 0.9 (how sure you are), and a category slug "
+        "from: fatigue_response, fueling_hydration, preferred_workouts, "
+        "recurring_issues, psychological_tendencies, goals_motivation, "
+        "coaching_risk, general.\n"
+        "Only make a prediction the training history genuinely supports and that "
+        "could realistically be checked from future activity data. Do NOT repeat "
+        "predictions already on file. Return up to 5, the most testable first.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"prediction": str, "expectedOutcome": str, '
+        '"horizon": str, "confidence": number, "category": str}]}. '
+        "Return an empty candidates array when the history supports no confident, "
+        "checkable prediction."
+    )
+
+
+def generate_athlete_predictions_user(
+    metrics_section: str,
+    existing_predictions: list[str] | None = None,
+) -> str:
+    predictions = existing_predictions or []
+    predictions_section = (
+        "Predictions already on file (do not repeat these):\n"
+        + "\n".join(f"- {item}" for item in predictions)
+        if predictions
+        else "No predictions are on file yet."
+    )
+    return (
+        f"{metrics_section}\n\n"
+        f"{predictions_section}\n\n"
+        "Make new, checkable predictions about this athlete from the training "
+        "history as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
+# evaluate_athlete_predictions prompts
+# ---------------------------------------------------------------------------
+
+
+def evaluate_athlete_predictions_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are scoring PREDICTIONS you made earlier against the "
+        "athlete's actual recent training data to measure how good your coaching "
+        "calls have been.\n"
+        "You are given numbered predictions, each with the outcome that would "
+        "confirm it, and a summary of recent activities. For each prediction "
+        "decide whether the data now shows it came TRUE or FALSE.\n"
+        "Only score a prediction you can actually judge from the data. If the "
+        "outcome cannot yet be observed — not enough time has passed, or the "
+        "relevant activity has not happened — mark its verdict 'unknown' and it "
+        "will be left pending. Hold a fair bar: do not call a prediction correct "
+        "on weak or absent evidence, and do not call it wrong merely because the "
+        "data is silent.\n"
+        "For each prediction you can score, give its zero-based 'index', a "
+        "'verdict' of 'correct' or 'incorrect', and an 'actualOutcome' (<=200 "
+        "chars) stating plainly what actually happened, citing the concrete "
+        "evidence (metrics, dates, or number of rides). Omit predictions you "
+        "cannot yet judge, or give them the 'unknown' verdict.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"evaluations": [{"index": int, "verdict": str, "actualOutcome": str}]}. '
+        "Return an empty evaluations array when none of the predictions can be "
+        "scored yet."
+    )
+
+
+def evaluate_athlete_predictions_user(
+    metrics_section: str,
+    predictions: list[dict[str, str]],
+) -> str:
+    lines = []
+    for index, item in enumerate(predictions):
+        line = f"{index}. {item['prediction']}"
+        expected = item.get("expected_outcome")
+        if expected:
+            line += f" | confirmed if: {expected}"
+        horizon = item.get("horizon")
+        if horizon:
+            line += f" | check by: {horizon}"
+        lines.append(line)
+    predictions_block = "\n".join(lines)
+    return (
+        f"{metrics_section}\n\n"
+        "Predictions you made earlier (index. prediction | confirmed if | check by):\n"
+        "-----\n"
+        f"{predictions_block}\n"
+        "-----\n"
+        "Score each prediction you can now judge from the data, as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions prompts
 # ---------------------------------------------------------------------------
 

@@ -157,6 +157,9 @@ class User(Base):
     validation_experiments: Mapped[list["AthleteExperiment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    predictions: Mapped[list["AthletePrediction"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
@@ -487,6 +490,64 @@ class AthleteExperiment(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="validation_experiments")
+
+
+class AthletePrediction(Base):
+    """A forward-looking, checkable claim the coach makes about an athlete.
+
+    #383: to measure coaching quality the coach records each prediction it makes
+    ("the athlete should be fully recovered tomorrow") alongside the concrete
+    ``expected_outcome`` that would confirm it. Once enough time passes the
+    prediction is evaluated against what actually happened (``actual_outcome``):
+    a correct call nudges its ``confidence`` up, a wrong one reduces it, and the
+    running hit-rate across all evaluated predictions is the coach's measured
+    accuracy — the closing of the loop that keeps the coach honest.
+    """
+
+    __tablename__ = "athlete_predictions"
+    __table_args__ = (
+        Index(
+            "ix_athlete_predictions_user_key",
+            "user_id",
+            "prediction_key",
+            unique=True,
+        ),
+        Index("ix_athlete_predictions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # The coach's claim, e.g. "the athlete should be fully recovered tomorrow".
+    prediction: Mapped[str] = mapped_column(Text, nullable=False)
+    prediction_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The observable result that would confirm the prediction (how to check it).
+    expected_outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    # What actually happened, filled in when the prediction is evaluated.
+    actual_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the prediction can be checked, e.g. "tomorrow" or "next week" — free
+    # text kept for the athlete and to help the evaluator judge if it is due yet.
+    horizon: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # The coach's confidence in the prediction; rises on a correct call and falls
+    # on a wrong one when the prediction is evaluated.
+    confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # pending (awaiting outcome) -> correct | incorrect.
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="predictions")
 
 
 class AthleteAvailabilityConstraint(Base):

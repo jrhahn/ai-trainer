@@ -9,6 +9,7 @@ import {
   Download,
   FlaskConical,
   Pencil,
+  Target,
   ThumbsDown,
   Trash2,
   X,
@@ -21,24 +22,31 @@ import {
   confirmAthleteMemoryFact,
   deleteAthleteHypothesis,
   deleteAthleteMemoryFact,
+  deleteAthletePrediction,
   deleteValidationExperiment,
   dismissValidationExperiment,
   exportMemory,
   fetchAthleteHypotheses,
   fetchAthleteMemoryFacts,
+  fetchAthletePredictions,
   fetchMemoryPrivacySettings,
   fetchValidationExperiments,
+  markPredictionCorrect,
+  markPredictionIncorrect,
   refuteAthleteHypothesis,
   updateAthleteMemoryFact,
   updateMemoryPrivacySettings,
   type AthleteExperiment,
   type AthleteHypothesis,
   type AthleteMemoryFact,
+  type AthletePrediction,
+  type AthletePredictionAccuracy,
 } from '../services/user'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
 export const ATHLETE_HYPOTHESES_QUERY_KEY = 'athlete-hypotheses'
 export const VALIDATION_EXPERIMENTS_QUERY_KEY = 'validation-experiments'
+export const ATHLETE_PREDICTIONS_QUERY_KEY = 'athlete-predictions'
 const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
 
 /** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
@@ -416,6 +424,110 @@ function ExperimentRow({
   )
 }
 
+function PredictionRow({
+  prediction,
+  token,
+}: {
+  prediction: AthletePrediction
+  token: string
+}) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState('')
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY],
+    })
+
+  const correctMutation = useMutation({
+    mutationFn: () => markPredictionCorrect(token, prediction.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to update prediction'),
+  })
+
+  const incorrectMutation = useMutation({
+    mutationFn: () => markPredictionIncorrect(token, prediction.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to update prediction'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAthletePrediction(token, prediction.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to delete prediction'),
+  })
+
+  const isBusy =
+    correctMutation.isPending ||
+    incorrectMutation.isPending ||
+    deleteMutation.isPending
+
+  const handleDelete = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Delete this prediction? The coach will stop tracking it.')
+    ) {
+      return
+    }
+    deleteMutation.mutate()
+  }
+
+  return (
+    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-900">{prediction.prediction}</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Confirmed if: {prediction.expectedOutcome}
+          </p>
+          {prediction.actualOutcome && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              Outcome: {prediction.actualOutcome}
+            </p>
+          )}
+          <p className="text-[11px] text-gray-400 mt-1">
+            confidence {Math.round(prediction.confidence * 100)}%
+            {prediction.horizon ? ` · check by ${prediction.horizon}` : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => correctMutation.mutate()}
+            disabled={isBusy}
+            title="This prediction came true"
+            aria-label="Mark prediction correct"
+            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+          >
+            <CheckCircle2 size={15} />
+          </button>
+          <button
+            onClick={() => incorrectMutation.mutate()}
+            disabled={isBusy}
+            title="This prediction did not hold — confidence reduced"
+            aria-label="Mark prediction incorrect"
+            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+          >
+            <ThumbsDown size={15} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isBusy}
+            title="Delete this prediction"
+            aria-label="Delete prediction"
+            className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+    </li>
+  )
+}
+
 export default function AthleteTraitsSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
@@ -438,6 +550,15 @@ export default function AthleteTraitsSettings() {
     queryFn: () => fetchValidationExperiments(authToken!),
     enabled: !!authToken,
   })
+
+  const { data: predictionsData } = useQuery({
+    queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY, authToken],
+    queryFn: () => fetchAthletePredictions(authToken!),
+    enabled: !!authToken,
+  })
+  const predictions = predictionsData?.predictions
+  const predictionAccuracy: AthletePredictionAccuracy | undefined =
+    predictionsData?.accuracy
 
   const { data: privacyData } = useQuery({
     queryKey: [MEMORY_PRIVACY_QUERY_KEY, authToken],
@@ -581,6 +702,38 @@ export default function AthleteTraitsSettings() {
               <ExperimentRow
                 key={experiment.id}
                 experiment={experiment}
+                token={authToken!}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {predictions && predictions.length > 0 && (
+        <div className="border-t border-gray-100 pt-5">
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+            <Target size={16} /> Predictions
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            To measure its own coaching quality, the coach makes checkable
+            predictions and later scores them against what actually happened.
+            {predictionAccuracy && predictionAccuracy.evaluated > 0 && (
+              <>
+                {' '}
+                So far{' '}
+                <span className="font-medium text-gray-700">
+                  {predictionAccuracy.correct} of {predictionAccuracy.evaluated}
+                </span>{' '}
+                evaluated predictions were correct (
+                {Math.round((predictionAccuracy.accuracy ?? 0) * 100)}% accuracy).
+              </>
+            )}
+          </p>
+          <ul className="space-y-2">
+            {predictions.map((prediction) => (
+              <PredictionRow
+                key={prediction.id}
+                prediction={prediction}
                 token={authToken!}
               />
             ))}

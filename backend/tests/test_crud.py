@@ -1881,3 +1881,113 @@ async def test_get_coach_memory_for_update_returns_row(db: AsyncSession) -> None
 async def test_get_coach_memory_for_update_missing_is_none(db: AsyncSession) -> None:
     user = await _make_user(db, "cm-lock-missing@example.com")
     assert await crud.get_coach_memory(db, user.id, for_update=True) is None
+
+
+# ---------------------------------------------------------------------------
+# AthletePrediction (#383)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_record_prediction_refreshes_pending_duplicate(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-dupe@example.com")
+    first = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="Recovered by tomorrow",
+        expected_outcome="HR baseline",
+        horizon="tomorrow",
+    )
+    second = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="  recovered BY tomorrow  ",  # same key, different casing/space
+        expected_outcome="Resting HR near baseline",
+        horizon="by tomorrow morning",
+    )
+    assert first.id == second.id
+    assert second.expected_outcome == "Resting HR near baseline"
+    assert second.horizon == "by tomorrow morning"
+    pending = await crud.list_athlete_predictions(db, user.id)
+    assert len(pending) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_prediction_requires_text_and_outcome(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-empty@example.com")
+    with pytest.raises(ValueError):
+        await crud.record_athlete_prediction(
+            db, user.id, prediction="   ", expected_outcome="something"
+        )
+    with pytest.raises(ValueError):
+        await crud.record_athlete_prediction(
+            db, user.id, prediction="a claim", expected_outcome="  "
+        )
+
+
+@pytest.mark.asyncio
+async def test_evaluate_prediction_is_idempotent(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-eval@example.com")
+    prediction = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="Hits VO2 targets next ride",
+        expected_outcome="All reps at target power",
+        confidence=0.5,
+    )
+    resolved = await crud.evaluate_athlete_prediction(
+        db,
+        user.id,
+        prediction.id,
+        correct=True,
+        actual_outcome="Nailed every rep",
+    )
+    assert resolved is not None
+    assert resolved.status == "correct"
+    assert resolved.confidence == pytest.approx(0.7)
+    assert resolved.evaluated_at is not None
+
+    # Re-evaluating an already-scored prediction must not double-count.
+    again = await crud.evaluate_athlete_prediction(
+        db,
+        user.id,
+        prediction.id,
+        correct=False,
+        actual_outcome="ignored",
+    )
+    assert again is not None
+    assert again.status == "correct"
+    assert again.confidence == pytest.approx(0.7)
+
+
+@pytest.mark.asyncio
+async def test_prediction_accuracy_counts_only_resolved(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-acc@example.com")
+    correct = await crud.record_athlete_prediction(
+        db, user.id, prediction="p1", expected_outcome="o1"
+    )
+    wrong = await crud.record_athlete_prediction(
+        db, user.id, prediction="p2", expected_outcome="o2"
+    )
+    await crud.record_athlete_prediction(
+        db, user.id, prediction="p3", expected_outcome="o3"
+    )  # left pending
+    await crud.evaluate_athlete_prediction(
+        db, user.id, correct.id, correct=True, actual_outcome="hit"
+    )
+    await crud.evaluate_athlete_prediction(
+        db, user.id, wrong.id, correct=False, actual_outcome="miss"
+    )
+
+    evaluated, hits = await crud.get_athlete_prediction_accuracy(db, user.id)
+    assert (evaluated, hits) == (2, 1)
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_predictions(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-clear@example.com")
+    await crud.record_athlete_prediction(
+        db, user.id, prediction="p", expected_outcome="o"
+    )
+    await crud.clear_athlete_memory(db, user.id)
+    assert await crud.list_athlete_predictions(db, user.id, include_resolved=True) == []

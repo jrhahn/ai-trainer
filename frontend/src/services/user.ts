@@ -473,6 +473,82 @@ export async function deleteValidationExperiment(
   })
 }
 
+export type AthletePredictionStatus = 'pending' | 'correct' | 'incorrect'
+
+export interface AthletePrediction {
+  id: string
+  prediction: string
+  expectedOutcome: string
+  actualOutcome: string | null
+  horizon: string
+  category: string
+  confidence: number
+  status: AthletePredictionStatus
+  createdAt: string
+  evaluatedAt: string | null
+  updatedAt: string
+}
+
+export interface AthletePredictionAccuracy {
+  evaluated: number
+  correct: number
+  accuracy: number | null
+}
+
+export interface AthletePredictionsResult {
+  predictions: AthletePrediction[]
+  accuracy: AthletePredictionAccuracy
+}
+
+export async function fetchAthletePredictions(
+  token: string
+): Promise<AthletePredictionsResult> {
+  return apiFetch<AthletePredictionsResult>('/users/me/predictions', { token })
+}
+
+export async function updateAthletePrediction(
+  token: string,
+  predictionId: string,
+  changes: {
+    prediction?: string
+    expectedOutcome?: string
+    actualOutcome?: string
+    horizon?: string
+    category?: string
+    status?: AthletePredictionStatus
+  }
+): Promise<AthletePrediction> {
+  return apiFetch<AthletePrediction>(`/users/me/predictions/${predictionId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function markPredictionCorrect(
+  token: string,
+  predictionId: string
+): Promise<AthletePrediction> {
+  return updateAthletePrediction(token, predictionId, { status: 'correct' })
+}
+
+export async function markPredictionIncorrect(
+  token: string,
+  predictionId: string
+): Promise<AthletePrediction> {
+  return updateAthletePrediction(token, predictionId, { status: 'incorrect' })
+}
+
+export async function deleteAthletePrediction(
+  token: string,
+  predictionId: string
+): Promise<void> {
+  await apiFetch(`/users/me/predictions/${predictionId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
 export interface MemoryPrivacySettings {
   memoryUpdatesEnabled: boolean
 }
