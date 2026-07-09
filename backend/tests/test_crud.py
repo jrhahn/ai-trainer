@@ -987,6 +987,134 @@ async def test_update_athlete_memory_fact_edits_and_rejects_fact(
 
 
 @pytest.mark.asyncio
+async def test_record_contradiction_lowers_confidence_and_flags_for_validation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="FTP is around 320 W",
+        category="fitness",
+        confidence=0.8,
+    )
+    before = fact.confidence
+    now = datetime(2026, 7, 9, tzinfo=timezone.utc)
+
+    flagged = await crud.record_athlete_memory_fact_contradiction(
+        db,
+        fact,
+        reason="Held 400 W for 5x4 min on 2026-07-05 — well above the stored 320 W.",
+        now=now,
+    )
+    assert flagged.status == "needs_validation"
+    assert flagged.confidence == pytest.approx(
+        before - crud.ATHLETE_MEMORY_CONTRADICTION_PENALTY
+    )
+    assert "400 W" in (flagged.contradiction_note or "")
+    assert flagged.updated_at == now
+
+
+@pytest.mark.asyncio
+async def test_needs_validation_fact_visible_but_out_of_prompts(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Struggles in the heat",
+        category="fitness",
+        confidence=0.8,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Strong performances on three warm-weather rides."
+    )
+
+    # Surfaced in the default management view so the athlete can act on it.
+    visible = await crud.list_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in visible}
+
+    # But withheld from coach prompts until the athlete validates or corrects it.
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id not in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_needs_validation_does_not_decay_or_archive(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Rarely rides in the rain",
+        category="preference",
+        confidence=0.8,
+        observed_at=observed_at,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Several rainy rides logged.", now=observed_at
+    )
+
+    # Long after the archive window it holds its flagged state, awaiting the athlete.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 30)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "needs_validation"
+
+
+@pytest.mark.asyncio
+async def test_fresh_observation_revives_contradicted_fact_and_clears_note(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers short intense sessions",
+        category="preference",
+        confidence=0.7,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Logged several long endurance rides."
+    )
+    assert fact.status == "needs_validation"
+
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers short intense sessions",
+        category="preference",
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    assert revived.contradiction_note is None
+
+
+@pytest.mark.asyncio
+async def test_confirming_contradicted_fact_clears_note(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Recovers slowly from hard blocks",
+        category="fitness",
+        confidence=0.7,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Back-to-back hard weeks with strong numbers."
+    )
+
+    confirmed = await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    assert confirmed is not None
+    assert confirmed.status == "user_confirmed"
+    assert confirmed.contradiction_note is None
+
+
+@pytest.mark.asyncio
 async def test_delete_athlete_memory_fact_removes_fact(
     db: AsyncSession,
 ) -> None:

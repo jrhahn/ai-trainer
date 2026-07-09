@@ -31,12 +31,20 @@ ATHLETE_MEMORY_STALE_CONFIDENCE = 0.3
 # retained for audit and revival, but hidden from coach prompts and the default
 # management view. A fresh observation revives it.
 ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS = 180
+# How much confidence a fact loses when fresh training evidence contradicts it.
+# Larger than a single decay day so a real contradiction meaningfully demotes the
+# fact and, together with the ``needs_validation`` flag, prompts the athlete to
+# confirm or correct it.
+ATHLETE_MEMORY_CONTRADICTION_PENALTY = 0.25
 
 _ATHLETE_MEMORY_ACTIVE_STATUSES = ("active", "user_confirmed")
+# Statuses shown in the default management view: currently trusted facts plus
+# facts flagged for the athlete's attention (contradicted by fresh evidence).
+_ATHLETE_MEMORY_VISIBLE_STATUSES = ("active", "user_confirmed", "needs_validation")
 # Unconfirmed statuses whose confidence still decays / that can be archived.
 _ATHLETE_MEMORY_DECAYABLE_STATUSES = ("active", "stale")
 # Statuses a fresh observation revives back to ``active``.
-_ATHLETE_MEMORY_REVIVABLE_STATUSES = ("stale", "archived")
+_ATHLETE_MEMORY_REVIVABLE_STATUSES = ("stale", "archived", "needs_validation")
 
 
 def _ride_metrics_are_near_duplicates(
@@ -618,7 +626,7 @@ async def list_athlete_memory_facts(
     )
     if not include_inactive:
         stmt = stmt.where(
-            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_ACTIVE_STATUSES)
+            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_VISIBLE_STATUSES)
         )
     result = await db.scalars(
         stmt.order_by(
@@ -684,6 +692,9 @@ async def observe_athlete_memory_fact(
         revived = existing.status in _ATHLETE_MEMORY_REVIVABLE_STATUSES
         if revived:
             existing.status = "active"
+            # Fresh evidence re-confirms the fact, so any pending contradiction is
+            # resolved and the validation prompt is cleared.
+            existing.contradiction_note = None
         base_confidence = max(existing.confidence, _clamp_confidence(confidence))
         # A revived observation may have decayed to near-zero; refresh it to at
         # least the default so fresh evidence is trusted again.
@@ -694,6 +705,35 @@ async def observe_athlete_memory_fact(
         )
     await db.flush()
     return existing
+
+
+async def record_athlete_memory_fact_contradiction(
+    db: AsyncSession,
+    fact: models.AthleteMemoryFact,
+    *,
+    reason: str,
+    now: datetime | None = None,
+) -> models.AthleteMemoryFact:
+    """Flag a fact that fresh training evidence contradicts.
+
+    Lowers the fact's confidence by ``ATHLETE_MEMORY_CONTRADICTION_PENALTY`` and
+    moves it to ``needs_validation`` so it is pulled from coach prompts and
+    surfaced to the athlete to confirm or correct. ``reason`` explains, in the
+    coach's words, why the evidence disagrees with the stored fact. This is a
+    deliberate, evidence-driven demotion, so it applies to ``user_confirmed``
+    facts too — even a vetted value is worth re-checking when the numbers
+    disagree. A later fresh, consistent observation revives the fact and clears
+    the flag (see :func:`observe_athlete_memory_fact`).
+    """
+    reference = now or datetime.now(timezone.utc)
+    fact.confidence = _clamp_confidence(
+        fact.confidence - ATHLETE_MEMORY_CONTRADICTION_PENALTY
+    )
+    fact.status = "needs_validation"
+    fact.contradiction_note = reason.strip()[:500] or None
+    fact.updated_at = reference
+    await db.flush()
+    return fact
 
 
 async def update_athlete_memory_fact(
@@ -720,6 +760,8 @@ async def update_athlete_memory_fact(
             raise ValueError("fact must not be empty")
         existing.fact = cleaned_fact
         existing.fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+        # Editing the fact text resolves any pending contradiction.
+        existing.contradiction_note = None
     if category is not None:
         existing.category = _normalise_athlete_memory_category(category)
     if source_snippet is not None:
@@ -730,6 +772,10 @@ async def update_athlete_memory_fact(
         existing.confidence = _clamp_confidence(confidence)
     if status is not None:
         existing.status = status
+        # Any move off ``needs_validation`` means the athlete has acted on the
+        # validation prompt, so the contradiction note no longer applies.
+        if status != "needs_validation":
+            existing.contradiction_note = None
         if status == "user_confirmed":
             existing.confidence = max(existing.confidence, 0.9)
             existing.last_confirmed_at = now
@@ -771,6 +817,10 @@ async def get_prompt_athlete_memory_facts(
     cutoff = reference - timedelta(days=stale_after_days)
     prompt_facts: list[models.AthleteMemoryFact] = []
     for fact in facts:
+        # Facts contradicted by fresh evidence are withheld from the coach until
+        # the athlete validates or corrects them.
+        if fact.status == "needs_validation":
+            continue
         if fact.status == "user_confirmed":
             prompt_facts.append(fact)
         elif fact.confidence >= min_confidence and _as_aware_utc(

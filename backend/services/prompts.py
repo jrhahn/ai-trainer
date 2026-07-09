@@ -683,7 +683,7 @@ def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     for fact in facts:
         status = fact.get("status")
         confidence = float(fact.get("confidence") or 0)
-        if status == "rejected" or status == "stale":
+        if status in ("rejected", "stale", "needs_validation"):
             continue
         if status != "user_confirmed" and confidence < 0.5:
             continue
@@ -1157,6 +1157,49 @@ def generate_athlete_insights_user(
         f"{metrics_section}\n\n"
         f"{existing_section}\n\n"
         "Infer new durable athlete insights from this training history as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
+# detect_athlete_fact_contradictions prompts
+# ---------------------------------------------------------------------------
+
+
+def detect_contradictions_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are checking an athlete's STORED knowledge against "
+        "their recent training data to catch facts the new evidence contradicts.\n"
+        "You are given numbered stored facts and a summary of recent activities. "
+        "Report ONLY a stored fact when the training data clearly and materially "
+        "disagrees with it — for example a stored FTP of 320 W while the athlete "
+        "repeatedly holds 400 W for 4-minute intervals, a 'dislikes long rides' "
+        "fact contradicted by several 4-hour endurance rides, or a 'struggles in "
+        "heat' fact contradicted by strong warm-weather performances.\n"
+        "Hold a high bar. Do NOT flag a fact merely because the data does not "
+        "mention it, because of a single off day, or because of normal day-to-day "
+        "variation — absence of evidence is not contradiction. When in doubt, do "
+        "not flag it.\n"
+        "For each contradicted fact, give its zero-based 'factIndex' and a concise "
+        "'reason' (<=280 chars), phrased as the coach would explain it to the "
+        "athlete, citing the concrete evidence (metrics, dates, or number of "
+        "rides) and noting that the fact should be re-validated.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"contradictions": [{"factIndex": int, "reason": str}]}. '
+        "Return an empty contradictions array when the evidence is consistent with "
+        "the stored facts."
+    )
+
+
+def detect_contradictions_user(metrics_section: str, facts: list[str]) -> str:
+    fact_lines = "\n".join(f"{index}. {fact}" for index, fact in enumerate(facts))
+    return (
+        f"{metrics_section}\n\n"
+        "Stored facts about the athlete (index. fact):\n"
+        "-----\n"
+        f"{fact_lines}\n"
+        "-----\n"
+        "Identify which stored facts the recent training data contradicts, as "
+        "specified."
     )
 
 

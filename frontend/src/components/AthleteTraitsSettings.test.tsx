@@ -42,6 +42,7 @@ function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact
     lastConfirmedAt: '2026-06-10T00:00:00Z',
     confidence: 0.6,
     status: 'active',
+    contradictionNote: null,
     observationCount: 2,
     updatedAt: '2026-06-10T00:00:00Z',
     ...overrides,
@@ -159,6 +160,24 @@ describe('AthleteTraitsSettings', () => {
     await screen.findByText('Adds extra work after rest days')
     expect(screen.queryByRole('button', { name: /confirm trait/i })).toBeNull()
     expect(screen.getByText(/Confirmed/i)).toBeInTheDocument()
+  })
+
+  it('flags a contradicted trait for validation and shows the reason', async () => {
+    mockFetch.mockResolvedValue([
+      makeFact({
+        status: 'needs_validation',
+        contradictionNote: 'Held 400 W for 5x4 min — well above the stored 320 W FTP.',
+      }),
+    ])
+    renderComponent()
+
+    await screen.findByText('Adds extra work after rest days')
+    expect(screen.getByText(/Needs validation/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Held 400 W for 5x4 min/),
+    ).toBeInTheDocument()
+    // The athlete can still confirm it to resolve the flag.
+    expect(screen.getByRole('button', { name: /confirm trait/i })).toBeInTheDocument()
   })
 
   it('toggles the "learn from conversations" privacy switch', async () => {

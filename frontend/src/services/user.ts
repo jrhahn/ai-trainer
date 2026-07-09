@@ -279,6 +279,7 @@ export type AthleteMemoryFactStatus =
   | 'archived'
   | 'rejected'
   | 'user_confirmed'
+  | 'needs_validation'
 
 export interface AthleteMemoryFact {
   id: string
@@ -290,6 +291,7 @@ export interface AthleteMemoryFact {
   lastConfirmedAt: string
   confidence: number
   status: AthleteMemoryFactStatus
+  contradictionNote: string | null
   observationCount: number
   updatedAt: string
 }
