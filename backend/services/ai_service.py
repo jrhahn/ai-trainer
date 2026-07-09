@@ -55,6 +55,8 @@ from .prompts import (
     detect_contradictions_user,
     extract_athlete_facts_system,
     extract_athlete_facts_user,
+    generate_athlete_hypotheses_system,
+    generate_athlete_hypotheses_user,
     generate_athlete_insights_system,
     generate_athlete_insights_user,
     match_observations_system,
@@ -798,6 +800,7 @@ async def extract_athlete_facts(
 
 
 MAX_GENERATED_INSIGHTS = 8
+MAX_GENERATED_HYPOTHESES = 5
 
 
 async def generate_athlete_insights(
@@ -841,6 +844,84 @@ async def generate_athlete_insights(
         seen.add(dedupe_key)
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_INSIGHTS:
+            break
+    return candidates
+
+
+def _normalise_hypothesis_candidate(raw: object) -> dict | None:
+    """Validate one generated hypothesis; return a clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    statement = raw.get("statement")
+    if not isinstance(statement, str) or not statement.strip():
+        return None
+    category = raw.get("category")
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
+    try:
+        confidence = float(raw.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = 0.35
+    # Hypotheses are unproven ideas, so their confidence is capped low.
+    confidence = max(0.0, min(0.6, confidence))
+    rationale = raw.get("rationale") or raw.get("source_snippet") or ""
+    rationale = rationale.strip()[:240] if isinstance(rationale, str) else ""
+    return {
+        "statement": statement.strip(),
+        "category": category,
+        "confidence": round(confidence, 2),
+        "rationale": rationale,
+    }
+
+
+async def generate_athlete_hypotheses(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    existing_hypotheses: list[str] | None = None,
+    provider: str = "openai",
+) -> list[dict]:
+    """Form explicit, testable hypotheses from a training-history context block.
+
+    ``metrics_section`` is a structured-text summary of recent activities (see
+    :func:`services.prompts.ride_metrics_context_section`). ``existing_facts`` and
+    ``existing_hypotheses`` are passed so the model avoids repeating knowledge
+    already on file.
+
+    Returns a list of candidate dicts (``statement``, ``category``, ``confidence``,
+    ``rationale``), deduplicated and capped. Candidates are NOT persisted — the
+    caller decides how to store them.
+    """
+    if not metrics_section.strip():
+        return []
+
+    system_prompt = generate_athlete_hypotheses_system()
+    user_msg = generate_athlete_hypotheses_user(
+        metrics_section, existing_facts, existing_hypotheses
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_hypothesis_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["statement"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_GENERATED_HYPOTHESES:
             break
     return candidates
 

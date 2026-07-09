@@ -839,11 +839,197 @@ async def clear_athlete_memory(db: AsyncSession, user_id: str) -> None:
             models.AthleteMemoryFact.user_id == user_id
         )
     )
+    await db.execute(
+        delete(models.AthleteHypothesis).where(
+            models.AthleteHypothesis.user_id == user_id
+        )
+    )
     coach_memory_row = await get_coach_memory(db, user_id)
     if coach_memory_row is not None:
         coach_memory_row.memory = ""
         coach_memory_row.updated_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# AthleteHypothesis
+# ---------------------------------------------------------------------------
+
+# Statuses shown by default: open hypotheses still awaiting the athlete's
+# judgement. Confirmed/refuted hypotheses are resolved and only surfaced on
+# request (management/export views).
+_ATHLETE_HYPOTHESIS_OPEN_STATUSES = ("proposed",)
+# Confidence a hypothesis is floored to when the athlete confirms it, before it
+# is promoted into a memory fact.
+ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE = 0.75
+
+
+def _normalise_hypothesis_key(statement: str) -> str:
+    return " ".join(statement.casefold().split())[:255]
+
+
+async def get_athlete_hypothesis(
+    db: AsyncSession, user_id: str, hypothesis_id: str
+) -> models.AthleteHypothesis | None:
+    """Return one athlete hypothesis owned by a user."""
+    return await db.scalar(
+        select(models.AthleteHypothesis).where(
+            models.AthleteHypothesis.id == hypothesis_id,
+            models.AthleteHypothesis.user_id == user_id,
+        )
+    )
+
+
+async def list_athlete_hypotheses(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    include_resolved: bool = False,
+) -> list[models.AthleteHypothesis]:
+    """Return stored hypotheses for a user, strongest evidence first."""
+    stmt = select(models.AthleteHypothesis).where(
+        models.AthleteHypothesis.user_id == user_id
+    )
+    if not include_resolved:
+        stmt = stmt.where(
+            models.AthleteHypothesis.status.in_(_ATHLETE_HYPOTHESIS_OPEN_STATUSES)
+        )
+    result = await db.scalars(
+        stmt.order_by(
+            models.AthleteHypothesis.confidence.desc(),
+            models.AthleteHypothesis.evidence_count.desc(),
+            models.AthleteHypothesis.updated_at.desc(),
+            models.AthleteHypothesis.id.desc(),
+        )
+    )
+    return list(result)
+
+
+async def propose_athlete_hypothesis(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    statement: str,
+    category: str = "general",
+    rationale: str = "",
+    confidence: float | None = None,
+    observed_at: datetime | None = None,
+) -> models.AthleteHypothesis:
+    """Create a hypothesis or strengthen an existing one with fresh evidence.
+
+    A new statement is stored as ``proposed`` with one unit of evidence. When the
+    same statement recurs its evidence count grows and its confidence ticks up (a
+    growing body of support), and a hypothesis the athlete had ``refuted`` is
+    revived to ``proposed`` — fresh evidence reopens the question. A ``confirmed``
+    hypothesis keeps its status while still accruing evidence.
+    """
+    cleaned = statement.strip()
+    if not cleaned:
+        raise ValueError("statement must not be empty")
+    now = observed_at or datetime.now(timezone.utc)
+    normalized_category = _normalise_athlete_memory_category(category)
+    statement_key = _normalise_hypothesis_key(cleaned)
+
+    existing = await db.scalar(
+        select(models.AthleteHypothesis).where(
+            models.AthleteHypothesis.user_id == user_id,
+            models.AthleteHypothesis.category == normalized_category,
+            models.AthleteHypothesis.statement_key == statement_key,
+        )
+    )
+    if existing is None:
+        existing = models.AthleteHypothesis(
+            user_id=user_id,
+            statement=cleaned,
+            statement_key=statement_key,
+            category=normalized_category,
+            rationale=rationale.strip(),
+            confidence=_clamp_confidence(confidence),
+            evidence_count=1,
+            status="proposed",
+            first_proposed_at=now,
+            updated_at=now,
+        )
+        db.add(existing)
+    else:
+        existing.evidence_count += 1
+        existing.updated_at = now
+        if rationale:
+            existing.rationale = rationale.strip()
+        if existing.status == "refuted":
+            existing.status = "proposed"
+        base_confidence = max(existing.confidence, _clamp_confidence(confidence))
+        existing.confidence = min(
+            1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP
+        )
+    await db.flush()
+    return existing
+
+
+async def update_athlete_hypothesis(
+    db: AsyncSession,
+    user_id: str,
+    hypothesis_id: str,
+    *,
+    statement: str | None = None,
+    category: str | None = None,
+    rationale: str | None = None,
+    confidence: float | None = None,
+    status: str | None = None,
+) -> models.AthleteHypothesis | None:
+    """Apply an athlete's edit or verdict to a hypothesis and flush.
+
+    Confirming a hypothesis floors its confidence and promotes it into a durable
+    memory fact via :func:`observe_athlete_memory_fact`, so validated knowledge
+    starts informing coach advice; refuting or deleting simply resolves it.
+    """
+    existing = await get_athlete_hypothesis(db, user_id, hypothesis_id)
+    if existing is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    if statement is not None:
+        cleaned = statement.strip()
+        if not cleaned:
+            raise ValueError("statement must not be empty")
+        existing.statement = cleaned
+        existing.statement_key = _normalise_hypothesis_key(cleaned)
+    if category is not None:
+        existing.category = _normalise_athlete_memory_category(category)
+    if rationale is not None:
+        existing.rationale = rationale.strip()
+    if confidence is not None:
+        existing.confidence = _clamp_confidence(confidence)
+    if status is not None:
+        existing.status = status
+        if status == "confirmed":
+            existing.confidence = max(
+                existing.confidence, ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE
+            )
+            await observe_athlete_memory_fact(
+                db,
+                user_id,
+                fact=existing.statement,
+                category=existing.category,
+                source_snippet=existing.rationale,
+                confidence=existing.confidence,
+                observed_at=now,
+            )
+    existing.updated_at = now
+    await db.flush()
+    return existing
+
+
+async def delete_athlete_hypothesis(
+    db: AsyncSession, user_id: str, hypothesis_id: str
+) -> bool:
+    """Permanently remove an athlete hypothesis owned by a user."""
+    existing = await get_athlete_hypothesis(db, user_id, hypothesis_id)
+    if existing is None:
+        return False
+    await db.delete(existing)
+    await db.flush()
+    return True
 
 
 # ---------------------------------------------------------------------------

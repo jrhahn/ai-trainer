@@ -151,6 +151,9 @@ class User(Base):
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    athlete_hypotheses: Mapped[list["AthleteHypothesis"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
@@ -375,6 +378,57 @@ class AthleteMemoryFact(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_memory_facts")
+
+
+class AthleteHypothesis(Base):
+    """A speculative, testable claim the coach forms about an athlete.
+
+    Distinct from :class:`AthleteMemoryFact`: a memory fact is something observed
+    or stated and trusted enough to inform coaching, whereas a hypothesis is a
+    tentative causal/predictive idea — e.g. "upper-body strength training
+    suppresses heart-rate response the following day" — that still ``needs
+    validation``. It accumulates supporting evidence over time and, once the
+    athlete confirms it, is promoted into a memory fact so it can inform advice.
+    """
+
+    __tablename__ = "athlete_hypotheses"
+    __table_args__ = (
+        Index(
+            "ix_athlete_hypotheses_user_category_key",
+            "user_id",
+            "category",
+            "statement_key",
+            unique=True,
+        ),
+        Index("ix_athlete_hypotheses_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    statement_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # Human-readable summary of the evidence that motivates the hypothesis.
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    # How many supporting observations back the hypothesis (the "Evidence" count).
+    evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # proposed (needs validation) -> confirmed | refuted.
+    status: Mapped[str] = mapped_column(
+        String(20), default="proposed", nullable=False
+    )
+    first_proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_hypotheses")
 
 
 class AthleteAvailabilityConstraint(Base):

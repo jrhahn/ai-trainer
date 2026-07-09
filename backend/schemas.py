@@ -395,6 +395,39 @@ class AthleteMemoryFactsResponse(CamelModel):
     facts: list[AthleteMemoryFactSchema]
 
 
+AthleteHypothesisStatus = Literal["proposed", "confirmed", "refuted"]
+
+
+class AthleteHypothesisSchema(CamelModel):
+    id: str
+    statement: str
+    category: str
+    rationale: str = ""
+    confidence: float
+    evidence_count: int
+    status: AthleteHypothesisStatus
+    first_proposed_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteHypothesesResponse(CamelModel):
+    hypotheses: list[AthleteHypothesisSchema]
+
+
+class AthleteHypothesisUpdateRequest(CamelModel):
+    statement: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = None
+    rationale: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[AthleteHypothesisStatus] = None
+
+
 class AthleteAvailabilityConstraintSchema(CamelModel):
     id: str
     constraint_type: str
@@ -446,6 +479,7 @@ class MemoryExportSchema(CamelModel):
     coach_memory: str
     athlete_context: Optional[AthleteContextSchema]
     memory_facts: list[AthleteMemoryFactSchema]
+    hypotheses: list[AthleteHypothesisSchema] = []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

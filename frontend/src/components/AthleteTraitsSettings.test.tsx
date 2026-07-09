@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteTraitsSettings from './AthleteTraitsSettings'
-import type { AthleteMemoryFact } from '../services/user'
+import type { AthleteHypothesis, AthleteMemoryFact } from '../services/user'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
@@ -13,6 +13,10 @@ const mockFetchPrivacy = vi.hoisted(() => vi.fn())
 const mockUpdatePrivacy = vi.hoisted(() => vi.fn())
 const mockClearAll = vi.hoisted(() => vi.fn())
 const mockExport = vi.hoisted(() => vi.fn())
+const mockFetchHypotheses = vi.hoisted(() => vi.fn())
+const mockConfirmHypothesis = vi.hoisted(() => vi.fn())
+const mockRefuteHypothesis = vi.hoisted(() => vi.fn())
+const mockDeleteHypothesis = vi.hoisted(() => vi.fn())
 
 vi.mock('../services/user', () => ({
   fetchAthleteMemoryFacts: mockFetch,
@@ -23,6 +27,10 @@ vi.mock('../services/user', () => ({
   updateMemoryPrivacySettings: mockUpdatePrivacy,
   clearAllMemory: mockClearAll,
   exportMemory: mockExport,
+  fetchAthleteHypotheses: mockFetchHypotheses,
+  confirmAthleteHypothesis: mockConfirmHypothesis,
+  refuteAthleteHypothesis: mockRefuteHypothesis,
+  deleteAthleteHypothesis: mockDeleteHypothesis,
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
@@ -49,6 +57,23 @@ function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact
   }
 }
 
+function makeHypothesis(
+  overrides: Partial<AthleteHypothesis> = {},
+): AthleteHypothesis {
+  return {
+    id: 'hyp-1',
+    statement: 'Upper-body strength suppresses next-day HR response',
+    category: 'fatigue_response',
+    rationale: 'HR ~8 bpm low the day after gym sessions.',
+    confidence: 0.38,
+    evidenceCount: 2,
+    status: 'proposed',
+    firstProposedAt: '2026-06-01T00:00:00Z',
+    updatedAt: '2026-06-10T00:00:00Z',
+    ...overrides,
+  }
+}
+
 function renderComponent() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -67,6 +92,7 @@ describe('AthleteTraitsSettings', () => {
     mockUpdatePrivacy.mockResolvedValue({ memoryUpdatesEnabled: false })
     mockClearAll.mockResolvedValue(undefined)
     mockExport.mockResolvedValue({ facts: [] })
+    mockFetchHypotheses.mockResolvedValue([])
   })
 
   it('groups learned traits by category', async () => {
@@ -178,6 +204,59 @@ describe('AthleteTraitsSettings', () => {
     ).toBeInTheDocument()
     // The athlete can still confirm it to resolve the flag.
     expect(screen.getByRole('button', { name: /confirm trait/i })).toBeInTheDocument()
+  })
+
+  it('renders a working hypothesis with its confidence and evidence', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    renderComponent()
+
+    expect(
+      await screen.findByText('Upper-body strength suppresses next-day HR response'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Working Hypotheses')).toBeInTheDocument()
+    expect(screen.getByText(/Needs validation/i)).toBeInTheDocument()
+    expect(screen.getByText(/confidence 38%/)).toBeInTheDocument()
+    expect(screen.getByText(/2 observations/)).toBeInTheDocument()
+  })
+
+  it('confirms a hypothesis', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockConfirmHypothesis.mockResolvedValue(makeHypothesis({ status: 'confirmed' }))
+    renderComponent()
+
+    await screen.findByText('Upper-body strength suppresses next-day HR response')
+    await user.click(screen.getByRole('button', { name: /confirm hypothesis/i }))
+
+    await waitFor(() =>
+      expect(mockConfirmHypothesis).toHaveBeenCalledWith('test-token', 'hyp-1'),
+    )
+  })
+
+  it('dismisses a hypothesis', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockRefuteHypothesis.mockResolvedValue(makeHypothesis({ status: 'refuted' }))
+    renderComponent()
+
+    await screen.findByText('Upper-body strength suppresses next-day HR response')
+    await user.click(screen.getByRole('button', { name: /dismiss hypothesis/i }))
+
+    await waitFor(() =>
+      expect(mockRefuteHypothesis).toHaveBeenCalledWith('test-token', 'hyp-1'),
+    )
+  })
+
+  it('does not show the hypotheses section when there are none', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchHypotheses.mockResolvedValue([])
+    renderComponent()
+
+    await screen.findByText(/No learned traits yet/i)
+    expect(screen.queryByText('Working Hypotheses')).toBeNull()
   })
 
   it('toggles the "learn from conversations" privacy switch', async () => {
