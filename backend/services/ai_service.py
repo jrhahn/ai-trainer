@@ -59,6 +59,8 @@ from .prompts import (
     generate_athlete_hypotheses_user,
     generate_athlete_insights_system,
     generate_athlete_insights_user,
+    generate_validation_experiments_system,
+    generate_validation_experiments_user,
     match_observations_system,
     match_observations_user,
     rate_workout_system,
@@ -801,6 +803,7 @@ async def extract_athlete_facts(
 
 MAX_GENERATED_INSIGHTS = 8
 MAX_GENERATED_HYPOTHESES = 5
+MAX_GENERATED_EXPERIMENTS = 5
 
 
 async def generate_athlete_insights(
@@ -922,6 +925,79 @@ async def generate_athlete_hypotheses(
         seen.add(dedupe_key)
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_HYPOTHESES:
+            break
+    return candidates
+
+
+def _normalise_experiment_candidate(raw: object) -> dict | None:
+    """Validate one generated validation experiment; return a clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    protocol = raw.get("protocol")
+    if not isinstance(protocol, str) or not protocol.strip():
+        return None
+    question = raw.get("question")
+    if not isinstance(question, str) or not question.strip():
+        return None
+    category = raw.get("category")
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
+    rationale = raw.get("rationale") or ""
+    rationale = rationale.strip()[:240] if isinstance(rationale, str) else ""
+    return {
+        "question": question.strip()[:240],
+        "protocol": protocol.strip()[:240],
+        "rationale": rationale,
+        "category": category,
+    }
+
+
+async def generate_validation_experiments(
+    uncertainties_section: str,
+    existing_experiments: list[str] | None = None,
+    provider: str = "openai",
+) -> list[dict]:
+    """Design validation experiments that resolve an athlete's open questions.
+
+    ``uncertainties_section`` is a structured-text block describing the athlete's
+    unproven hypotheses (the uncertainty). ``existing_experiments`` are the
+    protocols already suggested, passed so the model avoids repeating them.
+
+    Returns a list of candidate dicts (``question``, ``protocol``, ``rationale``,
+    ``category``), deduplicated on the protocol and capped. Candidates are NOT
+    persisted — the caller decides how to store them.
+    """
+    if not uncertainties_section.strip():
+        return []
+
+    system_prompt = generate_validation_experiments_system()
+    user_msg = generate_validation_experiments_user(
+        uncertainties_section, existing_experiments
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_experiment_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["protocol"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_GENERATED_EXPERIMENTS:
             break
     return candidates
 

@@ -1287,6 +1287,140 @@ async def test_clear_athlete_memory_removes_hypotheses(db: AsyncSession) -> None
 
 
 # ---------------------------------------------------------------------------
+# AthleteExperiment
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_suggest_athlete_experiment_creates_suggested(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does upper-body strength suppress next-day HR?",
+        protocol="Repeat the gym session and compare HR on the next easy ride.",
+        rationale="A clear HR drop would confirm the hypothesis.",
+        category="fatigue response",
+        hypothesis_id="hyp-123",
+    )
+
+    assert experiment.id is not None
+    assert experiment.status == "suggested"
+    assert experiment.category == "fatigue_response"
+    assert experiment.hypothesis_id == "hyp-123"
+    assert experiment.protocol_key
+
+
+@pytest.mark.asyncio
+async def test_suggest_athlete_experiment_dedupes_on_protocol(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes over the same climb using identical pedals.",
+    )
+    second = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster for the same power?",
+        protocol="  compare BOTH bikes over the same climb using identical pedals. ",
+        rationale="Whichever is quicker at equal power wins.",
+    )
+
+    assert second.id == first.id
+    assert second.question == "Which bike is faster for the same power?"
+    assert second.rationale == "Whichever is quicker at equal power wins."
+    assert len(await crud.list_athlete_experiments(db, user.id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_dismissed_experiment_hidden_then_revived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Is threshold higher than assumed?",
+        protocol="Perform a 30-minute threshold test.",
+    )
+    await crud.update_athlete_experiment(
+        db, user.id, experiment.id, status="dismissed"
+    )
+
+    assert await crud.list_athlete_experiments(db, user.id) == []
+    assert (
+        len(await crud.list_athlete_experiments(db, user.id, include_resolved=True))
+        == 1
+    )
+
+    revived = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Is threshold higher than assumed?",
+        protocol="Perform a 30-minute threshold test.",
+    )
+    assert revived.id == experiment.id
+    assert revived.status == "suggested"
+
+
+@pytest.mark.asyncio
+async def test_completed_experiment_not_revived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does heat cut power?",
+        protocol="Repeat the session under cooler conditions.",
+    )
+    await crud.update_athlete_experiment(
+        db, user.id, experiment.id, status="completed"
+    )
+
+    again = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does heat cut power?",
+        protocol="Repeat the session under cooler conditions.",
+    )
+    assert again.id == experiment.id
+    assert again.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_delete_athlete_experiment_scoped_to_owner(db: AsyncSession) -> None:
+    owner = await _make_user(db)
+    other = await _make_user(db, email="other-exp@example.com")
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        owner.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes using identical power pedals.",
+    )
+
+    assert await crud.delete_athlete_experiment(db, other.id, experiment.id) is False
+    assert await crud.delete_athlete_experiment(db, owner.id, experiment.id) is True
+    assert await crud.get_athlete_experiment(db, owner.id, experiment.id) is None
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_experiments(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes using identical power pedals.",
+    )
+
+    await crud.clear_athlete_memory(db, user.id)
+    assert (
+        await crud.list_athlete_experiments(db, user.id, include_resolved=True) == []
+    )
+
+
+# ---------------------------------------------------------------------------
 # StravaToken
 # ---------------------------------------------------------------------------
 

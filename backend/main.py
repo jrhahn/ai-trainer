@@ -14,6 +14,7 @@ from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
 from services.contradiction_detection import athlete_contradiction_detection_job
+from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
 from services.llm import AIKeyNotConfiguredError
@@ -43,6 +44,7 @@ async def lifespan(_: FastAPI):
     scheduler.register(athlete_insight_generation_job(async_session_maker))
     scheduler.register(athlete_contradiction_detection_job(async_session_maker))
     scheduler.register(athlete_hypothesis_generation_job(async_session_maker))
+    scheduler.register(validation_experiment_suggestion_job(async_session_maker))
     scheduler.start()
     try:
         yield

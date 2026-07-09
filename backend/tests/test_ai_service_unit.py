@@ -3618,6 +3618,105 @@ async def test_generate_athlete_hypotheses_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# generate_validation_experiments — propose experiments to resolve uncertainty
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "question": "Does upper-body strength suppress next-day HR?",
+                    "protocol": "Repeat the gym session, compare HR next easy ride.",
+                    "rationale": "A clear HR drop confirms the hypothesis.",
+                    "category": "fatigue_response",
+                },
+                {
+                    # Missing rationale defaults to empty; category defaults.
+                    "question": "Which bike is faster?",
+                    "protocol": "Compare both bikes over the same climb.",
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "Open questions:\n- upper-body strength suppresses next-day HR",
+            existing_experiments=["Perform a 30-minute threshold test."],
+            provider="openai",
+        )
+
+    assert [c["protocol"] for c in candidates] == [
+        "Repeat the gym session, compare HR next easy ride.",
+        "Compare both bikes over the same climb.",
+    ]
+    assert candidates[1]["rationale"] == ""
+    assert candidates[1]["category"] == "general"
+    # Uncertainties and already-suggested experiments both reach the model.
+    assert "upper-body strength" in captured[0][1]
+    assert "Perform a 30-minute threshold test." in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_empty_context_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"question": "q", "protocol": "Repeat the VO2 session", "category": "general"},
+            {"question": "q", "protocol": " repeat THE vo2 session ", "category": "general"},
+        ]
+        candidates += [
+            {"question": "q", "protocol": f"Experiment {i}", "category": "general"}
+            for i in range(ai_service.MAX_GENERATED_EXPERIMENTS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "uncertainty", provider="openai"
+        )
+
+    protocols = [c["protocol"] for c in candidates]
+    assert protocols.count("Repeat the VO2 session") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_EXPERIMENTS
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "uncertainty", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions — flag stored facts fresh data disagrees with
 # ---------------------------------------------------------------------------
 

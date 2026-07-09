@@ -428,6 +428,39 @@ class AthleteHypothesisUpdateRequest(CamelModel):
     status: Optional[AthleteHypothesisStatus] = None
 
 
+AthleteExperimentStatus = Literal["suggested", "completed", "dismissed"]
+
+
+class AthleteExperimentSchema(CamelModel):
+    id: str
+    hypothesis_id: Optional[str] = None
+    question: str
+    protocol: str
+    rationale: str = ""
+    category: str
+    status: AthleteExperimentStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteExperimentsResponse(CamelModel):
+    experiments: list[AthleteExperimentSchema]
+
+
+class AthleteExperimentUpdateRequest(CamelModel):
+    question: Optional[str] = Field(default=None, min_length=1)
+    protocol: Optional[str] = Field(default=None, min_length=1)
+    rationale: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[AthleteExperimentStatus] = None
+
+
 class AthleteAvailabilityConstraintSchema(CamelModel):
     id: str
     constraint_type: str
@@ -480,6 +513,7 @@ class MemoryExportSchema(CamelModel):
     athlete_context: Optional[AthleteContextSchema]
     memory_facts: list[AthleteMemoryFactSchema]
     hypotheses: list[AthleteHypothesisSchema] = []
+    experiments: list[AthleteExperimentSchema] = []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

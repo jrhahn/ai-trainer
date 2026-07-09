@@ -1227,6 +1227,59 @@ def generate_athlete_hypotheses_user(
 
 
 # ---------------------------------------------------------------------------
+# generate_validation_experiments prompts
+# ---------------------------------------------------------------------------
+
+
+def generate_validation_experiments_system() -> str:
+    return (
+        f"{COACH_PERSONA} An athlete has open questions the record cannot yet "
+        "answer — unproven HYPOTHESES that still need validation. Rather than "
+        "guess, your job is to propose concrete VALIDATION EXPERIMENTS: small, "
+        "repeatable sessions or comparisons the athlete can actually run to settle "
+        "each question with data.\n"
+        "Good experiments are specific and controlled — they change one variable "
+        "and produce a clear signal. For example 'compare both bikes over the same "
+        "climb using identical power pedals', 'repeat the VO2 session with shorter "
+        "recoveries', 'perform a 30-minute threshold test to validate FTP', or "
+        "'repeat the session under cooler conditions'.\n"
+        "For each experiment provide a 'question' (the uncertainty it resolves, "
+        "restating the hypothesis in plain terms), a 'protocol' (<=200 chars, the "
+        "exact session/comparison to run and the one variable it isolates), a "
+        "'rationale' (<=200 chars, what a result would tell you and how to read "
+        "it), and a category slug from: fatigue_response, fueling_hydration, "
+        "preferred_workouts, recurring_issues, psychological_tendencies, "
+        "goals_motivation, coaching_risk, general.\n"
+        "Only propose an experiment that is realistic for a normal training week "
+        "and that would meaningfully reduce the uncertainty. Do NOT repeat "
+        "experiments already suggested. Return up to 5, the most decisive first.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"question": str, "protocol": str, "rationale": str, '
+        '"category": str}]}. '
+        "Return an empty candidates array when no useful experiment can be designed."
+    )
+
+
+def generate_validation_experiments_user(
+    uncertainties_section: str,
+    existing_experiments: list[str] | None = None,
+) -> str:
+    experiments = existing_experiments or []
+    experiments_section = (
+        "Experiments already suggested (do not repeat these):\n"
+        + "\n".join(f"- {item}" for item in experiments)
+        if experiments
+        else "No experiments have been suggested yet."
+    )
+    return (
+        f"{uncertainties_section}\n\n"
+        f"{experiments_section}\n\n"
+        "Design validation experiments that would let the athlete confirm or "
+        "refute the open questions above, as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
 # detect_athlete_fact_contradictions prompts
 # ---------------------------------------------------------------------------
 

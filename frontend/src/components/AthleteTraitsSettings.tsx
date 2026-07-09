@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
+  Beaker,
   Brain,
   Check,
   CheckCircle2,
@@ -15,23 +16,29 @@ import {
 import { useAppStore } from '../store/useAppStore'
 import {
   clearAllMemory,
+  completeValidationExperiment,
   confirmAthleteHypothesis,
   confirmAthleteMemoryFact,
   deleteAthleteHypothesis,
   deleteAthleteMemoryFact,
+  deleteValidationExperiment,
+  dismissValidationExperiment,
   exportMemory,
   fetchAthleteHypotheses,
   fetchAthleteMemoryFacts,
   fetchMemoryPrivacySettings,
+  fetchValidationExperiments,
   refuteAthleteHypothesis,
   updateAthleteMemoryFact,
   updateMemoryPrivacySettings,
+  type AthleteExperiment,
   type AthleteHypothesis,
   type AthleteMemoryFact,
 } from '../services/user'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
 export const ATHLETE_HYPOTHESES_QUERY_KEY = 'athlete-hypotheses'
+export const VALIDATION_EXPERIMENTS_QUERY_KEY = 'validation-experiments'
 const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
 
 /** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
@@ -313,6 +320,102 @@ function HypothesisRow({
   )
 }
 
+function ExperimentRow({
+  experiment,
+  token,
+}: {
+  experiment: AthleteExperiment
+  token: string
+}) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState('')
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
+    })
+
+  const completeMutation = useMutation({
+    mutationFn: () => completeValidationExperiment(token, experiment.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to update experiment'),
+  })
+
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissValidationExperiment(token, experiment.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to dismiss experiment'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteValidationExperiment(token, experiment.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to delete experiment'),
+  })
+
+  const isBusy =
+    completeMutation.isPending ||
+    dismissMutation.isPending ||
+    deleteMutation.isPending
+
+  const handleDelete = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Delete this experiment? The coach will stop suggesting it.')
+    ) {
+      return
+    }
+    deleteMutation.mutate()
+  }
+
+  return (
+    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-900">{experiment.protocol}</p>
+          <p className="text-[11px] text-gray-500 mt-1">{experiment.question}</p>
+          {experiment.rationale && (
+            <p className="text-[11px] text-gray-400 mt-1">{experiment.rationale}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => completeMutation.mutate()}
+            disabled={isBusy}
+            title="Mark this experiment as done"
+            aria-label="Complete experiment"
+            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+          >
+            <CheckCircle2 size={15} />
+          </button>
+          <button
+            onClick={() => dismissMutation.mutate()}
+            disabled={isBusy}
+            title="Dismiss this experiment"
+            aria-label="Dismiss experiment"
+            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+          >
+            <ThumbsDown size={15} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isBusy}
+            title="Delete this experiment"
+            aria-label="Delete experiment"
+            className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+    </li>
+  )
+}
+
 export default function AthleteTraitsSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
@@ -327,6 +430,12 @@ export default function AthleteTraitsSettings() {
   const { data: hypotheses } = useQuery({
     queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY, authToken],
     queryFn: () => fetchAthleteHypotheses(authToken!),
+    enabled: !!authToken,
+  })
+
+  const { data: experiments } = useQuery({
+    queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY, authToken],
+    queryFn: () => fetchValidationExperiments(authToken!),
     enabled: !!authToken,
   })
 
@@ -348,6 +457,9 @@ export default function AthleteTraitsSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
+      queryClient.invalidateQueries({
+        queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
+      })
     },
   })
 
@@ -447,6 +559,28 @@ export default function AthleteTraitsSettings() {
               <HypothesisRow
                 key={hypothesis.id}
                 hypothesis={hypothesis}
+                token={authToken!}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {experiments && experiments.length > 0 && (
+        <div className="border-t border-gray-100 pt-5">
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+            <Beaker size={16} /> Suggested Experiments
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Where the coach is unsure, it suggests a small experiment to settle the
+            question with data instead of guessing. Run one, then mark it done or
+            dismiss it.
+          </p>
+          <ul className="space-y-2">
+            {experiments.map((experiment) => (
+              <ExperimentRow
+                key={experiment.id}
+                experiment={experiment}
                 token={authToken!}
               />
             ))}
