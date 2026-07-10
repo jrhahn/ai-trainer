@@ -49,13 +49,13 @@ def test_openai_defaults():
 
 
 def test_gemini_defaults():
-    """Gemini defaults all tasks to gemini-2.5-flash."""
+    """Gemini defaults all tasks to gemini-3.5-flash."""
     from config import settings
 
-    assert settings.gemini_classify_model == "gemini-2.5-flash"
-    assert settings.gemini_plan_model == "gemini-2.5-flash"
-    assert settings.gemini_coach_model == "gemini-2.5-flash"
-    assert settings.gemini_feedback_model == "gemini-2.5-flash"
+    assert settings.gemini_classify_model == "gemini-3.5-flash"
+    assert settings.gemini_plan_model == "gemini-3.5-flash"
+    assert settings.gemini_coach_model == "gemini-3.5-flash"
+    assert settings.gemini_feedback_model == "gemini-3.5-flash"
 
 
 # ---------------------------------------------------------------------------
@@ -105,13 +105,13 @@ def test_resolve_model_gemini_tasks(monkeypatch):
     import services.llm as llm
     from config import settings
 
-    monkeypatch.setattr(settings, "gemini_classify_model", "gemini-2.5-flash")
-    monkeypatch.setattr(settings, "gemini_plan_model", "gemini-2.5-flash")
+    monkeypatch.setattr(settings, "gemini_classify_model", "gemini-3.5-flash")
+    monkeypatch.setattr(settings, "gemini_plan_model", "gemini-3.5-flash")
     monkeypatch.setattr(settings, "gemini_coach_model", "gemini-2.5-pro")
     monkeypatch.setattr(settings, "gemini_feedback_model", "gemini-2.5-pro")
 
-    assert llm._resolve_model("gemini", llm.TASK_CLASSIFY) == "gemini-2.5-flash"
-    assert llm._resolve_model("gemini", llm.TASK_PLAN) == "gemini-2.5-flash"
+    assert llm._resolve_model("gemini", llm.TASK_CLASSIFY) == "gemini-3.5-flash"
+    assert llm._resolve_model("gemini", llm.TASK_PLAN) == "gemini-3.5-flash"
     assert llm._resolve_model("gemini", llm.TASK_COACH) == "gemini-2.5-pro"
     assert llm._resolve_model("gemini", llm.TASK_FEEDBACK) == "gemini-2.5-pro"
 
@@ -175,11 +175,11 @@ def test_get_provider_gemini_uses_task_model(monkeypatch):
 
     monkeypatch.setattr(settings, "gemini_api_key", "fake-gemini-key")
     monkeypatch.setattr(settings, "openai_api_key", "")
-    monkeypatch.setattr(settings, "gemini_feedback_model", "gemini-2.5-flash")
+    monkeypatch.setattr(settings, "gemini_feedback_model", "gemini-3.5-flash")
 
     provider = llm.get_provider("gemini", task=llm.TASK_FEEDBACK)
     assert isinstance(provider, llm.GeminiProvider)
-    assert provider._model == "gemini-2.5-flash"
+    assert provider._model == "gemini-3.5-flash"
 
 
 def test_get_provider_fallback_carries_task_model(monkeypatch):
@@ -190,11 +190,11 @@ def test_get_provider_fallback_carries_task_model(monkeypatch):
     # Only gemini key set; requesting openai → fallback to gemini
     monkeypatch.setattr(settings, "gemini_api_key", "fake-gemini-key")
     monkeypatch.setattr(settings, "openai_api_key", "")
-    monkeypatch.setattr(settings, "gemini_coach_model", "gemini-2.5-flash")
+    monkeypatch.setattr(settings, "gemini_coach_model", "gemini-3.5-flash")
 
     provider = llm.get_provider("openai", task=llm.TASK_COACH)
     assert isinstance(provider, llm.GeminiProvider)
-    assert provider._model == "gemini-2.5-flash"
+    assert provider._model == "gemini-3.5-flash"
 
 
 # ---------------------------------------------------------------------------

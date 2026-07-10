@@ -98,7 +98,7 @@ TASK_FEEDBACK = "feedback"
 
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 
 def _resolve_model(provider_name: str, task: str) -> str:
