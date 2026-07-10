@@ -120,10 +120,10 @@ class Settings(BaseSettings):
     openai_coach_model: str = "gpt-4o"
     openai_feedback_model: str = "gpt-4o"
 
-    gemini_classify_model: str = "gemini-2.5-flash"
-    gemini_plan_model: str = "gemini-2.5-flash"
-    gemini_coach_model: str = "gemini-2.5-flash"
-    gemini_feedback_model: str = "gemini-2.5-flash"
+    gemini_classify_model: str = "gemini-3.5-flash"
+    gemini_plan_model: str = "gemini-3.5-flash"
+    gemini_coach_model: str = "gemini-3.5-flash"
+    gemini_feedback_model: str = "gemini-3.5-flash"
 
     # ------------------------------------------------------------------
     # Readiness recommendations
