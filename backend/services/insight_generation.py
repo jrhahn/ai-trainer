@@ -27,6 +27,7 @@ from services.llm import (
     finish_token_usage_collection,
     resolve_user_provider,
 )
+from schemas import AthleteModelSchema
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
 
@@ -99,12 +100,13 @@ async def generate_user_insights(
     existing = await crud.list_athlete_memory_facts(db, user.id, now=now)
     existing_facts = [fact.fact for fact in existing]
 
+    provider = resolve_user_provider(user)
     usage_token = begin_token_usage_collection()
     try:
         candidates = await ai_service.generate_athlete_insights(
             metrics_section,
             existing_facts=existing_facts,
-            provider=resolve_user_provider(user),
+            provider=provider,
         )
     finally:
         consumed = finish_token_usage_collection(usage_token)
@@ -123,7 +125,49 @@ async def generate_user_insights(
             observed_at=now,
         )
         observed += 1
+
+    # Refresh the long-term structured athlete model (#384). Best-effort: a
+    # failure here must never discard the insights observed above.
+    await _refresh_athlete_model(db, user, metrics_section, provider)
+
     return observed
+
+
+async def _refresh_athlete_model(
+    db: AsyncSession,
+    user: models.User,
+    metrics_section: str,
+    provider: str,
+) -> None:
+    """Derive and persist the long-term athlete model, swallowing failures."""
+    existing_model_row = await crud.get_athlete_model(db, user.id)
+    current_model = (
+        AthleteModelSchema.model_validate(
+            existing_model_row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        if existing_model_row is not None
+        else None
+    )
+
+    usage_token = begin_token_usage_collection()
+    try:
+        derived_model = await ai_service.derive_athlete_model(
+            metrics_section,
+            current_model=current_model,
+            provider=provider,
+        )
+    except Exception:
+        logger.warning(
+            "Athlete model derivation failed for user_id=%s", user.id, exc_info=True
+        )
+        return
+    finally:
+        consumed = finish_token_usage_collection(usage_token)
+        if consumed:
+            await crud.increment_user_consumed_tokens(db, user, consumed)
+
+    if derived_model is not None:
+        await crud.upsert_athlete_model(db, user.id, **derived_model)
 
 
 async def run_insight_generation(

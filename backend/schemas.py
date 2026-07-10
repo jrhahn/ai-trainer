@@ -365,6 +365,60 @@ class AthleteContextRequest(AthleteContextSchema):
     pass
 
 
+class AthleteModelSchema(CamelModel):
+    """The long-term structured athlete model (#384).
+
+    Captures durable physiological/performance characteristics. Quantitative
+    anchors (``ftp_watts``, ``vo2max``) are optional; the remaining qualitative
+    fields default to empty so a never-derived model round-trips as blanks.
+    """
+
+    ftp_watts: Optional[int] = None
+    vo2max: Optional[float] = None
+    pacing_quality: str = ""
+    recovery_ability: str = ""
+    threshold_durability: str = ""
+    heat_tolerance: str = ""
+    preferred_training_style: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
+    summary: str = ""
+    confidence: float = 0.0
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteModelRequest(CamelModel):
+    """Athlete-authored edits to the long-term model.
+
+    Excludes ``confidence`` and ``updated_at`` — those are coach/server owned.
+    """
+
+    ftp_watts: Optional[int] = None
+    vo2max: Optional[float] = None
+    pacing_quality: str = ""
+    recovery_ability: str = ""
+    threshold_durability: str = ""
+    heat_tolerance: str = ""
+    preferred_training_style: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 AthleteMemoryFactStatus = Literal[
     "active", "stale", "archived", "rejected", "user_confirmed", "needs_validation"
 ]
@@ -557,6 +611,7 @@ class MemoryExportSchema(CamelModel):
     memory_updates_enabled: bool
     coach_memory: str
     athlete_context: Optional[AthleteContextSchema]
+    athlete_model: Optional[AthleteModelSchema] = None
     memory_facts: list[AthleteMemoryFactSchema]
     hypotheses: list[AthleteHypothesisSchema] = []
     experiments: list[AthleteExperimentSchema] = []

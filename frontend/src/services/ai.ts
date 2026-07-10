@@ -6,6 +6,7 @@ import type {
   StravaActivity,
   TrainingDay,
 } from '../store/useAppStore'
+import type { AthleteModel } from './user'
 import { apiFetch } from './api'
 
 export type { AiProvider }
@@ -161,6 +162,14 @@ export async function extractAthleteFacts(
     confidence: c.confidence ?? 0.35,
     sourceSnippet: c.sourceSnippet ?? c.source_snippet ?? '',
   }))
+}
+
+// #384: re-derive the long-term athlete model from training history on demand.
+export async function refreshAthleteModel(authToken: string): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/ai/refresh-athlete-model', {
+    token: authToken,
+    method: 'POST',
+  })
 }
 
 export async function fetchRaceEventFeedback(

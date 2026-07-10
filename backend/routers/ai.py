@@ -708,6 +708,14 @@ async def ask_trainer(
         if (athlete_context_row is not None and memory_enabled)
         else None
     )
+    athlete_model_row = await crud.get_athlete_model(db, current_user.id)
+    athlete_model = (
+        schemas.AthleteModelSchema.model_validate(
+            athlete_model_row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        if (athlete_model_row is not None and memory_enabled)
+        else None
+    )
     athlete_memory_fact_rows = (
         await crud.get_prompt_athlete_memory_facts(db, current_user.id)
         if memory_enabled
@@ -766,6 +774,7 @@ async def ask_trainer(
             race_events=race_events,
             athlete_context=athlete_context,
             athlete_memory_facts=athlete_memory_facts,
+            athlete_model=athlete_model,
             timezone_name=timezone_name,
         )
     except AIRateLimitError:
@@ -1139,6 +1148,58 @@ async def extract_athlete_facts(
             for candidate in candidates
         ]
     )
+
+
+@router.post("/refresh-athlete-model", response_model=schemas.AthleteModelSchema)
+async def refresh_athlete_model(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    """Re-derive the long-term athlete model from training history on demand (#384).
+
+    Mirrors the weekly background derivation but is triggered by the athlete from
+    the settings UI. When the history yields nothing the current model (or an
+    empty one) is returned unchanged.
+    """
+    timezone_name = _request_timezone(request)
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=60)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
+
+    existing_row = await crud.get_athlete_model(db, current_user.id)
+    current_model = (
+        schemas.AthleteModelSchema.model_validate(
+            existing_row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        if existing_row is not None
+        else None
+    )
+
+    usage_token = begin_token_usage_collection()
+    try:
+        derived = await ai_service.derive_athlete_model(
+            metrics_section,
+            current_model=current_model,
+            provider=resolve_user_provider(current_user),
+        )
+    except AIRateLimitError:
+        finish_token_usage_collection(usage_token)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+        )
+    await _persist_collected_token_usage(db, current_user, usage_token)
+
+    if derived is not None:
+        model = await crud.upsert_athlete_model(db, current_user.id, **derived)
+        return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+    if existing_row is not None:
+        return schemas.AthleteModelSchema.model_validate(
+            existing_row, from_attributes=True
+        )
+    return schemas.AthleteModelSchema()
 
 
 @router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)

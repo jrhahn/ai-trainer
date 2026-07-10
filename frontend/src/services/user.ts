@@ -341,6 +341,41 @@ export async function deleteAthleteMemoryFact(token: string, factId: string): Pr
   })
 }
 
+// #384: long-term structured athlete model (durable physiology & performance).
+export interface AthleteModel {
+  ftpWatts: number | null
+  vo2max: number | null
+  pacingQuality: string
+  recoveryAbility: string
+  thresholdDurability: string
+  heatTolerance: string
+  preferredTrainingStyle: string
+  strengths: string[]
+  weaknesses: string[]
+  riskFactors: string[]
+  summary: string
+  confidence: number
+  updatedAt: string | null
+}
+
+// Athlete-editable subset (excludes coach/server-owned confidence & updatedAt).
+export type AthleteModelEdit = Omit<AthleteModel, 'confidence' | 'updatedAt'>
+
+export async function fetchAthleteModel(token: string): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/users/me/athlete-model', { token })
+}
+
+export async function saveAthleteModel(
+  token: string,
+  model: AthleteModelEdit
+): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/users/me/athlete-model', {
+    token,
+    method: 'PUT',
+    body: model,
+  })
+}
+
 export type AthleteHypothesisStatus = 'proposed' | 'confirmed' | 'refuted'
 
 export interface AthleteHypothesis {

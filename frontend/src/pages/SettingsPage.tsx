@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
+import AthleteModelSettings from '../components/AthleteModelSettings'
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
 import IntervalsConnect from '../components/IntervalsConnect'
@@ -810,6 +811,9 @@ export default function SettingsPage() {
 
       {/* Learned athlete traits */}
       <AthleteTraitsSettings />
+
+      {/* Long-term structured athlete model (#384) */}
+      <AthleteModelSettings />
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">

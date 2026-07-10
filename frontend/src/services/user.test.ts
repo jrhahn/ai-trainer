@@ -45,6 +45,8 @@ import {
   fetchRideMetricsHistory,
   fetchPlanHistory,
   fetchPlanHistoryStats,
+  fetchAthleteModel,
+  saveAthleteModel,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -195,6 +197,59 @@ describe('saveTrainingPlan', () => {
       token: 'tok-123',
       method: 'PUT',
       body: { plan: [day] },
+    })
+  })
+})
+
+describe('athlete model (#384)', () => {
+  it('fetches the long-term athlete model', async () => {
+    const model = {
+      ftpWatts: 260,
+      vo2max: 58,
+      pacingQuality: 'even',
+      recoveryAbility: '',
+      thresholdDurability: 'holds 30 min',
+      heatTolerance: '',
+      preferredTrainingStyle: 'intervals',
+      strengths: ['threshold'],
+      weaknesses: [],
+      riskFactors: [],
+      summary: 'Durable rider.',
+      confidence: 0.7,
+      updatedAt: '2026-07-10T00:00:00Z',
+    }
+    mockApiFetch.mockResolvedValue(model)
+
+    const result = await fetchAthleteModel('tok-123')
+
+    expect(result.ftpWatts).toBe(260)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-model', {
+      token: 'tok-123',
+    })
+  })
+
+  it('PUTs athlete edits without coach-owned fields', async () => {
+    const edit = {
+      ftpWatts: 265,
+      vo2max: null,
+      pacingQuality: 'even',
+      recoveryAbility: '',
+      thresholdDurability: '',
+      heatTolerance: '',
+      preferredTrainingStyle: '',
+      strengths: ['climbing'],
+      weaknesses: [],
+      riskFactors: [],
+      summary: 'edited',
+    }
+    mockApiFetch.mockResolvedValue({ ...edit, confidence: 0.5, updatedAt: null })
+
+    await saveAthleteModel('tok-123', edit)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-model', {
+      token: 'tok-123',
+      method: 'PUT',
+      body: edit,
     })
   })
 })
