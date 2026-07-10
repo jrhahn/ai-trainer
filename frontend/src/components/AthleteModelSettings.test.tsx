@@ -100,4 +100,61 @@ describe('AthleteModelSettings', () => {
     await waitFor(() => expect(mockRefresh).toHaveBeenCalledWith('test-token'))
     expect(await screen.findByDisplayValue('275')).toBeInTheDocument()
   })
+
+  it('shows an error when the model fails to load', async () => {
+    mockFetch.mockRejectedValue(new Error('boom'))
+    renderComponent()
+
+    expect(
+      await screen.findByText(/could not load the athlete model/i)
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces a save failure', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    mockSave.mockRejectedValue(new Error('nope'))
+    renderComponent()
+
+    await screen.findByDisplayValue('260')
+    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(
+      await screen.findByText(/could not save the athlete model/i)
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces a refresh failure', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    mockRefresh.mockRejectedValue(new Error('nope'))
+    renderComponent()
+
+    await screen.findByDisplayValue('260')
+    await userEvent.click(
+      screen.getByRole('button', { name: /refresh from training/i })
+    )
+
+    expect(
+      await screen.findByText(/could not refresh from training history/i)
+    ).toBeInTheDocument()
+  })
+
+  it('clears a numeric field to null and edits list fields', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    mockSave.mockImplementation((_token, payload) => Promise.resolve(makeModel(payload)))
+    renderComponent()
+
+    const ftp = await screen.findByDisplayValue('260')
+    await userEvent.clear(ftp)
+
+    const strengths = screen.getByDisplayValue('threshold')
+    await userEvent.clear(strengths)
+    await userEvent.type(strengths, 'climbing{enter}sprinting')
+
+    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1))
+    const [, payload] = mockSave.mock.calls[0]
+    expect(payload.ftpWatts).toBeNull()
+    expect(payload.strengths).toEqual(['climbing', 'sprinting'])
+  })
 })

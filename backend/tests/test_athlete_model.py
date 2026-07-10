@@ -6,6 +6,7 @@ import pytest
 
 import crud
 from services import ai_service
+from services.ai_service import AIRateLimitError
 from services.prompts import athlete_model_section
 from tests.conftest import TestSessionLocal
 
@@ -80,6 +81,103 @@ async def test_put_does_not_touch_coach_owned_confidence(client, auth_headers):
 
 
 # ---------------------------------------------------------------------------
+# POST /ai/refresh-athlete-model
+# ---------------------------------------------------------------------------
+
+
+_DERIVED = {
+    "ftp_watts": 272,
+    "vo2max": 60.0,
+    "pacing_quality": "even",
+    "recovery_ability": "",
+    "threshold_durability": "holds 30 min",
+    "heat_tolerance": "",
+    "preferred_training_style": "intervals",
+    "strengths": ["threshold"],
+    "weaknesses": [],
+    "risk_factors": [],
+    "summary": "Durable rider.",
+    "confidence": 0.65,
+}
+
+
+@pytest.mark.asyncio
+async def test_refresh_persists_derived_model(client, auth_headers, monkeypatch):
+    async def fake_derive(metrics_section, *, current_model=None, provider="openai"):
+        return dict(_DERIVED)
+
+    monkeypatch.setattr(ai_service, "derive_athlete_model", fake_derive)
+
+    response = await client.post(
+        "/api/v1/ai/refresh-athlete-model", headers=auth_headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ftpWatts"] == 272
+    assert body["thresholdDurability"] == "holds 30 min"
+    assert body["confidence"] == pytest.approx(0.65)
+
+    # Persisted, so a follow-up GET returns the same model.
+    got = await client.get("/api/v1/users/me/athlete-model", headers=auth_headers)
+    assert got.json()["ftpWatts"] == 272
+
+
+@pytest.mark.asyncio
+async def test_refresh_returns_existing_when_derive_yields_nothing(
+    client, auth_headers, monkeypatch
+):
+    user_id = await _current_user_id(client, auth_headers)
+    async with TestSessionLocal() as db:
+        await crud.upsert_athlete_model(
+            db, user_id, summary="prior", confidence=0.4
+        )
+        await db.commit()
+
+    async def fake_derive(metrics_section, *, current_model=None, provider="openai"):
+        # The existing model should be handed to the deriver.
+        assert current_model is not None and current_model["summary"] == "prior"
+        return None
+
+    monkeypatch.setattr(ai_service, "derive_athlete_model", fake_derive)
+
+    response = await client.post(
+        "/api/v1/ai/refresh-athlete-model", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["summary"] == "prior"
+
+
+@pytest.mark.asyncio
+async def test_refresh_returns_empty_when_no_model_and_no_derivation(
+    client, auth_headers, monkeypatch
+):
+    async def fake_derive(metrics_section, *, current_model=None, provider="openai"):
+        return None
+
+    monkeypatch.setattr(ai_service, "derive_athlete_model", fake_derive)
+
+    response = await client.post(
+        "/api/v1/ai/refresh-athlete-model", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["ftpWatts"] is None
+    assert response.json()["summary"] == ""
+
+
+@pytest.mark.asyncio
+async def test_refresh_503_on_rate_limit(client, auth_headers, monkeypatch):
+    async def boom(metrics_section, *, current_model=None, provider="openai"):
+        raise AIRateLimitError("rate limited")
+
+    monkeypatch.setattr(ai_service, "derive_athlete_model", boom)
+
+    response = await client.post(
+        "/api/v1/ai/refresh-athlete-model", headers=auth_headers
+    )
+    assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
 # derive_athlete_model normalisation
 # ---------------------------------------------------------------------------
 
@@ -111,6 +209,33 @@ async def test_derive_normalises_llm_payload(monkeypatch):
 @pytest.mark.asyncio
 async def test_derive_returns_none_for_empty_history():
     assert await ai_service.derive_athlete_model("   ") is None
+
+
+@pytest.mark.asyncio
+async def test_derive_returns_none_when_payload_is_not_an_object(monkeypatch):
+    async def fake_chat(provider, system, user, *, json_mode, task):
+        return "[]"  # a JSON array, not the expected object
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+    assert await ai_service.derive_athlete_model("history") is None
+
+
+@pytest.mark.asyncio
+async def test_derive_tolerates_uncoercible_numbers(monkeypatch):
+    async def fake_chat(provider, system, user, *, json_mode, task):
+        # ftpWatts/vo2max/confidence are the wrong types; strengths isn't a list.
+        return (
+            '{"ftpWatts": {"bad": 1}, "vo2max": "abc", "strengths": "nope", '
+            '"confidence": "high"}'
+        )
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+    result = await ai_service.derive_athlete_model("history")
+    assert result is not None
+    assert result["ftp_watts"] is None
+    assert result["vo2max"] is None
+    assert result["strengths"] == []
+    assert result["confidence"] == 0.0
 
 
 # ---------------------------------------------------------------------------

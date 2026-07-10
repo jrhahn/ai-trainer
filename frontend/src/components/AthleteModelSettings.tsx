@@ -66,6 +66,9 @@ export default function AthleteModelSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<AthleteModelEdit | null>(null)
+  // List fields are edited as raw multi-line text and only split into arrays on
+  // save, so a just-typed newline isn't stripped mid-edit.
+  const [listText, setListText] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
 
   const { data, isLoading, isError } = useQuery({
@@ -81,6 +84,11 @@ export default function AthleteModelSettings() {
   if (data && data !== syncedModel) {
     setSyncedModel(data)
     setDraft(toDraft(data))
+    setListText(
+      Object.fromEntries(
+        LIST_FIELDS.map(([key]) => [key, (data[key] as string[]).join('\n')])
+      )
+    )
   }
 
   const applyModel = (model: AthleteModel) => {
@@ -118,7 +126,12 @@ export default function AthleteModelSettings() {
   }
 
   const handleSave = () => {
-    if (draft) saveMutation.mutate(draft)
+    if (!draft) return
+    const payload: AthleteModelEdit = { ...draft }
+    for (const [key] of LIST_FIELDS) {
+      payload[key] = linesToList(listText[key] ?? '') as never
+    }
+    saveMutation.mutate(payload)
   }
 
   const busy = saveMutation.isPending || refreshMutation.isPending
@@ -208,8 +221,10 @@ export default function AthleteModelSettings() {
               </span>
               <textarea
                 rows={3}
-                value={(draft[key] as string[]).join('\n')}
-                onChange={(e) => setField(key, linesToList(e.target.value) as never)}
+                value={listText[key] ?? ''}
+                onChange={(e) =>
+                  setListText((prev) => ({ ...prev, [key]: e.target.value }))
+                }
                 className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
             </label>
