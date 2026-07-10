@@ -564,6 +564,31 @@ async def save_athlete_context(
     return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
 
 
+@router.get("/athlete-model", response_model=schemas.AthleteModelSchema)
+async def get_athlete_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    model = await crud.get_athlete_model(db, current_user.id)
+    if model is None:
+        return schemas.AthleteModelSchema()
+    return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+
+@router.put("/athlete-model", response_model=schemas.AthleteModelSchema)
+async def save_athlete_model(
+    body: schemas.AthleteModelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    model = await crud.upsert_athlete_model(
+        db,
+        current_user.id,
+        **body.model_dump(),
+    )
+    return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+
 @router.get(
     "/athlete-memory-facts", response_model=schemas.AthleteMemoryFactsResponse
 )
@@ -889,6 +914,7 @@ async def export_memory(
 ) -> schemas.MemoryExportSchema:
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
+    athlete_model_row = await crud.get_athlete_model(db, current_user.id)
     facts = await crud.list_athlete_memory_facts(db, current_user.id, include_inactive=True)
     hypotheses = await crud.list_athlete_hypotheses(
         db, current_user.id, include_resolved=True
@@ -908,6 +934,13 @@ async def export_memory(
                 athlete_context_row, from_attributes=True
             )
             if athlete_context_row is not None
+            else None
+        ),
+        athlete_model=(
+            schemas.AthleteModelSchema.model_validate(
+                athlete_model_row, from_attributes=True
+            )
+            if athlete_model_row is not None
             else None
         ),
         memory_facts=[

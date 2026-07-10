@@ -51,6 +51,8 @@ from .prompts import (
     ask_trainer_system,
     update_memory_system,
     update_memory_user,
+    derive_athlete_model_system,
+    derive_athlete_model_user,
     detect_contradictions_system,
     detect_contradictions_user,
     extract_athlete_facts_system,
@@ -584,6 +586,7 @@ async def ask_trainer(
     race_events: list[dict] | None = None,
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
+    athlete_model: dict | None = None,
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -630,6 +633,7 @@ async def ask_trainer(
         plan_updates_rule,
         athlete_context=athlete_context,
         athlete_memory_facts=athlete_memory_facts,
+        athlete_model=athlete_model,
         science_context=science_context or "",
         training_load=training_load,
         classification=classification,
@@ -854,6 +858,120 @@ async def generate_athlete_insights(
         if len(candidates) >= MAX_GENERATED_INSIGHTS:
             break
     return candidates
+
+
+# Qualitative single-value athlete-model fields (short free-text descriptors).
+_ATHLETE_MODEL_TEXT_FIELDS = (
+    "pacing_quality",
+    "recovery_ability",
+    "threshold_durability",
+    "heat_tolerance",
+    "preferred_training_style",
+    "summary",
+)
+_ATHLETE_MODEL_LIST_FIELDS = ("strengths", "weaknesses", "risk_factors")
+# camelCase JSON key -> snake_case model field.
+_ATHLETE_MODEL_KEY_MAP = {
+    "ftpWatts": "ftp_watts",
+    "vo2max": "vo2max",
+    "pacingQuality": "pacing_quality",
+    "recoveryAbility": "recovery_ability",
+    "thresholdDurability": "threshold_durability",
+    "heatTolerance": "heat_tolerance",
+    "preferredTrainingStyle": "preferred_training_style",
+    "strengths": "strengths",
+    "weaknesses": "weaknesses",
+    "riskFactors": "risk_factors",
+    "summary": "summary",
+    "confidence": "confidence",
+}
+_ATHLETE_MODEL_TEXT_MAX = 200
+_ATHLETE_MODEL_LIST_ITEM_MAX = 120
+_ATHLETE_MODEL_LIST_MAX_ITEMS = 8
+
+
+def _normalise_athlete_model(raw: object) -> dict | None:
+    """Validate the LLM's derived athlete model into clean snake_case kwargs.
+
+    Returns a dict suitable for ``crud.upsert_athlete_model``, or ``None`` when
+    the payload is unusable.
+    """
+    if not isinstance(raw, dict):
+        return None
+
+    source: dict[str, object] = {}
+    for camel, snake in _ATHLETE_MODEL_KEY_MAP.items():
+        if camel in raw:
+            source[snake] = raw[camel]
+
+    result: dict[str, object] = {}
+
+    ftp = source.get("ftp_watts")
+    try:
+        result["ftp_watts"] = int(ftp) if ftp not in (None, "") else None
+    except (TypeError, ValueError):
+        result["ftp_watts"] = None
+
+    vo2 = source.get("vo2max")
+    try:
+        result["vo2max"] = float(vo2) if vo2 not in (None, "") else None
+    except (TypeError, ValueError):
+        result["vo2max"] = None
+
+    for field in _ATHLETE_MODEL_TEXT_FIELDS:
+        value = source.get(field)
+        result[field] = (
+            str(value).strip()[:_ATHLETE_MODEL_TEXT_MAX]
+            if isinstance(value, str)
+            else ""
+        )
+
+    for field in _ATHLETE_MODEL_LIST_FIELDS:
+        value = source.get(field)
+        items: list[str] = []
+        if isinstance(value, list):
+            for item in value:
+                if not isinstance(item, str):
+                    continue
+                cleaned = item.strip()[:_ATHLETE_MODEL_LIST_ITEM_MAX]
+                if cleaned:
+                    items.append(cleaned)
+                if len(items) >= _ATHLETE_MODEL_LIST_MAX_ITEMS:
+                    break
+        result[field] = items
+
+    confidence = source.get("confidence")
+    try:
+        result["confidence"] = max(0.0, min(0.9, float(confidence)))
+    except (TypeError, ValueError):
+        result["confidence"] = 0.0
+
+    return result
+
+
+async def derive_athlete_model(
+    metrics_section: str,
+    current_model: dict | None = None,
+    provider: str = "openai",
+) -> dict | None:
+    """Derive/refresh the long-term structured athlete model (#384).
+
+    ``metrics_section`` is a structured-text summary of recent activities (see
+    :func:`services.prompts.ride_metrics_context_section`); ``current_model`` is
+    the athlete's existing model (camelCase dict) so well-supported values are
+    carried forward. Returns snake_case kwargs for
+    :func:`crud.upsert_athlete_model`, or ``None`` when the history is too thin.
+    """
+    if not metrics_section.strip():
+        return None
+
+    system_prompt = derive_athlete_model_system()
+    user_msg = derive_athlete_model_user(metrics_section, current_model)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+    return _normalise_athlete_model(parsed)
 
 
 def _normalise_hypothesis_candidate(raw: object) -> dict | None:

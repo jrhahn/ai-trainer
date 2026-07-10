@@ -148,6 +148,9 @@ class User(Base):
     athlete_context: Mapped["AthleteContext | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    athlete_model: Mapped["AthleteModel | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -341,6 +344,51 @@ class AthleteContext(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_context")
+
+
+class AthleteModel(Base):
+    """The long-term, structured model of an athlete's durable capabilities (#384).
+
+    Distinct from :class:`AthleteContext` (behavioural/coaching tendencies) and
+    from per-session ride data: this captures the athlete's *physiological and
+    performance profile* — the qualities that change slowly over months, such as
+    threshold power, VO2 max, how well they hold threshold, how quickly they
+    recover, and how they tolerate heat. The coach derives and refreshes it from
+    accumulated training history (see ``services.insight_generation``) and the
+    athlete can review and correct it. It is injected into coaching prompts as
+    stable knowledge about who the athlete is, not what they did yesterday.
+    """
+
+    __tablename__ = "athlete_model"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    # Quantitative capacity anchors (nullable until known).
+    ftp_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vo2max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Qualitative capability assessments, short free-text descriptors
+    # (e.g. "strong", "fades after 20 min", "handles heat well").
+    pacing_quality: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    recovery_ability: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    threshold_durability: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    heat_tolerance: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    preferred_training_style: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    strengths: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    weaknesses: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    risk_factors: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    # Short narrative overview and the coach's confidence in the current model.
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_model")
 
 
 class AthleteMemoryFact(Base):

@@ -18,6 +18,7 @@ import {
   generateTrainingPlan,
   processPendingFeedbacks,
   rateCompletedWorkout,
+  refreshAthleteModel,
   refreshLoginSummary,
   resolveRideMatch,
 } from './ai'
@@ -47,6 +48,21 @@ void profile
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+describe('refreshAthleteModel', () => {
+  it('POSTs to the refresh endpoint and returns the model', async () => {
+    const model = { ftpWatts: 275, summary: 'refreshed' }
+    mockApiFetch.mockResolvedValue(model)
+
+    const result = await refreshAthleteModel('tok-123')
+
+    expect(result).toBe(model)
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/refresh-athlete-model', {
+      token: 'tok-123',
+      method: 'POST',
+    })
+  })
 })
 
 describe('MAX_CONVERSATION_HISTORY', () => {

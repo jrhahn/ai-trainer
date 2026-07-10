@@ -675,6 +675,40 @@ def athlete_context_section(athlete_context: dict | None) -> str:
     )
 
 
+def athlete_model_section(athlete_model: dict | None) -> str:
+    """Render the long-term athlete model (#384) for a coaching prompt.
+
+    Only non-empty fields are included so a sparsely-derived model stays compact.
+    ``confidence`` and ``updated_at`` are metadata and are not surfaced.
+    """
+    if not athlete_model:
+        return ""
+
+    # ``confidence``/``updated_at`` are coach/server metadata, not coaching
+    # signal. Suppress both snake_case and camelCase spellings since callers may
+    # pass either (the router serialises with ``by_alias=True``).
+    metadata_keys = {"confidence", "updated_at", "updatedAt"}
+    compact: dict[str, object] = {}
+    for key, value in athlete_model.items():
+        if key in metadata_keys:
+            continue
+        if value in (None, "", [], {}):
+            continue
+        compact[key] = value
+
+    if not compact:
+        return ""
+
+    return (
+        "\n\nLong-term athlete model (durable physiology & performance profile): "
+        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        "These are slow-changing capabilities (threshold power, VO2 max, how the "
+        "athlete holds threshold, recovers, and tolerates heat), not a report on a "
+        "single session. Use them to set realistic targets and pacing; do not "
+        "recite them verbatim."
+    )
+
+
 def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     if not facts:
         return ""
@@ -799,6 +833,7 @@ def ask_trainer_system(
     plan_updates_rule: str,
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
+    athlete_model: dict | None = None,
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
@@ -833,6 +868,7 @@ def ask_trainer_system(
     )
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
     durable_context_section = athlete_context_section(athlete_context)
+    durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = (
@@ -926,6 +962,7 @@ def ask_trainer_system(
         f"{events_section}"
         f"{training_load_section}"
         f"{durable_context_section}"
+        f"{durable_model_section}"
         f"{durable_memory_facts_section}"
         f"{memory_section}"
         f"{workout_section}"
@@ -1157,6 +1194,62 @@ def generate_athlete_insights_user(
         f"{metrics_section}\n\n"
         f"{existing_section}\n\n"
         "Infer new durable athlete insights from this training history as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
+# derive_athlete_model prompts (#384: long-term structured athlete model)
+# ---------------------------------------------------------------------------
+
+
+def derive_athlete_model_system() -> str:
+    return (
+        f"{COACH_PERSONA} You maintain a structured LONG-TERM MODEL of the athlete: "
+        "the slow-changing physiological and performance characteristics that define "
+        "who they are as a rider, distinct from any single session.\n"
+        "You are given the athlete's recent training history and their current model "
+        "(which may be blank). Produce an UPDATED model that reflects the evidence.\n"
+        "Fields:\n"
+        "- ftpWatts: best estimate of functional threshold power in watts (integer), "
+        "or null if the history gives no basis for it. Do not invent precision.\n"
+        "- vo2max: estimate of VO2 max in ml/kg/min (number) only if strongly "
+        "supported, else null.\n"
+        "- pacingQuality, recoveryAbility, thresholdDurability, heatTolerance, "
+        "preferredTrainingStyle: short qualitative descriptors (<=120 chars each), "
+        "e.g. 'holds threshold well up to ~30 min', 'recovers fast after hard days', "
+        "'fades in heat above 28C'. Use '' when there is no evidence.\n"
+        "- strengths, weaknesses, riskFactors: arrays of short phrases (each <=80 "
+        "chars); [] when unknown.\n"
+        "- summary: one to three sentences capturing the athlete's durable profile; "
+        "'' when there is nothing durable to say.\n"
+        "- confidence: number 0.0-0.9 for how well the history supports the model as a "
+        "whole. Never exceed 0.9 — this is inferred, not measured.\n"
+        "Carry forward well-supported values already in the current model when new "
+        "history does not contradict them; only change a field when the evidence "
+        "warrants it. Prefer keeping a field empty over guessing.\n"
+        "ALWAYS respond with a single valid JSON object with exactly these keys: "
+        '{"ftpWatts": int|null, "vo2max": number|null, "pacingQuality": str, '
+        '"recoveryAbility": str, "thresholdDurability": str, "heatTolerance": str, '
+        '"preferredTrainingStyle": str, "strengths": [str], "weaknesses": [str], '
+        '"riskFactors": [str], "summary": str, "confidence": number}.'
+    )
+
+
+def derive_athlete_model_user(
+    metrics_section: str, current_model: dict | None = None
+) -> str:
+    current = current_model or {}
+    if current:
+        current_section = (
+            "Current athlete model on file (refine, do not blindly discard):\n"
+            f"{json.dumps(current, ensure_ascii=False)}"
+        )
+    else:
+        current_section = "No athlete model exists yet; build one from the history."
+    return (
+        f"{metrics_section}\n\n"
+        f"{current_section}\n\n"
+        "Return the updated long-term athlete model as specified."
     )
 
 

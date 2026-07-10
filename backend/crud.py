@@ -519,6 +519,68 @@ async def upsert_athlete_context(
 
 
 # ---------------------------------------------------------------------------
+# AthleteModel (long-term structured athlete model, #384)
+# ---------------------------------------------------------------------------
+
+
+async def get_athlete_model(
+    db: AsyncSession, user_id: str
+) -> models.AthleteModel | None:
+    """Return the long-term AthleteModel for a user, or None."""
+    return await db.get(models.AthleteModel, user_id)
+
+
+async def upsert_athlete_model(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    ftp_watts: int | None = None,
+    vo2max: float | None = None,
+    pacing_quality: str = "",
+    recovery_ability: str = "",
+    threshold_durability: str = "",
+    heat_tolerance: str = "",
+    preferred_training_style: str = "",
+    strengths: list[str] | None = None,
+    weaknesses: list[str] | None = None,
+    risk_factors: list[str] | None = None,
+    summary: str = "",
+    confidence: float | None = None,
+) -> models.AthleteModel:
+    """Create or update a user's long-term athlete model and flush.
+
+    ``confidence`` is only written when explicitly provided so that an athlete's
+    manual edit (which omits it) preserves the coach's last confidence score.
+    """
+    values: dict[str, object] = {
+        "ftp_watts": ftp_watts,
+        "vo2max": vo2max,
+        "pacing_quality": pacing_quality,
+        "recovery_ability": recovery_ability,
+        "threshold_durability": threshold_durability,
+        "heat_tolerance": heat_tolerance,
+        "preferred_training_style": preferred_training_style,
+        "strengths": list(strengths or []),
+        "weaknesses": list(weaknesses or []),
+        "risk_factors": list(risk_factors or []),
+        "summary": summary,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if confidence is not None:
+        values["confidence"] = confidence
+
+    existing = await get_athlete_model(db, user_id)
+    if existing is None:
+        existing = models.AthleteModel(user_id=user_id, **values)
+        db.add(existing)
+    else:
+        for attr, value in values.items():
+            setattr(existing, attr, value)
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
 # AthleteMemoryFact
 # ---------------------------------------------------------------------------
 

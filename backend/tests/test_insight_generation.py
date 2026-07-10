@@ -67,6 +67,21 @@ async def _facts(user_id: str) -> list[models.AthleteMemoryFact]:
         return await crud.list_athlete_memory_facts(db, user_id, include_inactive=True)
 
 
+@pytest.fixture(autouse=True)
+def _stub_derive_athlete_model(monkeypatch):
+    """Keep the long-term-model derivation from hitting the network by default.
+
+    Tests that care about it override this with their own stub.
+    """
+
+    async def _noop(metrics_section, *, current_model=None, provider="openai"):
+        return None
+
+    monkeypatch.setattr(
+        insight_generation.ai_service, "derive_athlete_model", _noop
+    )
+
+
 _SAMPLE_CANDIDATES = [
     {
         "fact": "Performs best after one recovery day",
@@ -239,6 +254,90 @@ async def test_isolates_per_user_failures(monkeypatch):
     assert result.failed == 1
     assert {f.fact for f in await _facts(ok_id)}
     assert not await _facts(failing_id)
+
+
+@pytest.mark.asyncio
+async def test_derives_and_stores_long_term_athlete_model(monkeypatch):
+    user_id = await _create_user_with_history(
+        email="model@example.com", activity_count=10
+    )
+
+    async def fake_generate(metrics_section, *, existing_facts, provider):
+        return []
+
+    seen_current: list[object] = []
+
+    async def fake_derive(metrics_section, *, current_model=None, provider="openai"):
+        assert metrics_section
+        seen_current.append(current_model)
+        return {
+            "ftp_watts": 262,
+            "vo2max": 58.0,
+            "pacing_quality": "even pacing on long efforts",
+            "recovery_ability": "recovers fast",
+            "threshold_durability": "holds threshold ~30 min",
+            "heat_tolerance": "fades above 28C",
+            "preferred_training_style": "structured intervals",
+            "strengths": ["threshold", "consistency"],
+            "weaknesses": ["sprint"],
+            "risk_factors": ["ramps volume quickly"],
+            "summary": "Durable threshold rider.",
+            "confidence": 0.7,
+        }
+
+    monkeypatch.setattr(
+        insight_generation.ai_service, "generate_athlete_insights", fake_generate
+    )
+    monkeypatch.setattr(
+        insight_generation.ai_service, "derive_athlete_model", fake_derive
+    )
+
+    await insight_generation.run_insight_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 3, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    async with TestSessionLocal() as db:
+        model = await crud.get_athlete_model(db, user_id)
+    assert model is not None
+    assert model.ftp_watts == 262
+    assert model.threshold_durability == "holds threshold ~30 min"
+    assert model.strengths == ["threshold", "consistency"]
+    assert model.confidence == 0.7
+    # No model existed on the first run.
+    assert seen_current == [None]
+
+
+@pytest.mark.asyncio
+async def test_model_derivation_failure_keeps_insights(monkeypatch):
+    user_id = await _create_user_with_history(
+        email="modelfail@example.com", activity_count=10
+    )
+
+    async def fake_generate(metrics_section, *, existing_facts, provider):
+        return [_SAMPLE_CANDIDATES[0]]
+
+    async def boom(metrics_section, *, current_model=None, provider="openai"):
+        raise RuntimeError("derive exploded")
+
+    monkeypatch.setattr(
+        insight_generation.ai_service, "generate_athlete_insights", fake_generate
+    )
+    monkeypatch.setattr(
+        insight_generation.ai_service, "derive_athlete_model", boom
+    )
+
+    result = await insight_generation.run_insight_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 3, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    assert result.failed == 0
+    assert {f.fact for f in await _facts(user_id)} == {_SAMPLE_CANDIDATES[0]["fact"]}
+    async with TestSessionLocal() as db:
+        assert await crud.get_athlete_model(db, user_id) is None
 
 
 def test_seconds_until_next_weekly_run_same_day():
