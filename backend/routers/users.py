@@ -738,6 +738,70 @@ async def delete_athlete_hypothesis(
 
 
 @router.get(
+    "/open-questions", response_model=schemas.AthleteOpenQuestionsResponse
+)
+async def list_athlete_open_questions(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteOpenQuestionsResponse:
+    questions = await crud.list_athlete_open_questions(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteOpenQuestionsResponse(
+        open_questions=[
+            schemas.AthleteOpenQuestionSchema.model_validate(q, from_attributes=True)
+            for q in questions
+        ]
+    )
+
+
+@router.patch(
+    "/open-questions/{question_id}",
+    response_model=schemas.AthleteOpenQuestionSchema,
+)
+async def update_athlete_open_question(
+    question_id: str,
+    body: schemas.AthleteOpenQuestionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteOpenQuestionSchema:
+    try:
+        question = await crud.update_athlete_open_question(
+            db,
+            current_user.id,
+            question_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteOpenQuestionSchema.model_validate(
+        question, from_attributes=True
+    )
+
+
+@router.delete(
+    "/open-questions/{question_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_open_question(
+    question_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_open_question(
+        db, current_user.id, question_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
     "/validation-experiments", response_model=schemas.AthleteExperimentsResponse
 )
 async def list_validation_experiments(
@@ -919,6 +983,9 @@ async def export_memory(
     hypotheses = await crud.list_athlete_hypotheses(
         db, current_user.id, include_resolved=True
     )
+    open_questions = await crud.list_athlete_open_questions(
+        db, current_user.id, include_resolved=True
+    )
     experiments = await crud.list_athlete_experiments(
         db, current_user.id, include_resolved=True
     )
@@ -950,6 +1017,10 @@ async def export_memory(
         hypotheses=[
             schemas.AthleteHypothesisSchema.model_validate(h, from_attributes=True)
             for h in hypotheses
+        ],
+        open_questions=[
+            schemas.AthleteOpenQuestionSchema.model_validate(q, from_attributes=True)
+            for q in open_questions
         ],
         experiments=[
             schemas.AthleteExperimentSchema.model_validate(e, from_attributes=True)

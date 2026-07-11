@@ -439,6 +439,74 @@ export async function deleteAthleteHypothesis(
   })
 }
 
+export type AthleteOpenQuestionStatus = 'open' | 'answered' | 'dismissed'
+
+export interface AthleteOpenQuestion {
+  id: string
+  question: string
+  category: string
+  evidence: string
+  needs: string
+  evidenceCount: number
+  status: AthleteOpenQuestionStatus
+  resolution: string | null
+  firstAskedAt: string
+  updatedAt: string
+}
+
+export async function fetchAthleteOpenQuestions(
+  token: string
+): Promise<AthleteOpenQuestion[]> {
+  const response = await apiFetch<{ openQuestions: AthleteOpenQuestion[] }>(
+    '/users/me/open-questions',
+    { token }
+  )
+  return response.openQuestions
+}
+
+export async function updateAthleteOpenQuestion(
+  token: string,
+  questionId: string,
+  changes: {
+    question?: string
+    category?: string
+    evidence?: string
+    needs?: string
+    resolution?: string
+    status?: AthleteOpenQuestionStatus
+  }
+): Promise<AthleteOpenQuestion> {
+  return apiFetch<AthleteOpenQuestion>(`/users/me/open-questions/${questionId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function answerAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<AthleteOpenQuestion> {
+  return updateAthleteOpenQuestion(token, questionId, { status: 'answered' })
+}
+
+export async function dismissAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<AthleteOpenQuestion> {
+  return updateAthleteOpenQuestion(token, questionId, { status: 'dismissed' })
+}
+
+export async function deleteAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<void> {
+  await apiFetch(`/users/me/open-questions/${questionId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
 export type AthleteExperimentStatus = 'suggested' | 'completed' | 'dismissed'
 
 export interface AthleteExperiment {

@@ -22,6 +22,11 @@ import {
   updateAthleteMemoryFact,
   confirmAthleteMemoryFact,
   deleteAthleteMemoryFact,
+  fetchAthleteOpenQuestions,
+  updateAthleteOpenQuestion,
+  answerAthleteOpenQuestion,
+  dismissAthleteOpenQuestion,
+  deleteAthleteOpenQuestion,
   fetchValidationExperiments,
   updateValidationExperiment,
   completeValidationExperiment,
@@ -580,6 +585,67 @@ describe('validation experiments', () => {
         method: 'DELETE',
       },
     )
+  })
+})
+
+describe('open questions (#385)', () => {
+  it('fetches the list and returns the openQuestions array', async () => {
+    const question = { id: 'oq-1', question: 'Is FTP underestimated?' }
+    mockApiFetch.mockResolvedValue({ openQuestions: [question] })
+
+    const result = await fetchAthleteOpenQuestions('tok-123')
+
+    expect(result).toEqual([question])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions', {
+      token: 'tok-123',
+    })
+  })
+
+  it('patches an edit', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', needs: 'Threshold test' })
+
+    await updateAthleteOpenQuestion('tok-123', 'oq-1', { needs: 'Threshold test' })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { needs: 'Threshold test' },
+    })
+  })
+
+  it('answers a question by setting answered status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', status: 'answered' })
+
+    await answerAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { status: 'answered' },
+    })
+  })
+
+  it('dismisses a question by setting dismissed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', status: 'dismissed' })
+
+    await dismissAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { status: 'dismissed' },
+    })
+  })
+
+  it('deletes a question', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await deleteAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'DELETE',
+    })
   })
 })
 
