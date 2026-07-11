@@ -18,6 +18,7 @@ from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
 from services.llm import AIKeyNotConfiguredError
+from services.open_question_generation import athlete_open_question_generation_job
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
 from services.prediction_evaluation import prediction_evaluation_job
@@ -45,6 +46,7 @@ async def lifespan(_: FastAPI):
     scheduler.register(athlete_insight_generation_job(async_session_maker))
     scheduler.register(athlete_contradiction_detection_job(async_session_maker))
     scheduler.register(athlete_hypothesis_generation_job(async_session_maker))
+    scheduler.register(athlete_open_question_generation_job(async_session_maker))
     scheduler.register(validation_experiment_suggestion_job(async_session_maker))
     scheduler.register(prediction_evaluation_job(async_session_maker))
     scheduler.start()

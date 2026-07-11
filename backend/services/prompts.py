@@ -709,6 +709,45 @@ def athlete_model_section(athlete_model: dict | None) -> str:
     )
 
 
+def open_questions_section(open_questions: list[dict] | None) -> str:
+    """Render the coach's still-open questions (#385) for a coaching prompt.
+
+    Surfaces only ``open`` questions so the coach knows what it is still trying
+    to figure out and can seize a chance to answer one, without treating the
+    uncertainty as settled fact. Resolved questions are omitted.
+    """
+    if not open_questions:
+        return ""
+
+    compact_questions: list[dict[str, object]] = []
+    for question in open_questions:
+        if question.get("status") not in (None, "open"):
+            continue
+        text = question.get("question")
+        if not text:
+            continue
+        compact: dict[str, object] = {"question": text}
+        evidence = question.get("evidence")
+        if evidence:
+            compact["evidence"] = str(evidence)[:240]
+        needs = question.get("needs")
+        if needs:
+            compact["needs"] = str(needs)[:240]
+        compact_questions.append(compact)
+
+    if not compact_questions:
+        return ""
+
+    return (
+        "\n\nOpen questions the coach is still trying to answer about this athlete: "
+        f"{json.dumps(compact_questions, ensure_ascii=False)}\n"
+        "These are acknowledged uncertainties, not facts. Do not assert them as "
+        "settled. When the conversation or recent data offers a chance to resolve "
+        "one — or a low-cost test in 'needs' fits naturally — take it, but never "
+        "force it into an unrelated answer."
+    )
+
+
 def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     if not facts:
         return ""
@@ -834,6 +873,7 @@ def ask_trainer_system(
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
+    open_questions: list[dict] | None = None,
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
@@ -870,6 +910,7 @@ def ask_trainer_system(
     durable_context_section = athlete_context_section(athlete_context)
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
+    durable_open_questions_section = open_questions_section(open_questions)
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = (
         f"\n\n{race_profile_section}\n" if race_profile_section else ""
@@ -964,6 +1005,7 @@ def ask_trainer_system(
         f"{durable_context_section}"
         f"{durable_model_section}"
         f"{durable_memory_facts_section}"
+        f"{durable_open_questions_section}"
         f"{memory_section}"
         f"{workout_section}"
         f"{classification_section}"
@@ -1316,6 +1358,72 @@ def generate_athlete_hypotheses_user(
         f"{hypotheses_section}\n\n"
         "Form new testable hypotheses about this athlete from the training history "
         "as specified."
+    )
+
+
+# ---------------------------------------------------------------------------
+# generate_open_questions prompts (#385)
+# ---------------------------------------------------------------------------
+
+
+def generate_open_questions_system() -> str:
+    return (
+        f"{COACH_PERSONA} You are maintaining an athlete's OPEN QUESTIONS list — the "
+        "specific things about this athlete you cannot yet answer from the record "
+        "and want to resolve. An open question is NOT a hypothesis (a tentative "
+        "answer) and NOT an insight (a supported pattern); it is an honest, "
+        "coaching-relevant uncertainty, for example 'Is FTP underestimated?', "
+        "'Does the MTB position improve sustainable power?', or 'Does strength "
+        "training suppress the heart-rate response?'.\n"
+        "For each question provide: a 'question' (<=160 chars, phrased as a real "
+        "question), 'evidence' (<=200 chars, the concrete signal in the history "
+        "that raises it — dates, metrics, or number of rides; empty string if "
+        "none yet), 'needs' (<=200 chars, what would answer it: a specific test, "
+        "a controlled comparison, or a number of further observations), and a "
+        "category slug from: fatigue_response, fueling_hydration, "
+        "preferred_workouts, recurring_issues, psychological_tendencies, "
+        "goals_motivation, coaching_risk, general.\n"
+        "Only raise a question the training data genuinely leaves open and that "
+        "would change your coaching once answered. Do NOT repeat questions already "
+        "on file, and do NOT invent trivia. If the history now clearly answers a "
+        "question already on file, return it with 'resolved': true and a short "
+        "'resolution' (<=200 chars) stating the answer.\n"
+        "Return up to 5 of the most coaching-relevant questions, most important "
+        "first.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"question": str, "evidence": str, "needs": str, '
+        '"category": str, "resolved": bool, "resolution": str}]}. '
+        "Return an empty candidates array when the history leaves no useful "
+        "question open."
+    )
+
+
+def generate_open_questions_user(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    existing_questions: list[str] | None = None,
+) -> str:
+    facts = existing_facts or []
+    questions = existing_questions or []
+    facts_section = (
+        "Observations already on file:\n"
+        + "\n".join(f"- {fact}" for fact in facts)
+        if facts
+        else "No observations are on file yet."
+    )
+    questions_section = (
+        "Open questions already tracked (do not repeat; resolve one only if the "
+        "history now answers it):\n"
+        + "\n".join(f"- {item}" for item in questions)
+        if questions
+        else "No open questions are on file yet."
+    )
+    return (
+        f"{metrics_section}\n\n"
+        f"{facts_section}\n\n"
+        f"{questions_section}\n\n"
+        "Maintain this athlete's open questions list from the training history as "
+        "specified."
     )
 
 

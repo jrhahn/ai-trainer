@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Download,
   FlaskConical,
+  HelpCircle,
   Pencil,
   Target,
   ThumbsDown,
@@ -25,9 +26,13 @@ import {
   deleteAthletePrediction,
   deleteValidationExperiment,
   dismissValidationExperiment,
+  answerAthleteOpenQuestion,
+  deleteAthleteOpenQuestion,
+  dismissAthleteOpenQuestion,
   exportMemory,
   fetchAthleteHypotheses,
   fetchAthleteMemoryFacts,
+  fetchAthleteOpenQuestions,
   fetchAthletePredictions,
   fetchMemoryPrivacySettings,
   fetchValidationExperiments,
@@ -39,12 +44,14 @@ import {
   type AthleteExperiment,
   type AthleteHypothesis,
   type AthleteMemoryFact,
+  type AthleteOpenQuestion,
   type AthletePrediction,
   type AthletePredictionAccuracy,
 } from '../services/user'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
 export const ATHLETE_HYPOTHESES_QUERY_KEY = 'athlete-hypotheses'
+export const ATHLETE_OPEN_QUESTIONS_QUERY_KEY = 'athlete-open-questions'
 export const VALIDATION_EXPERIMENTS_QUERY_KEY = 'validation-experiments'
 export const ATHLETE_PREDICTIONS_QUERY_KEY = 'athlete-predictions'
 const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
@@ -328,6 +335,112 @@ function HypothesisRow({
   )
 }
 
+function OpenQuestionRow({
+  question,
+  token,
+}: {
+  question: AthleteOpenQuestion
+  token: string
+}) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState('')
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY],
+    })
+
+  const answerMutation = useMutation({
+    mutationFn: () => answerAthleteOpenQuestion(token, question.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to update question'),
+  })
+
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissAthleteOpenQuestion(token, question.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to dismiss question'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAthleteOpenQuestion(token, question.id),
+    onSuccess: invalidate,
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to delete question'),
+  })
+
+  const isBusy =
+    answerMutation.isPending ||
+    dismissMutation.isPending ||
+    deleteMutation.isPending
+
+  const handleDelete = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Delete this open question? The coach will stop tracking it.')
+    ) {
+      return
+    }
+    deleteMutation.mutate()
+  }
+
+  return (
+    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-900">{question.question}</p>
+          {question.evidence && (
+            <p className="text-[11px] text-gray-500 mt-1">
+              <span className="font-medium">Evidence:</span> {question.evidence}
+            </p>
+          )}
+          {question.needs && (
+            <p className="text-[11px] text-gray-500 mt-1">
+              <span className="font-medium">Needs:</span> {question.needs}
+            </p>
+          )}
+          <p className="text-[11px] text-gray-400 mt-1">
+            {question.evidenceCount}{' '}
+            {question.evidenceCount === 1 ? 'observation' : 'observations'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => answerMutation.mutate()}
+            disabled={isBusy}
+            title="Mark this question as answered"
+            aria-label="Answer question"
+            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+          >
+            <CheckCircle2 size={15} />
+          </button>
+          <button
+            onClick={() => dismissMutation.mutate()}
+            disabled={isBusy}
+            title="Dismiss this question"
+            aria-label="Dismiss question"
+            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+          >
+            <ThumbsDown size={15} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isBusy}
+            title="Delete this question"
+            aria-label="Delete question"
+            className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+    </li>
+  )
+}
+
 function ExperimentRow({
   experiment,
   token,
@@ -545,6 +658,12 @@ export default function AthleteTraitsSettings() {
     enabled: !!authToken,
   })
 
+  const { data: openQuestions } = useQuery({
+    queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY, authToken],
+    queryFn: () => fetchAthleteOpenQuestions(authToken!),
+    enabled: !!authToken,
+  })
+
   const { data: experiments } = useQuery({
     queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY, authToken],
     queryFn: () => fetchValidationExperiments(authToken!),
@@ -578,6 +697,9 @@ export default function AthleteTraitsSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
+      queryClient.invalidateQueries({
+        queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY],
+      })
       queryClient.invalidateQueries({
         queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
       })
@@ -680,6 +802,28 @@ export default function AthleteTraitsSettings() {
               <HypothesisRow
                 key={hypothesis.id}
                 hypothesis={hypothesis}
+                token={authToken!}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {openQuestions && openQuestions.length > 0 && (
+        <div className="border-t border-gray-100 pt-5">
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+            <HelpCircle size={16} /> Open Questions
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Things the coach can't answer yet and is actively tracking. Each shows
+            the evidence so far and what it still needs. Questions close on their
+            own once enough evidence exists — or mark one answered or dismiss it.
+          </p>
+          <ul className="space-y-2">
+            {openQuestions.map((question) => (
+              <OpenQuestionRow
+                key={question.id}
+                question={question}
                 token={authToken!}
               />
             ))}

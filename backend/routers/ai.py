@@ -727,6 +727,17 @@ async def ask_trainer(
         ).model_dump(by_alias=True, mode="json")
         for fact in athlete_memory_fact_rows
     ]
+    open_question_rows = (
+        await crud.list_athlete_open_questions(db, current_user.id)
+        if memory_enabled
+        else []
+    )
+    open_questions = [
+        schemas.AthleteOpenQuestionSchema.model_validate(
+            question, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for question in open_question_rows
+    ]
     chat_messages = await crud.get_chat_messages(db, current_user.id)
     conversation_history = [
         {"role": msg.role, "content": msg.content}
@@ -775,6 +786,7 @@ async def ask_trainer(
             athlete_context=athlete_context,
             athlete_memory_facts=athlete_memory_facts,
             athlete_model=athlete_model,
+            open_questions=open_questions,
             timezone_name=timezone_name,
         )
     except AIRateLimitError:

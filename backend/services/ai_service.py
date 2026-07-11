@@ -61,6 +61,8 @@ from .prompts import (
     generate_athlete_hypotheses_user,
     generate_athlete_insights_system,
     generate_athlete_insights_user,
+    generate_open_questions_system,
+    generate_open_questions_user,
     generate_validation_experiments_system,
     generate_validation_experiments_user,
     generate_athlete_predictions_system,
@@ -587,6 +589,7 @@ async def ask_trainer(
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
+    open_questions: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -634,6 +637,7 @@ async def ask_trainer(
         athlete_context=athlete_context,
         athlete_memory_facts=athlete_memory_facts,
         athlete_model=athlete_model,
+        open_questions=open_questions,
         science_context=science_context or "",
         training_load=training_load,
         classification=classification,
@@ -811,6 +815,7 @@ async def extract_athlete_facts(
 
 MAX_GENERATED_INSIGHTS = 8
 MAX_GENERATED_HYPOTHESES = 5
+MAX_GENERATED_OPEN_QUESTIONS = 5
 MAX_GENERATED_EXPERIMENTS = 5
 MAX_GENERATED_PREDICTIONS = 5
 
@@ -1048,6 +1053,84 @@ async def generate_athlete_hypotheses(
         seen.add(dedupe_key)
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_HYPOTHESES:
+            break
+    return candidates
+
+
+def _normalise_open_question_candidate(raw: object) -> dict | None:
+    """Validate one generated open question (#385); return a clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    question = raw.get("question")
+    if not isinstance(question, str) or not question.strip():
+        return None
+    category = raw.get("category")
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
+
+    def _text(key: str) -> str:
+        value = raw.get(key)
+        return value.strip()[:240] if isinstance(value, str) else ""
+
+    resolved = bool(raw.get("resolved"))
+    return {
+        "question": question.strip()[:200],
+        "category": category,
+        "evidence": _text("evidence"),
+        "needs": _text("needs"),
+        "resolved": resolved,
+        "resolution": _text("resolution"),
+    }
+
+
+async def generate_open_questions(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    existing_questions: list[str] | None = None,
+    provider: str = "openai",
+) -> list[dict]:
+    """Maintain the athlete's open-questions list from a training-history block.
+
+    Mirrors :func:`generate_athlete_hypotheses`: ``metrics_section`` is a
+    structured summary of recent activities, and ``existing_facts`` /
+    ``existing_questions`` are passed so the model avoids repeating what is
+    already known or already asked.
+
+    Returns a list of candidate dicts (``question``, ``category``, ``evidence``,
+    ``needs``, ``resolved``, ``resolution``), deduplicated and capped. Candidates
+    are NOT persisted — the caller decides how to store them.
+    """
+    if not metrics_section.strip():
+        return []
+
+    system_prompt = generate_open_questions_system()
+    user_msg = generate_open_questions_user(
+        metrics_section, existing_facts, existing_questions
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_open_question_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["question"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= MAX_GENERATED_OPEN_QUESTIONS:
             break
     return candidates
 

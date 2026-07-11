@@ -7,6 +7,7 @@ import type {
   AthleteExperiment,
   AthleteHypothesis,
   AthleteMemoryFact,
+  AthleteOpenQuestion,
   AthletePrediction,
   AthletePredictionsResult,
 } from '../services/user'
@@ -23,6 +24,10 @@ const mockFetchHypotheses = vi.hoisted(() => vi.fn())
 const mockConfirmHypothesis = vi.hoisted(() => vi.fn())
 const mockRefuteHypothesis = vi.hoisted(() => vi.fn())
 const mockDeleteHypothesis = vi.hoisted(() => vi.fn())
+const mockFetchOpenQuestions = vi.hoisted(() => vi.fn())
+const mockAnswerOpenQuestion = vi.hoisted(() => vi.fn())
+const mockDismissOpenQuestion = vi.hoisted(() => vi.fn())
+const mockDeleteOpenQuestion = vi.hoisted(() => vi.fn())
 const mockFetchExperiments = vi.hoisted(() => vi.fn())
 const mockCompleteExperiment = vi.hoisted(() => vi.fn())
 const mockDismissExperiment = vi.hoisted(() => vi.fn())
@@ -45,6 +50,10 @@ vi.mock('../services/user', () => ({
   confirmAthleteHypothesis: mockConfirmHypothesis,
   refuteAthleteHypothesis: mockRefuteHypothesis,
   deleteAthleteHypothesis: mockDeleteHypothesis,
+  fetchAthleteOpenQuestions: mockFetchOpenQuestions,
+  answerAthleteOpenQuestion: mockAnswerOpenQuestion,
+  dismissAthleteOpenQuestion: mockDismissOpenQuestion,
+  deleteAthleteOpenQuestion: mockDeleteOpenQuestion,
   fetchValidationExperiments: mockFetchExperiments,
   completeValidationExperiment: mockCompleteExperiment,
   dismissValidationExperiment: mockDismissExperiment,
@@ -91,6 +100,24 @@ function makeHypothesis(
     evidenceCount: 2,
     status: 'proposed',
     firstProposedAt: '2026-06-01T00:00:00Z',
+    updatedAt: '2026-06-10T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function makeOpenQuestion(
+  overrides: Partial<AthleteOpenQuestion> = {},
+): AthleteOpenQuestion {
+  return {
+    id: 'oq-1',
+    question: 'Is FTP underestimated?',
+    category: 'general',
+    evidence: 'Recent VO2 intervals held above threshold.',
+    needs: '30-minute threshold test.',
+    evidenceCount: 2,
+    status: 'open',
+    resolution: null,
+    firstAskedAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-10T00:00:00Z',
     ...overrides,
   }
@@ -161,6 +188,7 @@ describe('AthleteTraitsSettings', () => {
     mockClearAll.mockResolvedValue(undefined)
     mockExport.mockResolvedValue({ facts: [] })
     mockFetchHypotheses.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([])
     mockFetchExperiments.mockResolvedValue([])
     mockFetchPredictions.mockResolvedValue({
       predictions: [],
@@ -330,6 +358,82 @@ describe('AthleteTraitsSettings', () => {
 
     await screen.findByText(/No learned traits yet/i)
     expect(screen.queryByText('Working Hypotheses')).toBeNull()
+  })
+
+  it('renders an open question with its evidence and needs', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    renderComponent()
+
+    expect(
+      await screen.findByText('Is FTP underestimated?'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Open Questions')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Recent VO2 intervals held above threshold\./),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/30-minute threshold test\./)).toBeInTheDocument()
+    expect(screen.getByText(/2 observations/)).toBeInTheDocument()
+  })
+
+  it('answers an open question', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockAnswerOpenQuestion.mockResolvedValue(
+      makeOpenQuestion({ status: 'answered' }),
+    )
+    renderComponent()
+
+    await screen.findByText('Is FTP underestimated?')
+    await user.click(screen.getByRole('button', { name: /answer question/i }))
+
+    await waitFor(() =>
+      expect(mockAnswerOpenQuestion).toHaveBeenCalledWith('test-token', 'oq-1'),
+    )
+  })
+
+  it('dismisses an open question', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockDismissOpenQuestion.mockResolvedValue(
+      makeOpenQuestion({ status: 'dismissed' }),
+    )
+    renderComponent()
+
+    await screen.findByText('Is FTP underestimated?')
+    await user.click(screen.getByRole('button', { name: /dismiss question/i }))
+
+    await waitFor(() =>
+      expect(mockDismissOpenQuestion).toHaveBeenCalledWith('test-token', 'oq-1'),
+    )
+  })
+
+  it('deletes an open question after confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockFetch.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockDeleteOpenQuestion.mockResolvedValue(undefined)
+    renderComponent()
+
+    await screen.findByText('Is FTP underestimated?')
+    await user.click(screen.getByRole('button', { name: /delete question/i }))
+
+    await waitFor(() =>
+      expect(mockDeleteOpenQuestion).toHaveBeenCalledWith('test-token', 'oq-1'),
+    )
+    confirmSpy.mockRestore()
+  })
+
+  it('does not show the open questions section when there are none', async () => {
+    mockFetch.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([])
+    renderComponent()
+
+    await screen.findByText(/No learned traits yet/i)
+    expect(screen.queryByText('Open Questions')).toBeNull()
   })
 
   it('renders a suggested experiment with its question', async () => {

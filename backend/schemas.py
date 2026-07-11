@@ -482,6 +482,43 @@ class AthleteHypothesisUpdateRequest(CamelModel):
     status: Optional[AthleteHypothesisStatus] = None
 
 
+AthleteOpenQuestionStatus = Literal["open", "answered", "dismissed"]
+
+
+class AthleteOpenQuestionSchema(CamelModel):
+    """An open question the coach is tracking about the athlete (#385)."""
+
+    id: str
+    question: str
+    category: str
+    evidence: str = ""
+    needs: str = ""
+    evidence_count: int
+    status: AthleteOpenQuestionStatus
+    resolution: Optional[str] = None
+    first_asked_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteOpenQuestionsResponse(CamelModel):
+    open_questions: list[AthleteOpenQuestionSchema]
+
+
+class AthleteOpenQuestionUpdateRequest(CamelModel):
+    question: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = None
+    evidence: Optional[str] = None
+    needs: Optional[str] = None
+    resolution: Optional[str] = None
+    status: Optional[AthleteOpenQuestionStatus] = None
+
+
 AthleteExperimentStatus = Literal["suggested", "completed", "dismissed"]
 
 
@@ -614,6 +651,7 @@ class MemoryExportSchema(CamelModel):
     athlete_model: Optional[AthleteModelSchema] = None
     memory_facts: list[AthleteMemoryFactSchema]
     hypotheses: list[AthleteHypothesisSchema] = []
+    open_questions: list[AthleteOpenQuestionSchema] = []
     experiments: list[AthleteExperimentSchema] = []
     predictions: list[AthletePredictionSchema] = []
 
