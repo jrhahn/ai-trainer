@@ -157,6 +157,9 @@ class User(Base):
     athlete_hypotheses: Mapped[list["AthleteHypothesis"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    open_questions: Mapped[list["AthleteOpenQuestion"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     validation_experiments: Mapped[list["AthleteExperiment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -501,6 +504,64 @@ class AthleteHypothesis(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_hypotheses")
+
+
+class AthleteOpenQuestion(Base):
+    """An unanswered question the coach explicitly tracks about an athlete (#385).
+
+    Where an :class:`AthleteHypothesis` is a tentative *answer* the coach proposes
+    ("strength training suppresses HR response"), an open question is the coach
+    admitting what it does **not** yet know — a first-class, athlete-visible list
+    of the uncertainties it is actively trying to resolve ("Is FTP
+    underestimated?"). Each question records the ``evidence`` currently pointing
+    at it and what it still ``needs`` to be answered (e.g. a 30-minute threshold
+    test). The coach derives questions from training history and accrues evidence
+    when the same question recurs; once enough evidence exists the question
+    auto-closes to ``answered`` with a short ``resolution``, so the list stays a
+    live picture of open uncertainty rather than a growing pile.
+    """
+
+    __tablename__ = "athlete_open_questions"
+    __table_args__ = (
+        Index(
+            "ix_athlete_open_questions_user_category_key",
+            "user_id",
+            "category",
+            "question_key",
+            unique=True,
+        ),
+        Index("ix_athlete_open_questions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    question_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # The evidence currently on file that bears on the question (the "Evidence"
+    # block in the athlete-facing list).
+    evidence: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # What is still needed to answer it — a test, a comparison, or more
+    # observations (the "Needs" block).
+    needs: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # How many independent observations back the question; drives auto-close.
+    evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # open (still unanswered) -> answered | dismissed.
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    # The short answer recorded when the question closes, if any.
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_asked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="open_questions")
 
 
 class AthleteExperiment(Base):

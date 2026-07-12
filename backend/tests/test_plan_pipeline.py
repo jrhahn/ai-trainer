@@ -7,12 +7,15 @@ survive a write (the reload-revert, #339).
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 import crud
 import models
 from auth import hash_password
 from services import plan_pipeline, summary_pipeline
+from services.dates import app_today
 from tests.conftest import TestSessionLocal
 
 
@@ -50,7 +53,9 @@ async def _create_user(email: str, plan: list[dict]) -> str:
 @pytest.mark.asyncio
 async def test_commit_plan_enforces_no_training_constraint():
     """A proposed training day on a hard no_training date is forced to rest."""
-    d = "2026-07-10"
+    # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
+    # future — a hardcoded past date would silently expire and stop enforcing.
+    d = (app_today() + timedelta(days=3)).isoformat()
     user_id = await _create_user("pipe-constraint@example.com", [_day(d, "intervals")])
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(

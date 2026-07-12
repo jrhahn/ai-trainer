@@ -926,6 +926,11 @@ async def clear_athlete_memory(db: AsyncSession, user_id: str) -> None:
         )
     )
     await db.execute(
+        delete(models.AthleteOpenQuestion).where(
+            models.AthleteOpenQuestion.user_id == user_id
+        )
+    )
+    await db.execute(
         delete(models.AthleteExperiment).where(
             models.AthleteExperiment.user_id == user_id
         )
@@ -1116,6 +1121,182 @@ async def delete_athlete_hypothesis(
 ) -> bool:
     """Permanently remove an athlete hypothesis owned by a user."""
     existing = await get_athlete_hypothesis(db, user_id, hypothesis_id)
+    if existing is None:
+        return False
+    await db.delete(existing)
+    await db.flush()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# AthleteOpenQuestion (#385)
+# ---------------------------------------------------------------------------
+
+# Statuses shown by default: still-open questions. Answered/dismissed questions
+# are resolved and only surfaced on request (management/export views).
+_ATHLETE_OPEN_QUESTION_OPEN_STATUSES = ("open",)
+# Independent observations at/above which an open question has "sufficient
+# evidence" and auto-closes as answered (see issue #385).
+ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE = 3
+
+
+def _normalise_open_question_key(question: str) -> str:
+    return " ".join(question.casefold().split())[:255]
+
+
+async def get_athlete_open_question(
+    db: AsyncSession, user_id: str, question_id: str
+) -> models.AthleteOpenQuestion | None:
+    """Return one open question owned by a user."""
+    return await db.scalar(
+        select(models.AthleteOpenQuestion).where(
+            models.AthleteOpenQuestion.id == question_id,
+            models.AthleteOpenQuestion.user_id == user_id,
+        )
+    )
+
+
+async def list_athlete_open_questions(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    include_resolved: bool = False,
+) -> list[models.AthleteOpenQuestion]:
+    """Return tracked open questions for a user, best-evidenced first."""
+    stmt = select(models.AthleteOpenQuestion).where(
+        models.AthleteOpenQuestion.user_id == user_id
+    )
+    if not include_resolved:
+        stmt = stmt.where(
+            models.AthleteOpenQuestion.status.in_(
+                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
+            )
+        )
+    result = await db.scalars(
+        stmt.order_by(
+            models.AthleteOpenQuestion.evidence_count.desc(),
+            models.AthleteOpenQuestion.updated_at.desc(),
+            models.AthleteOpenQuestion.id.desc(),
+        )
+    )
+    return list(result)
+
+
+async def record_athlete_open_question(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    question: str,
+    category: str = "general",
+    evidence: str = "",
+    needs: str = "",
+    resolved: bool = False,
+    resolution: str = "",
+    observed_at: datetime | None = None,
+) -> models.AthleteOpenQuestion:
+    """Create an open question or accrue evidence on an existing one, then flush.
+
+    A new question is stored ``open`` with one unit of evidence. When the same
+    question recurs its evidence count grows and its ``evidence``/``needs`` are
+    refreshed with the latest reading. Once the count reaches
+    :data:`ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE` — or the caller signals the
+    record now answers it via ``resolved`` — the question auto-closes to
+    ``answered`` with a short ``resolution``, matching the issue's requirement
+    that questions close once sufficient evidence exists.
+    """
+    cleaned = question.strip()
+    if not cleaned:
+        raise ValueError("question must not be empty")
+    now = observed_at or datetime.now(timezone.utc)
+    normalized_category = _normalise_athlete_memory_category(category)
+    question_key = _normalise_open_question_key(cleaned)
+
+    existing = await db.scalar(
+        select(models.AthleteOpenQuestion).where(
+            models.AthleteOpenQuestion.user_id == user_id,
+            models.AthleteOpenQuestion.category == normalized_category,
+            models.AthleteOpenQuestion.question_key == question_key,
+        )
+    )
+    if existing is None:
+        existing = models.AthleteOpenQuestion(
+            user_id=user_id,
+            question=cleaned,
+            question_key=question_key,
+            category=normalized_category,
+            evidence=evidence.strip(),
+            needs=needs.strip(),
+            evidence_count=1,
+            status="open",
+            first_asked_at=now,
+            updated_at=now,
+        )
+        db.add(existing)
+    else:
+        existing.evidence_count += 1
+        existing.updated_at = now
+        if evidence:
+            existing.evidence = evidence.strip()
+        if needs:
+            existing.needs = needs.strip()
+        # Fresh evidence reopens a question the athlete had dismissed.
+        if existing.status == "dismissed":
+            existing.status = "open"
+            existing.resolution = None
+
+    if existing.status == "open" and (
+        resolved
+        or existing.evidence_count >= ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE
+    ):
+        existing.status = "answered"
+        existing.resolution = (resolution.strip() or existing.evidence) or None
+    await db.flush()
+    return existing
+
+
+async def update_athlete_open_question(
+    db: AsyncSession,
+    user_id: str,
+    question_id: str,
+    *,
+    question: str | None = None,
+    category: str | None = None,
+    evidence: str | None = None,
+    needs: str | None = None,
+    resolution: str | None = None,
+    status: str | None = None,
+) -> models.AthleteOpenQuestion | None:
+    """Apply an athlete's edit or verdict to an open question and flush."""
+    existing = await get_athlete_open_question(db, user_id, question_id)
+    if existing is None:
+        return None
+
+    if question is not None:
+        cleaned = question.strip()
+        if not cleaned:
+            raise ValueError("question must not be empty")
+        existing.question = cleaned
+        existing.question_key = _normalise_open_question_key(cleaned)
+    if category is not None:
+        existing.category = _normalise_athlete_memory_category(category)
+    if evidence is not None:
+        existing.evidence = evidence.strip()
+    if needs is not None:
+        existing.needs = needs.strip()
+    if resolution is not None:
+        existing.resolution = resolution.strip() or None
+    if status is not None:
+        existing.status = status
+    existing.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return existing
+
+
+async def delete_athlete_open_question(
+    db: AsyncSession, user_id: str, question_id: str
+) -> bool:
+    """Permanently remove an open question owned by a user."""
+    existing = await get_athlete_open_question(db, user_id, question_id)
     if existing is None:
         return False
     await db.delete(existing)
