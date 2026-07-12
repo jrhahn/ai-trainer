@@ -2534,12 +2534,55 @@ def test_athlete_memory_facts_section_filters_untrusted_facts():
         ]
     )
 
-    assert "Evidence-backed athlete memory facts" in section
+    assert "Evidence-backed athlete memory" in section
     assert "Does too much when fresh" in section
     assert "Added extra intervals after rest." in section
     assert "Uses MTB races as motivation" in section
     assert "Maybe dislikes gym work" not in section
     assert "Only trains indoors" not in section
+
+
+def test_athlete_memory_facts_section_groups_facts_and_observations():
+    """Stable facts and inferred observations land under distinct labels (#386)."""
+    from services.prompts import athlete_memory_facts_section
+
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "FTP is about 250 W",
+                "kind": "fact",
+                "category": "general",
+                "confidence": 0.85,
+                "status": "active",
+            },
+            {
+                "fact": "Fades in the final interval of VO2 sessions",
+                "kind": "observation",
+                "category": "recurring_issues",
+                "confidence": 0.7,
+                "status": "active",
+            },
+        ]
+    )
+
+    fact_label_at = section.index("Stable athlete facts")
+    obs_label_at = section.index("Behavioural observations")
+    # Both groups render, each under its own heading, facts first.
+    assert fact_label_at < obs_label_at
+    assert "FTP is about 250 W" in section[fact_label_at:obs_label_at]
+    assert "Fades in the final interval" in section[obs_label_at:]
+
+
+def test_athlete_memory_facts_section_defaults_missing_kind_to_observation():
+    """Legacy rows without a kind are treated as observations, not facts (#386)."""
+    from services.prompts import athlete_memory_facts_section
+
+    section = athlete_memory_facts_section(
+        [{"fact": "Prefers MTB", "category": "general", "confidence": 0.8, "status": "active"}]
+    )
+
+    assert "Behavioural observations" in section
+    assert "Stable athlete facts" not in section
 
 
 def test_ask_trainer_system_includes_athlete_memory_facts():
@@ -2565,7 +2608,7 @@ def test_ask_trainer_system_includes_athlete_memory_facts():
         ],
     )
 
-    assert "Evidence-backed athlete memory facts" in prompt
+    assert "Evidence-backed athlete memory" in prompt
     assert "Does too much when fresh" in prompt
     assert "Repeatedly added extra work after rest." in prompt
     assert "confidence" in prompt
@@ -3435,15 +3478,23 @@ async def test_generate_athlete_insights_returns_normalised_candidates():
             "candidates": [
                 {
                     "fact": "Performs best after one recovery day",
+                    "kind": "observation",
                     "category": "fatigue_response",
                     "confidence": 0.6,
                     "sourceSnippet": "Strong sessions followed rest days on 05-03 and 05-10.",
                 },
                 {
                     # Confidence above the cap is clamped to 0.9.
-                    "fact": "Tolerates heat well",
+                    "fact": "Estimated FTP around 250 W",
+                    "kind": "fact",
                     "category": "general",
                     "confidence": 1.4,
+                },
+                {
+                    # A missing kind falls back to the safer "observation".
+                    "fact": "Tolerates heat well",
+                    "category": "general",
+                    "confidence": 0.5,
                 },
             ]
         })
@@ -3457,8 +3508,10 @@ async def test_generate_athlete_insights_returns_normalised_candidates():
 
     assert [c["fact"] for c in candidates] == [
         "Performs best after one recovery day",
+        "Estimated FTP around 250 W",
         "Tolerates heat well",
     ]
+    assert [c["kind"] for c in candidates] == ["observation", "fact", "observation"]
     assert candidates[1]["confidence"] == 0.9
     # History and the existing-facts guard both reach the model.
     assert "2026-05-10" in captured[0][1]

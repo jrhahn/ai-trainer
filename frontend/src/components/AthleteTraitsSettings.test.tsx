@@ -65,6 +65,7 @@ function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact
   return {
     id: 'fact-1',
     fact: 'Adds extra work after rest days',
+    kind: 'observation',
     category: 'coaching_risk',
     sourceSnippet: '',
     sourceExchangeId: null,
@@ -180,6 +181,25 @@ describe('AthleteTraitsSettings', () => {
     // Slugs are rendered as readable category headings.
     expect(screen.getByText('Coaching risk')).toBeInTheDocument()
     expect(screen.getByText('Preference')).toBeInTheDocument()
+  })
+
+  it('separates stable facts from behavioural observations', async () => {
+    mockFetch.mockResolvedValue([
+      makeFact({ id: 'f', kind: 'fact', category: 'general', fact: 'FTP is about 250 W' }),
+      makeFact({
+        id: 'o',
+        kind: 'observation',
+        category: 'recurring_issues',
+        fact: 'Fades in the final VO2 interval',
+      }),
+    ])
+    renderComponent()
+
+    expect(await screen.findByText('FTP is about 250 W')).toBeInTheDocument()
+    expect(screen.getByText('Fades in the final VO2 interval')).toBeInTheDocument()
+    // Both section headings render.
+    expect(screen.getByRole('heading', { name: 'Facts' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Observations' })).toBeInTheDocument()
   })
 
   it('shows an empty state when there are no traits', async () => {

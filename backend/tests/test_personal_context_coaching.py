@@ -97,7 +97,7 @@ def test_overtraining_memory_fact_included_when_high_confidence():
         },
     ])
 
-    assert "Evidence-backed athlete memory facts" in section
+    assert "Evidence-backed athlete memory" in section
     assert "Adds extra intervals when feeling fresh" in section
     assert "coaching_risk" in section
 
@@ -321,7 +321,7 @@ def test_mtb_context_excluded_when_empty():
     )
 
     assert "Structured athlete context" not in msg
-    assert "Evidence-backed athlete memory facts" not in msg
+    assert "Evidence-backed athlete memory" not in msg
 
 
 # ---------------------------------------------------------------------------

@@ -423,10 +423,15 @@ AthleteMemoryFactStatus = Literal[
     "active", "stale", "archived", "rejected", "user_confirmed", "needs_validation"
 ]
 
+# A stable ``fact`` (FTP, max HR, weight) versus an ``observation`` of repeated
+# behaviour inferred from training history (#386).
+AthleteMemoryFactKind = Literal["fact", "observation"]
+
 
 class AthleteMemoryFactSchema(CamelModel):
     id: str
     fact: str
+    kind: AthleteMemoryFactKind = "observation"
     category: str
     source_snippet: str = ""
     source_exchange_id: Optional[str] = None
@@ -583,6 +588,7 @@ class AthleteAvailabilityConstraintSchema(CamelModel):
 
 class AthleteMemoryFactObservationRequest(CamelModel):
     fact: str = Field(min_length=1)
+    kind: AthleteMemoryFactKind = "observation"
     category: str = "general"
     source_snippet: str = ""
     source_exchange_id: Optional[str] = None
@@ -591,6 +597,7 @@ class AthleteMemoryFactObservationRequest(CamelModel):
 
 class AthleteMemoryFactUpdateRequest(CamelModel):
     fact: Optional[str] = Field(default=None, min_length=1)
+    kind: Optional[AthleteMemoryFactKind] = None
     category: Optional[str] = None
     source_snippet: Optional[str] = None
     source_exchange_id: Optional[str] = None

@@ -281,9 +281,13 @@ export type AthleteMemoryFactStatus =
   | 'user_confirmed'
   | 'needs_validation'
 
+// A stable fact (FTP, max HR, weight) vs an observation of repeated behaviour (#386).
+export type AthleteMemoryFactKind = 'fact' | 'observation'
+
 export interface AthleteMemoryFact {
   id: string
   fact: string
+  kind: AthleteMemoryFactKind
   category: string
   sourceSnippet: string
   sourceExchangeId: string | null
@@ -306,7 +310,13 @@ export async function fetchAthleteMemoryFacts(token: string): Promise<AthleteMem
 
 export async function observeAthleteMemoryFact(
   token: string,
-  fact: { fact: string; category?: string; sourceSnippet?: string; confidence?: number }
+  fact: {
+    fact: string
+    kind?: AthleteMemoryFactKind
+    category?: string
+    sourceSnippet?: string
+    confidence?: number
+  }
 ): Promise<AthleteMemoryFact> {
   return apiFetch<AthleteMemoryFact>('/users/me/athlete-memory-facts', {
     token,
@@ -318,7 +328,12 @@ export async function observeAthleteMemoryFact(
 export async function updateAthleteMemoryFact(
   token: string,
   factId: string,
-  changes: { fact?: string; category?: string; status?: AthleteMemoryFactStatus }
+  changes: {
+    fact?: string
+    kind?: AthleteMemoryFactKind
+    category?: string
+    status?: AthleteMemoryFactStatus
+  }
 ): Promise<AthleteMemoryFact> {
   return apiFetch<AthleteMemoryFact>(`/users/me/athlete-memory-facts/${factId}`, {
     token,
