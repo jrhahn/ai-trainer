@@ -1,7 +1,7 @@
 """add kind to athlete_memory_facts (#386: separate facts from observations)
 
 Revision ID: 20260712_000001
-Revises: 20260710_000001
+Revises: 20260711_000001
 Create Date: 2026-07-12 00:00:01
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy import inspect as sa_inspect
 
 
 revision = "20260712_000001"
-down_revision = "20260710_000001"
+down_revision = "20260711_000001"
 branch_labels = None
 depends_on = None
 
