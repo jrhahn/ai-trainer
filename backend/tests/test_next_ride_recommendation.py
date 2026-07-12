@@ -574,16 +574,18 @@ async def test_next_ride_recommendation_forwards_structured_athlete_context(
             "coachingRisks": ["does too much when fresh"],
         },
     )
-    await client.post(
-        "/api/v1/users/me/athlete-memory-facts",
-        headers=auth_headers,
-        json={
-            "fact": "Motivation improves after easy social rides",
-            "category": "motivation",
-            "sourceSnippet": "User said group rides help them reset.",
-            "confidence": 0.8,
-        },
-    )
+    # Observed twice so it clears the evidence bar and reaches the coach (#387).
+    for _ in range(2):
+        await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={
+                "fact": "Motivation improves after easy social rides",
+                "category": "motivation",
+                "sourceSnippet": "User said group rides help them reset.",
+                "confidence": 0.8,
+            },
+        )
 
     response = await client.post(
         "/api/v1/ai/next-ride-recommendation",
