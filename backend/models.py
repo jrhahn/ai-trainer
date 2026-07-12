@@ -395,6 +395,16 @@ class AthleteModel(Base):
 
 
 class AthleteMemoryFact(Base):
+    """A durable piece of athlete knowledge the coach relies on.
+
+    Carries a ``kind`` discriminator (#386) separating stable **facts** (values
+    stated or measured about the athlete) from **observations** (patterns of
+    repeated behaviour inferred from training history). Both share one lifecycle
+    — confidence accrual, decay, contradiction and athlete validation — which is
+    why they live in a single table rather than two. The third knowledge type,
+    hypotheses that still need validation, is :class:`AthleteHypothesis`.
+    """
+
     __tablename__ = "athlete_memory_facts"
     __table_args__ = (
         Index(
@@ -415,6 +425,14 @@ class AthleteMemoryFact(Base):
     fact_key: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(
         String(50), default="general", nullable=False
+    )
+    # Which knowledge type this row is (#386): a stable ``fact`` stated or
+    # measured about the athlete (FTP, max HR, weight) versus an ``observation``
+    # of repeated behaviour the coach inferred from training history (prefers
+    # MTB, fades late in intervals). Hypotheses — claims that still need
+    # validation — live in their own :class:`AthleteHypothesis` table.
+    kind: Mapped[str] = mapped_column(
+        String(20), default="observation", nullable=False
     )
     source_snippet: Mapped[str] = mapped_column(Text, default="", nullable=False)
     source_exchange_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

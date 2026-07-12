@@ -736,15 +736,43 @@ export default function AthleteTraitsSettings() {
     }
   }
 
-  const grouped = useMemo(() => {
-    const groups = new Map<string, AthleteMemoryFact[]>()
-    for (const fact of data ?? []) {
-      const list = groups.get(fact.category) ?? []
-      list.push(fact)
-      groups.set(fact.category, list)
+  // Split learned traits into stable facts and inferred observations (#386),
+  // each still grouped by category for readability.
+  const { factGroups, observationGroups } = useMemo(() => {
+    const groupByCategory = (facts: AthleteMemoryFact[]) => {
+      const groups = new Map<string, AthleteMemoryFact[]>()
+      for (const fact of facts) {
+        const list = groups.get(fact.category) ?? []
+        list.push(fact)
+        groups.set(fact.category, list)
+      }
+      return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
+    const all = data ?? []
+    return {
+      factGroups: groupByCategory(all.filter((fact) => fact.kind === 'fact')),
+      observationGroups: groupByCategory(all.filter((fact) => fact.kind !== 'fact')),
+    }
   }, [data])
+
+  const hasTraits = factGroups.length > 0 || observationGroups.length > 0
+
+  const renderCategoryGroups = (groups: [string, AthleteMemoryFact[]][]) => (
+    <div className="space-y-4">
+      {groups.map(([category, facts]) => (
+        <div key={category}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+            {formatCategory(category)}
+          </h4>
+          <ul className="space-y-2">
+            {facts.map((fact) => (
+              <TraitRow key={fact.id} fact={fact} token={authToken!} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
 
   const memoryEnabled = privacyData?.memoryUpdatesEnabled ?? true
 
@@ -764,26 +792,36 @@ export default function AthleteTraitsSettings() {
         {isError && (
           <p className="text-sm text-red-600">Could not load learned traits.</p>
         )}
-        {!isLoading && !isError && grouped.length === 0 && (
+        {!isLoading && !isError && !hasTraits && (
           <p className="text-sm text-gray-400">
             No learned traits yet. As you chat with the coach, it will note
             patterns here.
           </p>
         )}
 
-        <div className="space-y-4">
-          {grouped.map(([category, facts]) => (
-            <div key={category}>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-                {formatCategory(category)}
-              </h3>
-              <ul className="space-y-2">
-                {facts.map((fact) => (
-                  <TraitRow key={fact.id} fact={fact} token={authToken!} />
-                ))}
-              </ul>
+        <div className="space-y-5">
+          {factGroups.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">Facts</h3>
+              <p className="text-xs text-gray-500 mb-2">
+                Stable values measured or stated about you — e.g. FTP, max heart
+                rate, weight.
+              </p>
+              {renderCategoryGroups(factGroups)}
             </div>
-          ))}
+          )}
+          {observationGroups.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">
+                Observations
+              </h3>
+              <p className="text-xs text-gray-500 mb-2">
+                Patterns of repeated behaviour the coach inferred from your
+                training — treated as tendencies, not certainties.
+              </p>
+              {renderCategoryGroups(observationGroups)}
+            </div>
+          )}
         </div>
       </div>
 

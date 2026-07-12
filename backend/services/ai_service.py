@@ -765,8 +765,14 @@ def _normalise_fact_candidate(raw: object) -> dict | None:
     confidence = max(0.0, min(0.9, confidence))
     snippet = raw.get("sourceSnippet") or raw.get("source_snippet") or ""
     snippet = snippet.strip()[:240] if isinstance(snippet, str) else ""
+    kind_raw = raw.get("kind")
+    # A stable stated/measured value is a "fact"; anything else (including a
+    # missing or unrecognised label) is treated as an inferred "observation" —
+    # the more conservative classification (#386).
+    kind = "fact" if isinstance(kind_raw, str) and kind_raw.strip().lower() == "fact" else "observation"
     return {
         "fact": fact.strip(),
+        "kind": kind,
         "category": category,
         "confidence": round(confidence, 2),
         "source_snippet": snippet,

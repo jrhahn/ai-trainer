@@ -594,6 +594,16 @@ def _normalise_athlete_memory_category(category: str | None) -> str:
     return value[:50] or "general"
 
 
+def _normalise_athlete_memory_kind(kind: str | None) -> str:
+    """Coerce a knowledge-type label to ``fact`` or ``observation`` (#386).
+
+    Anything that is not an explicit stable ``fact`` falls back to
+    ``observation`` — the safer default, since an inferred pattern carries less
+    authority than a stated value.
+    """
+    return "fact" if (kind or "").strip().lower() == "fact" else "observation"
+
+
 def _clamp_confidence(value: float | None) -> float:
     if value is None:
         return ATHLETE_MEMORY_DEFAULT_CONFIDENCE
@@ -706,6 +716,7 @@ async def observe_athlete_memory_fact(
     user_id: str,
     *,
     fact: str,
+    kind: str = "observation",
     category: str = "general",
     source_snippet: str = "",
     source_exchange_id: str | None = None,
@@ -718,6 +729,7 @@ async def observe_athlete_memory_fact(
         raise ValueError("fact must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
+    normalized_kind = _normalise_athlete_memory_kind(kind)
     fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
 
     existing = await db.scalar(
@@ -732,6 +744,7 @@ async def observe_athlete_memory_fact(
             user_id=user_id,
             fact=cleaned_fact,
             fact_key=fact_key,
+            kind=normalized_kind,
             category=normalized_category,
             source_snippet=source_snippet.strip(),
             source_exchange_id=source_exchange_id,
@@ -747,6 +760,9 @@ async def observe_athlete_memory_fact(
         existing.observation_count += 1
         existing.last_confirmed_at = now
         existing.updated_at = now
+        # Fresh evidence can re-classify a row (e.g. a value the coach once
+        # inferred is later stated outright), so keep the latest kind.
+        existing.kind = normalized_kind
         if source_snippet:
             existing.source_snippet = source_snippet.strip()
         if source_exchange_id is not None:
@@ -804,6 +820,7 @@ async def update_athlete_memory_fact(
     fact_id: str,
     *,
     fact: str | None = None,
+    kind: str | None = None,
     category: str | None = None,
     source_snippet: str | None = None,
     source_exchange_id: str | None = None,
@@ -824,6 +841,8 @@ async def update_athlete_memory_fact(
         existing.fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
         # Editing the fact text resolves any pending contradiction.
         existing.contradiction_note = None
+    if kind is not None:
+        existing.kind = _normalise_athlete_memory_kind(kind)
     if category is not None:
         existing.category = _normalise_athlete_memory_category(category)
     if source_snippet is not None:

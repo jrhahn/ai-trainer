@@ -119,6 +119,7 @@ async def generate_user_insights(
             db,
             user.id,
             fact=candidate["fact"],
+            kind=candidate.get("kind", "observation"),
             category=candidate["category"],
             source_snippet=candidate["source_snippet"],
             confidence=candidate["confidence"],

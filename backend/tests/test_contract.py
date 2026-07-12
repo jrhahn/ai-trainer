@@ -703,6 +703,7 @@ async def test_athlete_memory_facts_contract(client):
             headers=headers,
             json={
                 "fact": "Does too much when fresh",
+                "kind": "fact",
                 "category": "coaching risk",
                 "sourceSnippet": "I felt fresh so I added more VO2 work.",
                 "sourceExchangeId": "chat-123",
@@ -711,6 +712,7 @@ async def test_athlete_memory_facts_contract(client):
         )
     ).json()
     assert created["fact"] == "Does too much when fresh"
+    assert created["kind"] == "fact"
     assert created["category"] == "coaching_risk"
     assert created["sourceSnippet"] == "I felt fresh so I added more VO2 work."
     assert created["sourceExchangeId"] == "chat-123"
@@ -740,11 +742,13 @@ async def test_athlete_memory_facts_contract(client):
             headers=headers,
             json={
                 "fact": "Adds extra work after rest days",
+                "kind": "observation",
                 "status": "user_confirmed",
             },
         )
     ).json()
     assert corrected["fact"] == "Adds extra work after rest days"
+    assert corrected["kind"] == "observation"
     assert corrected["status"] == "user_confirmed"
     assert corrected["confidence"] >= 0.9
 

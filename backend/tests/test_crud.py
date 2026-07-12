@@ -710,6 +710,46 @@ async def test_observe_athlete_memory_fact_repeated_observations_increase_confid
 
 
 @pytest.mark.asyncio
+async def test_observe_athlete_memory_fact_persists_and_reclassifies_kind(
+    db: AsyncSession,
+) -> None:
+    """kind is stored, defaults to observation, and re-observing can promote it (#386)."""
+    user = await _make_user(db)
+
+    # An unspecified kind defaults to the safer "observation".
+    default = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Prefers MTB", category="preference"
+    )
+    assert default.kind == "observation"
+
+    # A stable value can be recorded explicitly as a fact.
+    ftp = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is about 250 W", kind="fact", category="general"
+    )
+    assert ftp.kind == "fact"
+
+    # An unrecognised label collapses to "observation".
+    weird = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Weird one", kind="hunch", category="general"
+    )
+    assert weird.kind == "observation"
+
+    # Re-observing the same row with a new kind re-classifies it.
+    promoted = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Prefers MTB", kind="fact", category="preference"
+    )
+    assert promoted.id == default.id
+    assert promoted.kind == "fact"
+
+    # A direct update can reclassify too.
+    updated = await crud.update_athlete_memory_fact(
+        db, user.id, promoted.id, kind="observation"
+    )
+    assert updated is not None
+    assert updated.kind == "observation"
+
+
+@pytest.mark.asyncio
 async def test_athlete_memory_confidence_decays_after_grace_period(
     db: AsyncSession,
 ) -> None:

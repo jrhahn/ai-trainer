@@ -775,19 +775,38 @@ def athlete_memory_facts_section(facts: list[dict] | None) -> str:
         observations = fact.get("observationCount") or fact.get("observation_count")
         if observations:
             compact["observationCount"] = observations
-        compact_facts.append(compact)
+        # Default to the safer "observation" classification for legacy rows that
+        # predate the kind discriminator (#386).
+        kind = "fact" if fact.get("kind") == "fact" else "observation"
+        compact_facts.append((kind, compact))
 
     if not compact_facts:
         return ""
 
+    stable_facts = [c for kind, c in compact_facts if kind == "fact"]
+    observations = [c for kind, c in compact_facts if kind == "observation"]
+
+    sections: list[str] = []
+    if stable_facts:
+        sections.append(
+            "Stable athlete facts (measured/stated values — FTP, max HR, weight): "
+            f"{json.dumps(stable_facts, ensure_ascii=False)}"
+        )
+    if observations:
+        sections.append(
+            "Behavioural observations (patterns inferred from training history — treat "
+            "as tendencies, not certainties): "
+            f"{json.dumps(observations, ensure_ascii=False)}"
+        )
+
     return (
-        "\n\nEvidence-backed athlete memory facts (durable, vetted): "
-        f"{json.dumps(compact_facts, ensure_ascii=False)}\n"
-        "Use these only when relevant. Treat confidence, evidence, and freshness "
-        "as part of the fact; never infer stronger claims than the stored fact supports. "
-        "Weight recommendations toward higher-confidence facts; lean on lower-confidence "
-        "ones tentatively, and prefer verifying them with a short question over acting on "
-        "them as settled."
+        "\n\nEvidence-backed athlete memory (durable, vetted):\n"
+        + "\n".join(sections)
+        + "\nUse these only when relevant. Treat confidence, evidence, and freshness "
+        "as part of each item; never infer stronger claims than it supports. Weight "
+        "recommendations toward higher-confidence items and lean on stable facts more "
+        "firmly than on inferred observations; verify lower-confidence items with a "
+        "short question rather than acting on them as settled."
     )
 
 
@@ -1205,6 +1224,12 @@ def generate_athlete_insights_system() -> str:
         "an event, not an insight. Ignore one-off results and normal day-to-day variation.\n"
         "Do NOT restate insights already present in the provided existing observations, "
         "and do not simply echo a single ride's coach/athlete note — synthesise across rides.\n"
+        "Classify each insight with a 'kind':\n"
+        "- 'fact' for a stable, quantifiable value the history establishes about the "
+        "athlete (e.g. an estimated FTP, a max heart rate, a typical resting HR).\n"
+        "- 'observation' for a pattern of repeated behaviour or response (e.g. fades late "
+        "in intervals, prefers MTB, recovers fast after hard days).\n"
+        "When unsure use 'observation' — most inferred patterns are observations, not facts.\n"
         "Use one of these category slugs for each insight: fatigue_response, "
         "fueling_hydration, preferred_workouts, recurring_issues, "
         "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
@@ -1215,8 +1240,8 @@ def generate_athlete_insights_system() -> str:
         "evidence from the history (e.g. dates, metrics, or the number of rides).\n"
         "Return up to 8 of the most coaching-relevant insights.\n"
         "ALWAYS respond with a valid JSON object of the form: "
-        '{"candidates": [{"fact": str, "category": str, "confidence": number, '
-        '"sourceSnippet": str}]}. '
+        '{"candidates": [{"fact": str, "kind": "fact"|"observation", "category": str, '
+        '"confidence": number, "sourceSnippet": str}]}. '
         "Return an empty candidates array when the history is too thin or shows no "
         "durable pattern."
     )
