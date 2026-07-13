@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
     activity_sync_interval_seconds: int = 1800
+    continuous_learning_enabled: bool = True
+    """Run the athlete-learning step after every completed workout is imported (#388).
+
+    When enabled, each freshly imported workout triggers a per-athlete learning
+    pass (observations, contradictions, hypotheses, open questions) inline with
+    activity sync. The weekly batch jobs remain as a backstop. Set to ``false``
+    to fall back to weekly-only learning (e.g. to cap per-sync token spend)."""
 
     # ------------------------------------------------------------------
     # Database
