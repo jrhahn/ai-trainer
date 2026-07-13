@@ -679,15 +679,21 @@ def athlete_model_section(athlete_model: dict | None) -> str:
     """Render the long-term athlete model (#384) for a coaching prompt.
 
     Only non-empty fields are included so a sparsely-derived model stays compact.
-    ``confidence`` and ``updated_at`` are metadata and are not surfaced.
+    ``updated_at`` is server metadata and is suppressed, but ``confidence`` is
+    surfaced (#389): these capabilities are *derived estimates*, and the coach's
+    confidence in them is the uncertainty it must communicate when quoting a
+    model-derived value (see :func:`confidence_communication_rules`).
     """
     if not athlete_model:
         return ""
 
-    # ``confidence``/``updated_at`` are coach/server metadata, not coaching
-    # signal. Suppress both snake_case and camelCase spellings since callers may
-    # pass either (the router serialises with ``by_alias=True``).
+    # ``updated_at`` is server metadata, not coaching signal. Suppress both
+    # snake_case and camelCase spellings since callers may pass either (the
+    # router serialises with ``by_alias=True``). ``confidence`` is pulled out
+    # separately below so it can be labelled as an uncertainty signal rather
+    # than buried among the capability fields.
     metadata_keys = {"confidence", "updated_at", "updatedAt"}
+    confidence = athlete_model.get("confidence")
     compact: dict[str, object] = {}
     for key, value in athlete_model.items():
         if key in metadata_keys:
@@ -699,13 +705,22 @@ def athlete_model_section(athlete_model: dict | None) -> str:
     if not compact:
         return ""
 
+    confidence_note = ""
+    if isinstance(confidence, (int, float)) and confidence > 0:
+        confidence_note = (
+            f" The coach's overall confidence in this derived profile is "
+            f"{round(float(confidence), 2)} — treat the quantitative anchors "
+            "(threshold power, VO2 max) as estimates and communicate that "
+            "uncertainty when you quote them."
+        )
+
     return (
         "\n\nLong-term athlete model (durable physiology & performance profile): "
         f"{json.dumps(compact, ensure_ascii=False)}\n"
         "These are slow-changing capabilities (threshold power, VO2 max, how the "
         "athlete holds threshold, recovers, and tolerates heat), not a report on a "
         "single session. Use them to set realistic targets and pacing; do not "
-        "recite them verbatim."
+        f"recite them verbatim.{confidence_note}"
     )
 
 
@@ -854,6 +869,43 @@ def recommendation_reasoning_layers_rule() -> str:
     )
 
 
+def confidence_communication_rules() -> str:
+    """Instruct the coach to voice uncertainty honestly in athlete-facing replies (#389).
+
+    The coach already receives calibrated confidence, evidence, and observation
+    counts (memory facts, the athlete model, open questions/hypotheses). This
+    rule turns that internal signal into natural language so the athlete can
+    always tell a firm fact from a working estimate.
+    """
+    return (
+        "\n\nCommunicating confidence and uncertainty:\n"
+        "- Distinguish two kinds of value in your reply. A measured or "
+        "athlete-stated value (profile FTP the athlete set, a user-confirmed "
+        "memory fact, an actual recorded ride number) is a fact — state it "
+        "plainly. A derived or inferred value (a capability from the long-term "
+        "athlete model, an unconfirmed behavioural observation, a hypothesis) is "
+        "an estimate — never present it with the certainty of a measurement.\n"
+        "- When you quote an estimated numeric value that carries a confidence, "
+        "surface that confidence naturally rather than stating the number bare. "
+        "Prefer 'Current estimate: 320 W (confidence 0.67)' over 'Your FTP is "
+        "320 W'. Only cite a confidence number you were actually given — never "
+        "invent one.\n"
+        "- Scale the strength of your language to the evidence behind a "
+        "behavioural observation (its confidence and how many times it has been "
+        "observed). Thin evidence gets tentative language, e.g. 'There is "
+        "emerging evidence that your heart-rate response may be slightly "
+        "suppressed after upper-body strength training. More observations are "
+        "needed.' A well-corroborated, high-confidence pattern can be stated more "
+        "firmly, though still as a tendency, not a law.\n"
+        "- Never dress a low-confidence inference up as settled fact, and never "
+        "hedge a firmly established one into vagueness. Match the wording to how "
+        "sure you actually are.\n"
+        "- Keep this natural and brief. Weave the uncertainty into the sentence; "
+        "do not append confidence scores to every number or lecture the athlete "
+        "on your evidence model."
+    )
+
+
 def rest_recommendation_rules() -> str:
     return (
         "\n\nRest/recovery recommendation rules:\n"
@@ -953,6 +1005,7 @@ def ask_trainer_system(
     )
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
+    confidence_instructions = confidence_communication_rules()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
 
@@ -1031,6 +1084,7 @@ def ask_trainer_system(
         f"{science_section}"
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
+        f"{confidence_instructions}"
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"

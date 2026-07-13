@@ -5,6 +5,24 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-07-13
+
+### Changed
+
+- **Coach communicates confidence and uncertainty** (`services/prompts.py`) —
+  the coach now voices how sure it is instead of stating everything as fact
+  (#389). A new `confidence_communication_rules()` block in `ask_trainer_system`
+  tells it to separate measured/athlete-stated values (state plainly) from
+  derived estimates (voice as estimates with their confidence, e.g. "Current
+  estimate: 320 W (confidence 0.67)"), to scale the strength of language for a
+  behavioural observation to its confidence and observation count (thin evidence
+  gets "emerging evidence… more observations are needed"; a corroborated pattern
+  is stated more firmly but still as a tendency), and never to fabricate a
+  confidence it was not given. `athlete_model_section` now surfaces the derived
+  model's overall `confidence` as a labelled uncertainty signal (previously
+  suppressed as metadata) so the coach has the number to quote; `updated_at`
+  stays suppressed.
+
 ## [0.41.0] - 2026-07-13
 
 ### Added

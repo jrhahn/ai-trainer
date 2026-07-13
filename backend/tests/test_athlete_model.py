@@ -243,7 +243,7 @@ async def test_derive_tolerates_uncoercible_numbers(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_athlete_model_section_omits_empty_and_metadata():
+def test_athlete_model_section_omits_empty_and_updated_at():
     section = athlete_model_section(
         {
             "ftpWatts": 260,
@@ -259,10 +259,35 @@ def test_athlete_model_section_omits_empty_and_metadata():
     assert "260" in section
     assert "holds 30 min" in section
     assert "threshold" in section
-    assert "0.7" not in section  # confidence is metadata, not surfaced
     assert "2026-07-10" not in section  # updatedAt suppressed
+
+
+def test_athlete_model_section_surfaces_confidence_as_uncertainty():
+    """The derived model's confidence must reach the coach so it can voice the
+    uncertainty when quoting an estimated capability (#389)."""
+    section = athlete_model_section(
+        {
+            "ftpWatts": 260,
+            "confidence": 0.67,
+            "updatedAt": "2026-07-10T00:00:00Z",
+        }
+    )
+    assert "0.67" in section
+    assert "estimate" in section.lower()
+    # It is not dumped into the capability JSON blob, only in the labelled note.
+    assert '"confidence"' not in section
+
+
+def test_athlete_model_section_omits_confidence_when_absent_or_zero():
+    """A default (0.0) or missing confidence is not worth surfacing."""
+    zero = athlete_model_section({"ftpWatts": 260, "confidence": 0.0})
+    assert "confidence" not in zero.lower()
+    missing = athlete_model_section({"ftpWatts": 260})
+    assert "confidence" not in missing.lower()
 
 
 def test_athlete_model_section_blank_when_no_signal():
     assert athlete_model_section(None) == ""
     assert athlete_model_section({"pacingQuality": "", "strengths": []}) == ""
+    # Confidence alone, with no capability fields, is not a reason to render.
+    assert athlete_model_section({"confidence": 0.9}) == ""
