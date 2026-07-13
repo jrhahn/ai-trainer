@@ -357,17 +357,19 @@ async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
 async def test_ask_trainer_endpoint_forwards_prompt_safe_athlete_memory_facts(
     client, auth_headers, mock_ai_service
 ):
-    saved = await client.post(
-        "/api/v1/users/me/athlete-memory-facts",
-        headers=auth_headers,
-        json={
-            "fact": "Does too much when fresh",
-            "category": "coaching risk",
-            "sourceSnippet": "Added extra intervals after a rest day.",
-            "confidence": 0.7,
-        },
-    )
-    assert saved.status_code == 201
+    # Observed twice so it clears the evidence bar and reaches the coach (#387).
+    for _ in range(2):
+        saved = await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={
+                "fact": "Does too much when fresh",
+                "category": "coaching risk",
+                "sourceSnippet": "Added extra intervals after a rest day.",
+                "confidence": 0.7,
+            },
+        )
+        assert saved.status_code == 201
     low_confidence = await client.post(
         "/api/v1/users/me/athlete-memory-facts",
         headers=auth_headers,

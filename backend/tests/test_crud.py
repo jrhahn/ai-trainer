@@ -762,6 +762,7 @@ async def test_athlete_memory_confidence_decays_after_grace_period(
         category="preference",
         confidence=0.7,
         observed_at=observed_at,
+        trusted=True,
     )
 
     # Within the grace window confidence is untouched.
@@ -930,6 +931,14 @@ async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejecte
     db: AsyncSession,
 ) -> None:
     user = await _make_user(db)
+    # Corroborated by a second observation, so it clears the evidence bar (#387).
+    included = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Responds well to clear recovery permission",
+        category="coaching",
+        confidence=0.6,
+    )
     included = await crud.observe_athlete_memory_fact(
         db,
         user.id,
@@ -987,6 +996,91 @@ async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejecte
     assert low_confidence.id not in fact_ids
     assert rejected.id not in fact_ids
     assert stale.id not in fact_ids
+
+
+@pytest.mark.asyncio
+async def test_single_observation_capped_and_withheld_until_corroborated(
+    db: AsyncSession,
+) -> None:
+    """A single event never promotes itself into trusted, coach-visible memory (#387)."""
+    user = await _make_user(db)
+
+    # However confident the extraction claims to be, a first sighting is capped
+    # below the prompt threshold and left out of coach prompts.
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Fades in the final interval of long sessions",
+        category="fatigue_response",
+        confidence=0.95,
+    )
+    assert fact.observation_count == 1
+    assert fact.confidence <= crud.ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP
+    assert fact.confidence < crud.ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id not in {f.id for f in prompt_facts}
+
+    # A second, corroborating observation grows confidence past the bar and,
+    # having met the evidence minimum, the fact now informs coaching.
+    corroborated = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Fades in the final interval of long sessions",
+        category="fatigue_response",
+        confidence=0.95,
+    )
+    assert corroborated.id == fact.id
+    assert corroborated.observation_count == crud.ATHLETE_MEMORY_MIN_EVIDENCE
+    assert corroborated.confidence >= crud.ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_trusted_observation_bypasses_evidence_gate(db: AsyncSession) -> None:
+    """A vetted, trusted write is usable at once — no re-earning trust (#387)."""
+    user = await _make_user(db)
+
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Targets a sub-9-hour gran fondo",
+        category="motivation",
+        confidence=0.75,
+        trusted=True,
+    )
+    # Trust is honoured directly and enough evidence is seeded to clear the bar.
+    assert fact.confidence == pytest.approx(0.75)
+    assert fact.observation_count >= crud.ATHLETE_MEMORY_MIN_EVIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_untrusted_observation_does_not_reclassify_confirmed_fact(
+    db: AsyncSession,
+) -> None:
+    """One automated observation must not overwrite athlete-confirmed knowledge (#387)."""
+    user = await _make_user(db)
+
+    fact = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is 300 W", kind="fact", category="general"
+    )
+    confirmed = await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    assert confirmed is not None and confirmed.kind == "fact"
+
+    # An automated re-observation classifying it as a mere observation is ignored;
+    # the athlete-confirmed classification stands.
+    reobserved = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is 300 W", kind="observation", category="general"
+    )
+    assert reobserved.id == fact.id
+    assert reobserved.kind == "fact"
 
 
 @pytest.mark.asyncio

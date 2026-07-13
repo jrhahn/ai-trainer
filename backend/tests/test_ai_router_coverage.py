@@ -98,13 +98,18 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
 
 
 async def _seed_observation(client, auth_headers, fact: str) -> None:
-    """Persist a high-confidence athlete-memory fact (prompt threshold is 0.5)."""
-    created = await client.post(
-        "/api/v1/users/me/athlete-memory-facts",
-        headers=auth_headers,
-        json={"fact": fact, "category": "behaviour", "confidence": 0.9},
-    )
-    assert created.status_code == 201
+    """Persist a coach-visible observation.
+
+    Observed twice so it clears the evidence bar: a single sighting stays a
+    low-confidence candidate withheld from coaching (#387).
+    """
+    for _ in range(2):
+        created = await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={"fact": fact, "category": "behaviour", "confidence": 0.9},
+        )
+        assert created.status_code == 201
 
 
 def _reasoning_lines(body: dict) -> list[dict]:

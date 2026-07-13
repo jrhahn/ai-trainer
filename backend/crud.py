@@ -22,6 +22,17 @@ ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
 ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE = 0.5
 ATHLETE_MEMORY_STALE_AFTER_DAYS = 90
 ATHLETE_MEMORY_PROMPT_LIMIT = 12
+# Evidence-based promotion (#387). The coach must not turn a single event into
+# trusted knowledge: an inferred observation has to recur before it earns the
+# coach's trust. A first sighting is seeded as a low-confidence candidate whose
+# stored confidence is capped at the default floor (below the prompt threshold),
+# and only repeated confirmation grows both its ``observation_count`` and its
+# confidence past the bar. ``get_prompt_athlete_memory_facts`` then requires at
+# least ``ATHLETE_MEMORY_MIN_EVIDENCE`` observations before an unconfirmed fact
+# reaches a coach prompt. Deliberate, athlete-driven writes (confirming a
+# hypothesis) bypass the cap via ``trusted=True``.
+ATHLETE_MEMORY_MIN_EVIDENCE = 2
+ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP = ATHLETE_MEMORY_DEFAULT_CONFIDENCE
 # Confidence in an unconfirmed observation erodes once it has gone unmentioned
 # for a grace period, so the coach trusts fresh evidence over old assumptions.
 ATHLETE_MEMORY_DECAY_GRACE_DAYS = 30
@@ -722,8 +733,17 @@ async def observe_athlete_memory_fact(
     source_exchange_id: str | None = None,
     confidence: float | None = None,
     observed_at: datetime | None = None,
+    trusted: bool = False,
 ) -> models.AthleteMemoryFact:
-    """Create a fact or strengthen an existing fact from a new observation."""
+    """Create a fact or strengthen an existing fact from a new observation.
+
+    An ordinary (``trusted=False``) observation is treated as tentative evidence
+    (#387): its first sighting is stored below the prompt-trust threshold and its
+    confidence can only climb through the per-observation step, so it takes
+    repeated confirmation before the coach relies on it. A ``trusted`` write —
+    the athlete confirming a hypothesis — records the supplied confidence as-is
+    and seeds enough evidence to be usable immediately.
+    """
     cleaned_fact = fact.strip()
     if not cleaned_fact:
         raise ValueError("fact must not be empty")
@@ -731,6 +751,13 @@ async def observe_athlete_memory_fact(
     normalized_category = _normalise_athlete_memory_category(category)
     normalized_kind = _normalise_athlete_memory_kind(kind)
     fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+    # Untrusted evidence can only claim up to the candidate cap; trust is earned
+    # by recurrence, not asserted in a single extraction.
+    contributed_confidence = _clamp_confidence(confidence)
+    if not trusted:
+        contributed_confidence = min(
+            contributed_confidence, ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP
+        )
 
     existing = await db.scalar(
         select(models.AthleteMemoryFact).where(
@@ -750,9 +777,11 @@ async def observe_athlete_memory_fact(
             source_exchange_id=source_exchange_id,
             first_observed_at=now,
             last_confirmed_at=now,
-            confidence=_clamp_confidence(confidence),
+            confidence=contributed_confidence,
             status="active",
-            observation_count=1,
+            # A confirmed hypothesis arrives already backed by evidence, so it
+            # meets the promotion bar at once; a plain observation starts at one.
+            observation_count=ATHLETE_MEMORY_MIN_EVIDENCE if trusted else 1,
             updated_at=now,
         )
         db.add(existing)
@@ -761,8 +790,10 @@ async def observe_athlete_memory_fact(
         existing.last_confirmed_at = now
         existing.updated_at = now
         # Fresh evidence can re-classify a row (e.g. a value the coach once
-        # inferred is later stated outright), so keep the latest kind.
-        existing.kind = normalized_kind
+        # inferred is later stated outright), but a single automated observation
+        # must not overwrite knowledge the athlete has confirmed (#387).
+        if trusted or existing.status != "user_confirmed":
+            existing.kind = normalized_kind
         if source_snippet:
             existing.source_snippet = source_snippet.strip()
         if source_exchange_id is not None:
@@ -773,7 +804,7 @@ async def observe_athlete_memory_fact(
             # Fresh evidence re-confirms the fact, so any pending contradiction is
             # resolved and the validation prompt is cleared.
             existing.contradiction_note = None
-        base_confidence = max(existing.confidence, _clamp_confidence(confidence))
+        base_confidence = max(existing.confidence, contributed_confidence)
         # A revived observation may have decayed to near-zero; refresh it to at
         # least the default so fresh evidence is trusted again.
         if revived:
@@ -887,6 +918,7 @@ async def get_prompt_athlete_memory_facts(
     *,
     now: datetime | None = None,
     min_confidence: float = ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE,
+    min_evidence: int = ATHLETE_MEMORY_MIN_EVIDENCE,
     stale_after_days: int = ATHLETE_MEMORY_STALE_AFTER_DAYS,
     limit: int = ATHLETE_MEMORY_PROMPT_LIMIT,
 ) -> list[models.AthleteMemoryFact]:
@@ -904,9 +936,14 @@ async def get_prompt_athlete_memory_facts(
             continue
         if fact.status == "user_confirmed":
             prompt_facts.append(fact)
-        elif fact.confidence >= min_confidence and _as_aware_utc(
-            fact.last_confirmed_at
-        ) >= cutoff:
+        # An unconfirmed observation must clear both the confidence and the
+        # evidence bar before it informs coaching, so a single event never
+        # reaches the coach (#387).
+        elif (
+            fact.confidence >= min_confidence
+            and fact.observation_count >= min_evidence
+            and _as_aware_utc(fact.last_confirmed_at) >= cutoff
+        ):
             prompt_facts.append(fact)
         if len(prompt_facts) >= limit:
             break
@@ -1102,6 +1139,9 @@ async def update_athlete_hypothesis(
             existing.confidence = max(
                 existing.confidence, ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE
             )
+            # The athlete has vetted this claim, so promote it as trusted
+            # knowledge: keep its confidence and let it inform coaching at once,
+            # rather than re-earning trust through the evidence gate (#387).
             await observe_athlete_memory_fact(
                 db,
                 user_id,
@@ -1110,6 +1150,7 @@ async def update_athlete_hypothesis(
                 source_snippet=existing.rationale,
                 confidence=existing.confidence,
                 observed_at=now,
+                trusted=True,
             )
     existing.updated_at = now
     await db.flush()
