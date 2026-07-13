@@ -5,6 +5,26 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0] - 2026-07-13
+
+### Added
+
+- **Continuous athlete-learning pipeline** (`services/learning_pipeline.py`,
+  `services/activity_sync.py`, `config.py`) — every completed workout now runs a
+  per-athlete learning step immediately, instead of the athlete-knowledge passes
+  only running once a week. `run_learning_step` composes the existing passes in
+  the weekly schedule's dependency order — insights + athlete-model refresh
+  (analyse, compare against the model, update observations and confidence) →
+  contradiction/anomaly detection → hypotheses → open questions — with each pass
+  best-effort so a failure is recorded and never aborts the others. The
+  persisted observations/hypotheses/open questions are the coach's evolving
+  notes (they already surface in coach prompts), so the step emits a structured
+  audit line rather than clobbering the athlete-editable coach memory (#346).
+  `activity_sync._persist_and_adapt` triggers the step after new workouts are
+  imported via `learn_from_completed_workouts`, guarded so a learning failure
+  can never break the sync. Gated by the new `continuous_learning_enabled`
+  setting (default on); the weekly jobs remain registered as a backstop (#388).
+
 ## [0.40.0] - 2026-07-05
 
 ### Added
