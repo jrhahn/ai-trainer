@@ -29,6 +29,7 @@ from services.intervals_service import (
     sanitize_intervals_streams,
     apply_summary_fallback,
 )
+from services.learning_pipeline import learn_from_completed_workouts
 from services.ride_matching import (
     apply_ride_plan_matches,
     review_matched_ride_and_adapt,
@@ -247,6 +248,15 @@ async def _persist_and_adapt(
             streams=streams_by_id.get(ride_metric.strava_activity_id),
         )
         adapted += 1
+
+    # Continuous athlete learning (#388): now that completed workouts are on
+    # file, run one learning step so the coach evolves from the new evidence
+    # immediately instead of waiting for the weekly batch jobs. Best-effort —
+    # it must never break the sync that triggered it.
+    await learn_from_completed_workouts(
+        db, user, timezone_name=settings.app_timezone
+    )
+
     return len(metrics_chain), adapted
 
 

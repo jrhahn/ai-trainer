@@ -609,3 +609,88 @@ async def test_activity_sync_isolates_per_user_source_failures(monkeypatch):
     assert result.users == 2
     assert result.imported == 1
     assert result.failed == 1
+
+
+@pytest.mark.asyncio
+async def test_import_triggers_continuous_learning(monkeypatch):
+    """A freshly imported workout runs one learning step for the athlete (#388)."""
+    user_id = await _create_user(
+        email="learn-on-import@example.com", strava=True, strava_cursor=100
+    )
+    learned_for: list[str] = []
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            {
+                "id": 101,
+                "name": "Morning Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T08:00:00Z",
+                "start_date_local": "2026-06-10T10:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
+
+    async def fake_fetch_streams(*args, **kwargs):
+        return {"watts": {"data": [200, 210, 220]}, "time": {"data": [0, 60, 120]}}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    async def fake_review(*args, **kwargs):
+        return "ok", []
+
+    async def fake_learn(db, user, **kwargs):
+        learned_for.append(user.id)
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+
+    assert result.imported == 1
+    assert learned_for == [user_id]
+
+
+@pytest.mark.asyncio
+async def test_no_import_skips_continuous_learning(monkeypatch):
+    """Learning is not triggered on a sync that imports nothing new."""
+    user_id = await _create_user(
+        email="learn-noop@example.com", strava=True, strava_cursor=100
+    )
+    learn_calls = 0
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return []  # nothing newer than the cursor
+
+    async def fake_learn(db, user, **kwargs):
+        nonlocal learn_calls
+        learn_calls += 1
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+
+    assert result.imported == 0
+    assert learn_calls == 0

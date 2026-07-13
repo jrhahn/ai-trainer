@@ -103,7 +103,9 @@ async def test_commit_plan_preserves_concurrent_user_edit():
 @pytest.mark.asyncio
 async def test_commit_plan_updates_drops_constraint_violating_update():
     """commit_plan_updates must not apply an update that violates a constraint."""
-    d = "2026-07-12"
+    # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
+    # future — a hardcoded past date would silently expire and stop enforcing.
+    d = (app_today() + timedelta(days=3)).isoformat()
     user_id = await _create_user("pipe-updates@example.com", [_day(d, "rest", duration=0)])
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
@@ -130,7 +132,9 @@ async def test_commit_plan_updates_drops_constraint_violating_update():
 @pytest.mark.asyncio
 async def test_commit_plan_enforces_required_workout():
     """A pinned required session is coerced onto a day that falls short."""
-    d = "2026-07-18"
+    # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
+    # future — a hardcoded past date would silently expire and stop enforcing.
+    d = (app_today() + timedelta(days=3)).isoformat()
     user_id = await _create_user("pipe-required@example.com", [_day(d, "rest", duration=0)])
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
