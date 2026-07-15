@@ -172,6 +172,29 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
             numeric = _numeric_list(values)
             if numeric:
                 collected[key] = numeric
+    elif isinstance(streams, list) and _is_typed_stream_list(streams):
+        # Intervals.icu's /activity/{id}/streams returns a list of typed-stream
+        # objects: [{"type": "watts", "data": [...]}, {"type": "time", ...}, ...].
+        # Without this branch every intervals ride loses its power stream and is
+        # classified "unknown" (see #409).
+        for stream_obj in streams:
+            if not isinstance(stream_obj, dict):
+                continue
+            type_name = str(stream_obj.get("type") or stream_obj.get("name"))
+            data = stream_obj.get("data")
+            if data is None:
+                data = stream_obj.get("values")
+            if type_name == "latlng":
+                points = _latlng_points(data)
+                if points:
+                    collected["latlng"] = points
+                continue
+            key = aliases.get(type_name)
+            if key is None:
+                continue
+            numeric = _numeric_list(data)
+            if numeric:
+                collected[key] = numeric
     elif isinstance(streams, list):
         for sample in streams:
             if not isinstance(sample, dict):
@@ -296,6 +319,24 @@ def _first_float(source: dict[str, Any], *keys: str) -> float | None:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
     return None
+
+
+def _is_typed_stream_list(streams: list) -> bool:
+    """True when *streams* is Intervals.icu's list of typed-stream objects.
+
+    Shape ``[{"type": "watts", "data": [...]}, ...]`` — distinguished from a
+    row-oriented list of per-sample dicts (``[{"watts": 100, ...}, ...]``) by a
+    ``type``/``name`` label sitting alongside a ``data``/``values`` list.
+    """
+    for item in streams:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data")
+        if data is None:
+            data = item.get("values")
+        if ("type" in item or "name" in item) and isinstance(data, list):
+            return True
+    return False
 
 
 def _numeric_list(values: object) -> list[float]:
