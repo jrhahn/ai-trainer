@@ -386,6 +386,20 @@ def test_classify_ride_purpose_intervals_below_thresholds():
     assert result == "interval_sprints"
 
 
+def test_plan_updates_rule_defers_on_provisional_classification():
+    """The coach must treat unknown/low-confidence ride classifications as provisional
+    and defer to the athlete's firsthand account rather than asserting the type (#409)."""
+    from services.prompts import ask_trainer_plan_updates_rule
+
+    rule = ask_trainer_plan_updates_rule(None)
+    lowered = rule.lower()
+    assert "provisional" in lowered
+    # Must instruct deferring to the athlete's stated session over the auto-guess.
+    assert "firsthand account" in lowered
+    # Must forbid re-labelling a reported session as something else (the observed bug).
+    assert "unknown" in lowered and "confidence" in lowered
+
+
 # ---------------------------------------------------------------------------
 # _detect_intervals — edge cases
 # ---------------------------------------------------------------------------

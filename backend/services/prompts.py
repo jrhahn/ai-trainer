@@ -608,7 +608,17 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "When explaining a displayed label, rely on the recent activity history, matched "
         "planned workout, duration, TSS/power/heart-rate evidence, and any explicit display "
         "label. Do not invent data-quality or missing-stream explanations unless the provided "
-        "activity context explicitly says the data is missing or unreliable."
+        "activity context explicitly says the data is missing or unreliable. "
+        "CRITICAL — provisional classifications: an activity whose purpose is 'unknown' or whose "
+        "classification confidence is low or medium (see the 'conf:' field and any "
+        "'[classification: …]' note in the recent activity history) is a PROVISIONAL guess, not "
+        "fact. Never tell the athlete they did a different session than they report — e.g. do not "
+        "call a session a steady endurance ride when its classification is unknown/low-confidence. "
+        "When the classification is provisional, say so and ask what they actually did rather than "
+        "asserting the auto-detected type. If the athlete states what they did, trust their "
+        "firsthand account over the provisional classification, acknowledge the detection was "
+        "uncertain, and issue a ride_label_update reflecting the real session. Defend the stored "
+        "classification only when its confidence is high."
     )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "

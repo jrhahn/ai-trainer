@@ -130,6 +130,26 @@ def test_sanitize_intervals_streams_list_shape():
     assert result["latlng"]["data"] == [[1.0, 2.0], [1.1, 2.1]]
 
 
+def test_sanitize_intervals_streams_typed_stream_list_shape():
+    # The shape Intervals.icu actually returns from /activity/{id}/streams:
+    # a list of typed-stream objects. Previously fell through both branches and
+    # collected nothing, so every intervals ride was classified "unknown" (#409).
+    result = isvc.sanitize_intervals_streams(
+        [
+            {"type": "time", "data": [0, 1, 2]},
+            {"type": "watts", "data": [100, 200, 150]},
+            {"type": "heartrate", "data": [120, 130, 128]},
+            {"type": "latlng", "data": [[1.0, 2.0], [1.1, 2.1], [1.2, 2.2]]},
+            {"type": "unsupported", "data": [1, 2, 3]},
+        ]
+    )
+    assert result["time"] == {"data": [0.0, 1.0, 2.0]}
+    assert result["watts"] == {"data": [100.0, 200.0, 150.0]}
+    assert result["heartrate"] == {"data": [120.0, 130.0, 128.0]}
+    assert result["latlng"] == {"data": [[1.0, 2.0], [1.1, 2.1], [1.2, 2.2]]}
+    assert "unsupported" not in result
+
+
 def test_sanitize_intervals_streams_other_type():
     assert isvc.sanitize_intervals_streams(None) == {}
 
