@@ -976,9 +976,13 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Today Ride')).toBeInTheDocument()
-    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(1)
+    // Today's session is removed from the Upcoming list (activity already logged today).
+    // It still appears twice overall: once on the matched ride card and once in the
+    // "Today's status" strip as "… completed".
+    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(2)
     expect(screen.getByText('Upcoming')).toBeInTheDocument()
-    expect(screen.getByText(/Tomorrow VO2 Max Intervals/)).toBeInTheDocument()
+    // Tomorrow's session shows in both the status strip and the Upcoming list.
+    expect(screen.getAllByText(/Tomorrow VO2 Max Intervals/)).toHaveLength(2)
     expect(screen.getByText(/Rest Day/)).toBeInTheDocument()
     expect(screen.getByText(/Endurance Ride/)).toBeInTheDocument()
   })
@@ -1236,5 +1240,112 @@ describe('DashboardPage — login summary loading', () => {
     renderDashboard()
 
     expect(await screen.findByText('Preparing your training summary…')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Today's status strip (#417)
+// ---------------------------------------------------------------------------
+
+describe("DashboardPage — Today's status strip", () => {
+  const planDay = (overrides: Partial<TrainingDay> & { date: string }): TrainingDay => ({
+    workoutType: 'endurance',
+    title: 'Session',
+    description: '',
+    durationMinutes: 60,
+    ...overrides,
+  })
+
+  it("shows today's planned session when nothing is logged yet", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'tempo', title: 'Sweet Spot' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Today: Sweet Spot')).toBeInTheDocument()
+  })
+
+  it('shows "Rest day" when today is a rest day', async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'rest', title: 'Rest Day' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Rest day')).toBeInTheDocument()
+  })
+
+  it("marks today's session completed once an activity is logged", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'intervals', title: 'VO2 Efforts' })],
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Morning Intervals' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('VO2 Efforts completed')).toBeInTheDocument()
+  })
+
+  it("shows tomorrow's session", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: tomorrow, workoutType: 'rest', title: 'Rest Day' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Tomorrow: Rest')).toBeInTheDocument()
+  })
+
+  it('reports "On track" when recent planned sessions were completed', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
+        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: true }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+  })
+
+  it('reports "Behind plan" when recent planned sessions were missed', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: yesterday, workoutType: 'endurance', completed: false }),
+        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: false }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Behind plan')).toBeInTheDocument()
+  })
+
+  it('reports "Slightly behind" when adherence is partial', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
+        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: false }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Slightly behind')).toBeInTheDocument()
+  })
+
+  it('omits the training-status segment when there is no adherence signal', async () => {
+    // Only a future session and past rest days — no planned sessions have fallen due,
+    // so we must not fabricate a status label.
+    setupStore({
+      trainingPlan: [
+        planDay({ date: today, workoutType: 'endurance', title: 'Base Ride' }),
+        planDay({ date: yesterday, workoutType: 'rest', title: 'Rest Day' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Today: Base Ride')).toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Slightly behind')).not.toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
+  it('renders no status strip when there is no plan', async () => {
+    setupStore({ trainingPlan: [] })
+    renderDashboard()
+    // Dashboard still mounts…
+    expect(await screen.findByTestId('ai-chat')).toBeInTheDocument()
+    // …but none of the strip's segments appear.
+    expect(screen.queryByText(/^Today:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Tomorrow:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
   })
 })
