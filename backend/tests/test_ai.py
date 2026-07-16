@@ -317,6 +317,75 @@ async def test_ask_trainer_flags_no_op_update_for_absent_day(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_is_honest_when_constraint_overrides_change(
+    client, auth_headers, mock_ai_service
+):
+    """A coach rest-day request on a required-session day is coerced back by the
+    plan pipeline; the reply must say so rather than falsely confirm it (#414)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 120,
+                }
+            ],
+        )
+        # A hard required-session constraint pins this day to endurance. No
+        # expiry so it stays active regardless of the test clock.
+        await crud.upsert_availability_constraint(
+            db,
+            user_id,
+            constraint_type="required_workout",
+            constraint_date="2027-01-15",
+            weekday="friday",
+            required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
+        )
+        await db.commit()
+
+    # The model claims it cleared the day to a rest day.
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Done — I cleared Friday to a complete rest day.",
+        "plan_updates": [
+            {
+                "date": "2027-01-15",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "description": "Full rest",
+                "durationMinutes": 0,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "make friday a rest day"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    lowered = body["response"].lower()
+    assert "couldn't change" in lowered
+    assert "friday" in lowered
+    assert "required session" in lowered
+    # The day stays as the required endurance session, not a rest day.
+    persisted = {d["date"]: d for d in body["updatedPlan"]}
+    assert persisted["2027-01-15"]["workoutType"] == "endurance"
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
     client, auth_headers, mock_ai_service
 ):

@@ -120,3 +120,73 @@ def filter_plan_updates_for_constraints(
     if not constraints:
         return updates
     return [u for u in updates if not day_violates_constraint(u, constraints)]
+
+
+def _constraint_for_date(
+    constraints: list[dict], date_value: str, constraint_type: str
+) -> dict | None:
+    for constraint in constraints:
+        if (
+            constraint.get("constraintType") == constraint_type
+            and constraint.get("constraintDate") == date_value
+        ):
+            return constraint
+    return None
+
+
+def describe_constraint_overrides(
+    updates: list[dict], constraints: list[dict]
+) -> list[dict]:
+    """Describe requested day-updates that hard constraints would override.
+
+    Constraint enforcement is deterministic and non-negotiable (see
+    ``sanitize_plan_for_constraints``), so a coach-requested update to a
+    constrained day never lands as asked. Callers use this to tell the athlete
+    the truth instead of falsely confirming the change (#414).
+
+    Returns one record per overridden update, in input order and deduplicated by
+    date. Each record carries ``date``, ``weekday`` (may be ``None``),
+    ``constraintType`` and — for required sessions — ``requiredType``:
+
+    - ``no_training``: the update schedules training on an unavailable day, which
+      the pipeline drops.
+    - ``required_workout``: the update does not meet a pinned required session,
+      which the pipeline coerces the day back to.
+
+    Updates that comply with every active constraint are not reported.
+    """
+    if not constraints:
+        return []
+    seen: set[str] = set()
+    overrides: list[dict] = []
+    for day in updates:
+        date_value = day.get("date")
+        if not date_value or date_value in seen:
+            continue
+        if day_violates_constraint(day, constraints):
+            constraint = _constraint_for_date(constraints, date_value, "no_training")
+            seen.add(date_value)
+            overrides.append(
+                {
+                    "date": date_value,
+                    "weekday": (constraint or {}).get("weekday"),
+                    "constraintType": "no_training",
+                    "requiredType": None,
+                }
+            )
+            continue
+        spec = _required_workout_for_day(day, constraints)
+        if spec and not day_satisfies_required_workout(day, spec):
+            constraint = _constraint_for_date(
+                constraints, date_value, "required_workout"
+            )
+            seen.add(date_value)
+            overrides.append(
+                {
+                    "date": date_value,
+                    "weekday": (constraint or {}).get("weekday"),
+                    "constraintType": "required_workout",
+                    "requiredType": spec.get("workoutType"),
+                }
+            )
+    return overrides
