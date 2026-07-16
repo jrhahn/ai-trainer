@@ -62,6 +62,19 @@ LONG_SESSION_PATTERNS = (
 
 DEFAULT_LONG_SESSION_MINUTES = 120
 
+# Boundaries that separate independent statements within one message. Splitting
+# on these keeps each intent tied to the days named in the *same* clause, so a
+# message like "tomorrow off? saturday long endurance" no longer pins a required
+# endurance session onto the rest day (the whole-message scan used to apply every
+# detected intent to every date it found — see #412). Note that "," and "and"
+# are deliberately *not* boundaries: they join same-intent phrasing such as
+# "monday and today" or "long ride on saturday, 3 hours".
+_CLAUSE_BOUNDARY = re.compile(r"[?!.;]+|\s+but\s+|\s+aber\s+|\s+however\s+")
+
+
+def _split_clauses(normalized: str) -> list[str]:
+    return [part.strip() for part in _CLAUSE_BOUNDARY.split(normalized) if part.strip()]
+
 
 def _next_weekday(today: date, weekday: int) -> date:
     delta = (weekday - today.weekday()) % 7
@@ -114,48 +127,56 @@ def extract_availability_constraints(
         return []
 
     source = text.strip()[:500]
-    targets = _target_dates(normalized, today)
     constraints: list[dict] = []
 
-    has_unavailable = any(
-        re.search(pattern, normalized) for pattern in UNAVAILABLE_PATTERNS
-    )
-    has_training_context = any(
-        re.search(pattern, normalized) for pattern in TRAINING_CONTEXT_PATTERNS
-    )
-    if has_unavailable and has_training_context:
-        for date_iso, weekday_label in targets:
-            constraints.append(
-                {
-                    "constraint_type": "no_training",
-                    "constraint_date": date_iso,
-                    "weekday": weekday_label,
-                    "reason": "Athlete said they are unavailable for training.",
-                    "source": source,
-                    "expires_on": date_iso,
-                }
-            )
+    # Scan each clause independently so an intent only applies to the days named
+    # alongside it, not to every day mentioned anywhere in the message (#412).
+    for clause in _split_clauses(normalized):
+        targets = _target_dates(clause, today)
+        if not targets:
+            continue
 
-    has_long_session = any(
-        re.search(pattern, normalized) for pattern in LONG_SESSION_PATTERNS
-    )
-    if has_long_session:
-        min_minutes = _parse_duration_minutes(normalized) or DEFAULT_LONG_SESSION_MINUTES
-        for date_iso, weekday_label in targets:
-            constraints.append(
-                {
-                    "constraint_type": "required_workout",
-                    "constraint_date": date_iso,
-                    "weekday": weekday_label,
-                    "reason": "Athlete asked for a long endurance session on this day.",
-                    "source": source,
-                    "expires_on": date_iso,
-                    "required_workout": {
-                        "workoutType": "endurance",
-                        "minDurationMinutes": min_minutes,
-                    },
-                }
+        has_unavailable = any(
+            re.search(pattern, clause) for pattern in UNAVAILABLE_PATTERNS
+        )
+        has_training_context = any(
+            re.search(pattern, clause) for pattern in TRAINING_CONTEXT_PATTERNS
+        )
+        if has_unavailable and has_training_context:
+            for date_iso, weekday_label in targets:
+                constraints.append(
+                    {
+                        "constraint_type": "no_training",
+                        "constraint_date": date_iso,
+                        "weekday": weekday_label,
+                        "reason": "Athlete said they are unavailable for training.",
+                        "source": source,
+                        "expires_on": date_iso,
+                    }
+                )
+
+        has_long_session = any(
+            re.search(pattern, clause) for pattern in LONG_SESSION_PATTERNS
+        )
+        if has_long_session:
+            min_minutes = (
+                _parse_duration_minutes(clause) or DEFAULT_LONG_SESSION_MINUTES
             )
+            for date_iso, weekday_label in targets:
+                constraints.append(
+                    {
+                        "constraint_type": "required_workout",
+                        "constraint_date": date_iso,
+                        "weekday": weekday_label,
+                        "reason": "Athlete asked for a long endurance session on this day.",
+                        "source": source,
+                        "expires_on": date_iso,
+                        "required_workout": {
+                            "workoutType": "endurance",
+                            "minDurationMinutes": min_minutes,
+                        },
+                    }
+                )
 
     # Keep the first occurrence per (type, date).
     by_key: dict[tuple[str, str], dict] = {}
