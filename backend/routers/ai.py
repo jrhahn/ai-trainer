@@ -42,7 +42,10 @@ from services.analysis import (
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import extract_availability_constraints
-from services.plan_constraints import filter_plan_updates_for_constraints
+from services.plan_constraints import (
+    describe_constraint_overrides,
+    filter_plan_updates_for_constraints,
+)
 from services.intervals_service import apply_summary_fallback
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
@@ -199,6 +202,40 @@ def _filter_plan_updates_for_availability_constraints(
     updates: list[dict], constraints: list[dict]
 ) -> list[dict]:
     return filter_plan_updates_for_constraints(updates, constraints)
+
+
+def _day_label(override: dict) -> str:
+    """Human-friendly day label for a constraint override note."""
+    weekday = override.get("weekday")
+    if weekday:
+        return str(weekday).capitalize()
+    return str(override.get("date") or "that day")
+
+
+def _format_constraint_override_note(overrides: list[dict]) -> str:
+    """Compose an honest note about coach-requested changes a constraint blocked.
+
+    The plan pipeline enforces hard availability constraints deterministically,
+    so these requests never land as asked. Without this, the coach would falsely
+    confirm the change (#414).
+    """
+    required = [o for o in overrides if o.get("constraintType") == "required_workout"]
+    unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
+    sentences: list[str] = []
+    if required:
+        days = ", ".join(_day_label(o) for o in required)
+        sentences.append(
+            f"I couldn't change {days}: it's pinned as a required session by one of "
+            f"your availability constraints, so the plan keeps it as-is. Let me know "
+            f"if you'd like to lift that constraint."
+        )
+    if unavailable:
+        days = ", ".join(_day_label(o) for o in unavailable)
+        sentences.append(
+            f"I couldn't schedule training on {days}: it's marked unavailable by one "
+            f"of your availability constraints."
+        )
+    return "(Note: " + " ".join(sentences) + ")"
 
 
 def _next_race_date_from_events(
@@ -804,8 +841,9 @@ async def ask_trainer(
 
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
+    requested_updates = result.get("plan_updates") or []
     plan_updates = _filter_plan_updates_for_availability_constraints(
-        result.get("plan_updates") or [],
+        requested_updates,
         availability_constraints,
     )
     persisted_updated_plan: list[dict] | None = None
@@ -830,6 +868,23 @@ async def ask_trainer(
                 f"current training plan, so no change was saved.)"
             )
             plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
+
+    # Coach honesty: hard availability constraints are enforced deterministically
+    # by the plan pipeline, so a requested change to a constrained day never lands
+    # as asked (a rest day on a required-session day is coerced back; training on
+    # an unavailable day is dropped). Without a note the coach falsely confirms the
+    # change (#414). Scope to days in the current plan window so dead dates stay
+    # owned by the note above.
+    if plan and availability_constraints:
+        plan_dates = {d.get("date") for d in plan if isinstance(d, dict)}
+        overrides = describe_constraint_overrides(
+            [u for u in requested_updates if u.get("date") in plan_dates],
+            availability_constraints,
+        )
+        if overrides:
+            result["response"] = (
+                f"{result['response']}\n\n{_format_constraint_override_note(overrides)}"
+            )
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
