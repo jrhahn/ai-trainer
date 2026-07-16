@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { format } from 'date-fns'
 import {
+  CheckCircle2,
   Cloud,
   CloudFog,
   CloudLightning,
@@ -677,6 +679,74 @@ export default function DashboardPage() {
     .filter((d) => d.date >= today && !(hasTodayActivity && d.date === today))
     .slice(0, 3)
 
+  // "Today's status" glance strip (#417): today / tomorrow / an honest, signal-backed
+  // training-status indicator. Each part is omitted when we have no real data for it —
+  // the status line in particular is derived from actual plan adherence, never faked.
+  const tomorrow = formatLocalDate(new Date(parseLocalDate(today).getTime() + 24 * 60 * 60 * 1000))
+  const todayPlan = trainingPlan.find((d) => d.date === today)
+  const tomorrowPlan = trainingPlan.find((d) => d.date === tomorrow)
+
+  const sessionLabel = (d: TrainingDay | undefined): string | null => {
+    if (!d) return null
+    if (d.workoutType === 'rest') return 'Rest'
+    return d.title?.trim() || d.workoutType.charAt(0).toUpperCase() + d.workoutType.slice(1)
+  }
+
+  let todayStatusText: string | null = null
+  if (hasTodayActivity) {
+    todayStatusText =
+      todayPlan && todayPlan.workoutType !== 'rest'
+        ? `${sessionLabel(todayPlan)} completed`
+        : 'Session logged'
+  } else if (todayPlan) {
+    todayStatusText =
+      todayPlan.workoutType === 'rest' ? 'Rest day' : `Today: ${sessionLabel(todayPlan)}`
+  }
+
+  const tomorrowStatusLabel = sessionLabel(tomorrowPlan)
+
+  // Training status = plan adherence over the trailing 7 days. Only counts planned
+  // (non-rest) sessions that already fell due; if none exist we have no trustworthy
+  // signal and simply drop the status segment rather than showing a decorative label.
+  const adherenceWindow = trainingPlan.filter(
+    (d) => d.date >= sevenDaysAgo && d.date < today && d.workoutType !== 'rest'
+  )
+  const plannedDue = adherenceWindow.length
+  const plannedDone = adherenceWindow.filter((d) => d.completed).length
+  const trainingStatus =
+    plannedDue === 0
+      ? null
+      : plannedDone / plannedDue >= 0.8
+        ? { label: 'On track', className: 'text-green-600' }
+        : plannedDone / plannedDue >= 0.5
+          ? { label: 'Slightly behind', className: 'text-amber-600' }
+          : { label: 'Behind plan', className: 'text-red-600' }
+
+  const statusSegments: Array<{ key: string; node: ReactNode }> = []
+  if (todayStatusText) {
+    statusSegments.push({
+      key: 'today',
+      node: (
+        <span className="flex items-center gap-1.5 font-medium text-gray-800">
+          {hasTodayActivity && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}
+          {todayStatusText}
+        </span>
+      ),
+    })
+  }
+  if (tomorrowStatusLabel) {
+    statusSegments.push({
+      key: 'tomorrow',
+      node: <span className="text-gray-500">Tomorrow: {tomorrowStatusLabel}</span>,
+    })
+  }
+  if (trainingStatus) {
+    statusSegments.push({
+      key: 'status',
+      node: <span className={`font-medium ${trainingStatus.className}`}>{trainingStatus.label}</span>,
+    })
+  }
+
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
@@ -749,6 +819,18 @@ export default function DashboardPage() {
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {/* Today's status — compact at-a-glance strip (#417) */}
+      {statusSegments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm text-sm">
+          {statusSegments.map((seg, i) => (
+            <Fragment key={seg.key}>
+              {i > 0 && <span className="text-gray-300" aria-hidden="true">·</span>}
+              {seg.node}
+            </Fragment>
+          ))}
+        </div>
+      )}
 
       {isExpertMode && (
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
