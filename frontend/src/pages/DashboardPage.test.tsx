@@ -16,10 +16,11 @@ import { formatLocalDate } from '../utils/workout'
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockProcessPendingFeedbacks, mockRefreshLoginSummary, mockSetRideLegs } = vi.hoisted(() => ({
+const { mockProcessPendingFeedbacks, mockRefreshLoginSummary, mockSetRideLegs, mockUseImportProgress } = vi.hoisted(() => ({
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
   mockSetRideLegs: vi.fn(),
+  mockUseImportProgress: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
@@ -34,8 +35,20 @@ vi.mock('../services/user', () => ({
 vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
 
 vi.mock('../hooks/useImportProgress', () => ({
-  useImportProgress: () => ({ status: 'idle', total: 0, processed: 0, error: undefined }),
+  useImportProgress: mockUseImportProgress,
 }))
+
+const idleImportProgress = {
+  status: 'idle' as const,
+  total: 0,
+  processed: 0,
+  imported: 0,
+  skipped: 0,
+  failedActivities: [],
+  error: '',
+}
+
+const stravaConnection = { athleteId: 123, athleteName: 'Test Athlete' }
 
 vi.mock('../components/ProgressionChart', () => ({
   default: () => <div data-testid="progression-chart" />,
@@ -121,6 +134,7 @@ beforeEach(() => {
   mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
   mockSetRideLegs.mockResolvedValue({ stravaActivityId: 0, ride: null })
+  mockUseImportProgress.mockReturnValue(idleImportProgress)
 })
 
 // ---------------------------------------------------------------------------
@@ -1155,5 +1169,72 @@ describe('DashboardPage — leg-feel control', () => {
     await waitFor(() =>
       expect(useAppStore.getState().rideMetricsHistory[0].feelLegs ?? null).toBeNull(),
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Strava analysis progress
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — Strava analysis progress', () => {
+  it('shows the analysis progress bar while an import is running', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'running',
+      total: 10,
+      processed: 4,
+    })
+    setupStore({ stravaConnection })
+    renderDashboard()
+
+    expect(await screen.findByText('Strava Activity Analysis')).toBeInTheDocument()
+    expect(screen.getByText('4 / 10 activities analyzed')).toBeInTheDocument()
+  })
+
+  it('surfaces the error message when the import fails', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'error',
+      total: 10,
+      processed: 3,
+      error: 'Strava rate limit exceeded',
+    })
+    setupStore({ stravaConnection })
+    renderDashboard()
+
+    expect(await screen.findByText('Strava rate limit exceeded')).toBeInTheDocument()
+    expect(screen.getByText('3 / 10 activities analyzed')).toBeInTheDocument()
+  })
+
+  it('does not show the progress bar when Strava is not connected', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'running',
+      total: 10,
+      processed: 4,
+    })
+    setupStore({ stravaConnection: null })
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.queryByText('Strava Activity Analysis')).not.toBeInTheDocument()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Login summary loading state
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — login summary loading', () => {
+  it('shows the loading placeholder while the summary is being prepared', async () => {
+    // A never-resolving refresh keeps summaryLoading true so the placeholder renders.
+    mockRefreshLoginSummary.mockReturnValue(new Promise(() => {}))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' },
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Preparing your training summary…')).toBeInTheDocument()
   })
 })
