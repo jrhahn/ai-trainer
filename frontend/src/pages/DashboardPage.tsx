@@ -761,55 +761,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Post-login ride summary */}
-      {(riderAssessment?.loginSummary || summaryLoading) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-              {loginSummary?.bullets.length ? (
-                <ul className="mt-2 space-y-1 list-disc pl-5">
-                  {loginSummary.bullets.map((bullet, index) => (
-                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                      {bullet.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Strava history analysis progress */}
-      {hasActivityProgress && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            Strava Activity Analysis
-          </p>
-          <div className="w-full bg-amber-100 rounded-full h-2.5">
-            <div
-              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <p className="text-sm text-amber-900 mt-2">
-            {analyzedActivities} / {importProgress.total} activities analyzed
-          </p>
-          {importProgress.status === 'error' && importProgress.error && (
-            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
-          )}
-        </div>
-      )}
-
       {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
       {(recentRides.length > 0 || next3Days.length > 0) && (
         <div>
@@ -929,6 +880,55 @@ export default function DashboardPage() {
               <WorkoutCard key={day.date} day={day} compact />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Post-login ride summary */}
+      {(riderAssessment?.loginSummary || summaryLoading) && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+            📊 Your Recent Training Summary
+          </p>
+          {summaryLoading ? (
+            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
+          ) : (
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+              {loginSummary?.bullets.length ? (
+                <ul className="mt-2 space-y-1 list-disc pl-5">
+                  {loginSummary.bullets.map((bullet, index) => (
+                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                      {bullet.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Strava history analysis progress */}
+      {hasActivityProgress && (
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
+            Strava Activity Analysis
+          </p>
+          <div className="w-full bg-amber-100 rounded-full h-2.5">
+            <div
+              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className="text-sm text-amber-900 mt-2">
+            {analyzedActivities} / {importProgress.total} activities analyzed
+          </p>
+          {importProgress.status === 'error' && importProgress.error && (
+            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
+          )}
         </div>
       )}
 
