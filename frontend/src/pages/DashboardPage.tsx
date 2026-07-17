@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { format } from 'date-fns'
 import {
+  Bot,
   CheckCircle2,
   Cloud,
   CloudFog,
@@ -965,34 +966,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Post-login ride summary */}
-      {(riderAssessment?.loginSummary || summaryLoading) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-              {loginSummary?.bullets.length ? (
-                <ul className="mt-2 space-y-1 list-disc pl-5">
-                  {loginSummary.bullets.map((bullet, index) => (
-                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                      {bullet.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Strava history analysis progress */}
       {hasActivityProgress && (
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
@@ -1014,9 +987,46 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Ask your coach — takes up the majority of the remaining space */}
+      {/* Coach Timeline — the recent-training summary opens the conversation as a
+          pinned coach entry, then plan updates, recommendations and chat interleave
+          in the feed below (#418). Takes up the majority of the remaining space. */}
       <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ask your coach</h2>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Coach Timeline</h2>
+
+        {(riderAssessment?.loginSummary || summaryLoading) && (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Bot size={14} className="text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Your recent training summary
+                </p>
+                {summaryLoading ? (
+                  <p className="text-sm text-gray-400 italic">Preparing your training summary…</p>
+                ) : (
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+                    {loginSummary?.bullets.length ? (
+                      <ul className="mt-2 space-y-1 list-disc pl-5">
+                        {loginSummary.bullets.map((bullet, index) => (
+                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                            {bullet.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <AIChat
           contextWorkout={trainingPlan.find((d) => d.date === today)}
           className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
