@@ -590,6 +590,15 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "Never describe the intervals only in text and omit the array — always materialise "
         "every rep as a separate object in the array."
     )
+    _duration_rule = (
+        "CRITICAL — duration: whenever you change how long a session is, you MUST set the "
+        'numeric duration in planUpdates, not only in the "description" text. For a single '
+        'target set "durationMinutes" (whole minutes); for a range set "durationMinMinutes" '
+        'and "durationMaxMinutes" (e.g. a 3-4 h endurance ride is '
+        '"durationMinMinutes": 180, "durationMaxMinutes": 240). '
+        "Never state a new duration only in prose while leaving the number unchanged — the "
+        "saved workout would still show the old length."
+    )
     _rich_description_rule = (
         'Whenever you include a planUpdates entry, always include "workoutPurpose" '
         '(1-2 sentences on the physiological goal) and "keyFocusPoints" (array of 3-5 '
@@ -657,6 +666,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
         f"{_constraints_rule}"
+        f"{_duration_rule} "
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
         f"{_ride_label_rule}"

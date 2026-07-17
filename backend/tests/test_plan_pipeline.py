@@ -684,3 +684,90 @@ async def test_no_op_plan_write_does_not_refresh_snapshots():
         await db.commit()
 
     called.assert_not_called()
+
+
+def test_apply_plan_updates_scalar_replaces_stale_window():
+    """A scalar duration update drops the base day's stale window (#422).
+
+    Otherwise ``normalize_duration_fields`` would later crush the new scalar
+    back to the leftover window's midpoint.
+    """
+    d = "2026-07-18"
+    base = [
+        {
+            **_day(d, "endurance", duration=120),
+            "durationMinMinutes": 45,
+            "durationMaxMinutes": 60,
+        }
+    ]
+    result = plan_pipeline.apply_plan_updates(
+        base, [{"date": d, "durationMinutes": 180}]
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinutes"] == 180
+    assert "durationMinMinutes" not in day
+    assert "durationMaxMinutes" not in day
+
+
+def test_apply_plan_updates_window_replaces_stale_scalar():
+    """A window duration update drops the base day's stale scalar (#422)."""
+    d = "2026-07-18"
+    base = [_day(d, "endurance", duration=120)]
+    result = plan_pipeline.apply_plan_updates(
+        base,
+        [{"date": d, "durationMinMinutes": 180, "durationMaxMinutes": 240}],
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinMinutes"] == 180
+    assert day["durationMaxMinutes"] == 240
+    # The stale single-value scalar is gone; normalize will derive the midpoint.
+    assert "durationMinutes" not in day
+
+
+def test_apply_plan_updates_keeps_duration_when_update_omits_it():
+    """A description-only update leaves an untouched duration in place."""
+    d = "2026-07-18"
+    base = [_day(d, "endurance", duration=120)]
+    result = plan_pipeline.apply_plan_updates(
+        base, [{"date": d, "description": "Ride for 3 hours"}]
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["description"] == "Ride for 3 hours"
+    assert day["durationMinutes"] == 120
+
+
+@pytest.mark.asyncio
+async def test_commit_plan_updates_scalar_duration_change_persists():
+    """End-to-end: a coach duration change lands coherently, not crushed (#422).
+
+    Reproduces the prod bug where a day carrying a stale window (45/60) kept its
+    old 120-minute scalar after a coach update asking for 3 hours.
+    """
+    d = (app_today() + timedelta(days=1)).isoformat()
+    base = [
+        {
+            **_day(d, "endurance", duration=120),
+            "durationMinMinutes": 45,
+            "durationMaxMinutes": 60,
+        }
+    ]
+    user_id = await _create_user("pipe-duration@example.com", base)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "durationMinutes": 180, "description": "Ride for 3 hours"}],
+            base_plan=base,
+            source="coach_chat",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == d)
+    assert day["durationMinutes"] == 180
+    assert "durationMinMinutes" not in day
+    assert "durationMaxMinutes" not in day

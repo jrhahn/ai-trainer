@@ -228,6 +228,39 @@ def _stamp_source(
     return stamped
 
 
+# Duration is expressed as either a scalar (``durationMinutes``) or a window
+# (``durationMin/MaxMinutes``), in camel- or snake-case. An update that touches
+# any of these owns the whole duration, so the stale ones must not linger.
+_DURATION_SCALAR_KEYS = frozenset({"durationMinutes", "duration_minutes"})
+_DURATION_WINDOW_KEYS = frozenset(
+    {
+        "durationMinMinutes",
+        "duration_min_minutes",
+        "durationMaxMinutes",
+        "duration_max_minutes",
+    }
+)
+_DURATION_KEYS = _DURATION_SCALAR_KEYS | _DURATION_WINDOW_KEYS
+
+
+def _merge_day_update(day: dict, update: dict) -> dict:
+    """Merge one day's ``update`` onto ``day``, keeping duration coherent.
+
+    Only fields the update actually sets (non-``None``) are applied. Duration is
+    treated as a single unit: if the update changes *any* duration field, the
+    base day's other duration fields are dropped rather than carried forward, so
+    ``normalize_duration_fields`` rebuilds from the update alone. Without this a
+    new scalar could be silently crushed back to a stale window's midpoint, and a
+    description-only change would leave the old number in place (#422).
+    """
+    patch = {k: v for k, v in update.items() if v is not None}
+    merged = {**day, **patch}
+    if _DURATION_KEYS & patch.keys():
+        for stale in _DURATION_KEYS - patch.keys():
+            merged.pop(stale, None)
+    return merged
+
+
 def apply_plan_updates(
     plan: list[dict], plan_updates: list[dict] | None
 ) -> list[dict] | None:
@@ -242,7 +275,7 @@ def apply_plan_updates(
     if not updates_by_date:
         return None
     return [
-        {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
+        _merge_day_update(day, updates_by_date[day["date"]])
         if day.get("date") in updates_by_date and not day.get("completed")
         else day
         for day in plan
