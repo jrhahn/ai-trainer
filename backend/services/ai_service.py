@@ -15,6 +15,9 @@ import re
 from typing import Any
 
 from json_repair import repair_json
+from pydantic import ValidationError
+
+import schemas
 
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -491,9 +494,58 @@ async def generate_training_plan(
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
-    return parsed.get("plan", [])
+    return await _generate_plan_days(provider, system_prompt, user_msg)
+
+
+_MAX_PLAN_VALIDATION_ATTEMPTS = 3
+
+
+def _summarize_validation_error(exc: ValidationError) -> str:
+    """A compact, model-friendly summary of why a generated plan was rejected."""
+    problems = []
+    for err in exc.errors()[:5]:
+        loc = ".".join(str(p) for p in err.get("loc", ()))
+        problems.append(f"{loc}: {err.get('msg')}")
+    return "; ".join(problems)
+
+
+async def _generate_plan_days(
+    provider: str, system_prompt: str, user_msg: str
+) -> list[dict]:
+    """Call the model and validate each day as a canonical ``PlanDay``.
+
+    The lenient ``PlanDay`` coercions repair most malformed output silently; this
+    loop is the safety net for a hard schema violation. On failure the specific
+    error is fed back and the model gets up to ``_MAX_PLAN_VALIDATION_ATTEMPTS``
+    tries before we give up with ``AIResponseFormatError`` (#422 follow-up).
+    """
+    correction = ""
+    last_error: ValidationError | None = None
+    for attempt in range(1, _MAX_PLAN_VALIDATION_ATTEMPTS + 1):
+        raw = await _chat(
+            provider, system_prompt, user_msg + correction,
+            json_mode=True, task=TASK_PLAN,
+        )
+        days = _parse_ai_json(raw).get("plan", [])
+        try:
+            validated = [schemas.PlanDay.model_validate(day) for day in days]
+        except ValidationError as exc:
+            last_error = exc
+            logger.warning(
+                "Generated plan failed PlanDay validation (attempt %d/%d): %s",
+                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS, exc,
+            )
+            correction = (
+                "\n\nYour previous response was rejected because some plan days "
+                f"were invalid ({_summarize_validation_error(exc)}). Return the "
+                "corrected plan as JSON with the same schema and field names."
+            )
+            continue
+        return [d.model_dump(by_alias=True, exclude_none=True) for d in validated]
+    raise AIResponseFormatError(
+        "Generated plan failed validation after "
+        f"{_MAX_PLAN_VALIDATION_ATTEMPTS} attempts: {last_error}"
+    )
 
 
 async def adapt_training_plan(
