@@ -301,11 +301,21 @@ async def save_plan(
 ) -> schemas.PlanResponse:
     # Route the manual edit through the shared pipeline so hard availability
     # constraints are enforced and concurrent edits are protected, instead of
-    # blindly persisting whatever the client sent.
+    # blindly persisting whatever the client sent. Validate each day as a
+    # canonical PlanDay and clear the server-authoritative fields — pinning
+    # (``source``), completion state (``completed``) and workout ``feedback``
+    # are owned by the server, so a client must not be able to forge them.
+    sanitized: list[schemas.PlanDay] = []
+    for raw_day in body.plan:
+        day = schemas.PlanDay.model_validate(raw_day)
+        day.source = None
+        day.completed = None
+        day.feedback = None
+        sanitized.append(day)
     existing = await crud.get_training_plan(db, current_user.id)
     base_plan = existing.plan if existing is not None else []
     merged = await plan_pipeline.commit_plan(
-        db, current_user, body.plan, base_plan=base_plan, source="user_edit"
+        db, current_user, sanitized, base_plan=base_plan, source="user_edit"
     )
     return schemas.PlanResponse(plan=merged)
 

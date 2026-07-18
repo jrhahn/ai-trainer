@@ -750,3 +750,69 @@ async def test_plan_history_stats_aggregates(client, auth_headers):
     assert data["blockedCount"] == 1
     # 2026-05-01 has the most changes, so it leads the ranking.
     assert data["mostChangedDates"][0] == {"date": "2026-05-01", "count": 2}
+
+
+@pytest.mark.asyncio
+async def test_save_plan_strips_client_set_server_owned_fields(client, auth_headers):
+    """A manual edit must not let the client forge server-owned day fields.
+
+    ``completed`` and ``feedback`` (and ``source`` pinning) are set by the
+    server; a client marking a future day completed would corrupt the plan.
+    """
+    plan = [
+        {
+            "date": "2026-12-01",
+            "workoutType": "endurance",
+            "title": "Z2 Ride",
+            "description": "Easy aerobic ride",
+            "durationMinutes": 90,
+            "completed": True,  # forged
+            "feedback": {  # forged (valid shape so it isn't rejected, just stripped)
+                "actualDurationMinutes": 60,
+                "perceivedEffort": 5,
+                "completedAt": "2026-12-01T10:00:00Z",
+            },
+        }
+    ]
+    save = await client.put(
+        "/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan}
+    )
+    assert save.status_code == 200
+
+    resp = await client.get("/api/v1/users/me/plan", headers=auth_headers)
+    day = next(d for d in resp.json()["plan"] if d["date"] == "2026-12-01")
+    assert not day.get("completed")  # forged completion stripped
+    assert "feedback" not in day  # forged feedback stripped
+    assert day["durationMinutes"] == 90  # legitimate content kept
+
+
+@pytest.mark.asyncio
+async def test_plan_write_read_roundtrip_is_canonical_and_lossless(client, auth_headers):
+    """Full write→read path yields a coherent day and preserves unknown keys.
+
+    Exercises the PlanDay persist gate end-to-end: a duration window is
+    reconciled to a coherent midpoint scalar, and an unmodelled field survives
+    (extra="allow") so typing never silently drops stored data.
+    """
+    plan = [
+        {
+            "date": "2026-12-02",
+            "workoutType": "endurance",
+            "title": "Long",
+            "description": "3-4h endurance",
+            "durationMinMinutes": 180,
+            "durationMaxMinutes": 240,
+            "someFutureField": "keep-me",
+        }
+    ]
+    save = await client.put(
+        "/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan}
+    )
+    assert save.status_code == 200
+
+    resp = await client.get("/api/v1/users/me/plan", headers=auth_headers)
+    day = next(d for d in resp.json()["plan"] if d["date"] == "2026-12-02")
+    assert day["durationMinMinutes"] == 180
+    assert day["durationMaxMinutes"] == 240
+    assert day["durationMinutes"] == round((180 + 240) / 2)  # 210 — coherent
+    assert day["someFutureField"] == "keep-me"  # unknown key preserved end-to-end
