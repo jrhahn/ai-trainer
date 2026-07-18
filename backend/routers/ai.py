@@ -698,6 +698,12 @@ async def generate_plan(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
+    except AIResponseFormatError:
+        finish_token_usage_collection(usage_token)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_AI_RESPONSE_FORMAT_DETAIL,
+        )
     await _persist_collected_token_usage(db, current_user, usage_token)
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []

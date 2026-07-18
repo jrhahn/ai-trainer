@@ -11,11 +11,19 @@ const {
   mockFetchCoachMemory,
   mockFetchCurrentUser,
   mockClearChatHistoryRemote,
+  mockFetchPlanHistory,
+  mockFetchAthleteOpenQuestions,
+  mockFetchAthleteHypotheses,
+  mockFetchValidationExperiments,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
   mockFetchCurrentUser: vi.fn(),
   mockClearChatHistoryRemote: vi.fn(),
+  mockFetchPlanHistory: vi.fn(),
+  mockFetchAthleteOpenQuestions: vi.fn(),
+  mockFetchAthleteHypotheses: vi.fn(),
+  mockFetchValidationExperiments: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -30,6 +38,10 @@ vi.mock('../services/user', () => ({
   fetchCoachMemory: mockFetchCoachMemory,
   fetchCurrentUser: mockFetchCurrentUser,
   clearChatHistoryRemote: mockClearChatHistoryRemote,
+  fetchPlanHistory: mockFetchPlanHistory,
+  fetchAthleteOpenQuestions: mockFetchAthleteOpenQuestions,
+  fetchAthleteHypotheses: mockFetchAthleteHypotheses,
+  fetchValidationExperiments: mockFetchValidationExperiments,
 }))
 
 const baseProfile: UserProfile = {
@@ -60,6 +72,10 @@ beforeEach(() => {
   mockFetchCoachMemory.mockResolvedValue('')
   mockFetchCurrentUser.mockResolvedValue({ profile: baseProfile })
   mockClearChatHistoryRemote.mockResolvedValue(undefined)
+  mockFetchPlanHistory.mockResolvedValue([])
+  mockFetchAthleteOpenQuestions.mockResolvedValue([])
+  mockFetchAthleteHypotheses.mockResolvedValue([])
+  mockFetchValidationExperiments.mockResolvedValue([])
 })
 
 describe('AIChat', () => {
@@ -550,4 +566,132 @@ describe('AIChat', () => {
     await waitFor(() => expect(screen.queryByText(/Couldn't refresh coach state/i)).not.toBeInTheDocument())
   })
 
+})
+
+// ---------------------------------------------------------------------------
+// Coach Timeline — interleaved system events (#418)
+// ---------------------------------------------------------------------------
+
+function planEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'p1',
+    date: '2026-06-15',
+    source: 'coach_chat',
+    applied: true,
+    recordedAt: '2026-06-15T10:02:00.000Z',
+    oldDay: null,
+    newDay: { workoutType: 'recovery', title: 'Recovery Ride' },
+    ...overrides,
+  }
+}
+
+function openQuestion(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'q1',
+    question: 'Do you recover faster with an extra rest day?',
+    category: 'recovery',
+    evidence: '',
+    needs: '',
+    evidenceCount: 1,
+    status: 'open',
+    resolution: null,
+    firstAskedAt: '2026-06-15T09:00:00.000Z',
+    updatedAt: '2026-06-15T09:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function hypothesis(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'h1',
+    statement: 'Your threshold holds well in the heat.',
+    category: 'physiology',
+    rationale: 'Consistent hot-ride power.',
+    confidence: 0.6,
+    evidenceCount: 3,
+    status: 'proposed',
+    firstProposedAt: '2026-06-15T08:00:00.000Z',
+    updatedAt: '2026-06-15T08:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function experiment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'e1',
+    hypothesisId: null,
+    question: 'Does a 20-minute warmup improve your VO2 efforts?',
+    protocol: 'Add a long warmup before intervals for two weeks.',
+    rationale: 'Testing readiness.',
+    category: 'training',
+    status: 'suggested',
+    createdAt: '2026-06-15T07:00:00.000Z',
+    updatedAt: '2026-06-15T07:00:00.000Z',
+    ...overrides,
+  }
+}
+
+describe('AIChat — Coach Timeline events', () => {
+  it('shows an applied plan change as a "Plan update" entry', async () => {
+    setupStore()
+    mockFetchPlanHistory.mockResolvedValue([planEntry()])
+    render(<AIChat />)
+
+    expect(await screen.findByText('Plan update')).toBeInTheDocument()
+    expect(screen.getByText(/Added recovery — Recovery Ride/)).toBeInTheDocument()
+  })
+
+  it('surfaces open questions, proposed hypotheses and suggested experiments', async () => {
+    setupStore()
+    mockFetchAthleteOpenQuestions.mockResolvedValue([openQuestion()])
+    mockFetchAthleteHypotheses.mockResolvedValue([hypothesis()])
+    mockFetchValidationExperiments.mockResolvedValue([experiment()])
+    render(<AIChat />)
+
+    expect(await screen.findByText('Open question')).toBeInTheDocument()
+    expect(screen.getByText('Do you recover faster with an extra rest day?')).toBeInTheDocument()
+    expect(screen.getByText('Coach hypothesis')).toBeInTheDocument()
+    expect(screen.getByText('Your threshold holds well in the heat.')).toBeInTheDocument()
+    expect(screen.getByText('Suggested experiment')).toBeInTheDocument()
+    expect(screen.getByText('Does a 20-minute warmup improve your VO2 efforts?')).toBeInTheDocument()
+  })
+
+  it('omits recommendations and plan changes that are no longer actionable', async () => {
+    setupStore()
+    mockFetchPlanHistory.mockResolvedValue([planEntry({ applied: false })])
+    mockFetchAthleteOpenQuestions.mockResolvedValue([openQuestion({ status: 'answered' })])
+    mockFetchAthleteHypotheses.mockResolvedValue([hypothesis({ status: 'refuted' })])
+    mockFetchValidationExperiments.mockResolvedValue([experiment({ status: 'completed' })])
+    render(<AIChat />)
+
+    // Give the fetch effect a chance to resolve before asserting nothing rendered.
+    await waitFor(() => expect(mockFetchPlanHistory).toHaveBeenCalled())
+    await waitFor(() => {
+      expect(screen.queryByTestId('timeline-event')).not.toBeInTheDocument()
+    })
+    expect(screen.queryByText('Plan update')).not.toBeInTheDocument()
+    expect(screen.queryByText('Open question')).not.toBeInTheDocument()
+  })
+
+  it('interleaves a plan update between conversation exchanges by time', async () => {
+    setupStore({
+      chatHistory: [
+        { role: 'user', content: 'Older question', timestamp: '2026-06-15T10:00:00.000Z' },
+        { role: 'assistant', content: 'Older answer', timestamp: '2026-06-15T10:00:01.000Z' },
+        { role: 'user', content: 'Newer question', timestamp: '2026-06-15T10:05:00.000Z' },
+        { role: 'assistant', content: 'Newer answer', timestamp: '2026-06-15T10:05:01.000Z' },
+      ],
+    })
+    // recordedAt sits between the two exchanges.
+    mockFetchPlanHistory.mockResolvedValue([planEntry({ recordedAt: '2026-06-15T10:02:00.000Z' })])
+    render(<AIChat />)
+
+    const planUpdate = await screen.findByText('Plan update')
+    const newerAnswer = screen.getByText('Newer answer')
+    const olderQuestion = screen.getByText('Older question')
+
+    // Newest first: newer exchange → plan update → older exchange.
+    expect(newerAnswer.compareDocumentPosition(planUpdate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(planUpdate.compareDocumentPosition(olderQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })

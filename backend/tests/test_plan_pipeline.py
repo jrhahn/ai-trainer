@@ -684,3 +684,137 @@ async def test_no_op_plan_write_does_not_refresh_snapshots():
         await db.commit()
 
     called.assert_not_called()
+
+
+def test_apply_plan_updates_scalar_replaces_stale_window():
+    """A scalar duration update drops the base day's stale window (#422).
+
+    Otherwise ``normalize_duration_fields`` would later crush the new scalar
+    back to the leftover window's midpoint.
+    """
+    d = "2026-07-18"
+    base = [
+        {
+            **_day(d, "endurance", duration=120),
+            "durationMinMinutes": 45,
+            "durationMaxMinutes": 60,
+        }
+    ]
+    result = plan_pipeline.apply_plan_updates(
+        base, [{"date": d, "durationMinutes": 180}]
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinutes"] == 180
+    assert "durationMinMinutes" not in day
+    assert "durationMaxMinutes" not in day
+
+
+def test_apply_plan_updates_window_replaces_stale_scalar():
+    """A window duration update drops the base day's stale scalar (#422)."""
+    d = "2026-07-18"
+    base = [_day(d, "endurance", duration=120)]
+    result = plan_pipeline.apply_plan_updates(
+        base,
+        [{"date": d, "durationMinMinutes": 180, "durationMaxMinutes": 240}],
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinMinutes"] == 180
+    assert day["durationMaxMinutes"] == 240
+    # The stale single-value scalar (120) is replaced by the window midpoint;
+    # apply_plan_updates now canonicalizes through PlanDay.
+    assert day["durationMinutes"] == round((180 + 240) / 2)  # 210
+
+
+def test_apply_plan_updates_keeps_duration_when_update_omits_it():
+    """A description-only update leaves an untouched duration in place."""
+    d = "2026-07-18"
+    base = [_day(d, "endurance", duration=120)]
+    result = plan_pipeline.apply_plan_updates(
+        base, [{"date": d, "description": "Ride for 3 hours"}]
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["description"] == "Ride for 3 hours"
+    assert day["durationMinutes"] == 120
+
+
+def test_apply_plan_updates_drops_invalid_update_keeps_day():
+    """A malformed update is dropped (not raised), leaving the day unchanged."""
+    d = "2026-07-18"
+    base = [_day(d, "endurance", duration=120)]
+    result = plan_pipeline.apply_plan_updates(
+        base, [{"date": d, "durationMinutes": "lots"}]  # non-numeric → invalid
+    )
+    assert result is not None
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinutes"] == 120  # base day preserved
+
+
+@pytest.mark.asyncio
+async def test_commit_plan_updates_scalar_duration_change_persists():
+    """End-to-end: a coach duration change lands coherently, not crushed (#422).
+
+    Reproduces the prod bug where a day carrying a stale window (45/60) kept its
+    old 120-minute scalar after a coach update asking for 3 hours.
+    """
+    d = (app_today() + timedelta(days=1)).isoformat()
+    base = [
+        {
+            **_day(d, "endurance", duration=120),
+            "durationMinMinutes": 45,
+            "durationMaxMinutes": 60,
+        }
+    ]
+    user_id = await _create_user("pipe-duration@example.com", base)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "durationMinutes": 180, "description": "Ride for 3 hours"}],
+            base_plan=base,
+            source="coach_chat",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == d)
+    assert day["durationMinutes"] == 180
+    assert "durationMinMinutes" not in day
+    assert "durationMaxMinutes" not in day
+
+
+@pytest.mark.asyncio
+async def test_incoherent_stored_day_is_backfilled_on_next_write():
+    """The PlanDay gate lazily fixes a legacy incoherent stored day on next write.
+
+    No migration: a day carrying a stale window (45/60) alongside a mismatched
+    scalar (120) is normalized to the coherent midpoint the next time the plan is
+    persisted, rather than being masked as a no-op.
+    """
+    d = (app_today() + timedelta(days=2)).isoformat()
+    incoherent = {
+        "date": d,
+        "workoutType": "endurance",
+        "title": f"Workout {d}",
+        "description": "Session",
+        "durationMinutes": 120,
+        "durationMinMinutes": 45,
+        "durationMaxMinutes": 60,
+    }
+    # Seed the incoherent day directly via crud, bypassing the pipeline gate.
+    user_id = await _create_user("pipe-backfill@example.com", [dict(incoherent)])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db, user, [dict(incoherent)], base_plan=[dict(incoherent)], source="adapt"
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == d)
+    assert day["durationMinMinutes"] == 45
+    assert day["durationMaxMinutes"] == 60
+    assert day["durationMinutes"] == round((45 + 60) / 2)  # 52 — now coherent

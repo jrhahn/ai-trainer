@@ -684,6 +684,50 @@ async def test_generate_training_plan_calls_chat():
 
 
 @pytest.mark.asyncio
+async def test_generate_training_plan_repairs_invalid_day():
+    """A day that fails PlanDay validation triggers a re-prompt, then succeeds (#422)."""
+    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
+               "fitnessLevel": "intermediate"}
+    invalid = {"date": "2026-04-10", "workoutType": "endurance", "title": "x",
+               "description": "y", "durationMinutes": "lots"}  # non-numeric duration
+    valid = [{"date": "2026-04-10", "workoutType": "endurance", "title": "x",
+              "description": "y", "durationMinutes": 90}]
+    prompts: list[str] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        prompts.append(user_msg)
+        payload = {"plan": [invalid]} if len(prompts) == 1 else {"plan": valid}
+        return json.dumps(payload)
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.generate_training_plan(profile, provider="openai")
+
+    assert len(prompts) == 2  # retried once
+    assert result[0]["durationMinutes"] == 90
+    assert "invalid" in prompts[1].lower()  # correction fed back to the model
+
+
+@pytest.mark.asyncio
+async def test_generate_training_plan_gives_up_after_max_attempts():
+    """After the repair budget is exhausted the caller gets a format error, not a 500."""
+    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
+               "fitnessLevel": "intermediate"}
+    invalid = {"date": "2026-04-10", "durationMinutes": "lots"}
+    calls = 0
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        nonlocal calls
+        calls += 1
+        return json.dumps({"plan": [invalid]})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        with pytest.raises(ai_service.AIResponseFormatError):
+            await ai_service.generate_training_plan(profile, provider="openai")
+
+    assert calls == ai_service._MAX_PLAN_VALIDATION_ATTEMPTS
+
+
+@pytest.mark.asyncio
 async def test_match_observations_to_recommendations_routes_by_llm():
     """LLM matcher routes each observation to its assigned recommendation index."""
     recs = [

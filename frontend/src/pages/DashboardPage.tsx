@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { format } from 'date-fns'
 import {
+  Bot,
+  CheckCircle2,
   Cloud,
   CloudFog,
   CloudLightning,
@@ -677,6 +680,74 @@ export default function DashboardPage() {
     .filter((d) => d.date >= today && !(hasTodayActivity && d.date === today))
     .slice(0, 3)
 
+  // "Today's status" glance strip (#417): today / tomorrow / an honest, signal-backed
+  // training-status indicator. Each part is omitted when we have no real data for it —
+  // the status line in particular is derived from actual plan adherence, never faked.
+  const tomorrow = formatLocalDate(new Date(parseLocalDate(today).getTime() + 24 * 60 * 60 * 1000))
+  const todayPlan = trainingPlan.find((d) => d.date === today)
+  const tomorrowPlan = trainingPlan.find((d) => d.date === tomorrow)
+
+  const sessionLabel = (d: TrainingDay | undefined): string | null => {
+    if (!d) return null
+    if (d.workoutType === 'rest') return 'Rest'
+    return d.title?.trim() || d.workoutType.charAt(0).toUpperCase() + d.workoutType.slice(1)
+  }
+
+  let todayStatusText: string | null = null
+  if (hasTodayActivity) {
+    todayStatusText =
+      todayPlan && todayPlan.workoutType !== 'rest'
+        ? `${sessionLabel(todayPlan)} completed`
+        : 'Session logged'
+  } else if (todayPlan) {
+    todayStatusText =
+      todayPlan.workoutType === 'rest' ? 'Rest day' : `Today: ${sessionLabel(todayPlan)}`
+  }
+
+  const tomorrowStatusLabel = sessionLabel(tomorrowPlan)
+
+  // Training status = plan adherence over the trailing 7 days. Only counts planned
+  // (non-rest) sessions that already fell due; if none exist we have no trustworthy
+  // signal and simply drop the status segment rather than showing a decorative label.
+  const adherenceWindow = trainingPlan.filter(
+    (d) => d.date >= sevenDaysAgo && d.date < today && d.workoutType !== 'rest'
+  )
+  const plannedDue = adherenceWindow.length
+  const plannedDone = adherenceWindow.filter((d) => d.completed).length
+  const trainingStatus =
+    plannedDue === 0
+      ? null
+      : plannedDone / plannedDue >= 0.8
+        ? { label: 'On track', className: 'text-green-600' }
+        : plannedDone / plannedDue >= 0.5
+          ? { label: 'Slightly behind', className: 'text-amber-600' }
+          : { label: 'Behind plan', className: 'text-red-600' }
+
+  const statusSegments: Array<{ key: string; node: ReactNode }> = []
+  if (todayStatusText) {
+    statusSegments.push({
+      key: 'today',
+      node: (
+        <span className="flex items-center gap-1.5 font-medium text-gray-800">
+          {hasTodayActivity && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}
+          {todayStatusText}
+        </span>
+      ),
+    })
+  }
+  if (tomorrowStatusLabel) {
+    statusSegments.push({
+      key: 'tomorrow',
+      node: <span className="text-gray-500">Tomorrow: {tomorrowStatusLabel}</span>,
+    })
+  }
+  if (trainingStatus) {
+    statusSegments.push({
+      key: 'status',
+      node: <span className={`font-medium ${trainingStatus.className}`}>{trainingStatus.label}</span>,
+    })
+  }
+
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
@@ -749,6 +820,18 @@ export default function DashboardPage() {
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
+
+      {/* Today's status — compact at-a-glance strip (#417) */}
+      {statusSegments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm text-sm">
+          {statusSegments.map((seg, i) => (
+            <Fragment key={seg.key}>
+              {i > 0 && <span className="text-gray-300" aria-hidden="true">·</span>}
+              {seg.node}
+            </Fragment>
+          ))}
+        </div>
+      )}
 
       {isExpertMode && (
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
@@ -883,34 +966,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Post-login ride summary */}
-      {(riderAssessment?.loginSummary || summaryLoading) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-              {loginSummary?.bullets.length ? (
-                <ul className="mt-2 space-y-1 list-disc pl-5">
-                  {loginSummary.bullets.map((bullet, index) => (
-                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                      {bullet.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Strava history analysis progress */}
       {hasActivityProgress && (
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
@@ -932,9 +987,46 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Ask your coach — takes up the majority of the remaining space */}
+      {/* Coach Timeline — the recent-training summary opens the conversation as a
+          pinned coach entry, then plan updates, recommendations and chat interleave
+          in the feed below (#418). Takes up the majority of the remaining space. */}
       <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ask your coach</h2>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Coach Timeline</h2>
+
+        {(riderAssessment?.loginSummary || summaryLoading) && (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Bot size={14} className="text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Your recent training summary
+                </p>
+                {summaryLoading ? (
+                  <p className="text-sm text-gray-400 italic">Preparing your training summary…</p>
+                ) : (
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+                    {loginSummary?.bullets.length ? (
+                      <ul className="mt-2 space-y-1 list-disc pl-5">
+                        {loginSummary.bullets.map((bullet, index) => (
+                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                            {bullet.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <AIChat
           contextWorkout={trainingPlan.find((d) => d.date === today)}
           className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
