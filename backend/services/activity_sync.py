@@ -171,7 +171,7 @@ def _strava_activity_to_imported_activity(
         activity_date=activity_date,
         sport_type=activity.get("sport_type") or activity.get("type") or "cycling",
         duration_seconds=int(
-            activity.get("elapsed_time") or activity.get("moving_time") or 0
+            activity.get("moving_time") or activity.get("elapsed_time") or 0
         ),
         streams=streams,
         start_lat=(

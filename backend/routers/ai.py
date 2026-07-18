@@ -113,7 +113,7 @@ def _activity_date_for_analysis(activity: schemas.StravaActivitySchema) -> str:
 
 
 def _activity_duration_for_analysis(activity: schemas.StravaActivitySchema) -> int:
-    return int(activity.elapsed_time or activity.moving_time or 0)
+    return int(activity.moving_time or activity.elapsed_time or 0)
 
 
 def _dedupe_analysis_activities(
@@ -553,10 +553,10 @@ async def analyse_activities(
                 or "cycling"
             )
             duration_seconds = int(
-                a_dict.get("elapsedTime")
-                or a_dict.get("elapsed_time")
-                or a_dict.get("movingTime")
+                a_dict.get("movingTime")
                 or a_dict.get("moving_time")
+                or a_dict.get("elapsedTime")
+                or a_dict.get("elapsed_time")
                 or 0
             )
             imported_activity = ImportedActivity(
