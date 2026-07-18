@@ -379,7 +379,7 @@ async def _run_import_background(
                     activity.get("sport_type") or activity.get("type") or "cycling"
                 )
                 duration_seconds: int = int(
-                    activity.get("elapsed_time") or activity.get("moving_time") or 0
+                    activity.get("moving_time") or activity.get("elapsed_time") or 0
                 )
                 activity_name = activity.get("name")
 

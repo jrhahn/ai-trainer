@@ -64,6 +64,21 @@ def test_stream_duration_seconds():
     assert analysis._stream_duration_seconds([10.0, 0.0]) == 0.0  # negative elapsed
 
 
+def test_stream_duration_seconds_excludes_long_pause():
+    # 60s of riding, a 30-minute stop, then 60s more: moving time is ~120s,
+    # not the ~32-minute wall-clock span (#427).
+    moving_block = list(range(0, 61))  # 0..60, one sample per second
+    after_pause = list(range(1860, 1921))  # resumes 30 min later
+    time_stream = [float(t) for t in moving_block + after_pause]
+
+    duration = analysis._stream_duration_seconds(time_stream)
+
+    # 120s of 1s gaps kept; the single 1800s gap excluded. Plus one sample
+    # spacing (~0.99s).
+    assert duration == pytest.approx(120 + 120 / 121)
+    assert duration < 200  # nowhere near the ~1920s elapsed span
+
+
 def test_compute_training_load_ftp_guard():
     assert analysis.compute_training_load([], 0) == {
         "ctl": 0.0,
