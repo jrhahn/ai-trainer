@@ -379,21 +379,40 @@ def compute_hr_drift(hr_segment: list[float]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
+# Gaps larger than this between consecutive time samples mean the ride was
+# paused/stopped (auto-pause or stopped recording), not normal sampling. Such
+# gaps are excluded so the duration reflects moving time rather than wall-clock
+# time including long breaks (#427).
+_PAUSE_GAP_SECONDS = 60.0
+
+
 def _stream_duration_seconds(time_stream: list[float]) -> float:
-    """Estimate ride duration from a Strava-style time stream."""
+    """Estimate ride *moving* duration from a Strava-style time stream.
+
+    Strava's time stream counts elapsed seconds from the start, so a long stop
+    appears as a large gap between two consecutive samples (auto-pause or
+    stopped recording). Gaps above ``_PAUSE_GAP_SECONDS`` are excluded so the
+    result reflects moving time, not wall-clock time including breaks (#427).
+    A ride with no such gaps yields the same value as before.
+    """
     if not time_stream:
         return 0.0
     if len(time_stream) == 1:
         return 1.0
 
-    elapsed = time_stream[-1] - time_stream[0]
-    if elapsed < 0:
+    if time_stream[-1] - time_stream[0] < 0:
         return 0.0
 
-    sample_spacing = elapsed / max(1, len(time_stream) - 1)
+    moving = 0.0
+    for prev, cur in zip(time_stream, time_stream[1:]):
+        dt = cur - prev
+        if 0 < dt <= _PAUSE_GAP_SECONDS:
+            moving += dt
+
+    sample_spacing = moving / max(1, len(time_stream) - 1)
     if sample_spacing <= 0:
         sample_spacing = 1.0
-    return elapsed + sample_spacing
+    return moving + sample_spacing
 
 
 def classify_ride_purpose(
