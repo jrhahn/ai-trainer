@@ -28,7 +28,6 @@ import crud
 import models
 import schemas
 from services.dates import app_today_iso
-from services.duration_range import normalize_duration_fields
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
     filter_plan_updates_for_constraints,
@@ -231,22 +230,39 @@ def _stamp_source(
 def apply_plan_updates(
     plan: list[dict], plan_updates: list[dict] | None
 ) -> list[dict] | None:
-    """Merge per-day ``plan_updates`` into ``plan``.
+    """Merge per-day ``plan_updates`` into ``plan`` through the canonical model.
 
-    Completed days are never modified. Returns ``None`` when there is nothing
-    to apply, so callers can cheaply detect a no-op.
+    Each changed day is validated as a ``PlanDay``, the update applied via
+    ``schemas.merge_update`` (which keeps duration coherent and drops stale
+    duration siblings, #422), and dumped back to a canonical camelCase dict.
+    Completed days are never modified. Returns ``None`` when there is nothing to
+    apply, so callers can cheaply detect a no-op.
     """
     if not plan_updates:
         return None
     updates_by_date = {u["date"]: u for u in plan_updates if u.get("date")}
     if not updates_by_date:
         return None
-    return [
-        {**day, **{k: v for k, v in updates_by_date[day["date"]].items() if v is not None}}
-        if day.get("date") in updates_by_date and not day.get("completed")
-        else day
-        for day in plan
-    ]
+    result: list[dict] = []
+    for day in plan:
+        date = day.get("date")
+        if date in updates_by_date and not day.get("completed"):
+            try:
+                merged = schemas.merge_update(
+                    schemas.PlanDay.model_validate(day),
+                    schemas.PlanDayUpdateSchema.model_validate(updates_by_date[date]),
+                )
+            except Exception:  # noqa: BLE001 — drop one bad update, keep the day
+                logger.warning(
+                    "dropping invalid plan update for %s; keeping current day",
+                    date, exc_info=True,
+                )
+                result.append(day)
+            else:
+                result.append(merged.model_dump(by_alias=True, exclude_none=True))
+        else:
+            result.append(day)
+    return result
 
 
 def merge_preserving_user_edits(
@@ -359,6 +375,29 @@ def _plan_day_changes(
     return changes
 
 
+def _to_canonical_day(day: dict) -> dict:
+    """Validate + normalize one day through the canonical ``PlanDay`` model.
+
+    This is the persist gate: it guarantees a coherent duration (scalar vs
+    min/max window) and, because ``PlanDay`` uses ``extra="allow"``, preserves
+    any unmodelled key rather than dropping it. A day that fails validation
+    (rare malformed legacy/LLM data) passes through unchanged and is logged,
+    so one bad day never aborts a whole plan write (#422 follow-up).
+    """
+    if not isinstance(day, dict):
+        return day
+    try:
+        return schemas.PlanDay.model_validate(day).model_dump(
+            by_alias=True, exclude_none=True, mode="json"
+        )
+    except Exception:  # noqa: BLE001 — never let one bad day block a write
+        logger.warning(
+            "plan day failed PlanDay validation; passing through unchanged",
+            exc_info=True,
+        )
+        return day
+
+
 async def _enforce_and_persist(
     db: AsyncSession,
     user: models.User,
@@ -368,10 +407,10 @@ async def _enforce_and_persist(
     constraints: list[dict],
     source: PlanSource,
 ) -> list[dict]:
-    # Give every proposed day coherent duration fields before anything reads
-    # them: a prescribed window (min/max) gets an ordered range and a derived
-    # midpoint scalar; single-value days pass through untouched (#368).
-    proposed_plan = [normalize_duration_fields(day) for day in proposed_plan]
+    # Give every proposed day coherent, canonical fields before anything reads
+    # them: the PlanDay gate reconciles the duration scalar vs min/max window and
+    # preserves unknown keys (#368, #422).
+    proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
     current_row = await crud.get_training_plan(db, user.id)
     current_plan = current_row.plan if current_row is not None else []
@@ -385,6 +424,12 @@ async def _enforce_and_persist(
         merged = _preserve_completed_days(merged, current_plan)
         merged = _preserve_pinned_days(merged, current_plan)
     merged = _stamp_source(merged, current_plan, source)
+    # Final canonicalization: preserved pins / completed days re-inject *stored*
+    # days that bypassed the gate above, so run every day through PlanDay once
+    # more before persist. Comparing against the raw ``current_plan`` means a
+    # previously-incoherent stored day is rewritten here (lazy backfill) instead
+    # of being masked as a no-op.
+    merged = [_to_canonical_day(day) for day in merged]
     # Record per-day history (append-only) before the early no-op return so that
     # a fully-blocked automated write still logs its attempted corrections.
     changes = _plan_day_changes(current_plan, merged, proposal, source)
@@ -407,12 +452,24 @@ async def _enforce_and_persist(
     return merged
 
 
+def _as_dicts(items) -> list[dict]:
+    """Coerce a list of typed models (PlanDay / PlanDayUpdateSchema) or dicts to
+    plain camelCase dicts, so builders may pass either into the commit API."""
+    coerced: list[dict] = []
+    for item in items or []:
+        if isinstance(item, schemas.CamelModel):
+            coerced.append(item.model_dump(by_alias=True, exclude_none=True))
+        else:
+            coerced.append(item)
+    return coerced
+
+
 async def commit_plan(
     db: AsyncSession,
     user: models.User,
-    proposed_plan: list[dict],
+    proposed_plan: "list[schemas.PlanDay | dict]",
     *,
-    base_plan: list[dict],
+    base_plan: "list[schemas.PlanDay | dict]",
     source: str,
     now=None,
     timezone_name: str | None = None,
@@ -421,24 +478,25 @@ async def commit_plan(
 
     ``source`` names the trigger (see ``PLAN_SOURCES``); it decides whether the
     change is pinned as a user edit and whether it must respect existing pins.
-    Returns the plan that was actually persisted (or the unchanged current plan
-    when the proposal collapses to a no-op).
+    Accepts typed ``PlanDay`` days or raw dicts. Returns the plan that was
+    actually persisted (or the unchanged current plan when the proposal collapses
+    to a no-op).
     """
     resolved = _resolve_source(source)
     today = app_today_iso(now, timezone_name)
     constraints = await load_active_constraints(db, user.id, today=today)
     return await _enforce_and_persist(
-        db, user, proposed_plan, base_plan=base_plan, constraints=constraints,
-        source=resolved,
+        db, user, _as_dicts(proposed_plan), base_plan=_as_dicts(base_plan),
+        constraints=constraints, source=resolved,
     )
 
 
 async def commit_plan_updates(
     db: AsyncSession,
     user: models.User,
-    plan_updates: list[dict] | None,
+    plan_updates: "list[schemas.PlanDayUpdateSchema | dict] | None",
     *,
-    base_plan: list[dict],
+    base_plan: "list[schemas.PlanDay | dict]",
     source: str,
     now=None,
     timezone_name: str | None = None,
@@ -452,11 +510,12 @@ async def commit_plan_updates(
     resolved = _resolve_source(source)
     today = app_today_iso(now, timezone_name)
     constraints = await load_active_constraints(db, user.id, today=today)
-    filtered = filter_plan_updates_for_constraints(plan_updates or [], constraints)
-    proposed = apply_plan_updates(base_plan, filtered)
+    base_dicts = _as_dicts(base_plan)
+    filtered = filter_plan_updates_for_constraints(_as_dicts(plan_updates), constraints)
+    proposed = apply_plan_updates(base_dicts, filtered)
     if proposed is None:
-        return base_plan
+        return base_dicts
     return await _enforce_and_persist(
-        db, user, proposed, base_plan=base_plan, constraints=constraints,
+        db, user, proposed, base_plan=base_dicts, constraints=constraints,
         source=resolved,
     )

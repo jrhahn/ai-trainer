@@ -72,6 +72,31 @@ def duration_range(day: dict | None) -> tuple[int | None, int | None]:
     return (lo, hi) if lo <= hi else (hi, lo)
 
 
+def reconcile_duration(
+    scalar: object, lo: object, hi: object
+) -> tuple[int | None, int | None]:
+    """Return coherent ``(min, max)`` bounds from a scalar + optional window.
+
+    Shared arithmetic behind both :func:`normalize_duration_fields` (dict form)
+    and the ``PlanDay`` model validator (typed form), so the scalar↔window
+    invariant lives in one place. Non-positive/None inputs count as absent.
+
+    - No explicit bound present → ``(None, None)`` (a single-value / rest day;
+      the caller keeps its scalar untouched).
+    - A window is present → the bounds are filled from the scalar/other bound
+      and ordered; the caller derives the scalar as ``round(midpoint)``.
+    """
+    lo_e = _as_positive_int(lo)
+    hi_e = _as_positive_int(hi)
+    if lo_e is None and hi_e is None:
+        return None, None
+    s = _as_positive_int(scalar)
+    lo2 = lo_e if lo_e is not None else (s if s is not None else hi_e)
+    hi2 = hi_e if hi_e is not None else (s if s is not None else lo_e)
+    assert lo2 is not None and hi2 is not None  # at least one explicit bound
+    return (lo2, hi2) if lo2 <= hi2 else (hi2, lo2)
+
+
 def representative_minutes(day: dict | None) -> int | None:
     """A single representative duration for ``day`` — the window midpoint."""
     lo, hi = duration_range(day)
@@ -111,14 +136,12 @@ def normalize_duration_fields(day: dict) -> dict:
     """
     if not isinstance(day, dict):
         return day
-    lo_e, hi_e = _explicit_bounds(day)
-    if lo_e is None and hi_e is None:
+    lo, hi = reconcile_duration(
+        _scalar_minutes(day), *_explicit_bounds(day)
+    )
+    if lo is None and hi is None:
         # No window intent — leave the single-value day exactly as-is.
         return day
-    # An explicit positive bound exists (checked above), so the window always
-    # resolves — the assert documents that invariant for the type checker.
-    lo, hi = duration_range(day)
-    assert lo is not None and hi is not None
     normalized = {
         k: v
         for k, v in day.items()

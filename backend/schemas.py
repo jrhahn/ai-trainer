@@ -838,20 +838,80 @@ class RideLabelUpdateSchema(CamelModel):
     label_override: str
 
 
-class TrainingDaySchema(CamelModel):
-    """Enough structure to pass to rateCompletedWorkout; rest stored as opaque JSON."""
+class PowerRange(CamelModel):
+    low: int
+    high: int
+
+
+class HeartRateRange(CamelModel):
+    low: int
+    high: int
+
+
+class PlanInterval(CamelModel):
+    duration: int  # seconds
+    power: int
+    rest: int  # seconds
+
+
+def _coerce_target_range(value: Any) -> Any:
+    """Lenient coercion of a target power/HR value into a ``{low, high}`` range.
+
+    The LLM occasionally emits a bare number (``"targetPower": 240``) or fills
+    only one bound. Treat a scalar as a degenerate range and mirror a lone bound
+    so one malformed value doesn't drop the whole day at the persist gate.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        v = int(value)
+        return {"low": v, "high": v}
+    if isinstance(value, str):
+        try:
+            v = int(float(value))
+        except ValueError:
+            return value
+        return {"low": v, "high": v}
+    if isinstance(value, dict):
+        low, high = value.get("low"), value.get("high")
+        if low is None and high is not None:
+            return {**value, "low": high}
+        if high is None and low is not None:
+            return {**value, "high": low}
+    return value
+
+
+class PlanDay(CamelModel):
+    """Canonical, self-normalizing training-plan day.
+
+    Every plan write is validated and dumped through this model at the pipeline
+    persist gate (``services/plan_pipeline.py``), so a day can never reach
+    storage with an incoherent duration (scalar ``durationMinutes`` vs a
+    ``durationMin/MaxMinutes`` window) — the recurring drift-bug class
+    (#368, #422). Lenient on input (LLM/legacy days may omit fields, use
+    snake_case, or send a scalar-only / window-only duration), strict and
+    canonical on output. ``extra="allow"`` preserves any unmodelled key so
+    typing never silently drops stored data.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="allow",
+    )
 
     date: str
-    workout_type: str
-    title: str
-    description: str
-    duration_minutes: int
-    # Optional planned-duration window (#368); see PlanDayUpdateSchema.
+    workout_type: str = "rest"
+    title: str = ""
+    description: str = ""
+    duration_minutes: int = 0
+    # Optional planned-duration window (#368). A single value is the degenerate
+    # window min == max; when both are set, duration_minutes is the midpoint.
     duration_min_minutes: Optional[int] = None
     duration_max_minutes: Optional[int] = None
-    target_power: Optional[Any] = None
-    target_heart_rate: Optional[Any] = None
-    intervals: Optional[list[Any]] = None
+    target_power: Optional[PowerRange] = None
+    target_heart_rate: Optional[HeartRateRange] = None
+    intervals: Optional[list[PlanInterval]] = None
     completed: Optional[bool] = None
     feedback: Optional[WorkoutFeedbackSchema] = None
     coach_feedback: Optional[str] = None
@@ -861,6 +921,58 @@ class TrainingDaySchema(CamelModel):
     # means a manual edit / coach-chat change and pins the day against automated
     # overwrites; see services/plan_pipeline.py. Clients cannot set this.
     source: Optional[str] = None
+
+    @field_validator("target_power", "target_heart_rate", mode="before")
+    @classmethod
+    def _coerce_ranges(cls, value: Any) -> Any:
+        return _coerce_target_range(value)
+
+    @model_validator(mode="after")
+    def _coherent_duration(self) -> "PlanDay":
+        # Reconcile the scalar with the min/max window so every reader sees one
+        # coherent view. Shared arithmetic with normalize_duration_fields;
+        # imported lazily because services modules import schemas at load time.
+        from services.duration_range import reconcile_duration
+
+        lo, hi = reconcile_duration(
+            self.duration_minutes,
+            self.duration_min_minutes,
+            self.duration_max_minutes,
+        )
+        if lo is None and hi is None:
+            # Single value / rest day — leave the scalar untouched.
+            return self
+        self.duration_min_minutes = lo
+        self.duration_max_minutes = hi
+        self.duration_minutes = round((lo + hi) / 2)
+        return self
+
+
+# Back-compat alias: the canonical day model used to be TrainingDaySchema.
+TrainingDaySchema = PlanDay
+
+
+_DURATION_ALIAS_KEYS = frozenset(
+    {"durationMinutes", "durationMinMinutes", "durationMaxMinutes"}
+)
+
+
+def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
+    """Apply a partial per-day ``update`` onto a canonical ``day``.
+
+    Only fields the update actually sets (non-``None``) are applied. Duration is
+    treated as one unit: an update touching *any* duration field drops the base
+    day's other duration fields so the ``PlanDay`` validator rebuilds the trio
+    from the update alone — otherwise a new scalar could be crushed back to a
+    stale window's midpoint (#422). Unknown keys on the base day are preserved
+    (``PlanDay`` uses ``extra="allow"``).
+    """
+    patch = update.model_dump(by_alias=True, exclude_none=True)
+    base = day.model_dump(by_alias=True)
+    if _DURATION_ALIAS_KEYS & patch.keys():
+        for stale in _DURATION_ALIAS_KEYS - patch.keys():
+            base.pop(stale, None)
+    return PlanDay.model_validate({**base, **patch})
 
 
 class AskTrainerResponse(CamelModel):
