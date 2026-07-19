@@ -5,6 +5,51 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-07-19
+
+### Added
+
+- **Daily duration-refresh job** (`services/duration_refresh.py`, `main.py`,
+  `config.py`) — a scheduled task re-derives `RideMetric.duration_seconds` from
+  each source's *current* `moving_time` over a recent lookback window
+  (`duration_refresh_lookback_days`, default 21) and recomputes the metrics
+  chain. This is the standing prevention for intervals.icu populating
+  `moving_time` only minutes after upload: an early sync could store wall-clock
+  `elapsed_time` and, because the ride was already imported, never correct it.
+  The one-off backfill CLI is now a thin wrapper over the same
+  `refresh_user_durations` logic (#429).
+- **Long-term athlete model in next-ride recommendations**
+  (`services/prompts.py`, `services/ai_service.py`, `services/ride_matching.py`)
+  — the durable structured athlete model (#384) is now threaded into the
+  next-ride recommendation prompt, not only ask-trainer, so suggestions also
+  use FTP, VO2 max, threshold durability, recovery and heat tolerance. Gated on
+  `memory_updates_enabled`, mirroring ask-trainer (#403).
+
+### Fixed
+
+- **Activity duration uses `moving_time`, not `elapsed_time`** — imported ride
+  durations now exclude pauses, so a long stop no longer inflates a ride to
+  wall-clock time (e.g. 8h28 instead of 4h25) (#427).
+- **intervals.icu id corruption prevented at the source** — the raw provider id
+  is now carried end-to-end as a string `external_id` (schema → intervals
+  `_activity_response` → frontend store → analyse persistence), so new rows
+  store the true uncorrupted hash instead of a float64-mangled one. A
+  float-tolerant join still corrects pre-existing rows (#429).
+- **Coach duration changes now update `durationMinutes`** — when the coach
+  rewrites a session's prose it also updates the structured duration field, so
+  the saved plan matches what the coach promised (#422).
+- **One-off production duration correction** for a mis-stored ride on
+  2026-07-18 (#426).
+
+### Changed
+
+- **Canonical typed `PlanDay` persist gate** — plan days are normalised by
+  `schemas.PlanDay` at a single gate in `plan_pipeline`; field invariants belong
+  there rather than in scattered call sites (#424).
+- **Source-aware duration backfill** — the `backfill_activity_moving_time`
+  script re-derives durations for both Strava (exact id) and intervals.icu
+  (float-tolerant id) sources (#429).
+
 ## [0.41.0] - 2026-07-13
 
 ### Added
