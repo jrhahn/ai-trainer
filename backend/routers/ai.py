@@ -46,7 +46,7 @@ from services.plan_constraints import (
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
 )
-from services.intervals_service import apply_summary_fallback
+from services.intervals_service import apply_summary_fallback, intervals_activity_id
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
     apply_ride_plan_matches,
@@ -559,9 +559,19 @@ async def analyse_activities(
                 or a_dict.get("elapsed_time")
                 or 0
             )
+            # Prefer the raw string external id (intervals ``i166933341``) so the
+            # persisted identity survives the float64 round-trip the numeric
+            # ``id`` suffers on the JS side, and matches what the sync path stores
+            # (#429 Bug B). Strava activities have no external_id and keep the id.
+            external_key = activity.external_id or str(activity.id)
+            legacy_activity_id = (
+                intervals_activity_id(activity.external_id)
+                if activity.external_id is not None
+                else activity.id
+            )
             imported_activity = ImportedActivity(
                 source=body.source,
-                external_activity_id=str(activity.id),
+                external_activity_id=external_key,
                 name=a_dict.get("name"),
                 start_datetime=start_date_local or start_date or None,
                 activity_date=activity_date,
@@ -571,8 +581,8 @@ async def analyse_activities(
                 weather=weather_by_id.get(activity.id, {}),
                 summary_avg_power_w=a_dict.get("average_watts"),
                 summary_normalized_power_w=a_dict.get("weighted_average_watts"),
-                metadata={f"{body.source}_activity_id": str(activity.id)},
-                legacy_activity_id=activity.id,
+                metadata={f"{body.source}_activity_id": external_key},
+                legacy_activity_id=legacy_activity_id,
             )
             rides_input.append(imported_activity.to_ride_input())
         if rides_input:
