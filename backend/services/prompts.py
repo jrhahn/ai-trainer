@@ -2346,6 +2346,7 @@ def next_ride_recommendation_user(
     coach_memory: str | None = None,
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
+    athlete_model: dict | None = None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -2373,6 +2374,10 @@ def next_ride_recommendation_user(
     structured_context = athlete_context_section(athlete_context).strip()
     if structured_context:
         athlete_context_parts.append(structured_context)
+
+    structured_model = athlete_model_section(athlete_model).strip()
+    if structured_model:
+        athlete_context_parts.append(structured_model)
 
     memory_facts = athlete_memory_facts_section(athlete_memory_facts).strip()
     if memory_facts:

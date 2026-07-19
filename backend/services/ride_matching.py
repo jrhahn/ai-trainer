@@ -537,6 +537,16 @@ async def review_matched_ride_and_adapt(
             ).model_dump(by_alias=True, mode="json")
             for fact in athlete_memory_fact_rows
         ]
+        # Durable physiology/performance model (#384), gated on the athlete's
+        # memory setting the same way routers/ai.py gates it for ask-trainer (#403).
+        athlete_model_row = await crud.get_athlete_model(db, user.id)
+        athlete_model = (
+            schemas.AthleteModelSchema.model_validate(
+                athlete_model_row, from_attributes=True
+            ).model_dump(by_alias=True, mode="json")
+            if (athlete_model_row is not None and user.memory_updates_enabled)
+            else None
+        )
         result = await ai_service.recommend_next_session(
             rides=[ride],
             plan=plan,
@@ -546,6 +556,7 @@ async def review_matched_ride_and_adapt(
             coach_memory=coach_memory,
             athlete_context=athlete_context,
             athlete_memory_facts=athlete_memory_facts,
+            athlete_model=athlete_model,
             ctl=float(ride.ctl_after) if ride.ctl_after is not None else None,
             atl=float(ride.atl_after) if ride.atl_after is not None else None,
             tsb=float(ride.tsb_after) if ride.tsb_after is not None else None,
