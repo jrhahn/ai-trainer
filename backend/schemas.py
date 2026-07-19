@@ -725,6 +725,11 @@ class StravaActivitySchema(CamelModel):
     """Mirrors the TypeScript StravaActivity interface."""
 
     id: int
+    # Raw, non-numeric provider id (e.g. intervals.icu ``i166933341``). Carried
+    # as a string so it never round-trips through a JS ``Number`` and loses
+    # precision the way the numeric ``id`` does for 19-digit intervals hashes
+    # (#429 Bug B). When present it is the authoritative external key on import.
+    external_id: Optional[str] = None
     name: str
     type: str
     sport_type: Optional[str] = None

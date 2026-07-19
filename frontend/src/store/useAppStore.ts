@@ -185,6 +185,11 @@ export interface IntervalsConnection {
 
 export interface StravaActivity {
   id: number
+  // Raw provider id (e.g. intervals.icu `i166933341`) as a string. The numeric
+  // `id` above is a 19-digit hash for intervals activities and loses precision
+  // as a JS Number; `external_id` is round-trip-safe and is what the backend
+  // persists as the activity's external key (#429 Bug B).
+  external_id?: string
   name: string
   type: string
   sport_type?: string

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
     activity_sync_interval_seconds: int = 1800
+    duration_refresh_lookback_days: int = 21
+    """How many days back the daily duration-refresh job re-checks moving_time.
+
+    intervals.icu computes ``moving_time`` a few minutes after upload, so an
+    early sync can store the wrong (elapsed) duration; the daily job re-derives
+    ``duration_seconds`` from the current ``moving_time`` for rides in this
+    window and recomputes the metrics chain (#429 Bug A)."""
     continuous_learning_enabled: bool = True
     """Run the athlete-learning step after every completed workout is imported (#388).
 

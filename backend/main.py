@@ -13,6 +13,7 @@ from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
+from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
 from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
@@ -43,6 +44,7 @@ async def lifespan(_: FastAPI):
     scheduler = InProcessScheduler()
     scheduler.register(daily_plan_maintenance_job(async_session_maker))
     scheduler.register(activity_sync_job(async_session_maker))
+    scheduler.register(duration_refresh_job(async_session_maker))
     scheduler.register(athlete_insight_generation_job(async_session_maker))
     scheduler.register(athlete_contradiction_detection_job(async_session_maker))
     scheduler.register(athlete_hypothesis_generation_job(async_session_maker))

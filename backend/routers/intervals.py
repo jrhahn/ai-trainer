@@ -70,6 +70,10 @@ def _activity_response(activity: dict, detail: dict | None = None) -> dict:
     )
     return {
         "id": activity_id,
+        # Raw intervals id (``i166933341``) as a string; the numeric ``id`` above
+        # is a 19-digit hash that loses precision as a JS Number, so persistence
+        # must key off this instead (#429 Bug B).
+        "external_id": None if raw_id is None else str(raw_id),
         "name": source.get("name") or source.get("title") or "Intervals.icu activity",
         "type": source.get("type") or source.get("sport") or "Ride",
         "sport_type": source.get("type") or source.get("sport") or "Ride",
