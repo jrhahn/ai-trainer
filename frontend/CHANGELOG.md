@@ -5,6 +5,15 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-07-19
+
+### Changed
+
+- **Carry the raw provider activity id as `external_id`** (`store/useAppStore.ts`)
+  — the Strava activity type now keeps the raw provider id as a string so an
+  intervals.icu id survives the round-trip through the store without float64
+  precision loss, letting the backend persist the true uncorrupted hash (#429).
+
 ## [0.28.0] - 2026-07-05
 
 ### Added
