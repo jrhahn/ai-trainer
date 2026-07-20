@@ -1566,6 +1566,7 @@ async def generate_login_summary(
     estimated_ftp: int | None,
     training_plan: list[dict] | None = None,
     provider: str = "openai",
+    feel_legs: str | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -1580,6 +1581,7 @@ async def generate_login_summary(
         notes=notes,
         estimated_ftp=estimated_ftp,
         training_plan=training_plan,
+        feel_legs=feel_legs,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

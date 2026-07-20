@@ -44,6 +44,12 @@ async def regenerate(
     existing_plan = await crud.get_training_plan(db, user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
+    # The athlete's one-tap "how the legs felt" rating lives on the ride, not the
+    # assessment. Read it at generation time so the summary reflects the real
+    # signal rather than an inferred effort number.
+    latest_ride = await crud.get_latest_ride_metric(db, user.id)
+    feel_legs = latest_ride.feel_legs if latest_ride is not None else None
+
     login_summary = await ai_service.generate_login_summary(
         ride_insights=assessment.ride_insights,
         last_ride_feedback=assessment.last_ride_feedback,
@@ -51,6 +57,7 @@ async def regenerate(
         estimated_ftp=assessment.estimated_ftp,
         training_plan=training_plan or None,
         provider=provider or resolve_user_provider(user),
+        feel_legs=feel_legs,
     )
     if login_summary:
         await crud.upsert_rider_assessment(

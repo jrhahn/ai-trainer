@@ -2020,6 +2020,7 @@ def refresh_login_summary_user(
     notes: str | None,
     estimated_ftp: int | None,
     training_plan: list[dict] | None,
+    feel_legs: str | None = None,
 ) -> str:
     """Build the user message for login summary generation from existing assessment data."""
     parts: list[str] = []
@@ -2027,6 +2028,13 @@ def refresh_login_summary_user(
         parts.append(f"Current estimated FTP: {estimated_ftp} W")
     if notes:
         parts.append(f"Overall assessment notes:\n{notes}")
+    if feel_legs:
+        parts.append(
+            "Athlete's own subjective leg-feel rating after their most recent ride: "
+            f"{feel_legs}. This is the athlete's self-reported signal — trust it over "
+            "any inferred effort, and do not invent a perceived-effort/RPE number they "
+            "did not give."
+        )
     if last_ride_feedback:
         parts.append(f"Most recent activity feedback:\n{last_ride_feedback}")
     if ride_insights:

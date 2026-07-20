@@ -220,8 +220,9 @@ def _ride_feedback_from_metric(ride: models.RideMetric) -> dict[str, Any]:
         if match:
             # rate_completed_workout's older prompt uses a 1-5 effort scale.
             feedback["perceivedEffort"] = max(1, min(5, round(int(match.group(1)) / 2)))
-    if "perceivedEffort" not in feedback:
-        feedback["perceivedEffort"] = 3
+    # No default RPE: when the athlete never reported perceived effort, leave it
+    # absent so downstream prompts omit it entirely. A hardcoded "3/5" here was
+    # surfaced to the athlete as if they had reported it (see login summary).
     return feedback
 
 
