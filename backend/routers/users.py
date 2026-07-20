@@ -1224,6 +1224,9 @@ async def save_ride_feedback(
             detail="Ride not found",
         )
 
+    # The leg-feel rating feeds the login summary, so mark it stale to regenerate.
+    await assessment_pipeline.notify_changed(db, current_user)
+
     return schemas.RideFeedbackResponse(
         strava_activity_id=strava_activity_id,
         ride=schemas.RideMetricSchema.model_validate(row, from_attributes=True),
