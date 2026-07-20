@@ -163,6 +163,9 @@ export interface PlanDayHistoryEntry {
   source: string
   applied: boolean
   recordedAt: string
+  // Shared by all rows from one coach run so the Coach Timeline can collapse a
+  // run into a single card; null for rows written before the batch_id column.
+  batchId: string | null
   oldDay: Partial<TrainingDay> | null
   newDay: Partial<TrainingDay> | null
 }

@@ -579,6 +579,7 @@ function planEntry(overrides: Record<string, unknown> = {}) {
     source: 'coach_chat',
     applied: true,
     recordedAt: '2026-06-15T10:02:00.000Z',
+    batchId: 'b1',
     oldDay: null,
     newDay: { workoutType: 'recovery', title: 'Recovery Ride' },
     ...overrides,
@@ -632,12 +633,12 @@ function experiment(overrides: Record<string, unknown> = {}) {
 }
 
 describe('AIChat — Coach Timeline events', () => {
-  it('shows an applied plan change as a "Plan update" entry', async () => {
+  it('shows an applied plan change as a run-labelled timeline entry', async () => {
     setupStore()
     mockFetchPlanHistory.mockResolvedValue([planEntry()])
     render(<AIChat />)
 
-    expect(await screen.findByText('Plan update')).toBeInTheDocument()
+    expect(await screen.findByText('Coach chat')).toBeInTheDocument()
     expect(screen.getByText(/Added recovery — Recovery Ride/)).toBeInTheDocument()
   })
 
@@ -669,7 +670,7 @@ describe('AIChat — Coach Timeline events', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('timeline-event')).not.toBeInTheDocument()
     })
-    expect(screen.queryByText('Plan update')).not.toBeInTheDocument()
+    expect(screen.queryByText('Coach chat')).not.toBeInTheDocument()
     expect(screen.queryByText('Open question')).not.toBeInTheDocument()
   })
 
@@ -686,7 +687,7 @@ describe('AIChat — Coach Timeline events', () => {
     mockFetchPlanHistory.mockResolvedValue([planEntry({ recordedAt: '2026-06-15T10:02:00.000Z' })])
     render(<AIChat />)
 
-    const planUpdate = await screen.findByText('Plan update')
+    const planUpdate = await screen.findByText('Coach chat')
     const newerAnswer = screen.getByText('Newer answer')
     const olderQuestion = screen.getByText('Older question')
 

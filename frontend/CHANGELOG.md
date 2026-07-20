@@ -5,6 +5,19 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Collapse the Coach Timeline plan-change flood** (`utils/coachTimeline.ts`,
+  `services/user.ts`) — `planUpdateEvents` now groups applied plan-day changes by
+  their coach run (`batchId`) into a single concise card (e.g. "Plan generation:
+  21 days updated (18 changed, 2 added, 1 removed)") instead of one card per
+  changed day. Single-day runs keep their detailed diff; the full per-day detail
+  stays in the plan-history log for debugging. Cards are now labelled by the run
+  source ("Coach chat", "Plan generation", "Nightly tune-up") rather than a
+  generic "Plan update" (#435).
+
 ## [0.29.0] - 2026-07-19
 
 ### Changed
