@@ -37,6 +37,7 @@ const entries: PlanDayHistoryEntry[] = [
     source: 'coach_chat',
     applied: true,
     recordedAt: '2026-05-01T10:00:00Z',
+    batchId: 'b1',
     oldDay: null,
     newDay: { workoutType: 'intervals', title: 'VO2max' },
   },
@@ -46,6 +47,7 @@ const entries: PlanDayHistoryEntry[] = [
     source: 'auto_adapt',
     applied: false,
     recordedAt: '2026-05-02T10:00:00Z',
+    batchId: 'b2',
     oldDay: { workoutType: 'intervals' },
     newDay: { workoutType: 'recovery' },
   },
@@ -85,6 +87,7 @@ describe('PlanChangesPanel', () => {
       source: 'user_edit',
       applied: true,
       recordedAt: `2026-05-${String(i + 1).padStart(2, '0')}T10:00:00Z`,
+      batchId: `b${i}`,
       oldDay: { title: `Old ${i}` },
       newDay: { title: `New ${i}` },
     }))

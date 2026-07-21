@@ -78,6 +78,7 @@ describe('describeEntry', () => {
     source: 'auto_adapt',
     applied: true,
     recordedAt: '2026-05-01T10:00:00Z',
+    batchId: 'b1',
     oldDay: { workoutType: 'endurance' },
     newDay: { workoutType: 'recovery' },
   }
@@ -100,6 +101,7 @@ describe('groupEntriesByDate', () => {
     source: 'user_edit',
     applied: true,
     recordedAt: `${date}T10:00:00Z`,
+    batchId: `batch-${id}`,
     oldDay: null,
     newDay: { workoutType: 'endurance' },
   })
