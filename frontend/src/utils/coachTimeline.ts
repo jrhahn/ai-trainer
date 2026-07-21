@@ -29,15 +29,21 @@ function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
   if (entries.length === 1) {
     return summarizeDayChange(entries[0].oldDay, entries[0].newDay)
   }
-  const added = entries.filter((e) => !e.oldDay && e.newDay).length
-  const removed = entries.filter((e) => e.oldDay && !e.newDay).length
-  const changed = entries.length - added - removed
+  let added = 0
+  let removed = 0
+  let changed = 0
+  for (const e of entries) {
+    if (!e.oldDay) added += 1
+    else if (!e.newDay) removed += 1
+    else changed += 1
+  }
   const parts: string[] = []
   if (changed) parts.push(`${changed} changed`)
   if (added) parts.push(`${added} added`)
   if (removed) parts.push(`${removed} removed`)
-  const breakdown = parts.length ? ` (${parts.join(', ')})` : ''
-  return `${entries.length} days updated${breakdown}`
+  // Every entry falls into exactly one bucket, so with ≥2 entries `parts` is
+  // always non-empty — no empty-breakdown branch to guard.
+  return `${entries.length} days updated (${parts.join(', ')})`
 }
 
 /**

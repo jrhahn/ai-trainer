@@ -63,6 +63,20 @@ describe('planUpdateEvents', () => {
     expect(events[0].body).toBe('3 days updated (1 changed, 1 added, 1 removed)')
   })
 
+  it('omits empty buckets from a changed-only run breakdown', () => {
+    const modified = (id: string): PlanDayHistoryEntry =>
+      entry({
+        id,
+        source: 'generate',
+        batchId: 'gen2',
+        oldDay: { workoutType: 'endurance', title: 'Base' },
+        newDay: { workoutType: 'tempo', title: 'Tempo' },
+      })
+    const events = planUpdateEvents([modified('a'), modified('b')])
+    expect(events).toHaveLength(1)
+    expect(events[0].body).toBe('2 days updated (2 changed)')
+  })
+
   it('groups legacy rows without a batchId by source + timestamp', () => {
     const events = planUpdateEvents([
       entry({ id: 'a', batchId: null }),
