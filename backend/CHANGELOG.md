@@ -5,6 +5,18 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`batch_id` on `plan_day_history`** (`models.py`, `crud.py`,
+  `routers/users.py`, migration `20260720_000001`) — every per-day row written
+  by one pipeline commit (`record_plan_day_changes`) now shares a `batch_id`, so
+  a coach run (a plan generation, nightly tune-up or single chat edit) can be
+  reassembled from the append-only log for debugging and is exposed on the
+  plan-history API as `batchId`. This lets the Coach Timeline collapse a run into
+  one card instead of one per changed day (#435).
+
 ## [0.42.0] - 2026-07-19
 
 ### Added

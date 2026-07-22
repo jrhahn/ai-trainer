@@ -4,7 +4,7 @@ import type {
   AthleteOpenQuestion,
   PlanDayHistoryEntry,
 } from '../services/user'
-import { describeEntry } from './planHistory'
+import { sourceLabel, summarizeDayChange } from './planHistory'
 
 // A non-conversation entry in the Coach Timeline (#418): a plan change the coach
 // made, or a recommendation the learning pipeline surfaced. These are interleaved
@@ -19,17 +19,63 @@ export interface TimelineEvent {
   body: string
 }
 
-/** Applied plan-day changes become "Plan update" entries (blocked attempts are skipped). */
+/**
+ * One concise sentence for a whole coach run. A single-day run keeps its detailed
+ * field diff ("type … → …, duration … → … min"); a multi-day run collapses to a
+ * count with a short breakdown so a 21-day plan generation is one line, not 21
+ * (#435). The full per-day detail stays in the plan-history DB for debugging.
+ */
+function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
+  if (entries.length === 1) {
+    return summarizeDayChange(entries[0].oldDay, entries[0].newDay)
+  }
+  let added = 0
+  let removed = 0
+  let changed = 0
+  for (const e of entries) {
+    if (!e.oldDay) added += 1
+    else if (!e.newDay) removed += 1
+    else changed += 1
+  }
+  const parts: string[] = []
+  if (changed) parts.push(`${changed} changed`)
+  if (added) parts.push(`${added} added`)
+  if (removed) parts.push(`${removed} removed`)
+  // Every entry falls into exactly one bucket, so with ≥2 entries `parts` is
+  // always non-empty — no empty-breakdown branch to guard.
+  return `${entries.length} days updated (${parts.join(', ')})`
+}
+
+/**
+ * Applied plan-day changes become "plan update" entries (blocked attempts are
+ * skipped). Rows are grouped by their coach run (`batchId`) so one plan
+ * generation / nightly tune-up is a single card instead of one per changed day.
+ * Rows without a `batchId` (written before that column existed) fall back to
+ * grouping by source + timestamp so legacy history still collapses sensibly.
+ */
 export function planUpdateEvents(entries: PlanDayHistoryEntry[]): TimelineEvent[] {
-  return entries
-    .filter((entry) => entry.applied)
-    .map((entry) => ({
-      id: `plan-${entry.id}`,
-      kind: 'plan-update' as const,
-      timestamp: entry.recordedAt,
-      title: 'Plan update',
-      body: describeEntry(entry),
-    }))
+  const applied = entries.filter((entry) => entry.applied)
+  const groups = new Map<string, PlanDayHistoryEntry[]>()
+  for (const entry of applied) {
+    const key = entry.batchId ?? `${entry.source}|${entry.recordedAt}`
+    const group = groups.get(key)
+    if (group) {
+      group.push(entry)
+    } else {
+      groups.set(key, [entry])
+    }
+  }
+  return [...groups.values()].map((group) => ({
+    id: `plan-${group[0].batchId ?? group[0].id}`,
+    kind: 'plan-update' as const,
+    // A run is placed by its most recent row so it sorts correctly in the feed.
+    timestamp: group.reduce(
+      (latest, e) => (e.recordedAt > latest ? e.recordedAt : latest),
+      group[0].recordedAt,
+    ),
+    title: sourceLabel(group[0].source),
+    body: summarizeBatch(group),
+  }))
 }
 
 /**

@@ -262,6 +262,9 @@ class PlanDayHistoryEntry(schemas.CamelModel):
     source: str
     applied: bool
     recorded_at: datetime
+    # Shared by all rows from one coach run so the frontend can collapse a run
+    # into a single timeline card; null for rows written before #435.
+    batch_id: str | None
     old_day: Any | None
     new_day: Any | None
 
@@ -344,6 +347,7 @@ async def get_plan_history(
                 source=row.source,
                 applied=row.applied,
                 recorded_at=row.recorded_at,
+                batch_id=row.batch_id,
                 old_day=row.old_day,
                 new_day=row.new_day,
             )

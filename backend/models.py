@@ -231,6 +231,12 @@ class PlanDayHistory(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # All per-day rows written by a single pipeline commit share one ``batch_id``
+    # so a coach run (a plan generation, a nightly tune-up, one chat edit) can be
+    # reconstituted from the log — for debugging and to collapse the run into a
+    # single Coach Timeline card instead of one card per changed day. Nullable so
+    # rows written before this column existed keep working. See #435.
+    batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     old_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     new_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)

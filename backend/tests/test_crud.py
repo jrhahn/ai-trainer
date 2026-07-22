@@ -1926,12 +1926,29 @@ async def test_record_plan_day_changes_inserts_rows(db: AsyncSession) -> None:
     assert len(rows) == 2
     assert all(r.source == "ride_review" for r in rows)
     assert all(r.applied is True for r in rows)  # default applied when omitted
+    # Every row from one call shares a batch id so the run can be reassembled.
+    assert rows[0].batch_id is not None
+    assert len({r.batch_id for r in rows}) == 1
 
     stored = await crud.list_plan_day_history(db, user.id)
     assert {r.date for r in stored} == {"2026-05-01", "2026-05-02"}
     by_date = {r.date: r for r in stored}
     assert by_date["2026-05-01"].old_day is None
     assert by_date["2026-05-02"].new_day == {"workoutType": "recovery"}
+
+
+@pytest.mark.asyncio
+async def test_record_plan_day_changes_distinct_batch_id_per_call(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db, "hist-batch@example.com")
+    change = [{"date": "2026-05-01", "old_day": None, "new_day": {"workoutType": "z2"}}]
+
+    first = await crud.record_plan_day_changes(db, user.id, change, "generate")
+    second = await crud.record_plan_day_changes(db, user.id, change, "generate")
+
+    # Distinct coach runs get distinct batch ids even with the same source.
+    assert first[0].batch_id != second[0].batch_id
 
 
 @pytest.mark.asyncio

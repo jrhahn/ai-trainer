@@ -14,6 +14,7 @@ function entry(overrides: Partial<PlanDayHistoryEntry> = {}): PlanDayHistoryEntr
     source: 'coach_chat',
     applied: true,
     recordedAt: '2026-06-15T10:00:00.000Z',
+    batchId: 'b1',
     oldDay: null,
     newDay: { workoutType: 'recovery', title: 'Recovery Ride' },
     ...overrides,
@@ -21,16 +22,69 @@ function entry(overrides: Partial<PlanDayHistoryEntry> = {}): PlanDayHistoryEntr
 }
 
 describe('planUpdateEvents', () => {
-  it('maps applied plan changes to timeline events', () => {
+  it('maps a single-day run to one detailed timeline event', () => {
     const events = planUpdateEvents([entry()])
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({
-      id: 'plan-p1',
+      id: 'plan-b1',
       kind: 'plan-update',
       timestamp: '2026-06-15T10:00:00.000Z',
-      title: 'Plan update',
+      title: 'Coach chat',
     })
     expect(events[0].body).toContain('Recovery Ride')
+  })
+
+  it('collapses a multi-day run into one card with a breakdown (#435)', () => {
+    const events = planUpdateEvents([
+      entry({ id: 'a', source: 'generate', batchId: 'gen1' }),
+      entry({
+        id: 'b',
+        source: 'generate',
+        batchId: 'gen1',
+        recordedAt: '2026-06-15T10:00:01.000Z',
+        oldDay: { workoutType: 'endurance', title: 'Base' },
+        newDay: { workoutType: 'recovery', title: 'Spin' },
+      }),
+      entry({
+        id: 'c',
+        source: 'generate',
+        batchId: 'gen1',
+        oldDay: { workoutType: 'rest', title: 'Rest' },
+        newDay: null,
+      }),
+    ])
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      id: 'plan-gen1',
+      title: 'Plan generation',
+      // Placed by the most recent row in the run.
+      timestamp: '2026-06-15T10:00:01.000Z',
+    })
+    expect(events[0].body).toBe('3 days updated (1 changed, 1 added, 1 removed)')
+  })
+
+  it('omits empty buckets from a changed-only run breakdown', () => {
+    const modified = (id: string): PlanDayHistoryEntry =>
+      entry({
+        id,
+        source: 'generate',
+        batchId: 'gen2',
+        oldDay: { workoutType: 'endurance', title: 'Base' },
+        newDay: { workoutType: 'tempo', title: 'Tempo' },
+      })
+    const events = planUpdateEvents([modified('a'), modified('b')])
+    expect(events).toHaveLength(1)
+    expect(events[0].body).toBe('2 days updated (2 changed)')
+  })
+
+  it('groups legacy rows without a batchId by source + timestamp', () => {
+    const events = planUpdateEvents([
+      entry({ id: 'a', batchId: null }),
+      entry({ id: 'b', batchId: null }),
+    ])
+    expect(events).toHaveLength(1)
+    expect(events[0].id).toBe('plan-a')
+    expect(events[0].body).toBe('2 days updated (2 added)')
   })
 
   it('skips blocked (unapplied) changes — they kept the athlete version', () => {

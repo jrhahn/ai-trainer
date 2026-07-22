@@ -212,13 +212,19 @@ async def record_plan_day_changes(
 
     Each ``changes`` entry is ``{"date", "old_day", "new_day", "applied"}``.
     ``applied`` defaults to True. No-op when ``changes`` is empty.
+
+    All rows from this call share one ``batch_id`` so the coach run they belong
+    to (one plan generation, nightly tune-up or chat edit) can be reconstituted
+    from the log and collapsed into a single Coach Timeline card (#435).
     """
     if not changes:
         return []
+    batch_id = models._uuid()
     rows = [
         models.PlanDayHistory(
             user_id=user_id,
             date=change["date"],
+            batch_id=batch_id,
             old_day=change.get("old_day"),
             new_day=change.get("new_day"),
             source=source,
