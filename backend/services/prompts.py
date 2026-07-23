@@ -533,6 +533,70 @@ def adapt_plan_user(
     )
 
 
+def _day_brief(day: dict | None) -> str:
+    """A compact one-line description of a plan day for a change diff (#439)."""
+    if not day:
+        return "rest / no session"
+    parts = [str(day.get("workoutType") or day.get("title") or "session")]
+    title = day.get("title")
+    if title and title != day.get("workoutType"):
+        parts.append(f'"{title}"')
+    duration = day.get("durationMinutes")
+    if duration:
+        parts.append(f"{duration} min")
+    return " ".join(parts)
+
+
+def plan_change_summary_system() -> str:
+    """System prompt: narrate a coach run's plan changes to the athlete (#439)."""
+    return (
+        f"{COACH_PERSONA} You have just reviewed and adjusted this athlete's "
+        "training plan. Write a short, personal note telling them what you changed "
+        "and — most importantly — why the new plan is better for them.\n"
+        "Return ONLY a valid JSON object with exactly two keys:\n"
+        '"summary": one short first-person paragraph (2-4 sentences) addressed to '
+        "the athlete. Lead with what changed, then why it helps them (recovery, "
+        "freshness, building fitness, an upcoming race). Be concrete and reference "
+        "specific days or sessions, but do NOT list every day mechanically and do "
+        "not use markdown headings.\n"
+        '"days": an array of {"date", "reason"} objects — one per changed day, each '
+        "a single concise clause explaining that day's change. Use the exact dates "
+        "from the diff.\n"
+        "Only describe changes present in the diff; never invent changes. If a day "
+        "was merely rescheduled, say so plainly."
+    )
+
+
+def plan_change_summary_user(
+    changes: list[dict],
+    profile: dict,
+    *,
+    run_context: str,
+    rider_assessment: dict | None = None,
+    training_load_section: str = "",
+) -> str:
+    """User prompt carrying the per-day old→new diff and athlete context (#439)."""
+    diff_lines = "\n".join(
+        f"- {c.get('date')}: {_day_brief(c.get('old_day'))} → "
+        f"{_day_brief(c.get('new_day'))}"
+        for c in changes
+    )
+    assessment_section = (
+        f"\nRider assessment: {json.dumps(rider_assessment)}"
+        if rider_assessment
+        else ""
+    )
+    load_section = f"\n{training_load_section}" if training_load_section else ""
+    return (
+        f"Context: {run_context}\n"
+        f"Athlete profile: {json.dumps(profile)}"
+        f"{assessment_section}{load_section}\n"
+        "Changes you just made (old → new):\n"
+        f"{diff_lines}\n"
+        "Write the summary and per-day reasons as instructed."
+    )
+
+
 # ---------------------------------------------------------------------------
 # ask_trainer prompts
 # ---------------------------------------------------------------------------

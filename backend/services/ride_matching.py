@@ -13,6 +13,7 @@ import crud
 import models
 import schemas
 from services import ai_service
+from services import coach_summary
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
 from services.duration_range import duration_range
@@ -573,8 +574,15 @@ async def review_matched_ride_and_adapt(
         if plan_updates:
             # Constraint enforcement, completed-day protection, user-edit merge
             # and persistence are all owned by the shared pipeline.
-            await plan_pipeline.commit_plan_updates(
+            commit = await plan_pipeline.commit_plan_updates(
                 db, user, plan_updates, base_plan=plan, source="ride_review"
+            )
+            await coach_summary.narrate_plan_changes(
+                db,
+                user,
+                batch_id=commit.batch_id,
+                source="ride_review",
+                applied_changes=commit.applied_changes,
             )
     except Exception:
         logger.warning("Matched ride plan adaptation failed", exc_info=True)

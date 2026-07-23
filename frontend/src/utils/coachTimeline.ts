@@ -52,9 +52,13 @@ function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
  * generation / nightly tune-up is a single card instead of one per changed day.
  * Rows without a `batchId` (written before that column existed) fall back to
  * grouping by source + timestamp so legacy history still collapses sensibly.
+ *
+ * Runs that were narrated as a coach chat message (`narrated`, #439) are dropped
+ * here: their "what and why" is already told in the athlete's chat feed, so a
+ * timeline card would be a duplicate entry.
  */
 export function planUpdateEvents(entries: PlanDayHistoryEntry[]): TimelineEvent[] {
-  const applied = entries.filter((entry) => entry.applied)
+  const applied = entries.filter((entry) => entry.applied && !entry.narrated)
   const groups = new Map<string, PlanDayHistoryEntry[]>()
   for (const entry of applied) {
     const key = entry.batchId ?? `${entry.source}|${entry.recordedAt}`

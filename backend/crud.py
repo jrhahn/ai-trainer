@@ -256,6 +256,65 @@ async def list_plan_day_history(
     return list(await db.scalars(stmt))
 
 
+async def set_plan_day_reasons(
+    db: AsyncSession, batch_id: str, reasons: dict[str, str]
+) -> None:
+    """Backfill each ``PlanDayHistory`` row's coach ``reason`` for one run (#439).
+
+    ``reasons`` maps a plan-day date to its one-line rationale. Only the rows of
+    the given ``batch_id`` are touched, so the per-day "why" lands next to the
+    diff it explains. Dates absent from ``reasons`` are left as-is.
+    """
+    if not reasons:
+        return
+    rows = await db.scalars(
+        select(models.PlanDayHistory).where(
+            models.PlanDayHistory.batch_id == batch_id
+        )
+    )
+    for row in rows:
+        reason = reasons.get(row.date)
+        if reason:
+            row.reason = reason
+    await db.flush()
+
+
+async def create_plan_change_summary(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    batch_id: str,
+    source: str,
+    summary: str,
+) -> models.PlanChangeSummary:
+    """Persist the one athlete-facing narrative for a coach run (#439)."""
+    row = models.PlanChangeSummary(
+        user_id=user_id, batch_id=batch_id, source=source, summary=summary
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_narrated_batch_ids(
+    db: AsyncSession, user_id: str, batch_ids: list[str]
+) -> set[str]:
+    """Return which of ``batch_ids`` have a ``PlanChangeSummary`` (#439).
+
+    Lets the plan-history endpoint tag entries whose run was narrated in chat so
+    the frontend can suppress the now-redundant Coach-Timeline card.
+    """
+    if not batch_ids:
+        return set()
+    rows = await db.scalars(
+        select(models.PlanChangeSummary.batch_id).where(
+            models.PlanChangeSummary.user_id == user_id,
+            models.PlanChangeSummary.batch_id.in_(batch_ids),
+        )
+    )
+    return set(rows)
+
+
 async def plan_day_history_stats(
     db: AsyncSession,
     user_id: str,

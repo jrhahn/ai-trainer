@@ -17,6 +17,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services import coach_summary
 from services import plan_pipeline
 from services import summary_pipeline
 from services.activity_imports import ImportedActivity
@@ -428,9 +429,14 @@ async def _auto_adapt_plan(
             weather_context_section=weather_section,
             timezone_name=timezone_name,
         )
-        await plan_pipeline.commit_plan(
+        commit = await plan_pipeline.commit_plan(
             db, user, updated_plan, base_plan=plan, source="auto_adapt",
             timezone_name=timezone_name,
+        )
+        await coach_summary.narrate_plan_changes(
+            db, user, batch_id=commit.batch_id, source="auto_adapt",
+            applied_changes=commit.applied_changes, profile=profile,
+            rider_assessment=rider_assessment,
         )
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
@@ -697,12 +703,19 @@ async def analyse_activities(
     if raw_updates:
         plan_row = await crud.get_training_plan(db, current_user.id)
         base_plan = plan_row.plan if plan_row is not None else []
-        await plan_pipeline.commit_plan_updates(
+        commit = await plan_pipeline.commit_plan_updates(
             db,
             current_user,
             raw_updates,
             base_plan=base_plan,
             source="ride_review",
+        )
+        await coach_summary.narrate_plan_changes(
+            db,
+            current_user,
+            batch_id=commit.batch_id,
+            source="ride_review",
+            applied_changes=commit.applied_changes,
         )
     return schemas.AnalyseActivitiesResponse(
         assessment=assessment_schema, plan_updates=plan_updates
@@ -762,11 +775,11 @@ async def generate_plan(
     await _persist_collected_token_usage(db, current_user, usage_token)
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
-    plan = await plan_pipeline.commit_plan(
+    commit = await plan_pipeline.commit_plan(
         db, current_user, plan, base_plan=base_plan, source="generate",
         timezone_name=timezone_name,
     )
-    return plan
+    return commit.plan
 
 
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)
@@ -1035,14 +1048,16 @@ async def ask_trainer(
 
     # Apply plan updates if any — through the shared constraint-respecting pipeline.
     if plan_updates:
-        persisted_updated_plan = await plan_pipeline.commit_plan_updates(
-            db,
-            current_user,
-            plan_updates,
-            base_plan=plan,
-            source="coach_chat",
-            timezone_name=timezone_name,
-        )
+        persisted_updated_plan = (
+            await plan_pipeline.commit_plan_updates(
+                db,
+                current_user,
+                plan_updates,
+                base_plan=plan,
+                source="coach_chat",
+                timezone_name=timezone_name,
+            )
+        ).plan
 
     # Merge RAG retrieval sources into the result.
     # rag_sources contains the full metadata for all retrieved chunks;

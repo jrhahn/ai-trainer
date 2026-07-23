@@ -168,6 +168,11 @@ export interface PlanDayHistoryEntry {
   batchId: string | null
   oldDay: Partial<TrainingDay> | null
   newDay: Partial<TrainingDay> | null
+  // One-line coach rationale for this day's change; null when not narrated.
+  reason?: string | null
+  // True when this run was narrated as a coach chat message — the Coach Timeline
+  // suppresses the redundant plan-update card for narrated runs.
+  narrated?: boolean
 }
 
 export interface PlanDayHistoryStats {

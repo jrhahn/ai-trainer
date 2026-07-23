@@ -241,11 +241,44 @@ class PlanDayHistory(Base):
     new_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # One-line coach rationale for *this* day's change, backfilled after the run
+    # by the narrator (services/coach_summary.py) for automated triggers. Null
+    # for un-narrated triggers and for pre-#439 rows. Lives next to the diff it
+    # explains so the per-day "why" has a single home — no separate store. The
+    # run-level narrative lives in ``PlanChangeSummary`` keyed by ``batch_id``.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
 
     __table_args__ = (Index("ix_plan_day_history_user_date", "user_id", "date"),)
+
+
+class PlanChangeSummary(Base):
+    """One athlete-facing narrative per automated coach run (#439).
+
+    Keyed by the ``batch_id`` shared by that run's ``PlanDayHistory`` rows, this
+    holds the single plain-language summary of what the coach changed and why the
+    new plan is better. It drives the one coach ``ChatMessage`` posted per run and
+    lets the frontend suppress the redundant Coach-Timeline card for narrated
+    runs. Only automated triggers (nightly maintenance, adapt, auto-adapt, ride
+    review) are narrated; see ``services/coach_summary.NARRATED_SOURCES``.
+    """
+
+    __tablename__ = "plan_change_summary"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, unique=True, index=True
+    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class WorkoutLog(Base):
