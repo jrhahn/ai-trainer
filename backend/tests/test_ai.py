@@ -386,6 +386,101 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
+    client, auth_headers, mock_ai_service
+):
+    """After the coach reports a blocking constraint, "lift that constraint" must
+    deactivate it and let the coach's edit finally persist (#437)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        # Skip the background memory write so the two sequential requests don't
+        # race for the SQLite lock.
+        user = await crud.get_user_by_id(db, user_id)
+        user.memory_updates_enabled = False
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 120,
+                }
+            ],
+        )
+        await crud.upsert_availability_constraint(
+            db,
+            user_id,
+            constraint_type="required_workout",
+            constraint_date="2027-01-15",
+            weekday="friday",
+            required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
+        )
+        await db.commit()
+
+    def _rest_update():
+        # A fresh dict per turn: the handler appends notes onto result["response"].
+        return {
+            "response": "Done — Friday is now a rest day.",
+            "plan_updates": [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "rest",
+                    "title": "Rest Day",
+                    "description": "Full rest",
+                    "durationMinutes": 0,
+                }
+            ],
+        }
+
+    # Turn 1: the request is blocked; the reply flags the constraint.
+    mock_ai_service["ask_trainer"].return_value = _rest_update()
+    first = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "make friday a rest day"},
+    )
+    assert first.status_code == 200
+    assert "couldn't change" in first.json()["response"].lower()
+    # The day is still the required session.
+    assert {d["date"]: d for d in first.json()["updatedPlan"]}["2027-01-15"][
+        "workoutType"
+    ] == "endurance"
+
+    # Turn 2: lift the constraint (no date named -> resolves to the flagged one).
+    mock_ai_service["ask_trainer"].return_value = _rest_update()
+    second = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "pls lift that constraint"},
+    )
+    assert second.status_code == 200
+    lowered = second.json()["response"].lower()
+    assert "lifted the availability constraint" in lowered
+    assert "friday" in lowered
+    # No stale override note this time.
+    assert "couldn't change" not in lowered
+    # The coach's rest-day edit now lands.
+    assert {d["date"]: d for d in second.json()["updatedPlan"]}["2027-01-15"][
+        "workoutType"
+    ] == "rest"
+
+    # The constraint is gone.
+    async with TestSessionLocal() as db:
+        active = await crud.list_active_availability_constraints(
+            db, user_id, today="2027-01-01"
+        )
+        assert active == []
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
     client, auth_headers, mock_ai_service
 ):

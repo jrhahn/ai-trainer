@@ -62,6 +62,18 @@ LONG_SESSION_PATTERNS = (
 
 DEFAULT_LONG_SESSION_MINUTES = 120
 
+# Phrasing that asks to lift/remove a previously captured availability
+# constraint. The coach's override note explicitly invites this ("Let me know if
+# you'd like to lift that constraint"), so the athlete's reply must be honoured
+# instead of silently keeping the constraint active (#437). Kept high-confidence
+# and paired with a "constraint" reference so ordinary chat ("remove the warmup")
+# never trips it.
+LIFT_PATTERNS = (
+    r"\b(?:lift|remove|cancel|drop|clear|delete)\b[^.?!]*\b(?:constraint|restriction|requirement|pin|block)\b",
+    r"\b(?:hebe?|entferne?|streich(?:e|en)?|l(?:ö|oe)sch(?:e|en)?)\b[^.?!]*\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe|constraint|beschr(?:ä|ae)nkung)\b",
+    r"\bsperre\b[^.?!]*\bauf\b",  # "hebe die Sperre auf"
+)
+
 # Boundaries that separate independent statements within one message. Splitting
 # on these keeps each intent tied to the days named in the *same* clause, so a
 # message like "tomorrow off? saturday long endurance" no longer pins a required
@@ -185,3 +197,33 @@ def extract_availability_constraints(
             (item["constraint_type"], item["constraint_date"]), item
         )
     return list(by_key.values())
+
+
+def extract_constraint_lift(text: str, *, today: date) -> dict:
+    """Detect a request to lift a previously captured availability constraint.
+
+    The coach's override note invites the athlete to lift a blocking constraint
+    (#437). This recognises that reply and reports which constraints to drop:
+
+    - ``lift``: whether the message asks to lift a constraint at all.
+    - ``dates``: ISO dates named alongside the lift request. When empty, the
+      caller resolves "that constraint" to the constraint(s) the previous
+      override note flagged.
+
+    Detection is scoped to the clause carrying the lift phrasing, so an unrelated
+    day mentioned elsewhere in the message is not swept in.
+    """
+    normalized = " ".join(text.casefold().split())
+    if not normalized:
+        return {"lift": False, "dates": []}
+
+    dates: list[str] = []
+    lift = False
+    for clause in _split_clauses(normalized):
+        if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
+            continue
+        lift = True
+        for date_iso, _weekday in _target_dates(clause, today):
+            if date_iso not in dates:
+                dates.append(date_iso)
+    return {"lift": lift, "dates": dates}

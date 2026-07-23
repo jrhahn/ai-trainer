@@ -306,6 +306,10 @@ class ChatMessage(Base):
         DateTime(timezone=True), default=_utcnow
     )
     plan_update_count: Mapped[int | None] = mapped_column(Integer)
+    # ISO dates of availability constraints this assistant reply reported as
+    # blocking a coach-requested change. Lets a follow-up "lift that constraint"
+    # resolve "that" to the constraint the last override note flagged (#437).
+    flagged_constraint_dates: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
 

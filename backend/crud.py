@@ -401,6 +401,7 @@ async def create_chat_message(
     content: str,
     timestamp: str,
     plan_update_count: int | None = None,
+    flagged_constraint_dates: list[str] | None = None,
 ) -> models.ChatMessage:
     """Create a ChatMessage, flush, and return the persisted instance."""
     message = models.ChatMessage(
@@ -409,6 +410,7 @@ async def create_chat_message(
         content=content,
         timestamp=timestamp,
         plan_update_count=plan_update_count,
+        flagged_constraint_dates=flagged_constraint_dates or None,
     )
     db.add(message)
     await db.flush()
@@ -1874,6 +1876,63 @@ async def deactivate_expired_availability_constraints(
     )
     await db.flush()
     return int(result.rowcount or 0)
+
+
+async def deactivate_availability_constraints_for_dates(
+    db: AsyncSession,
+    user_id: str,
+    dates: list[str],
+) -> list[models.AthleteAvailabilityConstraint]:
+    """Mark active constraints on ``dates`` inactive; return the ones lifted.
+
+    Used when the athlete asks to lift a constraint the coach's override note
+    flagged (#437). Returns the deactivated rows (before the flush hides them
+    from the active list) so the caller can honestly confirm what was lifted.
+    """
+    if not dates:
+        return []
+    result = await db.scalars(
+        select(models.AthleteAvailabilityConstraint).where(
+            models.AthleteAvailabilityConstraint.user_id == user_id,
+            models.AthleteAvailabilityConstraint.active.is_(True),
+            models.AthleteAvailabilityConstraint.constraint_date.in_(dates),
+        )
+    )
+    lifted = list(result)
+    now = datetime.now(timezone.utc)
+    for constraint in lifted:
+        constraint.active = False
+        constraint.updated_at = now
+    await db.flush()
+    return lifted
+
+
+async def get_last_flagged_constraint_dates(
+    db: AsyncSession, user_id: str
+) -> list[str]:
+    """Return the constraint dates the most recent override note flagged (#437).
+
+    Resolves a bare "lift that constraint" to the constraint(s) the previous
+    assistant reply reported as blocking a coach-requested change. Returns an
+    empty list when the last relevant reply flagged nothing.
+    """
+    # Filter in Python: ``is_not(None)`` on a JSON column matches SQL-NULL rows
+    # too (SQLAlchemy JSON-null semantics), so a plain reply after the flagged
+    # one would mask it. Scan newest-first and return the first real flag.
+    messages = await db.scalars(
+        select(models.ChatMessage)
+        .where(
+            models.ChatMessage.user_id == user_id,
+            models.ChatMessage.role == "assistant",
+        )
+        .order_by(models.ChatMessage.created_at.desc())
+        .limit(20)
+    )
+    for message in messages:
+        dates = message.flagged_constraint_dates
+        if dates:
+            return [str(d) for d in dates]
+    return []
 
 
 # ---------------------------------------------------------------------------
