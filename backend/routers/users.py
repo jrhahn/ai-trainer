@@ -1232,6 +1232,7 @@ async def save_ride_feedback(
         current_user.id,
         strava_activity_id,
         body.legs,
+        external_activity_id=body.external_activity_id,
     )
     if row is None:
         raise HTTPException(

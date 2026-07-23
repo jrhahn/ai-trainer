@@ -2599,6 +2599,8 @@ async def set_ride_feel_legs(
     user_id: str,
     strava_activity_id: int,
     legs: str | None,
+    *,
+    external_activity_id: str | None = None,
 ) -> models.RideMetric | None:
     """Set (or clear, when ``legs`` is None) the athlete's leg-freshness rating.
 
@@ -2606,12 +2608,39 @@ async def set_ride_feel_legs(
     dashboard tap can clear a prior rating.  It never touches ``user_note`` or
     any other field, so it cannot clobber notes captured conversationally.
     Returns the updated row, or None if not found.
+
+    ``external_activity_id`` is the precision-safe string identity carried for
+    non-Strava rides (e.g. intervals.icu).  Their synthesized 63-bit
+    ``strava_activity_id`` is float64-corrupted through the browser, so an exact
+    int lookup misses (#441); prefer the string id when the frontend supplies it.
     """
-    row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    row = None
+    if external_activity_id:
+        row = await get_ride_metric_by_external_id(db, user_id, external_activity_id)
+    if row is None:
+        row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
     if row is None:
         return None
     row.feel_legs = legs
     return row
+
+
+async def get_ride_metric_by_external_id(
+    db: AsyncSession,
+    user_id: str,
+    external_activity_id: str,
+) -> models.RideMetric | None:
+    """Return the RideMetric for a provider's external activity id, or None.
+
+    External ids are precision-safe strings (unlike the float64-corrupted
+    synthesized ``strava_activity_id`` for non-Strava rides, #441).
+    """
+    return await db.scalar(
+        select(models.RideMetric).where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.external_activity_id == external_activity_id,
+        )
+    )
 
 
 async def get_ride_metric_by_strava_id(

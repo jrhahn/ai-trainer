@@ -1199,6 +1199,14 @@ class RideFeedbackRequest(CamelModel):
     legs: Optional[Literal["fresh", "normal", "heavy"]] = None
     """Subjective leg-freshness rating, or ``None`` to clear it."""
 
+    external_activity_id: Optional[str] = None
+    """Precision-safe provider id for non-Strava rides (e.g. intervals.icu).
+
+    Their synthesized 63-bit ``strava_activity_id`` is float64-corrupted through
+    the browser, so the path param cannot be trusted to find the row (#441).
+    When supplied, the backend keys the lookup off this string instead.
+    """
+
 
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""

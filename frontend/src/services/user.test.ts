@@ -803,7 +803,7 @@ describe('setRideLegs', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9001', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: { legs: 'heavy' },
+      body: { legs: 'heavy', externalActivityId: null },
     })
   })
 
@@ -819,7 +819,23 @@ describe('setRideLegs', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9002', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: { legs: null },
+      body: { legs: null, externalActivityId: null },
+    })
+  })
+
+  it('sends the precision-safe external id for intervals rides (#441)', async () => {
+    mockApiFetch.mockResolvedValue({
+      stravaActivityId: 9003,
+      ride: { stravaActivityId: 9003, feelLegs: 'fresh' },
+    })
+
+    const { setRideLegs } = await import('./user')
+    await setRideLegs('tok-abc', 9003, 'fresh', 'i84213307')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9003', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { legs: 'fresh', externalActivityId: 'i84213307' },
     })
   })
 })

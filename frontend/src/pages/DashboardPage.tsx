@@ -610,7 +610,7 @@ export default function DashboardPage() {
     const next = ride.feelLegs === legs ? null : legs
     const previous = ride.feelLegs ?? null
     updateRideMetricLegs(ride.stravaActivityId, next)
-    void setRideLegs(authToken, ride.stravaActivityId, next).catch(() => {
+    void setRideLegs(authToken, ride.stravaActivityId, next, ride.externalActivityId).catch(() => {
       updateRideMetricLegs(ride.stravaActivityId, previous)
     })
   }

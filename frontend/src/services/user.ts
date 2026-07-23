@@ -768,10 +768,19 @@ export async function setRideLegs(
   token: string,
   stravaActivityId: number,
   legs: 'fresh' | 'normal' | 'heavy' | null,
+  externalActivityId?: string | null,
 ): Promise<{ stravaActivityId: number; ride?: RideMetricPoint | null }> {
+  // Non-Strava rides (e.g. intervals.icu) carry a synthesized 63-bit
+  // stravaActivityId that loses precision as a JS float64, so the path param
+  // cannot locate the row. Send the precision-safe external id so the backend
+  // can key the lookup off it (#441).
   return apiFetch<{ stravaActivityId: number; ride?: RideMetricPoint | null }>(
     `/users/me/ride-feedback/${stravaActivityId}`,
-    { token, method: 'PATCH', body: { legs } },
+    {
+      token,
+      method: 'PATCH',
+      body: { legs, externalActivityId: externalActivityId ?? null },
+    },
   )
 }
 

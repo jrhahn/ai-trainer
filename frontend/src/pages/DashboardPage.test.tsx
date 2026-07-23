@@ -1137,10 +1137,28 @@ describe('DashboardPage — leg-feel control', () => {
     const heavy = await screen.findByRole('button', { name: 'Legs felt Heavy' })
     fireEvent.click(heavy)
 
-    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 555, 'heavy')
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 555, 'heavy', undefined)
     await waitFor(() =>
       expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBe('heavy'),
     )
+  })
+
+  it('forwards the external id so intervals rides resolve server-side (#441)', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          stravaActivityId: 557,
+          externalActivityId: 'i84213307',
+          activityDate: yesterday,
+        }),
+      ],
+    })
+    renderDashboard()
+
+    const heavy = await screen.findByRole('button', { name: 'Legs felt Heavy' })
+    fireEvent.click(heavy)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 557, 'heavy', 'i84213307')
   })
 
   it('clears the rating when the active feel is tapped again', async () => {
@@ -1154,7 +1172,7 @@ describe('DashboardPage — leg-feel control', () => {
     const fresh = await screen.findByRole('button', { name: 'Legs felt Fresh' })
     fireEvent.click(fresh)
 
-    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 556, null)
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 556, null, undefined)
     await waitFor(() =>
       expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBeNull(),
     )
