@@ -45,6 +45,8 @@ from .prompts import (
     generate_plan_user,
     adapt_plan_system,
     adapt_plan_user,
+    plan_change_summary_system,
+    plan_change_summary_user,
     race_events_context_section,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
@@ -599,6 +601,35 @@ async def adapt_training_plan(
         day if day.get("completed") else updated_days.get(day["date"], day)
         for day in plan
     ]
+
+
+async def summarize_plan_changes(
+    changes: list[dict],
+    profile: dict,
+    *,
+    run_context: str,
+    provider: str = "openai",
+    rider_assessment: dict | None = None,
+    training_load_section: str = "",
+) -> dict:
+    """Narrate a coach run's applied plan changes for the athlete (#439).
+
+    ``changes`` is the ``applied=True`` subset from the plan pipeline
+    (``{"date", "old_day", "new_day"}`` dicts). Returns a dict with a first-person
+    ``summary`` string and a ``days`` list of ``{"date", "reason"}`` — the caller
+    (``services/coach_summary.py``) persists them and posts the chat message.
+    """
+    system_prompt = plan_change_summary_system()
+    user_msg = plan_change_summary_user(
+        changes,
+        profile,
+        run_context=run_context,
+        rider_assessment=rider_assessment,
+        training_load_section=training_load_section,
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
+    parsed = _parse_ai_json(raw)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:

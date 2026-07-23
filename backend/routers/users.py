@@ -267,6 +267,12 @@ class PlanDayHistoryEntry(schemas.CamelModel):
     batch_id: str | None
     old_day: Any | None
     new_day: Any | None
+    # One-line coach rationale for this day's change (#439); null when the run was
+    # not narrated (user edits, initial generation) or predates the feature.
+    reason: str | None = None
+    # True when this run was narrated as a coach chat message (#439). The frontend
+    # suppresses the redundant Coach-Timeline card for narrated runs.
+    narrated: bool = False
 
 
 class PlanDayHistoryResponse(schemas.CamelModel):
@@ -320,7 +326,7 @@ async def save_plan(
     merged = await plan_pipeline.commit_plan(
         db, current_user, sanitized, base_plan=base_plan, source="user_edit"
     )
-    return schemas.PlanResponse(plan=merged)
+    return schemas.PlanResponse(plan=merged.plan)
 
 
 @router.get("/plan-history", response_model=PlanDayHistoryResponse)
@@ -339,6 +345,9 @@ async def get_plan_history(
     rows = await crud.list_plan_day_history(
         db, current_user.id, date=date, limit=limit
     )
+    narrated_batches = await crud.get_narrated_batch_ids(
+        db, current_user.id, [row.batch_id for row in rows if row.batch_id]
+    )
     return PlanDayHistoryResponse(
         entries=[
             PlanDayHistoryEntry(
@@ -350,6 +359,8 @@ async def get_plan_history(
                 batch_id=row.batch_id,
                 old_day=row.old_day,
                 new_day=row.new_day,
+                reason=row.reason,
+                narrated=row.batch_id in narrated_batches,
             )
             for row in rows
         ],

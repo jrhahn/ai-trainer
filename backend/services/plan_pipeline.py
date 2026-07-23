@@ -55,6 +55,34 @@ pipeline_graph.register("plan")
 USER_SOURCE = "user"
 
 
+class PlanCommitResult(list):
+    """The persisted plan, augmented with the run's batch metadata (#439).
+
+    Subclasses ``list`` (of plan-day dicts) so every existing caller that treats
+    a commit's result as the plan keeps working unchanged, while narrated
+    triggers additionally read ``batch_id`` and ``applied_changes`` to explain
+    the run in one chat message. ``batch_id`` identifies the ``PlanDayHistory``
+    rows written by this commit (``None`` when nothing was recorded);
+    ``applied_changes`` is the ``applied=True`` subset as
+    ``{"date", "old_day", "new_day"}`` dicts — what actually changed for the
+    athlete. ``plan`` is an explicit alias for the list payload.
+    """
+
+    def __init__(
+        self,
+        plan: list[dict],
+        batch_id: str | None,
+        applied_changes: list[dict],
+    ) -> None:
+        super().__init__(plan)
+        self.batch_id = batch_id
+        self.applied_changes = applied_changes
+
+    @property
+    def plan(self) -> list[dict]:
+        return list(self)
+
+
 @dataclass(frozen=True)
 class PlanSource:
     """Describes the behaviour of one trigger that mutates the plan.
@@ -406,7 +434,7 @@ async def _enforce_and_persist(
     base_plan: list[dict],
     constraints: list[dict],
     source: PlanSource,
-) -> list[dict]:
+) -> PlanCommitResult:
     # Give every proposed day coherent, canonical fields before anything reads
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
     # preserves unknown keys (#368, #422).
@@ -433,10 +461,15 @@ async def _enforce_and_persist(
     # Record per-day history (append-only) before the early no-op return so that
     # a fully-blocked automated write still logs its attempted corrections.
     changes = _plan_day_changes(current_plan, merged, proposal, source)
+    batch_id: str | None = None
     if changes:
-        await crud.record_plan_day_changes(db, user.id, changes, source.trigger)
+        rows = await crud.record_plan_day_changes(db, user.id, changes, source.trigger)
+        batch_id = rows[0].batch_id if rows else None
+    # The applied=True subset is what actually changed for the athlete; the coach
+    # narrator turns it into one summary + per-day reasons (#439).
+    applied_changes = [c for c in changes if c.get("applied")]
     if current_row is not None and merged == current_plan:
-        return current_plan
+        return PlanCommitResult(current_plan, batch_id, applied_changes)
     await crud.upsert_training_plan(db, user.id, merged)
     # The plan changed: cascade to downstream pipelines (invalidate the login
     # summary so it regenerates from the new plan, and refresh ride↔plan snapshots
@@ -449,7 +482,7 @@ async def _enforce_and_persist(
     await pipeline_graph.notify_changed(
         "plan", db=db, user=user, dates=changed_dates
     )
-    return merged
+    return PlanCommitResult(merged, batch_id, applied_changes)
 
 
 def _as_dicts(items) -> list[dict]:
@@ -473,14 +506,14 @@ async def commit_plan(
     source: str,
     now=None,
     timezone_name: str | None = None,
-) -> list[dict]:
+) -> PlanCommitResult:
     """Enforce constraints, protect user edits, and persist a full proposed plan.
 
     ``source`` names the trigger (see ``PLAN_SOURCES``); it decides whether the
     change is pinned as a user edit and whether it must respect existing pins.
-    Accepts typed ``PlanDay`` days or raw dicts. Returns the plan that was
-    actually persisted (or the unchanged current plan when the proposal collapses
-    to a no-op).
+    Accepts typed ``PlanDay`` days or raw dicts. Returns a ``PlanCommitResult``
+    whose ``plan`` is what was actually persisted (or the unchanged current plan
+    when the proposal collapses to a no-op).
     """
     resolved = _resolve_source(source)
     today = app_today_iso(now, timezone_name)
@@ -500,12 +533,12 @@ async def commit_plan_updates(
     source: str,
     now=None,
     timezone_name: str | None = None,
-) -> list[dict]:
+) -> PlanCommitResult:
     """Apply per-day updates through the same constraint-respecting pipeline.
 
     Updates that would violate a hard constraint are dropped before they are
     applied; completed days are never touched. ``source`` names the trigger
-    (see ``PLAN_SOURCES``).
+    (see ``PLAN_SOURCES``). Returns a ``PlanCommitResult`` (see ``commit_plan``).
     """
     resolved = _resolve_source(source)
     today = app_today_iso(now, timezone_name)
@@ -514,7 +547,7 @@ async def commit_plan_updates(
     filtered = filter_plan_updates_for_constraints(_as_dicts(plan_updates), constraints)
     proposed = apply_plan_updates(base_dicts, filtered)
     if proposed is None:
-        return base_dicts
+        return PlanCommitResult(base_dicts, None, [])
     return await _enforce_and_persist(
         db, user, proposed, base_plan=base_dicts, constraints=constraints,
         source=resolved,

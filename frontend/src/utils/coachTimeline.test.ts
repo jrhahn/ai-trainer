@@ -90,6 +90,21 @@ describe('planUpdateEvents', () => {
   it('skips blocked (unapplied) changes — they kept the athlete version', () => {
     expect(planUpdateEvents([entry({ id: 'p2', applied: false })])).toEqual([])
   })
+
+  it('drops narrated runs — their what/why is told in the chat message (#439)', () => {
+    // A narrated nightly run: two applied rows, both flagged narrated.
+    const narrated = planUpdateEvents([
+      entry({ id: 'a', source: 'nightly_maintenance', batchId: 'n1', narrated: true }),
+      entry({ id: 'b', source: 'nightly_maintenance', batchId: 'n1', narrated: true }),
+    ])
+    expect(narrated).toEqual([])
+    // A non-narrated generation still collapses into a card.
+    const events = planUpdateEvents([
+      entry({ id: 'c', source: 'generate', batchId: 'gen3', narrated: false }),
+    ])
+    expect(events).toHaveLength(1)
+    expect(events[0].id).toBe('plan-gen3')
+  })
 })
 
 function question(overrides: Partial<AthleteOpenQuestion> = {}): AthleteOpenQuestion {
