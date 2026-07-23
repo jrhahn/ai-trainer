@@ -1329,6 +1329,65 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByText('Behind plan')).toBeInTheDocument()
   })
 
+  it('counts matched activities toward adherence even without logged feedback', async () => {
+    // A strength/endurance session that was auto-matched to its plan day is "done"
+    // even if the athlete never filed feedback (`completed` stays false). Otherwise
+    // we report "Behind plan" for sessions that were demonstrably done and matched.
+    setupStore({
+      trainingPlan: [
+        planDay({ date: yesterday, workoutType: 'strength', completed: false }),
+        planDay({ date: twoDaysAgo, workoutType: 'endurance', completed: false }),
+      ],
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: yesterday,
+          planMatchStatus: 'auto_matched',
+          matchedPlanDate: yesterday,
+        }),
+        makeRide({
+          activityDate: twoDaysAgo,
+          planMatchStatus: 'manual_matched',
+          matchedPlanDate: twoDaysAgo,
+        }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
+  it("counts today's matched session toward adherence once it's done", async () => {
+    // Today's session, matched, is the only due session — it should register as done
+    // ("On track"), not sit outside the adherence window.
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'strength', completed: false })],
+      rideMetricsHistory: [
+        makeRide({
+          activityDate: today,
+          planMatchStatus: 'auto_matched',
+          matchedPlanDate: today,
+        }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
+  it("does not let today's not-yet-done session drag adherence down", async () => {
+    // A session planned for later today isn't "behind" — it must stay out of the
+    // window until done, so it can neither help nor hurt the status.
+    setupStore({
+      trainingPlan: [
+        planDay({ date: today, workoutType: 'strength', completed: false }),
+        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
   it('reports "Slightly behind" when adherence is partial', async () => {
     setupStore({
       trainingPlan: [

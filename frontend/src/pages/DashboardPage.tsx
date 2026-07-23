@@ -709,11 +709,33 @@ export default function DashboardPage() {
   // Training status = plan adherence over the trailing 7 days. Only counts planned
   // (non-rest) sessions that already fell due; if none exist we have no trustworthy
   // signal and simply drop the status segment rather than showing a decorative label.
+  //
+  // A planned session counts as done when a synced activity was matched to that plan
+  // day, not just when the athlete filed feedback (`completed`). Feedback is optional,
+  // so hinging adherence on it alone reports "Behind plan" for sessions that were
+  // demonstrably done and matched — the exact contradiction athletes flag.
+  const matchedPlanDates = new Set(
+    rideMetricsHistory
+      .filter(
+        (r) =>
+          r.matchedPlanDate != null &&
+          (r.planMatchStatus === 'auto_matched' || r.planMatchStatus === 'manual_matched')
+      )
+      .map((r) => r.matchedPlanDate as string)
+  )
+  const isPlanDayDone = (d: TrainingDay): boolean =>
+    !!d.completed || matchedPlanDates.has(d.date)
+  // Past sessions always count as due. Today's session only enters the window once
+  // it's actually done — a session still ahead of you in the day must not count
+  // against adherence, but a completed/matched one should get its credit.
   const adherenceWindow = trainingPlan.filter(
-    (d) => d.date >= sevenDaysAgo && d.date < today && d.workoutType !== 'rest'
+    (d) =>
+      d.date >= sevenDaysAgo &&
+      d.workoutType !== 'rest' &&
+      (d.date < today || (d.date === today && isPlanDayDone(d)))
   )
   const plannedDue = adherenceWindow.length
-  const plannedDone = adherenceWindow.filter((d) => d.completed).length
+  const plannedDone = adherenceWindow.filter(isPlanDayDone).length
   const trainingStatus =
     plannedDue === 0
       ? null
