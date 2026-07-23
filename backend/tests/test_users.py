@@ -564,6 +564,60 @@ async def test_save_ride_feedback_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_save_ride_feedback_intervals_ride_by_external_id(
+    client, auth_headers, mock_ai_service
+):
+    """Intervals rides resolve via external id despite a float64-corrupted path id.
+
+    Their synthesized 63-bit ``strava_activity_id`` loses precision as a JS
+    float64, so the browser sends a corrupted path id. The precise string
+    ``externalActivityId`` in the body must still locate the row (#441).
+    """
+    import crud
+    from services.intervals_service import intervals_activity_id
+    from tests.conftest import TestSessionLocal
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user_id = me.json()["id"]
+
+    provider_id = "i84213307"
+    precise_id = intervals_activity_id(provider_id)
+    # A 63-bit id can't be represented exactly as a float64, so the browser
+    # rounds it — mimic that corruption of the path param.
+    corrupted_id = int(float(precise_id))
+    assert corrupted_id != precise_id, "expected precision loss for this id"
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=precise_id,
+            activity_source="intervals",
+            external_activity_id=provider_id,
+            activity_date="2026-07-20",
+            activity_name="Monday Intervals",
+        )
+        await db.commit()
+
+    # Without the external id, the corrupted path id misses (the original bug).
+    miss = await client.patch(
+        f"/api/v1/users/me/ride-feedback/{corrupted_id}",
+        headers=auth_headers,
+        json={"legs": "heavy"},
+    )
+    assert miss.status_code == 404
+
+    # With the precise external id, the row resolves and the rating sticks.
+    hit = await client.patch(
+        f"/api/v1/users/me/ride-feedback/{corrupted_id}",
+        headers=auth_headers,
+        json={"legs": "heavy", "externalActivityId": provider_id},
+    )
+    assert hit.status_code == 200
+    assert hit.json()["ride"]["feelLegs"] == "heavy"
+
+
+@pytest.mark.asyncio
 async def test_save_ride_feedback_invalid_legs(client, auth_headers):
     """PATCH ride-feedback rejects leg values outside the allowed set."""
     response = await client.patch(
