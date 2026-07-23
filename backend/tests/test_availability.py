@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from services.availability import extract_availability_constraints
+from services.availability import (
+    extract_availability_constraints,
+    extract_constraint_lift,
+)
 
 TODAY = date(2026, 6, 3)  # a Wednesday
 
@@ -124,3 +127,44 @@ def test_same_intent_still_spans_days_joined_by_and():
     )
     dates = {r["constraint_date"] for r in result}
     assert dates == {"2026-06-08", "2026-06-03"}  # next monday, today
+
+
+# --- Lifting constraints (#437) -------------------------------------------
+
+
+def test_lift_bare_request_detected_without_dates():
+    # "pls lift that constraint" is the exact phrasing the override note invites.
+    result = extract_constraint_lift("pls lift that constraint", today=TODAY)
+    assert result == {"lift": True, "dates": []}
+
+
+def test_lift_german_sperre_aufheben_detected():
+    result = extract_constraint_lift("hebe die Sperre bitte auf", today=TODAY)
+    assert result["lift"] is True
+    assert result["dates"] == []
+
+
+def test_lift_with_named_day_resolves_date():
+    result = extract_constraint_lift(
+        "remove the constraint on friday", today=TODAY
+    )
+    assert result["lift"] is True
+    assert result["dates"] == ["2026-06-05"]  # next friday
+
+
+def test_lift_ignores_day_in_unrelated_clause():
+    # The day named in a separate clause is not swept into the lift.
+    result = extract_constraint_lift(
+        "cancel that constraint. monday i am unavailable", today=TODAY
+    )
+    assert result["lift"] is True
+    assert result["dates"] == []
+
+
+def test_no_lift_for_ordinary_message():
+    assert extract_constraint_lift("make friday a rest day", today=TODAY) == {
+        "lift": False,
+        "dates": [],
+    }
+    # "remove the warmup" is not a constraint lift.
+    assert extract_constraint_lift("remove the warmup", today=TODAY)["lift"] is False

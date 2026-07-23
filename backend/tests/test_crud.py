@@ -589,6 +589,71 @@ async def test_delete_chat_messages(db: AsyncSession) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Availability constraint lifting (#437)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deactivate_availability_constraints_for_dates(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.upsert_availability_constraint(
+        db, user.id, constraint_type="required_workout", constraint_date="2026-07-24",
+        weekday="friday", expires_on="2026-07-24",
+    )
+    await crud.upsert_availability_constraint(
+        db, user.id, constraint_type="no_training", constraint_date="2026-07-25",
+        weekday="saturday", expires_on="2026-07-25",
+    )
+
+    lifted = await crud.deactivate_availability_constraints_for_dates(
+        db, user.id, ["2026-07-24"]
+    )
+    assert [c.constraint_date for c in lifted] == ["2026-07-24"]
+
+    active = await crud.list_active_availability_constraints(
+        db, user.id, today="2026-07-22"
+    )
+    # Only the Saturday constraint is still active.
+    assert [c.constraint_date for c in active] == ["2026-07-25"]
+
+
+@pytest.mark.asyncio
+async def test_deactivate_availability_constraints_for_dates_empty(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    assert await crud.deactivate_availability_constraints_for_dates(db, user.id, []) == []
+
+
+@pytest.mark.asyncio
+async def test_get_last_flagged_constraint_dates(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    # An earlier flagged reply, then a later one that supersedes it.
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="old",
+        timestamp="2026-07-20T10:00:00Z",
+        flagged_constraint_dates=["2026-07-20"],
+    )
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="new",
+        timestamp="2026-07-21T10:00:00Z",
+        flagged_constraint_dates=["2026-07-24"],
+    )
+    # A plain reply after it must not clear the last flagged set.
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="chit-chat",
+        timestamp="2026-07-21T11:00:00Z",
+    )
+    assert await crud.get_last_flagged_constraint_dates(db, user.id) == ["2026-07-24"]
+
+
+@pytest.mark.asyncio
+async def test_get_last_flagged_constraint_dates_none(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    assert await crud.get_last_flagged_constraint_dates(db, user.id) == []
+
+
+# ---------------------------------------------------------------------------
 # CoachMemory
 # ---------------------------------------------------------------------------
 

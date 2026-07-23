@@ -41,7 +41,10 @@ from services.analysis import (
 )
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
-from services.availability import extract_availability_constraints
+from services.availability import (
+    extract_availability_constraints,
+    extract_constraint_lift,
+)
 from services.plan_constraints import (
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
@@ -180,14 +183,41 @@ async def _capture_availability_constraints_from_message(
     user_id: str,
     message: str,
     timezone_name: str | None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
+    """Sync availability constraints with the athlete's message.
+
+    Lifts requested constraints first so a same-message re-proposed edit sees the
+    post-lift state, then captures any newly stated constraints. Returns the
+    active constraints for the prompt and the constraints that were lifted (#437).
+    """
     today = app_today(timezone_name=timezone_name)
+
+    # Lift before capture: honour "lift that constraint" so the coach's edit to a
+    # previously blocked day can finally land in the same turn (#437).
+    lift = extract_constraint_lift(message, today=today)
+    lifted_rows: list[models.AthleteAvailabilityConstraint] = []
+    if lift["lift"]:
+        dates = lift["dates"] or await crud.get_last_flagged_constraint_dates(
+            db, user_id
+        )
+        if dates:
+            lifted_rows = await crud.deactivate_availability_constraints_for_dates(
+                db, user_id, dates
+            )
+    lifted = [
+        schemas.AthleteAvailabilityConstraintSchema.model_validate(
+            row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for row in lifted_rows
+    ]
+
     extracted = extract_availability_constraints(message, today=today)
     for item in extracted:
         await crud.upsert_availability_constraint(db, user_id, **item)
-    return await _active_availability_constraints_for_prompt(
+    constraints = await _active_availability_constraints_for_prompt(
         db, user_id, timezone_name
     )
+    return constraints, lifted
 
 
 def _profile_with_availability_constraints(
@@ -236,6 +266,21 @@ def _format_constraint_override_note(overrides: list[dict]) -> str:
             f"of your availability constraints."
         )
     return "(Note: " + " ".join(sentences) + ")"
+
+
+def _format_constraint_lift_note(lifted: list[dict]) -> str:
+    """Confirm, deterministically, which availability constraints were lifted.
+
+    The lift is applied by the router before the plan pipeline runs, so this is
+    the honest record of what happened — independent of whatever the model says
+    in its prose (#437).
+    """
+    days = ", ".join(_day_label(c) for c in lifted)
+    plural = "constraints" if len(lifted) > 1 else "constraint"
+    return (
+        f"(Note: I lifted the availability {plural} on {days}, so the plan can now "
+        f"be changed there.)"
+    )
 
 
 def _next_race_date_from_events(
@@ -739,7 +784,10 @@ async def ask_trainer(
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
-    availability_constraints = await _capture_availability_constraints_from_message(
+    (
+        availability_constraints,
+        lifted_constraints,
+    ) = await _capture_availability_constraints_from_message(
         db, current_user.id, body.question, timezone_name
     )
     profile = _profile_with_availability_constraints(
@@ -891,6 +939,7 @@ async def ask_trainer(
     # an unavailable day is dropped). Without a note the coach falsely confirms the
     # change (#414). Scope to days in the current plan window so dead dates stay
     # owned by the note above.
+    flagged_constraint_dates: list[str] = []
     if plan and availability_constraints:
         plan_dates = {d.get("date") for d in plan if isinstance(d, dict)}
         overrides = describe_constraint_overrides(
@@ -901,6 +950,18 @@ async def ask_trainer(
             result["response"] = (
                 f"{result['response']}\n\n{_format_constraint_override_note(overrides)}"
             )
+            # Remember which constraints blocked this turn so a follow-up "lift
+            # that constraint" can resolve "that" to them (#437).
+            flagged_constraint_dates = [
+                o["date"] for o in overrides if o.get("date")
+            ]
+
+    # Coach honesty: confirm a lift deterministically, independent of the model's
+    # prose, so "pls lift that constraint" is not silently ignored (#437).
+    if lifted_constraints:
+        result["response"] = (
+            f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints)}"
+        )
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
@@ -959,6 +1020,7 @@ async def ask_trainer(
         content=result["response"],
         timestamp=assistant_message_time.isoformat(),
         plan_update_count=len(plan_updates) if plan_updates else None,
+        flagged_constraint_dates=flagged_constraint_dates or None,
     )
 
     # Update coach memory in the background only when user has not disabled it
