@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from datetime import date as _date
 from datetime import datetime, timedelta, timezone
 
@@ -323,6 +325,30 @@ async def _persist_collected_token_usage(
         await crud.increment_user_consumed_tokens(db, user, consumed)
 
 
+@asynccontextmanager
+async def _token_usage_scope(
+    db: AsyncSession, user: models.User
+) -> AsyncIterator[None]:
+    """Collect provider token usage for the enclosed block and always persist it.
+
+    Persisting/finishing in a ``finally`` guarantees the collection ContextVar is
+    reset exactly once on every exit path, so a raising block (e.g. an AI
+    rate-limit that becomes an ``HTTPException``) can't leak it. Previously each
+    call site had to remember to call ``finish_token_usage_collection`` in every
+    ``except`` branch, and un-handled exception types (classification errors, RAG
+    retrieval) leaked the collection entirely (#449). The persist itself is
+    best-effort: it must never mask the real error from the enclosed block.
+    """
+    token = begin_token_usage_collection()
+    try:
+        yield
+    finally:
+        try:
+            await _persist_collected_token_usage(db, user, token)
+        except Exception:  # noqa: BLE001 — never mask the enclosed block's error
+            logger.warning("Failed to persist collected token usage", exc_info=True)
+
+
 async def _auto_rate_ride(
     plan_day: dict,
     streams: dict,
@@ -506,23 +532,21 @@ async def analyse_activities(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.analyse_strava_activities(
-            activity_payloads,
-            provider=resolve_user_provider(current_user),
-            streams_by_id=streams_by_id,
-            max_heart_rate=body.max_heart_rate,
-            training_plan=training_plan or None,
-            user_ftp=body.current_ftp
-            or (int(current_user.current_ftp) if current_user.current_ftp else None),
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.analyse_strava_activities(
+                activity_payloads,
+                provider=resolve_user_provider(current_user),
+                streams_by_id=streams_by_id,
+                max_heart_rate=body.max_heart_rate,
+                training_plan=training_plan or None,
+                user_ftp=body.current_ftp
+                or (int(current_user.current_ftp) if current_user.current_ftp else None),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # Normalise text fields: the LLM may return dicts or lists instead of strings.
     # The DB columns and Pydantic schema both expect plain strings.
@@ -750,29 +774,26 @@ async def generate_plan(
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
-    usage_token = begin_token_usage_collection()
-    try:
-        plan = await ai_service.generate_training_plan(
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            metrics_history_section=metrics_section,
-            weather_context_section=weather_section,
-            race_events=race_events,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    except AIResponseFormatError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_AI_RESPONSE_FORMAT_DETAIL,
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            plan = await ai_service.generate_training_plan(
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                metrics_history_section=metrics_section,
+                weather_context_section=weather_section,
+                race_events=race_events,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        except AIResponseFormatError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=_AI_RESPONSE_FORMAT_DETAIL,
+            )
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
     commit = await plan_pipeline.commit_plan(
@@ -860,61 +881,60 @@ async def ask_trainer(
 
     # --- Fetch ride metrics history for structured LLM context ---
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
-    usage_token = begin_token_usage_collection()
-    classify_task = asyncio.ensure_future(
-        ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
-    )
-    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(
-        recent_metrics, timezone_name=timezone_name
-    )
-    race_events = await _race_events_for_prompt(db, current_user.id)
+    async with _token_usage_scope(db, current_user):
+        # Start question classification in parallel with the DB fetch (it's a pure LLM call).
+        classify_task = asyncio.ensure_future(
+            ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
+        )
+        try:
+            recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+            metrics_section = ride_metrics_context_section(
+                recent_metrics, timezone_name=timezone_name
+            )
+            race_events = await _race_events_for_prompt(db, current_user.id)
 
-    # --- Task 5: Await classification (likely already done), then conditionally retrieve RAG context ---
-    try:
-        classification = await classify_task
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    science_context = ""
-    rag_sources: list = []
-    if classification.get("needs_science_rag", False):
-        science_context, rag_sources = await retrieve_cycling_context(db, body.question)
+            # Await classification (likely already done), then conditionally retrieve RAG context.
+            classification = await classify_task
+            science_context = ""
+            rag_sources: list = []
+            if classification.get("needs_science_rag", False):
+                science_context, rag_sources = await retrieve_cycling_context(db, body.question)
 
-    try:
-        result = await ai_service.ask_trainer(
-            body.question,
-            plan,
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            coach_memory=coach_memory,
-            conversation_history=conversation_history,
-            context_workout=body.context_workout,
-            science_context=science_context,
-            classification=classification,
-            metrics_history_section=metrics_section,
-            race_events=race_events,
-            athlete_context=athlete_context,
-            athlete_memory_facts=athlete_memory_facts,
-            athlete_model=athlete_model,
-            open_questions=open_questions,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    except AIResponseFormatError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_AI_RESPONSE_FORMAT_DETAIL,
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+            result = await ai_service.ask_trainer(
+                body.question,
+                plan,
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                coach_memory=coach_memory,
+                conversation_history=conversation_history,
+                context_workout=body.context_workout,
+                science_context=science_context,
+                classification=classification,
+                metrics_history_section=metrics_section,
+                race_events=race_events,
+                athlete_context=athlete_context,
+                athlete_memory_facts=athlete_memory_facts,
+                athlete_model=athlete_model,
+                open_questions=open_questions,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        except AIResponseFormatError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=_AI_RESPONSE_FORMAT_DETAIL,
+            )
+        finally:
+            # Never leave the classification task pending/unawaited (#450): if we
+            # bailed out before awaiting it above, cancel and drain it here.
+            if not classify_task.done():
+                classify_task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await classify_task
 
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
@@ -1103,25 +1123,23 @@ async def race_event_feedback(
         recent_metrics, timezone_name=timezone_name
     )
     race_events = await _race_events_for_prompt(db, current_user.id)
-    usage_token = begin_token_usage_collection()
-    try:
-        feedback = await ai_service.race_event_feedback(
-            body.event.model_dump(by_alias=True),
-            plan,
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            race_events=race_events,
-            metrics_history_section=metrics_section,
-            action=body.action,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            feedback = await ai_service.race_event_feedback(
+                body.event.model_dump(by_alias=True),
+                plan,
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                race_events=race_events,
+                metrics_history_section=metrics_section,
+                action=body.action,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
     return schemas.RaceEventFeedbackResponse(feedback=feedback)
 
 
@@ -1180,42 +1198,40 @@ async def rate_workout(
                 exc_info=True,
             )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.rate_completed_workout(
-            body.day.model_dump(by_alias=True),
-            profile,
-            provider=resolve_user_provider(current_user),
-            stream_delta=stream_delta,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.rate_completed_workout(
+                body.day.model_dump(by_alias=True),
+                profile,
+                provider=resolve_user_provider(current_user),
+                stream_delta=stream_delta,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
-    if result.get("flag_for_adaptation"):
-        # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        plan = existing_plan.plan if existing_plan is not None else []
-        day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
-        auto_feedback = {
-            "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
-            "perceivedEffort": day_feedback.get("perceivedEffort"),
-            "notes": day_feedback.get(
-                "notes", "Auto-triggered due to workout feedback"
-            ),
-            "completedAt": day_feedback.get("completedAt"),
-        }
-        await _auto_adapt_plan(
-            db,
-            current_user,
-            plan,
-            auto_feedback,
-            resolve_user_provider(current_user),
-            timezone_name=timezone_name,
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+        if result.get("flag_for_adaptation"):
+            # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
+            existing_plan = await crud.get_training_plan(db, current_user.id)
+            plan = existing_plan.plan if existing_plan is not None else []
+            day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
+            auto_feedback = {
+                "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
+                "perceivedEffort": day_feedback.get("perceivedEffort"),
+                "notes": day_feedback.get(
+                    "notes", "Auto-triggered due to workout feedback"
+                ),
+                "completedAt": day_feedback.get("completedAt"),
+            }
+            await _auto_adapt_plan(
+                db,
+                current_user,
+                plan,
+                auto_feedback,
+                resolve_user_provider(current_user),
+                timezone_name=timezone_name,
+            )
 
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),
@@ -1251,21 +1267,19 @@ async def review_new_rides(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
-    usage_token = begin_token_usage_collection()
-    try:
-        review_text = await ai_service.batch_review_rides(
-            unreviewed,
-            profile=profile,
-            provider=resolve_user_provider(current_user),
-            training_plan=training_plan,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            review_text = await ai_service.batch_review_rides(
+                unreviewed,
+                profile=profile,
+                provider=resolve_user_provider(current_user),
+                training_plan=training_plan,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # Mark rides as reviewed so they are not presented again
     ride_ids = [m.strava_activity_id for m in unreviewed]
@@ -1289,18 +1303,16 @@ async def extract_athlete_facts(
     Candidates are returned for review only — nothing is persisted here. The
     client accepts chosen candidates via ``POST /users/me/athlete-memory-facts``.
     """
-    usage_token = begin_token_usage_collection()
-    try:
-        candidates = await ai_service.extract_athlete_facts(
-            body.transcript,
-            provider=resolve_user_provider(current_user),
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            candidates = await ai_service.extract_athlete_facts(
+                body.transcript,
+                provider=resolve_user_provider(current_user),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     return schemas.ExtractAthleteFactsResponse(
         candidates=[
@@ -1337,19 +1349,17 @@ async def refresh_athlete_model(
         else None
     )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        derived = await ai_service.derive_athlete_model(
-            metrics_section,
-            current_model=current_model,
-            provider=resolve_user_provider(current_user),
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            derived = await ai_service.derive_athlete_model(
+                metrics_section,
+                current_model=current_model,
+                provider=resolve_user_provider(current_user),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     if derived is not None:
         model = await crud.upsert_athlete_model(db, current_user.id, **derived)
@@ -1399,16 +1409,15 @@ async def resolve_ride_match(
                 exc_info=True,
             )
 
-    usage_token = begin_token_usage_collection()
-    coach_note, plan_updates = await review_matched_ride_and_adapt(
-        db,
-        current_user,
-        ride,
-        plan,
-        provider=resolve_user_provider(current_user),
-        streams=streams,
-    )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        coach_note, plan_updates = await review_matched_ride_and_adapt(
+            db,
+            current_user,
+            ride,
+            plan,
+            provider=resolve_user_provider(current_user),
+            streams=streams,
+        )
 
     validated_updates = (
         [schemas.PlanDayUpdateSchema.model_validate(u) for u in plan_updates]
@@ -1626,17 +1635,15 @@ async def refresh_login_summary(
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        login_summary = await summary_pipeline.regenerate(
-            db, current_user, provider=resolve_user_provider(current_user)
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            login_summary = await summary_pipeline.regenerate(
+                db, current_user, provider=resolve_user_provider(current_user)
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
 
@@ -1744,28 +1751,26 @@ async def next_ride_recommendation(
                 else None
             )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.recommend_next_session(
-            rides=rides,
-            plan=plan,
-            profile=profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            coach_memory=coach_memory,
-            athlete_context=athlete_context,
-            athlete_memory_facts=athlete_memory_facts,
-            ctl=ctl,
-            atl=atl,
-            tsb=tsb,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.recommend_next_session(
+                rides=rides,
+                plan=plan,
+                profile=profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                coach_memory=coach_memory,
+                athlete_context=athlete_context,
+                athlete_memory_facts=athlete_memory_facts,
+                ctl=ctl,
+                atl=atl,
+                tsb=tsb,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # --- Apply plan updates using the same logic as ask-trainer ---
     plan_updates = _filter_plan_updates_for_availability_constraints(
@@ -1831,21 +1836,19 @@ async def process_pending_feedbacks(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
 
-    usage_token = begin_token_usage_collection()
-    try:
-        login_summary = await ai_service.generate_summary_from_ride_feedbacks(
-            rides=rides,
-            assessment=assessment_dict,
-            training_plan=training_plan or None,
-            provider=resolve_user_provider(current_user),
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            login_summary = await ai_service.generate_summary_from_ride_feedbacks(
+                rides=rides,
+                assessment=assessment_dict,
+                training_plan=training_plan or None,
+                provider=resolve_user_provider(current_user),
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     if login_summary and current_user.rider_assessment is not None:
         await crud.upsert_rider_assessment(

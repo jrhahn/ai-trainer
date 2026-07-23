@@ -12,6 +12,13 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Canonical set of environment names treated as non-production ("dev"). Used to
+# relax production-only requirements (strong JWT secret, at-rest encryption key).
+# Shared with auth.py so both agree on what counts as a dev environment — a
+# previous split definition meant APP_ENV=local/dev/testing was "dev" for the
+# JWT check but "production" for the encryption-key check.
+DEV_ENVS = frozenset({"development", "dev", "local", "test", "testing"})
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -96,9 +103,14 @@ class Settings(BaseSettings):
     omitted, in which case secrets are stored as plaintext.
     """
 
+    @property
+    def is_dev_environment(self) -> bool:
+        """Whether APP_ENV names a non-production (dev/test) environment."""
+        return self.app_env.lower() in DEV_ENVS
+
     @model_validator(mode="after")
     def _require_encryption_key_in_production(self) -> "Settings":
-        if self.app_env not in ("development", "test") and not self.strava_encryption_key:
+        if not self.is_dev_environment and not self.strava_encryption_key:
             raise ValueError(
                 "STRAVA_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
                 "Generate one with: "

@@ -239,11 +239,20 @@ async def _persist_and_adapt(
     }
     adapted = 0
     for ride_metric in auto_matched:
+        # Re-read the plan before each adaptation so an earlier ride's committed
+        # changes are visible to the next one. Passing the same pre-loop snapshot
+        # as every ride's base_plan made a later adaptation to an already-changed
+        # day look like a concurrent user edit and get dropped (stale-snapshot
+        # clobber, #452).
+        current_plan_row = await crud.get_training_plan(db, user.id)
+        current_plan = (
+            current_plan_row.plan if current_plan_row is not None else training_plan
+        )
         await review_matched_ride_and_adapt(
             db,
             user,
             ride_metric,
-            training_plan,
+            current_plan,
             provider=resolve_user_provider(user),
             streams=streams_by_id.get(ride_metric.strava_activity_id),
         )

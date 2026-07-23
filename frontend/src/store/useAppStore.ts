@@ -337,6 +337,7 @@ interface AppState {
   ) => void
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
+  removePendingFeedbackRides: (ids: number[]) => void
   toggleExpertMode: () => void
   pendingCoachMessage: string | null
   setPendingCoachMessage: (msg: string | null) => void
@@ -480,6 +481,15 @@ export const useAppStore = create<AppState>()(
           : [...state.pendingFeedbackRideIds, id],
       })),
     clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
+    removePendingFeedbackRides: (ids) =>
+      set((state) => {
+        const remove = new Set(ids)
+        return {
+          pendingFeedbackRideIds: state.pendingFeedbackRideIds.filter(
+            (id) => !remove.has(id)
+          ),
+        }
+      }),
     setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
     toggleExpertMode: () =>
       set((state) => {
@@ -490,6 +500,12 @@ export const useAppStore = create<AppState>()(
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
       if (!token) return
+      // Dedupe concurrent loads for the same token: the App effect loads on every
+      // authToken change while the login pages also call loadUserData(token)
+      // directly, which otherwise fires two full parallel loads. The in-flight
+      // caller keeps running and the isLoadingUserData overlay covers the window
+      // for whichever caller is skipped here (#458).
+      if (get().isLoadingUserData && get().authToken === token) return
 
       set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
@@ -506,6 +522,14 @@ export const useAppStore = create<AppState>()(
           track(fetchMetricsHistory(token)),
           track(fetchRideMetricsHistory(token)),
         ])
+
+      // If the session was torn down while we were loading (manual logout, or an
+      // AUTH_EXPIRED_EVENT from a 401 on one of the parallel fetches), do not
+      // resurrect it by writing these now-stale results back. The logout /
+      // re-login that changed the token owns the resulting state (#454).
+      if (get().authToken !== token) {
+        return
+      }
 
       // Auth errors from the user endpoint must clear the session — app can't continue.
       if (userResult.status === 'rejected') {

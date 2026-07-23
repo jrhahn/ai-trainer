@@ -12,6 +12,26 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 type ActivitySource = 'strava' | 'intervals'
 
+/**
+ * Pick the sync-cursor id for the newest of `activities` for a given source.
+ *
+ * Strava activity ids are monotonic in the id space (the backend advances the
+ * cursor with `id > last_seen`), so the max id is the correct cursor.
+ *
+ * intervals.icu ids are 63-bit blake2b hashes (`intervals_activity_id` on the
+ * backend) — not ordered by time and precision-lossy as JS Numbers — so
+ * `Math.max` over them selects an essentially random activity. Pick the newest
+ * by start time instead and use its id; the backend matches the intervals
+ * cursor with a tolerance that absorbs the residual JS precision loss (#455).
+ */
+function newestCursorId(activities: StravaActivity[], source: ActivitySource): number {
+  if (source === 'intervals') {
+    const newest = activities.reduce((a, b) => (b.start_date > a.start_date ? b : a))
+    return newest.id
+  }
+  return Math.max(...activities.map((a) => a.id))
+}
+
 export type AnalysisStatus = 'idle' | 'analysing' | 'done' | 'error'
 
 export interface UseStravaSyncResult {
@@ -104,7 +124,7 @@ export function useStravaSync(): UseStravaSyncResult {
       }
       setUserProfile(updatedProfile)
 
-      const newestId = Math.max(...activities.map((a) => a.id))
+      const newestId = newestCursorId(activities, source)
       if (source === 'intervals') {
         setLastIntervalsActivityId(newestId)
       } else {
@@ -216,6 +236,11 @@ export function useStravaSync(): UseStravaSyncResult {
       (a) => !processedNewActivitiesRef.current.has(a.id)
     )
     if (unprocessed.length === 0) return
+    // Don't start an incremental analysis while another analysis is already in
+    // flight (the initial-analysis effect uses the same guard). Leave these
+    // activities unmarked so the next poll retries them once the current run
+    // finishes, instead of running two concurrent analyses (#456).
+    if (isAnalysingRef.current) return
     unprocessed.forEach((a) => processedNewActivitiesRef.current.add(a.id))
 
     setNewActivitiesCount(unprocessed.length)
