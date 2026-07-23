@@ -15,12 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from config import settings
+from config import DEV_ENVS, settings
 from database import get_db
 
 _JWT_SECRET_DEFAULT = "change-me-in-production"
 _MIN_HMAC_SECRET_BYTES = 32
-_DEV_ENVS = {"development", "dev", "local", "test", "testing"}
 logger = logging.getLogger(__name__)
 
 JWT_SECRET = settings.jwt_secret
@@ -42,7 +41,7 @@ _argon2_hasher = PasswordHasher()
 
 def validate_jwt_secret() -> None:
     """Validate JWT_SECRET strength for the configured runtime environment."""
-    is_dev_env = APP_ENV.lower() in _DEV_ENVS
+    is_dev_env = APP_ENV.lower() in DEV_ENVS
     if JWT_SECRET == _JWT_SECRET_DEFAULT and not is_dev_env:
         raise RuntimeError(
             f"JWT_SECRET is set to the insecure default value '{_JWT_SECRET_DEFAULT}'. "

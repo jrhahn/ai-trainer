@@ -177,5 +177,5 @@ def healthz() -> dict:
     return {
         "status": "ok",
         "api_version": "v1",
-        "frontend_url": ALLOWED_ORIGINS,
+        "allowed_origins": ALLOWED_ORIGINS,
     }
