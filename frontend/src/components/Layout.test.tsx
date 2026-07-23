@@ -8,10 +8,22 @@ const mockUseImportProgress = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useImportProgress', () => ({ useImportProgress: mockUseImportProgress }))
 
 const mockToggleExpertMode = vi.hoisted(() => vi.fn())
+const mockLogout = vi.hoisted(() => vi.fn())
 let expertMode = false
+type StoreShape = {
+  isExpertMode: boolean
+  toggleExpertMode: () => void
+  userProfile: { name: string } | null
+  logout: () => void
+}
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (s: { isExpertMode: boolean; toggleExpertMode: () => void }) => unknown) =>
-    selector({ isExpertMode: expertMode, toggleExpertMode: mockToggleExpertMode }),
+  useAppStore: (selector: (s: StoreShape) => unknown) =>
+    selector({
+      isExpertMode: expertMode,
+      toggleExpertMode: mockToggleExpertMode,
+      userProfile: { name: 'Jane Rider' },
+      logout: mockLogout,
+    }),
 }))
 
 function renderLayout() {
@@ -52,6 +64,25 @@ describe('Layout', () => {
     expect(screen.getAllByText('Coach')).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Toggle menu' }))
     expect(screen.getAllByText('Coach')).toHaveLength(2)
+  })
+
+  it('exposes the mobile drawer as an accessible dialog and closes it on Escape', async () => {
+    renderLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle menu' }))
+    const dialog = screen.getByRole('dialog', { name: 'Navigation menu' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Coach')).toHaveLength(1)
+  })
+
+  it('signs the user out from the shell', async () => {
+    renderLayout()
+    // Name is shown and sign-out is reachable directly from the sidebar chrome.
+    expect(screen.getByText('Jane Rider')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(mockLogout).toHaveBeenCalledTimes(1)
   })
 
   it('shows an import-complete toast when progress transitions running -> done', () => {

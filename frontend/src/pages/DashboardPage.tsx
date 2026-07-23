@@ -835,7 +835,7 @@ export default function DashboardPage() {
 
       {isExpertMode && (
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
             Consumed tokens
           </p>
           <p className="text-2xl font-bold text-gray-900">
@@ -847,7 +847,7 @@ export default function DashboardPage() {
       {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
       {(recentRides.length > 0 || next3Days.length > 0) && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Activities</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
               const plan = planForRide(ride, trainingPlan)
@@ -863,7 +863,7 @@ export default function DashboardPage() {
                 >
                   {/* Activity row */}
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-400 flex-shrink-0 w-16">
+                    <p className="text-xs text-gray-500 flex-shrink-0 w-16">
                       {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
                         weekday: 'short',
                         month: 'short',
@@ -886,7 +886,7 @@ export default function DashboardPage() {
                       </span>
                     )}
                     {ride.durationSeconds != null && (
-                      <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+                      <span className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0">
                         <Clock size={11} />
                         {formatDuration(ride.durationSeconds)}
                       </span>
@@ -899,7 +899,7 @@ export default function DashboardPage() {
                   </div>
                   {/* Plan comparison row */}
                   <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                    <span className="text-xs text-gray-400">planned:</span>
+                    <span className="text-xs text-gray-500">planned:</span>
                     <span className="text-xs text-gray-600 font-medium truncate flex-1">
                       {plan ? (
                         <>
@@ -955,7 +955,7 @@ export default function DashboardPage() {
               )
             })}
             {recentRides.length > 0 && next3Days.length > 0 && (
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2 pb-0.5 pl-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2 pb-0.5 pl-1">
                 Upcoming
               </p>
             )}
@@ -991,7 +991,7 @@ export default function DashboardPage() {
           pinned coach entry, then plan updates, recommendations and chat interleave
           in the feed below (#418). Takes up the majority of the remaining space. */}
       <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Coach Timeline</h2>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
 
         {(riderAssessment?.loginSummary || summaryLoading) && (
           <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
@@ -1000,11 +1000,11 @@ export default function DashboardPage() {
                 <Bot size={14} className="text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                   Your recent training summary
                 </p>
                 {summaryLoading ? (
-                  <p className="text-sm text-gray-400 italic">Preparing your training summary…</p>
+                  <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
                 ) : (
                   <div className="text-sm text-gray-700 leading-relaxed">
                     {loginSummary?.intro && <p>{loginSummary.intro}</p>}
@@ -1029,14 +1029,14 @@ export default function DashboardPage() {
 
         <AIChat
           contextWorkout={trainingPlan.find((d) => d.date === today)}
-          className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
+          className="h-[60vh] min-h-[24rem] shadow-sm"
         />
       </div>
 
       {/* Plan-vs-logged month calendar — expert mode only (#369) */}
       {isExpertMode && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
             Training calendar
           </h2>
           <TrainingCalendar showLoggedActivities />
