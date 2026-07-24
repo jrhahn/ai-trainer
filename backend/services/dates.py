@@ -82,6 +82,54 @@ def app_today_stamp(
     return f"[{_date_label(today)} · {today.isoformat()} · {tz_label}]"
 
 
+def plan_day_date_labels(raw_date: object, today: date | None = None) -> dict:
+    """Return weekday/dateLabel/relativeDay annotations for a plan day's ISO date.
+
+    Gives the LLM an explicit weekday and relative-day anchor so it never has to
+    compute a weekday from a bare date (a known drift-bug source) — e.g. calling
+    the next planned session "today" when it is actually days away. Returns an
+    empty dict when the date is missing or unparseable.
+
+    This is the single source of truth for plan-day date anchoring; every
+    plan-consuming LLM prompt should route through here (directly, or via
+    :func:`annotate_plan_days`) rather than re-deriving weekdays ad hoc.
+    """
+    if not raw_date:
+        return {}
+    try:
+        parsed = date.fromisoformat(str(raw_date))
+    except ValueError:
+        return {}
+    labels: dict = {
+        "weekday": parsed.strftime("%A"),
+        "dateLabel": _date_label(parsed),
+    }
+    if today is not None:
+        delta_days = (parsed - today).days
+        if delta_days == 0:
+            labels["relativeDay"] = "today"
+        elif delta_days == 1:
+            labels["relativeDay"] = "tomorrow"
+        elif delta_days == -1:
+            labels["relativeDay"] = "yesterday"
+    return labels
+
+
+def annotate_plan_days(
+    plan: list[dict] | None, today: date | None = None
+) -> list[dict] | None:
+    """Return each plan day merged with its weekday/dateLabel/relativeDay anchors.
+
+    Pass-through for a falsy plan so callers can annotate unconditionally. Use
+    this (paired with :func:`app_date_context`) in every prompt that shows the
+    athlete's plan, so the model can state a session's timing relative to today
+    instead of guessing it is "today".
+    """
+    if not plan:
+        return plan
+    return [{**day, **plan_day_date_labels(day.get("date"), today)} for day in plan]
+
+
 def request_timezone(request: Any) -> str | None:
     """Return the browser-supplied timezone header if present."""
     value = request.headers.get(TIMEZONE_HEADER)

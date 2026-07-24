@@ -8,7 +8,49 @@ from __future__ import annotations
 
 import json
 
-from .dates import app_today, app_today_iso
+from .dates import (
+    annotate_plan_days,
+    app_date_context,
+    app_today,
+    app_today_iso,
+    plan_day_date_labels,
+)
+
+# Shared instruction reused by every prompt that names when a planned session
+# occurs. Keeping it in one place stops the "next session is today" drift bug
+# from creeping back into individual builders (see services/dates.py anchoring).
+PLAN_TIMING_GUIDANCE = (
+    "When you mention when a planned session occurs, anchor it to the provided date "
+    "context and each plan day's weekday/dateLabel/relativeDay fields (for example "
+    '"today", "tomorrow", "this Saturday", or "next Tuesday"). The next session is '
+    "often days away — never assume it is today, and never compute a weekday from memory."
+)
+
+
+def annotated_plan_json(
+    training_plan: list[dict] | None,
+    timezone_name: str | None = None,
+    *,
+    indent: int | None = None,
+) -> str:
+    """JSON-render plan days with weekday/dateLabel/relativeDay anchors for a prompt.
+
+    Central helper so every plan-consuming builder shows the model the same
+    weekday-annotated plan instead of a bare date dump it has to interpret.
+    """
+    annotated = annotate_plan_days(
+        training_plan, app_today(timezone_name=timezone_name)
+    )
+    return json.dumps(annotated, indent=indent)
+
+
+def _plan_day_when(day: dict, today) -> str:
+    """Human-readable 'when' for a single plan day: dateLabel plus relative day."""
+    labels = plan_day_date_labels(day.get("date"), today)
+    when = labels.get("dateLabel") or day.get("date", "?")
+    relative = labels.get("relativeDay")
+    return f"{when} ({relative})" if relative else when
+
 
 _COACH_VOICE_TRAITS = (
     "You speak like a serious but approachable {sport} coach: warm, personal, plain-spoken, and concise. "
@@ -250,7 +292,8 @@ def analyse_activities_system(
         '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         f"the recent {activities_noun}, such as volume, effort quality, FTP/fitness signals, plan "
         "alignment, fatigue, or next actions when they genuinely matter. Omit categories with no "
-        "meaningful signal. Be specific, warm, and encouraging.\n"
+        "meaningful signal. Be specific, warm, and encouraging. "
+        f"{PLAN_TIMING_GUIDANCE}\n"
         '- "planUpdates": optional array of training day updates for the upcoming plan based on what '
         f"you observed in the {activities_noun}. Only include updates that are genuinely warranted (e.g. add recovery "
         "if athlete shows fatigue/HR drift, increase intensity if athlete is clearly above their current "
@@ -269,6 +312,7 @@ def analyse_activities_user(
     ride_analyses_section: str,
     sport_type: str = "cycling",
     training_plan: list[dict] | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     sport_key = sport_type.lower()
     is_running = sport_key in ("running", "run")
@@ -291,10 +335,12 @@ def analyse_activities_user(
     plan_section = ""
     if training_plan:
         plan_section = (
-            f"\n\nCurrent training plan (use for plan alignment in loginSummary):\n"
-            f"{json.dumps(training_plan, indent=2)}"
+            f"\n\nCurrent training plan (use for plan alignment in loginSummary; "
+            f"each day carries weekday/dateLabel/relativeDay anchors):\n"
+            f"{annotated_plan_json(training_plan, timezone_name, indent=2)}"
         )
     return (
+        f"{app_date_context(timezone_name=timezone_name)}\n\n"
         f"Last {len(activities)} {activities_noun}:\n{json.dumps(activities, indent=2)}"
         f"{computed_section}"
         f"{ride_analyses_section}"
@@ -2276,6 +2322,7 @@ def batch_review_system() -> str:
         "and for ambiguous/short rides, ask one concise follow-up question rather than over-interpreting.\n"
         "4. The combined fatigue/load impact of the batch (CTL/ATL/TSB trends if available).\n"
         "5. What the next planned session should focus on given the batch.\n"
+        f"{PLAN_TIMING_GUIDANCE}\n"
         "Keep the response concise and warm: 4-8 sentences or a short structured paragraph. "
         "Do not address the athlete by name in most messages; use it at most once every several exchanges and never as a sentence opener.\n"
         "Return ONLY a valid JSON object with exactly one field:\n"
@@ -2293,12 +2340,15 @@ def batch_review_user(
 
     *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
     """
-    today = app_today_iso(timezone_name=timezone_name)
+    date_context = app_date_context(timezone_name=timezone_name)
     profile_section = f"\nAthlete profile: {json.dumps(profile)}" if profile else ""
 
     plan_section = ""
     if training_plan:
-        plan_section = f"\nTraining plan (relevant days): {json.dumps(training_plan)}"
+        plan_section = (
+            "\nTraining plan (relevant days, with weekday/dateLabel/relativeDay anchors): "
+            f"{annotated_plan_json(training_plan, timezone_name)}"
+        )
 
     rides_lines: list[str] = ["Rides to review (oldest first):"]
     for m in rides:
@@ -2360,7 +2410,7 @@ def batch_review_user(
     rides_section = "\n".join(rides_lines)
 
     return (
-        f"Today's date: {today}"
+        f"{date_context}"
         f"{profile_section}"
         f"{plan_section}\n\n"
         f"{rides_section}\n\n"
@@ -2404,6 +2454,7 @@ def next_ride_recommendation_system() -> str:
         "- 'move_intensity': postpone any high-intensity work to a later session\n\n"
         "Base your decision on: recent TSS, CTL/ATL/TSB, subjective RPE, leg feel, "
         "and how recent rides compared to the plan.\n\n"
+        f"{PLAN_TIMING_GUIDANCE}\n\n"
         f"{hard_session_spacing_rules()}\n\n"
         "Return ONLY a valid JSON object with these fields:\n"
         '- "response": a warm, personal 2-4 sentence coaching message that explains '
@@ -2438,8 +2489,9 @@ def next_ride_recommendation_user(
     activity data including user_note (subjective feedback).
     """
     today = app_today_iso(timezone_name=timezone_name)
+    today_date = app_today(timezone_name=timezone_name)
 
-    parts: list[str] = [f"Today's date: {today}"]
+    parts: list[str] = [app_date_context(timezone_name=timezone_name)]
     athlete_context_parts: list[str] = []
     physiology_parts: list[str] = []
 
@@ -2533,7 +2585,7 @@ def next_ride_recommendation_user(
     if upcoming:
         next_session = upcoming[0]
         physiology_parts.append(
-            f"Next planned session ({next_session.get('date', '?')}): "
+            f"Next planned session — {_plan_day_when(next_session, today_date)}: "
             f"{next_session.get('title', 'Unknown')} — {next_session.get('workoutType', '?')}, "
             f"{next_session.get('durationMinutes', '?')} min. "
             f"Description: {next_session.get('description', '')}"
@@ -2542,7 +2594,7 @@ def next_ride_recommendation_user(
             physiology_parts.append(
                 "Following sessions: "
                 + ", ".join(
-                    f"{d.get('date')} {d.get('title', d.get('workoutType', '?'))}"
+                    f"{_plan_day_when(d, today_date)} {d.get('title', d.get('workoutType', '?'))}"
                     for d in upcoming[1:]
                 )
             )
@@ -2588,7 +2640,7 @@ def process_pending_feedbacks_system() -> str:
         '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         "the athlete's notes, ride load, plan alignment, fatigue, or next actions when they genuinely "
         "matter. Omit categories with no meaningful signal. Be specific, warm, and encouraging — "
-        "reference actual numbers from the data."
+        f"reference actual numbers from the data. {PLAN_TIMING_GUIDANCE}"
     )
 
 
@@ -2603,7 +2655,8 @@ def process_pending_feedbacks_user(
     *rides* is a list of RideMetric ORM objects sorted oldest-first.
     """
     today = app_today_iso(timezone_name=timezone_name)
-    parts: list[str] = [f"Today's date: {today}"]
+    today_date = app_today(timezone_name=timezone_name)
+    parts: list[str] = [app_date_context(timezone_name=timezone_name)]
 
     if assessment:
         ftp = assessment.get("estimatedFtp") or assessment.get("estimated_ftp")
@@ -2690,7 +2743,7 @@ def process_pending_feedbacks_user(
             parts.append(
                 "Upcoming planned sessions: "
                 + ", ".join(
-                    f"{d.get('date')} {d.get('title', d.get('workoutType', '?'))}"
+                    f"{_plan_day_when(d, today_date)} {d.get('title', d.get('workoutType', '?'))}"
                     for d in upcoming
                 )
             )

@@ -35,7 +35,13 @@ from .llm import (
     TASK_PLAN,
     get_provider,
 )  # re-exported for backward compat
-from .dates import app_date_context, app_today, app_today_iso, app_today_stamp
+from .dates import (
+    app_date_context,
+    app_today,
+    app_today_iso,
+    app_today_stamp,
+    plan_day_date_labels,
+)
 from .prompts import (
     COACH_PERSONA,
     analyse_activities_computed_section,
@@ -132,32 +138,13 @@ _SLIM_PLAN_KEEP = {
 def _plan_date_labels(
     raw_date: object, today_date: datetime.date | None = None
 ) -> dict:
-    """Return weekday/dateLabel/relativeDay annotations for a plan day's ISO date.
+    """Backward-compatible alias for :func:`services.dates.plan_day_date_labels`.
 
-    Gives the LLM an explicit weekday and relative-day anchor so it never has to
-    compute a weekday from a bare date (a known drift-bug source) — e.g. calling
-    the next planned session "today" when it is actually days away. Returns an
-    empty dict when the date is missing or unparseable.
+    The canonical implementation now lives in ``services.dates`` so every
+    plan-consuming prompt shares one date-anchoring source; this thin wrapper
+    preserves existing call sites and tests.
     """
-    if not raw_date:
-        return {}
-    try:
-        parsed = datetime.date.fromisoformat(str(raw_date))
-    except ValueError:
-        return {}
-    labels: dict = {
-        "weekday": parsed.strftime("%A"),
-        "dateLabel": f"{parsed.strftime('%A, %B')} {parsed.day}, {parsed.year}",
-    }
-    if today_date is not None:
-        delta_days = (parsed - today_date).days
-        if delta_days == 0:
-            labels["relativeDay"] = "today"
-        elif delta_days == 1:
-            labels["relativeDay"] = "tomorrow"
-        elif delta_days == -1:
-            labels["relativeDay"] = "yesterday"
-    return labels
+    return plan_day_date_labels(raw_date, today_date)
 
 
 def _slim_plan_entry(
@@ -342,6 +329,7 @@ async def analyse_strava_activities(
     sport_type: str = "cycling",
     training_plan: list[dict] | None = None,
     user_ftp: int | None = None,
+    timezone_name: str | None = None,
 ) -> dict:
     sport_type = _primary_sport_type(activities, fallback=sport_type)
     is_running = sport_type.lower() in ("running", "run")
@@ -414,6 +402,7 @@ async def analyse_strava_activities(
         ride_analyses_section,
         sport_type=sport_type,
         training_plan=training_plan,
+        timezone_name=timezone_name,
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
