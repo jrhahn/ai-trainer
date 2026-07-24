@@ -1620,6 +1620,7 @@ async def refresh_knowledge(
     "/refresh-login-summary", response_model=schemas.RefreshLoginSummaryResponse
 )
 async def refresh_login_summary(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RefreshLoginSummaryResponse:
@@ -1638,7 +1639,10 @@ async def refresh_login_summary(
     async with _token_usage_scope(db, current_user):
         try:
             login_summary = await summary_pipeline.regenerate(
-                db, current_user, provider=resolve_user_provider(current_user)
+                db,
+                current_user,
+                provider=resolve_user_provider(current_user),
+                timezone_name=_request_timezone(request),
             )
         except AIRateLimitError:
             raise HTTPException(

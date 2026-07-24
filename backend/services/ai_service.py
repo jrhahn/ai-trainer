@@ -129,27 +129,43 @@ _SLIM_PLAN_KEEP = {
 }
 
 
+def _plan_date_labels(
+    raw_date: object, today_date: datetime.date | None = None
+) -> dict:
+    """Return weekday/dateLabel/relativeDay annotations for a plan day's ISO date.
+
+    Gives the LLM an explicit weekday and relative-day anchor so it never has to
+    compute a weekday from a bare date (a known drift-bug source) — e.g. calling
+    the next planned session "today" when it is actually days away. Returns an
+    empty dict when the date is missing or unparseable.
+    """
+    if not raw_date:
+        return {}
+    try:
+        parsed = datetime.date.fromisoformat(str(raw_date))
+    except ValueError:
+        return {}
+    labels: dict = {
+        "weekday": parsed.strftime("%A"),
+        "dateLabel": f"{parsed.strftime('%A, %B')} {parsed.day}, {parsed.year}",
+    }
+    if today_date is not None:
+        delta_days = (parsed - today_date).days
+        if delta_days == 0:
+            labels["relativeDay"] = "today"
+        elif delta_days == 1:
+            labels["relativeDay"] = "tomorrow"
+        elif delta_days == -1:
+            labels["relativeDay"] = "yesterday"
+    return labels
+
+
 def _slim_plan_entry(
     entry: dict, today_date: datetime.date | None = None
 ) -> dict:
     """Return a compact version of a plan day with only fields needed for chat context."""
     slim = {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
-    raw_date = slim.get("date")
-    if raw_date:
-        try:
-            parsed = datetime.date.fromisoformat(str(raw_date))
-        except ValueError:
-            return slim
-        slim["weekday"] = parsed.strftime("%A")
-        slim["dateLabel"] = f"{parsed.strftime('%A, %B')} {parsed.day}, {parsed.year}"
-        if today_date is not None:
-            delta_days = (parsed - today_date).days
-            if delta_days == 0:
-                slim["relativeDay"] = "today"
-            elif delta_days == 1:
-                slim["relativeDay"] = "tomorrow"
-            elif delta_days == -1:
-                slim["relativeDay"] = "yesterday"
+    slim.update(_plan_date_labels(slim.get("date"), today_date))
     return slim
 
 
@@ -1598,6 +1614,7 @@ async def generate_login_summary(
     training_plan: list[dict] | None = None,
     provider: str = "openai",
     feel_legs: str | None = None,
+    timezone_name: str | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -1605,14 +1622,24 @@ async def generate_login_summary(
     ``None`` — e.g. because the column was added after their last Strava sync.
     Returns the summary string, or an empty string on failure.
     """
+    # Anchor the plan to today so the model can describe the next session's
+    # timing correctly (today/tomorrow/this Saturday/next week) instead of
+    # guessing it is "today". Each PlanDay carries an ISO ``date``.
+    today = app_today(timezone_name=timezone_name)
+    annotated_plan = (
+        [{**day, **_plan_date_labels(day.get("date"), today)} for day in training_plan]
+        if training_plan
+        else training_plan
+    )
     system_prompt = refresh_login_summary_system()
     user_msg = refresh_login_summary_user(
         ride_insights=ride_insights,
         last_ride_feedback=last_ride_feedback,
         notes=notes,
         estimated_ftp=estimated_ftp,
-        training_plan=training_plan,
+        training_plan=annotated_plan,
         feel_legs=feel_legs,
+        date_context=app_date_context(timezone_name=timezone_name),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

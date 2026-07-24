@@ -4307,6 +4307,82 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_generate_login_summary_anchors_next_session_to_today(monkeypatch):
+    """Regression: the login summary called the next session "today" even when it
+    was days away, because the prompt never received an authoritative today."""
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 7, 24)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Friday, July 24, 2026 (2026-07-24).\n"
+            "- Yesterday was Thursday, July 23, 2026 (2026-07-23).\n"
+            "- Tomorrow is Saturday, July 25, 2026 (2026-07-25)."
+        ),
+    )
+
+    async def fake_chat(
+        provider: str,
+        system_prompt: str,
+        user_msg: str,
+        json_mode: bool = False,
+        task: str = "plan",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["user_msg"] = user_msg
+        return json.dumps(
+            {
+                "loginSummary": (
+                    "Fresh legs today, nice work.\n"
+                    "- Next session: your Long Aerobic Base Build is this Saturday."
+                )
+            }
+        )
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    summary = await ai_service.generate_login_summary(
+        ride_insights="Solid aerobic base building.",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=250,
+        training_plan=[
+            {
+                "date": "2026-07-24",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-07-25",
+                "workoutType": "endurance",
+                "title": "Long Aerobic Base Build",
+                "durationMinutes": 180,
+            },
+        ],
+        timezone_name="Europe/Berlin",
+    )
+
+    assert summary  # non-empty means it passed the completeness check
+    user_msg = str(captured["user_msg"])
+    system_prompt = str(captured["system_prompt"])
+    # Authoritative "today" anchor reaches the prompt.
+    assert "Today is Friday, July 24, 2026 (2026-07-24)." in user_msg
+    # Plan days are annotated: today is a rest day; the next real session is tomorrow.
+    assert '"relativeDay": "today"' in user_msg
+    assert '"date": "2026-07-25"' in user_msg
+    assert '"weekday": "Saturday"' in user_msg
+    assert '"relativeDay": "tomorrow"' in user_msg
+    # System prompt instructs the model not to assume the next session is today.
+    assert "never assume it is today" in system_prompt
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatch):
     captured: dict[str, object] = {}
 

@@ -30,7 +30,11 @@ PIPELINE_NAME = "summary"
 
 
 async def regenerate(
-    db: AsyncSession, user: models.User, *, provider: str | None = None
+    db: AsyncSession,
+    user: models.User,
+    *,
+    provider: str | None = None,
+    timezone_name: str | None = None,
 ) -> str | None:
     """Regenerate and persist the login summary from current assessment + plan.
 
@@ -58,6 +62,7 @@ async def regenerate(
         training_plan=training_plan or None,
         provider=provider or resolve_user_provider(user),
         feel_legs=feel_legs,
+        timezone_name=timezone_name,
     )
     if login_summary:
         await crud.upsert_rider_assessment(
