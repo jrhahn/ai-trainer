@@ -2074,7 +2074,12 @@ def refresh_login_summary_system() -> str:
         '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         "recent activity, fitness signals, plan alignment, fatigue, or next actions when they genuinely "
         "matter. Omit categories with no meaningful signal. Be specific, warm, and encouraging — "
-        "reference actual numbers from the data."
+        "reference actual numbers from the data.\n"
+        "When you reference the next planned session, use the provided date context and the plan "
+        "entries' weekday/dateLabel/relativeDay fields to describe WHEN it occurs relative to today "
+        "(for example \"today\", \"tomorrow\", \"this Saturday\", or \"next Tuesday\"). The next "
+        "session is often days away — never assume it is today. Anchor every relative day to the "
+        "date context; never compute a weekday from memory."
     )
 
 
@@ -2085,9 +2090,12 @@ def refresh_login_summary_user(
     estimated_ftp: int | None,
     training_plan: list[dict] | None,
     feel_legs: str | None = None,
+    date_context: str | None = None,
 ) -> str:
     """Build the user message for login summary generation from existing assessment data."""
     parts: list[str] = []
+    if date_context:
+        parts.append(date_context)
     if estimated_ftp:
         parts.append(f"Current estimated FTP: {estimated_ftp} W")
     if notes:
