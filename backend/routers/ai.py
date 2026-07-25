@@ -470,6 +470,7 @@ async def _auto_adapt_plan(
 
 @router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
 async def analyse_activities(
+    request: Request,
     body: schemas.AnalyseActivitiesRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -542,6 +543,7 @@ async def analyse_activities(
                 training_plan=training_plan or None,
                 user_ftp=body.current_ftp
                 or (int(current_user.current_ftp) if current_user.current_ftp else None),
+                timezone_name=_request_timezone(request),
             )
         except AIRateLimitError:
             raise HTTPException(
