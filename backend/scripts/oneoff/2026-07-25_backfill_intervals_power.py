@@ -29,17 +29,23 @@ import asyncio
 from datetime import date, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
+import crud
 import models
-from database import async_session_maker
-from services import crud
+from config import settings
 from services.intervals_service import (
     _first_float,
     _first_int,
     fetch_recent_activities,
 )
 from services.metrics_service import recalculate_metrics_for_user
+
+# Dedicated engine for this one-off. The app engine uses ``pool_pre_ping=True``,
+# whose async ping raises MissingGreenlet when driven from a standalone script.
+_engine = create_async_engine(settings.database_url)
+async_session_maker = async_sessionmaker(_engine, expire_on_commit=False)
 
 
 def _provider_power(activity: dict) -> tuple[int | None, int | None, float | None]:
@@ -114,10 +120,12 @@ async def _backfill_user(session, user: models.User, *, commit: bool) -> tuple[i
         except ValueError as exc:
             print(f"    ! chain rebuild skipped ({exc}); power values still corrected")
 
-    if commit:
+    # Commit per user so a failure mid-run doesn't lose completed work. In
+    # dry-run mode the caller rolls the whole transaction back at the end — we
+    # must not roll back here, because rollback expires ``user`` and the next
+    # attribute access would lazy-load outside the async context.
+    if commit and corrected:
         await session.commit()
-    else:
-        await session.rollback()
 
     return len(intervals_metrics), corrected
 
@@ -132,14 +140,19 @@ async def main(email: str | None, commit: bool) -> None:
         total_examined = 0
         total_corrected = 0
         for user in users:
+            email = user.email  # capture before any flush/rollback expires it
             examined, corrected = await _backfill_user(session, user, commit=commit)
             if examined:
                 print(
-                    f"  user={user.email}: {corrected}/{examined} intervals rides corrected"
+                    f"  user={email}: {corrected}/{examined} intervals rides corrected"
                 )
             total_examined += examined
             total_corrected += corrected
 
+        if not commit:
+            await session.rollback()
+
+    await _engine.dispose()
     mode = "COMMITTED" if commit else "DRY RUN (no changes written)"
     print(
         f"\n{mode}: corrected {total_corrected} of {total_examined} intervals ride metrics"
