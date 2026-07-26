@@ -390,10 +390,18 @@ async def analyse_strava_activities(
 
     system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
 
-    # Build the per-activity analysis section for the AI prompt
+    # Build the per-activity analysis section for the AI prompt. Drop the
+    # whole-ride ``avg_power_w`` — it is the lossy stream-mean that misled the
+    # coach into "averaging 221W"; the authoritative average is now in the
+    # labeled power block (#467). Per-interval ``avg_power_w`` inside
+    # ``intervals_detected`` is legitimate and left untouched.
     ride_analyses_section = ""
     if ride_analyses:
-        ride_analyses_str = json.dumps(ride_analyses, indent=2)
+        sanitized = {
+            name: {k: v for k, v in analysis.items() if k != "avg_power_w"}
+            for name, analysis in ride_analyses.items()
+        }
+        ride_analyses_str = json.dumps(sanitized, indent=2)
         ride_analyses_section = f"\n\nAlgorithmic per-activity analysis (computed from stream data):\n{ride_analyses_str}"
 
     user_msg = analyse_activities_user(
@@ -403,6 +411,7 @@ async def analyse_strava_activities(
         sport_type=sport_type,
         training_plan=training_plan,
         timezone_name=timezone_name,
+        user_ftp=user_ftp,
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
