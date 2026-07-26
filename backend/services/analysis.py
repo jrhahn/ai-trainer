@@ -1918,6 +1918,27 @@ def build_ride_metrics_chain(
             # training-purpose label.
             ride_purpose = "unknown"
 
+        # --- Prefer the provider's own headline figures over stream recompute ---
+        # Providers (intervals.icu / Strava) compute avg/NP/TSS from full-resolution
+        # data. The stream we ingest can be downsampled or gap-stripped, which both
+        # inflates the sample-count mean and collapses NP onto avg (#466: avg == NP,
+        # ~20 W above Strava). Trust the provider figure when present; the stream
+        # computation above remains the fallback (and still drives ride_purpose and
+        # interval detection, which need shape rather than a single headline number).
+        summary_avg = ride.get("_summary_avg_power_w")
+        summary_np = ride.get("_summary_np_w")
+        summary_tss = ride.get("_summary_tss")
+        if summary_avg is not None:
+            avg_power = int(round(summary_avg))
+        if summary_np is not None:
+            np_value = int(round(summary_np))
+            if ftp > 0:
+                intensity_factor = round(np_value / ftp, 3)
+        if summary_tss is not None:
+            tss = float(summary_tss)
+        elif summary_np is not None and ftp > 0:
+            tss = compute_ride_tss(ride.get("duration_seconds") or 0, float(np_value), ftp)
+
         # --- CTL/ATL decay and update ---
         activity_date_str = ride["activity_date"]
         gap_days = 1

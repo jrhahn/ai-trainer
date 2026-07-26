@@ -66,6 +66,7 @@ async def fetch_recent_activities(
             "moving_time",
             "elapsed_time",
             "average_watts",
+            "icu_average_watts",
             "icu_weighted_avg_watts",
             "icu_training_load",
             "icu_ctl",
@@ -254,10 +255,15 @@ def map_activity_to_imported_activity(
         start_lat=_start_latlng(source)[0],
         start_lng=_start_latlng(source)[1],
         streams=streams,
+        # Average power must come from an *average* field — never fall back to
+        # ``icu_weighted_avg_watts`` (that is Normalized Power). Conflating them
+        # made avg == NP for intervals rides (#466).
         summary_avg_power_w=_first_int(
-            source, "average_watts", "icu_weighted_avg_watts"
+            source, "icu_average_watts", "average_watts"
         ),
-        summary_normalized_power_w=_first_int(source, "icu_weighted_avg_watts"),
+        summary_normalized_power_w=_first_int(
+            source, "icu_weighted_avg_watts", "weighted_average_watts"
+        ),
         summary_tss=_first_float(source, "icu_training_load", "training_load"),
         metadata={"intervals_activity_id": str(raw_id)},
         legacy_activity_id=intervals_activity_id(raw_id),
