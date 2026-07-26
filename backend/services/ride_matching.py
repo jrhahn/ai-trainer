@@ -391,6 +391,44 @@ async def apply_ride_plan_matches(
     return auto_matched
 
 
+async def mark_matched_days_completed(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict] | None,
+    rides: list[models.RideMetric],
+) -> None:
+    """Mark each ride's auto-matched plan day completed via the plan pipeline.
+
+    A synced activity is proof the athlete did that day, but nothing else sets the
+    plan-day ``completed`` flag — it is otherwise only set when the athlete ticks a
+    workout by hand. Setting it here makes completed-day protection and the
+    dashboard's completed state work for auto-matched rides without a manual tick.
+    Idempotent: already-completed days (and days the pipeline's pin guard owns) are
+    left untouched.
+    """
+    if not plan:
+        return
+    plan_by_date = {
+        d["date"]: d for d in plan if isinstance(d, dict) and d.get("date")
+    }
+    updates = [
+        {"date": date, "completed": True}
+        for date in sorted(
+            {
+                ride.matched_plan_date
+                for ride in rides
+                if ride.matched_plan_date and ride.plan_match_status == MATCH_AUTO
+            }
+        )
+        if plan_by_date.get(date) and not plan_by_date[date].get("completed")
+    ]
+    if not updates:
+        return
+    await plan_pipeline.commit_plan_updates(
+        db, user, updates, base_plan=plan, source="activity_import"
+    )
+
+
 async def refresh_matches_for_dates(
     db: AsyncSession,
     user_id: str,

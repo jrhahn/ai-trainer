@@ -101,7 +101,7 @@ class PlanSource:
 
 # (stamp name, respect_pins) per trigger; the trigger key is injected below so it
 # is recorded in history without being duplicated. Keeping this in one place makes
-# the pin policy for all eight triggers auditable at a glance. See #342 / #343.
+# the pin policy for every trigger auditable at a glance. See #342 / #343.
 _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # User-authored: stamp days "user" (pinning them). They created the intent.
     "user_edit": (USER_SOURCE, False),
@@ -120,6 +120,9 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     "auto_adapt": ("auto_adapt", True),
     "nightly_maintenance": ("nightly_maintenance", True),
     "ride_review": ("ride_review", True),
+    # Activity sync marking an auto-matched day completed. Respects pins like any
+    # automated trigger, so it never touches a user-owned day.
+    "activity_import": ("activity_import", True),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)

@@ -659,6 +659,81 @@ async def test_plan_change_refreshes_ride_snapshot():
 
 
 @pytest.mark.asyncio
+async def test_matched_ride_marks_plan_day_completed():
+    """A synced ride that auto-matches its plan day marks that day completed, so
+    completed-day protection covers it without a manual tick (#472 follow-up)."""
+    from services.ride_matching import (
+        apply_ride_plan_matches,
+        mark_matched_days_completed,
+    )
+
+    d = "2026-07-05"
+    user_id = await _create_user(
+        "pipe-complete-on-import@example.com", [_day(d, "endurance")]
+    )
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=93001, activity_date=d,
+            duration_seconds=3600,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = (await crud.get_training_plan(db, user_id)).plan
+        auto_matched = await apply_ride_plan_matches(db, user_id, plan, [93001])
+        await mark_matched_days_completed(db, user, plan, auto_matched)
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        day = next(
+            x for x in (await crud.get_training_plan(db, user_id)).plan
+            if x["date"] == d
+        )
+        assert day["completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_completed_matched_day_survives_later_regenerate():
+    """The completion set on import must let the existing completed-day guard keep
+    the day when a later automated regenerate omits it (#472 follow-up)."""
+    from services.ride_matching import (
+        apply_ride_plan_matches,
+        mark_matched_days_completed,
+    )
+
+    d = "2026-07-06"
+    future = "2026-07-07"
+    user_id = await _create_user(
+        "pipe-complete-survives@example.com", [_day(d, "endurance"), _day(future)]
+    )
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=93002, activity_date=d,
+            duration_seconds=3600,
+        )
+        await db.commit()
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = (await crud.get_training_plan(db, user_id)).plan
+        auto_matched = await apply_ride_plan_matches(db, user_id, plan, [93002])
+        await mark_matched_days_completed(db, user, plan, auto_matched)
+        await db.commit()
+
+    # A regenerate whose window starts the next day omits the completed day.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        base = (await crud.get_training_plan(db, user_id)).plan
+        result = await plan_pipeline.commit_plan(
+            db, user, [_day(future, "intervals")], base_plan=base, source="generate"
+        )
+        await db.commit()
+
+    assert next(x for x in result if x["date"] == d)["workoutType"] == "endurance"
+
+
+@pytest.mark.asyncio
 async def test_no_op_plan_write_does_not_refresh_snapshots():
     """A no-op plan write must not re-match rides (no changed dates fan out)."""
     from unittest.mock import AsyncMock

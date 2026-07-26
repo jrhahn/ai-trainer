@@ -15,6 +15,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   auto_adapt: 'Auto-adaptation',
   nightly_maintenance: 'Nightly tune-up',
   ride_review: 'Post-ride adaptation',
+  activity_import: 'Activity synced',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */
@@ -58,6 +59,9 @@ export function summarizeDayChange(
   }
   if (oldDay.durationMinutes !== newDay.durationMinutes) {
     parts.push(`duration ${oldDay.durationMinutes ?? '—'} → ${newDay.durationMinutes ?? '—'} min`)
+  }
+  if (!oldDay.completed && newDay.completed) {
+    parts.push('marked complete')
   }
   return parts.length > 0 ? parts.join(', ') : 'Minor adjustment'
 }
