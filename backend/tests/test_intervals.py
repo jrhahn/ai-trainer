@@ -245,7 +245,9 @@ async def test_intervals_import_success_and_dedupe(auth_headers, monkeypatch):
     ride = rows[0]
     assert ride.strava_activity_id == intervals_activity_id("i123")
     assert ride.activity_name == "Garmin Morning Ride"
-    assert ride.avg_power_w == 215
+    # Provider average (average_watts=210) wins over the stream mean of 215
+    # ([200,220,210,230]/4) — the stream is downsampled/lossy (#466).
+    assert ride.avg_power_w == 210
     assert ride.tss is not None
 
 
