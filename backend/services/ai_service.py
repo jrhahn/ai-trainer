@@ -22,6 +22,7 @@ import schemas
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
     LTHR_RATIO,
+    _time_in_power_zones,
     build_ride_analysis,
     compute_ftp_from_streams,
     compute_hr_zones,
@@ -404,6 +405,18 @@ async def analyse_strava_activities(
         ride_analyses_str = json.dumps(sanitized, indent=2)
         ride_analyses_section = f"\n\nAlgorithmic per-activity analysis (computed from stream data):\n{ride_analyses_str}"
 
+    # Per-ride time-in-zone from the authoritative entered FTP, so the coach can
+    # ground zone claims in measured time rather than guessing (#468). Keyed by
+    # activity id to match the labeled power block.
+    time_in_zone_by_id: dict[str, dict] = {}
+    if streams_by_id and not is_running and user_ftp and user_ftp > 0:
+        for act_id, streams in streams_by_id.items():
+            watts = streams.get("watts", {}).get("data", [])
+            time_data = streams.get("time", {}).get("data", [])
+            tiz = _time_in_power_zones(watts, time_data, float(user_ftp))
+            if any(v > 0 for v in tiz.values()):
+                time_in_zone_by_id[str(act_id)] = tiz
+
     user_msg = analyse_activities_user(
         activities,
         computed_section,
@@ -412,6 +425,7 @@ async def analyse_strava_activities(
         training_plan=training_plan,
         timezone_name=timezone_name,
         user_ftp=user_ftp,
+        time_in_zone_by_id=time_in_zone_by_id,
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)

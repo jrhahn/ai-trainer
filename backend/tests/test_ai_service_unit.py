@@ -657,6 +657,59 @@ async def test_analyse_strava_activities_no_streams():
 
 
 @pytest.mark.asyncio
+async def test_analyse_strava_activities_grounds_time_in_zone_from_streams():
+    """Streams + entered FTP produce a grounded time-in-zone line in the prompt (#468)."""
+    activities = [
+        {
+            "id": 10,
+            "name": "Endurance ride",
+            "type": "Ride",
+            "distance": 50000,
+            "movingTime": 3600,
+            "startDate": "2026-07-25T08:00:00Z",
+            # snake_case power fields (as router's model_dump() emits) so the
+            # labeled block — where the time-in-zone line is appended — renders.
+            "average_watts": 200,
+            "weighted_average_watts": 205,
+        }
+    ]
+    # A flat ~200 W stream at FTP 320 is squarely Zone 2 (176–240 W).
+    streams_by_id = {
+        "10": {
+            "watts": {"data": [200.0] * 10},
+            "time": {"data": [float(i * 30) for i in range(10)]},
+        }
+    }
+
+    ai_response = json.dumps(
+        {
+            "riderType": "endurance",
+            "notes": "Solid aerobic base.",
+            "rideInsights": "Endurance ride.",
+            "lastRideFeedback": "Nice steady effort.",
+        }
+    )
+    captured: dict[str, str] = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured["user_msg"] = user_msg
+        return ai_response
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        await ai_service.analyse_strava_activities(
+            activities,
+            provider="openai",
+            streams_by_id=streams_by_id,
+            user_ftp=320,
+        )
+
+    msg = captured["user_msg"]
+    # Zone boundaries with the Z2 ceiling, and measured time-in-zone (all in Z2).
+    assert "Zone 2 / endurance ceiling = 240 W" in msg
+    assert "time in zones: Z2" in msg
+
+
+@pytest.mark.asyncio
 async def test_generate_training_plan_calls_chat():
     """generate_training_plan should return the plan list from AI response."""
     profile = {
