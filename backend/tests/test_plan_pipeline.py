@@ -791,6 +791,39 @@ async def test_completed_matched_day_survives_later_regenerate():
 
 
 @pytest.mark.asyncio
+async def test_activity_day_workout_frozen_but_completion_passes():
+    """A trained day's workout stays frozen against an automated rewrite, but a
+    completion marker on it still lands (#472 activity guard + #473 coexistence)."""
+    d = "2026-07-08"
+    user_id = await _create_user(
+        "pipe-activity-coexist@example.com", [_day(d, "endurance", duration=90)]
+    )
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=93003, activity_date=d,
+            duration_seconds=3600,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        base = (await crud.get_training_plan(db, user_id)).plan
+        # An automated trigger tries to both rewrite the trained day and mark it done.
+        result = await plan_pipeline.commit_plan_updates(
+            db, user,
+            [{"date": d, "workoutType": "intervals", "durationMinutes": 30,
+              "completed": True}],
+            base_plan=base, source="nightly_maintenance",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["workoutType"] == "endurance"  # workout frozen (day was trained)
+    assert day["durationMinutes"] == 90
+    assert day["completed"] is True           # completion still lands
+
+
+@pytest.mark.asyncio
 async def test_no_op_plan_write_does_not_refresh_snapshots():
     """A no-op plan write must not re-match rides (no changed dates fan out)."""
     from unittest.mock import AsyncMock

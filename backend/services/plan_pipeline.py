@@ -247,9 +247,14 @@ def _preserve_activity_days(
     window starts today drops yesterday's ridden day entirely. The ride↔plan
     snapshot then has nothing to point at and the dashboard shows "No planned
     workout found" for a completed ride. Keying on recorded activity dates closes
-    that gap without depending on the manual flag; the matched day already belongs
-    to the completed ride and must not be rewritten or dropped by an automated
+    that gap without depending on the manual flag; the matched day's *workout* already
+    belongs to the completed ride and must not be rewritten or dropped by an automated
     trigger (mirrors ``_preserve_completed_days``).
+
+    A protected day's ``completed`` / ``feedback`` markers are the one legitimate
+    post-activity change, so an update that sets them is carried through onto the
+    preserved workout — otherwise this guard would revert the very completion that
+    activity sync marks on the matched day (the ``activity_import`` trigger).
     """
     protected = {
         d["date"]: d
@@ -262,7 +267,8 @@ def _preserve_activity_days(
     seen: set[str] = set()
     for day in plan:
         date = day.get("date")
-        result.append(protected[date] if date in protected else day)
+        result.append(_preserve_workout_carry_completion(protected[date], day)
+                      if date in protected else day)
         if date is not None:
             seen.add(date)
     for date, day in protected.items():
@@ -270,6 +276,20 @@ def _preserve_activity_days(
             result.append(day)
     result.sort(key=lambda d: d["date"])
     return result
+
+
+def _preserve_workout_carry_completion(current: dict, proposed: dict) -> dict:
+    """Keep ``current``'s workout but adopt ``proposed``'s completion markers.
+
+    Freezes the trained day's workout content against an automated rewrite while
+    letting a completion/feedback update land — the only change that legitimately
+    happens to a day after the athlete trained it.
+    """
+    restored = dict(current)
+    for marker in ("completed", "feedback"):
+        if proposed.get(marker) is not None:
+            restored[marker] = proposed[marker]
+    return restored
 
 
 def _stamp_source(
