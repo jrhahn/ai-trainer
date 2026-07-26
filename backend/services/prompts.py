@@ -306,6 +306,59 @@ def analyse_activities_system(
     )
 
 
+# Power fields that must never be dumped *unlabeled* alongside the raw activity
+# JSON — they are re-presented, named and unit-tagged, in the canonical
+# power-metrics block below so the model cannot cite a bare/ambiguous number
+# (#467). ``average_watts`` is the provider average; ``weighted_average_watts``
+# is Normalized Power; ``max_watts`` is peak power.
+_UNLABELED_POWER_FIELDS = ("average_watts", "weighted_average_watts", "max_watts")
+
+
+def activity_power_metrics_block(
+    activities: list[dict], user_ftp: int | None = None
+) -> str:
+    """One canonical, labeled power/load line per activity.
+
+    The raw activity dump carries ``average_watts`` (avg) and
+    ``weighted_average_watts`` (NP) with nothing marking which is authoritative,
+    so the coach narrated the wrong one — e.g. citing our lossy stream-mean
+    "averaging 221W" against the provider's real 201 W avg / 215 W NP (#467).
+    This hands the model a single labeled block instead, and instructs it to
+    cite only these figures. Returns "" when no activity has power data.
+    """
+    lines: list[str] = []
+    for activity in activities:
+        avg = activity.get("average_watts")
+        np = activity.get("weighted_average_watts")
+        peak = activity.get("max_watts")
+        if avg is None and np is None and peak is None:
+            continue
+        parts: list[str] = []
+        if avg is not None:
+            parts.append(f"average power {round(avg)} W")
+        if np is not None:
+            parts.append(f"normalized power {round(np)} W")
+            if user_ftp and user_ftp > 0:
+                parts.append(f"intensity factor {round(np / user_ftp, 3)}")
+        if peak is not None:
+            parts.append(f"peak power {round(peak)} W")
+        name = activity.get("name") or activity.get("type") or "activity"
+        day = (activity.get("start_date_local") or activity.get("start_date") or "")[
+            :10
+        ]
+        label = f"{name} ({day})" if day else str(name)
+        lines.append(f"- {label}: " + " · ".join(parts))
+    if not lines:
+        return ""
+    return (
+        "\n\nPer-activity power & load (authoritative — cite these labeled "
+        "figures verbatim when discussing power or load; never recompute, "
+        "re-average, or invent a number, and always name the metric with its "
+        "unit, e.g. 'average power 201 W', never a bare '201'):\n"
+        + "\n".join(lines)
+    )
+
+
 def analyse_activities_user(
     activities: list[dict],
     computed_section: str,
@@ -313,6 +366,7 @@ def analyse_activities_user(
     sport_type: str = "cycling",
     training_plan: list[dict] | None = None,
     timezone_name: str | None = None,
+    user_ftp: int | None = None,
 ) -> str:
     sport_key = sport_type.lower()
     is_running = sport_key in ("running", "run")
@@ -339,13 +393,25 @@ def analyse_activities_user(
             f"each day carries weekday/dateLabel/relativeDay anchors):\n"
             f"{annotated_plan_json(training_plan, timezone_name, indent=2)}"
         )
+    # Present power/load once, labeled, in the canonical block below — strip the
+    # bare, unlabeled power fields from the raw dump so the model can't cite an
+    # ambiguous or duplicate figure (#467).
+    dump_activities = [
+        {k: v for k, v in activity.items() if k not in _UNLABELED_POWER_FIELDS}
+        for activity in activities
+    ]
+    metrics_block = activity_power_metrics_block(activities, user_ftp)
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n\n"
-        f"Last {len(activities)} {activities_noun}:\n{json.dumps(activities, indent=2)}"
+        f"Last {len(activities)} {activities_noun}:\n{json.dumps(dump_activities, indent=2)}"
+        f"{metrics_block}"
         f"{computed_section}"
         f"{ride_analyses_section}"
         f"{plan_section}\n\n"
         f"Assess my fitness. {ftp_note}"
+        "When you state any power or training-load figure, cite only the labeled "
+        "'Per-activity power & load' values above and name the metric with its "
+        "unit — never a bare number, and never recompute or average a figure yourself. "
         "Use each activity's sport_type/type when writing rideInsights and appropriate planUpdates; "
         "do not describe non-cycling activities as rides."
     )
