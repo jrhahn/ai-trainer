@@ -111,3 +111,75 @@ def test_block_helper_uses_type_when_name_missing():
     )
     assert "VirtualRide" in block
     assert "average power 180 W" in block
+
+
+# --- Power-zone grounding so Z2 rides aren't called "above Z2" (#468) ---
+
+from services.analysis import power_zone_boundaries  # noqa: E402
+
+
+def test_power_zone_boundaries_from_ftp():
+    zones = power_zone_boundaries(320)
+    assert len(zones) == 7
+    assert zones[0]["low_w"] is None  # Z1 open below
+    assert zones[6]["high_w"] is None  # Z7 open above
+    z2 = zones[1]
+    assert (z2["zone"], z2["name"], z2["low_w"], z2["high_w"]) == (
+        "Z2",
+        "Endurance",
+        176,  # round(0.55 * 320)
+        240,  # round(0.75 * 320) — the Z2 ceiling
+    )
+
+
+def test_power_zone_boundaries_empty_without_ftp():
+    assert power_zone_boundaries(0) == []
+
+
+def test_prompt_exposes_zone_boundaries_and_ceiling():
+    msg = _msg(user_ftp=320)
+    assert "Your power zones at FTP 320 W" in msg
+    assert "Zone 2 / endurance ceiling = 240 W" in msg
+    assert "Z2 Endurance 176–240 W" in msg
+
+
+def test_prompt_grounds_zone_claims_in_boundaries():
+    lowered = _msg(user_ftp=320).lower()
+    assert "above your zone 2 ceiling" in lowered  # the anti-example is named
+    assert "cite the boundary and the figure" in lowered
+
+
+def test_zone_block_and_guidance_absent_for_running():
+    msg = prompts.analyse_activities_user(
+        [{"id": 5, "name": "Morning run", "type": "Run"}],
+        "",
+        "",
+        sport_type="running",
+        timezone_name=TZ,
+        user_ftp=320,
+    )
+    assert "Your power zones at FTP" not in msg
+    assert "Zone 2 ceiling" not in msg
+
+
+def test_zone_block_absent_without_ftp():
+    assert "Your power zones at FTP" not in _msg(user_ftp=None)
+
+
+def test_time_in_zone_line_rendered_from_mapping():
+    msg = prompts.analyse_activities_user(
+        [ACTIVITY],
+        "",
+        "",
+        sport_type="cycling",
+        timezone_name=TZ,
+        user_ftp=320,
+        # 210 min in Z2, 15 min in Z3 — an endurance ride.
+        time_in_zone_by_id={"999": {"z2_secs": 12600, "z3_secs": 900}},
+    )
+    assert "time in zones: Z2 210 min · Z3 15 min" in msg
+
+
+def test_time_in_zone_summary_empty_when_all_zero():
+    assert prompts._time_in_zone_summary({f"z{i}_secs": 0 for i in range(1, 8)}) == ""
+    assert prompts._time_in_zone_summary(None) == ""

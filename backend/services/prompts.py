@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from .analysis import power_zone_boundaries
 from .dates import (
     annotate_plan_days,
     app_date_context,
@@ -314,8 +315,64 @@ def analyse_activities_system(
 _UNLABELED_POWER_FIELDS = ("average_watts", "weighted_average_watts", "max_watts")
 
 
+_TIME_IN_ZONE_LABELS = {
+    "z1_secs": "Z1",
+    "z2_secs": "Z2",
+    "z3_secs": "Z3",
+    "z4_secs": "Z4",
+    "z5_secs": "Z5",
+    "z6_secs": "Z6",
+    "z7_secs": "Z7",
+}
+
+
+def power_zones_block(user_ftp: int | None) -> str:
+    """Render the athlete's absolute power-zone boundaries from their FTP.
+
+    Grounds every zone/intensity claim in explicit watt boundaries so the coach
+    stops inventing narratives like "above your Zone 2 ceiling" for a ride whose
+    average sits well inside Z2 (#468). Returns "" without a usable FTP.
+    """
+    if not user_ftp or user_ftp <= 0:
+        return ""
+    zones = power_zone_boundaries(float(user_ftp))
+    if not zones:
+        return ""
+    parts: list[str] = []
+    for z in zones:
+        low, high = z["low_w"], z["high_w"]
+        if low is None:
+            rng = f"<{high} W"
+        elif high is None:
+            rng = f">{low} W"
+        else:
+            rng = f"{low}–{high} W"
+        parts.append(f"{z['zone']} {z['name']} {rng}")
+    # Z2 upper edge is the "endurance / Zone 2 ceiling" the coach kept misusing.
+    z2_ceiling = zones[1]["high_w"]
+    return (
+        f"\n\nYour power zones at FTP {user_ftp} W "
+        f"(Zone 2 / endurance ceiling = {z2_ceiling} W): "
+        + " · ".join(parts)
+    )
+
+
+def _time_in_zone_summary(tiz: dict | None) -> str:
+    """Compact 'Z2 210 min · Z3 15 min' summary; "" when no zone has time."""
+    if not tiz:
+        return ""
+    parts = [
+        f"{label} {round(tiz[key] / 60)} min"
+        for key, label in _TIME_IN_ZONE_LABELS.items()
+        if tiz.get(key, 0) > 0
+    ]
+    return " · ".join(parts)
+
+
 def activity_power_metrics_block(
-    activities: list[dict], user_ftp: int | None = None
+    activities: list[dict],
+    user_ftp: int | None = None,
+    time_in_zone_by_id: dict[str, dict] | None = None,
 ) -> str:
     """One canonical, labeled power/load line per activity.
 
@@ -324,8 +381,12 @@ def activity_power_metrics_block(
     so the coach narrated the wrong one — e.g. citing our lossy stream-mean
     "averaging 221W" against the provider's real 201 W avg / 215 W NP (#467).
     This hands the model a single labeled block instead, and instructs it to
-    cite only these figures. Returns "" when no activity has power data.
+    cite only these figures. When ``time_in_zone_by_id`` maps an activity id to
+    its per-zone seconds, a grounded time-in-zone line is appended so intensity
+    claims cite measured time, not a guessed zone (#468). Returns "" when no
+    activity has power data.
     """
+    time_in_zone_by_id = time_in_zone_by_id or {}
     lines: list[str] = []
     for activity in activities:
         avg = activity.get("average_watts")
@@ -348,6 +409,9 @@ def activity_power_metrics_block(
         ]
         label = f"{name} ({day})" if day else str(name)
         lines.append(f"- {label}: " + " · ".join(parts))
+        tiz = _time_in_zone_summary(time_in_zone_by_id.get(str(activity.get("id"))))
+        if tiz:
+            lines.append(f"    time in zones: {tiz}")
     if not lines:
         return ""
     return (
@@ -367,6 +431,7 @@ def analyse_activities_user(
     training_plan: list[dict] | None = None,
     timezone_name: str | None = None,
     user_ftp: int | None = None,
+    time_in_zone_by_id: dict[str, dict] | None = None,
 ) -> str:
     sport_key = sport_type.lower()
     is_running = sport_key in ("running", "run")
@@ -400,11 +465,29 @@ def analyse_activities_user(
         {k: v for k, v in activity.items() if k not in _UNLABELED_POWER_FIELDS}
         for activity in activities
     ]
-    metrics_block = activity_power_metrics_block(activities, user_ftp)
+    metrics_block = activity_power_metrics_block(
+        activities, user_ftp, time_in_zone_by_id
+    )
+    # Power zones are FTP-based and only meaningful for cycling power data.
+    zones_block = "" if is_running else power_zones_block(user_ftp)
+    zone_guidance = (
+        ""
+        if is_running
+        else (
+            "Characterize intensity or training zones ONLY using the power-zone "
+            "boundaries and per-activity time-in-zone provided above. Never claim a "
+            "ride was above or below a zone (e.g. 'above your Zone 2 ceiling') unless "
+            "the ride's own average or normalized power actually crosses that zone's "
+            "stated watt boundary — cite the boundary and the figure. A ride with "
+            "average and normalized power inside Z2 is an endurance ride, not an "
+            "above-Z2 effort. "
+        )
+    )
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n\n"
         f"Last {len(activities)} {activities_noun}:\n{json.dumps(dump_activities, indent=2)}"
         f"{metrics_block}"
+        f"{zones_block}"
         f"{computed_section}"
         f"{ride_analyses_section}"
         f"{plan_section}\n\n"
@@ -412,6 +495,7 @@ def analyse_activities_user(
         "When you state any power or training-load figure, cite only the labeled "
         "'Per-activity power & load' values above and name the metric with its "
         "unit — never a bare number, and never recompute or average a figure yourself. "
+        f"{zone_guidance}"
         "Use each activity's sport_type/type when writing rideInsights and appropriate planUpdates; "
         "do not describe non-cycling activities as rides."
     )

@@ -1238,6 +1238,45 @@ def _normalized_power(watts: list[float], time_stream: list[float]) -> float | N
     return mean_fourth**0.25
 
 
+# Standard (Coggan) 7-zone power model, as fractions of FTP. The six internal
+# boundaries separate Z1..Z7; the shared source of truth for both time-in-zone
+# accounting and the zone-boundary block handed to the coach (#468).
+_POWER_ZONE_BOUNDARY_FRACTIONS = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50]
+_POWER_ZONE_NAMES = [
+    "Active Recovery",
+    "Endurance",
+    "Tempo",
+    "Threshold",
+    "VO2max",
+    "Anaerobic Capacity",
+    "Neuromuscular Power",
+]
+
+
+def power_zone_boundaries(ftp: float) -> list[dict]:
+    """Return the 7 standard power zones as absolute watt ranges for *ftp*.
+
+    Each entry: ``{"zone": "Z2", "name": "Endurance", "low_w": 176,
+    "high_w": 240}``. ``low_w`` is ``None`` for Z1 (open below) and ``high_w``
+    is ``None`` for Z7 (open above). Boundaries mirror
+    :func:`_time_in_power_zones` so a ride's time-in-zone and the boundaries the
+    coach reasons from can never disagree (#468). Returns ``[]`` for a
+    non-positive FTP.
+    """
+    if ftp <= 0:
+        return []
+    fractions = _POWER_ZONE_BOUNDARY_FRACTIONS
+    edges_w = [round(frac * ftp) for frac in fractions]
+    zones: list[dict] = []
+    for i, name in enumerate(_POWER_ZONE_NAMES):
+        low_w = edges_w[i - 1] if i > 0 else None
+        high_w = edges_w[i] if i < len(edges_w) else None
+        zones.append(
+            {"zone": f"Z{i + 1}", "name": name, "low_w": low_w, "high_w": high_w}
+        )
+    return zones
+
+
 def _time_in_power_zones(
     watts: list[float], time_stream: list[float], ftp: float
 ) -> dict:
@@ -1256,7 +1295,7 @@ def _time_in_power_zones(
     if not watts or not time_stream or len(watts) != len(time_stream) or ftp <= 0:
         return {k: round(v) for k, v in zones.items()}
 
-    boundaries = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50]
+    boundaries = _POWER_ZONE_BOUNDARY_FRACTIONS
 
     for i in range(len(watts)):
         pct = watts[i] / ftp
