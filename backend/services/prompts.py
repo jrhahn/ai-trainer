@@ -335,9 +335,8 @@ def power_zones_block(user_ftp: int | None) -> str:
     """
     if not user_ftp or user_ftp <= 0:
         return ""
+    # ftp > 0 here, so power_zone_boundaries always returns the 7 zones.
     zones = power_zone_boundaries(float(user_ftp))
-    if not zones:
-        return ""
     parts: list[str] = []
     for z in zones:
         low, high = z["low_w"], z["high_w"]
