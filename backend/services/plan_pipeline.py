@@ -232,6 +232,43 @@ def _preserve_pinned_days(
     return result
 
 
+def _preserve_activity_days(
+    plan: list[dict], current_plan: list[dict], activity_dates: set[str]
+) -> list[dict]:
+    """Restore current-plan days the athlete actually trained, unchanged.
+
+    ``_preserve_completed_days`` only guards days carrying the ``completed`` flag,
+    but that flag is set solely when the athlete ticks a workout by hand — a synced
+    activity never sets it. So a day the athlete rode but never ticked is protected
+    by neither the pin guard nor the completed guard, and a full regenerate whose
+    window starts today drops yesterday's ridden day entirely. The ride↔plan
+    snapshot then has nothing to point at and the dashboard shows "No planned
+    workout found" for a completed ride. Keying on recorded activity dates closes
+    that gap without depending on the manual flag; the matched day already belongs
+    to the completed ride and must not be rewritten or dropped by an automated
+    trigger (mirrors ``_preserve_completed_days``).
+    """
+    protected = {
+        d["date"]: d
+        for d in current_plan
+        if d.get("date") and d["date"] in activity_dates
+    }
+    if not protected:
+        return plan
+    result: list[dict] = []
+    seen: set[str] = set()
+    for day in plan:
+        date = day.get("date")
+        result.append(protected[date] if date in protected else day)
+        if date is not None:
+            seen.add(date)
+    for date, day in protected.items():
+        if date not in seen:
+            result.append(day)
+    result.sort(key=lambda d: d["date"])
+    return result
+
+
 def _stamp_source(
     plan: list[dict], current_plan: list[dict], source: PlanSource
 ) -> list[dict]:
@@ -451,6 +488,13 @@ async def _enforce_and_persist(
     if source.respect_pins:
         merged = _preserve_completed_days(merged, current_plan)
         merged = _preserve_pinned_days(merged, current_plan)
+        # A synced activity never sets the manual ``completed`` flag, so protect
+        # every current-plan day the athlete actually trained from being dropped
+        # or rewritten by this automated trigger (#468 follow-up).
+        activity_dates = await crud.get_recorded_activity_dates(
+            db, user.id, [d["date"] for d in current_plan if d.get("date")]
+        )
+        merged = _preserve_activity_days(merged, current_plan, activity_dates)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
