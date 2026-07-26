@@ -2762,6 +2762,30 @@ async def get_ride_metrics_by_date(
     return list(result)
 
 
+async def get_recorded_activity_dates(
+    db: AsyncSession, user_id: str, dates: list[str]
+) -> set[str]:
+    """Return the subset of ``dates`` on which the user has a recorded activity.
+
+    Used by the plan pipeline to protect past days the athlete actually trained
+    from being dropped by an automated full-plan regenerate, independent of the
+    manual ``completed`` flag (which is only set when the athlete ticks a workout
+    by hand). Every synced activity — ride, strength, yoga — is a ``RideMetric``,
+    so its presence marks the date as historical fact.
+    """
+    if not dates:
+        return set()
+    result = await db.scalars(
+        select(models.RideMetric.activity_date)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_date.in_(dates),
+        )
+        .distinct()
+    )
+    return set(result)
+
+
 # ---------------------------------------------------------------------------
 # RaceEvent
 # ---------------------------------------------------------------------------

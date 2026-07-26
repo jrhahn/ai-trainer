@@ -489,6 +489,63 @@ async def test_user_edit_can_still_modify_completed_day():
 
 
 @pytest.mark.asyncio
+async def test_automated_full_plan_keeps_trained_day_without_completed_flag():
+    """A day the athlete rode but never hand-ticked must survive an automated
+    regenerate whose window omits it (#468 follow-up).
+
+    The ``completed`` flag is set only when the athlete ticks a workout by hand;
+    a synced ride never sets it. Before this fix such a day was protected by
+    neither the pin guard nor the completed guard, so a full regenerate starting
+    a day later dropped it and the dashboard showed "No planned workout found"
+    for the completed ride.
+    """
+    ridden = _day("2026-08-09", "endurance")  # completed flag stays False
+    future = _day("2026-08-10", "endurance")
+    user_id = await _create_user("pipe-trained-drop@example.com", [ridden, future])
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=92001,
+            activity_date="2026-08-09", duration_seconds=3600,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day("2026-08-10", "intervals")],  # regenerate omits the ridden day
+            base_plan=[ridden, future],
+            source="generate",
+        )
+        await db.commit()
+
+    day = next((x for x in result if x["date"] == "2026-08-09"), None)
+    assert day is not None  # the trained day is not dropped
+    assert day["workoutType"] == "endurance"  # and not rewritten
+
+
+@pytest.mark.asyncio
+async def test_automated_full_plan_still_drops_untrained_past_day():
+    """Activity-day protection must not freeze the whole past: a day with no
+    recorded activity still rolls off when an automated regenerate omits it."""
+    stale = _day("2026-08-11", "endurance")
+    future = _day("2026-08-12", "endurance")
+    user_id = await _create_user("pipe-untrained-drop@example.com", [stale, future])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan(
+            db, user, [_day("2026-08-12", "intervals")],
+            base_plan=[stale, future], source="generate",
+        )
+        await db.commit()
+
+    assert all(x["date"] != "2026-08-11" for x in result)  # no activity -> rolls off
+
+
+@pytest.mark.asyncio
 async def test_unknown_source_is_rejected():
     """A typo'd source must fail loudly rather than silently mis-pin."""
     user_id = await _create_user("pipe-badsource@example.com", [_day("2026-08-04")])
