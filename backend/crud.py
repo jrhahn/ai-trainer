@@ -2594,6 +2594,57 @@ async def update_ride_metric_notes(
     return row
 
 
+async def get_unclassified_intervals_ride_metrics(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    since_date: str,
+    limit: int = 25,
+) -> list[models.RideMetric]:
+    """Return recent intervals.icu rides still classified ``unknown`` (or NULL).
+
+    Backs the reclassification backfill: bounded by ``since_date`` and ``limit``
+    so it only ever re-fetches a small, recent set of laps from the provider
+    (#482).  Newest first.
+    """
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.activity_source == "intervals",
+            or_(
+                models.RideMetric.ride_purpose == "unknown",
+                models.RideMetric.ride_purpose.is_(None),
+            ),
+            models.RideMetric.activity_date >= since_date,
+        )
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(limit)
+    )
+    return list(result)
+
+
+async def update_ride_metric_classification(
+    row: models.RideMetric,
+    *,
+    ride_purpose: str,
+    classification_confidence: str | None,
+    classification_reason: str | None,
+    summary: str | None = None,
+) -> None:
+    """Overwrite only the auto-classification fields on a RideMetric row.
+
+    Leaves power/TSS/CTL/ATL and every athlete-edited field (label_override,
+    coach_note, feel_legs, plan match, …) untouched, so a reclassification never
+    clobbers user edits.
+    """
+    row.ride_purpose = ride_purpose
+    row.classification_confidence = classification_confidence
+    row.classification_reason = classification_reason
+    if summary is not None:
+        row.summary = summary
+
+
 async def set_ride_feel_legs(
     db: AsyncSession,
     user_id: str,
