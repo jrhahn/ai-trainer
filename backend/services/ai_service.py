@@ -1627,6 +1627,9 @@ async def generate_login_summary(
     provider: str = "openai",
     feel_legs: str | None = None,
     timezone_name: str | None = None,
+    latest_ride_purpose: str | None = None,
+    latest_ride_confidence: str | None = None,
+    latest_ride_reason: str | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -1652,6 +1655,9 @@ async def generate_login_summary(
         training_plan=annotated_plan,
         feel_legs=feel_legs,
         date_context=app_date_context(timezone_name=timezone_name),
+        latest_ride_purpose=latest_ride_purpose,
+        latest_ride_confidence=latest_ride_confidence,
+        latest_ride_reason=latest_ride_reason,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

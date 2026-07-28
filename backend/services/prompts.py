@@ -2172,10 +2172,17 @@ def rate_workout_user(
         category = actual_ride_analysis.get("ride_category", "unknown")
         avg_pwr = actual_ride_analysis.get("avg_power_w")
         intervals = actual_ride_analysis.get("intervals_detected") or []
+        confidence = actual_ride_analysis.get("classification_confidence")
+        reason = actual_ride_analysis.get("classification_reason")
         analysis_lines: list[str] = [
             "\nActual activity character (algorithmically derived):"
         ]
         analysis_lines.append(f"- Detected activity category: {category}")
+        if confidence:
+            conf_line = f"- Classification confidence: {confidence}"
+            if reason:
+                conf_line += f" ({reason})"
+            analysis_lines.append(conf_line)
         if avg_pwr:
             analysis_lines.append(f"- Average power: {avg_pwr}W")
         if intervals:
@@ -2191,6 +2198,15 @@ def rate_workout_user(
         else:
             analysis_lines.append(
                 "- No distinct interval blocks detected (steady effort)"
+            )
+        if confidence in ("low", "medium"):
+            analysis_lines.append(
+                "- NOTE: this category is not certain. Do NOT state it as fact. If it "
+                "conflicts with the planned workout (e.g. planned intervals but "
+                "detected a steady ride, or vice versa), tell the athlete you are "
+                "unsure how to rate the ride and ask them what they actually did — "
+                "e.g. whether it was a VO2max/interval session and what the intervals "
+                "were — before giving your assessment."
             )
         actual_analysis_section = "\n".join(analysis_lines)
 
@@ -2274,7 +2290,14 @@ def refresh_login_summary_system() -> str:
         "entries' weekday/dateLabel/relativeDay fields to describe WHEN it occurs relative to today "
         "(for example \"today\", \"tomorrow\", \"this Saturday\", or \"next Tuesday\"). The next "
         "session is often days away — never assume it is today. Anchor every relative day to the "
-        "date context; never compute a weekday from memory."
+        "date context; never compute a weekday from memory.\n"
+        "Some activities cannot be reliably auto-classified (missing/unusable data). When the "
+        "input flags a ride's classification as unknown or low/medium confidence, treat its "
+        "workout type as UNCONFIRMED: do not state or imply a specific session type, training "
+        "zone, or intensity for it as fact (e.g. do not call it a 'tempo ride' or 'Zone 3 "
+        "effort'). Say the automatic detection was unsure and ask the athlete what they actually "
+        "did — for example whether it was an interval/VO2max session and what the intervals were. "
+        "You may still reference objective numbers (average power, TSS, duration)."
     )
 
 
@@ -2286,6 +2309,9 @@ def refresh_login_summary_user(
     training_plan: list[dict] | None,
     feel_legs: str | None = None,
     date_context: str | None = None,
+    latest_ride_purpose: str | None = None,
+    latest_ride_confidence: str | None = None,
+    latest_ride_reason: str | None = None,
 ) -> str:
     """Build the user message for login summary generation from existing assessment data."""
     parts: list[str] = []
@@ -2293,6 +2319,28 @@ def refresh_login_summary_user(
         parts.append(date_context)
     if estimated_ftp:
         parts.append(f"Current estimated FTP: {estimated_ftp} W")
+
+    # Deterministic guardrail: when the most recent ride could not be reliably
+    # auto-classified, tell the model outright not to assert a workout type for
+    # it — otherwise it invents one from the average power (e.g. NP ≈ 76 % FTP
+    # narrated as a "tempo/Zone 3" ride).
+    _conf = (latest_ride_confidence or "").lower()
+    if latest_ride_purpose == "unknown" or _conf in ("low", "medium"):
+        note = (
+            "IMPORTANT — the most recent activity could not be reliably auto-classified "
+            f"(detected type: {latest_ride_purpose or 'unknown'}, confidence: "
+            f"{_conf or 'unknown'})."
+        )
+        if latest_ride_reason:
+            note += f" {latest_ride_reason}"
+        note += (
+            " Do NOT state or imply a specific session type, training zone, or intensity "
+            "for it as fact. Note that the automatic detection was unsure and ask the "
+            "athlete what they actually did (for example, whether it was an interval/VO2max "
+            "session and what the intervals were). Objective numbers (average power, TSS, "
+            "duration) are fine to cite."
+        )
+        parts.append(note)
     if notes:
         parts.append(f"Overall assessment notes:\n{notes}")
     if feel_legs:

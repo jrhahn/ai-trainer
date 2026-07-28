@@ -100,7 +100,10 @@ async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"{INTERVALS_API_BASE}/activity/{activity_id}",
-                params={"intervals": "false"},
+                # Include the structured interval breakdown (``icu_intervals``) so
+                # rides can still be classified when their per-second power stream
+                # is missing or unusable.
+                params={"intervals": "true"},
                 auth=intervals_auth(api_key),
             )
     except httpx.RequestError as exc:
@@ -221,6 +224,48 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
     return cleaned
 
 
+def _normalize_provider_intervals(source: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Normalise Intervals.icu's ``icu_intervals`` breakdown for classification.
+
+    Intervals.icu computes clean per-interval averages server-side; we keep them
+    so a ride can still be classified when its per-second stream is missing or
+    unusable.  Returns a list of
+    ``{"duration_secs", "avg_power", "type", "peak_power"}`` dicts, or ``None``
+    when no usable interval data is present.
+    """
+    raw = source.get("icu_intervals")
+    if isinstance(raw, dict):
+        raw = raw.get("icu_intervals")
+    if not isinstance(raw, list):
+        return None
+
+    normalized: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        duration = _first_int(
+            item, "moving_time", "elapsed_time", "duration", default=0
+        )
+        avg_power = _first_int(
+            item, "average_watts", "icu_average_watts", "avg_watts", "watts"
+        )
+        if not duration or duration <= 0 or avg_power is None or avg_power <= 0:
+            continue
+        entry: dict[str, Any] = {
+            "duration_secs": duration,
+            "avg_power": avg_power,
+        }
+        itype = _first_str(item, "type")
+        if itype:
+            entry["type"] = itype
+        peak = _first_int(item, "max_watts", "peak_watts")
+        if peak:
+            entry["peak_power"] = peak
+        normalized.append(entry)
+
+    return normalized or None
+
+
 def map_activity_to_imported_activity(
     activity: dict[str, Any],
     detail: dict[str, Any] | None,
@@ -265,6 +310,7 @@ def map_activity_to_imported_activity(
             source, "icu_weighted_avg_watts", "weighted_average_watts"
         ),
         summary_tss=_first_float(source, "icu_training_load", "training_load"),
+        provider_intervals=_normalize_provider_intervals(source),
         metadata={"intervals_activity_id": str(raw_id)},
         legacy_activity_id=intervals_activity_id(raw_id),
     )

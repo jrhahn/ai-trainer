@@ -2364,6 +2364,55 @@ def test_rate_workout_system_prompt_backward_compatible_fields():
     assert '"flag_for_adaptation"' in prompt
 
 
+def test_rate_workout_user_flags_low_confidence_classification():
+    """A low/medium-confidence category must be surfaced as uncertain, with an
+    instruction to ask the athlete rather than narrate it as fact."""
+    from services.prompts import rate_workout_user
+
+    day = {
+        "workoutType": "intervals",
+        "title": "VO2max 4x4",
+        "description": "4x4 min VO2max",
+        "durationMinutes": 75,
+    }
+    analysis = {
+        "ride_category": "tempo",
+        "classification_confidence": "medium",
+        "classification_reason": "Average power in tempo band with no distinct "
+        "interval blocks detected.",
+        "avg_power_w": 242,
+        "intervals_detected": [],
+    }
+    prompt = rate_workout_user(day, feedback={}, actual_ride_analysis=analysis)
+
+    assert "Classification confidence: medium" in prompt
+    assert "no distinct interval blocks" in prompt
+    # Must tell the coach not to assert the category and to ask the athlete.
+    assert "not certain" in prompt
+    assert "ask them what they actually did" in prompt
+
+
+def test_rate_workout_user_omits_uncertainty_note_for_high_confidence():
+    """A high-confidence classification should not carry the 'ask the athlete' note."""
+    from services.prompts import rate_workout_user
+
+    day = {"workoutType": "intervals", "title": "VO2max 4x4", "durationMinutes": 75}
+    analysis = {
+        "ride_category": "interval_vo2max",
+        "classification_confidence": "high",
+        "classification_reason": "Structured vo2max intervals detected.",
+        "avg_power_w": 242,
+        "intervals_detected": [
+            {"duration_secs": 240, "avg_power_w": 360, "power_pct_ftp": 112}
+        ],
+    }
+    prompt = rate_workout_user(day, feedback={}, actual_ride_analysis=analysis)
+
+    assert "Classification confidence: high" in prompt
+    assert "not certain" not in prompt
+    assert "ask them what they actually did" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_ride():
     """For a short/ambiguous ride the AI may signal needs_athlete_feedback=true."""
@@ -4357,6 +4406,47 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
     assert '"relativeDay": "tomorrow"' in system_prompt
     assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
     assert "check every weekday/date pair" in system_prompt
+
+
+def test_login_summary_system_prompt_warns_on_unconfirmed_classification():
+    from services.prompts import refresh_login_summary_system
+
+    prompt = refresh_login_summary_system()
+    assert "UNCONFIRMED" in prompt
+    assert "unknown or low/medium confidence" in prompt
+    assert "ask the athlete what they actually did" in prompt
+
+
+def test_login_summary_user_flags_unknown_or_low_confidence_ride():
+    """The most recent ride's unknown/low-confidence classification must be
+    surfaced as an explicit 'do not assert a type' instruction."""
+    from services.prompts import refresh_login_summary_user
+
+    msg = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="unknown",
+        latest_ride_confidence="low",
+        latest_ride_reason="Insufficient stream data to classify ride reliably.",
+    )
+    assert "could not be reliably auto-classified" in msg
+    assert "Insufficient stream data" in msg
+    assert "Do NOT state or imply a specific session type" in msg
+
+    # A high-confidence classification carries no such caveat.
+    msg_high = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="interval_vo2max",
+        latest_ride_confidence="high",
+    )
+    assert "could not be reliably auto-classified" not in msg_high
 
 
 @pytest.mark.asyncio

@@ -177,6 +177,43 @@ def test_map_activity_to_imported_activity():
     assert imported.summary_avg_power_w == 210
 
 
+def test_normalize_provider_intervals_extracts_work_and_recovery():
+    detail = {
+        "icu_intervals": [
+            {"type": "WORK", "moving_time": 240, "average_watts": 361, "max_watts": 420},
+            {"type": "RECOVERY", "moving_time": 180, "average_watts": 150},
+            {"type": "WORK", "elapsed_time": 240, "icu_average_watts": 359},
+            {"type": "WORK", "moving_time": 0, "average_watts": 300},  # dropped: no dur
+            {"type": "WORK", "moving_time": 60},  # dropped: no power
+        ]
+    }
+    out = isvc._normalize_provider_intervals(detail)
+    assert out is not None
+    assert len(out) == 3
+    assert out[0] == {
+        "duration_secs": 240,
+        "avg_power": 361,
+        "type": "WORK",
+        "peak_power": 420,
+    }
+    assert out[2]["avg_power"] == 359  # icu_average_watts fallback
+    # No interval data → None
+    assert isvc._normalize_provider_intervals({}) is None
+
+
+def test_map_activity_carries_provider_intervals_into_ride_input():
+    imported = isvc.map_activity_to_imported_activity(
+        {"id": 9, "start_date_local": "2026-07-28T17:00:00", "type": "Ride"},
+        {"icu_intervals": [{"type": "WORK", "moving_time": 240, "average_watts": 360}]},
+        {},
+    )
+    assert imported is not None
+    ride = imported.to_ride_input()
+    assert ride["_provider_intervals"] == [
+        {"duration_secs": 240, "avg_power": 360, "type": "WORK"}
+    ]
+
+
 def test_map_activity_returns_none_without_id_or_date():
     assert isvc.map_activity_to_imported_activity({"name": "x"}, None, {}) is None
     assert isvc.map_activity_to_imported_activity({"id": 1}, None, {}) is None  # no date

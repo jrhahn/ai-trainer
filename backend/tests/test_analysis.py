@@ -50,6 +50,122 @@ def test_detect_intervals():
     assert analysis.detect_intervals([1.0], [0.0], 0.0) == []
 
 
+def test_noisy_offroad_vo2max_set_is_detected_not_tempo():
+    """A 4x4 VO2max set ridden off-road must survive the spiky power stream.
+
+    Regression: mountain-bike power drops below the work threshold for
+    a second or two constantly (coasting, technical sections), which used to
+    shatter each 4-min effort into discarded sub-blocks so the whole ride read
+    as a steady "tempo" ride.  Rolling-mean smoothing keeps the efforts intact.
+    """
+    import random
+
+    rng = random.Random(1)
+    ftp = 320.0
+
+    def noisy(base: float, secs: int, jitter: float) -> list[float]:
+        return [max(0.0, base + rng.gauss(0, jitter)) for _ in range(secs)]
+
+    watts: list[float] = noisy(210, 15 * 60, 70)  # warmup on rolling dirt
+    for _ in range(4):
+        seg = noisy(360, 4 * 60, 90)  # 4 min @ ~360W (~112% FTP)
+        for i in range(0, len(seg), 20):
+            if rng.random() < 0.3:
+                seg[i] = rng.uniform(80, 200)  # coasting / technical dips
+        watts += seg + noisy(150, 3 * 60, 60)  # recovery
+    watts += noisy(200, 10 * 60, 70)  # cooldown
+    time_stream = [float(i) for i in range(len(watts))]
+
+    # Average power sits right in the tempo band, so avg-power classification
+    # alone (the old fallback) mislabels the ride.
+    assert 0.70 < (sum(watts) / len(watts)) / ftp < 0.80
+
+    intervals = analysis.detect_intervals(watts, time_stream, ftp)
+    assert len(intervals) == 4  # one clean block per rep, no fragments
+    for iv in intervals:
+        assert 210 <= iv["duration_secs"] <= 260  # ~4 min each
+        assert iv["avg_power"] / ftp > 1.05  # VO2max intensity
+
+    category = analysis.classify_ride_purpose(watts, time_stream, ftp)
+    assert category == "interval_vo2max"
+
+    confidence, _reason = analysis.classify_ride_confidence_and_reason(
+        category, len(watts), intervals
+    )
+    assert confidence == "high"
+
+
+def test_classify_from_provider_intervals_vo2max():
+    """4 work reps at ~112% FTP (recoveries interleaved) → vo2max."""
+    ftp = 320.0
+    provider = [
+        {"type": "WORK", "duration_secs": 240, "avg_power": 361},
+        {"type": "RECOVERY", "duration_secs": 180, "avg_power": 150},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 359},
+        {"type": "RECOVERY", "duration_secs": 180, "avg_power": 140},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 367},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 352},
+    ]
+    purpose, work = analysis.classify_from_provider_intervals(provider, ftp)
+    assert purpose == "interval_vo2max"
+    assert len(work) == 4  # recoveries excluded
+    confidence, _ = analysis.classify_ride_confidence_and_reason(purpose, 6072, work)
+    assert confidence == "high"
+
+
+def test_classify_from_provider_intervals_recovery_only_is_unknown():
+    ftp = 320.0
+    assert analysis.classify_from_provider_intervals(
+        [
+            {"type": "RECOVERY", "duration_secs": 300, "avg_power": 150},
+            {"duration_secs": 600, "avg_power": 180},  # 56% FTP, sub-threshold
+        ],
+        ftp,
+    ) == ("unknown", [])
+    assert analysis.classify_from_provider_intervals([], ftp) == ("unknown", [])
+    assert analysis.classify_from_provider_intervals(
+        [{"type": "WORK", "duration_secs": 240, "avg_power": 360}], 0
+    ) == ("unknown", [])
+
+
+def test_build_ride_metrics_chain_uses_provider_intervals_without_stream():
+    """When the raw stream is missing, provider intervals rescue the ride from an
+    "unknown" label (regression for the July-28 intervals.icu VO2max ride)."""
+    ride = {
+        "strava_activity_id": 1,
+        "activity_source": "intervals",
+        "activity_date": "2026-07-28",
+        "sport_type": "cycling",
+        "duration_seconds": 6072,
+        "streams": {},  # no usable stream
+        "_summary_avg_power_w": 242,
+        "_provider_intervals": [
+            {"type": "WORK", "duration_secs": 240, "avg_power": 361},
+            {"type": "RECOVERY", "duration_secs": 180, "avg_power": 150},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 359},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 367},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 352},
+        ],
+    }
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert len(metrics) == 1
+    assert metrics[0]["ride_purpose"] == "interval_vo2max"
+    assert metrics[0]["classification_confidence"] == "high"
+
+
+def test_build_ride_metrics_chain_unknown_without_stream_or_intervals():
+    """No stream and no provider intervals still yields unknown."""
+    ride = {
+        "strava_activity_id": 2,
+        "activity_date": "2026-07-28",
+        "sport_type": "cycling",
+        "duration_seconds": 3600,
+        "streams": {},
+    }
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert metrics[0]["ride_purpose"] == "unknown"
+
+
 def test_compute_hr_drift():
     assert analysis.compute_hr_drift([0, 1, 2]) is None or True  # n<=2 guard below
     assert analysis.compute_hr_drift([1.0, 2.0]) is None

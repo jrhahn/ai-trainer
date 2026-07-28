@@ -63,6 +63,17 @@ async def regenerate(
         provider=provider or resolve_user_provider(user),
         feel_legs=feel_legs,
         timezone_name=timezone_name,
+        # Let the summary flag an unconfirmed auto-classification instead of
+        # inventing a workout type from average power.
+        latest_ride_purpose=(
+            latest_ride.ride_purpose if latest_ride is not None else None
+        ),
+        latest_ride_confidence=(
+            latest_ride.classification_confidence if latest_ride is not None else None
+        ),
+        latest_ride_reason=(
+            latest_ride.classification_reason if latest_ride is not None else None
+        ),
     )
     if login_summary:
         await crud.upsert_rider_assessment(
