@@ -62,6 +62,10 @@ class ImportedActivity:
     summary_avg_power_w: int | None = None
     summary_normalized_power_w: int | None = None
     summary_tss: float | None = None
+    # Provider-computed interval/lap breakdown (normalised to
+    # ``{"duration_secs", "avg_power", "type"}``). Used to classify the ride when
+    # the raw power stream is missing or unusable.
+    provider_intervals: list[dict[str, Any]] | None = None
     legacy_activity_id: int | None = None
 
     @property
@@ -105,6 +109,7 @@ class ImportedActivity:
             "_summary_avg_power_w": self.summary_avg_power_w,
             "_summary_np_w": self.summary_normalized_power_w,
             "_summary_tss": self.summary_tss,
+            "_provider_intervals": self.provider_intervals,
             **self.weather,
         }
 

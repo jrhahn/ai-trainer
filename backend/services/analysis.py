@@ -50,6 +50,27 @@ MIN_ENDURANCE_RIDE_SECS = 30 * 60
 # meaningful adaptation.
 MIN_HIGH_CONFIDENCE_ENDURANCE_SECS = 45 * 60
 
+# Rolling-average window used to smooth the power stream before interval
+# detection.  Off-road / mountain-bike power is extremely spiky — power drops
+# below the work threshold for a second or two constantly (coasting, technical
+# sections) even inside a hard, sustained interval.  Thresholding the raw,
+# instantaneous stream therefore shatters a single 4-min effort into many
+# sub-block fragments that get discarded, so a genuine VO2max set reads as a
+# steady "tempo" ride.  A short centred rolling mean removes that jitter while
+# preserving the shape of efforts down to ~1 min; it is intentionally small so
+# sub-minute sprints are not flattened away.
+INTERVAL_SMOOTHING_SECS = 10.0
+
+# Maps a single hard-effort bucket to the overall ride category used when every
+# detected interval falls in the same bucket.  Shared by the stream-based
+# classifier and the provider-interval fallback so both agree.
+_INTERVAL_BUCKET_TO_CATEGORY = {
+    "sprint": "interval_sprints",
+    "vo2max": "interval_vo2max",
+    "threshold": "interval_threshold",
+    "sweetspot": "interval_sweetspot",
+}
+
 # Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
 # true FTP is typically ~75 % of their raw average power across all recent rides
 # (accounting for the mix of easy and hard sessions that make up their history).
@@ -290,6 +311,38 @@ def compute_hr_zones(max_hr: int) -> dict:
     }
 
 
+def _smooth_power(
+    watts: list[float], time_stream: list[float], window_secs: float
+) -> list[float]:
+    """Return a centred time-windowed rolling mean of ``watts``.
+
+    For each sample the mean covers all samples whose timestamp lies within
+    ``± window_secs / 2`` of it, so the result tracks sustained effort while
+    ignoring one- or two-second spikes and dips.  ``time_stream`` is assumed
+    monotonic non-decreasing (Strava/intervals streams are).  A non-positive
+    window returns the input unchanged so callers can disable smoothing.
+    """
+    n = len(watts)
+    if window_secs <= 0 or n == 0:
+        return watts
+
+    half = window_secs / 2.0
+    out: list[float] = [0.0] * n
+    lo = 0
+    hi = 0
+    acc = 0.0
+    for i in range(n):
+        t = time_stream[i]
+        while hi < n and time_stream[hi] <= t + half:
+            acc += watts[hi]
+            hi += 1
+        while time_stream[lo] < t - half:
+            acc -= watts[lo]
+            lo += 1
+        out[i] = acc / (hi - lo)
+    return out
+
+
 def detect_intervals(
     watts: list[float],
     time_stream: list[float],
@@ -297,6 +350,7 @@ def detect_intervals(
     work_threshold_pct: float = 0.85,
     min_interval_secs: float = 30.0,
     recovery_gap_secs: float = 30.0,
+    smoothing_secs: float = INTERVAL_SMOOTHING_SECS,
 ) -> list[dict]:
     """Detect interval blocks in a power stream relative to FTP.
 
@@ -304,6 +358,12 @@ def detect_intervals(
     ``work_threshold_pct × ftp``.  Short recoveries (< ``recovery_gap_secs``)
     between high-power blocks are merged into the preceding interval so noisy
     one-second dips do not split a single effort into many fragments.
+
+    The on/off decision runs against a short rolling mean of the power stream
+    (``smoothing_secs``) rather than the raw, instantaneous values, so spiky
+    off-road power does not fragment a sustained effort into discarded blocks
+   .  Reported ``avg_power``/``peak_power`` are still measured from the
+    raw stream inside the detected boundaries.
 
     Returns a list of dicts, each with:
         ``start_idx``, ``end_idx``, ``duration_secs``,
@@ -314,6 +374,7 @@ def detect_intervals(
 
     threshold = ftp * work_threshold_pct
     n = len(watts)
+    signal = _smooth_power(watts, time_stream, smoothing_secs)
 
     # --- Phase 1: build raw on/off blocks ---
     blocks: list[tuple[int, int]] = []  # (start, end) inclusive
@@ -321,7 +382,7 @@ def detect_intervals(
     block_start = 0
 
     for i in range(n):
-        above = watts[i] >= threshold
+        above = signal[i] >= threshold
         if above and not in_block:
             in_block = True
             block_start = i
@@ -415,6 +476,38 @@ def _stream_duration_seconds(time_stream: list[float]) -> float:
     return moving + sample_spacing
 
 
+def _classify_interval_bucket(
+    avg_power: float, duration_secs: float, ftp: float
+) -> str | None:
+    """Bucket one hard effort into sprint/vo2max/threshold/sweetspot.
+
+    Returns ``None`` when the effort is not hard enough to count as an interval
+    (≤ 85 % FTP and not matching a structured band).  The thresholds are shared
+    by the stream-based classifier and the provider-interval fallback so a ride
+    is labelled the same regardless of which signal was available.
+    """
+    if ftp <= 0:
+        return None
+    pct = avg_power / ftp
+    dur_min = duration_secs / 60.0
+    if pct > 1.30 and dur_min < 2:
+        return "sprint"
+    if pct > 1.05 and dur_min <= 5:
+        return "vo2max"
+    if 0.95 <= pct <= 1.05 and dur_min <= 12:
+        return "threshold"
+    if 0.88 <= pct < 0.95 and 10 <= dur_min <= 20:
+        return "sweetspot"
+    if pct > 0.85:
+        # Catch-all for other hard efforts
+        if dur_min < 2:
+            return "sprint"
+        if dur_min <= 5:
+            return "vo2max"
+        return "threshold"
+    return None
+
+
 def classify_ride_purpose(
     watts: list[float],
     time_stream: list[float],
@@ -465,24 +558,9 @@ def classify_ride_purpose(
     # Classify each detected interval by its relative power and duration
     interval_types: list[str] = []
     for iv in intervals:
-        dur_min = iv["duration_secs"] / 60.0
-        pct = iv["avg_power"] / ftp
-        if pct > 1.30 and dur_min < 2:
-            interval_types.append("sprint")
-        elif pct > 1.05 and dur_min <= 5:
-            interval_types.append("vo2max")
-        elif 0.95 <= pct <= 1.05 and dur_min <= 12:
-            interval_types.append("threshold")
-        elif 0.88 <= pct < 0.95 and 10 <= dur_min <= 20:
-            interval_types.append("sweetspot")
-        elif pct > 0.85:
-            # Catch-all for other hard efforts
-            if dur_min < 2:
-                interval_types.append("sprint")
-            elif dur_min <= 5:
-                interval_types.append("vo2max")
-            else:
-                interval_types.append("threshold")
+        bucket = _classify_interval_bucket(iv["avg_power"], iv["duration_secs"], ftp)
+        if bucket is not None:
+            interval_types.append(bucket)
 
     unique_types = set(interval_types)
     if not unique_types:
@@ -497,12 +575,66 @@ def classify_ride_purpose(
     if len(unique_types) > 1:
         return "mixed"
     sole_type = next(iter(unique_types))
-    return {
-        "sprint": "interval_sprints",
-        "vo2max": "interval_vo2max",
-        "threshold": "interval_threshold",
-        "sweetspot": "interval_sweetspot",
-    }.get(sole_type, "endurance")
+    return _INTERVAL_BUCKET_TO_CATEGORY.get(sole_type, "endurance")
+
+
+def classify_from_provider_intervals(
+    provider_intervals: list[dict],
+    ftp: float,
+    min_interval_secs: float = 30.0,
+) -> tuple[str, list[dict]]:
+    """Classify a ride from a provider's own structured interval/lap data.
+
+    A fallback for when the raw power stream is missing or unusable — common for
+    intervals.icu rides, whose per-second stream can be absent even though the
+    provider computes clean per-interval averages server-side (the very numbers
+    the athlete sees in their interval breakdown).  Without this a genuine
+    interval session with no usable stream is mislabelled ``unknown``.
+
+    Each item in ``provider_intervals`` should carry ``duration_secs`` and
+    ``avg_power`` (watts); an optional ``type`` of ``"WORK"``/``"RECOVERY"`` is
+    honoured when present so recovery valleys are not counted as efforts.
+
+    Returns ``(ride_purpose, work_intervals)`` where ``work_intervals`` use the
+    same dict shape as :func:`detect_intervals`.  ``ride_purpose`` is
+    ``"unknown"`` when no qualifying hard effort is found.
+    """
+    if not provider_intervals or ftp <= 0:
+        return "unknown", []
+
+    interval_types: list[str] = []
+    work_intervals: list[dict] = []
+    for iv in provider_intervals:
+        try:
+            duration = float(iv.get("duration_secs") or 0)
+            avg = float(iv.get("avg_power") or 0)
+        except (TypeError, ValueError):
+            continue
+        if duration < min_interval_secs or avg <= 0:
+            continue
+        itype = str(iv.get("type") or "").upper()
+        if itype == "RECOVERY":
+            continue
+        bucket = _classify_interval_bucket(avg, duration, ftp)
+        if bucket is None:
+            continue
+        interval_types.append(bucket)
+        peak = iv.get("peak_power")
+        work_intervals.append(
+            {
+                "duration_secs": round(duration),
+                "avg_power": round(avg),
+                "peak_power": round(float(peak)) if peak else round(avg),
+            }
+        )
+
+    unique_types = set(interval_types)
+    if not unique_types:
+        return "unknown", []
+    if len(unique_types) > 1:
+        return "mixed", work_intervals
+    sole_type = next(iter(unique_types))
+    return _INTERVAL_BUCKET_TO_CATEGORY.get(sole_type, "unknown"), work_intervals
 
 
 def classify_ride_confidence_and_reason(
@@ -1956,6 +2088,21 @@ def build_ride_metrics_chain(
             # Missing or mismatched streams are not enough evidence for a
             # training-purpose label.
             ride_purpose = "unknown"
+
+        # Provider-interval fallback: when the raw stream gives us no shape
+        # (missing/unusable, so ``unknown``), fall back to the provider's own
+        # structured interval breakdown — intervals.icu ships clean per-interval
+        # averages even when the per-second stream is absent, so a real interval
+        # session is classified instead of silently reading as "unknown".
+        if ride_purpose in (None, "unknown") and ftp > 0:
+            provider_intervals = ride.get("_provider_intervals")
+            if provider_intervals:
+                p_purpose, p_intervals = classify_from_provider_intervals(
+                    provider_intervals, ftp
+                )
+                if p_purpose != "unknown":
+                    ride_purpose = p_purpose
+                    intervals = p_intervals
 
         # --- Prefer the provider's own headline figures over stream recompute ---
         # Providers (intervals.icu / Strava) compute avg/NP/TSS from full-resolution
