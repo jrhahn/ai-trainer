@@ -252,6 +252,65 @@ async def test_intervals_import_success_and_dedupe(auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_intervals_import_invalidates_cached_login_summary(
+    auth_headers, monkeypatch
+):
+    """Re-importing can change a ride's classification, so the cached login
+    summary must be cleared for lazy regeneration (#482)."""
+    import crud
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        return [
+            {
+                "id": "i777",
+                "name": "Evening Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T18:00:00",
+                "moving_time": 240,
+            }
+        ]
+
+    async def fake_fetch_activity_detail(*args, **kwargs):
+        return {"average_watts": 210}
+
+    async def fake_fetch_activity_streams(*args, **kwargs):
+        return {"watts": [200, 220, 210, 230], "time": [0, 60, 120, 180]}
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_detail", fake_fetch_activity_detail
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_streams", fake_fetch_activity_streams
+    )
+
+    # Seed a cached login summary that must be cleared by the import.
+    async with async_session_maker() as session:
+        await crud.upsert_rider_assessment(
+            session, user_id, estimated_ftp=280, login_summary="stale summary text"
+        )
+        await session.commit()
+
+    await intervals_router.run_intervals_import(
+        user_id=user_id,
+        api_key="secret",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=280,
+    )
+
+    async with async_session_maker() as session:
+        assessment = await crud.get_rider_assessment(session, user_id)
+    assert assessment is not None
+    assert not assessment.login_summary  # cleared for lazy regeneration
+
+
+@pytest.mark.asyncio
 async def test_intervals_import_auth_failure_sets_error(auth_headers, monkeypatch):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
 
