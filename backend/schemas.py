@@ -824,6 +824,10 @@ class PlanDayUpdateSchema(CamelModel):
     intervals: Optional[list[Any]] = None
     workout_purpose: Optional[str] = None
     key_focus_points: Optional[list[str]] = None
+    # Marks the day done. Set by activity-sync when a ride auto-matches the day
+    # (services/ride_matching.mark_matched_days_completed); clients mark completion
+    # through the same per-day update path.
+    completed: Optional[bool] = None
 
 
 class AnalyseActivitiesResponse(CamelModel):

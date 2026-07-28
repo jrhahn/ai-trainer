@@ -32,6 +32,7 @@ from services.intervals_service import (
 from services.learning_pipeline import learn_from_completed_workouts
 from services.ride_matching import (
     apply_ride_plan_matches,
+    mark_matched_days_completed,
     review_matched_ride_and_adapt,
 )
 from services.llm import resolve_user_provider
@@ -234,6 +235,14 @@ async def _persist_and_adapt(
     auto_matched = await apply_ride_plan_matches(
         db, user.id, training_plan, imported_ids
     )
+    # A synced ride is proof the athlete did that day, so mark its matched plan day
+    # completed — nothing else sets that flag automatically, which left auto-matched
+    # days unprotected against an automated regenerate dropping them. Best-effort:
+    # it must never break the sync that triggered it.
+    try:
+        await mark_matched_days_completed(db, user, training_plan, auto_matched)
+    except Exception:
+        logger.warning("Failed to mark matched plan days completed", exc_info=True)
     streams_by_id = {
         ride["strava_activity_id"]: ride.get("streams") or {} for ride in rides
     }

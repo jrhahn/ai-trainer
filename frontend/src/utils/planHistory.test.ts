@@ -11,6 +11,7 @@ describe('sourceLabel', () => {
   it('maps known trigger keys to friendly labels', () => {
     expect(sourceLabel('coach_chat')).toBe('Coach chat')
     expect(sourceLabel('ride_review')).toBe('Post-ride adaptation')
+    expect(sourceLabel('activity_import')).toBe('Activity synced')
   })
 
   it('title-cases unknown keys as a fallback', () => {
@@ -68,6 +69,11 @@ describe('summarizeDayChange', () => {
   it('falls back to "Minor adjustment" when the compared fields are unchanged', () => {
     const day = { workoutType: 'endurance' as const, title: 'A', durationMinutes: 60 }
     expect(summarizeDayChange(day, { ...day })).toBe('Minor adjustment')
+  })
+
+  it('reports when a day is marked complete', () => {
+    const day = { workoutType: 'endurance' as const, title: 'A', durationMinutes: 60 }
+    expect(summarizeDayChange(day, { ...day, completed: true })).toBe('marked complete')
   })
 })
 

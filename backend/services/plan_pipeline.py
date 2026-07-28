@@ -101,7 +101,7 @@ class PlanSource:
 
 # (stamp name, respect_pins) per trigger; the trigger key is injected below so it
 # is recorded in history without being duplicated. Keeping this in one place makes
-# the pin policy for all eight triggers auditable at a glance. See #342 / #343.
+# the pin policy for every trigger auditable at a glance. See #342 / #343.
 _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # User-authored: stamp days "user" (pinning them). They created the intent.
     "user_edit": (USER_SOURCE, False),
@@ -120,6 +120,9 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     "auto_adapt": ("auto_adapt", True),
     "nightly_maintenance": ("nightly_maintenance", True),
     "ride_review": ("ride_review", True),
+    # Activity sync marking an auto-matched day completed. Respects pins like any
+    # automated trigger, so it never touches a user-owned day.
+    "activity_import": ("activity_import", True),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
@@ -244,9 +247,14 @@ def _preserve_activity_days(
     window starts today drops yesterday's ridden day entirely. The ride↔plan
     snapshot then has nothing to point at and the dashboard shows "No planned
     workout found" for a completed ride. Keying on recorded activity dates closes
-    that gap without depending on the manual flag; the matched day already belongs
-    to the completed ride and must not be rewritten or dropped by an automated
+    that gap without depending on the manual flag; the matched day's *workout* already
+    belongs to the completed ride and must not be rewritten or dropped by an automated
     trigger (mirrors ``_preserve_completed_days``).
+
+    A protected day's ``completed`` / ``feedback`` markers are the one legitimate
+    post-activity change, so an update that sets them is carried through onto the
+    preserved workout — otherwise this guard would revert the very completion that
+    activity sync marks on the matched day (the ``activity_import`` trigger).
     """
     protected = {
         d["date"]: d
@@ -259,7 +267,8 @@ def _preserve_activity_days(
     seen: set[str] = set()
     for day in plan:
         date = day.get("date")
-        result.append(protected[date] if date in protected else day)
+        result.append(_preserve_workout_carry_completion(protected[date], day)
+                      if date in protected else day)
         if date is not None:
             seen.add(date)
     for date, day in protected.items():
@@ -267,6 +276,20 @@ def _preserve_activity_days(
             result.append(day)
     result.sort(key=lambda d: d["date"])
     return result
+
+
+def _preserve_workout_carry_completion(current: dict, proposed: dict) -> dict:
+    """Keep ``current``'s workout but adopt ``proposed``'s completion markers.
+
+    Freezes the trained day's workout content against an automated rewrite while
+    letting a completion/feedback update land — the only change that legitimately
+    happens to a day after the athlete trained it.
+    """
+    restored = dict(current)
+    for marker in ("completed", "feedback"):
+        if proposed.get(marker) is not None:
+            restored[marker] = proposed[marker]
+    return restored
 
 
 def _stamp_source(
