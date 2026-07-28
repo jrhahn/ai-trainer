@@ -224,7 +224,7 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
     return cleaned
 
 
-def _normalize_provider_intervals(source: dict[str, Any]) -> list[dict[str, Any]] | None:
+def normalize_provider_intervals(source: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Normalise Intervals.icu's ``icu_intervals`` breakdown for classification.
 
     Intervals.icu computes clean per-interval averages server-side; we keep them
@@ -310,7 +310,7 @@ def map_activity_to_imported_activity(
             source, "icu_weighted_avg_watts", "weighted_average_watts"
         ),
         summary_tss=_first_float(source, "icu_training_load", "training_load"),
-        provider_intervals=_normalize_provider_intervals(source),
+        provider_intervals=normalize_provider_intervals(source),
         metadata={"intervals_activity_id": str(raw_id)},
         legacy_activity_id=intervals_activity_id(raw_id),
     )

@@ -187,7 +187,7 @@ def test_normalize_provider_intervals_extracts_work_and_recovery():
             {"type": "WORK", "moving_time": 60},  # dropped: no power
         ]
     }
-    out = isvc._normalize_provider_intervals(detail)
+    out = isvc.normalize_provider_intervals(detail)
     assert out is not None
     assert len(out) == 3
     assert out[0] == {
@@ -198,7 +198,7 @@ def test_normalize_provider_intervals_extracts_work_and_recovery():
     }
     assert out[2]["avg_power"] == 359  # icu_average_watts fallback
     # No interval data → None
-    assert isvc._normalize_provider_intervals({}) is None
+    assert isvc.normalize_provider_intervals({}) is None
 
 
 def test_map_activity_carries_provider_intervals_into_ride_input():
