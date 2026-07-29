@@ -22,6 +22,7 @@ from services import ai_service
 from services import athlete_model_inference
 from services import coach_summary
 from services import plan_pipeline
+from services import roi_recommendation
 from services import summary_pipeline
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
@@ -1765,6 +1766,14 @@ async def next_ride_recommendation(
         for fact in athlete_memory_fact_rows
     ]
 
+    # --- ROI recommendation from the deterministic performance model (#478) ---
+    performance_recommendation: dict | None = None
+    perf_model_row = await crud.get_athlete_performance_model(db, current_user.id)
+    if perf_model_row is not None:
+        performance_recommendation = roi_recommendation.recommend_training_roi(
+            perf_model_row.attributes, perf_model_row.limiters
+        )
+
     # --- Resolve the ride(s) to use for the recommendation ---
     if body.strava_activity_id is not None:
         target_ride = await crud.get_ride_metric_by_strava_id(
@@ -1816,6 +1825,7 @@ async def next_ride_recommendation(
                 coach_memory=coach_memory,
                 athlete_context=athlete_context,
                 athlete_memory_facts=athlete_memory_facts,
+                performance_recommendation=performance_recommendation,
                 ctl=ctl,
                 atl=atl,
                 tsb=tsb,

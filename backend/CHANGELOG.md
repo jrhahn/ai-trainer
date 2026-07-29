@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-07-29
+
+### Added
+
+- **ROI-based training recommendation** (`services/roi_recommendation.py`,
+  `schemas.py`, `services/prompts.py`, `services/ai_service.py`,
+  `routers/ai.py`) — a deterministic engine maps the Athlete Performance Model
+  and its detected limiter to an **expected-gain-per-physiological-system** map
+  (`threshold`/`vo2max`/`endurance`/`anaerobic`, each `large`/`moderate`/`small`/
+  `maintenance`), a suggested weekly emphasis (e.g. `2× Threshold  1× VO₂max
+  1× Long endurance`) and a natural-language rationale that cites the athlete's
+  own numbers (FTP vs MAP, fractional utilization, aerobic base). Surfaced
+  machine-readable on the performance-model API as `recommendations` and injected
+  into the physiology layer of `next-ride-recommendation`, so the coach explains
+  *why* a stimulus has the highest return rather than prescribing generic
+  periodization. When the model has no confident limiter the recommendation is
+  `sufficient: false` and the coach falls back to its existing reasoning (#478).
+
 ## [0.43.0] - 2026-07-29
 
 ### Added
