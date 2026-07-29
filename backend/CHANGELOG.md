@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-07-29
+
+### Added
+
+- **Update the athlete model before the plan** (`services/prompts.py`) — a new
+  `update_model_before_plan_rule`, wired unconditionally into the coach chat system
+  prompt (`ask_trainer_system`), stops the coach from treating the training plan as
+  its primary state and reflexively editing it in response to new information. The
+  coach now follows an explicit belief-before-decision order: new evidence → update
+  the athlete model and shift its hypotheses → re-estimate confidence → only then
+  decide whether the current plan is still the highest-value choice. A belief update
+  does **not** imply a plan change — lower confidence in a hypothesis often leaves
+  the best plan unchanged, and "no change" is an explicit, valid outcome. When the
+  understanding shifts, the coach names what changed (which hypothesis, roughly from
+  what confidence to what, and why) **before** any plan talk, and keeps `planUpdates`
+  empty when the model moved but the plan should stand. This prevents oscillating,
+  contradictory plan changes where a follow-up question silently reverses an earlier
+  edit (#491).
+
 ## [0.47.0] - 2026-07-29
 
 ### Added

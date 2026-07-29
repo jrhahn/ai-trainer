@@ -1232,6 +1232,45 @@ def reveal_uncertainty_rule() -> str:
     )
 
 
+def update_model_before_plan_rule() -> str:
+    """Update the belief (athlete model) before touching the decision (plan) (#491).
+
+    New evidence must first change the coach's internal understanding — the athlete
+    model, its hypotheses, and its confidence — and only THEN drive a plan decision.
+    Treating the plan as the primary state produces oscillating, contradictory changes
+    across a conversation. A belief update does NOT imply a plan change: keeping the
+    current plan while confidence has dropped is a valid, transparent outcome.
+    """
+    return (
+        "\n\nUpdate your understanding before the plan (belief first, then decision):\n"
+        "- The training plan is NOT your primary state — your model of the athlete is. "
+        "When new evidence arrives (the athlete pushes back, reports how they feel, "
+        "corrects the record, or new data lands), update your understanding FIRST, then "
+        "decide about the plan. Do not reach for a plan edit as the immediate reflex to "
+        "new information.\n"
+        "- Follow this order: new evidence → update the athlete model (what you now "
+        "believe and how the hypotheses shift) → re-estimate confidence → only then "
+        "decide whether the current plan is still the highest-value choice. Skipping "
+        "straight to a plan change is what makes recommendations oscillate — a later "
+        "question flips the plan back with no explanation.\n"
+        "- A belief update does NOT imply a plan change. Lower confidence in a "
+        "hypothesis (e.g. the recovery/intensity-creep model weakens because MTB power "
+        "looks unreliable or a ride's classification was low-confidence) often leaves "
+        "the best plan unchanged. 'No change' is a valid, correct outcome — say so and "
+        "explain why the expected value still favours the current plan.\n"
+        "- When your understanding shifts, make the belief update explicit BEFORE any "
+        "plan talk: name what changed (which hypothesis, roughly from what confidence to "
+        "what, and why). Then give the plan decision separately — change or no change — "
+        "with its own reason tied to expected value, not merely repeating the previous "
+        "advice.\n"
+        "- Only emit planUpdates once the decision genuinely follows from the updated "
+        "model. If the model moved but the plan should not, keep planUpdates empty and "
+        "state that the plan stands despite the revised understanding. Never let a "
+        "follow-up question silently reverse an earlier plan change without first "
+        "revisiting what you believe and why."
+    )
+
+
 def open_questions_section(open_questions: list[dict] | None) -> str:
     """Render the coach's still-open questions (#385) for a coaching prompt.
 
@@ -1489,6 +1528,7 @@ def ask_trainer_system(
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     explainability_instructions = coach_explainability_rule()
     uncertainty_instructions = reveal_uncertainty_rule()
+    model_before_plan_instructions = update_model_before_plan_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
 
@@ -1572,6 +1612,7 @@ def ask_trainer_system(
         f"{recommendation_layers_instructions}"
         f"{explainability_instructions}"
         f"{uncertainty_instructions}"
+        f"{model_before_plan_instructions}"
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
