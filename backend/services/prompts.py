@@ -1193,6 +1193,45 @@ def coach_explainability_rule() -> str:
     )
 
 
+def reveal_uncertainty_rule() -> str:
+    """Make the coach own its uncertainty instead of arguing a single truth (#490).
+
+    A recommendation is a judgement under incomplete data, not a verdict. When the
+    call is genuinely uncertain — low/moderate confidence, or the athlete pushes back
+    with their own signals — the coach must surface BOTH the evidence for and against
+    its recommendation and name what it does not know, rather than defending the
+    recommendation as the only correct answer.
+    """
+    return (
+        "\n\nReveal your uncertainty (do not argue a single truth):\n"
+        "- A recommendation is a judgement call under incomplete data, never a "
+        "verdict. Own the uncertainty instead of defending the recommendation as the "
+        "only correct answer.\n"
+        "- When the call is genuinely uncertain — your confidence is low or moderate, "
+        "the physiology and athlete-context layers diverge, or the athlete pushes back "
+        "with their own signals (feels fresh, fast recovery, tolerated similar blocks "
+        "before) — lay the uncertainty out honestly rather than restating the "
+        "recommendation more firmly.\n"
+        "- Show BOTH sides: name the evidence supporting your recommendation AND the "
+        "evidence contradicting it (including what the athlete just told you), then say "
+        "how confident you actually are and what you do not know (missing HRV, weak "
+        "recovery model, uncertain MTB/other-sport power, etc.). Do not cherry-pick "
+        "only the evidence that backs your call.\n"
+        "- When the athlete asks to see the reasoning, you are unsure, or the two of "
+        "you disagree, you may make this explicit with a short structure — the "
+        "recommendation, your confidence (a rough %), a few supporting points, a few "
+        "contradicting points, and the open unknowns — instead of a wall of prose. "
+        "Keep each list to a few concrete bullets from THIS athlete's data.\n"
+        "- If honest confidence is low and the contradicting evidence is real, say so "
+        "and offer to let the athlete's judgement or a low-cost test decide, rather "
+        "than insisting. Deferring under genuine uncertainty is correct coaching, not "
+        "weakness.\n"
+        "- When confidence is genuinely high and the evidence is one-sided, do not "
+        "manufacture doubt or pad the answer — say it plainly and move on. Reserve the "
+        "explicit breakdown for calls that are actually uncertain or contested."
+    )
+
+
 def open_questions_section(open_questions: list[dict] | None) -> str:
     """Render the coach's still-open questions (#385) for a coaching prompt.
 
@@ -1449,6 +1488,7 @@ def ask_trainer_system(
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     explainability_instructions = coach_explainability_rule()
+    uncertainty_instructions = reveal_uncertainty_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
 
@@ -1531,6 +1571,7 @@ def ask_trainer_system(
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{explainability_instructions}"
+        f"{uncertainty_instructions}"
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"

@@ -12,6 +12,7 @@ from services.prompts import (
     active_hypotheses_section,
     coach_explainability_rule,
     performance_model_section,
+    reveal_uncertainty_rule,
 )
 
 
@@ -115,6 +116,22 @@ def test_explainability_rule_covers_drilldown_and_proactive_insight():
     assert "hypothesis" in lowered
 
 
+def test_reveal_uncertainty_rule_demands_both_sides_and_open_unknowns():
+    rule = reveal_uncertainty_rule()
+    lowered = rule.lower()
+    # The coach must not present a recommendation as the single truth (#490).
+    assert "single truth" in lowered
+    assert "not a verdict" in lowered or "never a verdict" in lowered
+    # Both supporting AND contradicting evidence, plus what is unknown.
+    assert "supporting" in lowered and "contradicting" in lowered
+    assert "do not know" in lowered or "unknown" in lowered
+    assert "confidence" in lowered
+    # Deferring under genuine uncertainty is endorsed, not treated as weakness.
+    assert "not weakness" in lowered or "not insisting" in lowered or "decide" in lowered
+    # But high-confidence, one-sided calls must not manufacture doubt.
+    assert "manufacture doubt" in lowered or "do not manufacture" in lowered
+
+
 # --- assembled system prompt -------------------------------------------------
 
 
@@ -150,6 +167,8 @@ def test_ask_trainer_system_surfaces_full_reasoning_chain():
     # Explainability + proactive rules present.
     assert "Explainable coaching rules" in prompt
     assert "want me to explain" in prompt.lower()
+    # Uncertainty-revealing rule is wired in too (#490).
+    assert "Reveal your uncertainty" in prompt
 
 
 def test_ask_trainer_system_omits_sections_without_model():
@@ -159,6 +178,8 @@ def test_ask_trainer_system_omits_sections_without_model():
     assert "Active coaching hypotheses" not in prompt
     # The rule itself is always present so the coach stays explainable on demand.
     assert "Explainable coaching rules" in prompt
+    # Owning uncertainty is unconditional — always present, model or not (#490).
+    assert "Reveal your uncertainty" in prompt
 
 
 def test_ask_trainer_system_omits_roi_when_insufficient():
