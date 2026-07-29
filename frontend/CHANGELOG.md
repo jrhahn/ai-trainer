@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-07-29
+
+### Added
+
+- **Athlete Model, limiter & hypotheses UI** (`components/AthletePerformanceModelCard.tsx`,
+  `services/ai.ts`, `services/user.ts`, `pages/SettingsPage.tsx`) — a read-only
+  "Coach's understanding" card surfaces the deterministic Athlete Performance
+  Model so the athlete can see the coach's evolving physiological picture, not
+  just a metrics dashboard. Each inferred attribute shows its estimate/score with
+  a **confidence bar**, its supporting evidence, and what is still missing; the
+  **likely limiter** is highlighted with its evidence and counter-evidence; and
+  the active **coaching hypotheses** list their evidence, confidence and
+  alternative explanations. Everything is framed as an inference with uncertainty
+  ("estimates with a confidence, not measured facts"), never as hard fact, with a
+  refresh action and a clean low-data empty state. Wires up
+  `fetchAthletePerformanceModel`/`refreshAthletePerformanceModel` and the
+  `AthletePerformanceModel` types, and extends `AthleteHypothesis` with
+  `evidence`/`alternativeExplanations` (#481).
+
 ### Changed
 
 - **Collapse the Coach Timeline plan-change flood** (`utils/coachTimeline.ts`,

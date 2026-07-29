@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import AthleteModelSettings from '../components/AthleteModelSettings'
+import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
 import IntervalsConnect from '../components/IntervalsConnect'
@@ -814,6 +815,9 @@ export default function SettingsPage() {
 
       {/* Long-term structured athlete model (#384) */}
       <AthleteModelSettings />
+
+      {/* Deterministic performance model, limiter & hypotheses (#481) */}
+      <AthletePerformanceModelCard />
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
