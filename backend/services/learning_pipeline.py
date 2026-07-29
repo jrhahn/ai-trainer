@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import models
 from config import settings
 from services import (
+    athlete_model_inference,
     contradiction_detection,
     hypothesis_generation,
     insight_generation,
@@ -62,6 +63,7 @@ class LearningStepResult:
     contradictions: int = 0
     hypotheses: int = 0
     open_questions: int = 0
+    performance_model: int = 0
     failed_steps: list[str] = field(default_factory=list)
 
     @property
@@ -71,7 +73,24 @@ class LearningStepResult:
             or self.contradictions
             or self.hypotheses
             or self.open_questions
+            or self.performance_model
         )
+
+
+async def _refresh_performance_model_step(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> int:
+    """Learning-step adapter around the deterministic inference engine (#476).
+
+    Returns 1 when a model was (re)derived, 0 otherwise, so it slots into the
+    common ``-> int`` step contract.
+    """
+    row = await athlete_model_inference.refresh_performance_model(db, user, now=now)
+    return 1 if row is not None else 0
 
 
 async def _run_step(
@@ -123,6 +142,15 @@ async def run_learning_step(
         timezone_name,
         result,
     )
+    result.performance_model = await _run_step(
+        "performance_model",
+        _refresh_performance_model_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
     result.contradictions = await _run_step(
         "contradictions",
         contradiction_detection.detect_user_contradictions,
@@ -153,12 +181,13 @@ async def run_learning_step(
 
     logger.info(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
-        "hypotheses=%s open_questions=%s failed=%s",
+        "hypotheses=%s open_questions=%s performance_model=%s failed=%s",
         user.id,
         result.observations,
         result.contradictions,
         result.hypotheses,
         result.open_questions,
+        result.performance_model,
         ",".join(result.failed_steps) or "none",
     )
     return result

@@ -2207,3 +2207,93 @@ async def test_clear_athlete_memory_removes_predictions(db: AsyncSession) -> Non
     )
     await crud.clear_athlete_memory(db, user.id)
     assert await crud.list_athlete_predictions(db, user.id, include_resolved=True) == []
+
+
+# ---------------------------------------------------------------------------
+# AthletePerformanceModel (#475)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_model_round_trip(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-model@example.com")
+    assert await crud.get_athlete_performance_model(db, user.id) is None
+
+    attributes = {
+        "ftp": {
+            "estimate": 302,
+            "score": None,
+            "confidence": 0.74,
+            "unit": "W",
+            "evidence": ["Best 20-min power 318 W across 3 rides"],
+            "missing_information": [],
+        },
+        "aerobic_endurance": {
+            "estimate": None,
+            "score": "high",
+            "confidence": 0.6,
+            "unit": None,
+            "evidence": ["4 h ride with 3.1% decoupling"],
+            "missing_information": [],
+        },
+    }
+    created = await crud.upsert_athlete_performance_model(
+        db,
+        user.id,
+        attributes=attributes,
+        source_window_days=120,
+        derived_from_rides=5,
+    )
+    assert created.attributes["ftp"]["estimate"] == 302
+    assert created.derived_from_rides == 5
+
+    # Upsert overwrites in place (one row per user).
+    updated = await crud.upsert_athlete_performance_model(
+        db,
+        user.id,
+        attributes={"ftp": {"estimate": 310, "confidence": 0.8}},
+        derived_from_rides=6,
+    )
+    assert updated.user_id == created.user_id
+    assert updated.attributes["ftp"]["estimate"] == 310
+    assert "aerobic_endurance" not in updated.attributes
+
+    fetched = await crud.get_athlete_performance_model(db, user.id)
+    assert fetched is not None
+    assert fetched.attributes["ftp"]["estimate"] == 310
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_snapshots_are_time_series(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-snap@example.com")
+    older = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 6, 1, tzinfo=timezone.utc)
+
+    await crud.create_athlete_performance_snapshot(
+        db, user.id, attributes={"ftp": {"estimate": 300, "confidence": 0.7}},
+        recorded_at=older,
+    )
+    await crud.create_athlete_performance_snapshot(
+        db, user.id, attributes={"ftp": {"estimate": 310, "confidence": 0.75}},
+        recorded_at=newer,
+    )
+
+    history = await crud.get_athlete_performance_snapshots(db, user.id)
+    assert [s.attributes["ftp"]["estimate"] for s in history] == [300, 310]
+
+
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_persists_perf_signals(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-signals@example.com")
+    signals = {"duration_s": 3600, "power_curve": {"5": 360, "20": 300}}
+    ride = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=12345,
+        activity_date="2026-07-20",
+        perf_signals=signals,
+    )
+    assert ride.perf_signals == signals
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+    assert history[0].perf_signals["power_curve"]["5"] == 360

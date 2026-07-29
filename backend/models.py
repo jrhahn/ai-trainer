@@ -151,6 +151,18 @@ class User(Base):
     athlete_model: Mapped["AthleteModel | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    athlete_performance_model: Mapped["AthletePerformanceModel | None"] = (
+        relationship(
+            back_populates="user", uselist=False, cascade="all, delete-orphan"
+        )
+    )
+    athlete_performance_snapshots: Mapped[
+        list["AthletePerformanceSnapshot"]
+    ] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="AthletePerformanceSnapshot.recorded_at",
+    )
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -868,6 +880,77 @@ class AthleteMetricSnapshot(Base):
     user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")
 
 
+class AthletePerformanceModel(Base):
+    """Deterministic, per-attribute physiological model of the athlete (#475).
+
+    Distinct from :class:`AthleteModel` (#384), which is an LLM-derived, qualitative
+    free-text profile with a single overall confidence. This model is the data
+    layer for the Athlete Performance Model epic (#474): a rule-based, quantitative
+    picture inferred across many workouts, where **every** attribute carries its own
+    estimate/score, confidence, evidence and missing information.
+
+    Attributes are stored as structured JSON keyed by attribute name (``vo2max``,
+    ``ftp``, ``map``, ``fractional_utilization``, ``aerobic_endurance``,
+    ``fatigue_resistance``, ``anaerobic_capacity``, …) so the set can grow without
+    schema churn. Each value is an ``AthletePerformanceAttribute``-shaped dict::
+
+        {"estimate": 302, "score": null, "confidence": 0.74, "unit": "W",
+         "evidence": [...], "missing_information": [...]}
+
+    The inference engine (#476) writes this; ``likely_limiter`` is reserved for the
+    limiter-detection issue (#477).
+    """
+
+    __tablename__ = "athlete_performance_models"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    # Structured per-attribute inferences, keyed by attribute name.
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    # Most probable physiological limiter (set by #477; unset until then).
+    likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Provenance: rolling window (days) and ride count the inference derived from.
+    source_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    derived_from_rides: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_performance_model")
+
+
+class AthletePerformanceSnapshot(Base):
+    """Time-series snapshot of the Athlete Performance Model (#475).
+
+    A new row is written each time the inference engine recomputes the model so
+    trends over months (e.g. "development over the last months" for Level 2) stay
+    queryable. Mirrors :class:`AthleteMetricSnapshot`.
+    """
+
+    __tablename__ = "athlete_performance_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    user: Mapped["User"] = relationship(
+        back_populates="athlete_performance_snapshots"
+    )
+
+
 class RideMetric(Base):
     """Per-ride time-series record with pre-computed training metrics.
 
@@ -936,6 +1019,11 @@ class RideMetric(Base):
         String(10), nullable=True
     )
     classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Compact per-ride physiological signals (power-duration envelope, HR drift,
+    # first/second-half power & HR) derived from the stream at analysis time and
+    # persisted so the cross-workout inference engine (#476) can aggregate them
+    # without re-fetching streams. NULL when no usable stream was available.
+    perf_signals: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)

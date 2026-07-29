@@ -1261,3 +1261,38 @@ async def test_fit_bulk_upload_skips_duplicates_and_keeps_failures_per_file(
     )
     assert metrics_resp.status_code == 200
     assert len(metrics_resp.json()["rides"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# 10. Athlete Performance Model contract (#475)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_model_contract(client):
+    """The performance-model endpoint returns a camelCase, evidence-shaped model."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Pim", "email": "pim@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (
+        await client.get("/api/v1/ai/athlete-performance-model", headers=headers)
+    ).json()
+    # A never-derived athlete gets an empty model, not a 404.
+    assert empty["attributes"] == {}
+    assert empty["likelyLimiter"] is None
+    assert empty["sourceWindowDays"] is None
+    assert empty["derivedFromRides"] == 0
+    assert empty["updatedAt"] is None
+
+    # On-demand refresh with no ride history stays empty rather than inventing data.
+    refreshed = (
+        await client.post(
+            "/api/v1/ai/refresh-athlete-performance-model", headers=headers
+        )
+    ).json()
+    assert refreshed["attributes"] == {}
+    assert refreshed["derivedFromRides"] == 0

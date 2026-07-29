@@ -659,6 +659,89 @@ async def upsert_athlete_model(
 
 
 # ---------------------------------------------------------------------------
+# AthletePerformanceModel (#475)
+# ---------------------------------------------------------------------------
+
+
+async def get_athlete_performance_model(
+    db: AsyncSession, user_id: str
+) -> models.AthletePerformanceModel | None:
+    """Return the deterministic Athlete Performance Model for a user, or None."""
+    return await db.get(models.AthletePerformanceModel, user_id)
+
+
+async def upsert_athlete_performance_model(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    attributes: dict[str, object],
+    likely_limiter: str | None = None,
+    source_window_days: int | None = None,
+    derived_from_rides: int = 0,
+) -> models.AthletePerformanceModel:
+    """Create or update a user's Athlete Performance Model and flush."""
+    values: dict[str, object] = {
+        "attributes": attributes,
+        "likely_limiter": likely_limiter,
+        "source_window_days": source_window_days,
+        "derived_from_rides": derived_from_rides,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    existing = await get_athlete_performance_model(db, user_id)
+    if existing is None:
+        existing = models.AthletePerformanceModel(user_id=user_id, **values)
+        db.add(existing)
+    else:
+        for attr, value in values.items():
+            setattr(existing, attr, value)
+    await db.flush()
+    return existing
+
+
+async def create_athlete_performance_snapshot(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    attributes: dict[str, object],
+    likely_limiter: str | None = None,
+    recorded_at: datetime | None = None,
+) -> models.AthletePerformanceSnapshot:
+    """Insert a new AthletePerformanceSnapshot row and flush."""
+    kwargs: dict = dict(
+        user_id=user_id,
+        attributes=attributes,
+        likely_limiter=likely_limiter,
+    )
+    if recorded_at is not None:
+        kwargs["recorded_at"] = recorded_at
+    snapshot = models.AthletePerformanceSnapshot(**kwargs)
+    db.add(snapshot)
+    await db.flush()
+    return snapshot
+
+
+async def get_athlete_performance_snapshots(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 90,
+) -> list[models.AthletePerformanceSnapshot]:
+    """Return the most recent *limit* performance snapshots for a user, oldest first."""
+    recent_ids = (
+        select(models.AthletePerformanceSnapshot.id)
+        .where(models.AthletePerformanceSnapshot.user_id == user_id)
+        .order_by(models.AthletePerformanceSnapshot.recorded_at.desc())
+        .limit(limit)
+        .scalar_subquery()
+    )
+    result = await db.scalars(
+        select(models.AthletePerformanceSnapshot)
+        .where(models.AthletePerformanceSnapshot.id.in_(recent_ids))
+        .order_by(models.AthletePerformanceSnapshot.recorded_at.asc())
+    )
+    return list(result)
+
+
+# ---------------------------------------------------------------------------
 # AthleteMemoryFact
 # ---------------------------------------------------------------------------
 
@@ -2299,6 +2382,7 @@ async def upsert_ride_metric(
     ride_purpose: str | None = None,
     classification_confidence: str | None = None,
     classification_reason: str | None = None,
+    perf_signals: dict | None = None,
     summary: str | None = None,
 ) -> models.RideMetric:
     """Insert or update a RideMetric row by stable activity identity."""
@@ -2340,6 +2424,7 @@ async def upsert_ride_metric(
         ride_purpose=ride_purpose,
         classification_confidence=classification_confidence,
         classification_reason=classification_reason,
+        perf_signals=perf_signals,
         summary=summary,
     )
 
