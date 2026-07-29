@@ -7,10 +7,28 @@ assert on estimates, confidence and evidence directly — no DB or LLM.
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import crud
 from services.analysis import compute_ride_performance_signals
 from services import athlete_model_inference as ami
+from tests.conftest import TestSessionLocal
 
 NOW = datetime(2026, 7, 28, tzinfo=timezone.utc)
+
+
+@pytest_asyncio.fixture
+async def db() -> AsyncSession:
+    """Yield a fresh session that is rolled back after each test."""
+    async with TestSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 def _stream(dur_s, watts_first, watts_second, hr_first, hr_second, step=5):
@@ -143,3 +161,53 @@ def test_recency_penalises_stale_data():
         now=NOW,
     )
     assert fresh["ftp"]["confidence"] > stale["ftp"]["confidence"]
+
+
+# --- refresh_performance_model (DB, end-to-end incl. limiter #477) -----------
+
+
+@pytest.mark.asyncio
+async def test_refresh_persists_model_and_threshold_limiter(db: AsyncSession) -> None:
+    """A strong-engine / relatively-low-FTP history is derived and persisted with
+    threshold detected as the likely limiter (#476 → #477 through the DB)."""
+    user = await crud.create_user(
+        db, email="perf-refresh@example.com", name="R", hashed_password="x"
+    )
+    # Long, durable, low-decoupling rides (low sustained power) ...
+    for i, dur in enumerate((14400, 12600)):
+        await crud.upsert_ride_metric(
+            db, user.id,
+            strava_activity_id=1000 + i,
+            activity_date="2026-07-2%d" % (5 + i),
+            perf_signals=compute_ride_performance_signals(
+                _stream(dur, 215 - i, 212 - i, 130, 133)
+            ),
+        )
+    # ... plus a short maximal ~5-10 min effort giving a high MAP well above FTP
+    # (kept short so it contributes a MAP point, not a 20-min FTP point).
+    await crud.upsert_ride_metric(
+        db, user.id,
+        strava_activity_id=1002,
+        activity_date="2026-07-27",
+        perf_signals=compute_ride_performance_signals(_stream(600, 355, 350, 176, 180)),
+    )
+
+    row = await ami.refresh_performance_model(db, user, now=NOW)
+    assert row is not None
+    assert row.attributes["map"]["estimate"]
+    assert row.likely_limiter == "threshold"
+    assert row.limiters and row.limiters[0]["limiter"] == "threshold"
+    assert row.limiters[0]["evidence"]
+
+    # The snapshot carries the same limiter for the month-over-month history.
+    snaps = await crud.get_athlete_performance_snapshots(db, user.id)
+    assert snaps and snaps[-1].likely_limiter == "threshold"
+
+
+@pytest.mark.asyncio
+async def test_refresh_returns_none_without_signals(db: AsyncSession) -> None:
+    user = await crud.create_user(
+        db, email="perf-refresh-empty@example.com", name="E", hashed_password="x"
+    )
+    assert await ami.refresh_performance_model(db, user, now=NOW) is None
+    assert await crud.get_athlete_performance_model(db, user.id) is None

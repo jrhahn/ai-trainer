@@ -442,6 +442,26 @@ class AthletePerformanceAttributeSchema(CamelModel):
     )
 
 
+class AthletePerformanceLimiterSchema(CamelModel):
+    """One candidate physiological limiter in the ranked list (#477).
+
+    Surfaced as an inference, never a fact: it carries a ``confidence`` and both
+    the ``evidence`` for and the ``counterEvidence`` against it. ``limiter`` is one
+    of ``threshold``/``vo2max``/``endurance_durability``/``insufficient_data``.
+    """
+
+    limiter: str
+    confidence: float
+    evidence: list[str] = Field(default_factory=list)
+    counter_evidence: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 class AthletePerformanceModelSchema(CamelModel):
     """Deterministic, per-attribute Athlete Performance Model (#475).
 
@@ -449,15 +469,25 @@ class AthletePerformanceModelSchema(CamelModel):
     rule-based, evidence-backed quantitative model. ``attributes`` is keyed by
     attribute name (``vo2max``, ``ftp``, ``map``, ``fractional_utilization``,
     ``aerobic_endurance``, ``fatigue_resistance``, ``anaerobic_capacity``, …).
+    ``likelyLimiter`` and the ranked ``limiters`` list come from limiter
+    detection (#477).
     """
 
     attributes: dict[str, AthletePerformanceAttributeSchema] = Field(
         default_factory=dict
     )
     likely_limiter: Optional[str] = None
+    limiters: list[AthletePerformanceLimiterSchema] = Field(default_factory=list)
     source_window_days: Optional[int] = None
     derived_from_rides: int = 0
     updated_at: Optional[datetime] = None
+
+    @field_validator("limiters", mode="before")
+    @classmethod
+    def _limiters_default(cls, v: object) -> object:
+        # The DB column is nullable (unset before limiter detection ran, or on
+        # rows predating the migration); present it as an empty list.
+        return v if v is not None else []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

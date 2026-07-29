@@ -14,8 +14,9 @@ as ``unknown`` at low confidence rather than guessed. An LLM is deliberately not
 used here — the numbers must be reproducible and explainable.
 
 Attributes produced: ``ftp``, ``map``, ``vo2max``, ``fractional_utilization``,
-``aerobic_endurance``, ``fatigue_resistance`` and ``anaerobic_capacity``. The
-``likely_limiter`` field is left for the limiter-detection issue (#477).
+``aerobic_endurance``, ``fatigue_resistance`` and ``anaerobic_capacity``. On
+refresh, :mod:`services.limiter_detection` (#477) reads those attributes to fill
+``likely_limiter`` and the ranked ``limiters`` list.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from services import limiter_detection
 
 logger = logging.getLogger(__name__)
 
@@ -422,15 +424,26 @@ async def refresh_performance_model(
     if not attributes:
         return None
 
+    # Limiter detection (#477) reads the freshly inferred attributes.
+    limiters = limiter_detection.detect_limiters(attributes)
+    likely_limiter = limiter_detection.top_limiter(limiters)
+
     derived_from = sum(1 for m in metrics if m.perf_signals)
     row = await crud.upsert_athlete_performance_model(
         db,
         user.id,
         attributes=attributes,
+        likely_limiter=likely_limiter,
+        limiters=limiters,
         source_window_days=PERF_WINDOW_DAYS,
         derived_from_rides=derived_from,
     )
     await crud.create_athlete_performance_snapshot(
-        db, user.id, attributes=attributes, recorded_at=now
+        db,
+        user.id,
+        attributes=attributes,
+        likely_limiter=likely_limiter,
+        limiters=limiters,
+        recorded_at=now,
     )
     return row

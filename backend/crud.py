@@ -676,6 +676,7 @@ async def upsert_athlete_performance_model(
     *,
     attributes: dict[str, object],
     likely_limiter: str | None = None,
+    limiters: list[object] | None = None,
     source_window_days: int | None = None,
     derived_from_rides: int = 0,
 ) -> models.AthletePerformanceModel:
@@ -683,6 +684,7 @@ async def upsert_athlete_performance_model(
     values: dict[str, object] = {
         "attributes": attributes,
         "likely_limiter": likely_limiter,
+        "limiters": limiters,
         "source_window_days": source_window_days,
         "derived_from_rides": derived_from_rides,
         "updated_at": datetime.now(timezone.utc),
@@ -704,6 +706,7 @@ async def create_athlete_performance_snapshot(
     *,
     attributes: dict[str, object],
     likely_limiter: str | None = None,
+    limiters: list[object] | None = None,
     recorded_at: datetime | None = None,
 ) -> models.AthletePerformanceSnapshot:
     """Insert a new AthletePerformanceSnapshot row and flush."""
@@ -711,6 +714,7 @@ async def create_athlete_performance_snapshot(
         user_id=user_id,
         attributes=attributes,
         likely_limiter=likely_limiter,
+        limiters=limiters,
     )
     if recorded_at is not None:
         kwargs["recorded_at"] = recorded_at

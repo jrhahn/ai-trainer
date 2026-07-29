@@ -1284,6 +1284,7 @@ async def test_athlete_performance_model_contract(client):
     # A never-derived athlete gets an empty model, not a 404.
     assert empty["attributes"] == {}
     assert empty["likelyLimiter"] is None
+    assert empty["limiters"] == []
     assert empty["sourceWindowDays"] is None
     assert empty["derivedFromRides"] == 0
     assert empty["updatedAt"] is None
