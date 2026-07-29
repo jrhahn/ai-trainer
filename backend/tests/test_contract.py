@@ -1288,6 +1288,19 @@ async def test_athlete_performance_model_contract(client):
     assert empty["sourceWindowDays"] is None
     assert empty["derivedFromRides"] == 0
     assert empty["updatedAt"] is None
+    # ROI recommendation (#478) is always present; with no model it is not
+    # sufficient so the client keeps its own periodization.
+    assert empty["recommendations"]["sufficient"] is False
+    assert empty["recommendations"]["expectedGain"] == [
+        {"system": "vo2max", "gain": "moderate", "rationale": "balanced default"},
+        {"system": "threshold", "gain": "moderate", "rationale": "balanced default"},
+        {
+            "system": "endurance",
+            "gain": "maintenance",
+            "rationale": "maintain aerobic base",
+        },
+    ]
+    assert empty["recommendations"]["weeklyEmphasis"][0]["label"]
 
     # On-demand refresh with no ride history stays empty rather than inventing data.
     refreshed = (

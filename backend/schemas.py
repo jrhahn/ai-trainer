@@ -462,6 +462,63 @@ class AthletePerformanceLimiterSchema(CamelModel):
     )
 
 
+class TrainingRoiSystemGainSchema(CamelModel):
+    """Expected training return for one physiological system (#478).
+
+    ``system`` is one of ``threshold``/``vo2max``/``endurance``/``anaerobic``;
+    ``gain`` is a coarse return bucket (``large``/``moderate``/``small``/
+    ``maintenance``) with a short ``rationale``.
+    """
+
+    system: str
+    gain: str
+    rationale: str = ""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingRoiEmphasisSchema(CamelModel):
+    """A suggested weekly emphasis line, e.g. ``2× Threshold`` (#478)."""
+
+    system: str
+    label: str
+    sessions: int
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingRoiRecommendationSchema(CamelModel):
+    """ROI-based recommendation derived from the model + limiter (#478).
+
+    Machine-readable expected gain per system plus a suggested weekly emphasis and
+    a natural-language rationale that cites the model. ``sufficient`` is ``False``
+    when the model has no confident limiter — the caller should keep its own
+    periodization rather than act on this.
+    """
+
+    sufficient: bool = False
+    limiter: Optional[str] = None
+    confidence: float = 0.0
+    hypothesis: str = ""
+    rationale: str = ""
+    expected_gain: list[TrainingRoiSystemGainSchema] = Field(default_factory=list)
+    weekly_emphasis: list[TrainingRoiEmphasisSchema] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 class AthletePerformanceModelSchema(CamelModel):
     """Deterministic, per-attribute Athlete Performance Model (#475).
 
@@ -470,7 +527,8 @@ class AthletePerformanceModelSchema(CamelModel):
     attribute name (``vo2max``, ``ftp``, ``map``, ``fractional_utilization``,
     ``aerobic_endurance``, ``fatigue_resistance``, ``anaerobic_capacity``, …).
     ``likelyLimiter`` and the ranked ``limiters`` list come from limiter
-    detection (#477).
+    detection (#477); ``recommendations`` is the ROI mapping derived from them
+    (#478).
     """
 
     attributes: dict[str, AthletePerformanceAttributeSchema] = Field(
@@ -478,6 +536,7 @@ class AthletePerformanceModelSchema(CamelModel):
     )
     likely_limiter: Optional[str] = None
     limiters: list[AthletePerformanceLimiterSchema] = Field(default_factory=list)
+    recommendations: Optional[TrainingRoiRecommendationSchema] = None
     source_window_days: Optional[int] = None
     derived_from_rides: int = 0
     updated_at: Optional[datetime] = None
@@ -488,6 +547,21 @@ class AthletePerformanceModelSchema(CamelModel):
         # The DB column is nullable (unset before limiter detection ran, or on
         # rows predating the migration); present it as an empty list.
         return v if v is not None else []
+
+    @model_validator(mode="after")
+    def _derive_recommendations(self) -> "AthletePerformanceModelSchema":
+        # The ROI recommendation (#478) is a pure derivation of attributes + the
+        # ranked limiter list, so compute it here rather than persist it. Imported
+        # lazily to keep schemas free of a service dependency at import time.
+        if self.recommendations is None:
+            from services.roi_recommendation import recommend_training_roi
+
+            attrs = {k: v.model_dump() for k, v in self.attributes.items()}
+            limiters = [lim.model_dump() for lim in self.limiters]
+            self.recommendations = TrainingRoiRecommendationSchema.model_validate(
+                recommend_training_roi(attrs, limiters)
+            )
+        return self
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

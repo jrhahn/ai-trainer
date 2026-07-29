@@ -988,6 +988,49 @@ def athlete_model_section(athlete_model: dict | None) -> str:
     )
 
 
+def athlete_performance_roi_section(recommendation: dict | None) -> str:
+    """Render the ROI-based recommendation (#478) for the physiology layer.
+
+    Turns the deterministic expected-gain-per-system map + weekly emphasis into a
+    compact block the coach uses to back its physiology reasoning with the explicit
+    performance model rather than ad-hoc periodization. Returns "" when the model
+    has no confident limiter (``sufficient`` False) so the coach falls back to its
+    own reasoning.
+    """
+    if not recommendation or not recommendation.get("sufficient"):
+        return ""
+
+    gains = "; ".join(
+        f"{g.get('system')}: {g.get('gain')}"
+        for g in recommendation.get("expected_gain", [])
+        if g.get("system") and g.get("gain")
+    )
+    emphasis = "  ".join(
+        f"{e.get('sessions')}× {e.get('label')}"
+        for e in recommendation.get("weekly_emphasis", [])
+        if e.get("label") and e.get("sessions")
+    )
+
+    lines = ["Performance-model ROI (deterministic, from the athlete's own numbers):"]
+    hypothesis = recommendation.get("hypothesis")
+    if hypothesis:
+        lines.append(f"- Working hypothesis: {hypothesis}")
+    if gains:
+        lines.append(f"- Expected gain per system: {gains}")
+    if emphasis:
+        lines.append(f"- Suggested weekly emphasis: {emphasis}")
+    rationale = recommendation.get("rationale")
+    if rationale:
+        lines.append(f"- Why: {rationale}")
+    lines.append(
+        "Use this as the physiology basis for which stimulus has the highest return "
+        "now; explain the WHY in the athlete's terms rather than prescribing generic "
+        "intervals. Recent load/freshness (CTL/ATL/TSB) and safety still gate whether "
+        "today is the day for that stimulus."
+    )
+    return "\n".join(lines)
+
+
 def open_questions_section(open_questions: list[dict] | None) -> str:
     """Render the coach's still-open questions (#385) for a coaching prompt.
 
@@ -1095,6 +1138,10 @@ def recommendation_reasoning_layers_rule() -> str:
         "- Separate the decision into two internal layers before recommending a workout.\n"
         "- Physiology layer: CTL, ATL, TSB, HRV/sleep if provided, recent load, subjective "
         "fatigue, and the planned training stimulus.\n"
+        "- When a performance-model ROI block is present, let it drive which stimulus has "
+        "the highest expected return (its detected limiter and expected-gain-per-system), "
+        "rather than defaulting to generic periodization; still gate the timing on load and "
+        "freshness. When it is absent or low-confidence, reason from the numbers as usual.\n"
         "- Athlete-context layer: motivation, rest tolerance, tendency to overdo it, social "
         "needs, mood, adherence pattern, structured athlete context, and evidence-backed "
         "memory facts.\n"
@@ -2675,6 +2722,7 @@ def next_ride_recommendation_user(
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
+    performance_recommendation: dict | None = None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -2726,6 +2774,10 @@ def next_ride_recommendation_user(
         load_parts.append(f"TSB (form): {round(tsb, 1)}")
     if load_parts:
         physiology_parts.append("Current training load: " + " | ".join(load_parts))
+
+    roi_section = athlete_performance_roi_section(performance_recommendation).strip()
+    if roi_section:
+        physiology_parts.append(roi_section)
 
     # Recent rides with feedback
     if rides:
