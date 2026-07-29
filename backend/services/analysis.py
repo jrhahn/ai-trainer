@@ -1776,6 +1776,88 @@ def compute_ftp_from_streams(
     return computed_ftp, computed_threshold_hr
 
 
+# Durations (minutes) captured in the per-ride power-duration envelope. Spans
+# anaerobic (1 min) through MAP/VO2max (3-6 min) to threshold/endurance (20-60
+# min) so the cross-workout inference engine (#476) can read every system.
+PERF_SIGNAL_DURATIONS_MIN: tuple[float, ...] = (1, 3, 4, 5, 8, 10, 20, 30, 60)
+
+
+def compute_ride_performance_signals(
+    streams: dict,
+    duration_seconds: int | None = None,
+) -> dict | None:
+    """Derive compact per-ride physiological signals from a stream.
+
+    Returns a small JSON-serialisable dict persisted on ``RideMetric.perf_signals``
+    so the cross-workout inference engine (#476) can aggregate across many rides
+    without re-fetching streams. Returns ``None`` when there is no usable power
+    stream (nothing physiological can be inferred).
+
+    The blob holds:
+
+    - ``power_curve``: best average power (W) over each standard duration present
+      in the ride — the power-duration envelope points feeding FTP/MAP/anaerobic.
+    - ``duration_s``: ride moving duration from the time stream.
+    - ``avg_hr`` / ``max_hr`` / ``hr_drift_slope``: HR response and whole-ride
+      cardiac drift (bpm per sample, via :func:`compute_hr_drift`).
+    - ``first_half_power`` / ``second_half_power`` and the HR equivalents: split at
+      the time midpoint, so the engine can score fatigue resistance and aerobic
+      decoupling (little degradation -> durable).
+    """
+    watts: list[float] = streams.get("watts", {}).get("data", []) or []
+    time_data: list[float] = streams.get("time", {}).get("data", []) or []
+    hr_data: list[float] = streams.get("heartrate", {}).get("data", []) or []
+
+    if not watts or not time_data or len(watts) != len(time_data):
+        return None
+
+    total_secs = time_data[-1] - time_data[0] if len(time_data) > 1 else 0.0
+    if total_secs <= 0:
+        return None
+
+    signals: dict = {"duration_s": round(total_secs)}
+
+    power_curve: dict[str, int] = {}
+    for minutes in PERF_SIGNAL_DURATIONS_MIN:
+        # Only probe durations the ride is long enough to actually contain.
+        if total_secs < minutes * 60 * 0.9:
+            continue
+        best, _, _ = best_n_min_power(watts, time_data, minutes)
+        if best is not None:
+            power_curve[str(int(minutes))] = round(best)
+    signals["power_curve"] = power_curve
+
+    usable_hr = hr_data if hr_data and len(hr_data) == len(watts) else None
+    if usable_hr:
+        signals["avg_hr"] = round(sum(usable_hr) / len(usable_hr))
+        signals["max_hr"] = round(max(usable_hr))
+        drift = compute_hr_drift(usable_hr)
+        if drift is not None:
+            signals["hr_drift_slope"] = round(drift, 5)
+
+    # Split at the time midpoint (robust to uneven sampling) for fatigue resistance.
+    mid_time = time_data[0] + total_secs / 2.0
+    split = next(
+        (i for i, t in enumerate(time_data) if t >= mid_time), len(watts) // 2
+    )
+    if 0 < split < len(watts):
+        first_p = _segment_average(watts, 0, split - 1)
+        second_p = _segment_average(watts, split, len(watts) - 1)
+        if first_p is not None:
+            signals["first_half_power"] = round(first_p)
+        if second_p is not None:
+            signals["second_half_power"] = round(second_p)
+        if usable_hr:
+            first_hr = _segment_average(usable_hr, 0, split - 1)
+            second_hr = _segment_average(usable_hr, split, len(usable_hr) - 1)
+            if first_hr is not None:
+                signals["first_half_hr"] = round(first_hr)
+            if second_hr is not None:
+                signals["second_half_hr"] = round(second_hr)
+
+    return signals
+
+
 # ---------------------------------------------------------------------------
 # Ride-metrics chain computation
 # ---------------------------------------------------------------------------
@@ -2065,6 +2147,15 @@ def build_ride_metrics_chain(
         watts: list[float] = streams.get("watts", {}).get("data", [])
         time_data: list[float] = streams.get("time", {}).get("data", [])
 
+        # Compact per-ride physiological signals for the cross-workout inference
+        # engine (#476). Best-effort: never let signal extraction break the chain.
+        try:
+            perf_signals = compute_ride_performance_signals(
+                streams, ride.get("duration_seconds")
+            )
+        except Exception:  # pragma: no cover - defensive
+            perf_signals = None
+
         # --- Per-ride metrics ---
         avg_power: int | None = None
         np_value: int | None = None
@@ -2194,6 +2285,7 @@ def build_ride_metrics_chain(
                 "ride_purpose": ride_purpose,
                 "classification_confidence": classification_confidence,
                 "classification_reason": classification_reason,
+                "perf_signals": perf_signals,
                 "summary": summary,
             }
         )

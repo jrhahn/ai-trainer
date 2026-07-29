@@ -19,6 +19,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services import athlete_model_inference
 from services import coach_summary
 from services import plan_pipeline
 from services import summary_pipeline
@@ -1372,6 +1373,53 @@ async def refresh_athlete_model(
             existing_row, from_attributes=True
         )
     return schemas.AthleteModelSchema()
+
+
+@router.get(
+    "/athlete-performance-model",
+    response_model=schemas.AthletePerformanceModelSchema,
+)
+async def get_athlete_performance_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePerformanceModelSchema:
+    """Return the athlete's deterministic, evidence-backed performance model (#475).
+
+    An athlete with no derived model yet gets an empty model (no attributes) rather
+    than a 404, so the frontend can render a clean "not enough data" state.
+    """
+    row = await crud.get_athlete_performance_model(db, current_user.id)
+    if row is None:
+        return schemas.AthletePerformanceModelSchema()
+    return schemas.AthletePerformanceModelSchema.model_validate(
+        row, from_attributes=True
+    )
+
+
+@router.post(
+    "/refresh-athlete-performance-model",
+    response_model=schemas.AthletePerformanceModelSchema,
+)
+async def refresh_athlete_performance_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePerformanceModelSchema:
+    """Re-run the deterministic inference engine on demand (#476).
+
+    Mirrors the post-import/weekly refresh but athlete-triggered. Returns the
+    (possibly empty) current model when the history yields no usable signals.
+    """
+    row = await athlete_model_inference.refresh_performance_model(db, current_user)
+    if row is None:
+        existing = await crud.get_athlete_performance_model(db, current_user.id)
+        if existing is None:
+            return schemas.AthletePerformanceModelSchema()
+        return schemas.AthletePerformanceModelSchema.model_validate(
+            existing, from_attributes=True
+        )
+    return schemas.AthletePerformanceModelSchema.model_validate(
+        row, from_attributes=True
+    )
 
 
 @router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)

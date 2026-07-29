@@ -419,6 +419,53 @@ class AthleteModelRequest(CamelModel):
     )
 
 
+class AthletePerformanceAttributeSchema(CamelModel):
+    """One inferred physiological attribute in the Athlete Performance Model (#475).
+
+    Every attribute is emitted with a ``confidence`` and never presented as fact:
+    quantitative attributes carry an ``estimate`` (+ ``unit``); qualitative ones
+    carry a ``score`` (e.g. ``high``/``above_average``/``unknown``). ``evidence``
+    lists the signals behind it and ``missing_information`` what would sharpen it.
+    """
+
+    estimate: Optional[float] = None
+    score: Optional[str] = None
+    confidence: float
+    unit: Optional[str] = None
+    evidence: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePerformanceModelSchema(CamelModel):
+    """Deterministic, per-attribute Athlete Performance Model (#475).
+
+    Complements :class:`AthleteModelSchema` (LLM qualitative profile) with a
+    rule-based, evidence-backed quantitative model. ``attributes`` is keyed by
+    attribute name (``vo2max``, ``ftp``, ``map``, ``fractional_utilization``,
+    ``aerobic_endurance``, ``fatigue_resistance``, ``anaerobic_capacity``, …).
+    """
+
+    attributes: dict[str, AthletePerformanceAttributeSchema] = Field(
+        default_factory=dict
+    )
+    likely_limiter: Optional[str] = None
+    source_window_days: Optional[int] = None
+    derived_from_rides: int = 0
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 AthleteMemoryFactStatus = Literal[
     "active", "stale", "archived", "rejected", "user_confirmed", "needs_validation"
 ]
