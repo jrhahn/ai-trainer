@@ -16,7 +16,10 @@ knowledge in the same reconciled state a full weekly cycle would:
    Covers issue steps 1, 2, 4 and 5.
 2. **Detect anomalies** — flag stored knowledge the new evidence contradicts
    (:func:`services.contradiction_detection.detect_user_contradictions`).
-3. **Create new hypotheses** — form tentative, testable ideas
+3. **Create new hypotheses** — form tentative, testable ideas, both the
+   deterministic performance-model hypotheses derived from the freshly refreshed
+   model (:func:`services.hypothesis_engine.refresh_performance_hypotheses`) and
+   the free-form LLM ones
    (:func:`services.hypothesis_generation.generate_user_hypotheses`).
 4. **Resolve open questions** — record new coaching uncertainties and close the
    ones the new data now answers
@@ -43,6 +46,7 @@ from config import settings
 from services import (
     athlete_model_inference,
     contradiction_detection,
+    hypothesis_engine,
     hypothesis_generation,
     insight_generation,
     open_question_generation,
@@ -62,6 +66,7 @@ class LearningStepResult:
     observations: int = 0
     contradictions: int = 0
     hypotheses: int = 0
+    performance_hypotheses: int = 0
     open_questions: int = 0
     performance_model: int = 0
     failed_steps: list[str] = field(default_factory=list)
@@ -72,6 +77,7 @@ class LearningStepResult:
             self.observations
             or self.contradictions
             or self.hypotheses
+            or self.performance_hypotheses
             or self.open_questions
             or self.performance_model
         )
@@ -91,6 +97,22 @@ async def _refresh_performance_model_step(
     """
     row = await athlete_model_inference.refresh_performance_model(db, user, now=now)
     return 1 if row is not None else 0
+
+
+async def _refresh_performance_hypotheses_step(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> int:
+    """Learning-step adapter around the deterministic hypothesis engine (#479).
+
+    Runs right after the model refresh so it works from the freshly derived model,
+    and returns the number of hypotheses asserted so it slots into the common
+    ``-> int`` step contract.
+    """
+    return await hypothesis_engine.refresh_performance_hypotheses(db, user, now=now)
 
 
 async def _run_step(
@@ -151,6 +173,15 @@ async def run_learning_step(
         timezone_name,
         result,
     )
+    result.performance_hypotheses = await _run_step(
+        "performance_hypotheses",
+        _refresh_performance_hypotheses_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
     result.contradictions = await _run_step(
         "contradictions",
         contradiction_detection.detect_user_contradictions,
@@ -181,11 +212,13 @@ async def run_learning_step(
 
     logger.info(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
-        "hypotheses=%s open_questions=%s performance_model=%s failed=%s",
+        "hypotheses=%s performance_hypotheses=%s open_questions=%s "
+        "performance_model=%s failed=%s",
         user.id,
         result.observations,
         result.contradictions,
         result.hypotheses,
+        result.performance_hypotheses,
         result.open_questions,
         result.performance_model,
         ",".join(result.failed_steps) or "none",

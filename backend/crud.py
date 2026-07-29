@@ -1149,6 +1149,12 @@ _ATHLETE_HYPOTHESIS_OPEN_STATUSES = ("proposed",)
 # Confidence a hypothesis is floored to when the athlete confirms it, before it
 # is promoted into a memory fact.
 ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE = 0.75
+# When the performance model stops supporting a deterministic hypothesis (#479),
+# its confidence steps down each pass; once it falls below the retire floor the
+# hypothesis is deleted so the coach stops asserting a claim the model no longer
+# backs, rather than leaving a stale duplicate around.
+ATHLETE_HYPOTHESIS_DECAY_STEP = 0.2
+ATHLETE_HYPOTHESIS_RETIRE_CONFIDENCE = 0.2
 
 
 def _normalise_hypothesis_key(statement: str) -> str:
@@ -1200,6 +1206,8 @@ async def propose_athlete_hypothesis(
     category: str = "general",
     rationale: str = "",
     confidence: float | None = None,
+    evidence: list[str] | None = None,
+    alternative_explanations: list[str] | None = None,
     observed_at: datetime | None = None,
 ) -> models.AthleteHypothesis:
     """Create a hypothesis or strengthen an existing one with fresh evidence.
@@ -1209,6 +1217,11 @@ async def propose_athlete_hypothesis(
     growing body of support), and a hypothesis the athlete had ``refuted`` is
     revived to ``proposed`` — fresh evidence reopens the question. A ``confirmed``
     hypothesis keeps its status while still accruing evidence.
+
+    ``evidence`` and ``alternative_explanations`` (#479) are the structured
+    supporting observations and the competing explanations still to be ruled out;
+    when supplied they replace the stored lists so a recurring hypothesis carries
+    the latest evidence rather than a stale snapshot.
     """
     cleaned = statement.strip()
     if not cleaned:
@@ -1232,6 +1245,10 @@ async def propose_athlete_hypothesis(
             category=normalized_category,
             rationale=rationale.strip(),
             confidence=_clamp_confidence(confidence),
+            evidence=list(evidence) if evidence else None,
+            alternative_explanations=(
+                list(alternative_explanations) if alternative_explanations else None
+            ),
             evidence_count=1,
             status="proposed",
             first_proposed_at=now,
@@ -1243,6 +1260,10 @@ async def propose_athlete_hypothesis(
         existing.updated_at = now
         if rationale:
             existing.rationale = rationale.strip()
+        if evidence:
+            existing.evidence = list(evidence)
+        if alternative_explanations:
+            existing.alternative_explanations = list(alternative_explanations)
         if existing.status == "refuted":
             existing.status = "proposed"
         base_confidence = max(existing.confidence, _clamp_confidence(confidence))
@@ -1251,6 +1272,46 @@ async def propose_athlete_hypothesis(
         )
     await db.flush()
     return existing
+
+
+async def decay_unsupported_model_hypotheses(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    category: str,
+    supported_keys: set[str],
+    now: datetime | None = None,
+) -> int:
+    """Decay — and eventually retire — proposed hypotheses no longer supported.
+
+    Called after regenerating the deterministic performance-model hypotheses
+    (#479): any previously ``proposed`` hypothesis in ``category`` whose statement
+    the model no longer produces has lost its supporting evidence, so its
+    confidence is stepped down; once it drops below the retire floor it is deleted
+    so the coach stops asserting a claim the model no longer backs. Confirmed or
+    refuted hypotheses (the athlete has already ruled on them) are left untouched.
+    Returns the number of hypotheses decayed or retired.
+    """
+    normalized_category = _normalise_athlete_memory_category(category)
+    now = now or datetime.now(timezone.utc)
+    rows = await db.scalars(
+        select(models.AthleteHypothesis).where(
+            models.AthleteHypothesis.user_id == user_id,
+            models.AthleteHypothesis.category == normalized_category,
+            models.AthleteHypothesis.status == "proposed",
+        )
+    )
+    changed = 0
+    for row in rows:
+        if row.statement_key in supported_keys:
+            continue
+        row.confidence = max(0.0, row.confidence - ATHLETE_HYPOTHESIS_DECAY_STEP)
+        row.updated_at = now
+        if row.confidence < ATHLETE_HYPOTHESIS_RETIRE_CONFIDENCE:
+            await db.delete(row)
+        changed += 1
+    await db.flush()
+    return changed
 
 
 async def update_athlete_hypothesis(
