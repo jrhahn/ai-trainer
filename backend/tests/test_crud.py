@@ -2237,15 +2237,27 @@ async def test_athlete_performance_model_round_trip(db: AsyncSession) -> None:
             "missing_information": [],
         },
     }
+    limiters = [
+        {
+            "limiter": "threshold",
+            "confidence": 0.72,
+            "evidence": ["FTP low vs MAP"],
+            "counter_evidence": [],
+        }
+    ]
     created = await crud.upsert_athlete_performance_model(
         db,
         user.id,
         attributes=attributes,
+        likely_limiter="threshold",
+        limiters=limiters,
         source_window_days=120,
         derived_from_rides=5,
     )
     assert created.attributes["ftp"]["estimate"] == 302
     assert created.derived_from_rides == 5
+    assert created.likely_limiter == "threshold"
+    assert created.limiters[0]["confidence"] == 0.72
 
     # Upsert overwrites in place (one row per user).
     updated = await crud.upsert_athlete_performance_model(
@@ -2261,6 +2273,9 @@ async def test_athlete_performance_model_round_trip(db: AsyncSession) -> None:
     fetched = await crud.get_athlete_performance_model(db, user.id)
     assert fetched is not None
     assert fetched.attributes["ftp"]["estimate"] == 310
+    # Not re-passing limiters clears them (one derivation writes the full picture).
+    assert fetched.likely_limiter is None
+    assert fetched.limiters is None
 
 
 @pytest.mark.asyncio

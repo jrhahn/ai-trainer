@@ -7,8 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-07-29
+
 ### Added
 
+- **Athlete Performance Model — data layer** (`models.py`, `schemas.py`,
+  `crud.py`, `routers/ai.py`, migrations `20260729_000001` /
+  `20260730_000001`) — a new persistent, per-attribute, evidence-backed
+  `AthletePerformanceModel` (one row per athlete) plus an
+  `AthletePerformanceSnapshot` time series. Distinct from the LLM-derived
+  qualitative `AthleteModel` (#384): this one is deterministic and quantitative,
+  where **every** attribute carries its own estimate/score, `confidence`,
+  `evidence` and `missingInformation`. Exposed read-only at
+  `GET /ai/athlete-performance-model` (empty model, not 404, when never
+  derived) with an on-demand `POST /ai/refresh-athlete-performance-model`
+  (#475).
+- **Cross-workout physiological inference engine**
+  (`services/athlete_model_inference.py`, `services/analysis.py`,
+  `services/learning_pipeline.py`) — a compact per-ride `perf_signals` blob
+  (power-duration envelope, HR drift, first/second-half power & HR splits) is
+  persisted on `RideMetric` at the `build_ride_metrics_chain` choke point, and a
+  deterministic, pure engine aggregates it over a rolling window to infer FTP,
+  MAP, VO₂max, fractional utilization, aerobic endurance, fatigue resistance and
+  anaerobic capacity. No attribute is emitted without a confidence; missing
+  signals report `unknown` rather than being guessed (VO₂max stays `unknown`
+  until a body-weight source exists). Runs as a best-effort step in the
+  continuous-learning pipeline after each import (#476).
+- **Physiological limiter detection** (`services/limiter_detection.py`,
+  `models.py`, `schemas.py`, `crud.py`, migration `20260730_000001`) — a
+  deterministic engine reads the performance model and returns a
+  confidence-ranked list of candidate limiters (`threshold`, `vo2max`,
+  `endurance_durability`), each with `evidence` **and** `counterEvidence`,
+  reproducing the "if the engine is already big, raise the floor" reasoning from
+  the gap between the aerobic ceiling (MAP) and sustainable threshold power
+  (fractional utilization). The top candidate is written back to
+  `likelyLimiter` and the full ranking to `limiters`, both surfaced on the
+  performance-model API. Missing signals return a low-confidence
+  `insufficient_data` entry rather than guessing (#477).
 - **`batch_id` on `plan_day_history`** (`models.py`, `crud.py`,
   `routers/users.py`, migration `20260720_000001`) — every per-day row written
   by one pipeline commit (`record_plan_day_changes`) now shares a `batch_id`, so

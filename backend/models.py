@@ -897,8 +897,8 @@ class AthletePerformanceModel(Base):
         {"estimate": 302, "score": null, "confidence": 0.74, "unit": "W",
          "evidence": [...], "missing_information": [...]}
 
-    The inference engine (#476) writes this; ``likely_limiter`` is reserved for the
-    limiter-detection issue (#477).
+    The inference engine (#476) writes ``attributes``; limiter detection (#477)
+    writes ``likely_limiter`` and the ranked ``limiters`` list.
     """
 
     __tablename__ = "athlete_performance_models"
@@ -910,8 +910,11 @@ class AthletePerformanceModel(Base):
     attributes: Mapped[dict[str, Any]] = mapped_column(
         JSON, default=dict, nullable=False
     )
-    # Most probable physiological limiter (set by #477; unset until then).
+    # Most probable physiological limiter (set by #477; None when undetermined).
     likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Confidence-ranked candidate limiters (#477), each a dict with
+    # ``limiter``/``confidence``/``evidence``/``counter_evidence``.
+    limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     # Provenance: rolling window (days) and ride count the inference derived from.
     source_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     derived_from_rides: Mapped[int] = mapped_column(
@@ -945,6 +948,7 @@ class AthletePerformanceSnapshot(Base):
         JSON, default=dict, nullable=False
     )
     likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(
         back_populates="athlete_performance_snapshots"
