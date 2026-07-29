@@ -407,10 +407,63 @@ export interface AthleteHypothesis {
   category: string
   rationale: string
   confidence: number
+  // Structured supporting evidence and the competing explanations still to rule
+  // out (#479). Empty for older LLM-formed hypotheses.
+  evidence: string[]
+  alternativeExplanations: string[]
   evidenceCount: number
   status: AthleteHypothesisStatus
   firstProposedAt: string
   updatedAt: string
+}
+
+// #475/#477/#478: deterministic, evidence-backed Athlete Performance Model.
+export interface AthletePerformanceAttribute {
+  estimate: number | null
+  score: string | null
+  confidence: number
+  unit: string | null
+  evidence: string[]
+  missingInformation: string[]
+}
+
+export interface AthletePerformanceLimiter {
+  limiter: string
+  confidence: number
+  evidence: string[]
+  counterEvidence: string[]
+}
+
+export interface TrainingRoiSystemGain {
+  system: string
+  gain: string
+  rationale: string
+}
+
+export interface TrainingRoiEmphasis {
+  system: string
+  label: string
+  sessions: number
+}
+
+export interface TrainingRoiRecommendation {
+  sufficient: boolean
+  limiter: string | null
+  confidence: number
+  hypothesis: string
+  rationale: string
+  expectedGain: TrainingRoiSystemGain[]
+  weeklyEmphasis: TrainingRoiEmphasis[]
+}
+
+export interface AthletePerformanceModel {
+  attributes: Record<string, AthletePerformanceAttribute>
+  likelyLimiter: string | null
+  limiters: AthletePerformanceLimiter[]
+  recommendations: TrainingRoiRecommendation | null
+  sourceWindowDays: number | null
+  derivedFromRides: number
+  updatedAt: string | null
 }
 
 export async function fetchAthleteHypotheses(token: string): Promise<AthleteHypothesis[]> {
