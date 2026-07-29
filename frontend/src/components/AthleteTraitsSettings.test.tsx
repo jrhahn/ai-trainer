@@ -98,6 +98,8 @@ function makeHypothesis(
     category: 'fatigue_response',
     rationale: 'HR ~8 bpm low the day after gym sessions.',
     confidence: 0.38,
+    evidence: [],
+    alternativeExplanations: [],
     evidenceCount: 2,
     status: 'proposed',
     firstProposedAt: '2026-06-01T00:00:00Z',

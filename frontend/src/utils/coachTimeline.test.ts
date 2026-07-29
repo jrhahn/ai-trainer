@@ -130,6 +130,8 @@ function hypothesis(overrides: Partial<AthleteHypothesis> = {}): AthleteHypothes
     category: 'physiology',
     rationale: 'Hot-ride power is steady.',
     confidence: 0.6,
+    evidence: [],
+    alternativeExplanations: [],
     evidenceCount: 3,
     status: 'proposed',
     firstProposedAt: '2026-06-15T08:00:00.000Z',
