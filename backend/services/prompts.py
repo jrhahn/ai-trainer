@@ -1031,6 +1031,168 @@ def athlete_performance_roi_section(recommendation: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _attribute_summary(name: str, attr: dict) -> str | None:
+    """One human line for a performance-model attribute, or None when empty."""
+    if not isinstance(attr, dict):
+        return None
+    estimate = attr.get("estimate")
+    score = attr.get("score")
+    value = estimate if estimate not in (None, "") else score
+    if value in (None, "", "unknown"):
+        return None
+    unit = attr.get("unit")
+    label = name.replace("_", " ")
+    rendered = f"{value}{f' {unit}' if unit else ''}"
+    confidence = attr.get("confidence")
+    conf_txt = f", confidence {float(confidence):.0%}" if isinstance(confidence, (int, float)) else ""
+    line = f"- {label}: {rendered}{conf_txt}"
+    missing = attr.get("missing_information") or attr.get("missingInformation")
+    if missing:
+        line += f" (still missing: {'; '.join(str(m) for m in missing)[:200]})"
+    return line
+
+
+def performance_model_section(performance_model: dict | None) -> str:
+    """Render the deterministic Athlete Performance Model + limiter (#476/#477).
+
+    Gives the coach the drill-down substrate for Level-2 explainability (#480): the
+    detected limiter with its confidence and the concrete evidence behind it, plus
+    each inferred attribute with its own confidence and what is still missing. This
+    is the coach's own inference from the athlete's numbers — every value carries a
+    confidence and must never be presented as a measured fact.
+    """
+    if not performance_model:
+        return ""
+
+    attributes = performance_model.get("attributes") or {}
+    attr_lines = [
+        line
+        for name, attr in attributes.items()
+        if (line := _attribute_summary(name, attr)) is not None
+    ]
+
+    limiters = performance_model.get("limiters") or []
+    limiter_lines: list[str] = []
+    for cand in limiters[:2]:
+        if not isinstance(cand, dict):
+            continue
+        name = cand.get("limiter")
+        if not name:
+            continue
+        confidence = cand.get("confidence")
+        conf_txt = (
+            f" (confidence {float(confidence):.0%})"
+            if isinstance(confidence, (int, float))
+            else ""
+        )
+        evidence = cand.get("evidence") or []
+        counter = cand.get("counter_evidence") or cand.get("counterEvidence") or []
+        line = f"- {name.replace('_', ' ')}{conf_txt}"
+        if evidence:
+            line += f" — evidence: {'; '.join(str(e) for e in evidence)[:280]}"
+        if counter:
+            line += f" — but note: {'; '.join(str(c) for c in counter)[:200]}"
+        limiter_lines.append(line)
+
+    if not attr_lines and not limiter_lines:
+        return ""
+
+    parts = [
+        "\n\nAthlete performance model (deterministic, inferred from the athlete's own "
+        "rides — your COACH INFERENCE, not measured fact; every value carries a "
+        "confidence):"
+    ]
+    if limiter_lines:
+        parts.append("Most likely current limiter(s):")
+        parts.extend(limiter_lines)
+    if attr_lines:
+        parts.append("Inferred attributes:")
+        parts.extend(attr_lines)
+    parts.append(
+        "When the athlete asks WHY you recommend something, walk down from the claim "
+        "to the limiter/attribute to this concrete evidence, and always state the "
+        "confidence and what is still missing rather than asserting it as fact."
+    )
+    return "\n".join(parts)
+
+
+def active_hypotheses_section(hypotheses: list[dict] | None) -> str:
+    """Render the coach's active, testable hypotheses for the conversation (#479/#480).
+
+    Surfaces each open hypothesis with its evidence, confidence and the competing
+    explanations still to rule out, so the coach can defend a claim on demand and,
+    when the data supports a materially better emphasis, offer it proactively as a
+    hypothesis rather than a fact.
+    """
+    if not hypotheses:
+        return ""
+
+    entries: list[str] = []
+    for hyp in hypotheses:
+        statement = hyp.get("statement")
+        if not statement:
+            continue
+        if hyp.get("status") not in (None, "proposed"):
+            continue
+        confidence = hyp.get("confidence")
+        conf_txt = (
+            f" (confidence {float(confidence):.0%})"
+            if isinstance(confidence, (int, float))
+            else ""
+        )
+        line = f"- {statement}{conf_txt}"
+        evidence = hyp.get("evidence") or []
+        if evidence:
+            line += f"\n  Evidence: {'; '.join(str(e) for e in evidence)[:280]}"
+        alternatives = (
+            hyp.get("alternative_explanations")
+            or hyp.get("alternativeExplanations")
+            or []
+        )
+        if alternatives:
+            line += (
+                f"\n  Could also be: {'; '.join(str(a) for a in alternatives)[:280]}"
+            )
+        entries.append(line)
+
+    if not entries:
+        return ""
+
+    return (
+        "\n\nActive coaching hypotheses (tentative, testable ideas — NOT settled "
+        "facts):\n"
+        + "\n".join(entries)
+        + "\nThese are working theories with explicit uncertainty. When one is "
+        "relevant, you may raise it, but phrase it as a hypothesis and name its "
+        "confidence and the alternative explanations. If asked to justify one, cite "
+        "its evidence and say what would confirm or overturn it."
+    )
+
+
+def coach_explainability_rule() -> str:
+    """Level-2 drill-down + proactive-insight rules for the coaching chat (#480)."""
+    return (
+        "\n\nExplainable coaching rules:\n"
+        "- Any recommendation must be justifiable on demand. When the athlete asks "
+        "'why?', 'what makes you say that?', or 'show me', walk down the chain: the "
+        "recommendation → the model attribute or limiter it rests on → the concrete "
+        "workouts, power/HR numbers and multi-week trend behind it → your confidence "
+        "and what is still uncertain. Go one layer deeper each time they push.\n"
+        "- Never present an inferred estimate (FTP, MAP, VO₂max, limiter, a "
+        "hypothesis) as a measured fact. Attach the confidence and name the missing "
+        "information in plain language; if a claim is a judgement call, say so.\n"
+        "- Be proactive: when the performance model implies a materially higher-return "
+        "training emphasis than the current plan is giving, surface it in one short, "
+        "jargon-free sentence, phrased as a hypothesis, and offer to explain — e.g. "
+        "'I think threshold work may buy you more right now than more VO₂max sessions "
+        "— want me to explain why?'. Offer this at most once and never force it into "
+        "an unrelated answer.\n"
+        "- Prefer the athlete's own numbers and rides as evidence over generic "
+        "sports-science; when you do lean on science, cite it in \"sources\" so the "
+        "athlete can tell where a claim comes from."
+    )
+
+
 def open_questions_section(open_questions: list[dict] | None) -> str:
     """Render the coach's still-open questions (#385) for a coaching prompt.
 
@@ -1219,6 +1381,9 @@ def ask_trainer_system(
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
     open_questions: list[dict] | None = None,
+    performance_model: dict | None = None,
+    performance_recommendation: dict | None = None,
+    hypotheses: list[dict] | None = None,
     science_context: str = "",
     training_load: dict | None = None,
     classification: dict | None = None,
@@ -1256,6 +1421,10 @@ def ask_trainer_system(
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
     durable_open_questions_section = open_questions_section(open_questions)
+    perf_model_section = performance_model_section(performance_model)
+    roi_section = athlete_performance_roi_section(performance_recommendation)
+    roi_section = f"\n\n{roi_section}" if roi_section else ""
+    hypotheses_section = active_hypotheses_section(hypotheses)
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = (
         f"\n\n{race_profile_section}\n" if race_profile_section else ""
@@ -1279,6 +1448,7 @@ def ask_trainer_system(
     )
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
+    explainability_instructions = coach_explainability_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
 
@@ -1349,6 +1519,9 @@ def ask_trainer_system(
         f"{training_load_section}"
         f"{durable_context_section}"
         f"{durable_model_section}"
+        f"{perf_model_section}"
+        f"{roi_section}"
+        f"{hypotheses_section}"
         f"{durable_memory_facts_section}"
         f"{durable_open_questions_section}"
         f"{memory_section}"
@@ -1357,6 +1530,7 @@ def ask_trainer_system(
         f"{science_section}"
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
+        f"{explainability_instructions}"
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"

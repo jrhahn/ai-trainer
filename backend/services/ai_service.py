@@ -701,6 +701,9 @@ async def ask_trainer(
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
     open_questions: list[dict] | None = None,
+    performance_model: dict | None = None,
+    performance_recommendation: dict | None = None,
+    hypotheses: list[dict] | None = None,
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -749,6 +752,9 @@ async def ask_trainer(
         athlete_memory_facts=athlete_memory_facts,
         athlete_model=athlete_model,
         open_questions=open_questions,
+        performance_model=performance_model,
+        performance_recommendation=performance_recommendation,
+        hypotheses=hypotheses,
         science_context=science_context or "",
         training_load=training_load,
         classification=classification,
