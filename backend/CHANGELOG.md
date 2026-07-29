@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-07-29
+
+### Added
+
+- **Reveal uncertainty in coaching recommendations** (`services/prompts.py`) — a
+  new `reveal_uncertainty_rule`, wired unconditionally into the coach chat system
+  prompt (`ask_trainer_system`), stops the coach from arguing that a
+  recommendation is the single truth. A recommendation is framed as a judgement
+  call under incomplete data, not a verdict: when the call is genuinely uncertain
+  (low/moderate confidence, diverging physiology vs athlete-context layers, or the
+  athlete pushing back with their own signals) the coach must surface **both** the
+  supporting **and** the contradicting evidence, state a rough confidence, and name
+  the open unknowns (missing HRV, weak recovery model, uncertain other-sport
+  power) — optionally as a short *recommendation / confidence / supporting /
+  contradicting / unknowns* breakdown — and may defer to the athlete's judgement or
+  a low-cost test rather than insisting. High-confidence, one-sided calls are told
+  the opposite: state it plainly and do not manufacture doubt (#490).
+
 ## [0.46.0] - 2026-07-29
 
 ### Added
