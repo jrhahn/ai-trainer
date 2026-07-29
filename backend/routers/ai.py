@@ -877,6 +877,30 @@ async def ask_trainer(
         ).model_dump(by_alias=True, mode="json")
         for question in open_question_rows
     ]
+
+    # Deterministic Athlete Performance Model (#476/#477), its ROI recommendation
+    # (#478) and the active testable hypotheses (#479) — the structured substrate
+    # the coach drills into to explain WHY on demand and to surface a higher-return
+    # emphasis proactively (#480).
+    performance_model: dict | None = None
+    performance_recommendation: dict | None = None
+    hypotheses: list[dict] = []
+    if memory_enabled:
+        perf_model_row = await crud.get_athlete_performance_model(db, current_user.id)
+        if perf_model_row is not None:
+            performance_model = schemas.AthletePerformanceModelSchema.model_validate(
+                perf_model_row, from_attributes=True
+            ).model_dump(by_alias=False, mode="json")
+            performance_recommendation = roi_recommendation.recommend_training_roi(
+                perf_model_row.attributes, perf_model_row.limiters
+            )
+        hypothesis_rows = await crud.list_athlete_hypotheses(db, current_user.id)
+        hypotheses = [
+            schemas.AthleteHypothesisSchema.model_validate(
+                hypothesis, from_attributes=True
+            ).model_dump(by_alias=False, mode="json")
+            for hypothesis in hypothesis_rows
+        ]
     chat_messages = await crud.get_chat_messages(db, current_user.id)
     conversation_history = [
         {"role": msg.role, "content": msg.content}
@@ -921,6 +945,9 @@ async def ask_trainer(
                 athlete_memory_facts=athlete_memory_facts,
                 athlete_model=athlete_model,
                 open_questions=open_questions,
+                performance_model=performance_model,
+                performance_recommendation=performance_recommendation,
+                hypotheses=hypotheses,
                 timezone_name=timezone_name,
             )
         except AIRateLimitError:

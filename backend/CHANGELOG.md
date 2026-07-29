@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-07-29
+
+### Added
+
+- **Explainable coaching conversation & proactive insight (Level 2)**
+  (`services/prompts.py`, `services/ai_service.py`, `routers/ai.py`) — the coach
+  chat (`ask_trainer`) now receives the deterministic Athlete Performance Model
+  (#476), its detected limiter (#477), the ROI recommendation (#478) and the
+  active testable hypotheses (#479) as structured context. New prompt sections
+  (`performance_model_section`, `active_hypotheses_section`, reusing
+  `athlete_performance_roi_section`) expose each claim's **evidence, confidence
+  and what is still missing**, and a new `coach_explainability_rule` instructs the
+  coach to (a) justify any recommendation on demand, drilling *claim → model
+  attribute/limiter → concrete workouts/trends → confidence & uncertainty*, never
+  presenting an inferred estimate as a measured fact, and (b) **proactively**
+  surface a materially higher-return training emphasis — phrased as a hypothesis
+  with an offer to explain — when the model implies one. ROI context is omitted
+  when the model has no confident limiter so the coach falls back to its usual
+  reasoning (#480).
+
 ## [0.45.0] - 2026-07-29
 
 ### Added
