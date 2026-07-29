@@ -614,10 +614,20 @@ class AthleteHypothesisSchema(CamelModel):
     category: str
     rationale: str = ""
     confidence: float
+    # Structured supporting evidence and the competing explanations still to be
+    # ruled out (#479). Deterministic performance-model hypotheses populate these;
+    # older LLM-formed hypotheses leave them empty (stored NULL -> []).
+    evidence: list[str] = Field(default_factory=list)
+    alternative_explanations: list[str] = Field(default_factory=list)
     evidence_count: int
     status: AthleteHypothesisStatus
     first_proposed_at: datetime
     updated_at: datetime
+
+    @field_validator("evidence", "alternative_explanations", mode="before")
+    @classmethod
+    def _default_list(cls, value: object) -> object:
+        return value or []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

@@ -544,6 +544,14 @@ class AthleteHypothesis(Base):
     )
     # Human-readable summary of the evidence that motivates the hypothesis.
     rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Structured supporting evidence (list of concrete observations) and the
+    # competing explanations the coach must still rule out (#479). Deterministic
+    # performance-model hypotheses populate these; older LLM-formed hypotheses
+    # leave them empty, so both are nullable.
+    evidence: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    alternative_explanations: Mapped[list[Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
     confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
     # How many supporting observations back the hypothesis (the "Evidence" count).
     evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

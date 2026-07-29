@@ -41,6 +41,32 @@ async def test_list_returns_open_hypotheses(client, auth_headers):
     assert hypotheses[0]["status"] == "proposed"
     assert hypotheses[0]["evidenceCount"] == 1
     assert hypotheses[0]["confidence"] == pytest.approx(0.38)
+    # Structured fields default to empty lists when not populated (#479).
+    assert hypotheses[0]["evidence"] == []
+    assert hypotheses[0]["alternativeExplanations"] == []
+
+
+@pytest.mark.asyncio
+async def test_list_surfaces_structured_evidence_and_alternatives(client, auth_headers):
+    user_id = await _current_user_id(client, auth_headers)
+    await _seed_hypothesis(
+        user_id,
+        statement="Current limiter is likely threshold utilization",
+        category="performance_model",
+        confidence=0.6,
+        evidence=["FTP ~250 W vs MAP ~360 W (69% of the ceiling)."],
+        alternative_explanations=["The MAP estimate may be inflated by one effort."],
+    )
+
+    response = await client.get(
+        "/api/v1/users/me/athlete-hypotheses", headers=auth_headers
+    )
+    assert response.status_code == 200
+    hypothesis = response.json()["hypotheses"][0]
+    assert hypothesis["evidence"] == ["FTP ~250 W vs MAP ~360 W (69% of the ceiling)."]
+    assert hypothesis["alternativeExplanations"] == [
+        "The MAP estimate may be inflated by one effort."
+    ]
 
 
 @pytest.mark.asyncio

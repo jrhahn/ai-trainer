@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-07-29
+
+### Added
+
+- **Continuous coaching hypotheses (Level 1, automatic)**
+  (`services/hypothesis_engine.py`, `crud.py`, `models.py`, `schemas.py`,
+  `services/learning_pipeline.py`, Alembic
+  `20260731_000001_add_hypothesis_evidence_alternatives`) — a deterministic engine
+  forms testable coaching hypotheses **after every session** straight from the
+  Athlete Performance Model and its detected limiter (no LLM): e.g. *"the current
+  limiter is likely threshold utilization"*, *"the athlete has developed a strong
+  aerobic engine"*, *"FTP could be underestimated"*. Each hypothesis carries the
+  epic's required `evidence` (the athlete's own FTP/MAP/fractional-utilization
+  numbers), `confidence` (inherited from the underlying limiter/attribute, never a
+  guess) and `alternative_explanations` (the competing readings still to rule out).
+  Hypotheses persist through the existing merge lifecycle so repeated confirming
+  observations raise `confidence`/`evidenceCount` instead of duplicating, while a
+  hypothesis the model no longer supports decays and is eventually retired
+  (`crud.decay_unsupported_model_hypotheses`). Generation runs as a per-import step
+  in the continuous-learning pipeline right after the model refresh, and the
+  structured `evidence`/`alternativeExplanations` are surfaced on the existing
+  `GET /users/me/athlete-hypotheses` API for the conversation layer and frontend
+  (#479).
+
 ## [0.44.0] - 2026-07-29
 
 ### Added
