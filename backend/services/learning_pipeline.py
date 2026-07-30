@@ -14,14 +14,19 @@ knowledge in the same reconciled state a full weekly cycle would:
    patterns from the new training, compare them against the stored athlete model
    and refresh it (:func:`services.insight_generation.generate_user_insights`).
    Covers issue steps 1, 2, 4 and 5.
-2. **Detect anomalies** — flag stored knowledge the new evidence contradicts
+2. **Refresh the weather model** — re-cluster the athlete's ride starts into their
+   training location (:func:`services.home_location.infer_home_location`) and
+   update the confidence-scored weather tolerances derived from the conditions
+   stored on each ride
+   (:func:`services.weather_preference.refresh_weather_preferences`).
+3. **Detect anomalies** — flag stored knowledge the new evidence contradicts
    (:func:`services.contradiction_detection.detect_user_contradictions`).
-3. **Create new hypotheses** — form tentative, testable ideas, both the
+4. **Create new hypotheses** — form tentative, testable ideas, both the
    deterministic performance-model hypotheses derived from the freshly refreshed
    model (:func:`services.hypothesis_engine.refresh_performance_hypotheses`) and
    the free-form LLM ones
    (:func:`services.hypothesis_generation.generate_user_hypotheses`).
-4. **Resolve open questions** — record new coaching uncertainties and close the
+5. **Resolve open questions** — record new coaching uncertainties and close the
    ones the new data now answers
    (:func:`services.open_question_generation.generate_user_open_questions`).
 
@@ -46,10 +51,12 @@ from config import settings
 from services import (
     athlete_model_inference,
     contradiction_detection,
+    home_location,
     hypothesis_engine,
     hypothesis_generation,
     insight_generation,
     open_question_generation,
+    weather_preference,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +76,8 @@ class LearningStepResult:
     performance_hypotheses: int = 0
     open_questions: int = 0
     performance_model: int = 0
+    home_location: int = 0
+    weather_preferences: int = 0
     failed_steps: list[str] = field(default_factory=list)
 
     @property
@@ -80,6 +89,8 @@ class LearningStepResult:
             or self.performance_hypotheses
             or self.open_questions
             or self.performance_model
+            or self.home_location
+            or self.weather_preferences
         )
 
 
@@ -113,6 +124,34 @@ async def _refresh_performance_hypotheses_step(
     ``-> int`` step contract.
     """
     return await hypothesis_engine.refresh_performance_hypotheses(db, user, now=now)
+
+
+async def _infer_home_location_step(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> int:
+    """Learning-step adapter around the ride-start clustering (#495).
+
+    Runs before the weather-preference step so an indoor ride imported in the same
+    batch can be weather-tagged from a freshly seeded location. An athlete-set
+    location is protected by the crud write gate, so this is safe every sync.
+    """
+    row = await home_location.infer_home_location(db, user.id, now=now)
+    return 1 if row is not None else 0
+
+
+async def _refresh_weather_preferences_step(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> int:
+    """Learning-step adapter around the weather-preference engine (#495)."""
+    return await weather_preference.refresh_weather_preferences(db, user, now=now)
 
 
 async def _run_step(
@@ -182,6 +221,24 @@ async def run_learning_step(
         timezone_name,
         result,
     )
+    result.home_location = await _run_step(
+        "home_location",
+        _infer_home_location_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
+    result.weather_preferences = await _run_step(
+        "weather_preferences",
+        _refresh_weather_preferences_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
     result.contradictions = await _run_step(
         "contradictions",
         contradiction_detection.detect_user_contradictions,
@@ -213,7 +270,7 @@ async def run_learning_step(
     logger.info(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
         "hypotheses=%s performance_hypotheses=%s open_questions=%s "
-        "performance_model=%s failed=%s",
+        "performance_model=%s home_location=%s weather_preferences=%s failed=%s",
         user.id,
         result.observations,
         result.contradictions,
@@ -221,6 +278,8 @@ async def run_learning_step(
         result.performance_hypotheses,
         result.open_questions,
         result.performance_model,
+        result.home_location,
+        result.weather_preferences,
         ",".join(result.failed_steps) or "none",
     )
     return result

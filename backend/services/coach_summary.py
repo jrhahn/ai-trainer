@@ -54,6 +54,7 @@ async def narrate_plan_changes(
     profile: dict | None = None,
     rider_assessment: dict | None = None,
     training_load_section: str = "",
+    weather_context_section: str = "",
 ) -> models.PlanChangeSummary | None:
     """Summarise one automated coach run and post a single coach chat message.
 
@@ -92,6 +93,7 @@ async def narrate_plan_changes(
                 provider=provider,
                 rider_assessment=rider_assessment,
                 training_load_section=training_load_section,
+                weather_context_section=weather_context_section,
             )
         finally:
             consumed = finish_token_usage_collection(usage_token)

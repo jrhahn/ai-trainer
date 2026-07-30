@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TodayCard from './TodayCard'
+import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
 const TODAY = '2024-05-01'
@@ -21,6 +22,10 @@ function renderCard(today: string, plan: TrainingDay[]) {
     </MemoryRouter>
   )
 }
+
+beforeEach(() => {
+  useAppStore.getState().resetAll()
+})
 
 describe('TodayCard', () => {
   it('shows a rest-day card when today is a rest workout', () => {
@@ -67,5 +72,37 @@ describe('TodayCard', () => {
   it('shows the log CTA when the workout is not yet completed', () => {
     renderCard(TODAY, [workoutDay])
     expect(screen.getByText('View & log workout')).toBeInTheDocument()
+  })
+
+  it("shows today's forecast on the planned session (#495)", () => {
+    useAppStore.setState({
+      weatherForecast: {
+        [TODAY]: {
+          date: TODAY,
+          condition: 'rain',
+          temperatureMaxC: 16.7,
+          temperatureMinC: 11.0,
+          precipitationMm: 5.2,
+          loadFlag: 'rain',
+        },
+      },
+    })
+    renderCard(TODAY, [workoutDay])
+    expect(screen.getByText('17\u00b0C')).toBeInTheDocument()
+  })
+
+  it("shows today's forecast on a rest day too", () => {
+    useAppStore.setState({
+      weatherForecast: {
+        [TODAY]: { date: TODAY, condition: 'clear', temperatureMaxC: 28.2 },
+      },
+    })
+    renderCard(TODAY, [{ ...workoutDay, workoutType: 'rest' }])
+    expect(screen.getByText('28\u00b0C')).toBeInTheDocument()
+  })
+
+  it('renders no weather when the forecast has nothing for today', () => {
+    renderCard(TODAY, [workoutDay])
+    expect(screen.queryByLabelText(/Forecast/)).not.toBeInTheDocument()
   })
 })

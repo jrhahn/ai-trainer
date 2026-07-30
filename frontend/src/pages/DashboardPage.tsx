@@ -1,18 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { format } from 'date-fns'
-import {
-  Bot,
-  CheckCircle2,
-  Cloud,
-  CloudFog,
-  CloudLightning,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
-  Clock,
-  Sun,
-} from 'lucide-react'
+import { Bot, CheckCircle2, Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -21,6 +10,8 @@ import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
+import { WeatherIcon } from '../components/WeatherBadge'
+import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
@@ -47,11 +38,6 @@ export function formatDuration(seconds: number | undefined): string {
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m} min`
-}
-
-export function formatTemperature(value: number | null | undefined): string {
-  if (value == null) return ''
-  return `${Math.round(value)}°C`
 }
 
 export function rideActivityKey(ride: RideMetricPoint): string {
@@ -258,23 +244,6 @@ function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[
     unique.push(ride)
   }
   return unique
-}
-
-function WeatherIcon({ condition }: { condition?: string | null }) {
-  const normalized = condition?.toLowerCase()
-  if (normalized === 'clear') return <Sun size={12} className="text-amber-500" />
-  if (normalized === 'partly_cloudy') {
-    return <CloudSun size={12} className="text-amber-500" />
-  }
-  if (normalized === 'fog') return <CloudFog size={12} className="text-gray-400" />
-  if (normalized === 'rain' || normalized === 'drizzle') {
-    return <CloudRain size={12} className="text-blue-500" />
-  }
-  if (normalized === 'snow') return <CloudSnow size={12} className="text-sky-500" />
-  if (normalized === 'thunderstorm') {
-    return <CloudLightning size={12} className="text-violet-500" />
-  }
-  return <Cloud size={12} className="text-gray-400" />
 }
 
 function isRestOrNoTargetPlan(plan: Partial<TrainingDay>): boolean {

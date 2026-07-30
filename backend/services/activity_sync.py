@@ -50,7 +50,10 @@ from services.strava_service import (
     ensure_fresh_strava_token,
     fetch_activity_streams_strict as fetch_strava_activity_streams,
 )
-from services.weather_service import enrich_activity_weather
+from services.weather_service import (
+    enrich_activity_weather,
+    home_coordinates_for_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +327,9 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
     imported_ids: list[int] = []
     imported_activities: list[ImportedActivity] = []
     retry_barrier: int | None = None  # smallest id we must not advance past (#325)
+    # Resolved once for the batch: indoor rides have no GPS, so their conditions
+    # come from the athlete's training location (#495).
+    home_coordinates = await home_coordinates_for_user(db, user.id)
     for activity in new_activities:
         activity_id = int(activity["id"])
         try:
@@ -344,7 +350,9 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
             )
             continue
         streams = _sanitize_strava_streams(raw_streams)
-        weather = await enrich_activity_weather(activity, streams=streams)
+        weather = await enrich_activity_weather(
+            activity, streams=streams, fallback_coordinates=home_coordinates
+        )
         imported = _strava_activity_to_imported_activity(activity, streams, weather)
         if imported is None:
             result.skipped += 1

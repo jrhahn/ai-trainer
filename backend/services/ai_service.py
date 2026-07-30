@@ -639,6 +639,7 @@ async def summarize_plan_changes(
     provider: str = "openai",
     rider_assessment: dict | None = None,
     training_load_section: str = "",
+    weather_context_section: str = "",
 ) -> dict:
     """Narrate a coach run's applied plan changes for the athlete (#439).
 
@@ -654,6 +655,7 @@ async def summarize_plan_changes(
         run_context=run_context,
         rider_assessment=rider_assessment,
         training_load_section=training_load_section,
+        weather_context_section=weather_context_section,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
@@ -704,6 +706,7 @@ async def ask_trainer(
     performance_model: dict | None = None,
     performance_recommendation: dict | None = None,
     hypotheses: list[dict] | None = None,
+    weather_context_section: str = "",
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -760,6 +763,7 @@ async def ask_trainer(
         classification=classification,
         metrics_history_section=metrics_history_section,
         race_events_section=race_events_context_section(race_events),
+        weather_context_section=weather_context_section,
         date_context=date_context,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]

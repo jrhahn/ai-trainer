@@ -2697,6 +2697,123 @@ async def get_latest_ride_metric_with_location(
     )
 
 
+async def get_recent_ride_start_locations(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 120,
+) -> list[tuple[float, float]]:
+    """Return recent ride start coordinates, newest first (#495).
+
+    The learning substrate for the inferred home location: clustering these is
+    robust to travel and one-off rides in a way the single latest GPS ride never
+    was (:func:`services.home_location.infer_home_location`).
+    """
+    rows = await db.execute(
+        select(models.RideMetric.start_lat, models.RideMetric.start_lng)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.start_lat.is_not(None),
+            models.RideMetric.start_lng.is_not(None),
+        )
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(limit)
+    )
+    return [(float(lat), float(lng)) for lat, lng in rows.all()]
+
+
+async def get_rides_with_weather(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 200,
+) -> list[models.RideMetric]:
+    """Return recent rides that carry stored weather, newest first (#495).
+
+    Feeds the weather-preference belief update: the per-ride conditions were
+    already persisted at import, so learning tolerances needs no new storage.
+    """
+    result = await db.scalars(
+        select(models.RideMetric)
+        .where(
+            models.RideMetric.user_id == user_id,
+            models.RideMetric.weather_temperature_c.is_not(None),
+        )
+        .order_by(models.RideMetric.activity_date.desc())
+        .limit(limit)
+    )
+    return list(result)
+
+
+async def get_athlete_home_location(
+    db: AsyncSession,
+    user_id: str,
+) -> models.AthleteHomeLocation | None:
+    """Return the athlete's persisted training location, if any (#495)."""
+    return await db.scalar(
+        select(models.AthleteHomeLocation).where(
+            models.AthleteHomeLocation.user_id == user_id
+        )
+    )
+
+
+async def upsert_athlete_home_location(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    latitude: float,
+    longitude: float,
+    label: str = "",
+    source: str = "inferred",
+    confidence: float = 0.0,
+    ride_count: int = 0,
+    now: datetime | None = None,
+) -> models.AthleteHomeLocation | None:
+    """Write the athlete's training location, honouring the user-set override.
+
+    An ``inferred`` write is refused when a ``user_set`` row already exists and
+    returns the stored row untouched: the athlete told the coach where they train,
+    so the next clustering pass must not silently move it back (#342/#345/#346).
+    A ``user_set`` write always wins. Returns the stored row, or ``None`` when the
+    coordinates are unusable.
+    """
+    if latitude is None or longitude is None:
+        return None
+    if not (-90.0 <= float(latitude) <= 90.0 and -180.0 <= float(longitude) <= 180.0):
+        return None
+
+    normalized_source = "user_set" if source == "user_set" else "inferred"
+    timestamp = now or datetime.now(timezone.utc)
+    existing = await get_athlete_home_location(db, user_id)
+
+    if existing is not None:
+        if existing.source == "user_set" and normalized_source != "user_set":
+            return existing
+        existing.latitude = float(latitude)
+        existing.longitude = float(longitude)
+        # An inference pass must not blank a label the athlete gave us.
+        if label or normalized_source == "user_set":
+            existing.label = label[:120]
+        existing.source = normalized_source
+        existing.confidence = _clamp_confidence(confidence)
+        existing.ride_count = max(0, int(ride_count))
+        existing.updated_at = timestamp
+        await db.flush()
+        return existing
+
+    row = models.AthleteHomeLocation(
+        user_id=user_id,
+        latitude=float(latitude),
+        longitude=float(longitude),
+        label=label[:120],
+        source=normalized_source,
+        confidence=_clamp_confidence(confidence),
+        ride_count=max(0, int(ride_count)),
+        updated_at=timestamp,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
 async def get_latest_ride_metric(
     db: AsyncSession,
     user_id: str,

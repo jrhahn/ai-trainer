@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-07-30
+
+### Added
+
+- **Persisted, editable athlete training location** (`models.py`, `crud.py`,
+  `services/home_location.py`, `routers/users.py`, migration
+  `20260801_000001`) — the weather anchor is no longer re-derived on every request
+  from whichever ride happened to carry GPS last, where a single holiday ride moved
+  the whole forecast. A new `athlete_home_location` attribute stores lat/lng, a
+  place label, a `source` marker and a confidence, seeded by **clustering typical
+  ride start points** (`cluster_ride_starts`) rather than taking the latest ride.
+  `resolve_training_location` prefers the stored attribute and still falls back to
+  the latest ride with GPS, so nothing regresses for athletes with no stored row.
+  The write gate in `upsert_athlete_home_location` refuses to let an `inferred`
+  pass overwrite a `user_set` row — the stale-snapshot clobber class (#342/#345/#346)
+  applied to location — and `GET`/`PUT /users/me/home-location` make it editable.
+- **Coach-agent location override** (`routers/ai.py`, `services/home_location.py`)
+  — "I mostly train near Freiburg now" in coach chat is recognised deterministically
+  (narrow, high-confidence phrasing, so a place mentioned in passing never moves the
+  base), geocoded through Open-Meteo's key-free geocoding API, and stored as
+  `user_set`. The router applies it before the model replies and appends a
+  deterministic confirmation note, so the athlete is told what actually happened
+  rather than what the prose claims (the #437 honesty pattern).
+- **Cached daily forecast + planned-day weather API** (`services/weather_service.py`,
+  `routers/users.py`, `schemas.py`) — `fetch_daily_forecast` caches Open-Meteo's
+  daily outlook for an hour per location, keyed on coordinates rounded to ~11 km so
+  nearby athletes share one lookup, and a single 16-day fetch is sliced to serve
+  every shorter horizon. No per-request upstream calls. `GET
+  /users/me/weather-forecast` exposes the per-day condition, high/low, precipitation,
+  wind and coaching `load_flag` that the dashboard shows on planned days.
+- **Per-athlete weather tolerances as confidence-scored beliefs**
+  (`services/weather_preference.py`, `services/learning_pipeline.py`) — "everyone
+  slows in the heat" is a population average, not an athlete. The conditions already
+  stored on every `RideMetric` are now correlated against **outcome** (intensity
+  factor and session length in each condition bucket versus the athlete's own
+  mild-weather baseline) and **behaviour** (rode outdoors in the wet anyway, or moved
+  indoors), and written as `AthleteHypothesis` rows under a new
+  `weather_preference` category with evidence, alternative explanations and a
+  confidence that grows with sample size and effect. Inconclusive or contradictory
+  evidence asserts **nothing** rather than inventing a pattern. Beliefs share the
+  existing merge/decay lifecycle, and one the athlete stated themselves ("I actually
+  love the rain", also captured from chat) is exempt from decay — absent ride data is
+  not a counter-argument to what they told us.
+- **Weather for indoor rides** (`services/weather_service.py`,
+  `services/activity_sync.py`, `routers/strava.py`, `routers/ai.py`) —
+  `enrich_activity_weather` now accepts the athlete's training location as a fallback
+  for activities with no GPS, tagged `weather_source="open_meteo_home"` and without
+  touching `start_lat`/`start_lng`. That is what makes "it was 34 °C and the athlete
+  rode inside" a learnable behavioural signal instead of a blank row.
+
+### Changed
+
+- **Weather-aware coaching, conditioned on the learned tolerances**
+  (`services/prompts.py`, `services/ai_service.py`, `services/weather_service.py`) —
+  `training_weather_context_for_user` now names the training location, and carries the
+  learned tolerances alongside the forecast so the coach cannot act on one without the
+  other. A new `weather_scheduling_rule` (wired into the coach chat prompt only when a
+  forecast exists) tells it to *adapt rather than rewrite*: move or soften intensity on
+  extreme-heat days, offer an indoor or cooler window in severe conditions — but never
+  for conditions this athlete demonstrably handles well, weighting each call by the
+  belief's confidence, and always saying when weather is the reason a session changed.
+  The coach chat prompt receives the forecast for the first time (`ask_trainer`), which
+  is where "should I ride tomorrow?" is actually asked.
+- **Plan-change narration can explain a weather-driven move**
+  (`services/coach_summary.py`, `services/plan_maintenance.py`, `services/prompts.py`)
+  — the nightly adaptation now passes the forecast it acted on into
+  `narrate_plan_changes`, so a session moved off a 38 °C day is explained as exactly
+  that instead of reading as unexplained plan churn (#439), with an explicit
+  instruction never to invent a weather reason for an unrelated change.
+- **Continuous learning refreshes the weather model** (`services/learning_pipeline.py`)
+  — two new best-effort steps re-cluster the training location and update the weather
+  tolerances after every import, ordered so a ride imported in the same batch can be
+  weather-tagged from a freshly seeded location.
+
 ## [0.48.0] - 2026-07-29
 
 ### Added

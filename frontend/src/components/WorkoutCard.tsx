@@ -1,8 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Clock, Zap, Heart } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
+import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 import { parseLocalDate } from '../utils/workout'
 import { formatPlanDuration } from '../utils/planDuration'
+import WeatherBadge from './WeatherBadge'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -24,6 +27,8 @@ export default function WorkoutCard({
   compact?: boolean
 }) {
   const navigate = useNavigate()
+  // Forecast for this planned day, when it falls inside the horizon (#495).
+  const forecast = useAppStore(useShallow((s) => s.weatherForecast[day.date]))
 
   if (compact) {
     return (
@@ -46,6 +51,7 @@ export default function WorkoutCard({
           {day.workoutType}
         </span>
         <span className="text-xs text-gray-700 font-medium flex-1 truncate">{day.title}</span>
+        <WeatherBadge forecast={forecast} size={11} className="flex-shrink-0 text-xs" />
         <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
           <Clock size={11} />
           {formatPlanDuration(day)}
@@ -86,6 +92,8 @@ export default function WorkoutCard({
         <span className="flex items-center gap-1">
           <Clock size={12} /> {formatPlanDuration(day)}
         </span>
+        <WeatherBadge forecast={forecast} />
+
         {day.targetPower && (
           <span className="flex items-center gap-1">
             <Zap size={12} /> {day.targetPower.low}-{day.targetPower.high}W

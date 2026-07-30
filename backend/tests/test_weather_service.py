@@ -1,6 +1,15 @@
 import pytest
 
 from services import weather_service
+from services.home_location import TrainingLocation
+
+
+@pytest.fixture(autouse=True)
+def _clear_forecast_cache():
+    """The daily forecast is cached per location for an hour; isolate each test."""
+    weather_service.clear_forecast_cache()
+    yield
+    weather_service.clear_forecast_cache()
 
 
 def test_coordinates_from_streams_uses_midpoint_gps_sample():
@@ -278,25 +287,26 @@ async def test_fetch_activity_weather_returns_none_when_no_data_at_index(monkeyp
     assert await weather_service.fetch_activity_weather(1.0, 1.0, "2000-02-02", "2000-02-02T12:00:00") is None
 
 
+def _patch_location(monkeypatch, location):
+    """Pin the resolved training location (#495) for a weather-context test."""
+
+    async def fake_resolve(db, user_id):
+        return location
+
+    monkeypatch.setattr(weather_service, "resolve_training_location", fake_resolve)
+
+
 @pytest.mark.asyncio
 async def test_training_weather_context_empty_without_location(monkeypatch):
-    async def fake_loc(db, user_id):
-        return None
-
-    monkeypatch.setattr(weather_service.crud, "get_latest_ride_metric_with_location", fake_loc)
+    _patch_location(monkeypatch, None)
     assert await weather_service.training_weather_context_for_user(None, "u1") == ""
 
 
 @pytest.mark.asyncio
 async def test_training_weather_context_renders_forecast(monkeypatch):
-    class _Loc:
-        start_lat = 52.5
-        start_lng = 13.4
-
-    async def fake_loc(db, user_id):
-        return _Loc()
-
-    monkeypatch.setattr(weather_service.crud, "get_latest_ride_metric_with_location", fake_loc)
+    _patch_location(
+        monkeypatch, TrainingLocation(latitude=52.5, longitude=13.4, label="Berlin")
+    )
     payload = {
         "daily": {
             "time": ["2026-05-05", "2026-05-06"],
@@ -311,7 +321,7 @@ async def test_training_weather_context_renders_forecast(monkeypatch):
 
     result = await weather_service.training_weather_context_for_user(None, "u1", days=2)
 
-    assert "Upcoming weather" in result
+    assert "Upcoming weather near Berlin" in result
     assert "training flag:very_hot" in result
     assert "snow" in result
     assert "wind 40kph" in result
@@ -319,14 +329,7 @@ async def test_training_weather_context_renders_forecast(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_training_weather_context_handles_error(monkeypatch):
-    class _Loc:
-        start_lat = 1.0
-        start_lng = 1.0
-
-    monkeypatch.setattr(
-        weather_service.crud, "get_latest_ride_metric_with_location",
-        lambda db, user_id: _async_return(_Loc()),
-    )
+    _patch_location(monkeypatch, TrainingLocation(latitude=1.0, longitude=1.0))
     _patch_httpx(monkeypatch, _FakeResp({}, is_success=False))
     assert await weather_service.training_weather_context_for_user(None, "u1") == ""
 
@@ -356,6 +359,7 @@ async def test_backfill_missing_ride_weather_applies_weather(monkeypatch):
 
     monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+    _patch_location(monkeypatch, None)
 
     class _DB:
         async def flush(self):
@@ -393,6 +397,7 @@ async def test_backfill_recovers_coords_from_stream(monkeypatch):
     monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
     monkeypatch.setattr(weather_service, "fetch_activity_streams", fake_streams)
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+    _patch_location(monkeypatch, None)
 
     class _DB:
         async def flush(self):
@@ -401,3 +406,229 @@ async def test_backfill_recovers_coords_from_stream(monkeypatch):
     updated = await weather_service.backfill_missing_ride_weather(_DB(), "u1", access_token="tok")
     assert updated == 1
     assert row.start_lat == 41.0
+
+
+# ---------------------------------------------------------------------------
+# Forecast caching + home-location fallback (#495)
+# ---------------------------------------------------------------------------
+
+
+_DAILY_PAYLOAD = {
+    "daily": {
+        "time": ["2026-08-01", "2026-08-02"],
+        "temperature_2m_max": [31.0, 12.0],
+        "temperature_2m_min": [19.0, 6.0],
+        "weather_code": [1, 61],
+        "precipitation_sum": [0.0, 6.4],
+        "wind_speed_10m_max": [12.0, 33.0],
+    }
+}
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_forecast_maps_days_and_load_flags(monkeypatch):
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD))
+
+    days = await weather_service.fetch_daily_forecast(52.5, 13.4, days=2)
+
+    assert [d["date"] for d in days] == ["2026-08-01", "2026-08-02"]
+    assert days[0]["condition"] == "partly_cloudy"
+    assert days[0]["temperature_max_c"] == 31.0
+    assert days[0]["load_flag"] == "hot"
+    assert days[1]["condition"] == "rain"
+    assert days[1]["precipitation_mm"] == 6.4
+    assert days[1]["wind_speed_kph"] == 33.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_forecast_serves_repeat_calls_from_cache(monkeypatch):
+    """No per-request Open-Meteo calls: one lookup per location per hour (#495)."""
+    calls = []
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD), calls)
+
+    await weather_service.fetch_daily_forecast(52.5, 13.4, days=2)
+    await weather_service.fetch_daily_forecast(52.5, 13.4, days=2)
+    # A different horizon is sliced from the same cached 16-day fetch.
+    await weather_service.fetch_daily_forecast(52.5, 13.4, days=1)
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_forecast_cache_key_rounds_nearby_coordinates_together(monkeypatch):
+    """Coordinates round to ~11 km so athletes near each other share a lookup."""
+    calls = []
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD), calls)
+
+    await weather_service.fetch_daily_forecast(52.51, 13.41, days=2)
+    await weather_service.fetch_daily_forecast(52.52, 13.43, days=2)
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_forecast_cache_expires_after_the_ttl(monkeypatch):
+    calls = []
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD), calls)
+
+    await weather_service.fetch_daily_forecast(52.5, 13.4, days=2, now=0.0)
+    await weather_service.fetch_daily_forecast(
+        52.5, 13.4, days=2, now=weather_service.FORECAST_CACHE_TTL_SECONDS + 1
+    )
+
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_forecast_returns_empty_without_coordinates():
+    assert await weather_service.fetch_daily_forecast(None, None) == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_forecast_does_not_cache_a_failed_lookup(monkeypatch):
+    calls = []
+    _patch_httpx(monkeypatch, _FakeResp({}, is_success=False), calls)
+
+    assert await weather_service.fetch_daily_forecast(52.5, 13.4) == []
+    assert await weather_service.fetch_daily_forecast(52.5, 13.4) == []
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_enrich_activity_weather_uses_home_fallback_for_indoor_rides(monkeypatch):
+    """An indoor ride has no GPS; home-location weather is what makes "rode inside
+    on a 34 C day" a learnable signal (#495). start_lat stays null and honest."""
+    async def fake_weather(lat, lng, activity_date, activity_datetime=None):
+        assert (lat, lng) == (47.99, 7.85)
+        return {"weather_temperature_c": 34.0, "weather_source": "open_meteo"}
+
+    monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+
+    fields = await weather_service.enrich_activity_weather(
+        {"start_date_local": "2026-08-01T10:00:00", "elapsed_time": 3600},
+        None,
+        fallback_coordinates=(47.99, 7.85),
+    )
+
+    assert fields["start_lat"] is None
+    assert fields["start_lng"] is None
+    assert fields["weather_temperature_c"] == 34.0
+    assert fields["weather_source"] == "open_meteo_home"
+
+
+@pytest.mark.asyncio
+async def test_enrich_activity_weather_without_gps_or_fallback_stays_blank(monkeypatch):
+    async def fake_weather(lat, lng, activity_date, activity_datetime=None):
+        raise AssertionError("must not look up weather with no location at all")
+
+    monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+
+    fields = await weather_service.enrich_activity_weather(
+        {"start_date_local": "2026-08-01T10:00:00"}, None
+    )
+
+    assert fields == {"start_lat": None, "start_lng": None}
+
+
+@pytest.mark.asyncio
+async def test_enrich_activity_weather_prefers_measured_gps_over_fallback(monkeypatch):
+    async def fake_weather(lat, lng, activity_date, activity_datetime=None):
+        assert (lat, lng) == (52.5, 13.4)
+        return {"weather_temperature_c": 20.0, "weather_source": "open_meteo"}
+
+    monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+
+    fields = await weather_service.enrich_activity_weather(
+        {"start_latlng": [52.5, 13.4], "start_date_local": "2026-08-01T10:00:00"},
+        None,
+        fallback_coordinates=(47.99, 7.85),
+    )
+
+    assert fields["start_lat"] == 52.5
+    assert fields["weather_source"] == "open_meteo"
+
+
+@pytest.mark.asyncio
+async def test_backfill_uses_home_location_when_a_ride_has_no_gps(monkeypatch):
+    import models
+
+    row = models.RideMetric(
+        strava_activity_id=77,
+        start_lat=None,
+        start_lng=None,
+        activity_start_datetime="2026-08-01T18:00:00",
+        duration_seconds=3600,
+        activity_date="2026-08-01",
+    )
+
+    async def fake_rows(db, user_id, limit=90):
+        return [row]
+
+    async def fake_weather(lat, lng, activity_date, activity_datetime=None):
+        assert (lat, lng) == (47.99, 7.85)
+        return {"weather_temperature_c": 33.0, "weather_condition": "clear"}
+
+    monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
+    monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
+    _patch_location(
+        monkeypatch, TrainingLocation(latitude=47.99, longitude=7.85, source="user_set")
+    )
+
+    class _DB:
+        async def flush(self):
+            pass
+
+    updated = await weather_service.backfill_missing_ride_weather(
+        _DB(), "u1", access_token=None
+    )
+
+    assert updated == 1
+    assert row.start_lat is None
+    assert row.weather_temperature_c == 33.0
+    assert row.weather_source == "open_meteo_home"
+
+
+@pytest.mark.asyncio
+async def test_training_weather_context_includes_learned_preferences(monkeypatch):
+    """The forecast and the athlete's own tolerances arrive together, so the coach
+    cannot act on one without the other (#495)."""
+    from services import weather_preference
+
+    _patch_location(
+        monkeypatch, TrainingLocation(latitude=52.5, longitude=13.4, label="Berlin")
+    )
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD))
+
+    async def fake_preferences(db, user_id):
+        return "What is known about this athlete's own weather tolerances: heat-tolerant"
+
+    monkeypatch.setattr(
+        weather_preference,
+        "weather_preference_context_for_user",
+        fake_preferences,
+    )
+
+    result = await weather_service.training_weather_context_for_user(None, "u1", days=2)
+
+    assert "heat-tolerant" in result
+    assert "adapt rather than rewrite" in result
+
+
+@pytest.mark.asyncio
+async def test_training_weather_context_survives_a_preference_lookup_failure(monkeypatch):
+    """Weather is additive context; a belief-read failure must not break the prompt."""
+    from services import weather_preference
+
+    _patch_location(monkeypatch, TrainingLocation(latitude=52.5, longitude=13.4))
+    _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD))
+
+    async def boom(db, user_id):
+        raise RuntimeError("belief store down")
+
+    monkeypatch.setattr(
+        weather_preference, "weather_preference_context_for_user", boom
+    )
+
+    result = await weather_service.training_weather_context_for_user(None, "u1", days=2)
+
+    assert "2026-08-01" in result

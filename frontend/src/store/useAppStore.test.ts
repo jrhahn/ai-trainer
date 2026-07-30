@@ -9,6 +9,7 @@ const {
   mockFetchRaceEvents,
   mockFetchMetricsHistory,
   mockFetchRideMetricsHistory,
+  mockFetchWeatherForecast,
 } = vi.hoisted(() => ({
   mockFetchCurrentUser: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
@@ -18,6 +19,7 @@ const {
   mockFetchRaceEvents: vi.fn(),
   mockFetchMetricsHistory: vi.fn(),
   mockFetchRideMetricsHistory: vi.fn(),
+  mockFetchWeatherForecast: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
@@ -29,6 +31,7 @@ vi.mock('../services/user', () => ({
   fetchRaceEvents: mockFetchRaceEvents,
   fetchMetricsHistory: mockFetchMetricsHistory,
   fetchRideMetricsHistory: mockFetchRideMetricsHistory,
+  fetchWeatherForecast: mockFetchWeatherForecast,
 }))
 
 import { useAppStore } from './useAppStore'
@@ -52,6 +55,9 @@ const mockDay: TrainingDay = {
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
+  // Weather is additive dashboard context (#495): default it to "nothing known"
+  // so every hydration test stays about the data it is actually asserting.
+  mockFetchWeatherForecast.mockResolvedValue({ location: null, days: [] })
 })
 
 describe('chatHistory actions', () => {

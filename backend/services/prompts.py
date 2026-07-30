@@ -113,6 +113,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Never schedule two hard days back-to-back.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
 - Account for weather when provided: shorten or reduce intensity on hot days, extend warmups and avoid long exposed sessions on freezing/cold days, and move sessions indoors or swap to recovery/strength when weather is unsafe.
+- Weight every weather decision by the athlete's own learned tolerances when they are provided: do not move a session for conditions this athlete demonstrably handles well, and say in the workout description when weather is why a session was placed or shaped that way.
 """
 
 
@@ -769,8 +770,15 @@ def plan_change_summary_user(
     run_context: str,
     rider_assessment: dict | None = None,
     training_load_section: str = "",
+    weather_context_section: str = "",
 ) -> str:
-    """User prompt carrying the per-day old→new diff and athlete context (#439)."""
+    """User prompt carrying the per-day old→new diff and athlete context (#439).
+
+    ``weather_context_section`` is the forecast and learned tolerances the run
+    itself acted on (#495). Without it the narration cannot tell the athlete that a
+    session moved because of a 38 °C day, and a weather-driven change reads as the
+    plan churning for no reason.
+    """
     diff_lines = "\n".join(
         f"- {c.get('date')}: {_day_brief(c.get('old_day'))} → "
         f"{_day_brief(c.get('new_day'))}"
@@ -782,13 +790,23 @@ def plan_change_summary_user(
         else ""
     )
     load_section = f"\n{training_load_section}" if training_load_section else ""
+    weather_section = (
+        f"\n{weather_context_section}" if weather_context_section else ""
+    )
+    weather_rule = (
+        "\nIf a change lines up with the forecast above, say so plainly and name the "
+        "condition — but only when the weather genuinely explains it; never invent a "
+        "weather reason for an unrelated change."
+        if weather_context_section
+        else ""
+    )
     return (
         f"Context: {run_context}\n"
         f"Athlete profile: {json.dumps(profile)}"
-        f"{assessment_section}{load_section}\n"
+        f"{assessment_section}{load_section}{weather_section}\n"
         "Changes you just made (old → new):\n"
         f"{diff_lines}\n"
-        "Write the summary and per-day reasons as instructed."
+        f"Write the summary and per-day reasons as instructed.{weather_rule}"
     )
 
 
@@ -1232,6 +1250,38 @@ def reveal_uncertainty_rule() -> str:
     )
 
 
+def weather_scheduling_rule() -> str:
+    """Let the forecast move sessions — but only as far as this athlete warrants (#495).
+
+    An upcoming forecast is a scheduling constraint, not a mandate: 40 °C on the day
+    of a VO2max block is a real reason to move it, while a warm day for a rider whose
+    own history shows they hold power in heat is not. The learned tolerances arrive in
+    the prompt as confidence-scored beliefs, so this rule ties the strength of the
+    intervention to the strength of the belief and requires the coach to say when
+    weather is the reason a session changed.
+    """
+    return (
+        "\n\nWeather-aware scheduling rules:\n"
+        "- Treat the upcoming forecast as a scheduling constraint on sessions that have "
+        "not happened yet. Adapt the plan, never silently rewrite it: prefer moving or "
+        "softening one session over reshuffling the whole week.\n"
+        "- Concrete moves worth making: shift high-intensity work off extreme-heat days "
+        "or offer a cooler early-morning window, offer an indoor trainer session in "
+        "severe rain, snow, thunderstorms, or high wind, swap to endurance, recovery, or "
+        "strength work when outdoor intensity is unsafe, and extend warmups in the cold.\n"
+        "- Condition every weather call on this athlete's learned tolerances. Do not "
+        "move a session for conditions they demonstrably handle well, and weight the "
+        "advice by the confidence attached to that belief — a low-confidence tolerance "
+        "is a reason to ask, not to assume.\n"
+        "- When the athlete tells you how they feel about a condition ('I actually love "
+        "the rain', 'heat kills me'), treat that as direct evidence about them that "
+        "outranks the population average, and reflect it in what you advise next.\n"
+        "- Whenever weather is why you moved, softened, or kept a session, say so "
+        "explicitly and name the day and the condition. A weather-driven change the "
+        "athlete cannot trace back to a reason reads as the plan churning by itself."
+    )
+
+
 def update_model_before_plan_rule() -> str:
     """Update the belief (athlete model) before touching the decision (plan) (#491).
 
@@ -1467,6 +1517,7 @@ def ask_trainer_system(
     classification: dict | None = None,
     metrics_history_section: str = "",
     race_events_section: str = "",
+    weather_context_section: str = "",
     date_context: str = "",
 ) -> str:
     science_section = (
@@ -1495,6 +1546,12 @@ def ask_trainer_system(
         f"\n\n{metrics_history_section}" if metrics_history_section else ""
     )
     events_section = f"\n\n{race_events_section}" if race_events_section else ""
+    # The upcoming per-day outlook plus what has been learned about this athlete's
+    # own weather tolerances (#495) — the coach may use it to move or soften a
+    # session, but only where this athlete's own history says the weather matters.
+    weather_section = (
+        f"\n\n{weather_context_section}" if weather_context_section else ""
+    )
     durable_context_section = athlete_context_section(athlete_context)
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
@@ -1528,6 +1585,7 @@ def ask_trainer_system(
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     explainability_instructions = coach_explainability_rule()
     uncertainty_instructions = reveal_uncertainty_rule()
+    weather_instructions = weather_scheduling_rule() if weather_context_section else ""
     model_before_plan_instructions = update_model_before_plan_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
@@ -1596,6 +1654,7 @@ def ask_trainer_system(
         f"{assessment_section}"
         f"{metrics_section}"
         f"{events_section}"
+        f"{weather_section}"
         f"{training_load_section}"
         f"{durable_context_section}"
         f"{durable_model_section}"
@@ -1617,6 +1676,7 @@ def ask_trainer_system(
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
         f"{constraint_instructions}"
+        f"{weather_instructions}"
         f"{outlook_instructions}\n\n"
         "Before writing your response, reason through: "
         "(1) what the athlete is really asking, "
