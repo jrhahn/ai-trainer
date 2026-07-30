@@ -87,6 +87,10 @@ from .prompts import (
     rate_workout_user,
     refresh_login_summary_system,
     refresh_login_summary_user,
+    training_status_system,
+    training_status_user,
+    TRAINING_STATUS_LABEL_MAX_CHARS,
+    TRAINING_STATUS_TONES,
     batch_review_system,
     batch_review_user,
     next_ride_recommendation_system,
@@ -707,6 +711,7 @@ async def ask_trainer(
     performance_recommendation: dict | None = None,
     hypotheses: list[dict] | None = None,
     weather_context_section: str = "",
+    training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     timezone_name: str | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
@@ -764,6 +769,7 @@ async def ask_trainer(
         metrics_history_section=metrics_history_section,
         race_events_section=race_events_context_section(race_events),
         weather_context_section=weather_context_section,
+        training_status_badge=training_status_badge,
         date_context=date_context,
     )
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
@@ -1673,6 +1679,44 @@ async def generate_login_summary(
     parsed = _parse_ai_json(raw)
     summary = parsed.get("loginSummary") or ""
     return summary if _is_complete_login_summary(summary) else ""
+
+
+async def generate_training_status(
+    facts: dict,
+    training_plan: list[dict] | None = None,
+    provider: str = "openai",
+    timezone_name: str | None = None,
+) -> tuple[str, str, str] | None:
+    """Have the coach write the dashboard status badge from deterministic facts.
+
+    Returns ``(label, tone, rationale)``, or ``None`` when the model produced
+    nothing usable — callers fall back to
+    :func:`services.training_status.fallback_status` so the chip is never blank.
+    """
+    system_prompt = training_status_system()
+    user_msg = training_status_user(
+        facts, training_plan=training_plan, timezone_name=timezone_name
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
+    parsed = _parse_ai_json(raw)
+
+    label = str(parsed.get("label") or "").strip().strip(".")
+    rationale = str(parsed.get("rationale") or "").strip()
+    if not label or len(label) > TRAINING_STATUS_LABEL_MAX_CHARS or not rationale:
+        # A too-long badge wraps and breaks the dashboard's status strip, so an
+        # over-length label is rejected outright rather than truncated into
+        # something that no longer reads as a phrase.
+        logger.warning(
+            "Unusable training status from provider (label=%r, rationale len=%d)",
+            label,
+            len(rationale),
+        )
+        return None
+
+    tone = str(parsed.get("tone") or "").strip().lower()
+    if tone not in TRAINING_STATUS_TONES:
+        tone = "steady"
+    return label, tone, rationale
 
 
 async def batch_review_rides(

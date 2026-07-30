@@ -23,6 +23,7 @@ from services import athlete_model_inference
 from services import coach_summary
 from services import plan_pipeline
 from services import roi_recommendation
+from services import status_pipeline
 from services import summary_pipeline
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
@@ -363,6 +364,24 @@ def _next_race_date_from_events(
 
 def _request_timezone(request: Request) -> str | None:
     return request_timezone(request)
+
+
+def _training_status_badge(
+    user: models.User,
+) -> tuple[str | None, str | None, str | None] | None:
+    """The dashboard status badge the athlete is currently looking at (#499).
+
+    Handed to the coach so a question about the badge is answered from the badge
+    the coach itself wrote, rather than from a guess about what it might mean.
+    """
+    assessment = user.rider_assessment
+    if assessment is None or not assessment.training_status_label:
+        return None
+    return (
+        assessment.training_status_label,
+        assessment.training_status_tone,
+        assessment.training_status_rationale,
+    )
 
 
 
@@ -1012,6 +1031,7 @@ async def ask_trainer(
                 performance_recommendation=performance_recommendation,
                 hypotheses=hypotheses,
                 weather_context_section=weather_section,
+                training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
             )
         except AIRateLimitError:
@@ -1797,6 +1817,43 @@ async def refresh_login_summary(
             )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
+
+
+@router.post("/refresh-training-status", response_model=schemas.TrainingStatusResponse)
+async def refresh_training_status(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.TrainingStatusResponse:
+    """Regenerate the dashboard's coach-authored training-status badge (#499).
+
+    Called by the frontend when the stored badge is missing — either never
+    generated, or invalidated by the status pipeline after a plan or activity
+    change. Always returns a renderable badge: the pipeline falls back to a
+    deterministic label when the provider cannot produce a usable one.
+    """
+    if current_user.rider_assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No rider assessment found — please complete a Strava analysis first",
+        )
+
+    async with _token_usage_scope(db, current_user):
+        try:
+            label, tone, rationale = await status_pipeline.regenerate(
+                db,
+                current_user,
+                provider=resolve_user_provider(current_user),
+                timezone_name=_request_timezone(request),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+
+    return schemas.TrainingStatusResponse(
+        label=label, tone=tone, rationale=rationale
+    )
 
 
 @router.post(

@@ -1518,6 +1518,7 @@ def ask_trainer_system(
     metrics_history_section: str = "",
     race_events_section: str = "",
     weather_context_section: str = "",
+    training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     date_context: str = "",
 ) -> str:
     science_section = (
@@ -1552,6 +1553,9 @@ def ask_trainer_system(
     weather_section = (
         f"\n\n{weather_context_section}" if weather_context_section else ""
     )
+    # The athlete can see this badge on their dashboard and will ask about it by
+    # its exact words, so the coach has to be holding the same label it wrote.
+    status_badge_section = training_status_section(*(training_status_badge or (None, None, None)))
     durable_context_section = athlete_context_section(athlete_context)
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
@@ -1655,6 +1659,7 @@ def ask_trainer_system(
         f"{metrics_section}"
         f"{events_section}"
         f"{weather_section}"
+        f"{status_badge_section}"
         f"{training_load_section}"
         f"{durable_context_section}"
         f"{durable_model_section}"
@@ -2727,6 +2732,113 @@ def refresh_login_summary_user(
         "\n\n".join(parts)
         + "\n\nGenerate a loginSummary JSON object based on the above."
     )
+
+
+# ---------------------------------------------------------------------------
+# Training status chip (#499)
+# ---------------------------------------------------------------------------
+
+# The chip sits on one line under the dashboard greeting, beside two other
+# segments. Anything longer than this wraps and breaks the strip, so the budget
+# is a hard product constraint rather than a stylistic preference.
+TRAINING_STATUS_LABEL_MAX_CHARS = 22
+
+TRAINING_STATUS_TONES = ("positive", "steady", "caution")
+
+
+def training_status_system() -> str:
+    """System prompt for the coach-authored dashboard status chip."""
+    return (
+        f"{COACH_PERSONA} You are writing the short training-status badge shown on the "
+        "athlete's dashboard, directly under the greeting, plus the reason behind it.\n"
+        "You will receive a deterministic audit of the last 7 days: every planned "
+        "session with its outcome, anything optional they declined, and any unplanned "
+        "work they did. Those facts are authoritative — never contradict them, and "
+        "never invent a session, a number or a reason that is not in them.\n"
+        "Return ONLY a valid JSON object with exactly these fields:\n"
+        f'- "label": the badge text, at most {TRAINING_STATUS_LABEL_MAX_CHARS} characters. '
+        "A short noun phrase in title case, no trailing punctuation, no numbers "
+        '(for example "On track", "Ahead of plan", "Easing off", "Missed two"). '
+        "It must be readable on its own at a glance.\n"
+        f'- "tone": exactly one of {", ".join(TRAINING_STATUS_TONES)} — "positive" when they '
+        'are meeting or beating the plan, "steady" when things are simply proceeding or '
+        'there is no meaningful signal, "caution" only when real planned work was missed. '
+        "The badge is coloured from this, so it must agree with the label.\n"
+        '- "rationale": two or three sentences, addressed to the athlete, explaining '
+        "exactly why the badge says what it says. This is the answer they get when they "
+        "ask the coach 'why?', so it must cite the concrete sessions behind it.\n"
+        "Judgement rules, in order of priority:\n"
+        "- Declining a session the plan itself marked optional is compliance, NOT a "
+        "shortfall. Never describe it as missed or as being behind.\n"
+        "- Unplanned training still counts as work done. An athlete who did more than "
+        "the plan asked is not behind, whatever the completion ratio says.\n"
+        "- A session still ahead of them today has not been missed. Do not judge it.\n"
+        "- Only genuinely missed, non-optional past sessions justify a 'caution' tone.\n"
+        "- Adherence is about executing the plan, never about the athlete's fitness or "
+        "physiological capability. Never imply their fitness is lacking, and never cite "
+        "model confidence or missing test data as a reason for the badge."
+    )
+
+
+def training_status_user(
+    facts: dict,
+    training_plan: list[dict] | None = None,
+    timezone_name: str | None = None,
+) -> str:
+    """Build the user message carrying the deterministic status audit."""
+    today = app_today(timezone_name=timezone_name)
+    # Anchor every audited session to a weekday so the coach can say "Wednesday's
+    # intervals" instead of deriving a weekday from an ISO date in its head.
+    anchored = {
+        **facts,
+        "sessions": annotate_plan_days(facts.get("sessions"), today),
+        "missed": annotate_plan_days(facts.get("missed"), today),
+        "skippedOptional": annotate_plan_days(facts.get("skippedOptional"), today),
+        "pending": annotate_plan_days(facts.get("pending"), today),
+        "extraActivities": annotate_plan_days(facts.get("extraActivities"), today),
+    }
+
+    parts: list[str] = [app_date_context(timezone_name=timezone_name)]
+    parts.append(
+        "Deterministic training-status audit of the last 7 days (authoritative):\n"
+        f"{json.dumps(anchored, indent=2)}"
+    )
+    if training_plan:
+        parts.append(
+            "Current training plan for context:\n"
+            f"{annotated_plan_json(training_plan, timezone_name, indent=2)}"
+        )
+    parts.append(
+        "Write the status badge JSON object (label, tone, rationale) from the audit above."
+    )
+    return "\n\n".join(parts)
+
+
+def training_status_section(
+    label: str | None, tone: str | None, rationale: str | None
+) -> str:
+    """The status block injected into the coach's own prompts.
+
+    Without this the coach cannot see the badge it is being asked about and
+    confabulates an explanation — the #499 bug, where the dashboard said
+    "Slightly behind" and the coach attributed it to model confidence.
+    """
+    if not label:
+        return ""
+    lines = [
+        "\n\nTraining-status badge currently shown on this athlete's dashboard:",
+        f'- Badge text: "{label}"' + (f" (tone: {tone})" if tone else ""),
+    ]
+    if rationale:
+        lines.append(f"- The reason it says that: {rationale}")
+    lines.append(
+        "This badge is YOUR assessment of plan adherence over the last 7 days, and the "
+        "athlete can see it. If they ask what it means or why it says that, explain it "
+        "from the reason above — do not deny it, do not guess at a different cause, and "
+        "do not attribute it to their fitness, to model confidence or to missing test "
+        "data. It reflects planned sessions executed, nothing else."
+    )
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

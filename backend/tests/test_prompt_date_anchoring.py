@@ -77,6 +77,14 @@ def _all_plan_builder_messages() -> list[tuple[str, str]]:
                 [_ride()], assessment=None, training_plan=PLAN, timezone_name=TZ
             ),
         ),
+        (
+            "training_status_user",
+            prompts.training_status_user(
+                {"sessions": [dict(PLAN[0], status="done")]},
+                training_plan=PLAN,
+                timezone_name=TZ,
+            ),
+        ),
     ]
 
 
@@ -96,6 +104,7 @@ def _fixed_today(monkeypatch):
         "batch_review_user",
         "next_ride_recommendation_user",
         "process_pending_feedbacks_user",
+        "training_status_user",
     ],
 )
 def test_plan_builders_inject_date_context(name, _fixed_today):

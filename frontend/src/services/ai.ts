@@ -339,6 +339,30 @@ export async function refreshLoginSummary(authToken: string): Promise<string> {
   return raw.loginSummary ?? ''
 }
 
+export interface TrainingStatusBadge {
+  label: string
+  tone: 'positive' | 'steady' | 'caution'
+  rationale: string
+}
+
+/** Regenerate the coach-authored dashboard status badge (#499).
+ *
+ * The badge is deliberately not computed in the browser: the backend owns it so
+ * the coach holds the same label the athlete is reading and can explain it.
+ */
+export async function refreshTrainingStatus(
+  authToken: string
+): Promise<TrainingStatusBadge | null> {
+  const raw = await apiFetch<{
+    label?: string
+    tone?: string
+    rationale?: string
+  }>('/ai/refresh-training-status', { token: authToken, method: 'POST' })
+  if (!raw.label) return null
+  const tone = raw.tone === 'positive' || raw.tone === 'caution' ? raw.tone : 'steady'
+  return { label: raw.label, tone, rationale: raw.rationale ?? '' }
+}
+
 export interface NextRideRecommendationResult {
   response: string
   nextSessionRecommendation: string

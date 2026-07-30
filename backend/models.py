@@ -907,6 +907,13 @@ class RiderAssessment(Base):
     ride_insights: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_ride_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     login_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The dashboard's training-status chip, written by the coach rather than by
+    # the browser (#499), so the label and the coach's explanation of it can
+    # never disagree. Cleared by ``services.status_pipeline`` when the plan or
+    # the athlete's activity changes, then lazily regenerated on the next load.
+    training_status_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    training_status_tone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    training_status_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

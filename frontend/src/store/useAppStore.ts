@@ -309,6 +309,11 @@ export interface RiderAssessment {
   rideInsights?: string
   lastRideFeedback?: string
   loginSummary?: string
+  /** Coach-authored dashboard status badge (#499) — written by the backend
+   * status pipeline, never computed here, so the coach can explain it. */
+  trainingStatusLabel?: string
+  trainingStatusTone?: 'positive' | 'steady' | 'caution'
+  trainingStatusRationale?: string
 }
 
 interface AppState {
