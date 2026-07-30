@@ -13,6 +13,7 @@ from services.prompts import (
     coach_explainability_rule,
     performance_model_section,
     reveal_uncertainty_rule,
+    update_model_before_plan_rule,
 )
 
 
@@ -132,6 +133,23 @@ def test_reveal_uncertainty_rule_demands_both_sides_and_open_unknowns():
     assert "manufacture doubt" in lowered or "do not manufacture" in lowered
 
 
+def test_update_model_before_plan_rule_orders_belief_before_decision():
+    rule = update_model_before_plan_rule()
+    lowered = rule.lower()
+    # The plan is not the primary state — the athlete model is (#491).
+    assert "not your primary state" in lowered or "not your primary" in lowered
+    # Explicit belief-first ordering: evidence → model → confidence → plan.
+    assert "update the athlete model" in lowered
+    assert "confidence" in lowered
+    # A belief update must NOT automatically imply a plan change.
+    assert "does not imply a plan change" in lowered
+    assert "no change" in lowered
+    # Oscillation is the failure mode being prevented.
+    assert "oscillat" in lowered
+    # When the model moves but the plan holds, planUpdates stays empty.
+    assert "planupdates empty" in lowered or "keep planupdates" in lowered
+
+
 # --- assembled system prompt -------------------------------------------------
 
 
@@ -169,6 +187,8 @@ def test_ask_trainer_system_surfaces_full_reasoning_chain():
     assert "want me to explain" in prompt.lower()
     # Uncertainty-revealing rule is wired in too (#490).
     assert "Reveal your uncertainty" in prompt
+    # Belief-before-decision ordering is wired in too (#491).
+    assert "Update your understanding before the plan" in prompt
 
 
 def test_ask_trainer_system_omits_sections_without_model():
@@ -180,6 +200,8 @@ def test_ask_trainer_system_omits_sections_without_model():
     assert "Explainable coaching rules" in prompt
     # Owning uncertainty is unconditional — always present, model or not (#490).
     assert "Reveal your uncertainty" in prompt
+    # Belief-before-decision ordering is unconditional too (#491).
+    assert "Update your understanding before the plan" in prompt
 
 
 def test_ask_trainer_system_omits_roi_when_insufficient():
