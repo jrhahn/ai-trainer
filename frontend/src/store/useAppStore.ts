@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { sessionSlot, sessionsForDate } from '../utils/planSessions'
 
 /**
  * Storage key for the JWT auth token.
@@ -128,6 +129,15 @@ export interface WorkoutFeedback {
 
 export interface TrainingDay {
   date: string
+  /**
+   * Ordered position of this session within its date (#496). A date may hold
+   * more than one session (AM yoga + PM endurance), so `(date, slot)` — not the
+   * date alone — identifies a session. Absent on legacy single-session days and
+   * read as 0; use utils/planSessions helpers rather than reading it directly.
+   */
+  slot?: number
+  /** Free-text when-in-the-day hint ("am", "pm", "18:30"); display only. */
+  timeOfDay?: string
   workoutType: 'rest' | 'endurance' | 'intervals' | 'tempo' | 'race' | 'recovery' | 'strength'
   title: string
   description: string
@@ -337,7 +347,8 @@ interface AppState {
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
   setTrainingPlan: (plan: TrainingDay[]) => void
-  logWorkout: (date: string, feedback: WorkoutFeedback) => void
+  /** Log feedback for one session; `slot` defaults to the day's first (#496). */
+  logWorkout: (date: string, feedback: WorkoutFeedback, slot?: number) => void
   setStravaConnection: (connection: StravaConnection | null) => void
   setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
@@ -349,7 +360,16 @@ interface AppState {
   setIntervalsAutoSyncEnabled: (enabled: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
-  updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
+  /**
+   * Patch one planned session. `slot` picks which session on `date` when the day
+   * holds a two-a-day (#496); omit it to patch the day's first session, which is
+   * the only one a single-session day has.
+   */
+  updateTrainingDay: (
+    date: string,
+    updates: Partial<TrainingDay>,
+    slot?: number
+  ) => void
   resetAll: () => void
   addChatMessage: (msg: ChatMessage) => void
   setCoachMemory: (memory: string) => void
@@ -411,12 +431,35 @@ const initialState = {
   ...dataState,
 }
 
+/**
+ * The key a session's workout log is stored under (#496).
+ *
+ * The first session of a date keeps the bare date, so every log written before
+ * two-a-days existed still resolves; only the extra sessions add a `#slot`
+ * suffix. This mirrors the backend's `GET /users/me/workouts` keying exactly.
+ */
+export function workoutLogKey(date: string, slot?: number): string {
+  const resolved = sessionSlot({ date, slot })
+  return resolved === 0 ? date : `${date}#${resolved}`
+}
+
+/** The slot an update targets: the given one, or the day's first session. */
+function targetSlot(
+  plan: TrainingDay[],
+  date: string,
+  slot: number | undefined
+): number {
+  if (slot !== undefined) return slot
+  const sessions = sessionsForDate(plan, date)
+  return sessions.length > 0 ? sessionSlot(sessions[0]) : 0
+}
+
 function mergePlanWithWorkouts(
   plan: TrainingDay[],
   workoutLogs: Record<string, WorkoutFeedback>
 ): TrainingDay[] {
   return plan.map((day) => {
-    const feedback = workoutLogs[day.date]
+    const feedback = workoutLogs[workoutLogKey(day.date, day.slot)]
     return feedback ? { ...day, completed: true, feedback } : day
   })
 }
@@ -442,13 +485,21 @@ export const useAppStore = create<AppState>()(
     },
     setUserProfile: (profile) => set({ userProfile: profile }),
     setTrainingPlan: (plan) => set({ trainingPlan: plan }),
-    logWorkout: (date, feedback) =>
-      set((state) => ({
-        workoutLogs: { ...state.workoutLogs, [date]: feedback },
-        trainingPlan: state.trainingPlan.map((day) =>
-          day.date === date ? { ...day, completed: true, feedback } : day
-        ),
-      })),
+    logWorkout: (date, feedback, slot) =>
+      set((state) => {
+        const target = targetSlot(state.trainingPlan, date, slot)
+        return {
+          workoutLogs: {
+            ...state.workoutLogs,
+            [workoutLogKey(date, target)]: feedback,
+          },
+          trainingPlan: state.trainingPlan.map((day) =>
+            day.date === date && sessionSlot(day) === target
+              ? { ...day, completed: true, feedback }
+              : day
+          ),
+        }
+      }),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
@@ -460,12 +511,17 @@ export const useAppStore = create<AppState>()(
     setIntervalsAutoSyncEnabled: (enabled) => set({ intervalsAutoSyncEnabled: enabled }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
-    updateTrainingDay: (date, updates) =>
-      set((state) => ({
-        trainingPlan: state.trainingPlan.map((day) =>
-          day.date === date ? { ...day, ...updates } : day
-        ),
-      })),
+    updateTrainingDay: (date, updates, slot) =>
+      set((state) => {
+        const target = targetSlot(state.trainingPlan, date, slot)
+        return {
+          trainingPlan: state.trainingPlan.map((day) =>
+            day.date === date && sessionSlot(day) === target
+              ? { ...day, ...updates }
+              : day
+          ),
+        }
+      }),
     resetAll: () => {
       persistToken(null)
       set(initialState)

@@ -208,10 +208,11 @@ async def record_plan_day_changes(
     changes: list[dict],
     source: str,
 ) -> list[models.PlanDayHistory]:
-    """Append one PlanDayHistory row per per-day change and flush.
+    """Append one PlanDayHistory row per per-session change and flush.
 
-    Each ``changes`` entry is ``{"date", "old_day", "new_day", "applied"}``.
-    ``applied`` defaults to True. No-op when ``changes`` is empty.
+    Each ``changes`` entry is ``{"date", "slot", "old_day", "new_day", "applied"}``.
+    ``applied`` defaults to True, ``slot`` to 0 (the single-session day, #496).
+    No-op when ``changes`` is empty.
 
     All rows from this call share one ``batch_id`` so the coach run they belong
     to (one plan generation, nightly tune-up or chat edit) can be reconstituted
@@ -224,6 +225,7 @@ async def record_plan_day_changes(
         models.PlanDayHistory(
             user_id=user_id,
             date=change["date"],
+            slot=int(change.get("slot") or 0),
             batch_id=batch_id,
             old_day=change.get("old_day"),
             new_day=change.get("new_day"),
@@ -379,13 +381,18 @@ async def get_workout_logs(db: AsyncSession, user_id: str) -> list[models.Workou
 
 
 async def get_workout_log_by_date(
-    db: AsyncSession, user_id: str, date: str
+    db: AsyncSession, user_id: str, date: str, slot: int = 0
 ) -> models.WorkoutLog | None:
-    """Return the WorkoutLog for a specific user/date, or None."""
+    """Return the WorkoutLog for a specific user/date/session, or None.
+
+    ``slot`` selects which session on ``date`` (#496); it defaults to 0, the only
+    session a legacy single-workout day has.
+    """
     return await db.scalar(
         select(models.WorkoutLog).where(
             models.WorkoutLog.user_id == user_id,
             models.WorkoutLog.date == date,
+            models.WorkoutLog.slot == slot,
         )
     )
 
@@ -403,13 +410,15 @@ async def upsert_workout_log(
     notes: str,
     completed_at: str,
     sport_type: str = "cycling",
+    slot: int = 0,
 ) -> models.WorkoutLog:
-    """Create or update a WorkoutLog for a user/date and flush."""
-    existing = await get_workout_log_by_date(db, user_id, date)
+    """Create or update a WorkoutLog for one user/date/session and flush (#496)."""
+    existing = await get_workout_log_by_date(db, user_id, date, slot)
     if existing is None:
         existing = models.WorkoutLog(
             user_id=user_id,
             date=date,
+            slot=slot,
             actual_duration_minutes=actual_duration_minutes,
             average_power=average_power,
             average_heart_rate=average_heart_rate,
@@ -3259,13 +3268,19 @@ async def update_ride_match(
     *,
     status: str,
     matched_plan_date: str | None = None,
+    matched_plan_slot: int | None = None,
     matched_plan_snapshot: dict | None = None,
     matched_at: datetime | None = None,
     label_override: str | None = None,
 ) -> models.RideMetric:
-    """Update the plan-match fields on a RideMetric row and flush."""
+    """Update the plan-match fields on a RideMetric row and flush.
+
+    ``matched_plan_slot`` names which session on ``matched_plan_date`` the ride
+    belongs to (#496); ``None`` is the single-session day.
+    """
     ride.plan_match_status = status
     ride.matched_plan_date = matched_plan_date
+    ride.matched_plan_slot = matched_plan_slot
     ride.matched_plan_snapshot = matched_plan_snapshot
     ride.matched_at = matched_at
     ride.label_override = label_override

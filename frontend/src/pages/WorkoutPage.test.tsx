@@ -147,7 +147,8 @@ describe('WorkoutPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
 
     await waitFor(() => {
-      expect(mockSaveWorkoutLog).toHaveBeenCalledWith('tok-123', TODAY, expect.anything())
+      // Slot 0 — the day's only session (#496).
+      expect(mockSaveWorkoutLog).toHaveBeenCalledWith('tok-123', TODAY, expect.anything(), 0)
       expect(mockRateCompletedWorkout).toHaveBeenCalled()
     })
   })
@@ -331,5 +332,105 @@ describe('WorkoutPage', () => {
     expect(
       await screen.findByText('No recorded changes for this day yet.'),
     ).toBeInTheDocument()
+  })
+  // ---------------------------------------------------------------------
+  // Two-a-days (#496)
+  // ---------------------------------------------------------------------
+
+  describe('multiple sessions per day', () => {
+    const amYoga: TrainingDay = {
+      date: TODAY,
+      slot: 0,
+      timeOfDay: 'am',
+      workoutType: 'recovery',
+      title: 'Morning yoga',
+      description: 'Mobility work',
+      durationMinutes: 30,
+    }
+    const pmIntervals: TrainingDay = {
+      ...mockDay,
+      slot: 1,
+      timeOfDay: 'pm',
+      title: 'Evening intervals',
+    }
+
+    function renderAtSlot(slot?: number) {
+      const path = slot === undefined ? `/workout/${TODAY}` : `/workout/${TODAY}?slot=${slot}`
+      return render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route path="/workout/:date" element={<WorkoutPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    }
+
+    it('lists every session of the day as a tab', () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      renderAtSlot()
+
+      const tabs = screen.getAllByRole('tab')
+      expect(tabs).toHaveLength(2)
+      expect(tabs[0]).toHaveTextContent('Morning yoga')
+      expect(tabs[1]).toHaveTextContent('Evening intervals')
+    })
+
+    it('opens the day\'s first session when no slot is given', () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      renderAtSlot()
+
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Morning yoga')
+    })
+
+    it('opens the session named by the slot query param', () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      renderAtSlot(1)
+
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Evening intervals')
+      expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('switches sessions when another tab is picked', async () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      renderAtSlot()
+
+      await userEvent.click(screen.getByRole('tab', { name: /Evening intervals/ }))
+
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Evening intervals')
+    })
+
+    it('logs feedback against the open session, not the date', async () => {
+      useAppStore.setState({
+        authToken: 'tok-123',
+        trainingPlan: [pmIntervals, amYoga],
+        userProfile: {
+          weeklyHours: 8,
+          followsTrainingPlan: true,
+          fitnessLevel: 'intermediate',
+        },
+      })
+      renderAtSlot(1)
+
+      await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
+      await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+
+      await waitFor(() => {
+        expect(mockSaveWorkoutLog).toHaveBeenCalledWith(
+          'tok-123',
+          TODAY,
+          expect.anything(),
+          1
+        )
+      })
+    })
+
+    it('renders no tab strip for an ordinary single-session day', () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+      renderAtSlot()
+
+      expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    })
   })
 })

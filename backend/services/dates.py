@@ -115,19 +115,86 @@ def plan_day_date_labels(raw_date: object, today: date | None = None) -> dict:
     return labels
 
 
+def plan_session_labels(session_index: int, session_count: int, time_of_day) -> dict:
+    """Return sessionOrder/sessionCount/sessionLabel anchors for one session (#496).
+
+    A date can hold more than one session, so a prompt that only showed the date
+    would flatten "AM yoga + PM endurance" into two indistinguishable entries and
+    the coach could not reason about load ordering within the day. Single-session
+    days get no annotations at all, keeping every existing prompt byte-identical.
+
+    ``sessionLabel`` prefers the athlete's own ``timeOfDay`` wording when present
+    and otherwise states the position explicitly ("session 1 of 2"), so the model
+    is never left to infer ordering from list position.
+    """
+    if session_count <= 1:
+        return {}
+    labels: dict = {
+        "sessionOrder": session_index + 1,
+        "sessionCount": session_count,
+    }
+    hint = str(time_of_day or "").strip()
+    labels["sessionLabel"] = (
+        f"{hint} (session {session_index + 1} of {session_count})"
+        if hint
+        else f"session {session_index + 1} of {session_count}"
+    )
+    return labels
+
+
 def annotate_plan_days(
     plan: list[dict] | None, today: date | None = None
 ) -> list[dict] | None:
-    """Return each plan day merged with its weekday/dateLabel/relativeDay anchors.
+    """Return each plan session merged with its date and within-day anchors.
 
     Pass-through for a falsy plan so callers can annotate unconditionally. Use
     this (paired with :func:`app_date_context`) in every prompt that shows the
     athlete's plan, so the model can state a session's timing relative to today
     instead of guessing it is "today".
+
+    On a date holding two-a-days, each session additionally carries its order
+    within the day, so the coach can move the hard PM session out of the heat and
+    leave the easy AM one alone (#495 × #496) rather than treating the date as one
+    indivisible block. Sessions are emitted in slot order within a date.
     """
     if not plan:
         return plan
-    return [{**day, **plan_day_date_labels(day.get("date"), today)} for day in plan]
+    counts: dict[str, int] = {}
+    for day in plan:
+        counts[str(day.get("date") or "")] = counts.get(str(day.get("date") or ""), 0) + 1
+    seen: dict[str, int] = {}
+    annotated: list[dict] = []
+    for day in _slot_ordered(plan):
+        date_key = str(day.get("date") or "")
+        index = seen.get(date_key, 0)
+        seen[date_key] = index + 1
+        annotated.append(
+            {
+                **day,
+                **plan_day_date_labels(day.get("date"), today),
+                **plan_session_labels(
+                    index, counts[date_key], day.get("timeOfDay") or day.get("time_of_day")
+                ),
+            }
+        )
+    return annotated
+
+
+def _slot_ordered(plan: list[dict]) -> list[dict]:
+    """Plan sessions in ``(date, slot)`` order, preserving the caller's date order.
+
+    Only reorders *within* a date, so a prompt that deliberately passes an unsorted
+    or windowed plan keeps its overall shape while AM still precedes PM.
+    """
+    import schemas
+
+    date_order: dict[str, int] = {}
+    for day in plan:
+        date_order.setdefault(str(day.get("date") or ""), len(date_order))
+    return sorted(
+        plan,
+        key=lambda d: (date_order[str(d.get("date") or "")], schemas.day_slot(d)),
+    )
 
 
 def request_timezone(request: Any) -> str | None:

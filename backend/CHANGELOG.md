@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-07-30
+
+### Added
+
+- **Multiple sessions per day — two-a-days** (`schemas.py`, `services/plan_pipeline.py`,
+  `services/ride_matching.py`, `services/plan_constraints.py`, `services/dates.py`,
+  `models.py`, `crud.py`, `routers/users.py`, migration `20260802_000001`) — a plan
+  can now hold an AM yoga session *and* a PM endurance ride on the same date, each
+  with its own type, duration, targets and intervals. `PlanDay` gains a `slot`
+  (0 = first/AM) and an optional `timeOfDay`, so a session's identity is
+  **`(date, slot)`** rather than the date alone — `schemas.session_key` /
+  `day_slot` / `normalize_slot` are the one place that is decided. Keeping the
+  session as the model, instead of nesting a `sessions` list under a day
+  container, is what lets the canonical `PlanDay` persist gate go on owning every
+  duration/drift invariant (#368/#422/#424) unchanged.
+- **Per-session executed-activity matching** (`services/ride_matching.py`,
+  `models.RideMetric.matched_plan_slot`) — `apply_ride_plan_matches` groups a date's
+  planned sessions and assigns each of the day's rides to the session it best fits,
+  greedy over sport plausibility then duration, with chronological order as the
+  tiebreak so "earlier activity → earlier slot" resolves the obvious way. The
+  morning gym session and the evening ride now each attribute to their own planned
+  session; before, one won and every other activity was forced to
+  `MATCH_UNMATCHED`. Rides left over once every session is filled stay cleanly
+  unmatched and keep the existing `Additional` / `Too much` labelling.
+- **Per-session completion and feedback** (`models.WorkoutLog.slot`,
+  `crud.upsert_workout_log`, `POST /users/me/workouts/{date}`) — ticking the morning
+  yoga marks *that* session done and leaves the evening ride pending, and each
+  session carries its own workout log. `GET /users/me/workouts` keys the first
+  session of a date by the bare date, so existing clients read exactly what they
+  read before, and only the extra sessions of a two-a-day add a `date#slot` key.
+- **Per-session coach prompts** (`services/dates.py`) — `annotate_plan_days` now
+  emits `sessionOrder` / `sessionCount` / `sessionLabel` and orders sessions by slot
+  within a date, so the coach can reason about AM/PM load ordering (move the hard PM
+  session out of the heat, leave the easy AM one alone — #495 × #496). A
+  single-session day gets no session annotations at all, keeping every existing
+  prompt byte-identical.
+
+### Changed
+
+- **The plan pipeline is keyed by session, not by date** (`services/plan_pipeline.py`)
+  — user-pin protection, completed-day preservation, trained-day preservation, the
+  concurrent-edit merge, source stamping and `PlanDayHistory` all moved from
+  `{date: day}` to `(date, slot)`. A pin now protects one session rather than
+  freezing the whole day, and the change log records one row per session instead of
+  one conflated row per date. Per-day updates without a `slot` target the date's
+  first session, so every pre-existing caller behaves exactly as before.
+- **Required-workout constraints apply per day, not per session**
+  (`services/plan_constraints.py`) — a required session is satisfied once *some*
+  session on the date qualifies, and only the date's first session is coerced when
+  none does. Without this a two-a-day would have had both halves rewritten into
+  "Required endurance session".
+- **`slot: 0` is not serialized** (`schemas.PlanDay`) — slot 0 *is* the legacy
+  "no slot" day, so it is omitted on dump. Writing it would rewrite every stored
+  plan on the first commit after this change and, worse, make an unchanged plan
+  compare unequal to the database — turning every no-op write into a real write that
+  cascades a login-summary refresh and a ride-snapshot rebuild.
+
+### Fixed
+
+- **`normalize_slot` no longer accepts arbitrary objects** (`schemas.py`) — a bare
+  `int(value)` converts anything defining `__int__`, which silently turned an unset
+  slot into a real-looking slot 1 and mis-keyed the session. Only genuine numbers and
+  numeric strings are accepted now; booleans are excluded for the same reason.
+
 ## [0.49.0] - 2026-07-30
 
 ### Added

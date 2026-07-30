@@ -105,4 +105,62 @@ describe('TodayCard', () => {
     renderCard(TODAY, [workoutDay])
     expect(screen.queryByLabelText(/Forecast/)).not.toBeInTheDocument()
   })
+  // ---------------------------------------------------------------------
+  // Two-a-days (#496)
+  // ---------------------------------------------------------------------
+
+  const amYoga: TrainingDay = {
+    date: TODAY,
+    slot: 0,
+    timeOfDay: 'am',
+    workoutType: 'recovery',
+    title: 'Morning yoga',
+    description: 'Mobility',
+    durationMinutes: 30,
+  }
+  const pmRide: TrainingDay = {
+    date: TODAY,
+    slot: 1,
+    timeOfDay: 'pm',
+    workoutType: 'endurance',
+    title: 'Evening endurance',
+    description: 'Zone 2',
+    durationMinutes: 120,
+  }
+
+  it('renders every session of a two-a-day, not just the first', () => {
+    renderCard(TODAY, [pmRide, amYoga])
+    expect(screen.getByText('Morning yoga')).toBeInTheDocument()
+    expect(screen.getByText('Evening endurance')).toBeInTheDocument()
+  })
+
+  it('orders the sessions AM before PM regardless of plan order', () => {
+    renderCard(TODAY, [pmRide, amYoga])
+    const titles = screen.getAllByRole('link').map((link) => link.textContent)
+    expect(titles[0]).toContain('Morning yoga')
+    expect(titles[1]).toContain('Evening endurance')
+  })
+
+  it('labels each session and links the second one to its slot', () => {
+    renderCard(TODAY, [amYoga, pmRide])
+    expect(screen.getByText('AM')).toBeInTheDocument()
+    expect(screen.getByText('PM')).toBeInTheDocument()
+    const links = screen.getAllByRole('link')
+    expect(links[0]).toHaveAttribute('href', `/workout/${TODAY}`)
+    expect(links[1]).toHaveAttribute('href', `/workout/${TODAY}?slot=1`)
+  })
+
+  it('adds no session label when the day holds a single workout', () => {
+    renderCard(TODAY, [workoutDay])
+    expect(screen.queryByText('AM')).not.toBeInTheDocument()
+    expect(screen.queryByText('1/1')).not.toBeInTheDocument()
+  })
+
+  it('still shows the rest card when every session on the date is a rest day', () => {
+    renderCard(TODAY, [
+      { ...amYoga, workoutType: 'rest' },
+      { ...pmRide, workoutType: 'rest' },
+    ])
+    expect(screen.getByText('Rest day')).toBeInTheDocument()
+  })
 })

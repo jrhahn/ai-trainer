@@ -205,11 +205,22 @@ export async function fetchWorkoutLogs(token: string): Promise<Record<string, Wo
   return apiFetch<Record<string, WorkoutFeedback>>('/users/me/workouts', { token })
 }
 
-export async function saveWorkoutLog(token: string, date: string, feedback: WorkoutFeedback): Promise<void> {
+/**
+ * Persist feedback for one planned session.
+ *
+ * `slot` names which session on `date` (#496); omitted or 0 is the day's first
+ * session, which is what every single-session day has.
+ */
+export async function saveWorkoutLog(
+  token: string,
+  date: string,
+  feedback: WorkoutFeedback,
+  slot?: number
+): Promise<void> {
   await apiFetch(`/users/me/workouts/${date}`, {
     token,
     method: 'POST',
-    body: { feedback },
+    body: slot ? { feedback, slot } : { feedback },
   })
 }
 

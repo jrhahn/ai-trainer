@@ -51,20 +51,153 @@ def _is_training_day(day: dict | None) -> bool:
     return workout_type not in {"", "rest"} and int(duration or 0) > 0
 
 
+def _group_sessions_by_date(
+    plan: list[dict] | None, *, training_only: bool
+) -> dict[str, list[dict]]:
+    """Group a plan's sessions by date, each date's list ordered by slot (#496).
+
+    A date may hold several sessions (AM yoga + PM endurance), so grouping — not
+    the old ``{date: day}`` map, which silently kept whichever session came last —
+    is what lets each executed activity attach to its own planned session.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for day in plan or []:
+        if not isinstance(day, dict) or not day.get("date"):
+            continue
+        if training_only and not _is_training_day(day):
+            continue
+        grouped.setdefault(str(day["date"]), []).append(day)
+    for sessions in grouped.values():
+        sessions.sort(key=schemas.day_slot)
+    return grouped
+
+
 def _plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
+    """The *first* trainable session per date.
+
+    Retained for callers that legitimately want one representative session for a
+    date (manual match resolution, legacy single-session paths).
+    """
     return {
-        str(day["date"]): day
-        for day in (plan or [])
-        if isinstance(day, dict) and day.get("date") and _is_training_day(day)
+        date: sessions[0]
+        for date, sessions in _group_sessions_by_date(
+            plan, training_only=True
+        ).items()
     }
 
 
 def _all_plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
     return {
-        str(day["date"]): day
-        for day in (plan or [])
-        if isinstance(day, dict) and day.get("date")
+        date: sessions[0]
+        for date, sessions in _group_sessions_by_date(
+            plan, training_only=False
+        ).items()
     }
+
+
+# Sport-type fragments that mark an executed activity as a gym/mobility session
+# rather than a ride, so a planned strength session and a planned ride on the same
+# date each pull the activity that actually belongs to them.
+_STRENGTH_SPORT_MARKERS = (
+    "weight",
+    "strength",
+    "workout",
+    "gym",
+    "crossfit",
+    "yoga",
+    "pilates",
+    "core",
+)
+
+
+def _is_strength_activity(ride: models.RideMetric) -> bool:
+    sport_type = str(ride.sport_type or "").lower()
+    return any(marker in sport_type for marker in _STRENGTH_SPORT_MARKERS)
+
+
+def _session_accepts_ride(session: dict, ride: models.RideMetric) -> bool:
+    """Whether ``ride``'s sport is plausible for this planned session.
+
+    Deliberately permissive: it only rules out the two combinations that are
+    clearly wrong (a gym activity against a planned ride, a ride against a
+    planned strength session). Everything else stays eligible and is decided on
+    duration, so an unusual sport type never leaves a session unmatched.
+    """
+    workout_type = str(
+        session.get("workoutType") or session.get("workout_type") or ""
+    ).lower()
+    if workout_type == "strength":
+        return _is_strength_activity(ride)
+    if _is_strength_activity(ride):
+        return False
+    return True
+
+
+def _session_duration_cost(session: dict, ride: models.RideMetric) -> float:
+    """How far ``ride``'s duration sits outside ``session``'s planned window.
+
+    Zero inside the window (on target), otherwise the distance to the nearest
+    bound. Rides or sessions with no usable duration score a flat mid cost so
+    they neither win nor are excluded outright.
+    """
+    actual = _ride_duration_minutes(ride)
+    lo, hi = duration_range(session)
+    if actual is None or lo is None or hi is None:
+        return 60.0
+    if lo <= actual <= hi:
+        return 0.0
+    return float(min(abs(actual - lo), abs(actual - hi)))
+
+
+def _ride_start_order(ride: models.RideMetric) -> str:
+    """Sort key putting the day's earlier activity first.
+
+    ``activity_start_datetime`` is an ISO string, so lexical order is chronological
+    order. Rides without one sort last but stay deterministic via the activity id.
+    """
+    return str(ride.activity_start_datetime or "~") + f"#{ride.strava_activity_id}"
+
+
+def _assign_rides_to_sessions(
+    sessions: list[dict], rides: list[models.RideMetric]
+) -> dict[int, dict]:
+    """Map each ride's activity id to the planned session it best fits.
+
+    Greedy over the globally cheapest eligible (ride, session) pair, so the
+    morning gym activity and the evening ride each land on their own session
+    rather than competing for one day (#496). Each session takes at most one ride
+    and each ride at most one session; leftovers stay unmatched and are labelled
+    as extras by the caller.
+
+    Ties break on chronological order — the earlier activity takes the earlier
+    slot — which is what makes "AM yoga, PM endurance" resolve the obvious way
+    when both sessions fit equally well.
+    """
+    ordered_rides = sorted(rides, key=_ride_start_order)
+    ride_order = {
+        ride.strava_activity_id: index for index, ride in enumerate(ordered_rides)
+    }
+    candidates: list[tuple[float, int, int, int]] = []
+    for session_index, session in enumerate(sessions):
+        for ride in ordered_rides:
+            if not _session_accepts_ride(session, ride):
+                continue
+            cost = _session_duration_cost(session, ride)
+            # Chronological agreement is a tiebreak, never a driver: it only
+            # separates candidates whose duration fit is equally good.
+            order_penalty = abs(ride_order[ride.strava_activity_id] - session_index)
+            candidates.append(
+                (cost, order_penalty, session_index, ride.strava_activity_id)
+            )
+    candidates.sort()
+    assigned: dict[int, dict] = {}
+    used_sessions: set[int] = set()
+    for _cost, _penalty, session_index, activity_id in candidates:
+        if session_index in used_sessions or activity_id in assigned:
+            continue
+        used_sessions.add(session_index)
+        assigned[activity_id] = sessions[session_index]
+    return assigned
 
 
 def _utcnow() -> datetime:
@@ -232,6 +365,87 @@ def _ride_feedback_from_metric(ride: models.RideMetric) -> dict[str, Any]:
 _apply_plan_updates = plan_pipeline.apply_plan_updates
 
 
+def _matched_slot(ride: models.RideMetric) -> int:
+    """The plan slot ``ride`` is matched to, as a total function.
+
+    ``matched_plan_slot`` is NULL for every row written before two-a-days existed
+    and for every ride matched to a single-session day; both mean slot 0.
+    """
+    return schemas.normalize_slot(getattr(ride, "matched_plan_slot", None))
+
+
+def _session_at_slot(sessions: list[dict], slot: int | None) -> dict | None:
+    """The session sitting at ``slot``, or ``None``.
+
+    A ``None`` slot is a pre-#496 match against a single-session day, so it
+    resolves to the date's first session rather than to nothing.
+    """
+    if not sessions:
+        return None
+    if slot is None:
+        return sessions[0]
+    wanted = schemas.normalize_slot(slot)
+    return next((s for s in sessions if schemas.day_slot(s) == wanted), None)
+
+
+async def _match_multi_session_date(
+    db: AsyncSession,
+    activity_date: str,
+    sessions: list[dict],
+    date_rides: list[models.RideMetric],
+) -> list[models.RideMetric]:
+    """Attach each of a two-a-day's rides to its own planned session (#496).
+
+    With one planned session per date, a second activity could only ever end up
+    ``MATCH_UNMATCHED`` — the data was stored but not attributable. Here every
+    session takes at most one ride (chosen on sport plausibility then duration
+    fit), so a morning gym session and an evening ride are each recorded against
+    the session they belong to. Rides left over after every session is filled are
+    genuine extras and keep the existing ``Additional`` / ``Too much`` labelling.
+    """
+    assigned = _assign_rides_to_sessions(sessions, date_rides)
+    auto_matched: list[models.RideMetric] = []
+    for ride in date_rides:
+        session = assigned.get(ride.strava_activity_id)
+        if session is None:
+            await crud.update_ride_match(
+                db,
+                ride,
+                # Unattributable to any one session, but the date *is* planned —
+                # keep the date so the dashboard still shows it in context, and
+                # leave slot/snapshot empty rather than implying a session.
+                status=MATCH_UNMATCHED,
+                matched_plan_date=activity_date,
+                matched_plan_slot=None,
+                matched_plan_snapshot=None,
+                matched_at=None,
+                label_override=_resolve_label(
+                    ride,
+                    LABEL_TOO_MUCH if _is_hard_extra_ride(ride) else LABEL_ADDITIONAL,
+                ),
+            )
+            continue
+        await crud.update_ride_match(
+            db,
+            ride,
+            status=MATCH_AUTO,
+            matched_plan_date=activity_date,
+            matched_plan_slot=schemas.day_slot(session),
+            matched_plan_snapshot=session,
+            matched_at=_utcnow(),
+            label_override=_resolve_label(
+                ride,
+                _duration_mismatch_label(
+                    _ride_duration_minutes(ride),
+                    _plan_duration_minutes(session),
+                    _plan_duration_range(session),
+                ),
+            ),
+        )
+        auto_matched.append(ride)
+    return auto_matched
+
+
 async def apply_ride_plan_matches(
     db: AsyncSession,
     user_id: str,
@@ -247,13 +461,15 @@ async def apply_ride_plan_matches(
     if not rides:
         return []
 
-    plan_by_date = _plan_days_by_date(plan)
-    display_plan_by_date = _all_plan_days_by_date(plan)
+    sessions_by_date = _group_sessions_by_date(plan, training_only=True)
+    display_sessions_by_date = _group_sessions_by_date(plan, training_only=False)
     auto_matched: list[models.RideMetric] = []
 
     for activity_date in sorted({ride.activity_date for ride in rides}):
-        plan_day = plan_by_date.get(activity_date)
-        display_plan_day = display_plan_by_date.get(activity_date)
+        day_sessions = sessions_by_date.get(activity_date, [])
+        plan_day = day_sessions[0] if day_sessions else None
+        display_sessions = display_sessions_by_date.get(activity_date, [])
+        display_plan_day = display_sessions[0] if display_sessions else None
         date_rides = await crud.get_ride_metrics_by_date(db, user_id, activity_date)
         if not date_rides:
             continue
@@ -268,14 +484,22 @@ async def apply_ride_plan_matches(
             None,
         )
         if manual_match is not None:
+            # The athlete's own attribution wins, including which session they
+            # pointed the ride at — re-matching must never silently move it.
+            manual_session = _session_at_slot(
+                display_sessions, manual_match.matched_plan_slot
+            ) or display_plan_day
             for ride in date_rides:
                 if ride.strava_activity_id == manual_match.strava_activity_id:
                     await crud.update_ride_match(
                         db,
                         ride,
                         status=MATCH_MANUAL,
-                        matched_plan_date=activity_date if display_plan_day else None,
-                        matched_plan_snapshot=display_plan_day,
+                        matched_plan_date=activity_date if manual_session else None,
+                        matched_plan_slot=(
+                            schemas.day_slot(manual_session) if manual_session else None
+                        ),
+                        matched_plan_snapshot=manual_session,
                         matched_at=ride.matched_at or _utcnow(),
                         label_override=_resolve_label(ride, None),
                     )
@@ -288,6 +512,14 @@ async def apply_ride_plan_matches(
                         matched_plan_snapshot=display_plan_day,
                         label_override=_resolve_label(ride, None),
                     )
+            continue
+
+        if len(day_sessions) > 1:
+            auto_matched.extend(
+                await _match_multi_session_date(
+                    db, activity_date, day_sessions, date_rides
+                )
+            )
             continue
 
         if plan_day is None:
@@ -315,6 +547,7 @@ async def apply_ride_plan_matches(
                 ride,
                 status=MATCH_AUTO,
                 matched_plan_date=activity_date,
+                matched_plan_slot=schemas.day_slot(plan_day),
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
                 label_override=_resolve_label(ride, label_override),
@@ -339,6 +572,7 @@ async def apply_ride_plan_matches(
                             ride,
                             status=MATCH_AUTO,
                             matched_plan_date=activity_date,
+                            matched_plan_slot=schemas.day_slot(plan_day),
                             matched_plan_snapshot=plan_day,
                             matched_at=_utcnow(),
                             label_override=_resolve_label(ride, LABEL_OK),
@@ -349,6 +583,7 @@ async def apply_ride_plan_matches(
                             ride,
                             status=MATCH_AUTO,
                             matched_plan_date=activity_date,
+                            matched_plan_slot=schemas.day_slot(plan_day),
                             matched_plan_snapshot=plan_day,
                             matched_at=_utcnow(),
                             label_override=_resolve_label(
@@ -397,30 +632,37 @@ async def mark_matched_days_completed(
     plan: list[dict] | None,
     rides: list[models.RideMetric],
 ) -> None:
-    """Mark each ride's auto-matched plan day completed via the plan pipeline.
+    """Mark each ride's auto-matched plan *session* completed via the plan pipeline.
 
-    A synced activity is proof the athlete did that day, but nothing else sets the
-    plan-day ``completed`` flag — it is otherwise only set when the athlete ticks a
-    workout by hand. Setting it here makes completed-day protection and the
+    A synced activity is proof the athlete did that session, but nothing else sets
+    the plan-day ``completed`` flag — it is otherwise only set when the athlete ticks
+    a workout by hand. Setting it here makes completed-day protection and the
     dashboard's completed state work for auto-matched rides without a manual tick.
-    Idempotent: already-completed days (and days the pipeline's pin guard owns) are
-    left untouched.
+    Idempotent: already-completed sessions (and sessions the pipeline's pin guard
+    owns) are left untouched.
+
+    Completion is per session (#496): the morning gym ride marks the AM session done
+    and leaves the evening endurance session pending, instead of ticking the date.
     """
     if not plan:
         return
-    plan_by_date = {
-        d["date"]: d for d in plan if isinstance(d, dict) and d.get("date")
+    plan_by_key = {
+        schemas.session_key(d): d
+        for d in plan
+        if isinstance(d, dict) and d.get("date")
     }
+    matched_keys = sorted(
+        {
+            (ride.matched_plan_date, _matched_slot(ride))
+            for ride in rides
+            if ride.matched_plan_date and ride.plan_match_status == MATCH_AUTO
+        }
+    )
     updates = [
-        {"date": date, "completed": True}
-        for date in sorted(
-            {
-                ride.matched_plan_date
-                for ride in rides
-                if ride.matched_plan_date and ride.plan_match_status == MATCH_AUTO
-            }
-        )
-        if plan_by_date.get(date) and not plan_by_date[date].get("completed")
+        {"date": date, "slot": slot, "completed": True}
+        for date, slot in matched_keys
+        if plan_by_key.get((date, slot))
+        and not plan_by_key[(date, slot)].get("completed")
     ]
     if not updates:
         return
@@ -460,9 +702,18 @@ async def resolve_manual_match(
     planned_date: str,
     strava_activity_id: int,
     plan: list[dict] | None,
+    planned_slot: int | None = None,
 ) -> models.RideMetric | None:
-    """Resolve an ambiguous date by marking one ride as the planned workout."""
-    plan_day = _plan_days_by_date(plan).get(planned_date)
+    """Resolve an ambiguous date by marking one ride as the planned workout.
+
+    ``planned_slot`` picks which session on ``planned_date`` the athlete meant when
+    the day holds more than one (#496); omitting it selects the day's first session,
+    which is the only one a single-session day has.
+    """
+    day_sessions = _group_sessions_by_date(plan, training_only=True).get(
+        planned_date, []
+    )
+    plan_day = _session_at_slot(day_sessions, planned_slot)
     if plan_day is None:
         return None
 
@@ -478,6 +729,7 @@ async def resolve_manual_match(
                 ride,
                 status=MATCH_MANUAL,
                 matched_plan_date=planned_date,
+                matched_plan_slot=schemas.day_slot(plan_day),
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
                 label_override=_resolve_label(ride, None),
@@ -510,7 +762,20 @@ async def review_matched_ride_and_adapt(
     """
     plan_day = ride.matched_plan_snapshot
     if not isinstance(plan_day, dict) and ride.matched_plan_date:
-        plan_day = next((day for day in plan if day.get("date") == ride.matched_plan_date), None)
+        # Fall back to the live plan, resolving the ride's own session rather than
+        # whichever entry for that date happens to come first (#496).
+        plan_day = _session_at_slot(
+            sorted(
+                (
+                    day
+                    for day in plan
+                    if isinstance(day, dict)
+                    and day.get("date") == ride.matched_plan_date
+                ),
+                key=schemas.day_slot,
+            ),
+            _matched_slot(ride),
+        )
     if not isinstance(plan_day, dict):
         return None, None
 
@@ -603,10 +868,15 @@ async def review_matched_ride_and_adapt(
         )
         plan_updates = result.get("plan_updates") or None
         if plan_updates:
-            # Never modify the day that was just matched — it belongs to the completed ride.
+            # Never modify the session that was just matched — it belongs to the
+            # completed ride. Only that session is off-limits: on a two-a-day the
+            # coach may still retune the *other* session of the same date (#496).
             if ride.matched_plan_date:
+                matched_key = (ride.matched_plan_date, _matched_slot(ride))
                 plan_updates = [
-                    u for u in plan_updates if u.get("date") != ride.matched_plan_date
+                    u
+                    for u in plan_updates
+                    if (str(u.get("date") or ""), schemas.day_slot(u)) != matched_key
                 ]
             plan_updates = plan_updates or None
         if plan_updates:

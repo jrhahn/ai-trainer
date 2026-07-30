@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-07-30
+
+### Added
+
+- **Two-a-days across the UI** (`utils/planSessions.ts`, `components/TodayCard.tsx`,
+  `components/TrainingCalendar.tsx`, `pages/WorkoutPage.tsx`,
+  `store/useAppStore.ts`, `services/user.ts`) — a date can now hold more than one
+  planned session, so every `plan.find((d) => d.date === iso)` (which silently
+  rendered the first session and dropped the rest) was replaced with an explicit
+  list. A new `utils/planSessions` module owns the session identity — `(date, slot)`,
+  where a legacy day with no `slot` reads as slot 0 — plus `sessionsForDate`,
+  `sessionAtSlot` and `sessionLabel`.
+- **Today's card lists every session** (`components/TodayCard.tsx`) — AM yoga and PM
+  endurance each get their own card in slot order, labelled with the athlete's own
+  time-of-day wording ("AM"/"PM") or an explicit position ("2/2"). A single-workout
+  day renders exactly as before, with no label — a lone session must not sprout one
+  implying there is another.
+- **Calendar cells stack their sessions** (`components/TrainingCalendar.tsx`) — a
+  day cell shows each planned session with its own emoji, label, title and duration,
+  so "AM Yoga · PM Endurance" is readable without opening the day. The cell is tinted
+  by the day's *hardest* session, so an easy morning spin next to an evening interval
+  block reads as an interval day. The whole-day tick only appears once every session
+  is done, and the race-event modal offers one "Open planned workout" link per session.
+- **Workout page session switcher** (`pages/WorkoutPage.tsx`) — a two-a-day gets a
+  tab strip listing every session on the date; `?slot=` selects which one is open and
+  no slot opens the day's first, so every existing `/workout/:date` link keeps
+  working. Logging feedback and requesting a coach review now apply to the open
+  session rather than to the date.
+
+### Changed
+
+- **Store updates are per session** (`store/useAppStore.ts`) — `updateTrainingDay`
+  and `logWorkout` take an optional `slot`, defaulting to the day's first session.
+  Workout logs are keyed by session via the new `workoutLogKey`, which mirrors the
+  backend: the first session of a date keeps the bare date, so every log written
+  before two-a-days existed still resolves.
+
 ## [0.31.0] - 2026-07-30
 
 ### Added
