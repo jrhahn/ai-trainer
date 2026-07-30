@@ -45,6 +45,22 @@ describe('describeForecast', () => {
   it('omits calm wind and dry precipitation', () => {
     expect(describeForecast(hotDay)).toBe('Forecast: clear · 23–39°C')
   })
+
+  it('omits the condition when none is known', () => {
+    expect(
+      describeForecast({ date: '2026-08-01', temperatureMinC: 11, temperatureMaxC: 16 }),
+    ).toBe('Forecast: 11–16°C')
+  })
+
+  it('omits the range when only one end of it is known', () => {
+    expect(describeForecast({ date: '2026-08-01', condition: 'rain', temperatureMaxC: 16 })).toBe(
+      'Forecast: rain',
+    )
+  })
+
+  it('degrades to a bare label when nothing at all is known', () => {
+    expect(describeForecast({ date: '2026-08-01' })).toBe('Forecast')
+  })
 })
 
 describe('WeatherBadge', () => {
@@ -75,6 +91,45 @@ describe('WeatherBadge', () => {
   it('colours an extreme day so it stands out on the calendar', () => {
     render(<WeatherBadge forecast={hotDay} />)
     expect(screen.getByLabelText(/clear/)).toHaveClass('text-red-600')
+  })
+
+  it.each([
+    ['clear', 'text-amber-500'],
+    ['partly_cloudy', 'text-amber-500'],
+    ['fog', 'text-gray-400'],
+    ['rain', 'text-blue-500'],
+    ['drizzle', 'text-blue-500'],
+    ['snow', 'text-sky-500'],
+    ['thunderstorm', 'text-violet-500'],
+    ['cloudy', 'text-gray-400'],
+    ['unknown', 'text-gray-400'],
+  ])('renders a distinct icon for %s', (condition, iconClass) => {
+    const { container } = render(
+      <WeatherBadge forecast={{ date: '2026-08-01', condition, temperatureMaxC: 20 }} />,
+    )
+    expect(container.querySelector('svg')).toHaveClass(iconClass)
+  })
+
+  it('renders an icon for a day with a condition but no temperature', () => {
+    const { container } = render(
+      <WeatherBadge forecast={{ date: '2026-08-01', condition: 'rain' }} />,
+    )
+    expect(container.querySelector('svg')).toBeInTheDocument()
+    expect(screen.queryByText(/°C/)).not.toBeInTheDocument()
+  })
+
+  it('falls back to neutral styling for an unrecognised load flag', () => {
+    render(
+      <WeatherBadge
+        forecast={{
+          date: '2026-08-01',
+          condition: 'clear',
+          temperatureMaxC: 20,
+          loadFlag: 'meteor_shower',
+        }}
+      />,
+    )
+    expect(screen.getByLabelText(/clear/)).toHaveClass('text-gray-500')
   })
 
   it('keeps an ordinary day neutral', () => {

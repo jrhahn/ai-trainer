@@ -566,6 +566,24 @@ describe('TrainingCalendar', () => {
       expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
     })
 
+    it('shows the completion check instead of the forecast on a done day', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date), completed: true }],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+
     it('shows no forecast on a planned day already in the past', () => {
       const date = formatIsoDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
       useAppStore.setState({
