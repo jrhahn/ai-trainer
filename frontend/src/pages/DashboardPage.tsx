@@ -14,7 +14,7 @@ import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
-import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
+import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
 import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
@@ -567,6 +567,7 @@ export default function DashboardPage() {
   )
 
   const summaryTriggeredRef = useRef(false)
+  const statusTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
@@ -675,44 +676,31 @@ export default function DashboardPage() {
 
   const tomorrowStatusLabel = sessionLabel(tomorrowPlan)
 
-  // Training status = plan adherence over the trailing 7 days. Only counts planned
-  // (non-rest) sessions that already fell due; if none exist we have no trustworthy
-  // signal and simply drop the status segment rather than showing a decorative label.
+  // Training status is written by the coach, not by this component (#499).
   //
-  // A planned session counts as done when a synced activity was matched to that plan
-  // day, not just when the athlete filed feedback (`completed`). Feedback is optional,
-  // so hinging adherence on it alone reports "Behind plan" for sessions that were
-  // demonstrably done and matched — the exact contradiction athletes flag.
-  const matchedPlanDates = new Set(
-    rideMetricsHistory
-      .filter(
-        (r) =>
-          r.matchedPlanDate != null &&
-          (r.planMatchStatus === 'auto_matched' || r.planMatchStatus === 'manual_matched')
-      )
-      .map((r) => r.matchedPlanDate as string)
-  )
-  const isPlanDayDone = (d: TrainingDay): boolean =>
-    !!d.completed || matchedPlanDates.has(d.date)
-  // Past sessions always count as due. Today's session only enters the window once
-  // it's actually done — a session still ahead of you in the day must not count
-  // against adherence, but a completed/matched one should get its credit.
-  const adherenceWindow = trainingPlan.filter(
-    (d) =>
-      d.date >= sevenDaysAgo &&
-      d.workoutType !== 'rest' &&
-      (d.date < today || (d.date === today && isPlanDayDone(d)))
-  )
-  const plannedDue = adherenceWindow.length
-  const plannedDone = adherenceWindow.filter(isPlanDayDone).length
-  const trainingStatus =
-    plannedDue === 0
-      ? null
-      : plannedDone / plannedDue >= 0.8
-        ? { label: 'On track', className: 'text-green-600' }
-        : plannedDone / plannedDue >= 0.5
-          ? { label: 'Slightly behind', className: 'text-amber-600' }
-          : { label: 'Behind plan', className: 'text-red-600' }
+  // It used to be a local `done / due` ratio over the trailing week, which the
+  // coach never saw — so when the athlete asked "why am I slightly behind?" the
+  // coach had no idea the badge existed and invented a reason. That ratio was
+  // also wrong on its own terms: it dropped two-a-days whose ride↔plan match came
+  // back `ambiguous`, counted declining an explicitly optional session as a miss,
+  // and ignored unplanned work entirely, so it could only ever punish.
+  //
+  // The backend status pipeline now owns the verdict and the wording, and feeds
+  // the very same text into the coach's prompt. Rendering it here is a plain read.
+  const statusTone: Record<string, string> = {
+    positive: 'text-green-600',
+    steady: 'text-gray-600',
+    caution: 'text-amber-600',
+  }
+  const trainingStatus = riderAssessment?.trainingStatusLabel
+    ? {
+        label: riderAssessment.trainingStatusLabel,
+        // The tone is a free-text column server-side, so an unknown or absent
+        // value falls back to neutral rather than leaving the badge unstyled.
+        className: statusTone[riderAssessment.trainingStatusTone ?? ''] ?? statusTone.steady,
+        title: riderAssessment.trainingStatusRationale,
+      }
+    : null
 
   const statusSegments: Array<{ key: string; node: ReactNode }> = []
   if (todayStatusText) {
@@ -735,7 +723,11 @@ export default function DashboardPage() {
   if (trainingStatus) {
     statusSegments.push({
       key: 'status',
-      node: <span className={`font-medium ${trainingStatus.className}`}>{trainingStatus.label}</span>,
+      node: (
+        <span className={`font-medium ${trainingStatus.className}`} title={trainingStatus.title}>
+          {trainingStatus.label}
+        </span>
+      ),
     })
   }
 
@@ -769,6 +761,28 @@ export default function DashboardPage() {
         // silently ignore — the card simply won't show
       })
       .finally(() => setSummaryLoading(false))
+  }, [authToken, riderAssessment, setRiderAssessment])
+
+  // Lazily regenerate the status badge when the pipeline has invalidated it (or
+  // the athlete never had one). Cheap to skip, so it is fire-and-forget: a
+  // failure just leaves the segment out rather than blocking the dashboard.
+  useEffect(() => {
+    if (!authToken || !riderAssessment || riderAssessment.trainingStatusLabel) return
+    if (statusTriggeredRef.current) return
+    statusTriggeredRef.current = true
+    refreshTrainingStatus(authToken)
+      .then((badge) => {
+        if (!badge) return
+        setRiderAssessment({
+          ...riderAssessment,
+          trainingStatusLabel: badge.label,
+          trainingStatusTone: badge.tone,
+          trainingStatusRationale: badge.rationale,
+        })
+      })
+      .catch(() => {
+        // silently ignore — the status segment simply won't show
+      })
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {

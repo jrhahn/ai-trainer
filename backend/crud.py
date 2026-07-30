@@ -2321,6 +2321,46 @@ async def invalidate_login_summary(db: AsyncSession, user_id: str) -> bool:
     return True
 
 
+async def set_training_status(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    label: str | None,
+    tone: str | None,
+    rationale: str | None,
+) -> models.RiderAssessment | None:
+    """Persist the coach-authored dashboard status chip (#499).
+
+    Deliberately *not* routed through :func:`upsert_rider_assessment`, which
+    rewrites ``hr_zones``/``ride_insights`` from its arguments — a status-only
+    write must not touch the assessment's other fields.
+    """
+    assessment = await get_rider_assessment(db, user_id)
+    if assessment is None:
+        return None
+    assessment.training_status_label = label
+    assessment.training_status_tone = tone
+    assessment.training_status_rationale = rationale
+    await db.flush()
+    return assessment
+
+
+async def invalidate_training_status(db: AsyncSession, user_id: str) -> bool:
+    """Clear the stored status so it regenerates on the next dashboard load.
+
+    Returns True when a stored status was actually cleared. Used by the status
+    pipeline when the plan or the athlete's recorded activity changes.
+    """
+    assessment = await get_rider_assessment(db, user_id)
+    if assessment is None or assessment.training_status_label is None:
+        return False
+    assessment.training_status_label = None
+    assessment.training_status_tone = None
+    assessment.training_status_rationale = None
+    await db.flush()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # AthleteMetricSnapshot
 # ---------------------------------------------------------------------------

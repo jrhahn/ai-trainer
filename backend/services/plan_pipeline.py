@@ -36,12 +36,15 @@ from services.plan_constraints import (
 # Importing these registers the downstream nodes on the "plan" node, so any plan
 # write — wherever it originates — fans out to them: summary_pipeline invalidates
 # the login summary, ride_match_pipeline refreshes ride↔plan snapshots for the
-# changed dates (#364). The assessment_pipeline import registers the "assessment"
-# source node that summary_pipeline also depends on, so validate() at startup can
-# resolve every edge. Neither module imports this one at load time, so the
-# imports stay acyclic (ride_match_pipeline defers its ride_matching import).
+# changed dates (#364), status_pipeline invalidates the dashboard status badge
+# (#499). The assessment_pipeline import registers the "assessment" source node
+# that summary_pipeline also depends on, so validate() at startup can resolve
+# every edge. Neither module imports this one at load time, so the imports stay
+# acyclic (ride_match_pipeline defers its ride_matching import, and
+# status_pipeline defers its ai_service import).
 from services import assessment_pipeline  # noqa: F401
 from services import ride_match_pipeline  # noqa: F401
+from services import status_pipeline  # noqa: F401
 from services import summary_pipeline  # noqa: F401
 
 logger = logging.getLogger(__name__)

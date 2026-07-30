@@ -82,3 +82,8 @@ def test_registered_app_graph_is_acyclic():
 
     graph.validate()
     assert "summary" in graph.downstream_of("plan")
+    # The status badge depends on ride↔plan matching as well as on the plan, so a
+    # plan change must refresh matches *before* the badge is invalidated (#499).
+    downstream = graph.downstream_of("plan")
+    assert downstream.index("ride_match") < downstream.index("training_status")
+    assert "training_status" in graph.downstream_of("assessment")

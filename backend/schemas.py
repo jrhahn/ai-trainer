@@ -120,6 +120,9 @@ class RiderAssessmentSchema(CamelModel):
     ride_insights: Optional[str] = None
     last_ride_feedback: Optional[str] = None
     login_summary: Optional[str] = None
+    training_status_label: Optional[str] = None
+    training_status_tone: Optional[str] = None
+    training_status_rationale: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -1279,6 +1282,14 @@ class RefreshKnowledgeResponse(BaseModel):
 
 class RefreshLoginSummaryResponse(CamelModel):
     login_summary: str
+
+
+class TrainingStatusResponse(CamelModel):
+    """The dashboard status chip plus the coach's reason for it (#499)."""
+
+    label: Optional[str] = None
+    tone: Optional[str] = None
+    rationale: Optional[str] = None
 
 
 class RaceEventFeedbackRequest(CamelModel):

@@ -9,16 +9,23 @@ import {
   matchScoreLabel,
 } from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockProcessPendingFeedbacks, mockRefreshLoginSummary, mockSetRideLegs, mockUseImportProgress } = vi.hoisted(() => ({
+const {
+  mockProcessPendingFeedbacks,
+  mockRefreshLoginSummary,
+  mockRefreshTrainingStatus,
+  mockSetRideLegs,
+  mockUseImportProgress,
+} = vi.hoisted(() => ({
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
+  mockRefreshTrainingStatus: vi.fn(),
   mockSetRideLegs: vi.fn(),
   mockUseImportProgress: vi.fn(),
 }))
@@ -26,6 +33,7 @@ const { mockProcessPendingFeedbacks, mockRefreshLoginSummary, mockSetRideLegs, m
 vi.mock('../services/ai', () => ({
   processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
+  refreshTrainingStatus: mockRefreshTrainingStatus,
 }))
 
 vi.mock('../services/user', () => ({
@@ -115,6 +123,19 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
   })
 }
 
+function assessmentWithStatus(
+  overrides: Partial<RiderAssessment> = {}
+): RiderAssessment {
+  return {
+    riderType: 'allrounder',
+    notes: '',
+    trainingStatusLabel: 'On track',
+    trainingStatusTone: 'positive',
+    trainingStatusRationale: 'Every planned session is done.',
+    ...overrides,
+  }
+}
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -133,6 +154,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
+  mockRefreshTrainingStatus.mockResolvedValue(null)
   mockSetRideLegs.mockResolvedValue({ stravaActivityId: 0, ride: null })
   mockUseImportProgress.mockReturnValue(idleImportProgress)
 })
@@ -1307,101 +1329,100 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByText('Tomorrow: Rest')).toBeInTheDocument()
   })
 
-  it('reports "On track" when recent planned sessions were completed', async () => {
+  it('renders the coach-authored status badge verbatim', async () => {
     setupStore({
-      trainingPlan: [
-        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
-        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: true }),
-      ],
+      trainingPlan: [planDay({ date: yesterday, workoutType: 'endurance' })],
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Ahead of plan',
+        trainingStatusTone: 'positive',
+      }),
     })
     renderDashboard()
-    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(await screen.findByText('Ahead of plan')).toBeInTheDocument()
   })
 
-  it('reports "Behind plan" when recent planned sessions were missed', async () => {
+  it('colours the badge from the coach-chosen tone', async () => {
     setupStore({
-      trainingPlan: [
-        planDay({ date: yesterday, workoutType: 'endurance', completed: false }),
-        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: false }),
-      ],
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Missed two',
+        trainingStatusTone: 'caution',
+      }),
     })
     renderDashboard()
-    expect(await screen.findByText('Behind plan')).toBeInTheDocument()
+    expect(await screen.findByText('Missed two')).toHaveClass('text-amber-600')
   })
 
-  it('counts matched activities toward adherence even without logged feedback', async () => {
-    // A strength/endurance session that was auto-matched to its plan day is "done"
-    // even if the athlete never filed feedback (`completed` stays false). Otherwise
-    // we report "Behind plan" for sessions that were demonstrably done and matched.
+  it('falls back to a neutral colour when the stored tone is unusable', async () => {
+    // `training_status_tone` is a free-text column, so a legacy or malformed
+    // value must still render — just without claiming a verdict it cannot back.
     setupStore({
-      trainingPlan: [
-        planDay({ date: yesterday, workoutType: 'strength', completed: false }),
-        planDay({ date: twoDaysAgo, workoutType: 'endurance', completed: false }),
-      ],
-      rideMetricsHistory: [
-        makeRide({
-          activityDate: yesterday,
-          planMatchStatus: 'auto_matched',
-          matchedPlanDate: yesterday,
-        }),
-        makeRide({
-          activityDate: twoDaysAgo,
-          planMatchStatus: 'manual_matched',
-          matchedPlanDate: twoDaysAgo,
-        }),
-      ],
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Easing off',
+        trainingStatusTone: undefined,
+      }),
     })
     renderDashboard()
-    expect(await screen.findByText('On track')).toBeInTheDocument()
-    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+    expect(await screen.findByText('Easing off')).toHaveClass('text-gray-600')
   })
 
-  it("counts today's matched session toward adherence once it's done", async () => {
-    // Today's session, matched, is the only due session — it should register as done
-    // ("On track"), not sit outside the adherence window.
+  it("exposes the coach's reason as the badge's tooltip", async () => {
+    // The athlete asks "why?" of the badge itself; the same rationale also goes
+    // into the coach's prompt, so both answers come from one source (#499).
     setupStore({
-      trainingPlan: [planDay({ date: today, workoutType: 'strength', completed: false })],
-      rideMetricsHistory: [
-        makeRide({
-          activityDate: today,
-          planMatchStatus: 'auto_matched',
-          matchedPlanDate: today,
-        }),
-      ],
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'On track',
+        trainingStatusRationale: 'You completed both hard sessions this week.',
+      }),
     })
     renderDashboard()
-    expect(await screen.findByText('On track')).toBeInTheDocument()
-    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+    expect(await screen.findByText('On track')).toHaveAttribute(
+      'title',
+      'You completed both hard sessions this week.'
+    )
   })
 
-  it("does not let today's not-yet-done session drag adherence down", async () => {
-    // A session planned for later today isn't "behind" — it must stay out of the
-    // window until done, so it can neither help nor hurt the status.
-    setupStore({
-      trainingPlan: [
-        planDay({ date: today, workoutType: 'strength', completed: false }),
-        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
-      ],
-    })
-    renderDashboard()
-    expect(await screen.findByText('On track')).toBeInTheDocument()
-    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
-  })
-
-  it('reports "Slightly behind" when adherence is partial', async () => {
+  it('never derives a status from plan adherence in the browser', async () => {
+    // The old local `done / due` heuristic produced "Slightly behind" from exactly
+    // this data while the coach knew nothing about it (#499). With no stored badge
+    // the segment must simply be absent rather than locally invented.
     setupStore({
       trainingPlan: [
         planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
         planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: false }),
       ],
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }),
     })
     renderDashboard()
-    expect(await screen.findByText('Slightly behind')).toBeInTheDocument()
+    expect(screen.queryByText('Slightly behind')).not.toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
   })
 
-  it('omits the training-status segment when there is no adherence signal', async () => {
-    // Only a future session and past rest days — no planned sessions have fallen due,
-    // so we must not fabricate a status label.
+  it('asks the backend for a badge when none is stored', async () => {
+    mockRefreshTrainingStatus.mockResolvedValue({
+      label: 'On track',
+      tone: 'positive',
+      rationale: 'Everything the plan asked for is done.',
+    })
+    setupStore({
+      trainingPlan: [planDay({ date: yesterday, workoutType: 'endurance' })],
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(mockRefreshTrainingStatus).toHaveBeenCalledWith('test-token')
+  })
+
+  it('does not re-request a badge that is already stored', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: 'On track' }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(mockRefreshTrainingStatus).not.toHaveBeenCalled()
+  })
+
+  it('omits the training-status segment when the athlete has no assessment', async () => {
     setupStore({
       trainingPlan: [
         planDay({ date: today, workoutType: 'endurance', title: 'Base Ride' }),
