@@ -602,4 +602,102 @@ describe('TrainingCalendar', () => {
       expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
     })
   })
+  // ---------------------------------------------------------------------
+  // Two-a-days (#496)
+  // ---------------------------------------------------------------------
+
+  describe('multiple sessions per day', () => {
+    function twoADay(date: string): TrainingDay[] {
+      return [
+        {
+          ...makeDay(date, 'recovery'),
+          slot: 0,
+          timeOfDay: 'am',
+          title: 'Morning yoga',
+          durationMinutes: 30,
+        },
+        {
+          ...makeDay(date, 'intervals'),
+          slot: 1,
+          timeOfDay: 'pm',
+          title: 'Evening intervals',
+          durationMinutes: 90,
+        },
+      ]
+    }
+
+    it('stacks both sessions in the day cell instead of showing only the first', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: twoADay(date) })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('Morning yoga')).toBeInTheDocument()
+      expect(screen.getByText('Evening intervals')).toBeInTheDocument()
+      expect(screen.getByText('AM')).toBeInTheDocument()
+      expect(screen.getByText('PM')).toBeInTheDocument()
+    })
+
+    it('tints the cell by the hardest session of the day', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: twoADay(date) })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      // An easy AM spin next to a PM interval block must read as an interval
+      // day, not a recovery day.
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.className).toContain('bg-red-50')
+    })
+
+    it('marks the day complete only once every session is done', () => {
+      const date = monthDate(0, 14)
+      const [am, pm] = twoADay(date)
+      useAppStore.setState({ trainingPlan: [{ ...am, completed: true }, pm] })
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.querySelectorAll('.lucide-circle-check-big').length).toBe(1)
+
+      useAppStore.setState({
+        trainingPlan: [{ ...am, completed: true }, { ...pm, completed: true }],
+      })
+      rerender(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+      // Both the per-session tick and the whole-day tick are now shown.
+      expect(
+        screen.getByLabelText(`Calendar day ${date}`).querySelectorAll('.lucide-circle-check-big')
+          .length
+      ).toBe(3)
+    })
+
+    it('adds no session label to an ordinary single-workout day', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: [makeDay(date, 'endurance')] })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('AM')).not.toBeInTheDocument()
+      expect(screen.queryByText('1/1')).not.toBeInTheDocument()
+    })
+  })
 })

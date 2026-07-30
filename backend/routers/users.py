@@ -399,8 +399,8 @@ async def get_workouts(
 ) -> dict[str, dict]:
     logs = await crud.get_workout_logs(db, current_user.id)
     result: dict[str, dict] = {}
-    for log in logs:
-        result[log.date] = {
+    for log in sorted(logs, key=lambda row: (row.date, row.slot or 0)):
+        entry = {
             "actualDurationMinutes": log.actual_duration_minutes,
             "averagePower": log.average_power,
             "averageHeartRate": log.average_heart_rate,
@@ -408,7 +408,12 @@ async def get_workouts(
             "perceivedEffort": log.perceived_effort,
             "notes": log.notes,
             "completedAt": log.completed_at,
+            "slot": log.slot or 0,
         }
+        # Keyed by session (#496): the first session keeps the bare date so every
+        # existing client keeps reading exactly what it read before, and only the
+        # extra sessions of a two-a-day add a "date#slot" key.
+        result[log.date if not log.slot else f"{log.date}#{log.slot}"] = entry
     return result
 
 
@@ -424,6 +429,7 @@ async def save_workout(
         db,
         current_user.id,
         date,
+        slot=schemas.normalize_slot(body.slot),
         actual_duration_minutes=feedback.actual_duration_minutes,
         average_power=feedback.average_power,
         average_heart_rate=feedback.average_heart_rate,

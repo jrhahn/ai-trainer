@@ -246,6 +246,11 @@ class PlanDayHistory(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Which session on ``date`` this row describes (#496). A day may hold more
+    # than one session (two-a-days), so ``(date, slot)`` — not date alone — is
+    # what a history row is keyed to. Rows written before two-a-days existed, and
+    # every single-session day, carry slot 0.
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     # All per-day rows written by a single pipeline commit share one ``batch_id``
     # so a coach run (a plan generation, a nightly tune-up, one chat edit) can be
     # reconstituted from the log — for debugging and to collapse the run into a
@@ -304,6 +309,10 @@ class WorkoutLog(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # Which session on ``date`` this log belongs to (#496), so the morning gym
+    # session and the evening ride each carry their own feedback instead of one
+    # overwriting the other. Pre-two-a-day rows and single-session days are slot 0.
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     actual_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     average_power: Mapped[int | None] = mapped_column(Integer)
@@ -1092,6 +1101,11 @@ class RideMetric(Base):
         String(20), default="unmatched", nullable=False
     )
     matched_plan_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Which session on ``matched_plan_date`` this ride was matched to (#496).
+    # A date can hold several planned sessions, so the morning gym activity and
+    # the evening ride each point at their own slot instead of competing for the
+    # one day. NULL for unmatched rides and for pre-two-a-day rows (slot 0).
+    matched_plan_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_plan_snapshot: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     matched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

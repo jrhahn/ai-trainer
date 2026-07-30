@@ -16,6 +16,7 @@ from pydantic import (
     EmailStr,
     Field,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -237,6 +238,9 @@ class WorkoutFeedbackSchema(CamelModel):
 
 class WorkoutLogRequest(BaseModel):
     feedback: WorkoutFeedbackSchema
+    # Which session on the logged date this feedback is for (#496). Absent from
+    # every pre-two-a-day client and from single-session days, meaning slot 0.
+    slot: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -972,6 +976,11 @@ class AskTrainerRequest(CamelModel):
 
 class PlanDayUpdateSchema(CamelModel):
     date: str
+    # Which session on ``date`` this update targets (#496). ``None`` means the
+    # day's first (lowest-slot) session, which is what every pre-two-a-day caller
+    # and every single-session day resolves to.
+    slot: Optional[int] = None
+    time_of_day: Optional[str] = None
     workout_type: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
@@ -1051,8 +1060,63 @@ def _coerce_target_range(value: Any) -> Any:
     return value
 
 
+def normalize_slot(value: Any) -> int:
+    """Coerce any stored/LLM slot value to a non-negative int, defaulting to 0.
+
+    Total by design: a slot is a storage key, so no input may raise. Missing,
+    ``None``, empty and unparseable values are all the legacy single-session day,
+    i.e. slot 0; negatives are clamped so ordering stays total.
+
+    Only genuine numbers and numeric strings are accepted. A bare ``int(value)``
+    would happily convert any object defining ``__int__`` — which is how a slot
+    that was never set turns into a real-looking slot 1 and silently mis-keys a
+    session. Booleans are excluded for the same reason.
+    """
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return 0 if value != value else max(0, int(value))  # NaN → 0
+    if isinstance(value, str):
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return 0
+    return 0
+
+
+def day_slot(day: Any) -> int:
+    """The session slot of ``day``, accepting a ``PlanDay``, dict or alias case.
+
+    Legacy days that predate two-a-days carry no slot at all and read back as 0.
+    """
+    if isinstance(day, PlanDay):
+        return day.slot
+    if isinstance(day, dict):
+        raw = day.get("slot")
+        if raw is None:
+            raw = day.get("session_slot")
+        return normalize_slot(raw)
+    return normalize_slot(getattr(day, "slot", None))
+
+
+def session_key(day: Any) -> tuple[str, int]:
+    """The unique identity of a plan session: ``(date, slot)`` (#496).
+
+    Date alone stopped being unique when a day became able to hold more than one
+    session, so every map/merge/sort over a plan must key on this instead. Use it
+    anywhere the old ``{d["date"]: d}`` shape appeared.
+    """
+    if isinstance(day, PlanDay):
+        return (str(day.date), day.slot)
+    if isinstance(day, dict):
+        return (str(day.get("date") or ""), day_slot(day))
+    return (str(getattr(day, "date", "") or ""), day_slot(day))
+
+
 class PlanDay(CamelModel):
-    """Canonical, self-normalizing training-plan day.
+    """Canonical, self-normalizing training-plan *session*.
 
     Every plan write is validated and dumped through this model at the pipeline
     persist gate (``services/plan_pipeline.py``), so a day can never reach
@@ -1062,6 +1126,13 @@ class PlanDay(CamelModel):
     snake_case, or send a scalar-only / window-only duration), strict and
     canonical on output. ``extra="allow"`` preserves any unmodelled key so
     typing never silently drops stored data.
+
+    A plan is a flat list of these, and a *date may repeat*: two-a-days are two
+    entries sharing one date and distinguished by ``slot`` (#496). The unique
+    identity of a session is therefore ``(date, slot)`` — see :func:`session_key`
+    — not the date alone. Keeping the session as the model (rather than nesting
+    ``sessions`` under a day container) is what lets this single persist gate go
+    on owning every duration/drift invariant unchanged.
     """
 
     model_config = ConfigDict(
@@ -1071,6 +1142,14 @@ class PlanDay(CamelModel):
     )
 
     date: str
+    # Ordered position of this session within its date: 0 is the first/only
+    # session, 1 the second, and so on. A legacy single-workout day carries no
+    # slot and reads back as slot 0, so every stored plan migrates losslessly.
+    slot: int = 0
+    # Optional free-text when-in-the-day hint ("am", "pm", "18:30"). Advisory
+    # only — ``slot`` is the identity and the ordering; this is for display and
+    # for the coach's AM/PM load reasoning.
+    time_of_day: Optional[str] = None
     workout_type: str = "rest"
     title: str = ""
     description: str = ""
@@ -1096,6 +1175,31 @@ class PlanDay(CamelModel):
     @classmethod
     def _coerce_ranges(cls, value: Any) -> Any:
         return _coerce_target_range(value)
+
+    @field_validator("slot", mode="before")
+    @classmethod
+    def _coerce_slot(cls, value: Any) -> Any:
+        # Slot is a storage key, so it must never fail validation and drop a day
+        # at the persist gate: a missing/None/garbage slot is the legacy
+        # single-session day, i.e. slot 0. Negatives are clamped for the same
+        # reason (ordering must stay total and non-negative).
+        return normalize_slot(value)
+
+    @model_serializer(mode="wrap")
+    def _omit_default_slot(self, handler: Any) -> Any:
+        """Serialize slot 0 as absent, so a single-session day is stored as before.
+
+        Slot 0 *is* the legacy "no slot" day, so writing it out would rewrite every
+        stored plan on the first commit after #496 ships and — worse — make a
+        genuinely unchanged plan compare unequal to what is in the database, turning
+        every no-op write into a real write that cascades a login-summary refresh
+        and a ride-snapshot rebuild. Omitting the default keeps storage byte-stable
+        and no-op detection honest; readers already default a missing slot to 0.
+        """
+        data = handler(self)
+        if isinstance(data, dict) and data.get("slot") in (0, None):
+            data.pop("slot", None)
+        return data
 
     @model_validator(mode="after")
     def _coherent_duration(self) -> "PlanDay":

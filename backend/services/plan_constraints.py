@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import schemas
+
+# A date may hold more than one session (#496); ``slot`` orders them. Reuse the
+# canonical reader so this module and the pipeline can never disagree on which
+# session a day dict is.
+_slot = schemas.day_slot
+
 
 def day_violates_constraint(day: dict, constraints: list[dict]) -> bool:
     date_value = day.get("date")
@@ -79,9 +86,43 @@ def _coerce_day_to_required(day: dict, spec: dict) -> dict:
     return new_day
 
 
+def _required_workout_satisfied_dates(
+    plan: list[dict], constraints: list[dict]
+) -> set[str]:
+    """Dates where *some* session already satisfies the required-workout constraint.
+
+    A required session is a constraint on the *day*, not on every session in it, so
+    once a date holds a qualifying session the rest of that date's sessions must be
+    left alone. Without this, a two-a-day would have both its morning and evening
+    session rewritten into "Required endurance session" (#496).
+    """
+    satisfied: set[str] = set()
+    for day in plan:
+        date_value = day.get("date")
+        if not date_value:
+            continue
+        spec = _required_workout_for_day(day, constraints)
+        if spec and day_satisfies_required_workout(day, spec):
+            satisfied.add(str(date_value))
+    return satisfied
+
+
 def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> list[dict]:
     if not constraints:
         return plan
+    # Which dates already have a qualifying session, and which session on a date
+    # gets coerced when none does — the first (lowest-slot) one, so the required
+    # workout lands once per day rather than once per session.
+    satisfied_dates = _required_workout_satisfied_dates(plan, constraints)
+    coercion_slot: dict[str, int] = {}
+    for day in plan:
+        date_value = day.get("date")
+        if not date_value:
+            continue
+        slot = _slot(day)
+        date_value = str(date_value)
+        if slot < coercion_slot.get(date_value, slot + 1):
+            coercion_slot[date_value] = slot
     result: list[dict] = []
     for day in plan:
         if day_violates_constraint(day, constraints):
@@ -105,9 +146,15 @@ def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> 
             )
             continue
         # Positive constraints: ensure a pinned required session is present and
-        # meets its minimum, but only coerce when the planned day falls short.
+        # meets its minimum, but only coerce when the *date* falls short — and
+        # then only its first session, so the other half of a two-a-day survives.
         spec = _required_workout_for_day(day, constraints)
-        if spec and not day_satisfies_required_workout(day, spec):
+        date_value = str(day.get("date") or "")
+        if (
+            spec
+            and date_value not in satisfied_dates
+            and _slot(day) == coercion_slot.get(date_value, 0)
+        ):
             result.append(_coerce_day_to_required(day, spec))
         else:
             result.append(day)
