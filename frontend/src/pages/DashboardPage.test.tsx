@@ -1352,6 +1352,19 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByText('Missed two')).toHaveClass('text-amber-600')
   })
 
+  it('falls back to a neutral colour when the stored tone is unusable', async () => {
+    // `training_status_tone` is a free-text column, so a legacy or malformed
+    // value must still render — just without claiming a verdict it cannot back.
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Easing off',
+        trainingStatusTone: undefined,
+      }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('Easing off')).toHaveClass('text-gray-600')
+  })
+
   it("exposes the coach's reason as the badge's tooltip", async () => {
     // The athlete asks "why?" of the badge itself; the same rationale also goes
     // into the coach's prompt, so both answers come from one source (#499).

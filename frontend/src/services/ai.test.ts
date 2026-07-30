@@ -20,6 +20,7 @@ import {
   rateCompletedWorkout,
   refreshAthleteModel,
   refreshLoginSummary,
+  refreshTrainingStatus,
   resolveRideMatch,
 } from './ai'
 
@@ -447,6 +448,57 @@ describe('refreshLoginSummary', () => {
   it('returns an empty string when no summary is present', async () => {
     mockApiFetch.mockResolvedValue({})
     expect(await refreshLoginSummary('tok-123')).toBe('')
+  })
+})
+
+describe('refreshTrainingStatus', () => {
+  it('POSTs and returns the coach-authored badge', async () => {
+    mockApiFetch.mockResolvedValue({
+      label: 'Ahead of plan',
+      tone: 'positive',
+      rationale: 'You added an unplanned long ride.',
+    })
+
+    const badge = await refreshTrainingStatus('tok-123')
+
+    expect(badge).toEqual({
+      label: 'Ahead of plan',
+      tone: 'positive',
+      rationale: 'You added an unplanned long ride.',
+    })
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/refresh-training-status', {
+      token: 'tok-123',
+      method: 'POST',
+    })
+  })
+
+  it('returns null when the backend has no badge to give', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(await refreshTrainingStatus('tok-123')).toBeNull()
+  })
+
+  it('falls back to the neutral tone when the tone is unrecognised', async () => {
+    // The tone drives the chip's colour, so an unknown value must degrade to
+    // something renderable rather than leaving the badge unstyled.
+    mockApiFetch.mockResolvedValue({ label: 'Cruising', tone: 'euphoric' })
+
+    expect(await refreshTrainingStatus('tok-123')).toEqual({
+      label: 'Cruising',
+      tone: 'steady',
+      rationale: '',
+    })
+  })
+
+  it('keeps the caution tone intact', async () => {
+    mockApiFetch.mockResolvedValue({
+      label: 'Missed two',
+      tone: 'caution',
+      rationale: 'Two threshold sessions went unridden.',
+    })
+
+    const badge = await refreshTrainingStatus('tok-123')
+
+    expect(badge?.tone).toBe('caution')
   })
 })
 

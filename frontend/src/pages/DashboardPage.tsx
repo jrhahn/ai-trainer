@@ -695,9 +695,10 @@ export default function DashboardPage() {
   const trainingStatus = riderAssessment?.trainingStatusLabel
     ? {
         label: riderAssessment.trainingStatusLabel,
-        className:
-          statusTone[riderAssessment.trainingStatusTone ?? 'steady'] ?? statusTone.steady,
-        title: riderAssessment.trainingStatusRationale ?? undefined,
+        // The tone is a free-text column server-side, so an unknown or absent
+        // value falls back to neutral rather than leaving the badge unstyled.
+        className: statusTone[riderAssessment.trainingStatusTone ?? ''] ?? statusTone.steady,
+        title: riderAssessment.trainingStatusRationale,
       }
     : null
 
