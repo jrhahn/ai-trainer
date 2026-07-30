@@ -406,7 +406,10 @@ describe('WorkoutPage', () => {
         authToken: 'tok-123',
         trainingPlan: [pmIntervals, amYoga],
         userProfile: {
-          weeklyHours: 8,
+          name: 'Alice',
+          email: 'alice@example.com',
+          bikeType: 'road',
+          trainingGoal: 'general_fitness',
           followsTrainingPlan: true,
           fitnessLevel: 'intermediate',
         },
