@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
+import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
+import WeatherBadge from './WeatherBadge'
 
 const WORKOUT_COLORS: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-500',
@@ -20,6 +23,9 @@ interface Props {
 
 export default function TodayCard({ today, trainingPlan }: Props) {
   const todayWorkout = trainingPlan.find((d) => d.date === today)
+  // Today's forecast near the athlete's training location (#495) — shown on the
+  // planned session so the conditions are visible before they head out.
+  const forecast = useAppStore(useShallow((s) => s.weatherForecast[today]))
 
   if (!todayWorkout || todayWorkout.workoutType === 'rest') {
     return (
@@ -31,6 +37,7 @@ export default function TodayCard({ today, trainingPlan }: Props) {
           {todayWorkout?.completed && (
             <span className="text-xs text-green-600 font-medium">✓ Done</span>
           )}
+          <WeatherBadge forecast={forecast} className="ml-auto text-xs" />
         </div>
         <p className="text-lg font-semibold text-gray-800 mt-1">Recovery &amp; rest</p>
         {!todayWorkout && (
@@ -52,6 +59,7 @@ export default function TodayCard({ today, trainingPlan }: Props) {
           {todayWorkout.completed && (
             <span className="text-xs text-green-600 font-medium">✓ Done</span>
           )}
+          <WeatherBadge forecast={forecast} className="ml-auto text-xs" />
         </div>
         <p className="text-xl font-bold text-gray-900 mt-1 group-hover:text-amber-600 transition-colors">
           {todayWorkout.title}

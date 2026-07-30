@@ -62,8 +62,11 @@ from services.ride_matching import (
     review_matched_ride_and_adapt,
 )
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
+from services import home_location, weather_preference
 from services.weather_service import (
+    clear_forecast_cache,
     enrich_activity_weather,
+    home_coordinates_for_user,
     training_weather_context_for_user,
 )
 from services import llm as llm_service
@@ -223,6 +226,52 @@ async def _capture_availability_constraints_from_message(
         db, user_id, timezone_name
     )
     return constraints, lifted
+
+
+async def _capture_weather_signals_from_message(
+    db: AsyncSession,
+    user_id: str,
+    message: str,
+) -> str | None:
+    """Sync the athlete's weather-related self-reports from their message (#495).
+
+    Two independent captures, both deterministic and both best-effort:
+
+    * a stated training location ("I mostly train near Freiburg now") becomes the
+      ``user_set`` home-location attribute, which then outranks every inference
+      pass and re-anchors all weather lookups;
+    * a stated weather preference ("I actually love the rain") becomes evidence on
+      the corresponding weather-preference belief, reinforcing the same row the
+      ride data writes.
+
+    Returns a deterministic confirmation note when the location moved — the honest
+    record of what the backend actually did, independent of the model's prose (the
+    same contract as the availability-constraint lift note, #437).
+    """
+    try:
+        await weather_preference.capture_weather_preferences_from_message(
+            db, user_id, message
+        )
+    except Exception:
+        logger.warning("Weather-preference capture failed", exc_info=True)
+
+    try:
+        row = await home_location.capture_home_location_from_message(
+            db, user_id, message
+        )
+    except Exception:
+        logger.warning("Home-location capture failed", exc_info=True)
+        return None
+    if row is None:
+        return None
+
+    # A new base invalidates the cached forecast for the old one.
+    clear_forecast_cache()
+    where = row.label or f"{row.latitude:.2f}, {row.longitude:.2f}"
+    return (
+        f"(Note: I've set your usual training location to {where}, so your weather "
+        f"outlook and any weather-driven plan changes now use that.)"
+    )
 
 
 def _profile_with_availability_constraints(
@@ -523,11 +572,14 @@ async def analyse_activities(
 
     activity_payloads: list[dict] = []
     weather_by_id: dict[int, dict] = {}
+    # Resolved once for the batch so indoor rides still record conditions (#495).
+    home_coordinates = await home_coordinates_for_user(db, current_user.id)
     for activity in analysis_activities:
         activity_dict = activity.model_dump()
         weather_fields = await enrich_activity_weather(
             activity_dict,
             streams=streams_by_id.get(str(activity.id)),
+            fallback_coordinates=home_coordinates,
         )
         weather_by_id[activity.id] = weather_fields
         activity_payloads.append({**activity_dict, **weather_fields})
@@ -828,6 +880,11 @@ async def ask_trainer(
     ) = await _capture_availability_constraints_from_message(
         db, current_user.id, body.question, timezone_name
     )
+    # Capture weather self-reports before the forecast is read, so a location the
+    # athlete states in this very message anchors this turn's outlook (#495).
+    home_location_note = await _capture_weather_signals_from_message(
+        db, current_user.id, body.question
+    )
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
@@ -920,6 +977,12 @@ async def ask_trainer(
                 recent_metrics, timezone_name=timezone_name
             )
             race_events = await _race_events_for_prompt(db, current_user.id)
+            # The upcoming outlook near the athlete's training location plus their
+            # learned tolerances — the coach chat is where "should I ride tomorrow?"
+            # actually gets asked (#495). Cached per location, so this is cheap.
+            weather_section = await training_weather_context_for_user(
+                db, current_user.id
+            )
 
             # Await classification (likely already done), then conditionally retrieve RAG context.
             classification = await classify_task
@@ -948,6 +1011,7 @@ async def ask_trainer(
                 performance_model=performance_model,
                 performance_recommendation=performance_recommendation,
                 hypotheses=hypotheses,
+                weather_context_section=weather_section,
                 timezone_name=timezone_name,
             )
         except AIRateLimitError:
@@ -1026,6 +1090,11 @@ async def ask_trainer(
         result["response"] = (
             f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints)}"
         )
+
+    # Coach honesty: the training location was moved by the router, before the model
+    # replied, so confirm it deterministically rather than hoping the prose does (#495).
+    if home_location_note:
+        result["response"] = f"{result['response']}\n\n{home_location_note}"
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)

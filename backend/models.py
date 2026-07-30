@@ -181,6 +181,9 @@ class User(Base):
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
+    home_location: Mapped["AthleteHomeLocation | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     strava_token: Mapped["StravaToken | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -780,6 +783,45 @@ class AthleteAvailabilityConstraint(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="availability_constraints")
+
+
+class AthleteHomeLocation(Base):
+    """Where the athlete usually trains — the anchor for every weather lookup (#495).
+
+    Previously the training location was re-derived on every request from the
+    single latest ride that happened to carry GPS, so one holiday ride moved the
+    whole forecast. This persists it as a first-class athlete attribute, seeded by
+    clustering typical ride start points (:mod:`services.home_location`) and
+    overridable by the athlete through the coach ("I mostly train near X now").
+
+    ``source`` is the authority marker that keeps the two writers apart:
+    ``user_set`` beats ``inferred``, and the inference pass must never overwrite a
+    ``user_set`` row — the stale-snapshot clobber class the plan pipeline already
+    guards against (#342/#345/#346). ``confidence`` and ``ride_count`` record how
+    much history backed an inferred cluster so the coach can be honest about it.
+    """
+
+    __tablename__ = "athlete_home_location"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    # Human-readable place name ("Freiburg"); empty for a purely inferred centroid.
+    label: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    # "inferred" (clustered ride starts) | "user_set" (athlete told the coach).
+    source: Mapped[str] = mapped_column(
+        String(20), default="inferred", nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # How many ride starts fell inside the cluster this location came from.
+    ride_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="home_location")
 
 
 class StravaToken(Base):

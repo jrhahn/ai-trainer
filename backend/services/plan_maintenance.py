@@ -148,6 +148,9 @@ async def maintain_user_training_plan(
         profile=profile,
         rider_assessment=rider_assessment,
         training_load_section=metrics_section,
+        # The same forecast the adaptation acted on, so a session moved off a
+        # 38 C day is explained as exactly that rather than as unexplained churn.
+        weather_context_section=weather_section,
     )
     return commit.plan != before_plan
 

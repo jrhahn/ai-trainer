@@ -22,6 +22,7 @@ import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppSto
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import { formatPlanDuration } from '../utils/planDuration'
+import WeatherBadge from './WeatherBadge'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -143,6 +144,7 @@ export default function TrainingCalendar({
     plan,
     raceEvents,
     rideMetricsHistory,
+    weatherForecast,
     addRaceEvent,
     removeRaceEvent,
     updateRaceEvent,
@@ -152,6 +154,7 @@ export default function TrainingCalendar({
       plan: s.trainingPlan,
       raceEvents: s.raceEvents,
       rideMetricsHistory: s.rideMetricsHistory,
+      weatherForecast: s.weatherForecast,
       addRaceEvent: s.addRaceEvent,
       removeRaceEvent: s.removeRaceEvent,
       updateRaceEvent: s.updateRaceEvent,
@@ -362,10 +365,21 @@ export default function TrainingCalendar({
                     isToday ? 'ring-2 ring-inset ring-amber-500' : ''
                   } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !day.completed ? 'opacity-60' : ''}`}
                 >
-                  <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-xs font-bold">{parseLocalDate(date).getDate()}</span>
-                    {day?.completed && (
+                    {day?.completed ? (
                       <CheckCircle size={12} className="text-green-500 flex-shrink-0" />
+                    ) : (
+                      // Forecast on planned days inside the ~16-day horizon (#495).
+                      // Past and unplanned days show nothing rather than a stale
+                      // or irrelevant reading.
+                      day && !isPast && (
+                        <WeatherBadge
+                          forecast={weatherForecast[date]}
+                          size={10}
+                          className="flex-shrink-0 text-[10px] font-semibold"
+                        />
+                      )
                     )}
                   </div>
                   {day ? (

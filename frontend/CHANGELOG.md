@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-07-30
+
+### Added
+
+- **Weather on planned rides** (`components/WeatherBadge.tsx`, `utils/weather.ts`,
+  `components/TrainingCalendar.tsx`, `components/TodayCard.tsx`,
+  `components/WorkoutCard.tsx`, `store/useAppStore.ts`, `services/user.ts`) — the
+  upcoming forecast near the athlete's training location is fetched during dashboard
+  hydration and shown as a weather icon plus temperature on each planned day: in the
+  calendar grid, on today's session card, and on the upcoming-session rows. Extreme
+  days are colour-coded from the backend's coaching `loadFlag` so a 39 °C Saturday is
+  visible at a glance, and the full forecast (condition, range, precipitation, notable
+  wind) is exposed as an accessible label. Days outside the ~16-day horizon, days with
+  no planned session, and past days render nothing — an absent forecast must look
+  absent rather than like a guess. The icon/format logic is now shared with the
+  logged-activity weather that already existed, so planned and actual conditions read
+  as the same kind of information.
+- **Editable training location** (`components/HomeLocationSettings.tsx`,
+  `pages/SettingsPage.tsx`, `services/user.ts`) — a settings card showing where the
+  weather forecast is taken from, how much ride history backs an inferred location
+  (and with what confidence), and whether the athlete has overridden it. Saving stores
+  it as `user_set`, which the backend then protects from later inference, so an
+  override sticks. The card also points out that telling the coach "I mostly train
+  near Freiburg now" does the same thing.
+
+### Changed
+
+- **Deduplicated weather presentation** (`pages/DashboardPage.tsx`) — the
+  `WeatherIcon` and `formatTemperature` helpers that lived inside `DashboardPage`
+  moved to the shared `WeatherBadge` component and `utils/weather.ts`.
+
 ## [0.30.0] - 2026-07-29
 
 ### Added

@@ -28,7 +28,10 @@ from services.strava_service import (
     ensure_fresh_strava_token,
     fetch_activity_streams,
 )
-from services.weather_service import enrich_activity_weather
+from services.weather_service import (
+    enrich_activity_weather,
+    home_coordinates_for_user,
+)
 
 router = APIRouter(tags=["strava"])
 STATE_TTL_SECONDS = 600
@@ -354,6 +357,10 @@ async def _run_import_background(
         rides: list[dict] = []
         skipped = 0
         keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
+        # Resolved once for the whole import: indoor rides carry no GPS, so their
+        # conditions come from the athlete's training location (#495).
+        async with async_session_maker() as db:
+            home_coordinates = await home_coordinates_for_user(db, user_id)
         async with httpx.AsyncClient() as client:
             for idx, activity in enumerate(all_activities):
                 activity_id = activity.get("id")
@@ -417,7 +424,7 @@ async def _run_import_background(
                     continue
 
                 weather_fields = await enrich_activity_weather(
-                    activity, streams=streams
+                    activity, streams=streams, fallback_coordinates=home_coordinates
                 )
 
                 imported_activity = ImportedActivity(

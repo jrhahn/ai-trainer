@@ -5,6 +5,9 @@ vi.mock('./api', () => ({ API_BASE: '/api/v1', apiFetch: mockApiFetch }))
 
 import {
   fetchCurrentUser,
+  fetchHomeLocation,
+  fetchWeatherForecast,
+  saveHomeLocation,
   updateCurrentUser,
   fetchTrainingPlan,
   fetchWorkoutLogs,
@@ -942,5 +945,92 @@ describe('metrics history', () => {
     const result = await fetchRideMetricsHistory('tok')
     expect(result).toHaveLength(1)
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-metrics-history', { token: 'tok' })
+  })
+})
+
+describe('weather forecast and training location (#495)', () => {
+  const location = {
+    latitude: 47.99,
+    longitude: 7.85,
+    label: 'Freiburg',
+    source: 'user_set',
+    confidence: 1,
+    rideCount: 0,
+  }
+
+  it('unwraps the location and days from the forecast response', async () => {
+    mockApiFetch.mockResolvedValue({
+      location,
+      days: [{ date: '2026-08-01', condition: 'rain', temperatureMaxC: 17 }],
+    })
+
+    const result = await fetchWeatherForecast('tok')
+
+    expect(result.location).toEqual(location)
+    expect(result.days).toHaveLength(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/weather-forecast', {
+      token: 'tok',
+    })
+  })
+
+  it('defaults a location-less forecast response to no location and no days', async () => {
+    mockApiFetch.mockResolvedValue({})
+
+    const result = await fetchWeatherForecast('tok')
+
+    expect(result).toEqual({ location: null, days: [] })
+  })
+
+  it('reads the stored training location', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    expect(await fetchHomeLocation('tok')).toEqual(location)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+    })
+  })
+
+  it('returns null when no training location is stored', async () => {
+    mockApiFetch.mockResolvedValue({ location: null })
+    expect(await fetchHomeLocation('tok')).toBeNull()
+
+    mockApiFetch.mockResolvedValue({})
+    expect(await fetchHomeLocation('tok')).toBeNull()
+  })
+
+  it('PUTs an override with the label the athlete typed', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    const result = await saveHomeLocation('tok', {
+      latitude: 47.99,
+      longitude: 7.85,
+      label: 'Freiburg',
+    })
+
+    expect(result).toEqual(location)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+      method: 'PUT',
+      body: { latitude: 47.99, longitude: 7.85, label: 'Freiburg' },
+    })
+  })
+
+  it('sends an empty label rather than undefined when none was given', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    await saveHomeLocation('tok', { latitude: 52.52, longitude: 13.4 })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+      method: 'PUT',
+      body: { latitude: 52.52, longitude: 13.4, label: '' },
+    })
+  })
+
+  it('returns null when the save response carries no location', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(
+      await saveHomeLocation('tok', { latitude: 1, longitude: 2 }),
+    ).toBeNull()
   })
 })

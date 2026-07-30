@@ -94,6 +94,7 @@ import {
   fetchRaceEvents,
   fetchRideMetricsHistory,
   fetchTrainingPlan,
+  fetchWeatherForecast,
   fetchWorkoutLogs,
 } from '../services/user'
 
@@ -263,6 +264,34 @@ export interface RideMetricPoint {
   matchedAt?: string | null
 }
 
+/**
+ * One day of the upcoming outlook near the athlete's training location (#495).
+ * Keyed by ISO date so planned days can look their own forecast up; days beyond
+ * the ~16-day horizon are simply absent.
+ */
+export interface DailyForecast {
+  date: string
+  condition?: string | null
+  weatherCode?: number | null
+  temperatureMaxC?: number | null
+  temperatureMinC?: number | null
+  precipitationMm?: number | null
+  windSpeedKph?: number | null
+  /** Coaching-relevant summary: very_hot | hot | cold | freezing | rain | … */
+  loadFlag?: string | null
+}
+
+export interface AthleteHomeLocation {
+  latitude: number
+  longitude: number
+  label: string
+  /** user_set beats inferred; latest_ride means nothing is persisted yet. */
+  source: string
+  confidence: number
+  rideCount?: number
+  updatedAt?: string | null
+}
+
 export interface RiderAssessment {
   riderType: 'timetrial' | 'sprinter' | 'climber' | 'allrounder' | 'endurance'
   notes: string
@@ -296,6 +325,9 @@ interface AppState {
   raceEvents: RaceEvent[]
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
+  /** Upcoming forecast keyed by ISO date, for the weather shown on planned days. */
+  weatherForecast: Record<string, DailyForecast>
+  homeLocation: AthleteHomeLocation | null
   pendingFeedbackRideIds: number[]
   dataLoadWarning: string | null
 
@@ -328,6 +360,8 @@ interface AppState {
   setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
+  setWeatherForecast: (days: DailyForecast[]) => void
+  setHomeLocation: (location: AthleteHomeLocation | null) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
   updateRideMetric: (ride: RideMetricPoint) => void
   updateRideMetricLabel: (stravaActivityId: number, labelOverride: string) => void
@@ -363,6 +397,8 @@ const dataState = {
   raceEvents: [] as RaceEvent[],
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
+  weatherForecast: {} as Record<string, DailyForecast>,
+  homeLocation: null as AthleteHomeLocation | null,
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
   dataLoadWarning: null as string | null,
@@ -451,6 +487,11 @@ export const useAppStore = create<AppState>()(
     setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
+    setWeatherForecast: (days) =>
+      set({
+        weatherForecast: Object.fromEntries(days.map((day) => [day.date, day])),
+      }),
+    setHomeLocation: (location) => set({ homeLocation: location }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
     updateRideMetric: (ride) =>
       set((state) => ({
@@ -511,7 +552,7 @@ export const useAppStore = create<AppState>()(
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
       const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
 
-      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult] =
+      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult, weatherForecastResult] =
         await Promise.allSettled([
           track(fetchCurrentUser(token)),
           track(fetchTrainingPlan(token)),
@@ -521,6 +562,7 @@ export const useAppStore = create<AppState>()(
           track(fetchRaceEvents(token)),
           track(fetchMetricsHistory(token)),
           track(fetchRideMetricsHistory(token)),
+          track(fetchWeatherForecast(token)),
         ])
 
       // If the session was torn down while we were loading (manual logout, or an
@@ -555,6 +597,12 @@ export const useAppStore = create<AppState>()(
       if (raceEventsResult.status === 'rejected') failed.push('race events')
       if (metricsHistoryResult.status === 'rejected') failed.push('fitness metrics')
       if (rideMetricsHistoryResult.status === 'rejected') failed.push('ride history')
+      // The forecast is decoration on top of the plan, not data the dashboard
+      // needs to function, so a failed lookup stays silent rather than nagging.
+      const weather =
+        weatherForecastResult.status === 'fulfilled'
+          ? weatherForecastResult.value
+          : { location: null, days: [] }
 
       set({
         authToken: token,
@@ -577,6 +625,8 @@ export const useAppStore = create<AppState>()(
         raceEvents: raceEventsResult.status === 'fulfilled' ? raceEventsResult.value : [],
         metricsHistory: metricsHistoryResult.status === 'fulfilled' ? metricsHistoryResult.value : [],
         rideMetricsHistory: rideMetricsHistoryResult.status === 'fulfilled' ? rideMetricsHistoryResult.value : [],
+        weatherForecast: Object.fromEntries(weather.days.map((day) => [day.date, day])),
+        homeLocation: weather.location,
         dataLoadWarning: failed.length > 0
           ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
           : null,

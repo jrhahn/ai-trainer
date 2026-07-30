@@ -1,7 +1,9 @@
 import type {
   AiProvider,
+  AthleteHomeLocation,
   AthleteMetricSnapshot,
   ChatMessage,
+  DailyForecast,
   RiderAssessment,
   RaceEvent,
   RideMetricPoint,
@@ -810,6 +812,60 @@ export async function fetchRideMetricsHistory(token: string): Promise<RideMetric
     { token }
   )
   return response.rides
+}
+
+export interface WeatherForecastResult {
+  location: AthleteHomeLocation | null
+  days: DailyForecast[]
+}
+
+/**
+ * Upcoming daily outlook near the athlete's training location (#495), used for
+ * the weather shown on planned days. Served from the backend's hourly per-location
+ * cache, so calling this on every dashboard load costs no upstream requests.
+ */
+export async function fetchWeatherForecast(
+  token: string,
+): Promise<WeatherForecastResult> {
+  const response = await apiFetch<{
+    location?: AthleteHomeLocation | null
+    days?: DailyForecast[]
+  }>('/users/me/weather-forecast', { token })
+  return { location: response.location ?? null, days: response.days ?? [] }
+}
+
+/** Read the persisted training location, if the athlete has one. */
+export async function fetchHomeLocation(
+  token: string,
+): Promise<AthleteHomeLocation | null> {
+  const response = await apiFetch<{ location?: AthleteHomeLocation | null }>(
+    '/users/me/home-location',
+    { token },
+  )
+  return response.location ?? null
+}
+
+/**
+ * Set the athlete's training location explicitly. Stored as `user_set`, which
+ * pins it against the backend's ride-start inference.
+ */
+export async function saveHomeLocation(
+  token: string,
+  location: { latitude: number; longitude: number; label?: string },
+): Promise<AthleteHomeLocation | null> {
+  const response = await apiFetch<{ location?: AthleteHomeLocation | null }>(
+    '/users/me/home-location',
+    {
+      token,
+      method: 'PUT',
+      body: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: location.label ?? '',
+      },
+    },
+  )
+  return response.location ?? null
 }
 
 /**

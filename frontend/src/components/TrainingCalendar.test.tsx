@@ -518,4 +518,88 @@ describe('TrainingCalendar', () => {
     await user.click(screen.getByRole('button', { name: /Previous month/i }))
     expect(screen.getByText('Mon')).toBeInTheDocument()
   })
+
+  describe('planned-day weather (#495)', () => {
+    function tomorrowIso(): string {
+      return formatIsoDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    }
+
+    it('shows the forecast temperature on an upcoming planned day', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [makeDay(date, 'intervals')],
+        weatherForecast: {
+          [date]: {
+            date,
+            condition: 'clear',
+            temperatureMaxC: 38.4,
+            temperatureMinC: 23.0,
+            loadFlag: 'very_hot',
+          },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('38\u00b0C')).toBeInTheDocument()
+    })
+
+    it('shows no forecast on a day that has no planned session', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+
+    it('shows the completion check instead of the forecast on a done day', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date), completed: true }],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+
+    it('shows no forecast on a planned day already in the past', () => {
+      const date = formatIsoDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+      useAppStore.setState({
+        trainingPlan: [makeDay(date)],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+  })
 })
