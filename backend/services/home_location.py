@@ -125,6 +125,8 @@ def cluster_ride_starts(
     if not usable:
         return None
 
+    # Every candidate matches itself, so with a non-empty ``usable`` the winning
+    # cluster always has at least one member — no empty-result guard needed here.
     best: list[tuple[float, float]] = []
     for centre_lat, centre_lng in usable:
         members = [
@@ -134,8 +136,6 @@ def cluster_ride_starts(
         ]
         if len(members) > len(best):
             best = members
-    if not best:
-        return None
 
     return LocationCluster(
         latitude=round(sum(lat for lat, _ in best) / len(best), 4),

@@ -4,6 +4,7 @@ import pytest
 
 import crud
 import services.weather_service as weather_service
+from services import home_location, weather_preference
 from services.home_location import TrainingLocation
 from services.prompts import (
     TRAINING_PLAN_PRINCIPLES,
@@ -229,3 +230,69 @@ async def test_forecast_reaches_the_coach_prompt(
     assert response.status_code == 200
     assert "very_hot" in captured["weather_context_section"]
     assert "Freiburg" in captured["weather_context_section"]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_preference_capture_does_not_break_the_chat_turn(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    """Both captures are best-effort: the athlete still gets their answer."""
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("belief store down")
+
+    monkeypatch.setattr(
+        weather_preference, "capture_weather_preferences_from_message", boom
+    )
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I actually love the rain, what's next?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_location_capture_does_not_break_the_chat_turn(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("geocoder down")
+
+    monkeypatch.setattr(home_location, "capture_home_location_from_message", boom)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I mostly train near Freiburg now, what's next?"},
+    )
+
+    assert response.status_code == 200
+    # No confirmation note, because nothing was actually stored.
+    assert "usual training location" not in response.json()["response"]
+    stored = await client.get("/api/v1/users/me/home-location", headers=auth_headers)
+    assert stored.json()["location"] is None
+
+
+@pytest.mark.asyncio
+async def test_confirmation_note_falls_back_to_coordinates_without_a_place_name(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    """The athlete must still be told where the coach put them."""
+
+    async def fake_geocode(name):
+        return 47.99, 7.85, ""
+
+    monkeypatch.setattr(home_location, "geocode_place", fake_geocode)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I mostly train near Freiburg now"},
+    )
+
+    assert response.status_code == 200
+    assert "47.99, 7.85" in response.json()["response"]

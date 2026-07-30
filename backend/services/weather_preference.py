@@ -630,6 +630,11 @@ async def weather_preference_context_for_user(
     Each belief is presented with its confidence and evidence count so the coach
     conditions its advice on what is actually known and can say "I think" where it
     only thinks — the uncertainty-revealing contract from #490.
+
+    Only still-open (``proposed``) beliefs appear here. Once the athlete confirms
+    one it is promoted into a durable memory fact by
+    :func:`crud.update_athlete_hypothesis` and reaches the prompt through that
+    channel instead, so repeating it here would state the same belief twice.
     """
     rows = await crud.list_athlete_hypotheses(db, user_id)
     beliefs = [row for row in rows if row.category == CATEGORY]
@@ -644,7 +649,5 @@ async def weather_preference_context_for_user(
     for row in beliefs:
         detail = f"(confidence {row.confidence:.2f}, {row.evidence_count} observation"
         detail += "s)" if row.evidence_count != 1 else ")"
-        if row.status == "confirmed":
-            detail += " [athlete confirmed]"
         lines.append(f"- {row.statement} {detail}")
     return "\n".join(lines)

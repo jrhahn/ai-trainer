@@ -209,13 +209,20 @@ async def test_inferred_refresh_keeps_existing_label(db: AsyncSession, user: mod
 
 
 @pytest.mark.asyncio
-async def test_upsert_rejects_out_of_range_coordinates(db: AsyncSession, user: models.User):
+@pytest.mark.parametrize(
+    "latitude,longitude",
+    [(200.0, 7.85), (47.99, 400.0), (-91.0, 0.0), (None, 7.85), (47.99, None)],
+)
+async def test_upsert_rejects_unusable_coordinates(
+    db: AsyncSession, user: models.User, latitude, longitude
+):
     assert (
         await crud.upsert_athlete_home_location(
-            db, user.id, latitude=200.0, longitude=7.85
+            db, user.id, latitude=latitude, longitude=longitude
         )
         is None
     )
+    assert await crud.get_athlete_home_location(db, user.id) is None
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +313,120 @@ async def test_resolve_training_location_returns_none_without_any_gps(
     db: AsyncSession, user: models.User
 ):
     assert await home_location.resolve_training_location(db, user.id) is None
+
+
+# ---------------------------------------------------------------------------
+# Geocoding
+# ---------------------------------------------------------------------------
+
+
+class _FakeResp:
+    def __init__(self, payload, is_success=True):
+        self._payload = payload
+        self.is_success = is_success
+
+    def json(self):
+        return self._payload
+
+
+def _patch_httpx(monkeypatch, resp, calls=None):
+    """Stub httpx.AsyncClient so geocoding is exercised without a network call."""
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None):
+            if calls is not None:
+                calls.append((url, params))
+            if isinstance(resp, Exception):
+                raise resp
+            return resp
+
+    monkeypatch.setattr(home_location.httpx, "AsyncClient", _FakeClient)
+
+
+@pytest.mark.asyncio
+async def test_geocode_place_returns_coordinates_and_canonical_name(monkeypatch):
+    calls: list = []
+    _patch_httpx(
+        monkeypatch,
+        _FakeResp(
+            {
+                "results": [
+                    {"latitude": 47.996, "longitude": 7.849, "name": "Freiburg im Breisgau"}
+                ]
+            }
+        ),
+        calls,
+    )
+
+    result = await home_location.geocode_place("Freiburg")
+
+    assert result == (47.996, 7.849, "Freiburg im Breisgau")
+    assert calls[0][0] == home_location.GEOCODING_URL
+    assert calls[0][1]["name"] == "Freiburg"
+    # One result is all we need; asking for more would just cost bandwidth.
+    assert calls[0][1]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_geocode_place_falls_back_to_the_query_when_no_name_is_returned(
+    monkeypatch,
+):
+    _patch_httpx(
+        monkeypatch, _FakeResp({"results": [{"latitude": 1.0, "longitude": 2.0}]})
+    )
+
+    assert await home_location.geocode_place("  Nowhere  ") == (1.0, 2.0, "Nowhere")
+
+
+@pytest.mark.asyncio
+async def test_geocode_place_returns_none_for_an_empty_query(monkeypatch):
+    def _explode(*a, **k):
+        raise AssertionError("must not call the geocoder for an empty name")
+
+    monkeypatch.setattr(home_location.httpx, "AsyncClient", _explode)
+
+    assert await home_location.geocode_place("") is None
+    assert await home_location.geocode_place("   ") is None
+    assert await home_location.geocode_place(None) is None
+
+
+@pytest.mark.asyncio
+async def test_geocode_place_returns_none_on_an_error_response(monkeypatch):
+    _patch_httpx(monkeypatch, _FakeResp({}, is_success=False))
+    assert await home_location.geocode_place("Freiburg") is None
+
+
+@pytest.mark.asyncio
+async def test_geocode_place_returns_none_when_the_lookup_raises(monkeypatch):
+    """A geocoding hiccup must never break the chat turn that triggered it."""
+    _patch_httpx(monkeypatch, RuntimeError("DNS exploded"))
+    assert await home_location.geocode_place("Freiburg") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"results": []},
+        {"results": None},
+        "not a dict",
+        {"results": [{"longitude": 7.85}]},
+        {"results": [{"latitude": "north", "longitude": 7.85}]},
+    ],
+)
+async def test_geocode_place_returns_none_for_unusable_payloads(monkeypatch, payload):
+    _patch_httpx(monkeypatch, _FakeResp(payload))
+    assert await home_location.geocode_place("Freiburg") is None
 
 
 # ---------------------------------------------------------------------------

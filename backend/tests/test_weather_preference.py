@@ -293,6 +293,66 @@ def test_ride_without_gps_is_treated_as_indoor():
     assert projected.is_wet is True
 
 
+def test_is_adverse_flags_every_notable_condition():
+    """The behaviour gate keys off this, so each bucket must set it."""
+    assert _ride(temperature_c=33.0).is_adverse is True
+    assert _ride(temperature_c=2.0).is_adverse is True
+    assert _ride(condition="rain", precipitation_mm=4.0).is_adverse is True
+    assert _ride(wind_speed_kph=40.0).is_adverse is True
+    assert _ride().is_adverse is False
+
+
+def test_no_belief_when_the_bucket_carries_no_usable_numbers():
+    """Enough hot rides, but none with intensity or duration recorded."""
+    rides = [
+        *_mild_baseline(),
+        *[
+            _ride(temperature_c=33.0, intensity_factor=None, duration_seconds=None)
+            for _ in range(5)
+        ],
+    ]
+    assert _find(derive_weather_preferences(rides), DIMENSION_HEAT) is None
+
+
+def test_behaviour_stays_silent_in_the_undecided_middle():
+    """Half in, half out is not a preference — it is noise.
+
+    The outdoor rides are paced in the inconclusive band too, so neither the
+    behaviour nor the outcome reading has anything to say.
+    """
+    rides = [
+        *_mild_baseline(),
+        *[
+            _ride(
+                condition="rain",
+                precipitation_mm=4.0,
+                intensity_factor=0.71,
+                outdoor=idx % 2 == 0,
+            )
+            for idx in range(6)
+        ],
+    ]
+    assert _find(derive_weather_preferences(rides), DIMENSION_RAIN) is None
+
+
+def test_preference_statement_is_none_for_an_unknown_pairing():
+    assert preference_statement("humidity", DIRECTION_TOLERANT) is None
+    assert preference_statement(DIMENSION_HEAT, "indifferent") is None
+
+
+def test_belief_refuses_to_build_a_claim_it_cannot_state():
+    """Guard on the private builder, exercised directly because no current caller
+    can trip it: adding a condition bucket without a matching statement must yield
+    no belief rather than a hypothesis whose statement is None."""
+    assert (
+        weather_preference._belief("humidity", DIRECTION_TOLERANT, 0.5, ["evidence"])
+        is None
+    )
+    assert (
+        weather_preference._belief(DIMENSION_HEAT, DIRECTION_TOLERANT, 0.5, []) is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # Chat capture
 # ---------------------------------------------------------------------------
@@ -506,3 +566,55 @@ async def test_preference_context_empty_without_beliefs(
     db: AsyncSession, user: models.User
 ):
     assert await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+
+
+@pytest.mark.asyncio
+async def test_capture_survives_a_failing_write(db: AsyncSession, user: models.User, monkeypatch):
+    """A belief-store failure must not break the chat turn that triggered it."""
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("belief store down")
+
+    monkeypatch.setattr(crud, "propose_athlete_hypothesis", boom)
+
+    rows = await weather_preference.capture_weather_preferences_from_message(
+        db, user.id, "I actually love the rain"
+    )
+
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_confirmed_belief_moves_out_of_the_belief_context(
+    db: AsyncSession, user: models.User
+):
+    """Confirming promotes the belief into a durable memory fact.
+
+    From then on it reaches the coach through the memory-fact channel, so listing
+    it here as well would state the same belief to the coach twice.
+    """
+    rows = await weather_preference.capture_weather_preferences_from_message(
+        db, user.id, "I actually love the rain"
+    )
+    assert await weather_preference.weather_preference_context_for_user(db, user.id)
+
+    await crud.update_athlete_hypothesis(db, user.id, rows[0].id, status="confirmed")
+
+    assert await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+
+
+@pytest.mark.asyncio
+async def test_preference_context_pluralises_the_observation_count(
+    db: AsyncSession, user: models.User
+):
+    await weather_preference.capture_weather_preferences_from_message(
+        db, user.id, "I actually love the rain"
+    )
+    single = await weather_preference.weather_preference_context_for_user(db, user.id)
+    assert "1 observation)" in single
+
+    await weather_preference.capture_weather_preferences_from_message(
+        db, user.id, "I actually love the rain"
+    )
+    plural = await weather_preference.weather_preference_context_for_user(db, user.id)
+    assert "2 observations)" in plural
