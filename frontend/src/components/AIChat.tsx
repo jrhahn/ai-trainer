@@ -172,8 +172,10 @@ function PinnedInquiry({
     }
   }
 
+  // No in-flight guard here: both buttons carry `disabled={busy}`, so a second
+  // click cannot reach this. `submit` still needs its own check because Enter can
+  // fire on an empty box.
   const skip = async () => {
-    if (busy) return
     setBusy(true)
     try {
       await onSkip()
@@ -283,14 +285,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
-  // Bumped on every local answer/skip. Answering appends chat messages, which
-  // re-triggers the fetch effect below; without this the list that fetch started
-  // before the answer lands would overwrite the newer state and re-pin a question
-  // the athlete has already dealt with.
-  const inquiryEpochRef = useRef(0)
-  // Inquiries the athlete has already answered or skipped. A list fetched from
-  // the server can still be a moment behind, and re-pinning a question they just
-  // dealt with is worse than picking up a new one a cycle late.
+  // Inquiries the athlete has already answered or skipped. A list fetch can be in
+  // flight when they deal with one — and a skip changes no chat message, so the
+  // effect below is not even re-run to cancel it. Re-pinning a question they just
+  // answered is worse than picking up a new one a cycle late.
   const handledInquiryIdsRef = useRef<Set<string>>(new Set())
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
@@ -331,7 +329,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
     if (!authToken) return
     let cancelled = false
     void (async () => {
-      const epoch = inquiryEpochRef.current
       const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
         fetchPlanHistory(authToken).catch(() => [] as PlanDayHistoryEntry[]),
         fetchAthleteOpenQuestions(authToken).catch(() => [] as AthleteOpenQuestion[]),
@@ -344,11 +341,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ...planUpdateEvents(history),
         ...recommendationEvents(questions, hypotheses, experiments),
       ])
-      if (epoch === inquiryEpochRef.current) {
-        setPendingInquiries(
-          inquiries.filter((item) => !handledInquiryIdsRef.current.has(item.id)),
-        )
-      }
+      setPendingInquiries(
+        inquiries.filter((item) => !handledInquiryIdsRef.current.has(item.id)),
+      )
     })()
     return () => {
       cancelled = true
@@ -624,7 +619,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string) => {
     if (!authToken) return
     const result = await answerAthleteInquiry(authToken, inquiry.id, answer)
-    inquiryEpochRef.current += 1
     // Mirror what the backend just persisted into the chat, so the exchange stays
     // readable in the timeline after the pin clears.
     const timestamp = new Date().toISOString()
@@ -648,7 +642,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const handleInquirySkip = async (inquiry: AthleteInquiry) => {
     if (!authToken) return
     await dismissAthleteInquiry(authToken, inquiry.id)
-    inquiryEpochRef.current += 1
     handledInquiryIdsRef.current.add(inquiry.id)
     setPendingInquiries((current) => current.filter((item) => item.id !== inquiry.id))
   }

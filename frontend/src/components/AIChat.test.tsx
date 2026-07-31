@@ -866,3 +866,303 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument()
   })
 })
+
+describe('AIChat pinned inquiry edge cases (#506)', () => {
+  const inquiry = (overrides = {}) => ({
+    id: 'inq-1',
+    question: 'You skipped Tuesday three weeks running — what is getting in the way?',
+    category: 'recurring_issues',
+    whyAsking: 'Your rides show the absence but never the reason.',
+    settingsHint: 'Settings > Athlete > Availability',
+    status: 'pending' as const,
+    answer: null,
+    askCount: 1,
+    followUpNote: null,
+    askedAt: '2026-06-15T09:00:00.000Z',
+    answeredAt: null,
+    updatedAt: '2026-06-15T09:00:00.000Z',
+    ...overrides,
+  })
+
+  const answered = (coachReply: string) => ({
+    inquiry: inquiry({ status: 'answered' as const, answer: 'Work trips.' }),
+    accepted: true,
+    coachReply,
+  })
+
+  it('sends the answer on Enter without needing the button', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue(answered('Noted, thanks.'))
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const box = screen.getByLabelText(/^Answer:/)
+    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    await waitFor(() =>
+      expect(mockAnswerAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1', 'Work trips.'),
+    )
+  })
+
+  it('leaves the answer alone on shift+Enter so it can be a new line', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const box = screen.getByLabelText(/^Answer:/)
+    fireEvent.change(box, { target: { value: 'Work trips,' } })
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
+
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
+    expect(box).toHaveValue('Work trips,')
+  })
+
+  it('ignores Enter on an empty answer box', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.keyDown(screen.getByLabelText(/^Answer:/), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByLabelText(/^Answer:/), { key: 'Enter' })
+
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
+    expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument()
+  })
+
+  it('sends only once while an answer is already in flight', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    let release: (value: unknown) => void = () => {}
+    mockAnswerAthleteInquiry.mockImplementation(
+      () => new Promise((resolve) => { release = resolve }),
+    )
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const box = screen.getByLabelText(/^Answer:/)
+    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mockAnswerAthleteInquiry).toHaveBeenCalledTimes(1)
+    release(answered('Noted.'))
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+  })
+
+  it('adds no coach message when the reply comes back empty', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue(answered(''))
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+    // Question and answer are still recorded; there is simply no third message.
+    const chat = useAppStore.getState().chatHistory
+    expect(chat.map((m) => m.content)).toEqual([
+      'You skipped Tuesday three weeks running — what is getting in the way?',
+      'Work trips.',
+    ])
+  })
+
+  it('keeps the pin and reports the failure when skipping fails', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockDismissAthleteInquiry.mockRejectedValue(new Error('network'))
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+
+    expect(await screen.findByText(/Couldn't skip that/)).toBeInTheDocument()
+    expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument()
+  })
+
+  it('does nothing on answer or skip once the athlete is signed out', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    // Session ends (expiry or sign-out) while the question is still pinned.
+    useAppStore.setState({ authToken: null })
+
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    // Wait for the send to settle before skipping: both buttons disable while one
+    // is in flight, so a same-tick second click would never reach the handler.
+    const skip = screen.getByRole('button', { name: 'Skip for now' })
+    await waitFor(() => expect(skip).toBeEnabled())
+    fireEvent.click(skip)
+
+    await waitFor(() => expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument())
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
+    expect(mockDismissAthleteInquiry).not.toHaveBeenCalled()
+  })
+})
+
+describe('AIChat pinned inquiry resilience (#506)', () => {
+  const inquiry = (overrides = {}) => ({
+    id: 'inq-1',
+    question: 'You skipped Tuesday three weeks running — what is getting in the way?',
+    category: 'recurring_issues',
+    whyAsking: 'Your rides show the absence but never the reason.',
+    settingsHint: 'Settings > Athlete > Availability',
+    status: 'pending' as const,
+    answer: null,
+    askCount: 1,
+    followUpNote: null,
+    askedAt: '2026-06-15T09:00:00.000Z',
+    answeredAt: null,
+    updatedAt: '2026-06-15T09:00:00.000Z',
+    ...overrides,
+  })
+
+  it('degrades to no pin when the inquiry fetch fails', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockRejectedValue(new Error('offline'))
+    render(<AIChat />)
+
+    // The rest of the timeline still renders; a failed fetch must not break the chat.
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalled())
+    expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Coach chat messages')).toBeInTheDocument()
+  })
+
+  it('locks both controls while a skip is in flight so it cannot fire twice', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    let release: (value: unknown) => void = () => {}
+    mockDismissAthleteInquiry.mockImplementation(
+      () => new Promise((resolve) => { release = resolve }),
+    )
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const skip = screen.getByRole('button', { name: 'Skip for now' })
+    fireEvent.click(skip)
+
+    // The disabled attributes are the single guard against a double submit.
+    await waitFor(() => expect(skip).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    expect(screen.getByLabelText(/^Answer:/)).toBeDisabled()
+    fireEvent.click(skip)
+    expect(mockDismissAthleteInquiry).toHaveBeenCalledTimes(1)
+
+    release(undefined)
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+  })
+
+  it('leaves the other pending question untouched when one is rephrased', async () => {
+    setupStore()
+    const second = inquiry({ id: 'inq-2', question: 'How is sleep at the moment?' })
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry(), second])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ askCount: 2, question: 'Is it a fixed commitment on Tuesdays?' }),
+      accepted: false,
+      coachReply: 'Let me put it another way.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pinned-inquiry')).toHaveTextContent(
+        'Is it a fixed commitment on Tuesdays?',
+      ),
+    )
+    // The rephrase must not disturb the queue behind it.
+    mockFetchAthleteInquiries.mockResolvedValue([second])
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('pinned-inquiry')).toHaveTextContent('How is sleep at the moment?'),
+    )
+  })
+
+  it('does not re-pin an answered question when a slower fetch lands after it', async () => {
+    setupStore()
+    let release: (value: unknown) => void = () => {}
+    mockFetchAthleteInquiries
+      .mockResolvedValueOnce([inquiry()])
+      // The refetch triggered by the answer starts before the answer resolves and
+      // still carries the pre-answer list.
+      .mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered' as const, answer: 'Work trips.' }),
+      accepted: true,
+      coachReply: 'Noted.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+
+    release([inquiry()])
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument()
+  })
+})
+
+describe('AIChat pinned inquiry vs. background refresh (#506)', () => {
+  const inquiry = {
+    id: 'inq-1',
+    question: 'You skipped Tuesday three weeks running — what is getting in the way?',
+    category: 'recurring_issues',
+    whyAsking: 'Your rides show the absence but never the reason.',
+    settingsHint: 'Settings > Athlete > Availability',
+    status: 'pending' as const,
+    answer: null,
+    askCount: 1,
+    followUpNote: null,
+    askedAt: '2026-06-15T09:00:00.000Z',
+    answeredAt: null,
+    updatedAt: '2026-06-15T09:00:00.000Z',
+  }
+
+  it('discards a list fetch that was already in flight when the athlete skipped', async () => {
+    setupStore()
+    let releaseFetch: (value: unknown) => void = () => {}
+    mockFetchAthleteInquiries
+      .mockResolvedValueOnce([inquiry])
+      .mockImplementation(() => new Promise((resolve) => { releaseFetch = resolve }))
+    mockAskTrainer.mockResolvedValue({ response: 'Sure thing.' })
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: { ...inquiry, status: 'answered' as const, answer: 'Work trips.' },
+      accepted: true,
+      coachReply: 'Noted.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+
+    // An ordinary chat message kicks off a refresh that is still in flight...
+    fireEvent.change(screen.getByLabelText('Message to coach'), {
+      target: { value: 'How is my week looking?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalledTimes(2))
+
+    // ...while the athlete skips the pinned question. A skip writes no chat
+    // message, so the effect is never re-run and that fetch is never cancelled —
+    // the handled-id filter is the only thing standing between it and a re-pin.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+
+    // The stale list resolves last and must not resurrect the skipped question.
+    releaseFetch([inquiry])
+    await Promise.resolve()
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+  })
+})

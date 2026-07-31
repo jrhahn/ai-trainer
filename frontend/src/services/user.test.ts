@@ -25,6 +25,9 @@ import {
   updateAthleteMemoryFact,
   confirmAthleteMemoryFact,
   deleteAthleteMemoryFact,
+  fetchAthleteInquiries,
+  answerAthleteInquiry,
+  dismissAthleteInquiry,
   fetchAthleteOpenQuestions,
   updateAthleteOpenQuestion,
   answerAthleteOpenQuestion,
@@ -1032,5 +1035,64 @@ describe('weather forecast and training location (#495)', () => {
     expect(
       await saveHomeLocation('tok', { latitude: 1, longitude: 2 }),
     ).toBeNull()
+  })
+})
+
+describe('athlete inquiries (#506)', () => {
+  const inquiry = {
+    id: 'inq-1',
+    question: 'You skipped Tuesday three weeks running — what is getting in the way?',
+    category: 'recurring_issues',
+    whyAsking: 'Your rides show the absence but never the reason.',
+    settingsHint: 'Settings > Athlete > Availability',
+    status: 'pending' as const,
+    answer: null,
+    askCount: 1,
+    followUpNote: null,
+    askedAt: '2026-06-15T09:00:00.000Z',
+    answeredAt: null,
+    updatedAt: '2026-06-15T09:00:00.000Z',
+  }
+
+  it('unwraps the pending inquiry list', async () => {
+    mockApiFetch.mockResolvedValue({ inquiries: [inquiry] })
+
+    const result = await fetchAthleteInquiries('tok-123')
+
+    expect(result).toEqual([inquiry])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/inquiries', {
+      token: 'tok-123',
+    })
+  })
+
+  it('posts an answer and returns the coach verdict', async () => {
+    mockApiFetch.mockResolvedValue({
+      inquiry: { ...inquiry, status: 'answered', answer: 'Work trips.' },
+      accepted: true,
+      coachReply: 'Thanks — I will move that session to Wednesday.',
+    })
+
+    const result = await answerAthleteInquiry('tok-123', 'inq-1', 'Work trips.')
+
+    expect(result.accepted).toBe(true)
+    expect(result.coachReply).toBe('Thanks — I will move that session to Wednesday.')
+    expect(result.inquiry.status).toBe('answered')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/inquiries/inq-1/answer', {
+      token: 'tok-123',
+      method: 'POST',
+      body: { answer: 'Work trips.' },
+    })
+  })
+
+  it('dismisses an inquiry the athlete skipped', async () => {
+    mockApiFetch.mockResolvedValue({ ...inquiry, status: 'dismissed' })
+
+    const result = await dismissAthleteInquiry('tok-123', 'inq-1')
+
+    expect(result.status).toBe('dismissed')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/inquiries/inq-1/dismiss', {
+      token: 'tok-123',
+      method: 'POST',
+    })
   })
 })
