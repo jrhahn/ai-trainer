@@ -1,11 +1,15 @@
 name: Deploy
 
 on:
+  # Manual deploys stay available for any ref, so a hotfix or a rollback is still
+  # one click away.
   workflow_dispatch:
   push:
     branches:
-      - '**'
-      # - develop
+      # Only the default branch deploys. This was briefly '**', which meant every
+      # feature-branch push ran the playbook against the production host with
+      # DEPLOY_BRANCH=<that branch> — so opening a PR shipped it to prod.
+      - develop
 
 permissions:
   contents: read
