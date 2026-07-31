@@ -74,6 +74,10 @@ vi.mock('../components/AIChat', () => ({
   default: () => <div data-testid="ai-chat" />,
 }))
 
+vi.mock('../components/AthletePerformanceModelCard', () => ({
+  default: () => <div data-testid="performance-model-card" />,
+}))
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -776,6 +780,22 @@ describe('DashboardPage — TrainingCalendar', () => {
     setupStore({ isExpertMode: true })
     renderDashboard()
     expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage — athlete performance model', () => {
+  it('does not render the performance model card in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('performance-model-card')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the performance model card when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('performance-model-card')).toBeInTheDocument()
   })
 })
 

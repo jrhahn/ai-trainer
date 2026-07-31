@@ -167,7 +167,11 @@ function HypothesisRow({ hypothesis }: { hypothesis: AthleteHypothesis }) {
   )
 }
 
-export default function AthletePerformanceModelCard() {
+export default function AthletePerformanceModelCard({
+  className = '',
+}: {
+  className?: string
+} = {}) {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
 
@@ -202,7 +206,7 @@ export default function AthletePerformanceModelCard() {
   const hasModel = attributes.length > 0
 
   return (
-    <section className="bg-white rounded-2xl border border-gray-100 p-5 mt-6">
+    <section className={`bg-white rounded-2xl border border-gray-100 p-5 ${className}`}>
       <div className="flex items-start justify-between gap-3 mb-1">
         <div className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-indigo-600" />

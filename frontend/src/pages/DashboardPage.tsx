@@ -10,6 +10,7 @@ import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
+import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
@@ -1037,6 +1038,9 @@ export default function DashboardPage() {
           className="h-[60vh] min-h-[24rem] shadow-sm"
         />
       </div>
+
+      {/* Coach's model of the athlete + its confidences — expert mode only */}
+      {isExpertMode && <AthletePerformanceModelCard />}
 
       {/* Plan-vs-logged month calendar — expert mode only (#369) */}
       {isExpertMode && (

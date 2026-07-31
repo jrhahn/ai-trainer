@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-07-31
+
+### Added
+
+- **Expert mode shows the coach's model of the athlete** (`pages/DashboardPage.tsx`,
+  `components/AthletePerformanceModelCard.tsx`) — the performance-model card, until
+  now reachable only by scrolling Settings, is rendered on the dashboard whenever
+  expert mode is on, next to the training calendar, plan-changes and progression
+  panels. It states what the coach infers and how sure it is: each attribute (FTP,
+  MAP, VO₂max, fractional utilization, aerobic endurance, fatigue resistance,
+  anaerobic capacity) with a confidence bar, its evidence and what is still missing;
+  the likely limiter with its confidence, evidence *and* counter-evidence; open
+  working hypotheses with their alternative explanations; and the ride count and
+  window the whole thing was derived from. The card keeps its Settings mount for
+  non-expert users, and both mounts share one react-query cache, so opening the
+  dashboard costs no extra fetch. (#501)
+
+### Changed
+
+- **The dashboard status badge is written by the coach** (`pages/DashboardPage.tsx`,
+  `services/ai.ts`, `store/useAppStore.ts`) — the "On track" / "Slightly behind" chip
+  under the greeting is no longer computed in the browser; it is fetched with its
+  rationale from the backend status pipeline, so the coach can explain the exact word
+  it is shown rather than confabulating one. The browser-side heuristic it replaces
+  was wrong in three ways: it dropped `ambiguous` ride↔plan matches (which is what a
+  two-a-day produces), it counted a declined *optional* session as a miss, and it
+  could not see unplanned work at all. (#499)
+- **Card spacing is set by the caller** (`components/AthletePerformanceModelCard.tsx`)
+  — the component took a hardcoded `mt-6`; it now accepts an optional `className` and
+  the Settings page passes the margin, leaving that page unchanged.
+
 ## [0.32.0] - 2026-07-30
 
 ### Added
