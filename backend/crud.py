@@ -945,6 +945,7 @@ async def create_athlete_metric_snapshot(
     *,
     ftp: int | None,
     threshold_hr: int | None = None,
+    map_5min: int | None = None,
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
@@ -959,6 +960,7 @@ async def create_athlete_metric_snapshot(
     kwargs: dict = dict(
         user_id=user_id,
         ftp=ftp,
+        map_5min=map_5min,
         ctl=ctl,
         atl=atl,
         tsb=tsb,
@@ -991,6 +993,24 @@ async def get_athlete_metric_history(
         .order_by(models.AthleteMetricSnapshot.recorded_at.asc())
     )
     return list(result)
+
+
+async def get_latest_map_5min(db: AsyncSession, user_id: str) -> int | None:
+    """Return the most recently recorded best 5-minute power, if any.
+
+    Used as the maximal aerobic power reference when sanity-checking a
+    user-entered FTP.  Older snapshots predate the column and store ``NULL``,
+    so rows without a value are skipped rather than treated as zero.
+    """
+    return await db.scalar(
+        select(models.AthleteMetricSnapshot.map_5min)
+        .where(
+            models.AthleteMetricSnapshot.user_id == user_id,
+            models.AthleteMetricSnapshot.map_5min.isnot(None),
+        )
+        .order_by(models.AthleteMetricSnapshot.recorded_at.desc())
+        .limit(1)
+    )
 
 
 async def delete_athlete_metric_snapshots(db: AsyncSession, user_id: str) -> None:
