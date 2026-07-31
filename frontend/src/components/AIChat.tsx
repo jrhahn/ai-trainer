@@ -13,6 +13,8 @@ import {
   HelpCircle,
   Lightbulb,
   FlaskConical,
+  Pin,
+  Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -22,10 +24,13 @@ import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
 import {
+  answerAthleteInquiry,
   clearChatHistoryRemote,
+  dismissAthleteInquiry,
   fetchCoachMemory,
   fetchCurrentUser,
   fetchPlanHistory,
+  fetchAthleteInquiries,
   fetchAthleteOpenQuestions,
   fetchAthleteHypotheses,
   fetchValidationExperiments,
@@ -33,6 +38,7 @@ import {
 import type {
   AthleteExperiment,
   AthleteHypothesis,
+  AthleteInquiry,
   AthleteOpenQuestion,
   PlanDayHistoryEntry,
 } from '../services/user'
@@ -129,6 +135,110 @@ function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem
   )
 }
 
+// A question the coach could never answer from data, pinned above the feed until
+// the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
+// as an ordinary chat message it would be buried by the next exchange, which is
+// exactly how these questions went unanswered before.
+function PinnedInquiry({
+  inquiry,
+  onAnswer,
+  onSkip,
+}: {
+  inquiry: AthleteInquiry
+  onAnswer: (answer: string) => Promise<void>
+  onSkip: () => Promise<void>
+}) {
+  const [answer, setAnswer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // A fresh question after a rephrasing must not inherit the text that missed.
+  useEffect(() => {
+    setAnswer('')
+    setError('')
+  }, [inquiry.id, inquiry.question])
+
+  const submit = async () => {
+    if (!answer.trim() || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onAnswer(answer.trim())
+      setAnswer('')
+    } catch {
+      setError("Couldn't send that answer — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const skip = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await onSkip()
+    } catch {
+      setError("Couldn't skip that — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="pinned-inquiry"
+      className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5"
+    >
+      <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+        <Pin size={11} />
+        {inquiry.askCount > 1 ? 'Still needs an answer' : 'Your coach needs an answer'}
+      </p>
+      <p className="text-sm text-gray-800">{inquiry.question}</p>
+      {inquiry.whyAsking && (
+        <p className="mt-1 text-[11px] text-gray-500">{inquiry.whyAsking}</p>
+      )}
+      <textarea
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            void submit()
+          }
+        }}
+        placeholder="Type your answer..."
+        aria-label={`Answer: ${inquiry.question}`}
+        rows={2}
+        disabled={busy}
+        className="mt-2 w-full resize-none rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-amber-500 disabled:opacity-50"
+      />
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !answer.trim()}
+          className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+        >
+          Send
+        </button>
+        <button
+          onClick={() => void skip()}
+          disabled={busy}
+          className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 disabled:opacity-50"
+        >
+          Skip for now
+        </button>
+        {inquiry.settingsHint && (
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-gray-400">
+            <Settings size={11} />
+            {inquiry.settingsHint}
+          </span>
+        )}
+      </div>
+      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 export default function AIChat({ contextWorkout, className }: Props) {
   const {
     authToken,
@@ -168,10 +278,20 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [pendingInquiries, setPendingInquiries] = useState<AthleteInquiry[]>([])
   const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
+  // Bumped on every local answer/skip. Answering appends chat messages, which
+  // re-triggers the fetch effect below; without this the list that fetch started
+  // before the answer lands would overwrite the newer state and re-pin a question
+  // the athlete has already dealt with.
+  const inquiryEpochRef = useRef(0)
+  // Inquiries the athlete has already answered or skipped. A list fetched from
+  // the server can still be a moment behind, and re-pinning a question they just
+  // dealt with is worse than picking up a new one a cycle late.
+  const handledInquiryIdsRef = useRef<Set<string>>(new Set())
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
@@ -211,17 +331,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
     if (!authToken) return
     let cancelled = false
     void (async () => {
-      const [history, questions, hypotheses, experiments] = await Promise.all([
+      const epoch = inquiryEpochRef.current
+      const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
         fetchPlanHistory(authToken).catch(() => [] as PlanDayHistoryEntry[]),
         fetchAthleteOpenQuestions(authToken).catch(() => [] as AthleteOpenQuestion[]),
         fetchAthleteHypotheses(authToken).catch(() => [] as AthleteHypothesis[]),
         fetchValidationExperiments(authToken).catch(() => [] as AthleteExperiment[]),
+        fetchAthleteInquiries(authToken).catch(() => [] as AthleteInquiry[]),
       ])
       if (cancelled) return
       setTimelineEvents([
         ...planUpdateEvents(history),
         ...recommendationEvents(questions, hypotheses, experiments),
       ])
+      if (epoch === inquiryEpochRef.current) {
+        setPendingInquiries(
+          inquiries.filter((item) => !handledInquiryIdsRef.current.has(item.id)),
+        )
+      }
     })()
     return () => {
       cancelled = true
@@ -490,6 +617,42 @@ export default function AIChat({ contextWorkout, className }: Props) {
     void sendMessageRef.current?.(pendingCoachMessage)
   }, [pendingCoachMessage, setPendingCoachMessage])
 
+  // The oldest unanswered question gets the pin: one question at a time, and the
+  // one that has been waiting longest rather than the newest distraction.
+  const pinnedInquiry = pendingInquiries[0]
+
+  const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string) => {
+    if (!authToken) return
+    const result = await answerAthleteInquiry(authToken, inquiry.id, answer)
+    inquiryEpochRef.current += 1
+    // Mirror what the backend just persisted into the chat, so the exchange stays
+    // readable in the timeline after the pin clears.
+    const timestamp = new Date().toISOString()
+    addChatMessage({ role: 'assistant', content: inquiry.question, timestamp })
+    addChatMessage({ role: 'user', content: answer, timestamp })
+    if (result.coachReply) {
+      addChatMessage({ role: 'assistant', content: result.coachReply, timestamp })
+    }
+    // A rephrased question comes back still pending and re-pins itself; anything
+    // else (answered, or handed off to settings) leaves the pin for good.
+    if (result.inquiry.status !== 'pending') {
+      handledInquiryIdsRef.current.add(result.inquiry.id)
+    }
+    setPendingInquiries((current) =>
+      result.inquiry.status === 'pending'
+        ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
+        : current.filter((item) => item.id !== result.inquiry.id),
+    )
+  }
+
+  const handleInquirySkip = async (inquiry: AthleteInquiry) => {
+    if (!authToken) return
+    await dismissAthleteInquiry(authToken, inquiry.id)
+    inquiryEpochRef.current += 1
+    handledInquiryIdsRef.current.add(inquiry.id)
+    setPendingInquiries((current) => current.filter((item) => item.id !== inquiry.id))
+  }
+
   const handleClearChatHistory = async () => {
     if (!authToken) return
     clearChatHistory()
@@ -540,6 +703,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         <div className="mx-3 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
           Couldn't refresh coach state — data may be slightly out of date.
         </div>
+      )}
+
+      {pinnedInquiry && (
+        <PinnedInquiry
+          inquiry={pinnedInquiry}
+          onAnswer={(answer) => handleInquiryAnswer(pinnedInquiry, answer)}
+          onSkip={() => handleInquirySkip(pinnedInquiry)}
+        />
       )}
 
       {/* Input */}

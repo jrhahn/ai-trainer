@@ -1360,6 +1360,42 @@ def open_questions_section(open_questions: list[dict] | None) -> str:
     )
 
 
+def pending_inquiries_section(inquiries: list[dict] | None) -> str:
+    """Render the questions already pinned to the athlete in the chat (#506).
+
+    The pin owns these questions. Without this block the coach re-asks them in
+    prose — the athlete gets the same question twice in one screen, once pinned
+    and once conversationally, and answers it in the reply box where the
+    inquiry's answer check never sees it.
+    """
+    if not inquiries:
+        return ""
+
+    compact: list[dict[str, object]] = []
+    for inquiry in inquiries:
+        if inquiry.get("status") not in (None, "pending"):
+            continue
+        question = inquiry.get("question")
+        if not question:
+            continue
+        entry: dict[str, object] = {"question": str(question)[:240]}
+        why = inquiry.get("whyAsking") or inquiry.get("why_asking")
+        if why:
+            entry["whyAsking"] = str(why)[:240]
+        compact.append(entry)
+
+    if not compact:
+        return ""
+
+    return (
+        "\n\nQuestions you have already put to this athlete and are waiting on: "
+        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        "They are pinned in the chat with their own answer box, so do NOT ask them "
+        "again here — asking twice reads as not listening. If the athlete answers "
+        "one of them in passing, simply use what they said."
+    )
+
+
 def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     if not facts:
         return ""
@@ -1509,6 +1545,7 @@ def ask_trainer_system(
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
     open_questions: list[dict] | None = None,
+    pending_inquiries: list[dict] | None = None,
     performance_model: dict | None = None,
     performance_recommendation: dict | None = None,
     hypotheses: list[dict] | None = None,
@@ -1560,6 +1597,7 @@ def ask_trainer_system(
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
     durable_open_questions_section = open_questions_section(open_questions)
+    pinned_inquiries_section = pending_inquiries_section(pending_inquiries)
     perf_model_section = performance_model_section(performance_model)
     roi_section = athlete_performance_roi_section(performance_recommendation)
     roi_section = f"\n\n{roi_section}" if roi_section else ""
@@ -1668,6 +1706,7 @@ def ask_trainer_system(
         f"{hypotheses_section}"
         f"{durable_memory_facts_section}"
         f"{durable_open_questions_section}"
+        f"{pinned_inquiries_section}"
         f"{memory_section}"
         f"{workout_section}"
         f"{classification_section}"
@@ -2096,6 +2135,163 @@ def generate_open_questions_user(
         f"{questions_section}\n\n"
         "Maintain this athlete's open questions list from the training history as "
         "specified."
+    )
+
+
+# ---------------------------------------------------------------------------
+# athlete inquiry prompts (#506)
+# ---------------------------------------------------------------------------
+
+# The category slugs shared by every athlete-knowledge generator.
+_ATHLETE_KNOWLEDGE_CATEGORIES = (
+    "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
+    "psychological_tendencies, goals_motivation, coaching_risk, general"
+)
+
+
+def generate_inquiries_system(max_candidates: int) -> str:
+    """System prompt for raising questions only the athlete can answer (#506).
+
+    The whole value of this pass is the gate it puts in front of itself: the model
+    must first work out what the incoming training data *will* tell it, and may
+    only ask about the residual. Without that step a coach model happily asks
+    about FTP, fatigue and pacing — all of which the next few rides answer for
+    free — and burns the athlete's patience on questions it should infer.
+    """
+    return (
+        f"{COACH_PERSONA} You are deciding what to ASK THIS ATHLETE DIRECTLY.\n"
+        "You already receive every ride they do: duration, power, heart rate, "
+        "cadence, speed, elevation, weather and how the session compared with the "
+        "plan. Weekly passes turn that stream into observations, hypotheses and "
+        "open questions on their own.\n"
+        "Work in two steps.\n"
+        "STEP 1 — Ask yourself what the NEXT FEW WEEKS OF DATA WILL TELL YOU "
+        "without anyone saying a word: fitness trend, threshold drift, how they "
+        "respond to load, which sessions they complete, pacing, durability, "
+        "weather tolerance. You must NOT ask about any of it. If more riding "
+        "would settle it, it is an open question or an experiment, not a question "
+        "for the athlete.\n"
+        "STEP 2 — Ask only about what the data can NEVER reveal, because it lives "
+        "in the athlete's head, body or calendar rather than in their power file. "
+        "For example: WHY a session was skipped or cut short, whether a pain or "
+        "niggle is still there, what they actually want from this season, "
+        "constraints on their week you cannot see, equipment or measurement "
+        "changes (a swapped power meter, a new bike), illness, sleep, stress or "
+        "life events, and what they enjoy or dread doing.\n"
+        "Each question must be one plain, specific, conversational question a "
+        "coach would actually ask — not a form field, not two questions bolted "
+        "together, and never a request for a number the athlete has no way to "
+        "know.\n"
+        "For each provide: 'question' (<=200 chars, addressed to the athlete as "
+        "'you'), 'whyAsking' (<=200 chars, why the training data cannot tell you "
+        "this and what you would do differently once you knew — the athlete sees "
+        "this), 'settingsHint' (<=120 chars, where in the app's settings they "
+        "could state this themselves, e.g. 'Settings > Athlete > Goals'; empty "
+        f"string if nowhere fits), and a category slug from: "
+        f"{_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
+        "Do NOT repeat anything already known, already asked, or already answered. "
+        "Silence is a valid answer: return an empty array unless a question would "
+        "genuinely change how you coach them.\n"
+        f"Return at most {max_candidates}, the most consequential first.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"candidates": [{"question": str, "whyAsking": str, '
+        '"settingsHint": str, "category": str}]}.'
+    )
+
+
+def generate_inquiries_user(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    asked_questions: list[str] | None = None,
+) -> str:
+    facts = existing_facts or []
+    asked = asked_questions or []
+    facts_section = (
+        "What you already know about this athlete:\n"
+        + "\n".join(f"- {fact}" for fact in facts)
+        if facts
+        else "You know nothing durable about this athlete yet."
+    )
+    asked_section = (
+        "Questions you have ALREADY put to this athlete — never ask these again, "
+        "in any wording:\n" + "\n".join(f"- {item}" for item in asked)
+        if asked
+        else "You have not asked this athlete anything yet."
+    )
+    return (
+        f"{metrics_section}\n\n"
+        f"{facts_section}\n\n"
+        f"{asked_section}\n\n"
+        "Decide what — if anything — you need to ask this athlete directly, as "
+        "specified."
+    )
+
+
+def evaluate_inquiry_answer_system(is_final_attempt: bool) -> str:
+    """System prompt judging whether a reply actually answered the question (#506).
+
+    ``is_final_attempt`` switches the fallback from "rephrase and ask again" to
+    "stop asking and hand off to Settings", so the coach never puts the same
+    question a third time.
+    """
+    fallback = (
+        (
+            "This was your LAST attempt. Do NOT ask again. In 'reply', thank them, "
+            "say plainly that you will work without it for now, and point them at "
+            "the settings location given below so they can state it themselves "
+            "whenever they want. Leave 'question' empty."
+        )
+        if is_final_attempt
+        else (
+            "Ask ONCE more. In 'question' put the rephrased question (<=200 chars) "
+            "— make it easier to answer than before: narrow it, give an example "
+            "answer, or offer the likely options. In 'reply' write the friendly "
+            "one-or-two-sentence message that carries it, acknowledging what they "
+            "did say. Never imply they answered badly."
+        )
+    )
+    return (
+        f"{COACH_PERSONA} You asked your athlete a question and they replied. "
+        "Judge ONLY whether the reply actually answers what you asked.\n"
+        "Be generous: a short, vague or partial answer that still tells you the "
+        "thing you needed ('knee's fine now', 'work trip') COUNTS as answered. An "
+        "answer counts as NOT answered only when it is off-topic, a refusal, a "
+        "question back at you, or so unclear it tells you nothing.\n"
+        "If it IS answered: set 'answered' true and put in 'fact' a single "
+        "third-person sentence (<=200 chars) recording what you now know about the "
+        "athlete, phrased so it still reads correctly in six weeks (resolve 'last "
+        "Tuesday' and similar to what actually happened, and keep it free of "
+        "wording that would age badly). In 'reply' write a short, warm "
+        "acknowledgement — one or two sentences, saying what you will do with it. "
+        "Leave 'question' empty.\n"
+        f"If it is NOT answered: set 'answered' false. {fallback} Leave 'fact' "
+        "empty.\n"
+        "ALWAYS respond with a valid JSON object of the form: "
+        '{"answered": bool, "fact": str, "reply": str, "question": str}.'
+    )
+
+
+def evaluate_inquiry_answer_user(
+    question: str,
+    answer: str,
+    why_asking: str = "",
+    settings_hint: str = "",
+) -> str:
+    why_line = (
+        f"Why you asked: {why_asking}\n" if why_asking.strip() else ""
+    )
+    hint_line = (
+        f"Where they could state this themselves: {settings_hint}\n"
+        if settings_hint.strip()
+        else "There is no settings page for this; suggest they simply tell you in "
+        "the chat when they know.\n"
+    )
+    return (
+        f"You asked: {question}\n"
+        f"{why_line}"
+        f"They replied: {answer}\n"
+        f"{hint_line}\n"
+        "Judge the reply as specified."
     )
 
 

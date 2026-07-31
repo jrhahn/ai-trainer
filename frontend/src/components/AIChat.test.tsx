@@ -15,6 +15,9 @@ const {
   mockFetchAthleteOpenQuestions,
   mockFetchAthleteHypotheses,
   mockFetchValidationExperiments,
+  mockFetchAthleteInquiries,
+  mockAnswerAthleteInquiry,
+  mockDismissAthleteInquiry,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
@@ -24,6 +27,9 @@ const {
   mockFetchAthleteOpenQuestions: vi.fn(),
   mockFetchAthleteHypotheses: vi.fn(),
   mockFetchValidationExperiments: vi.fn(),
+  mockFetchAthleteInquiries: vi.fn(),
+  mockAnswerAthleteInquiry: vi.fn(),
+  mockDismissAthleteInquiry: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -42,6 +48,9 @@ vi.mock('../services/user', () => ({
   fetchAthleteOpenQuestions: mockFetchAthleteOpenQuestions,
   fetchAthleteHypotheses: mockFetchAthleteHypotheses,
   fetchValidationExperiments: mockFetchValidationExperiments,
+  fetchAthleteInquiries: mockFetchAthleteInquiries,
+  answerAthleteInquiry: mockAnswerAthleteInquiry,
+  dismissAthleteInquiry: mockDismissAthleteInquiry,
 }))
 
 const baseProfile: UserProfile = {
@@ -76,6 +85,8 @@ beforeEach(() => {
   mockFetchAthleteOpenQuestions.mockResolvedValue([])
   mockFetchAthleteHypotheses.mockResolvedValue([])
   mockFetchValidationExperiments.mockResolvedValue([])
+  mockFetchAthleteInquiries.mockResolvedValue([])
+  mockDismissAthleteInquiry.mockResolvedValue(undefined)
 })
 
 describe('AIChat', () => {
@@ -694,5 +705,164 @@ describe('AIChat — Coach Timeline events', () => {
     // Newest first: newer exchange → plan update → older exchange.
     expect(newerAnswer.compareDocumentPosition(planUpdate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(planUpdate.compareDocumentPosition(olderQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('AIChat pinned inquiries (#506)', () => {
+  const inquiry = (overrides = {}) => ({
+    id: 'inq-1',
+    question: 'You skipped Tuesday three weeks running — what is getting in the way?',
+    category: 'recurring_issues',
+    whyAsking: 'Your rides show the absence but never the reason.',
+    settingsHint: 'Settings > Athlete > Availability',
+    status: 'pending' as const,
+    answer: null,
+    askCount: 1,
+    followUpNote: null,
+    askedAt: '2026-06-15T09:00:00.000Z',
+    answeredAt: null,
+    updatedAt: '2026-06-15T09:00:00.000Z',
+    ...overrides,
+  })
+
+  it('pins the question outside the scrolling feed so it cannot be buried', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    const pin = await screen.findByTestId('pinned-inquiry')
+    expect(pin).toHaveTextContent('what is getting in the way?')
+    expect(pin).toHaveTextContent('Your rides show the absence but never the reason.')
+    expect(pin).toHaveTextContent('Settings > Athlete > Availability')
+    // The pin must not live in the feed, which scrolls away under new exchanges.
+    const feed = screen.getByLabelText('Coach chat messages')
+    expect(feed.contains(pin)).toBe(false)
+  })
+
+  it('pins only the longest-waiting question, not every open one', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([
+      inquiry(),
+      inquiry({ id: 'inq-2', question: 'How is sleep at the moment?' }),
+    ])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    expect(screen.getAllByTestId('pinned-inquiry')).toHaveLength(1)
+    expect(screen.queryByText('How is sleep at the moment?')).not.toBeInTheDocument()
+  })
+
+  it('clears the pin on an accepted answer and shows the exchange in the chat', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'Work trips.' }),
+      accepted: true,
+      coachReply: 'Thanks — I will move that session to Wednesday.',
+    })
+    render(<AIChat />)
+
+    const pin = await screen.findByTestId('pinned-inquiry')
+    const box = screen.getByLabelText(/^Answer:/)
+    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+    expect(mockAnswerAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1', 'Work trips.')
+    expect(await screen.findByText('Thanks — I will move that session to Wednesday.')).toBeInTheDocument()
+    expect(screen.getByText('Work trips.')).toBeInTheDocument()
+    expect(pin).not.toBeInTheDocument()
+  })
+
+  it('keeps the pin with the rephrased question when the answer missed', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    const rephrased = inquiry({
+      status: 'pending',
+      askCount: 2,
+      question: 'Is it a fixed commitment on Tuesdays, or just how it fell?',
+    })
+    mockAnswerAthleteInquiry.mockImplementation(async () => {
+      // The answer re-pins a rephrased question server-side, so a list fetched
+      // after this point sees the new wording too.
+      mockFetchAthleteInquiries.mockResolvedValue([rephrased])
+      return {
+        inquiry: rephrased,
+        accepted: false,
+        coachReply: 'Fair enough — let me put it another way.',
+      }
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const pin = await screen.findByTestId('pinned-inquiry')
+    await waitFor(() =>
+      expect(pin).toHaveTextContent('Is it a fixed commitment on Tuesdays, or just how it fell?'),
+    )
+    expect(pin).toHaveTextContent('Still needs an answer')
+    // The answer that missed must not be left in the box for the new question.
+    expect(screen.getByLabelText(/^Answer:/)).toHaveValue('')
+  })
+
+  it('drops the pin once the coach hands off to settings', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry({ askCount: 2 })])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ askCount: 2, status: 'needs_settings' }),
+      accepted: false,
+      coachReply: 'No problem — you can set this any time under Settings > Athlete > Availability.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'still dunno' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+    expect(
+      await screen.findByText(/you can set this any time under Settings/),
+    ).toBeInTheDocument()
+  })
+
+  it('skipping removes the pin without answering', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+    expect(mockDismissAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1')
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
+    // A list fetch that is still a moment behind must not re-pin it.
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalled())
+    expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument()
+  })
+
+  it('keeps the pin and reports the failure when sending the answer fails', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockRejectedValue(new Error('network'))
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText(/Couldn't send that answer/)).toBeInTheDocument()
+    expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Answer:/)).toHaveValue('Work trips.')
+  })
+
+  it('shows no pin when nothing is waiting', async () => {
+    setupStore()
+    render(<AIChat />)
+
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalled())
+    expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument()
   })
 })

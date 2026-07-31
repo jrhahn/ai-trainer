@@ -692,6 +692,53 @@ class AthleteOpenQuestionUpdateRequest(CamelModel):
     status: Optional[AthleteOpenQuestionStatus] = None
 
 
+AthleteInquiryStatus = Literal["pending", "answered", "needs_settings", "dismissed"]
+
+
+class AthleteInquirySchema(CamelModel):
+    """A question the coach put to the athlete because data cannot answer it (#506)."""
+
+    id: str
+    question: str
+    category: str
+    why_asking: str = ""
+    settings_hint: str = ""
+    status: AthleteInquiryStatus
+    answer: Optional[str] = None
+    ask_count: int
+    follow_up_note: Optional[str] = None
+    asked_at: datetime
+    answered_at: Optional[datetime] = None
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteInquiriesResponse(CamelModel):
+    inquiries: list[AthleteInquirySchema]
+
+
+class AthleteInquiryAnswerRequest(CamelModel):
+    answer: str = Field(min_length=1)
+
+
+class AthleteInquiryAnswerResponse(CamelModel):
+    """The inquiry after the answer was judged, plus what the coach said back.
+
+    ``accepted`` reports whether the answer resolved the question. When it did
+    not, ``coach_reply`` carries either the rephrased ask or the hand-off to
+    Settings, so the chat can show the coach's words without a second round trip.
+    """
+
+    inquiry: AthleteInquirySchema
+    accepted: bool
+    coach_reply: str = ""
+
+
 AthleteExperimentStatus = Literal["suggested", "completed", "dismissed"]
 
 
@@ -829,6 +876,7 @@ class MemoryExportSchema(CamelModel):
     open_questions: list[AthleteOpenQuestionSchema] = []
     experiments: list[AthleteExperimentSchema] = []
     predictions: list[AthletePredictionSchema] = []
+    inquiries: list[AthleteInquirySchema] = []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

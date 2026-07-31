@@ -953,6 +953,19 @@ async def ask_trainer(
         ).model_dump(by_alias=True, mode="json")
         for question in open_question_rows
     ]
+    # Questions already pinned to the athlete (#506) — passed so the coach does
+    # not ask them a second time in prose while the pin is still waiting.
+    pending_inquiry_rows = (
+        await crud.list_athlete_inquiries(db, current_user.id)
+        if memory_enabled
+        else []
+    )
+    pending_inquiries = [
+        schemas.AthleteInquirySchema.model_validate(
+            inquiry, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for inquiry in pending_inquiry_rows
+    ]
 
     # Deterministic Athlete Performance Model (#476/#477), its ROI recommendation
     # (#478) and the active testable hypotheses (#479) — the structured substrate
@@ -1027,6 +1040,7 @@ async def ask_trainer(
                 athlete_memory_facts=athlete_memory_facts,
                 athlete_model=athlete_model,
                 open_questions=open_questions,
+                pending_inquiries=pending_inquiries,
                 performance_model=performance_model,
                 performance_recommendation=performance_recommendation,
                 hypotheses=hypotheses,

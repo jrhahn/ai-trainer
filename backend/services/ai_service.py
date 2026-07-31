@@ -75,6 +75,10 @@ from .prompts import (
     generate_athlete_insights_user,
     generate_open_questions_system,
     generate_open_questions_user,
+    generate_inquiries_system,
+    generate_inquiries_user,
+    evaluate_inquiry_answer_system,
+    evaluate_inquiry_answer_user,
     generate_validation_experiments_system,
     generate_validation_experiments_user,
     generate_athlete_predictions_system,
@@ -707,6 +711,7 @@ async def ask_trainer(
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
     open_questions: list[dict] | None = None,
+    pending_inquiries: list[dict] | None = None,
     performance_model: dict | None = None,
     performance_recommendation: dict | None = None,
     hypotheses: list[dict] | None = None,
@@ -760,6 +765,7 @@ async def ask_trainer(
         athlete_memory_facts=athlete_memory_facts,
         athlete_model=athlete_model,
         open_questions=open_questions,
+        pending_inquiries=pending_inquiries,
         performance_model=performance_model,
         performance_recommendation=performance_recommendation,
         hypotheses=hypotheses,
@@ -949,6 +955,7 @@ async def extract_athlete_facts(
 MAX_GENERATED_INSIGHTS = 8
 MAX_GENERATED_HYPOTHESES = 5
 MAX_GENERATED_OPEN_QUESTIONS = 5
+MAX_GENERATED_INQUIRIES = 3
 MAX_GENERATED_EXPERIMENTS = 5
 MAX_GENERATED_PREDICTIONS = 5
 
@@ -1216,6 +1223,144 @@ def _normalise_open_question_candidate(raw: object) -> dict | None:
         "needs": _text("needs"),
         "resolved": resolved,
         "resolution": _text("resolution"),
+    }
+
+
+def _normalise_inquiry_candidate(raw: object) -> dict | None:
+    """Validate one generated athlete inquiry (#506); clean dict or ``None``."""
+    if not isinstance(raw, dict):
+        return None
+    question = raw.get("question")
+    if not isinstance(question, str) or not question.strip():
+        return None
+    category = raw.get("category")
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
+
+    def _text(*keys: str, limit: int = 240) -> str:
+        for key in keys:
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:limit]
+        return ""
+
+    return {
+        "question": question.strip()[:200],
+        "category": category,
+        "why_asking": _text("whyAsking", "why_asking"),
+        "settings_hint": _text("settingsHint", "settings_hint", limit=120),
+    }
+
+
+async def generate_athlete_inquiries(
+    metrics_section: str,
+    existing_facts: list[str] | None = None,
+    asked_questions: list[str] | None = None,
+    max_candidates: int = MAX_GENERATED_INQUIRIES,
+    provider: str = "openai",
+) -> list[dict]:
+    """Decide what to ask the athlete that data will never reveal (#506).
+
+    ``metrics_section`` is the usual structured training-history summary — here it
+    serves the opposite purpose to the other generators: the model reads it to
+    work out what the data stream already answers, so it can ask about the gaps
+    instead. ``asked_questions`` are every inquiry ever put to this athlete,
+    including answered and dismissed ones, so nothing is asked twice.
+
+    Returns candidate dicts (``question``, ``category``, ``why_asking``,
+    ``settings_hint``), deduplicated and capped at ``max_candidates``. Candidates
+    are NOT persisted — the caller decides how to store them.
+    """
+    if not metrics_section.strip() or max_candidates <= 0:
+        return []
+
+    system_prompt = generate_inquiries_system(max_candidates)
+    user_msg = generate_inquiries_user(
+        metrics_section, existing_facts, asked_questions
+    )
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
+    parsed = _parse_ai_json(raw)
+
+    candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
+    if not isinstance(candidates_raw, list):
+        return []
+
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates_raw:
+        candidate = _normalise_inquiry_candidate(item)
+        if candidate is None:
+            continue
+        dedupe_key = candidate["question"].casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        candidates.append(candidate)
+        if len(candidates) >= max_candidates:
+            break
+    return candidates
+
+
+async def evaluate_inquiry_answer(
+    question: str,
+    answer: str,
+    why_asking: str = "",
+    settings_hint: str = "",
+    is_final_attempt: bool = False,
+    provider: str = "openai",
+) -> dict:
+    """Judge whether an athlete's reply answered the inquiry it was pinned to (#506).
+
+    Returns ``{"answered": bool, "fact": str, "reply": str, "question": str}``:
+    ``fact`` is the durable third-person sentence to store when answered, ``reply``
+    is what the coach says back, and ``question`` is the rephrased ask when the
+    coach gets another attempt (empty on the final one).
+
+    On a malformed or empty model response the answer is treated as **accepted**:
+    the athlete did their part, and the failure mode of a broken judge must be a
+    stored answer rather than an athlete asked the same thing again.
+    """
+    cleaned_answer = answer.strip()
+    if not cleaned_answer:
+        raise ValueError("answer must not be empty")
+
+    fallback = {
+        "answered": True,
+        "fact": "",
+        "reply": "",
+        "question": "",
+    }
+
+    system_prompt = evaluate_inquiry_answer_system(is_final_attempt)
+    user_msg = evaluate_inquiry_answer_user(
+        question, cleaned_answer, why_asking, settings_hint
+    )
+    try:
+        raw = await _chat(
+            provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+        )
+    except Exception:
+        logger.warning("Inquiry answer evaluation failed", exc_info=True)
+        return fallback
+
+    parsed = _parse_ai_json(raw)
+    if not isinstance(parsed, dict) or "answered" not in parsed:
+        return fallback
+
+    def _text(key: str, limit: int = 400) -> str:
+        value = parsed.get(key)
+        return value.strip()[:limit] if isinstance(value, str) else ""
+
+    return {
+        "answered": bool(parsed.get("answered")),
+        "fact": _text("fact", 240),
+        "reply": _text("reply"),
+        "question": _text("question", 200),
     }
 
 
