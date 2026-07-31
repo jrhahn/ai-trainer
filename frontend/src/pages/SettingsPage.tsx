@@ -818,7 +818,7 @@ export default function SettingsPage() {
       <AthleteModelSettings />
 
       {/* Deterministic performance model, limiter & hypotheses (#481) */}
-      <AthletePerformanceModelCard />
+      <AthletePerformanceModelCard className="mt-6" />
 
       {/* Editable training location behind the weather forecast (#495) */}
       <HomeLocationSettings />
