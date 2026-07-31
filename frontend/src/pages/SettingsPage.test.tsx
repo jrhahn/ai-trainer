@@ -91,6 +91,7 @@ beforeEach(() => {
     stravaAutoSyncEnabled: true,
     intervalsAutoSyncEnabled: true,
     aiProvider: 'openai',
+    ftpPlausibilityWarning: null,
   })
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue({})
@@ -193,6 +194,59 @@ describe('SettingsPage', () => {
     expect(within(hrSection).getByDisplayValue('188')).toBeInTheDocument()
     expect(within(hrSection).getByDisplayValue('52')).toBeInTheDocument()
     expect(within(hrSection).getByText(/188 bpm/i)).toBeInTheDocument()
+  })
+
+  it('shows the FTP plausibility warning when one is present', () => {
+    useAppStore.setState({
+      userProfile: { ...baseProfile, currentFTP: 300 },
+      ftpPlausibilityWarning:
+        'FTP of 300 W is 97% of your best 5-minute power (310 W). FTP is a ' +
+        'sustainable effort below maximal aerobic power — normally 72-85 % of ' +
+        'it — so this FTP looks too high.',
+    })
+
+    setup()
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/97% of your best 5-minute power/)
+    expect(alert).toHaveTextContent(/looks too high/)
+    // Advisory only — the entered FTP is left untouched.
+    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    expect(within(ftpSection).getByDisplayValue('300')).toBeInTheDocument()
+  })
+
+  it('shows no plausibility warning when FTP and MAP are consistent', () => {
+    useAppStore.setState({
+      userProfile: { ...baseProfile, currentFTP: 280 },
+      ftpPlausibilityWarning: null,
+    })
+
+    setup()
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('refreshes the plausibility warning from the save response', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile, currentFTP: 280 } })
+    mockUpdateCurrentUser.mockResolvedValue({
+      profile: { ...baseProfile, currentFTP: 500 },
+      ftpPlausibilityWarning: 'FTP of 500 W is 98% of your best 5-minute power (510 W).',
+    })
+
+    setup()
+
+    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    const input = within(ftpSection).getByDisplayValue('280')
+    await userEvent.clear(input)
+    await userEvent.type(input, '500')
+    await userEvent.click(within(ftpSection).getByRole('button', { name: /Save FTP/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/98% of your best 5-minute power/)
+    })
+    expect(useAppStore.getState().ftpPlausibilityWarning).toBe(
+      'FTP of 500 W is 98% of your best 5-minute power (510 W).'
+    )
   })
 
   it('hydrates FTP and heart-rate inputs when profile data arrives after render', async () => {
