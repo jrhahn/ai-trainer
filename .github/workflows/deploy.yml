@@ -14,6 +14,19 @@ on:
 permissions:
   contents: read
 
+# One deploy at a time. Two runs overlapping on the production host race each
+# other: both rsync the repo with --delete (which removes the live .env, since
+# it is generated rather than committed) and both then re-render it, so one run
+# can delete .env out from under the other's `docker compose up`. Compose reads
+# no .env, silently substitutes the placeholder credentials in compose.yml, and
+# the backend crash-loops on "password authentication failed".
+#
+# Queue rather than cancel: a cancelled run leaves the host half-synced, which
+# is worse than a deploy that simply waits its turn.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Hetzner
