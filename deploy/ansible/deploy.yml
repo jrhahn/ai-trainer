@@ -114,6 +114,12 @@
         rsync_opts:
           - "--exclude=.git"
           - "--exclude=node_modules"
+          # .env is rendered below, not committed, so --delete would otherwise
+          # remove it on every deploy. That leaves a window in which a running
+          # `docker compose` sees no .env and falls back to placeholder
+          # credentials; excluding it means the file is only ever replaced
+          # in-place by the template task.
+          - "--exclude=.env"
           - "--exclude=authelia/users_database.yml"
           - "--exclude=authelia/db.sqlite3"
           - "--exclude=authelia/notification.txt"

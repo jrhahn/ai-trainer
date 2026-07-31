@@ -5,7 +5,14 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-aitrainer}
       POSTGRES_USER: ${POSTGRES_USER:-aitrainer}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aitrainer}
+      # No default. A default here is silently wrong rather than merely
+      # insecure: Postgres only applies POSTGRES_PASSWORD when it initialises an
+      # empty data directory, so on an existing volume the placeholder is
+      # ignored here but still lands in the backend's DATABASE_URL below --
+      # the two disagree and the backend crash-loops on "password
+      # authentication failed". Fail at `compose up` instead. Copy .env.example
+      # to .env for local development.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set - copy .env.example to .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -65,7 +72,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aitrainer}:${POSTGRES_PASSWORD:-aitrainer}@postgres:5432/${POSTGRES_DB:-aitrainer}
+      # Must agree with the postgres service above; see the note there on why
+      # this password has no default.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aitrainer}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set - copy .env.example to .env}@postgres:5432/${POSTGRES_DB:-aitrainer}
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
