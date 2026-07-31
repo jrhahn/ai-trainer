@@ -1340,15 +1340,18 @@ async def evaluate_inquiry_answer(
     user_msg = evaluate_inquiry_answer_user(
         question, cleaned_answer, why_asking, settings_hint
     )
+    # The parse is inside the guard on purpose: a model that replies in prose
+    # makes _parse_ai_json raise, and an exception here would 500 the request and
+    # lose the answer the athlete just typed.
     try:
         raw = await _chat(
             provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
         )
+        parsed = _parse_ai_json(raw)
     except Exception:
         logger.warning("Inquiry answer evaluation failed", exc_info=True)
         return fallback
 
-    parsed = _parse_ai_json(raw)
     if not isinstance(parsed, dict) or "answered" not in parsed:
         return fallback
 

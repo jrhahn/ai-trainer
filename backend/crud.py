@@ -1674,10 +1674,13 @@ async def record_athlete_inquiry(
     normalized_category = _normalise_athlete_memory_category(category)
     question_key = _normalise_inquiry_key(cleaned)
 
+    # Matched on the question alone, deliberately ignoring the category: the model
+    # files the same question under a different slug from one run to the next, and
+    # "never asked twice" has to survive that. The unique index keeps the stricter
+    # (category, question) pair as a backstop.
     existing = await db.scalar(
         select(models.AthleteInquiry).where(
             models.AthleteInquiry.user_id == user_id,
-            models.AthleteInquiry.category == normalized_category,
             models.AthleteInquiry.question_key == question_key,
         )
     )
