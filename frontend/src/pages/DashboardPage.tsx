@@ -1,27 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { format } from 'date-fns'
-import {
-  Cloud,
-  CloudFog,
-  CloudLightning,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
-  Clock,
-  MessageSquare,
-  Sun,
-} from 'lucide-react'
+import { Bot, CheckCircle2, Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
-import RideFeedbackForm from '../components/RideFeedbackForm'
+import PlanChangesPanel from '../components/PlanChangesPanel'
+import TrainingCalendar from '../components/TrainingCalendar'
+import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
+import { WeatherIcon } from '../components/WeatherBadge'
+import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
-import { processPendingFeedbacks, refreshLoginSummary } from '../services/ai'
+import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
+import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
+import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
@@ -29,17 +26,19 @@ const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
 
+// Quick leg-freshness ratings tappable directly on each activity card.
+const LEG_FEELINGS = [
+  { value: 'fresh', emoji: '🟢', label: 'Fresh' },
+  { value: 'normal', emoji: '🟡', label: 'Normal' },
+  { value: 'heavy', emoji: '🔴', label: 'Heavy' },
+] as const
+
 export function formatDuration(seconds: number | undefined): string {
   if (!seconds) return ''
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m} min`
-}
-
-export function formatTemperature(value: number | null | undefined): string {
-  if (value == null) return ''
-  return `${Math.round(value)}°C`
 }
 
 export function rideActivityKey(ride: RideMetricPoint): string {
@@ -248,23 +247,6 @@ function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[
   return unique
 }
 
-function WeatherIcon({ condition }: { condition?: string | null }) {
-  const normalized = condition?.toLowerCase()
-  if (normalized === 'clear') return <Sun size={12} className="text-amber-500" />
-  if (normalized === 'partly_cloudy') {
-    return <CloudSun size={12} className="text-amber-500" />
-  }
-  if (normalized === 'fog') return <CloudFog size={12} className="text-gray-400" />
-  if (normalized === 'rain' || normalized === 'drizzle') {
-    return <CloudRain size={12} className="text-blue-500" />
-  }
-  if (normalized === 'snow') return <CloudSnow size={12} className="text-sky-500" />
-  if (normalized === 'thunderstorm') {
-    return <CloudLightning size={12} className="text-violet-500" />
-  }
-  return <Cloud size={12} className="text-gray-400" />
-}
-
 function isRestOrNoTargetPlan(plan: Partial<TrainingDay>): boolean {
   const workoutType = plan.workoutType?.toLowerCase()
   return workoutType === 'rest' || (!plan.durationMinutes && !plan.targetPower)
@@ -345,7 +327,8 @@ export function computeMatchScore(
     }
     // No TSS available: use duration ratio if both sides are known, otherwise default to no-data OK
     if (ride.durationSeconds && plan.durationMinutes) {
-      return scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+      // A prescribed duration window makes any in-range actual on-target (#368).
+      return scoreDurationMatch(ride.durationSeconds, effectivePlannedMinutes(plan, ride.durationSeconds))
     }
     return 90
   }
@@ -353,16 +336,18 @@ export function computeMatchScore(
   // Strength/non-power plans: score purely on duration completion (0–100 %).
   if (isStrengthPlan(plan)) {
     if (!ride.durationSeconds || !plan.durationMinutes) return 90
-    return Math.min(100, Math.round((ride.durationSeconds / 60 / plan.durationMinutes) * 100))
+    const planned = effectivePlannedMinutes(plan, ride.durationSeconds)
+    return Math.min(100, Math.round((ride.durationSeconds / 60 / planned) * 100))
   }
 
   const parts: number[] = []
   const intervalWorkout = isIntervalWorkoutPlan(plan)
 
   if (ride.durationSeconds != null && plan.durationMinutes) {
-    let durationScore = scoreDurationMatch(ride.durationSeconds, plan.durationMinutes)
+    const planned = effectivePlannedMinutes(plan, ride.durationSeconds)
+    let durationScore = scoreDurationMatch(ride.durationSeconds, planned)
     if (intervalWorkout) {
-      const ratio = ride.durationSeconds / 60 / plan.durationMinutes
+      const ratio = ride.durationSeconds / 60 / planned
       if (ratio > 1 && ratio <= 2) {
         durationScore = Math.max(durationScore, 40)
       }
@@ -494,7 +479,7 @@ export function buildMatchCoachPrompt(
   ].filter(Boolean).join(', ')
 
   const planParts = [
-    plan.durationMinutes ? `${plan.durationMinutes} min` : null,
+    plan.durationMinutes ? formatPlanDuration(plan) : null,
     plan.targetPower ? `${plan.targetPower.low}–${plan.targetPower.high}W` : null,
   ].filter(Boolean).join(', ')
 
@@ -567,7 +552,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetric, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -577,16 +562,29 @@ export default function DashboardPage() {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       rideMetricsHistory: s.rideMetricsHistory,
-      updateRideMetric: s.updateRideMetric,
+      updateRideMetricLegs: s.updateRideMetricLegs,
       setPendingCoachMessage: s.setPendingCoachMessage,
     }))
   )
 
   const summaryTriggeredRef = useRef(false)
+  const statusTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
-  const [feedbackRide, setFeedbackRide] = useState<RideMetricPoint | null>(null)
+
+  // Quick "how the legs felt" tap on an activity card. Optimistically update the
+  // store, persist to the backend, and revert on failure. Tapping the active
+  // rating again clears it (back to unset, which is ignored everywhere).
+  const handleSetLegs = (ride: RideMetricPoint, legs: 'fresh' | 'normal' | 'heavy') => {
+    if (!authToken) return
+    const next = ride.feelLegs === legs ? null : legs
+    const previous = ride.feelLegs ?? null
+    updateRideMetricLegs(ride.stravaActivityId, next)
+    void setRideLegs(authToken, ride.stravaActivityId, next, ride.externalActivityId).catch(() => {
+      updateRideMetricLegs(ride.stravaActivityId, previous)
+    })
+  }
 
   useEffect(() => {
     try {
@@ -653,6 +651,87 @@ export default function DashboardPage() {
     .filter((d) => d.date >= today && !(hasTodayActivity && d.date === today))
     .slice(0, 3)
 
+  // "Today's status" glance strip (#417): today / tomorrow / an honest, signal-backed
+  // training-status indicator. Each part is omitted when we have no real data for it —
+  // the status line in particular is derived from actual plan adherence, never faked.
+  const tomorrow = formatLocalDate(new Date(parseLocalDate(today).getTime() + 24 * 60 * 60 * 1000))
+  const todayPlan = trainingPlan.find((d) => d.date === today)
+  const tomorrowPlan = trainingPlan.find((d) => d.date === tomorrow)
+
+  const sessionLabel = (d: TrainingDay | undefined): string | null => {
+    if (!d) return null
+    if (d.workoutType === 'rest') return 'Rest'
+    return d.title?.trim() || d.workoutType.charAt(0).toUpperCase() + d.workoutType.slice(1)
+  }
+
+  let todayStatusText: string | null = null
+  if (hasTodayActivity) {
+    todayStatusText =
+      todayPlan && todayPlan.workoutType !== 'rest'
+        ? `${sessionLabel(todayPlan)} completed`
+        : 'Session logged'
+  } else if (todayPlan) {
+    todayStatusText =
+      todayPlan.workoutType === 'rest' ? 'Rest day' : `Today: ${sessionLabel(todayPlan)}`
+  }
+
+  const tomorrowStatusLabel = sessionLabel(tomorrowPlan)
+
+  // Training status is written by the coach, not by this component (#499).
+  //
+  // It used to be a local `done / due` ratio over the trailing week, which the
+  // coach never saw — so when the athlete asked "why am I slightly behind?" the
+  // coach had no idea the badge existed and invented a reason. That ratio was
+  // also wrong on its own terms: it dropped two-a-days whose ride↔plan match came
+  // back `ambiguous`, counted declining an explicitly optional session as a miss,
+  // and ignored unplanned work entirely, so it could only ever punish.
+  //
+  // The backend status pipeline now owns the verdict and the wording, and feeds
+  // the very same text into the coach's prompt. Rendering it here is a plain read.
+  const statusTone: Record<string, string> = {
+    positive: 'text-green-600',
+    steady: 'text-gray-600',
+    caution: 'text-amber-600',
+  }
+  const trainingStatus = riderAssessment?.trainingStatusLabel
+    ? {
+        label: riderAssessment.trainingStatusLabel,
+        // The tone is a free-text column server-side, so an unknown or absent
+        // value falls back to neutral rather than leaving the badge unstyled.
+        className: statusTone[riderAssessment.trainingStatusTone ?? ''] ?? statusTone.steady,
+        title: riderAssessment.trainingStatusRationale,
+      }
+    : null
+
+  const statusSegments: Array<{ key: string; node: ReactNode }> = []
+  if (todayStatusText) {
+    statusSegments.push({
+      key: 'today',
+      node: (
+        <span className="flex items-center gap-1.5 font-medium text-gray-800">
+          {hasTodayActivity && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}
+          {todayStatusText}
+        </span>
+      ),
+    })
+  }
+  if (tomorrowStatusLabel) {
+    statusSegments.push({
+      key: 'tomorrow',
+      node: <span className="text-gray-500">Tomorrow: {tomorrowStatusLabel}</span>,
+    })
+  }
+  if (trainingStatus) {
+    statusSegments.push({
+      key: 'status',
+      node: (
+        <span className={`font-medium ${trainingStatus.className}`} title={trainingStatus.title}>
+          {trainingStatus.label}
+        </span>
+      ),
+    })
+  }
+
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
@@ -683,6 +762,28 @@ export default function DashboardPage() {
         // silently ignore — the card simply won't show
       })
       .finally(() => setSummaryLoading(false))
+  }, [authToken, riderAssessment, setRiderAssessment])
+
+  // Lazily regenerate the status badge when the pipeline has invalidated it (or
+  // the athlete never had one). Cheap to skip, so it is fire-and-forget: a
+  // failure just leaves the segment out rather than blocking the dashboard.
+  useEffect(() => {
+    if (!authToken || !riderAssessment || riderAssessment.trainingStatusLabel) return
+    if (statusTriggeredRef.current) return
+    statusTriggeredRef.current = true
+    refreshTrainingStatus(authToken)
+      .then((badge) => {
+        if (!badge) return
+        setRiderAssessment({
+          ...riderAssessment,
+          trainingStatusLabel: badge.label,
+          trainingStatusTone: badge.tone,
+          trainingStatusRationale: badge.rationale,
+        })
+      })
+      .catch(() => {
+        // silently ignore — the status segment simply won't show
+      })
   }, [authToken, riderAssessment, setRiderAssessment])
 
   useEffect(() => {
@@ -726,9 +827,21 @@ export default function DashboardPage() {
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
 
+      {/* Today's status — compact at-a-glance strip (#417) */}
+      {statusSegments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm text-sm">
+          {statusSegments.map((seg, i) => (
+            <Fragment key={seg.key}>
+              {i > 0 && <span className="text-gray-300" aria-hidden="true">·</span>}
+              {seg.node}
+            </Fragment>
+          ))}
+        </div>
+      )}
+
       {isExpertMode && (
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
             Consumed tokens
           </p>
           <p className="text-2xl font-bold text-gray-900">
@@ -737,31 +850,125 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Post-login ride summary */}
-      {(riderAssessment?.loginSummary || summaryLoading) && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            📊 Your Recent Training Summary
-          </p>
-          {summaryLoading ? (
-            <p className="text-sm text-blue-400 italic">Preparing your training summary…</p>
-          ) : (
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-              {loginSummary?.bullets.length ? (
-                <ul className="mt-2 space-y-1 list-disc pl-5">
-                  {loginSummary.bullets.map((bullet, index) => (
-                    <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                      {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                      {bullet.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-              )}
-            </div>
-          )}
+      {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
+      {(recentRides.length > 0 || next3Days.length > 0) && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Activities</h2>
+          <div className="space-y-1.5">
+            {recentRides.map((ride) => {
+              const plan = planForRide(ride, trainingPlan)
+              const score = plan ? computeMatchScore(ride, plan) : null
+              const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
+              const scoreBadgeStyle = plan
+                ? matchScoreBadgeStyle(score, plan, ride.labelOverride)
+                : 'bg-gray-100 text-gray-500'
+              return (
+                <div
+                  key={rideActivityKey(ride)}
+                  className="bg-white rounded-lg border border-gray-100 px-3 py-2"
+                >
+                  {/* Activity row */}
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-500 flex-shrink-0 w-16">
+                      {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
+                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                    <span className="text-xs text-gray-700 font-medium flex-1 truncate">
+                      {ride.activityName ?? 'Activity'}
+                    </span>
+                    {ride.weatherTemperatureC != null && (
+                      <span
+                        className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0"
+                        title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
+                      >
+                        <WeatherIcon condition={ride.weatherCondition} />
+                        {formatTemperature(ride.weatherTemperatureC)}
+                      </span>
+                    )}
+                    {ride.durationSeconds != null && (
+                      <span className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0">
+                        <Clock size={11} />
+                        {formatDuration(ride.durationSeconds)}
+                      </span>
+                    )}
+                    {isNew(ride) && (
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                        new
+                      </span>
+                    )}
+                  </div>
+                  {/* Plan comparison row */}
+                  <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
+                    <span className="text-xs text-gray-500">planned:</span>
+                    <span className="text-xs text-gray-600 font-medium truncate flex-1">
+                      {plan ? (
+                        <>
+                          {plan.title ?? plan.workoutType}
+                          {plan.durationMinutes ? ` · ${formatPlanDuration(plan)}` : ''}
+                          {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
+                        </>
+                      ) : (
+                        'No planned workout found'
+                      )}
+                    </span>
+                    {plan && (
+                      <button
+                        onClick={() =>
+                          setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
+                        }
+                        title="Ask coach about this match"
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
+                      >
+                        {scoreLabel}
+                      </button>
+                    )}
+                    {authToken && (
+                      <div
+                        className="flex items-center gap-0.5 flex-shrink-0"
+                        role="group"
+                        aria-label="How did your legs feel?"
+                      >
+                        {LEG_FEELINGS.map((feel) => {
+                          const active = ride.feelLegs === feel.value
+                          return (
+                            <button
+                              key={feel.value}
+                              type="button"
+                              onClick={() => handleSetLegs(ride, feel.value)}
+                              title={`Legs: ${feel.label}`}
+                              aria-label={`Legs felt ${feel.label}`}
+                              aria-pressed={active}
+                              className={`text-xs leading-none px-1.5 py-1 rounded transition-all ${
+                                active
+                                  ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
+                                  : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
+                              }`}
+                            >
+                              {feel.emoji}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {recentRides.length > 0 && next3Days.length > 0 && (
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2 pb-0.5 pl-1">
+                Upcoming
+              </p>
+            )}
+            {next3Days.map((day) => (
+              <WorkoutCard key={day.date} day={day} compact />
+            ))}
+          </div>
         </div>
       )}
 
@@ -786,132 +993,67 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
-      {(recentRides.length > 0 || next3Days.length > 0) && (
-        <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Activities</h2>
-          <div className="space-y-1.5">
-            {recentRides.map((ride) => {
-              const plan = planForRide(ride, trainingPlan)
-              const score = plan ? computeMatchScore(ride, plan) : null
-              const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
-              const scoreBadgeStyle = plan
-                ? matchScoreBadgeStyle(score, plan, ride.labelOverride)
-                : 'bg-gray-100 text-gray-500'
-              return (
-                <div
-                  key={rideActivityKey(ride)}
-                  className="bg-white rounded-lg border border-gray-100 px-3 py-2"
-                >
-                  {/* Activity row */}
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-400 flex-shrink-0 w-16">
-                      {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </p>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
-                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-xs text-gray-700 font-medium flex-1 truncate">
-                      {ride.activityName ?? 'Activity'}
-                    </span>
-                    {ride.weatherTemperatureC != null && (
-                      <span
-                        className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0"
-                        title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
-                      >
-                        <WeatherIcon condition={ride.weatherCondition} />
-                        {formatTemperature(ride.weatherTemperatureC)}
-                      </span>
-                    )}
-                    {ride.durationSeconds != null && (
-                      <span className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-                        <Clock size={11} />
-                        {formatDuration(ride.durationSeconds)}
-                      </span>
-                    )}
-                    {isNew(ride) && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
-                        new
-                      </span>
+      {/* Coach Timeline — the recent-training summary opens the conversation as a
+          pinned coach entry, then plan updates, recommendations and chat interleave
+          in the feed below (#418). Takes up the majority of the remaining space. */}
+      <div className="flex flex-col">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
+
+        {(riderAssessment?.loginSummary || summaryLoading) && (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Bot size={14} className="text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Your recent training summary
+                </p>
+                {summaryLoading ? (
+                  <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
+                ) : (
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+                    {loginSummary?.bullets.length ? (
+                      <ul className="mt-2 space-y-1 list-disc pl-5">
+                        {loginSummary.bullets.map((bullet, index) => (
+                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                            {bullet.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
                     )}
                   </div>
-                  {/* Plan comparison row */}
-                  <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                    <span className="text-xs text-gray-400">planned:</span>
-                    <span className="text-xs text-gray-600 font-medium truncate flex-1">
-                      {plan ? (
-                        <>
-                          {plan.title ?? plan.workoutType}
-                          {plan.durationMinutes ? ` · ${plan.durationMinutes} min` : ''}
-                          {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
-                        </>
-                      ) : (
-                        'No planned workout found'
-                      )}
-                    </span>
-                    {plan && (
-                      <button
-                        onClick={() =>
-                          setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
-                        }
-                        title="Ask coach about this match"
-                        className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
-                      >
-                        {scoreLabel}
-                      </button>
-                    )}
-                    {authToken && (
-                      <button
-                        onClick={() => setFeedbackRide(ride)}
-                        title="Add ride feedback"
-                        className="text-gray-400 hover:text-amber-600 transition-colors"
-                        aria-label={`Add feedback for ${ride.activityName ?? 'activity'}`}
-                      >
-                        <MessageSquare size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-            {recentRides.length > 0 && next3Days.length > 0 && (
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2 pb-0.5 pl-1">
-                Upcoming
-              </p>
-            )}
-            {next3Days.map((day) => (
-              <WorkoutCard key={day.date} day={day} compact />
-            ))}
+                )}
+              </div>
+            </div>
           </div>
+        )}
+
+        <AIChat
+          contextWorkout={trainingPlan.find((d) => d.date === today)}
+          className="h-[60vh] min-h-[24rem] shadow-sm"
+        />
+      </div>
+
+      {/* Coach's model of the athlete + its confidences — expert mode only */}
+      {isExpertMode && <AthletePerformanceModelCard />}
+
+      {/* Plan-vs-logged month calendar — expert mode only (#369) */}
+      {isExpertMode && (
+        <div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            Training calendar
+          </h2>
+          <TrainingCalendar showLoggedActivities />
         </div>
       )}
 
-      {feedbackRide && (
-        <RideFeedbackForm
-          stravaActivityId={feedbackRide.stravaActivityId}
-          activityDate={feedbackRide.activityDate}
-          activityName={feedbackRide.activityName}
-          sportType={feedbackRide.sportType}
-          onSaved={(data) => {
-            if (data.ride) updateRideMetric(data.ride)
-            setFeedbackRide(null)
-          }}
-          onCancel={() => setFeedbackRide(null)}
-        />
-      )}
-
-      {/* Ask your coach — takes up the majority of the remaining space */}
-      <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ask your coach</h2>
-        <AIChat
-          contextWorkout={trainingPlan.find((d) => d.date === today)}
-          className="flex-1 h-[calc(100vh-22rem)] min-h-[24rem] shadow-sm"
-        />
-      </div>
+      {/* Recent plan changes / override analytics — expert mode only (#357) */}
+      {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
 
       {/* Athlete progression charts — expert mode only */}
       {isExpertMode && <ProgressionChart />}

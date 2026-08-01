@@ -95,6 +95,95 @@ def test_metrics_chain_preserves_normalized_source_fields():
     assert metrics[0]["source_metadata"] == {"file_id_serial_number": "abc"}
 
 
+# --- Provider power figures over lossy stream recompute (#466) ---
+
+
+def test_intervals_average_never_borrows_normalized_power():
+    """Average power must not fall back to ``icu_weighted_avg_watts`` (NP).
+
+    Conflating them made avg == NP for intervals rides (#466).
+    """
+    imported = map_activity_to_imported_activity(
+        {
+            "id": "i77",
+            "type": "Ride",
+            "start_date_local": "2026-07-01T09:00:00",
+            "moving_time": 3600,
+            "icu_weighted_avg_watts": 210,  # NP only, no average field
+        },
+        None,
+        {},
+    )
+    assert imported is not None
+    ride = imported.to_ride_input()
+    assert ride["_summary_np_w"] == 210
+    assert ride["_summary_avg_power_w"] is None
+
+
+def test_intervals_average_prefers_icu_average_watts():
+    imported = map_activity_to_imported_activity(
+        {
+            "id": "i78",
+            "type": "Ride",
+            "start_date_local": "2026-07-01T09:00:00",
+            "moving_time": 3600,
+            "icu_average_watts": 198,
+            "average_watts": 201,
+            "icu_weighted_avg_watts": 215,
+        },
+        None,
+        {},
+    )
+    assert imported is not None
+    ride = imported.to_ride_input()
+    assert ride["_summary_avg_power_w"] == 198
+    assert ride["_summary_np_w"] == 215
+
+
+def test_metrics_chain_prefers_provider_power_over_lossy_stream():
+    """A degenerate stream (avg == NP) must not override the provider figures."""
+    ride = ImportedActivity(
+        source="intervals",
+        external_activity_id="i999",
+        name="Long aerobic ride",
+        start_datetime="2026-07-25T08:00:00",
+        activity_date="2026-07-25",
+        sport_type="cycling",
+        duration_seconds=13622,
+        # Flat stream would recompute avg == NP == 100 — the #466 failure mode.
+        streams={"watts": {"data": [100, 100, 100]}, "time": {"data": [0, 30, 60]}},
+        summary_avg_power_w=201,
+        summary_normalized_power_w=215,
+        summary_tss=170.0,
+    ).to_ride_input()
+
+    metrics = build_ride_metrics_chain([ride], ftp=320)
+    m = metrics[0]
+
+    assert m["avg_power_w"] == 201
+    assert m["normalized_power_w"] == 215
+    assert m["normalized_power_w"] != m["avg_power_w"]  # no longer degenerate
+    assert m["intensity_factor"] == round(215 / 320, 3)
+    assert m["tss"] == 170.0
+
+
+def test_metrics_chain_falls_back_to_stream_without_provider_power():
+    ride = ImportedActivity(
+        source="intervals",
+        external_activity_id="i998",
+        name="No-summary ride",
+        start_datetime="2026-07-25T08:00:00",
+        activity_date="2026-07-25",
+        sport_type="cycling",
+        duration_seconds=3600,
+        streams={"watts": {"data": [200, 200, 200, 200]}, "time": {"data": [0, 30, 60, 90]}},
+    ).to_ride_input()
+
+    metrics = build_ride_metrics_chain([ride], ftp=250)
+
+    assert metrics[0]["avg_power_w"] == 200  # from the stream, provider absent
+
+
 # --- ImportedActivity id/key helpers (issue #335) ---
 
 from services.activity_imports import (  # noqa: E402

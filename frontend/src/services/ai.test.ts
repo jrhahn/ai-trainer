@@ -18,7 +18,9 @@ import {
   generateTrainingPlan,
   processPendingFeedbacks,
   rateCompletedWorkout,
+  refreshAthleteModel,
   refreshLoginSummary,
+  refreshTrainingStatus,
   resolveRideMatch,
 } from './ai'
 
@@ -47,6 +49,21 @@ void profile
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+describe('refreshAthleteModel', () => {
+  it('POSTs to the refresh endpoint and returns the model', async () => {
+    const model = { ftpWatts: 275, summary: 'refreshed' }
+    mockApiFetch.mockResolvedValue(model)
+
+    const result = await refreshAthleteModel('tok-123')
+
+    expect(result).toBe(model)
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/refresh-athlete-model', {
+      token: 'tok-123',
+      method: 'POST',
+    })
+  })
 })
 
 describe('MAX_CONVERSATION_HISTORY', () => {
@@ -345,7 +362,15 @@ describe('fetchReadinessScore', () => {
       projected_ctl: 85,
       projected_atl: 72,
       projected_tsb: 13,
-      recommendations: ['Taper now'],
+      recommendations: [
+        {
+          recommendation: 'Taper now',
+          reasoning: [
+            { source: 'coach_inference', text: 'TSB is 10.0' },
+            { source: 'scientific_evidence', text: 'taper lifts form' },
+          ],
+        },
+      ],
     })
 
     const result = await fetchReadinessScore('tok-123')
@@ -363,7 +388,15 @@ describe('fetchReadinessScore', () => {
       projectedCtl: 85,
       projectedAtl: 72,
       projectedTsb: 13,
-      recommendations: ['Taper now'],
+      recommendations: [
+        {
+          recommendation: 'Taper now',
+          reasoning: [
+            { source: 'coach_inference', text: 'TSB is 10.0' },
+            { source: 'scientific_evidence', text: 'taper lifts form' },
+          ],
+        },
+      ],
     })
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/readiness-score', { token: 'tok-123' })
   })
@@ -377,6 +410,25 @@ describe('fetchReadinessScore', () => {
     const result = await fetchReadinessScore('tok-123')
 
     expect(result.recommendations).toEqual([])
+  })
+
+  it('falls back to coach_inference for an unknown reasoning source', async () => {
+    mockApiFetch.mockResolvedValue({
+      score: 50, form_score: 50, fitness_score: 50, ctl: 40, atl: 40, tsb: 0,
+      days_until_race: 0, race_date: null,
+      recommendations: [
+        {
+          recommendation: 'Keep going',
+          reasoning: [{ source: 'mystery', text: 'unknown origin' }],
+        },
+      ],
+    })
+
+    const result = await fetchReadinessScore('tok-123')
+
+    expect(result.recommendations[0].reasoning).toEqual([
+      { source: 'coach_inference', text: 'unknown origin' },
+    ])
   })
 })
 
@@ -396,6 +448,57 @@ describe('refreshLoginSummary', () => {
   it('returns an empty string when no summary is present', async () => {
     mockApiFetch.mockResolvedValue({})
     expect(await refreshLoginSummary('tok-123')).toBe('')
+  })
+})
+
+describe('refreshTrainingStatus', () => {
+  it('POSTs and returns the coach-authored badge', async () => {
+    mockApiFetch.mockResolvedValue({
+      label: 'Ahead of plan',
+      tone: 'positive',
+      rationale: 'You added an unplanned long ride.',
+    })
+
+    const badge = await refreshTrainingStatus('tok-123')
+
+    expect(badge).toEqual({
+      label: 'Ahead of plan',
+      tone: 'positive',
+      rationale: 'You added an unplanned long ride.',
+    })
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/refresh-training-status', {
+      token: 'tok-123',
+      method: 'POST',
+    })
+  })
+
+  it('returns null when the backend has no badge to give', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(await refreshTrainingStatus('tok-123')).toBeNull()
+  })
+
+  it('falls back to the neutral tone when the tone is unrecognised', async () => {
+    // The tone drives the chip's colour, so an unknown value must degrade to
+    // something renderable rather than leaving the badge unstyled.
+    mockApiFetch.mockResolvedValue({ label: 'Cruising', tone: 'euphoric' })
+
+    expect(await refreshTrainingStatus('tok-123')).toEqual({
+      label: 'Cruising',
+      tone: 'steady',
+      rationale: '',
+    })
+  })
+
+  it('keeps the caution tone intact', async () => {
+    mockApiFetch.mockResolvedValue({
+      label: 'Missed two',
+      tone: 'caution',
+      rationale: 'Two threshold sessions went unridden.',
+    })
+
+    const badge = await refreshTrainingStatus('tok-123')
+
+    expect(badge?.tone).toBe('caution')
   })
 })
 

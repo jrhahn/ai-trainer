@@ -6,6 +6,7 @@ import pytest
 
 from services.plan_constraints import (
     day_violates_constraint,
+    describe_constraint_overrides,
     filter_plan_updates_for_constraints,
     sanitize_plan_for_constraints,
 )
@@ -167,3 +168,54 @@ def test_no_training_takes_precedence_over_required_on_same_day():
     constraints = [_constraint("2026-07-04"), _required("2026-07-04")]
     result = sanitize_plan_for_constraints(plan, constraints)
     assert result[0]["workoutType"] == "rest"
+
+
+# ---------------------------------------------------------------------------
+# describe_constraint_overrides (#414 coach honesty)
+# ---------------------------------------------------------------------------
+
+
+def _required_wd(date: str, weekday: str) -> dict:
+    return {**_required(date), "weekday": weekday}
+
+
+def test_override_reports_rest_request_on_required_day():
+    # The #412 case: coach asked to rest a required-session day.
+    updates = [{"date": "2026-07-17", "workoutType": "rest", "durationMinutes": 0}]
+    overrides = describe_constraint_overrides(
+        updates, [_required_wd("2026-07-17", "friday")]
+    )
+    assert len(overrides) == 1
+    assert overrides[0]["constraintType"] == "required_workout"
+    assert overrides[0]["weekday"] == "friday"
+    assert overrides[0]["requiredType"] == "endurance"
+
+
+def test_override_reports_training_on_unavailable_day():
+    updates = [_day("2026-06-26")]
+    overrides = describe_constraint_overrides(
+        updates, [{**_constraint("2026-06-26"), "weekday": "friday"}]
+    )
+    assert len(overrides) == 1
+    assert overrides[0]["constraintType"] == "no_training"
+
+
+def test_override_ignores_compliant_updates():
+    # A request that already satisfies the required session is not an override.
+    updates = [{"date": "2026-07-17", "workoutType": "endurance", "durationMinutes": 150}]
+    assert describe_constraint_overrides(updates, [_required("2026-07-17")]) == []
+    # A request on an unconstrained day is fine.
+    assert describe_constraint_overrides([_day("2026-07-20")], [_required("2026-07-17")]) == []
+
+
+def test_override_empty_when_no_constraints():
+    assert describe_constraint_overrides([_day("2026-07-17")], []) == []
+
+
+def test_override_deduplicates_per_date():
+    updates = [
+        {"date": "2026-07-17", "workoutType": "rest", "durationMinutes": 0},
+        {"date": "2026-07-17", "workoutType": "recovery", "durationMinutes": 30},
+    ]
+    overrides = describe_constraint_overrides(updates, [_required("2026-07-17")])
+    assert len(overrides) == 1

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import {
@@ -9,35 +9,73 @@ import {
   matchScoreLabel,
 } from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockProcessPendingFeedbacks, mockRefreshLoginSummary } = vi.hoisted(() => ({
+const {
+  mockProcessPendingFeedbacks,
+  mockRefreshLoginSummary,
+  mockRefreshTrainingStatus,
+  mockSetRideLegs,
+  mockUseImportProgress,
+} = vi.hoisted(() => ({
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
+  mockRefreshTrainingStatus: vi.fn(),
+  mockSetRideLegs: vi.fn(),
+  mockUseImportProgress: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
   processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
+  refreshTrainingStatus: mockRefreshTrainingStatus,
+}))
+
+vi.mock('../services/user', () => ({
+  setRideLegs: mockSetRideLegs,
 }))
 
 vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
 
 vi.mock('../hooks/useImportProgress', () => ({
-  useImportProgress: () => ({ status: 'idle', total: 0, processed: 0, error: undefined }),
+  useImportProgress: mockUseImportProgress,
 }))
+
+const idleImportProgress = {
+  status: 'idle' as const,
+  total: 0,
+  processed: 0,
+  imported: 0,
+  skipped: 0,
+  failedActivities: [],
+  error: '',
+}
+
+const stravaConnection = { athleteId: 123, athleteName: 'Test Athlete' }
 
 vi.mock('../components/ProgressionChart', () => ({
   default: () => <div data-testid="progression-chart" />,
 }))
 
+vi.mock('../components/PlanChangesPanel', () => ({
+  default: () => <div data-testid="plan-changes-panel" />,
+}))
+
+vi.mock('../components/TrainingCalendar', () => ({
+  default: () => <div data-testid="training-calendar" />,
+}))
+
 vi.mock('../components/AIChat', () => ({
   default: () => <div data-testid="ai-chat" />,
+}))
+
+vi.mock('../components/AthletePerformanceModelCard', () => ({
+  default: () => <div data-testid="performance-model-card" />,
 }))
 
 // ---------------------------------------------------------------------------
@@ -89,6 +127,19 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
   })
 }
 
+function assessmentWithStatus(
+  overrides: Partial<RiderAssessment> = {}
+): RiderAssessment {
+  return {
+    riderType: 'allrounder',
+    notes: '',
+    trainingStatusLabel: 'On track',
+    trainingStatusTone: 'positive',
+    trainingStatusRationale: 'Every planned session is done.',
+    ...overrides,
+  }
+}
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -107,6 +158,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockProcessPendingFeedbacks.mockResolvedValue('')
   mockRefreshLoginSummary.mockResolvedValue(null)
+  mockRefreshTrainingStatus.mockResolvedValue(null)
+  mockSetRideLegs.mockResolvedValue({ stravaActivityId: 0, ride: null })
+  mockUseImportProgress.mockReturnValue(idleImportProgress)
 })
 
 // ---------------------------------------------------------------------------
@@ -697,6 +751,54 @@ describe('DashboardPage — ProgressionChart', () => {
   })
 })
 
+describe('DashboardPage — PlanChangesPanel', () => {
+  it('does not render the plan-changes panel in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('plan-changes-panel')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the plan-changes panel when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('plan-changes-panel')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage — TrainingCalendar', () => {
+  it('does not render the training calendar in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the training calendar when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage — athlete performance model', () => {
+  it('does not render the performance model card in normal mode', async () => {
+    setupStore({ isExpertMode: false })
+    renderDashboard()
+    await waitFor(() => {
+      expect(screen.queryByTestId('performance-model-card')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders the performance model card when expert mode is on', async () => {
+    setupStore({ isExpertMode: true })
+    renderDashboard()
+    expect(await screen.findByTestId('performance-model-card')).toBeInTheDocument()
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Plan comparison row & score badge
 // ---------------------------------------------------------------------------
@@ -916,9 +1018,13 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Today Ride')).toBeInTheDocument()
-    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(1)
+    // Today's session is removed from the Upcoming list (activity already logged today).
+    // It still appears twice overall: once on the matched ride card and once in the
+    // "Today's status" strip as "… completed".
+    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(2)
     expect(screen.getByText('Upcoming')).toBeInTheDocument()
-    expect(screen.getByText(/Tomorrow VO2 Max Intervals/)).toBeInTheDocument()
+    // Tomorrow's session shows in both the status strip and the Upcoming list.
+    expect(screen.getAllByText(/Tomorrow VO2 Max Intervals/)).toHaveLength(2)
     expect(screen.getByText(/Rest Day/)).toBeInTheDocument()
     expect(screen.getByText(/Endurance Ride/)).toBeInTheDocument()
   })
@@ -999,6 +1105,33 @@ describe('computeMatchScore — rest/no-target plan', () => {
       'bg-blue-100'
     )
   })
+
+  it('scores an in-window ride on a duration range as fully on-target (#368)', () => {
+    // 2.75h ride vs a 2.5–3h endurance window → any in-range duration is on-target.
+    const rangePlan: Partial<TrainingDay> = {
+      workoutType: 'rest',
+      durationMinutes: 165,
+      durationMinMinutes: 150,
+      durationMaxMinutes: 180,
+    }
+    const ride = { stravaActivityId: 9, sportType: 'Ride', durationSeconds: 165 * 60 } as RideMetricPoint
+    expect(computeMatchScore(ride, rangePlan)).toBe(100)
+  })
+})
+
+describe('computeMatchScore — strength plan', () => {
+  const strengthPlan: Partial<TrainingDay> = { workoutType: 'strength', durationMinutes: 60 }
+
+  it('scores purely on duration completion', () => {
+    const ride = { stravaActivityId: 10, sportType: 'WeightTraining', durationSeconds: 30 * 60 } as RideMetricPoint
+    // 30 min of a 60-min plan → 50 %.
+    expect(computeMatchScore(ride, strengthPlan)).toBe(50)
+  })
+
+  it('caps a longer-than-planned session at 100 %', () => {
+    const ride = { stravaActivityId: 11, sportType: 'WeightTraining', durationSeconds: 90 * 60 } as RideMetricPoint
+    expect(computeMatchScore(ride, strengthPlan)).toBe(100)
+  })
 })
 
 describe('computeMatchScore — endurance plan', () => {
@@ -1033,5 +1166,304 @@ describe('computeMatchScore — endurance plan', () => {
     expect(prompt).toContain('The displayed match label is "Close"')
     expect(prompt).toContain('with a 72% score')
     expect(prompt).toContain('do not invent data-quality causes')
+  })
+})
+
+describe('DashboardPage — leg-feel control', () => {
+  it('persists a leg-feel tap and optimistically updates the store', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ stravaActivityId: 555, activityDate: yesterday })],
+    })
+    renderDashboard()
+
+    const heavy = await screen.findByRole('button', { name: 'Legs felt Heavy' })
+    fireEvent.click(heavy)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 555, 'heavy', undefined)
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBe('heavy'),
+    )
+  })
+
+  it('forwards the external id so intervals rides resolve server-side (#441)', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({
+          stravaActivityId: 557,
+          externalActivityId: 'i84213307',
+          activityDate: yesterday,
+        }),
+      ],
+    })
+    renderDashboard()
+
+    const heavy = await screen.findByRole('button', { name: 'Legs felt Heavy' })
+    fireEvent.click(heavy)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 557, 'heavy', 'i84213307')
+  })
+
+  it('clears the rating when the active feel is tapped again', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ stravaActivityId: 556, activityDate: yesterday, feelLegs: 'fresh' }),
+      ],
+    })
+    renderDashboard()
+
+    const fresh = await screen.findByRole('button', { name: 'Legs felt Fresh' })
+    fireEvent.click(fresh)
+
+    expect(mockSetRideLegs).toHaveBeenCalledWith('test-token', 556, null, undefined)
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBeNull(),
+    )
+  })
+
+  it('reverts the optimistic update when the request fails', async () => {
+    mockSetRideLegs.mockRejectedValueOnce(new Error('network'))
+    setupStore({
+      rideMetricsHistory: [makeRide({ stravaActivityId: 557, activityDate: yesterday })],
+    })
+    renderDashboard()
+
+    const normal = await screen.findByRole('button', { name: 'Legs felt Normal' })
+    fireEvent.click(normal)
+
+    await waitFor(() =>
+      expect(useAppStore.getState().rideMetricsHistory[0].feelLegs ?? null).toBeNull(),
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Strava analysis progress
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — Strava analysis progress', () => {
+  it('shows the analysis progress bar while an import is running', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'running',
+      total: 10,
+      processed: 4,
+    })
+    setupStore({ stravaConnection })
+    renderDashboard()
+
+    expect(await screen.findByText('Strava Activity Analysis')).toBeInTheDocument()
+    expect(screen.getByText('4 / 10 activities analyzed')).toBeInTheDocument()
+  })
+
+  it('surfaces the error message when the import fails', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'error',
+      total: 10,
+      processed: 3,
+      error: 'Strava rate limit exceeded',
+    })
+    setupStore({ stravaConnection })
+    renderDashboard()
+
+    expect(await screen.findByText('Strava rate limit exceeded')).toBeInTheDocument()
+    expect(screen.getByText('3 / 10 activities analyzed')).toBeInTheDocument()
+  })
+
+  it('does not show the progress bar when Strava is not connected', async () => {
+    mockUseImportProgress.mockReturnValue({
+      ...idleImportProgress,
+      status: 'running',
+      total: 10,
+      processed: 4,
+    })
+    setupStore({ stravaConnection: null })
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.queryByText('Strava Activity Analysis')).not.toBeInTheDocument()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Login summary loading state
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — login summary loading', () => {
+  it('shows the loading placeholder while the summary is being prepared', async () => {
+    // A never-resolving refresh keeps summaryLoading true so the placeholder renders.
+    mockRefreshLoginSummary.mockReturnValue(new Promise(() => {}))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' },
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Preparing your training summary…')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Today's status strip (#417)
+// ---------------------------------------------------------------------------
+
+describe("DashboardPage — Today's status strip", () => {
+  const planDay = (overrides: Partial<TrainingDay> & { date: string }): TrainingDay => ({
+    workoutType: 'endurance',
+    title: 'Session',
+    description: '',
+    durationMinutes: 60,
+    ...overrides,
+  })
+
+  it("shows today's planned session when nothing is logged yet", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'tempo', title: 'Sweet Spot' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Today: Sweet Spot')).toBeInTheDocument()
+  })
+
+  it('shows "Rest day" when today is a rest day', async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'rest', title: 'Rest Day' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Rest day')).toBeInTheDocument()
+  })
+
+  it("marks today's session completed once an activity is logged", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: today, workoutType: 'intervals', title: 'VO2 Efforts' })],
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Morning Intervals' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('VO2 Efforts completed')).toBeInTheDocument()
+  })
+
+  it("shows tomorrow's session", async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: tomorrow, workoutType: 'rest', title: 'Rest Day' })],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Tomorrow: Rest')).toBeInTheDocument()
+  })
+
+  it('renders the coach-authored status badge verbatim', async () => {
+    setupStore({
+      trainingPlan: [planDay({ date: yesterday, workoutType: 'endurance' })],
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Ahead of plan',
+        trainingStatusTone: 'positive',
+      }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('Ahead of plan')).toBeInTheDocument()
+  })
+
+  it('colours the badge from the coach-chosen tone', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Missed two',
+        trainingStatusTone: 'caution',
+      }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('Missed two')).toHaveClass('text-amber-600')
+  })
+
+  it('falls back to a neutral colour when the stored tone is unusable', async () => {
+    // `training_status_tone` is a free-text column, so a legacy or malformed
+    // value must still render — just without claiming a verdict it cannot back.
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Easing off',
+        trainingStatusTone: undefined,
+      }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('Easing off')).toHaveClass('text-gray-600')
+  })
+
+  it("exposes the coach's reason as the badge's tooltip", async () => {
+    // The athlete asks "why?" of the badge itself; the same rationale also goes
+    // into the coach's prompt, so both answers come from one source (#499).
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'On track',
+        trainingStatusRationale: 'You completed both hard sessions this week.',
+      }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toHaveAttribute(
+      'title',
+      'You completed both hard sessions this week.'
+    )
+  })
+
+  it('never derives a status from plan adherence in the browser', async () => {
+    // The old local `done / due` heuristic produced "Slightly behind" from exactly
+    // this data while the coach knew nothing about it (#499). With no stored badge
+    // the segment must simply be absent rather than locally invented.
+    setupStore({
+      trainingPlan: [
+        planDay({ date: yesterday, workoutType: 'endurance', completed: true }),
+        planDay({ date: twoDaysAgo, workoutType: 'intervals', completed: false }),
+      ],
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }),
+    })
+    renderDashboard()
+    expect(screen.queryByText('Slightly behind')).not.toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
+  it('asks the backend for a badge when none is stored', async () => {
+    mockRefreshTrainingStatus.mockResolvedValue({
+      label: 'On track',
+      tone: 'positive',
+      rationale: 'Everything the plan asked for is done.',
+    })
+    setupStore({
+      trainingPlan: [planDay({ date: yesterday, workoutType: 'endurance' })],
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(mockRefreshTrainingStatus).toHaveBeenCalledWith('test-token')
+  })
+
+  it('does not re-request a badge that is already stored', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({ trainingStatusLabel: 'On track' }),
+    })
+    renderDashboard()
+    expect(await screen.findByText('On track')).toBeInTheDocument()
+    expect(mockRefreshTrainingStatus).not.toHaveBeenCalled()
+  })
+
+  it('omits the training-status segment when the athlete has no assessment', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: today, workoutType: 'endurance', title: 'Base Ride' }),
+        planDay({ date: yesterday, workoutType: 'rest', title: 'Rest Day' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByText('Today: Base Ride')).toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Slightly behind')).not.toBeInTheDocument()
+    expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()
+  })
+
+  it('renders no status strip when there is no plan', async () => {
+    setupStore({ trainingPlan: [] })
+    renderDashboard()
+    // Dashboard still mounts…
+    expect(await screen.findByTestId('ai-chat')).toBeInTheDocument()
+    // …but none of the strip's segments appear.
+    expect(screen.queryByText(/^Today:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Tomorrow:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
   })
 })

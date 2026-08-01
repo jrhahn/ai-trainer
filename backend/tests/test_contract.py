@@ -703,6 +703,7 @@ async def test_athlete_memory_facts_contract(client):
             headers=headers,
             json={
                 "fact": "Does too much when fresh",
+                "kind": "fact",
                 "category": "coaching risk",
                 "sourceSnippet": "I felt fresh so I added more VO2 work.",
                 "sourceExchangeId": "chat-123",
@@ -711,6 +712,7 @@ async def test_athlete_memory_facts_contract(client):
         )
     ).json()
     assert created["fact"] == "Does too much when fresh"
+    assert created["kind"] == "fact"
     assert created["category"] == "coaching_risk"
     assert created["sourceSnippet"] == "I felt fresh so I added more VO2 work."
     assert created["sourceExchangeId"] == "chat-123"
@@ -740,11 +742,13 @@ async def test_athlete_memory_facts_contract(client):
             headers=headers,
             json={
                 "fact": "Adds extra work after rest days",
+                "kind": "observation",
                 "status": "user_confirmed",
             },
         )
     ).json()
     assert corrected["fact"] == "Adds extra work after rest days"
+    assert corrected["kind"] == "observation"
     assert corrected["status"] == "user_confirmed"
     assert corrected["confidence"] >= 0.9
 
@@ -1257,3 +1261,52 @@ async def test_fit_bulk_upload_skips_duplicates_and_keeps_failures_per_file(
     )
     assert metrics_resp.status_code == 200
     assert len(metrics_resp.json()["rides"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# 10. Athlete Performance Model contract (#475)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_model_contract(client):
+    """The performance-model endpoint returns a camelCase, evidence-shaped model."""
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Pim", "email": "pim@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (
+        await client.get("/api/v1/ai/athlete-performance-model", headers=headers)
+    ).json()
+    # A never-derived athlete gets an empty model, not a 404.
+    assert empty["attributes"] == {}
+    assert empty["likelyLimiter"] is None
+    assert empty["limiters"] == []
+    assert empty["sourceWindowDays"] is None
+    assert empty["derivedFromRides"] == 0
+    assert empty["updatedAt"] is None
+    # ROI recommendation (#478) is always present; with no model it is not
+    # sufficient so the client keeps its own periodization.
+    assert empty["recommendations"]["sufficient"] is False
+    assert empty["recommendations"]["expectedGain"] == [
+        {"system": "vo2max", "gain": "moderate", "rationale": "balanced default"},
+        {"system": "threshold", "gain": "moderate", "rationale": "balanced default"},
+        {
+            "system": "endurance",
+            "gain": "maintenance",
+            "rationale": "maintain aerobic base",
+        },
+    ]
+    assert empty["recommendations"]["weeklyEmphasis"][0]["label"]
+
+    # On-demand refresh with no ride history stays empty rather than inventing data.
+    refreshed = (
+        await client.post(
+            "/api/v1/ai/refresh-athlete-performance-model", headers=headers
+        )
+    ).json()
+    assert refreshed["attributes"] == {}
+    assert refreshed["derivedFromRides"] == 0

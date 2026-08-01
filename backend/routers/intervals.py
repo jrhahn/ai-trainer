@@ -26,6 +26,7 @@ from services.intervals_service import (
     map_activity_to_ride_input,
     sanitize_intervals_streams,
 )
+from services import summary_pipeline
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.ride_matching import apply_ride_plan_matches
 
@@ -70,6 +71,10 @@ def _activity_response(activity: dict, detail: dict | None = None) -> dict:
     )
     return {
         "id": activity_id,
+        # Raw intervals id (``i166933341``) as a string; the numeric ``id`` above
+        # is a 19-digit hash that loses precision as a JS Number, so persistence
+        # must key off this instead (#429 Bug B).
+        "external_id": None if raw_id is None else str(raw_id),
         "name": source.get("name") or source.get("title") or "Intervals.icu activity",
         "type": source.get("type") or source.get("sport") or "Ride",
         "sport_type": source.get("type") or source.get("sport") or "Ride",
@@ -478,6 +483,12 @@ async def run_intervals_import(
                     training_plan,
                     [m["strava_activity_id"] for m in metrics_chain],
                 )
+                # Re-importing overwrites ride classification (e.g. a previously
+                # "unknown" intervals ride now reads as VO2max), so the cached
+                # login summary is stale — clear it for lazy regeneration (#482).
+                user = await crud.get_user_by_id(db, user_id)
+                if user is not None:
+                    await summary_pipeline.invalidate(db, user)
             await db.commit()
         logger.info(
             "Intervals.icu history import persisted user=%s imported=%s skipped=%s failed=%s",

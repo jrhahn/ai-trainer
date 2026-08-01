@@ -30,6 +30,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
+from services import assessment_pipeline
 from services import plan_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -40,11 +41,12 @@ from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
 from services import llm as llm_service
 from services.llm import begin_token_usage_collection, finish_token_usage_collection
-from services.ride_matching import (
-    apply_ride_plan_matches,
-    review_matched_ride_and_adapt,
+from services.ride_matching import apply_ride_plan_matches
+from services.weather_service import (
+    backfill_missing_ride_weather,
+    clear_forecast_cache,
+    daily_forecast_for_user,
 )
-from services.weather_service import backfill_missing_ride_weather
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -284,6 +286,50 @@ async def delete_me(
     return {"status": "deleted"}
 
 
+class PlanDayHistoryEntry(schemas.CamelModel):
+    """One athlete-visible plan-day change (see #343 / #357).
+
+    ``source`` is the raw trigger key (``coach_chat``, ``ride_review``, …); the
+    frontend maps it to a friendly label. ``applied=False`` marks an automated
+    change that a user pin or completed day blocked ("attempted but kept").
+    """
+
+    id: str
+    date: str
+    source: str
+    applied: bool
+    recorded_at: datetime
+    # Shared by all rows from one coach run so the frontend can collapse a run
+    # into a single timeline card; null for rows written before #435.
+    batch_id: str | None
+    old_day: Any | None
+    new_day: Any | None
+    # One-line coach rationale for this day's change (#439); null when the run was
+    # not narrated (user edits, initial generation) or predates the feature.
+    reason: str | None = None
+    # True when this run was narrated as a coach chat message (#439). The frontend
+    # suppresses the redundant Coach-Timeline card for narrated runs.
+    narrated: bool = False
+
+
+class PlanDayHistoryResponse(schemas.CamelModel):
+    entries: list[PlanDayHistoryEntry]
+    total: int
+
+
+class PlanDayHistoryDateCount(schemas.CamelModel):
+    date: str
+    count: int
+
+
+class PlanDayHistoryStatsResponse(schemas.CamelModel):
+    by_source: dict[str, int]
+    applied_count: int
+    blocked_count: int
+    most_changed_dates: list[PlanDayHistoryDateCount]
+    total: int
+
+
 @router.get("/plan", response_model=schemas.PlanResponse)
 async def get_plan(
     db: AsyncSession = Depends(get_db),
@@ -301,13 +347,82 @@ async def save_plan(
 ) -> schemas.PlanResponse:
     # Route the manual edit through the shared pipeline so hard availability
     # constraints are enforced and concurrent edits are protected, instead of
-    # blindly persisting whatever the client sent.
+    # blindly persisting whatever the client sent. Validate each day as a
+    # canonical PlanDay and clear the server-authoritative fields — pinning
+    # (``source``), completion state (``completed``) and workout ``feedback``
+    # are owned by the server, so a client must not be able to forge them.
+    sanitized: list[schemas.PlanDay] = []
+    for raw_day in body.plan:
+        day = schemas.PlanDay.model_validate(raw_day)
+        day.source = None
+        day.completed = None
+        day.feedback = None
+        sanitized.append(day)
     existing = await crud.get_training_plan(db, current_user.id)
     base_plan = existing.plan if existing is not None else []
     merged = await plan_pipeline.commit_plan(
-        db, current_user, body.plan, base_plan=base_plan, source="user_edit"
+        db, current_user, sanitized, base_plan=base_plan, source="user_edit"
     )
-    return schemas.PlanResponse(plan=merged)
+    return schemas.PlanResponse(plan=merged.plan)
+
+
+@router.get("/plan-history", response_model=PlanDayHistoryResponse)
+async def get_plan_history(
+    date: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> PlanDayHistoryResponse:
+    """Return the athlete's own per-day plan change log, newest first.
+
+    Optionally filter to a single ``date`` (ISO ``YYYY-MM-DD``). Each entry shows
+    the day before/after and which trigger caused it; ``applied=false`` entries
+    are automated changes a user pin or completed day blocked. See #343 / #357.
+    """
+    rows = await crud.list_plan_day_history(
+        db, current_user.id, date=date, limit=limit
+    )
+    narrated_batches = await crud.get_narrated_batch_ids(
+        db, current_user.id, [row.batch_id for row in rows if row.batch_id]
+    )
+    return PlanDayHistoryResponse(
+        entries=[
+            PlanDayHistoryEntry(
+                id=row.id,
+                date=row.date,
+                source=row.source,
+                applied=row.applied,
+                recorded_at=row.recorded_at,
+                batch_id=row.batch_id,
+                old_day=row.old_day,
+                new_day=row.new_day,
+                reason=row.reason,
+                narrated=row.batch_id in narrated_batches,
+            )
+            for row in rows
+        ],
+        total=len(rows),
+    )
+
+
+@router.get("/plan-history/stats", response_model=PlanDayHistoryStatsResponse)
+async def get_plan_history_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> PlanDayHistoryStatsResponse:
+    """Aggregate the athlete's plan-change log: counts by trigger, applied vs
+    blocked, and the most-changed days. Read-only analytics. See #357."""
+    stats = await crud.plan_day_history_stats(db, current_user.id)
+    return PlanDayHistoryStatsResponse(
+        by_source=stats["by_source"],
+        applied_count=stats["applied_count"],
+        blocked_count=stats["blocked_count"],
+        most_changed_dates=[
+            PlanDayHistoryDateCount(date=d["date"], count=d["count"])
+            for d in stats["most_changed_dates"]
+        ],
+        total=stats["total"],
+    )
 
 
 @router.get("/workouts")
@@ -317,8 +432,8 @@ async def get_workouts(
 ) -> dict[str, dict]:
     logs = await crud.get_workout_logs(db, current_user.id)
     result: dict[str, dict] = {}
-    for log in logs:
-        result[log.date] = {
+    for log in sorted(logs, key=lambda row: (row.date, row.slot or 0)):
+        entry = {
             "actualDurationMinutes": log.actual_duration_minutes,
             "averagePower": log.average_power,
             "averageHeartRate": log.average_heart_rate,
@@ -326,7 +441,12 @@ async def get_workouts(
             "perceivedEffort": log.perceived_effort,
             "notes": log.notes,
             "completedAt": log.completed_at,
+            "slot": log.slot or 0,
         }
+        # Keyed by session (#496): the first session keeps the bare date so every
+        # existing client keeps reading exactly what it read before, and only the
+        # extra sessions of a two-a-day add a "date#slot" key.
+        result[log.date if not log.slot else f"{log.date}#{log.slot}"] = entry
     return result
 
 
@@ -342,6 +462,7 @@ async def save_workout(
         db,
         current_user.id,
         date,
+        slot=schemas.normalize_slot(body.slot),
         actual_duration_minutes=feedback.actual_duration_minutes,
         average_power=feedback.average_power,
         average_heart_rate=feedback.average_heart_rate,
@@ -511,6 +632,31 @@ async def save_athlete_context(
     return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
 
 
+@router.get("/athlete-model", response_model=schemas.AthleteModelSchema)
+async def get_athlete_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    model = await crud.get_athlete_model(db, current_user.id)
+    if model is None:
+        return schemas.AthleteModelSchema()
+    return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+
+@router.put("/athlete-model", response_model=schemas.AthleteModelSchema)
+async def save_athlete_model(
+    body: schemas.AthleteModelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    model = await crud.upsert_athlete_model(
+        db,
+        current_user.id,
+        **body.model_dump(),
+    )
+    return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+
 @router.get(
     "/athlete-memory-facts", response_model=schemas.AthleteMemoryFactsResponse
 )
@@ -595,6 +741,270 @@ async def delete_athlete_memory_fact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get(
+    "/athlete-hypotheses", response_model=schemas.AthleteHypothesesResponse
+)
+async def list_athlete_hypotheses(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHypothesesResponse:
+    hypotheses = await crud.list_athlete_hypotheses(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteHypothesesResponse(
+        hypotheses=[
+            schemas.AthleteHypothesisSchema.model_validate(h, from_attributes=True)
+            for h in hypotheses
+        ]
+    )
+
+
+@router.patch(
+    "/athlete-hypotheses/{hypothesis_id}",
+    response_model=schemas.AthleteHypothesisSchema,
+)
+async def update_athlete_hypothesis(
+    hypothesis_id: str,
+    body: schemas.AthleteHypothesisUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHypothesisSchema:
+    try:
+        hypothesis = await crud.update_athlete_hypothesis(
+            db,
+            current_user.id,
+            hypothesis_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if hypothesis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteHypothesisSchema.model_validate(
+        hypothesis, from_attributes=True
+    )
+
+
+@router.delete(
+    "/athlete-hypotheses/{hypothesis_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_hypothesis(
+    hypothesis_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_hypothesis(
+        db, current_user.id, hypothesis_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/open-questions", response_model=schemas.AthleteOpenQuestionsResponse
+)
+async def list_athlete_open_questions(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteOpenQuestionsResponse:
+    questions = await crud.list_athlete_open_questions(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteOpenQuestionsResponse(
+        open_questions=[
+            schemas.AthleteOpenQuestionSchema.model_validate(q, from_attributes=True)
+            for q in questions
+        ]
+    )
+
+
+@router.patch(
+    "/open-questions/{question_id}",
+    response_model=schemas.AthleteOpenQuestionSchema,
+)
+async def update_athlete_open_question(
+    question_id: str,
+    body: schemas.AthleteOpenQuestionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteOpenQuestionSchema:
+    try:
+        question = await crud.update_athlete_open_question(
+            db,
+            current_user.id,
+            question_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteOpenQuestionSchema.model_validate(
+        question, from_attributes=True
+    )
+
+
+@router.delete(
+    "/open-questions/{question_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_open_question(
+    question_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_open_question(
+        db, current_user.id, question_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/validation-experiments", response_model=schemas.AthleteExperimentsResponse
+)
+async def list_validation_experiments(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteExperimentsResponse:
+    experiments = await crud.list_athlete_experiments(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteExperimentsResponse(
+        experiments=[
+            schemas.AthleteExperimentSchema.model_validate(e, from_attributes=True)
+            for e in experiments
+        ]
+    )
+
+
+@router.patch(
+    "/validation-experiments/{experiment_id}",
+    response_model=schemas.AthleteExperimentSchema,
+)
+async def update_validation_experiment(
+    experiment_id: str,
+    body: schemas.AthleteExperimentUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteExperimentSchema:
+    try:
+        experiment = await crud.update_athlete_experiment(
+            db,
+            current_user.id,
+            experiment_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if experiment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteExperimentSchema.model_validate(
+        experiment, from_attributes=True
+    )
+
+
+@router.delete(
+    "/validation-experiments/{experiment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_validation_experiment(
+    experiment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_experiment(
+        db, current_user.id, experiment_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/predictions", response_model=schemas.AthletePredictionsResponse
+)
+async def list_athlete_predictions(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePredictionsResponse:
+    predictions = await crud.list_athlete_predictions(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    evaluated, correct = await crud.get_athlete_prediction_accuracy(
+        db, current_user.id
+    )
+    return schemas.AthletePredictionsResponse(
+        predictions=[
+            schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
+            for p in predictions
+        ],
+        accuracy=schemas.AthletePredictionAccuracy(
+            evaluated=evaluated,
+            correct=correct,
+            accuracy=(correct / evaluated) if evaluated else None,
+        ),
+    )
+
+
+@router.patch(
+    "/predictions/{prediction_id}",
+    response_model=schemas.AthletePredictionSchema,
+)
+async def update_athlete_prediction(
+    prediction_id: str,
+    body: schemas.AthletePredictionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePredictionSchema:
+    try:
+        prediction = await crud.update_athlete_prediction(
+            db,
+            current_user.id,
+            prediction_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if prediction is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthletePredictionSchema.model_validate(
+        prediction, from_attributes=True
+    )
+
+
+@router.delete(
+    "/predictions/{prediction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_athlete_prediction(
+    prediction_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_prediction(
+        db, current_user.id, prediction_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
 async def get_memory_privacy_settings(
     db: AsyncSession = Depends(get_db),
@@ -636,7 +1046,20 @@ async def export_memory(
 ) -> schemas.MemoryExportSchema:
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
+    athlete_model_row = await crud.get_athlete_model(db, current_user.id)
     facts = await crud.list_athlete_memory_facts(db, current_user.id, include_inactive=True)
+    hypotheses = await crud.list_athlete_hypotheses(
+        db, current_user.id, include_resolved=True
+    )
+    open_questions = await crud.list_athlete_open_questions(
+        db, current_user.id, include_resolved=True
+    )
+    experiments = await crud.list_athlete_experiments(
+        db, current_user.id, include_resolved=True
+    )
+    predictions = await crud.list_athlete_predictions(
+        db, current_user.id, include_resolved=True
+    )
     return schemas.MemoryExportSchema(
         exported_at=datetime.now(timezone.utc),
         memory_updates_enabled=current_user.memory_updates_enabled,
@@ -648,9 +1071,32 @@ async def export_memory(
             if athlete_context_row is not None
             else None
         ),
+        athlete_model=(
+            schemas.AthleteModelSchema.model_validate(
+                athlete_model_row, from_attributes=True
+            )
+            if athlete_model_row is not None
+            else None
+        ),
         memory_facts=[
             schemas.AthleteMemoryFactSchema.model_validate(f, from_attributes=True)
             for f in facts
+        ],
+        hypotheses=[
+            schemas.AthleteHypothesisSchema.model_validate(h, from_attributes=True)
+            for h in hypotheses
+        ],
+        open_questions=[
+            schemas.AthleteOpenQuestionSchema.model_validate(q, from_attributes=True)
+            for q in open_questions
+        ],
+        experiments=[
+            schemas.AthleteExperimentSchema.model_validate(e, from_attributes=True)
+            for e in experiments
+        ],
+        predictions=[
+            schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
+            for p in predictions
         ],
     )
 
@@ -806,6 +1252,86 @@ async def get_ride_metrics_history(
     )
 
 
+def _home_location_schema(
+    row: models.AthleteHomeLocation | None,
+) -> schemas.AthleteHomeLocationSchema | None:
+    if row is None:
+        return None
+    return schemas.AthleteHomeLocationSchema.model_validate(
+        row, from_attributes=True
+    )
+
+
+@router.get("/home-location", response_model=schemas.AthleteHomeLocationResponse)
+async def get_home_location(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHomeLocationResponse:
+    """Return the athlete's persisted training location, if one is known (#495)."""
+    row = await crud.get_athlete_home_location(db, current_user.id)
+    return schemas.AthleteHomeLocationResponse(location=_home_location_schema(row))
+
+
+@router.put("/home-location", response_model=schemas.AthleteHomeLocationResponse)
+async def save_home_location(
+    body: schemas.AthleteHomeLocationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteHomeLocationResponse:
+    """Set the athlete's training location explicitly.
+
+    Stored as ``user_set``, which pins it against every later inference pass — the
+    athlete's own answer outranks a cluster of ride starts. Also drops the cached
+    forecast so the next dashboard load reflects the new location immediately.
+    """
+    row = await crud.upsert_athlete_home_location(
+        db,
+        current_user.id,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        label=body.label,
+        source="user_set",
+        confidence=1.0,
+    )
+    await db.commit()
+    clear_forecast_cache()
+    return schemas.AthleteHomeLocationResponse(location=_home_location_schema(row))
+
+
+@router.get("/weather-forecast", response_model=schemas.WeatherForecastResponse)
+async def get_weather_forecast(
+    days: int = 14,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.WeatherForecastResponse:
+    """Return the upcoming daily outlook for the athlete's training location (#495).
+
+    Powers the weather icon + temperature shown on planned days in the dashboard.
+    Served from the hourly per-location forecast cache, so repeated dashboard loads
+    cost no upstream calls, and degrades to an empty list when no location is known
+    or Open-Meteo is unreachable.
+    """
+    location, forecast = await daily_forecast_for_user(
+        db, current_user.id, max(1, min(days, 16))
+    )
+    stored = await crud.get_athlete_home_location(db, current_user.id)
+    location_schema = _home_location_schema(stored)
+    if location_schema is None and location is not None:
+        # Falling back to the latest ride with GPS: report it honestly rather than
+        # implying a persisted attribute exists.
+        location_schema = schemas.AthleteHomeLocationSchema(
+            latitude=location.latitude,
+            longitude=location.longitude,
+            label=location.label,
+            source=location.source,
+            confidence=location.confidence,
+        )
+    return schemas.WeatherForecastResponse(
+        location=location_schema,
+        days=[schemas.DailyForecastSchema(**day) for day in forecast],
+    )
+
+
 @router.patch(
     "/ride-feedback/{strava_activity_id}",
     response_model=schemas.RideFeedbackResponse,
@@ -816,45 +1342,21 @@ async def save_ride_feedback(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RideFeedbackResponse:
-    """Save structured post-ride subjective feedback for a specific Strava activity.
+    """Set the athlete's quick "how the legs felt" rating for a Strava activity.
 
-    The four feedback fields (RPE, legs feeling, intent, optional note) are
-    formatted into a single human-readable ``user_note`` string that is stored
-    on the ``RideMetric`` row.  This note is then automatically included in all
-    AI coach prompts via ``ride_metrics_context_section()``.
+    This is the one-tap dashboard signal.  It writes only the ``feel_legs``
+    column (``None`` clears it), so it never clobbers notes captured
+    conversationally via the coach chat.  When set, ``feel_legs`` is surfaced to
+    every AI coach prompt via ``ride_metrics_context_section()``.  Richer
+    feedback — perceived effort, notes, plan-match corrections — is captured in
+    conversation with the coach, not here.
     """
-    match_labels = {
-        "matched": "Solid",
-        "mostly_matched": "Close",
-        "not_matched": "Off plan",
-    }
-    match_note_labels = {
-        "matched": "matched plan",
-        "mostly_matched": "partly matched plan",
-        "not_matched": "did not match plan",
-    }
-    parts = [
-        f"RPE {body.rpe}/10",
-        f"legs: {body.legs}",
-        f"intent: {body.intent}",
-    ]
-    if body.plan_match_feedback:
-        parts.append(f"plan match: {match_note_labels[body.plan_match_feedback]}")
-    if body.note:
-        parts.append(body.note)
-    user_note = " | ".join(parts)
-    label_override = (
-        match_labels[body.plan_match_feedback]
-        if body.plan_match_feedback
-        else None
-    )
-
-    row = await crud.update_ride_metric_notes(
+    row = await crud.set_ride_feel_legs(
         db,
         current_user.id,
         strava_activity_id,
-        user_note=user_note,
-        label_override=label_override,
+        body.legs,
+        external_activity_id=body.external_activity_id,
     )
     if row is None:
         raise HTTPException(
@@ -862,34 +1364,11 @@ async def save_ride_feedback(
             detail="Ride not found",
         )
 
-    coach_note = None
-    plan_updates = None
-    if (
-        row.plan_match_status in {"auto_matched", "manual_matched"}
-        and row.matched_plan_date
-    ):
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        plan = existing_plan.plan if existing_plan is not None else []
-        usage_token = begin_token_usage_collection()
-        coach_note, raw_plan_updates = await review_matched_ride_and_adapt(
-            db,
-            current_user,
-            row,
-            plan,
-            provider=_provider(current_user),
-        )
-        await _persist_collected_token_usage(db, current_user, usage_token)
-        plan_updates = (
-            [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_plan_updates]
-            if raw_plan_updates
-            else None
-        )
+    # The leg-feel rating feeds the login summary, so mark it stale to regenerate.
+    await assessment_pipeline.notify_changed(db, current_user)
 
     return schemas.RideFeedbackResponse(
         strava_activity_id=strava_activity_id,
-        user_note=user_note,
-        coach_note=coach_note,
-        plan_updates=plan_updates,
         ride=schemas.RideMetricSchema.model_validate(row, from_attributes=True),
     )
 
@@ -1249,6 +1728,9 @@ async def _analyse_fit_import(
             ride_insights=ai_result.get("rideInsights"),
             last_ride_feedback=ai_result.get("lastRideFeedback"),
         )
+        # These fields feed the login summary but no fresh summary was generated
+        # here; mark it stale so it regenerates on the next dashboard load.
+        await assessment_pipeline.notify_changed(db, current_user)
 
     return ai_result
 

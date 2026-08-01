@@ -5,8 +5,11 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
+import AthleteModelSettings from '../components/AthleteModelSettings'
+import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
+import HomeLocationSettings from '../components/HomeLocationSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
@@ -825,6 +828,15 @@ export default function SettingsPage() {
 
       {/* Learned athlete traits */}
       <AthleteTraitsSettings />
+
+      {/* Long-term structured athlete model (#384) */}
+      <AthleteModelSettings />
+
+      {/* Deterministic performance model, limiter & hypotheses (#481) */}
+      <AthletePerformanceModelCard className="mt-6" />
+
+      {/* Editable training location behind the weather forecast (#495) */}
+      <HomeLocationSettings />
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">

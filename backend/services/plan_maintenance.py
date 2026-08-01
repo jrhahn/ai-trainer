@@ -13,6 +13,7 @@ import models
 import schemas
 from config import settings
 from services import ai_service
+from services import coach_summary
 from services.dates import app_today_iso, app_timezone
 from services.llm import begin_token_usage_collection, finish_token_usage_collection, resolve_user_provider
 from services import plan_pipeline
@@ -127,7 +128,7 @@ async def maintain_user_training_plan(
     # are owned by the shared plan pipeline so every trigger behaves identically.
     before_row = await crud.get_training_plan(db, user.id)
     before_plan = before_row.plan if before_row is not None else []
-    merged = await plan_pipeline.commit_plan(
+    commit = await plan_pipeline.commit_plan(
         db,
         user,
         updated_plan,
@@ -136,7 +137,22 @@ async def maintain_user_training_plan(
         now=now,
         timezone_name=timezone_name,
     )
-    return merged != before_plan
+    # Explain the run to the athlete in one chat message and store the rationale.
+    # Fail-safe: never let narration undo a successful plan update.
+    await coach_summary.narrate_plan_changes(
+        db,
+        user,
+        batch_id=commit.batch_id,
+        source="nightly_maintenance",
+        applied_changes=commit.applied_changes,
+        profile=profile,
+        rider_assessment=rider_assessment,
+        training_load_section=metrics_section,
+        # The same forecast the adaptation acted on, so a session moved off a
+        # 38 C day is explained as exactly that rather than as unexplained churn.
+        weather_context_section=weather_section,
+    )
+    return commit.plan != before_plan
 
 
 async def run_daily_plan_maintenance(

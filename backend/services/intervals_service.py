@@ -66,6 +66,7 @@ async def fetch_recent_activities(
             "moving_time",
             "elapsed_time",
             "average_watts",
+            "icu_average_watts",
             "icu_weighted_avg_watts",
             "icu_training_load",
             "icu_ctl",
@@ -99,7 +100,10 @@ async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"{INTERVALS_API_BASE}/activity/{activity_id}",
-                params={"intervals": "false"},
+                # Include the structured interval breakdown (``icu_intervals``) so
+                # rides can still be classified when their per-second power stream
+                # is missing or unusable.
+                params={"intervals": "true"},
                 auth=intervals_auth(api_key),
             )
     except httpx.RequestError as exc:
@@ -172,6 +176,29 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
             numeric = _numeric_list(values)
             if numeric:
                 collected[key] = numeric
+    elif isinstance(streams, list) and _is_typed_stream_list(streams):
+        # Intervals.icu's /activity/{id}/streams returns a list of typed-stream
+        # objects: [{"type": "watts", "data": [...]}, {"type": "time", ...}, ...].
+        # Without this branch every intervals ride loses its power stream and is
+        # classified "unknown" (see #409).
+        for stream_obj in streams:
+            if not isinstance(stream_obj, dict):
+                continue
+            type_name = str(stream_obj.get("type") or stream_obj.get("name"))
+            data = stream_obj.get("data")
+            if data is None:
+                data = stream_obj.get("values")
+            if type_name == "latlng":
+                points = _latlng_points(data)
+                if points:
+                    collected["latlng"] = points
+                continue
+            key = aliases.get(type_name)
+            if key is None:
+                continue
+            numeric = _numeric_list(data)
+            if numeric:
+                collected[key] = numeric
     elif isinstance(streams, list):
         for sample in streams:
             if not isinstance(sample, dict):
@@ -195,6 +222,48 @@ def sanitize_intervals_streams(streams: object) -> dict[str, dict[str, list]]:
         else:
             cleaned[key] = {"data": [float(v) for v in data]}
     return cleaned
+
+
+def normalize_provider_intervals(source: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Normalise Intervals.icu's ``icu_intervals`` breakdown for classification.
+
+    Intervals.icu computes clean per-interval averages server-side; we keep them
+    so a ride can still be classified when its per-second stream is missing or
+    unusable.  Returns a list of
+    ``{"duration_secs", "avg_power", "type", "peak_power"}`` dicts, or ``None``
+    when no usable interval data is present.
+    """
+    raw = source.get("icu_intervals")
+    if isinstance(raw, dict):
+        raw = raw.get("icu_intervals")
+    if not isinstance(raw, list):
+        return None
+
+    normalized: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        duration = _first_int(
+            item, "moving_time", "elapsed_time", "duration", default=0
+        )
+        avg_power = _first_int(
+            item, "average_watts", "icu_average_watts", "avg_watts", "watts"
+        )
+        if not duration or duration <= 0 or avg_power is None or avg_power <= 0:
+            continue
+        entry: dict[str, Any] = {
+            "duration_secs": duration,
+            "avg_power": avg_power,
+        }
+        itype = _first_str(item, "type")
+        if itype:
+            entry["type"] = itype
+        peak = _first_int(item, "max_watts", "peak_watts")
+        if peak:
+            entry["peak_power"] = peak
+        normalized.append(entry)
+
+    return normalized or None
 
 
 def map_activity_to_imported_activity(
@@ -231,11 +300,17 @@ def map_activity_to_imported_activity(
         start_lat=_start_latlng(source)[0],
         start_lng=_start_latlng(source)[1],
         streams=streams,
+        # Average power must come from an *average* field — never fall back to
+        # ``icu_weighted_avg_watts`` (that is Normalized Power). Conflating them
+        # made avg == NP for intervals rides (#466).
         summary_avg_power_w=_first_int(
-            source, "average_watts", "icu_weighted_avg_watts"
+            source, "icu_average_watts", "average_watts"
         ),
-        summary_normalized_power_w=_first_int(source, "icu_weighted_avg_watts"),
+        summary_normalized_power_w=_first_int(
+            source, "icu_weighted_avg_watts", "weighted_average_watts"
+        ),
         summary_tss=_first_float(source, "icu_training_load", "training_load"),
+        provider_intervals=normalize_provider_intervals(source),
         metadata={"intervals_activity_id": str(raw_id)},
         legacy_activity_id=intervals_activity_id(raw_id),
     )
@@ -296,6 +371,24 @@ def _first_float(source: dict[str, Any], *keys: str) -> float | None:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
     return None
+
+
+def _is_typed_stream_list(streams: list) -> bool:
+    """True when *streams* is Intervals.icu's list of typed-stream objects.
+
+    Shape ``[{"type": "watts", "data": [...]}, ...]`` — distinguished from a
+    row-oriented list of per-sample dicts (``[{"watts": 100, ...}, ...]``) by a
+    ``type``/``name`` label sitting alongside a ``data``/``values`` list.
+    """
+    for item in streams:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data")
+        if data is None:
+            data = item.get("values")
+        if ("type" in item or "name" in item) and isinstance(data, list):
+            return True
+    return False
 
 
 def _numeric_list(values: object) -> list[float]:

@@ -13,9 +13,16 @@ from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
+from services.duration_refresh import duration_refresh_job
+from services.contradiction_detection import athlete_contradiction_detection_job
+from services.experiment_suggestion import validation_experiment_suggestion_job
+from services.hypothesis_generation import athlete_hypothesis_generation_job
+from services.insight_generation import athlete_insight_generation_job
 from services.llm import AIKeyNotConfiguredError
+from services.open_question_generation import athlete_open_question_generation_job
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
+from services.prediction_evaluation import prediction_evaluation_job
 from services.scheduler import InProcessScheduler
 
 logger = logging.getLogger(__name__)
@@ -37,6 +44,13 @@ async def lifespan(_: FastAPI):
     scheduler = InProcessScheduler()
     scheduler.register(daily_plan_maintenance_job(async_session_maker))
     scheduler.register(activity_sync_job(async_session_maker))
+    scheduler.register(duration_refresh_job(async_session_maker))
+    scheduler.register(athlete_insight_generation_job(async_session_maker))
+    scheduler.register(athlete_contradiction_detection_job(async_session_maker))
+    scheduler.register(athlete_hypothesis_generation_job(async_session_maker))
+    scheduler.register(athlete_open_question_generation_job(async_session_maker))
+    scheduler.register(validation_experiment_suggestion_job(async_session_maker))
+    scheduler.register(prediction_evaluation_job(async_session_maker))
     scheduler.start()
     try:
         yield
@@ -163,5 +177,5 @@ def healthz() -> dict:
     return {
         "status": "ok",
         "api_version": "v1",
-        "frontend_url": ALLOWED_ORIGINS,
+        "allowed_origins": ALLOWED_ORIGINS,
     }

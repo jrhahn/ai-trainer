@@ -281,6 +281,232 @@ describe('TrainingCalendar', () => {
     expect(screen.queryByLabelText(/Distance/)).not.toBeInTheDocument()
   })
 
+  it('overlays logged activities when showLoggedActivities is set', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'unmatched',
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('1h 0m')).toBeInTheDocument()
+    expect(screen.getByTitle(/Logged: ride · 1h 0m \(unplanned\)/)).toBeInTheDocument()
+  })
+
+  it('does not overlay logged activities without the prop', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText('1h 0m')).not.toBeInTheDocument()
+  })
+
+  it('marks a logged ride as matched when it is tied to a planned day', () => {
+    const date = monthDate(0, 12)
+    useAppStore.setState({
+      trainingPlan: [makeDay(date, 'intervals')],
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: date,
+          durationSeconds: 5400,
+          planMatchStatus: 'auto_matched',
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTitle(/matched to plan/)).toBeInTheDocument()
+  })
+
+  it('falls back to the sport label for a logged ride without a duration', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Virtual_Ride',
+          activityDate: rideDate,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    // No duration -> shows the sport label, and the title omits the duration part.
+    expect(screen.getByText('virtual ride')).toBeInTheDocument()
+    expect(screen.getByTitle('Logged: virtual ride (unplanned)')).toBeInTheDocument()
+  })
+
+  it('formats a sub-hour logged ride in minutes', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 1800,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('30m')).toBeInTheDocument()
+  })
+
+  it('labels ambiguous, manually matched, and unmatched-with-plan rides', () => {
+    const ambiguousDate = monthDate(0, 10)
+    const manualDate = monthDate(0, 11)
+    const unmatchedDate = monthDate(0, 12)
+    useAppStore.setState({
+      trainingPlan: [makeDay(unmatchedDate, 'endurance')],
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          externalActivityId: 'ext-1',
+          sportType: 'Ride',
+          activityDate: ambiguousDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'ambiguous',
+        } as never,
+        {
+          stravaActivityId: 2,
+          sportType: 'Ride',
+          activityDate: manualDate,
+          durationSeconds: 3600,
+          planMatchStatus: 'manual_matched',
+        } as never,
+        {
+          stravaActivityId: 3,
+          sportType: 'Ride',
+          activityDate: unmatchedDate,
+          durationSeconds: 3600,
+          planMatchStatus: undefined,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTitle(/ambiguous match/)).toBeInTheDocument()
+    expect(screen.getByTitle(/matched to plan/)).toBeInTheDocument()
+    // A ride with no match status but a plan on that day reads as "unmatched".
+    expect(screen.getByTitle(/\(unmatched\)/)).toBeInTheDocument()
+  })
+
+  it('collapses more than two logged rides on a day into an overflow count', () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [1, 2, 3, 4].map(
+        (id) =>
+          ({
+            stravaActivityId: id,
+            sportType: 'Ride',
+            activityDate: rideDate,
+            durationSeconds: 3600,
+          }) as never
+      ),
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('+2 more')).toBeInTheDocument()
+  })
+
+  it('flags a planned past day with nothing logged as missed', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00'))
+    try {
+      useAppStore.setState({
+        trainingPlan: [makeDay('2026-07-10', 'endurance')],
+        rideMetricsHistory: [],
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar showLoggedActivities />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('missed')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('navigates to the workout day when a logged-only day is clicked', async () => {
+    const rideDate = monthDate(0, 12)
+    useAppStore.setState({
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 1,
+          sportType: 'Ride',
+          activityDate: rideDate,
+          durationSeconds: 3600,
+        } as never,
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: `Calendar day ${rideDate}` }))
+    expect(mockNavigate).toHaveBeenCalledWith(`/workout/${rideDate}`)
+  })
+
   it('navigates to the previous month', async () => {
     render(
       <MemoryRouter>
@@ -291,5 +517,187 @@ describe('TrainingCalendar', () => {
     // Should not throw and keeps the calendar grid rendered
     await user.click(screen.getByRole('button', { name: /Previous month/i }))
     expect(screen.getByText('Mon')).toBeInTheDocument()
+  })
+
+  describe('planned-day weather (#495)', () => {
+    function tomorrowIso(): string {
+      return formatIsoDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    }
+
+    it('shows the forecast temperature on an upcoming planned day', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [makeDay(date, 'intervals')],
+        weatherForecast: {
+          [date]: {
+            date,
+            condition: 'clear',
+            temperatureMaxC: 38.4,
+            temperatureMinC: 23.0,
+            loadFlag: 'very_hot',
+          },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('38\u00b0C')).toBeInTheDocument()
+    })
+
+    it('shows no forecast on a day that has no planned session', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+
+    it('shows the completion check instead of the forecast on a done day', () => {
+      const date = tomorrowIso()
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date), completed: true }],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+
+    it('shows no forecast on a planned day already in the past', () => {
+      const date = formatIsoDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+      useAppStore.setState({
+        trainingPlan: [makeDay(date)],
+        weatherForecast: {
+          [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
+        },
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('38\u00b0C')).not.toBeInTheDocument()
+    })
+  })
+  // ---------------------------------------------------------------------
+  // Two-a-days (#496)
+  // ---------------------------------------------------------------------
+
+  describe('multiple sessions per day', () => {
+    function twoADay(date: string): TrainingDay[] {
+      return [
+        {
+          ...makeDay(date, 'recovery'),
+          slot: 0,
+          timeOfDay: 'am',
+          title: 'Morning yoga',
+          durationMinutes: 30,
+        },
+        {
+          ...makeDay(date, 'intervals'),
+          slot: 1,
+          timeOfDay: 'pm',
+          title: 'Evening intervals',
+          durationMinutes: 90,
+        },
+      ]
+    }
+
+    it('stacks both sessions in the day cell instead of showing only the first', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: twoADay(date) })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByText('Morning yoga')).toBeInTheDocument()
+      expect(screen.getByText('Evening intervals')).toBeInTheDocument()
+      expect(screen.getByText('AM')).toBeInTheDocument()
+      expect(screen.getByText('PM')).toBeInTheDocument()
+    })
+
+    it('tints the cell by the hardest session of the day', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: twoADay(date) })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      // An easy AM spin next to a PM interval block must read as an interval
+      // day, not a recovery day.
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.className).toContain('bg-red-50')
+    })
+
+    it('marks the day complete only once every session is done', () => {
+      const date = monthDate(0, 14)
+      const [am, pm] = twoADay(date)
+      useAppStore.setState({ trainingPlan: [{ ...am, completed: true }, pm] })
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.querySelectorAll('.lucide-circle-check-big').length).toBe(1)
+
+      useAppStore.setState({
+        trainingPlan: [{ ...am, completed: true }, { ...pm, completed: true }],
+      })
+      rerender(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+      // Both the per-session tick and the whole-day tick are now shown.
+      expect(
+        screen.getByLabelText(`Calendar day ${date}`).querySelectorAll('.lucide-circle-check-big')
+          .length
+      ).toBe(3)
+    })
+
+    it('adds no session label to an ordinary single-workout day', () => {
+      const date = monthDate(0, 14)
+      useAppStore.setState({ trainingPlan: [makeDay(date, 'endurance')] })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.queryByText('AM')).not.toBeInTheDocument()
+      expect(screen.queryByText('1/1')).not.toBeInTheDocument()
+    })
   })
 })

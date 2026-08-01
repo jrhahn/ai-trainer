@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time as _time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from services.home_location import TrainingLocation, resolve_training_location
 from services.strava_service import fetch_activity_detail, fetch_activity_streams
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,16 @@ WEATHER_HOURLY = (
     "temperature_2m,apparent_temperature,weather_code,precipitation,wind_speed_10m"
 )
 WEATHER_DAILY = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max"
+
+# Open-Meteo's daily outlook barely moves within an hour, and the dashboard hits it
+# on every hydration, so the daily forecast is cached rather than re-fetched per
+# request. The key rounds coordinates to ~11 km so nearby athletes share one
+# lookup, and a single 16-day fetch serves every shorter horizon by slicing.
+FORECAST_CACHE_TTL_SECONDS = 3600
+FORECAST_CACHE_COORD_PRECISION = 1
+FORECAST_MAX_DAYS = 16
+
+_forecast_cache: dict[tuple[float, float], tuple[float, list[dict[str, Any]]]] = {}
 
 
 def condition_from_code(code: int | None) -> str | None:
@@ -324,21 +336,61 @@ async def fetch_activity_weather(
     }
 
 
+async def home_coordinates_for_user(
+    db: AsyncSession,
+    user_id: str,
+) -> tuple[float, float] | None:
+    """Coordinates to fall back on for activities that carry no GPS (#495).
+
+    Resolved once per import batch and handed to
+    :func:`enrich_activity_weather` so indoor/trainer rides still record the
+    conditions the athlete chose to avoid.
+    """
+    location = await resolve_training_location(db, user_id)
+    if location is None:
+        return None
+    return location.latitude, location.longitude
+
+
 async def enrich_activity_weather(
     activity: dict[str, Any],
     streams: dict[str, Any] | None = None,
+    fallback_coordinates: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
-    """Return weather/coordinate fields for a raw Strava activity dict."""
+    """Return weather/coordinate fields for a raw Strava activity dict.
+
+    ``fallback_coordinates`` is the athlete's persisted training location, used to
+    look up conditions for activities that carry no GPS — indoor/trainer rides
+    above all. That is what makes "it was 34 °C and the athlete rode inside" a
+    learnable signal (#495) instead of a blank row. The fallback never populates
+    ``start_lat``/``start_lng`` (those stay an honest record of measured GPS) and
+    is tagged ``weather_source="open_meteo_home"`` so consumers can tell a
+    location-derived reading from a measured one.
+    """
     lat, lng = coordinates_from_streams(streams)
     if lat is None or lng is None:
         lat, lng = coordinates_from_activity(activity)
     weather_datetime = _activity_midpoint_datetime(activity, streams)
     activity_date = str(weather_datetime)[:10] if weather_datetime else ""
-    weather = await fetch_activity_weather(lat, lng, activity_date, weather_datetime)
+
+    if lat is not None and lng is not None:
+        weather = await fetch_activity_weather(
+            lat, lng, activity_date, weather_datetime
+        )
+        return {"start_lat": lat, "start_lng": lng, **(weather or {})}
+
+    if fallback_coordinates is None:
+        return {"start_lat": None, "start_lng": None}
+    weather = await fetch_activity_weather(
+        fallback_coordinates[0], fallback_coordinates[1], activity_date, weather_datetime
+    )
+    if not weather:
+        return {"start_lat": None, "start_lng": None}
     return {
-        "start_lat": lat,
-        "start_lng": lng,
-        **(weather or {}),
+        "start_lat": None,
+        "start_lng": None,
+        **weather,
+        "weather_source": "open_meteo_home",
     }
 
 
@@ -357,9 +409,13 @@ async def backfill_missing_ride_weather(
     """Attach missing weather to recent stored rides.
 
     Existing imports may lack coordinates, so this optionally fetches the
-    Strava activity detail first to recover ``start_latlng``.
+    Strava activity detail first to recover ``start_latlng``. Rides that still
+    have no GPS afterwards (indoor/trainer sessions) fall back to the athlete's
+    persisted training location, tagged ``weather_source="open_meteo_home"``, so
+    the weather-preference engine can see what the athlete rode *away* from (#495).
     """
     rows = await crud.get_ride_metrics_missing_weather(db, user_id, limit=limit)
+    home = await resolve_training_location(db, user_id)
     updated = 0
     for row in rows:
         lat = row.start_lat
@@ -404,10 +460,24 @@ async def backfill_missing_ride_weather(
         weather_date = (
             str(weather_datetime)[:10] if weather_datetime else row.activity_date
         )
-        weather = await fetch_activity_weather(lat, lng, weather_date, weather_datetime)
+        if lat is not None and lng is not None:
+            weather = await fetch_activity_weather(
+                lat, lng, weather_date, weather_datetime
+            )
+            if weather:
+                _apply_weather_fields(row, {"start_lat": lat, "start_lng": lng, **weather})
+                updated += 1
+            continue
+
+        if home is None:
+            continue
+        weather = await fetch_activity_weather(
+            home.latitude, home.longitude, weather_date, weather_datetime
+        )
         if weather:
-            fields = {"start_lat": lat, "start_lng": lng, **weather}
-            _apply_weather_fields(row, fields)
+            _apply_weather_fields(
+                row, {**weather, "weather_source": "open_meteo_home"}
+            )
             updated += 1
 
     if updated:
@@ -415,38 +485,23 @@ async def backfill_missing_ride_weather(
     return updated
 
 
-async def training_weather_context_for_user(
-    db: AsyncSession,
-    user_id: str,
-    days: int = 14,
-) -> str:
-    """Return compact upcoming weather context for plan generation/adaptation."""
-    location = await crud.get_latest_ride_metric_with_location(db, user_id)
-    if location is None or location.start_lat is None or location.start_lng is None:
-        return ""
+def _cache_key(latitude: float, longitude: float) -> tuple[float, float]:
+    return (
+        round(float(latitude), FORECAST_CACHE_COORD_PRECISION),
+        round(float(longitude), FORECAST_CACHE_COORD_PRECISION),
+    )
 
-    try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(
-                FORECAST_URL,
-                params={
-                    "latitude": location.start_lat,
-                    "longitude": location.start_lng,
-                    "daily": WEATHER_DAILY,
-                    "forecast_days": max(1, min(days, 16)),
-                    "timezone": "auto",
-                },
-            )
-        if not resp.is_success:
-            return ""
-        payload = resp.json()
-    except Exception:
-        logger.info("Upcoming weather lookup failed", exc_info=True)
-        return ""
 
+def clear_forecast_cache() -> None:
+    """Drop every cached forecast (used by tests and after a location change)."""
+    _forecast_cache.clear()
+
+
+def _parse_daily_payload(payload: Any) -> list[dict[str, Any]]:
+    """Map an Open-Meteo daily response into our per-day forecast dicts."""
     daily = payload.get("daily") if isinstance(payload, dict) else None
     if not isinstance(daily, dict):
-        return ""
+        return []
 
     times = daily.get("time") or []
     max_temps = daily.get("temperature_2m_max") or []
@@ -455,35 +510,177 @@ async def training_weather_context_for_user(
     precipitation = daily.get("precipitation_sum") or []
     wind = daily.get("wind_speed_10m_max") or []
 
-    lines = ["Upcoming weather near the athlete's usual activity location:"]
-    for idx, day in enumerate(times[:days]):
+    forecast: list[dict[str, Any]] = []
+    for idx, day in enumerate(times):
         high = _pick_hourly_value(max_temps, idx)
         low = _pick_hourly_value(min_temps, idx)
         code = _pick_hourly_value(codes, idx)
-        condition = condition_from_code(
-            int(code) if isinstance(code, (int, float)) else None
-        )
-        flag = weather_load_flag(
-            float(high) if isinstance(high, (int, float)) else None, condition
-        )
-        parts = [str(day)]
-        if condition:
-            parts.append(condition.replace("_", " "))
-        if isinstance(low, (int, float)) and isinstance(high, (int, float)):
-            parts.append(f"{round(low)}-{round(high)}C")
         precip = _pick_hourly_value(precipitation, idx)
-        if isinstance(precip, (int, float)) and precip > 0:
-            parts.append(f"precip {round(precip, 1)}mm")
         wind_kph = _pick_hourly_value(wind, idx)
-        if isinstance(wind_kph, (int, float)) and wind_kph >= 25:
-            parts.append(f"wind {round(wind_kph)}kph")
-        if flag:
-            parts.append(f"training flag:{flag}")
-        lines.append("- " + " | ".join(parts))
+        numeric_code = int(code) if isinstance(code, (int, float)) else None
+        condition = condition_from_code(numeric_code)
+        high_c = round(float(high), 1) if isinstance(high, (int, float)) else None
+        forecast.append(
+            {
+                "date": str(day),
+                "condition": condition,
+                "weather_code": numeric_code,
+                "temperature_max_c": high_c,
+                "temperature_min_c": (
+                    round(float(low), 1) if isinstance(low, (int, float)) else None
+                ),
+                "precipitation_mm": (
+                    round(float(precip), 1)
+                    if isinstance(precip, (int, float))
+                    else None
+                ),
+                "wind_speed_kph": (
+                    round(float(wind_kph), 1)
+                    if isinstance(wind_kph, (int, float))
+                    else None
+                ),
+                "load_flag": weather_load_flag(high_c, condition),
+            }
+        )
+    return forecast
+
+
+async def fetch_daily_forecast(
+    latitude: float | None,
+    longitude: float | None,
+    days: int = 14,
+    *,
+    now: float | None = None,
+) -> list[dict[str, Any]]:
+    """Return the cached daily forecast for a location, newest day first-in-list.
+
+    One upstream call per rounded location per hour serves every caller and every
+    horizon: the full 16-day window is fetched and cached, then sliced to ``days``.
+    Returns an empty list on any failure — weather is always additive context, so
+    a forecast outage must never break plan generation or a dashboard load.
+    """
+    if latitude is None or longitude is None:
+        return []
+    wanted = max(1, min(days, FORECAST_MAX_DAYS))
+    key = _cache_key(latitude, longitude)
+    clock = now if now is not None else _time.monotonic()
+
+    cached = _forecast_cache.get(key)
+    if cached is not None and clock - cached[0] < FORECAST_CACHE_TTL_SECONDS:
+        return cached[1][:wanted]
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(
+                FORECAST_URL,
+                params={
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "daily": WEATHER_DAILY,
+                    "forecast_days": FORECAST_MAX_DAYS,
+                    "timezone": "auto",
+                },
+            )
+        if not resp.is_success:
+            return []
+        payload = resp.json()
+    except Exception:
+        logger.info("Upcoming weather lookup failed", exc_info=True)
+        return []
+
+    forecast = _parse_daily_payload(payload)
+    if forecast:
+        _forecast_cache[key] = (clock, forecast)
+    return forecast[:wanted]
+
+
+async def daily_forecast_for_user(
+    db: AsyncSession,
+    user_id: str,
+    days: int = 14,
+) -> tuple[TrainingLocation | None, list[dict[str, Any]]]:
+    """Return ``(training location, daily forecast)`` for an athlete.
+
+    The location comes from the persisted ``home_location`` attribute when set —
+    athlete override first, inferred cluster second — and falls back to the latest
+    ride with GPS (:func:`services.home_location.resolve_training_location`).
+    """
+    location = await resolve_training_location(db, user_id)
+    if location is None:
+        return None, []
+    forecast = await fetch_daily_forecast(
+        location.latitude, location.longitude, days
+    )
+    return location, forecast
+
+
+def format_forecast_day(day: dict[str, Any]) -> str:
+    """One compact prompt line for a forecast day, e.g. ``2026-08-02 | rain | 14-19C``."""
+    parts = [str(day.get("date"))]
+    condition = day.get("condition")
+    if condition:
+        parts.append(str(condition).replace("_", " "))
+    low = day.get("temperature_min_c")
+    high = day.get("temperature_max_c")
+    if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+        parts.append(f"{round(low)}-{round(high)}C")
+    precip = day.get("precipitation_mm")
+    if isinstance(precip, (int, float)) and precip > 0:
+        parts.append(f"precip {round(precip, 1)}mm")
+    wind_kph = day.get("wind_speed_kph")
+    if isinstance(wind_kph, (int, float)) and wind_kph >= 25:
+        parts.append(f"wind {round(wind_kph)}kph")
+    flag = day.get("load_flag")
+    if flag:
+        parts.append(f"training flag:{flag}")
+    return " | ".join(parts)
+
+
+async def training_weather_context_for_user(
+    db: AsyncSession,
+    user_id: str,
+    days: int = 14,
+) -> str:
+    """Return compact upcoming weather context for plan generation/adaptation.
+
+    The per-day forecast is a *scheduling constraint* the coach may act on, and it
+    is presented alongside what the coach has actually learned about this
+    athlete's weather tolerances (:mod:`services.weather_preference`) so a proven
+    heat-tolerant rider is not nagged off every warm day (#495).
+    """
+    # Imported lazily: the preference engine reads hypotheses through crud, and a
+    # module-level import would tie every weather lookup to the learning stack.
+    from services import weather_preference
+
+    location, forecast = await daily_forecast_for_user(db, user_id, days)
+    if location is None or not forecast:
+        return ""
+
+    where = f" near {location.label}" if location.label else " near their usual training location"
+    lines = [f"Upcoming weather{where}:"]
+    lines.extend("- " + format_forecast_day(day) for day in forecast)
+
+    # Best-effort: the forecast is the part callers depend on, so a failure reading
+    # the learned beliefs must degrade to "no preferences known", never break the
+    # plan prompt that asked for weather.
+    try:
+        preference_section = (
+            await weather_preference.weather_preference_context_for_user(db, user_id)
+        )
+    except Exception:
+        logger.info("Weather-preference context lookup failed", exc_info=True)
+        preference_section = ""
+    if preference_section:
+        lines.append("")
+        lines.append(preference_section)
 
     lines.append(
-        "Use this weather only as a scheduling constraint: shorten or reduce intensity in heat, "
-        "extend warmups and avoid long exposed sessions in freezing/cold conditions, and consider "
-        "indoor, recovery, or strength sessions during severe rain, snow, thunderstorms, or high wind."
+        "Use this weather only as a scheduling constraint, and adapt rather than rewrite: move or "
+        "soften high-intensity work on extreme-heat days, offer an indoor trainer session or a "
+        "cooler earlier window, extend warmups and avoid long exposed sessions in freezing/cold "
+        "conditions, and swap to endurance, recovery, or strength work during severe rain, snow, "
+        "thunderstorms, or high wind. Weight this against what is known about the athlete's own "
+        "tolerances above — do not move a session for weather this athlete demonstrably handles "
+        "well. Whenever weather is why a session changed, say so explicitly in your reasoning."
     )
     return "\n".join(lines)

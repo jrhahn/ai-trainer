@@ -5,12 +5,32 @@ import { useAppStore, type StravaActivity } from '../store/useAppStore'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
 import { analyseStravaActivities, generateTrainingPlan, refreshLoginSummary } from '../services/ai'
-import { saveTrainingPlan, updateCurrentUser } from '../services/user'
+import { fetchTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 type ActivitySource = 'strava' | 'intervals'
+
+/**
+ * Pick the sync-cursor id for the newest of `activities` for a given source.
+ *
+ * Strava activity ids are monotonic in the id space (the backend advances the
+ * cursor with `id > last_seen`), so the max id is the correct cursor.
+ *
+ * intervals.icu ids are 63-bit blake2b hashes (`intervals_activity_id` on the
+ * backend) — not ordered by time and precision-lossy as JS Numbers — so
+ * `Math.max` over them selects an essentially random activity. Pick the newest
+ * by start time instead and use its id; the backend matches the intervals
+ * cursor with a tolerance that absorbs the residual JS precision loss (#455).
+ */
+function newestCursorId(activities: StravaActivity[], source: ActivitySource): number {
+  if (source === 'intervals') {
+    const newest = activities.reduce((a, b) => (b.start_date > a.start_date ? b : a))
+    return newest.id
+  }
+  return Math.max(...activities.map((a) => a.id))
+}
 
 export type AnalysisStatus = 'idle' | 'analysing' | 'done' | 'error'
 
@@ -25,7 +45,6 @@ export function useStravaSync(): UseStravaSyncResult {
   const {
     authToken,
     userProfile,
-    trainingPlan,
     stravaConnection,
     intervalsConnection,
     stravaAnalysisComplete,
@@ -45,7 +64,6 @@ export function useStravaSync(): UseStravaSyncResult {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
-      trainingPlan: s.trainingPlan,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
@@ -106,7 +124,7 @@ export function useStravaSync(): UseStravaSyncResult {
       }
       setUserProfile(updatedProfile)
 
-      const newestId = Math.max(...activities.map((a) => a.id))
+      const newestId = newestCursorId(activities, source)
       if (source === 'intervals') {
         setLastIntervalsActivityId(newestId)
       } else {
@@ -133,18 +151,18 @@ export function useStravaSync(): UseStravaSyncResult {
       }
 
       if (isIncremental && planUpdates && planUpdates.length > 0) {
-        // For new activities, apply targeted plan updates rather than regenerating the whole plan
-        const updatesByDate = Object.fromEntries(planUpdates.map((u) => [u.date, u]))
-        const updatedPlan = trainingPlan.map((day) =>
-          updatesByDate[day.date] ? { ...day, ...updatesByDate[day.date] } : day
-        )
-        setTrainingPlan(updatedPlan)
-        // Persist the updated plan
-        await saveTrainingPlan(authToken, updatedPlan)
+        // The backend already persisted these targeted updates through the shared
+        // pin/completed-respecting pipeline (source="ride_review"). Re-fetch the
+        // authoritative plan rather than PUTting our in-memory snapshot back: that
+        // reverted concurrent edits and bypassed pin/completed-day protection,
+        // rewriting pinned/completed days (stale-snapshot clobber, #399).
+        const freshPlan = await fetchTrainingPlan(authToken)
+        setTrainingPlan(freshPlan)
       } else {
-        // First-time analysis or no targeted updates → regenerate the full plan
+        // First-time analysis or no targeted updates → regenerate the full plan.
+        // generateTrainingPlan already persists server-side (source="generate"),
+        // so we only mirror the persisted result into local state.
         const updatedPlan = await generateTrainingPlan(authToken)
-        await saveTrainingPlan(authToken, updatedPlan)
         setTrainingPlan(updatedPlan)
       }
 
@@ -218,6 +236,11 @@ export function useStravaSync(): UseStravaSyncResult {
       (a) => !processedNewActivitiesRef.current.has(a.id)
     )
     if (unprocessed.length === 0) return
+    // Don't start an incremental analysis while another analysis is already in
+    // flight (the initial-analysis effect uses the same guard). Leave these
+    // activities unmarked so the next poll retries them once the current run
+    // finishes, instead of running two concurrent analyses (#456).
+    if (isAnalysingRef.current) return
     unprocessed.forEach((a) => processedNewActivitiesRef.current.add(a.id))
 
     setNewActivitiesCount(unprocessed.length)

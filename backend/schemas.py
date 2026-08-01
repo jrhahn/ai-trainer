@@ -16,6 +16,7 @@ from pydantic import (
     EmailStr,
     Field,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -135,6 +136,9 @@ class RiderAssessmentSchema(CamelModel):
     ride_insights: Optional[str] = None
     last_ride_feedback: Optional[str] = None
     login_summary: Optional[str] = None
+    training_status_label: Optional[str] = None
+    training_status_tone: Optional[str] = None
+    training_status_rationale: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +286,9 @@ class WorkoutFeedbackSchema(CamelModel):
 
 class WorkoutLogRequest(BaseModel):
     feedback: WorkoutFeedbackSchema
+    # Which session on the logged date this feedback is for (#496). Absent from
+    # every pre-two-a-day client and from single-session days, meaning slot 0.
+    slot: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -410,12 +417,224 @@ class AthleteContextRequest(AthleteContextSchema):
     pass
 
 
-AthleteMemoryFactStatus = Literal["active", "stale", "rejected", "user_confirmed"]
+class AthleteModelSchema(CamelModel):
+    """The long-term structured athlete model (#384).
+
+    Captures durable physiological/performance characteristics. Quantitative
+    anchors (``ftp_watts``, ``vo2max``) are optional; the remaining qualitative
+    fields default to empty so a never-derived model round-trips as blanks.
+    """
+
+    ftp_watts: Optional[int] = None
+    vo2max: Optional[float] = None
+    pacing_quality: str = ""
+    recovery_ability: str = ""
+    threshold_durability: str = ""
+    heat_tolerance: str = ""
+    preferred_training_style: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
+    summary: str = ""
+    confidence: float = 0.0
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteModelRequest(CamelModel):
+    """Athlete-authored edits to the long-term model.
+
+    Excludes ``confidence`` and ``updated_at`` — those are coach/server owned.
+    """
+
+    ftp_watts: Optional[int] = None
+    vo2max: Optional[float] = None
+    pacing_quality: str = ""
+    recovery_ability: str = ""
+    threshold_durability: str = ""
+    heat_tolerance: str = ""
+    preferred_training_style: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePerformanceAttributeSchema(CamelModel):
+    """One inferred physiological attribute in the Athlete Performance Model (#475).
+
+    Every attribute is emitted with a ``confidence`` and never presented as fact:
+    quantitative attributes carry an ``estimate`` (+ ``unit``); qualitative ones
+    carry a ``score`` (e.g. ``high``/``above_average``/``unknown``). ``evidence``
+    lists the signals behind it and ``missing_information`` what would sharpen it.
+    """
+
+    estimate: Optional[float] = None
+    score: Optional[str] = None
+    confidence: float
+    unit: Optional[str] = None
+    evidence: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePerformanceLimiterSchema(CamelModel):
+    """One candidate physiological limiter in the ranked list (#477).
+
+    Surfaced as an inference, never a fact: it carries a ``confidence`` and both
+    the ``evidence`` for and the ``counterEvidence`` against it. ``limiter`` is one
+    of ``threshold``/``vo2max``/``endurance_durability``/``insufficient_data``.
+    """
+
+    limiter: str
+    confidence: float
+    evidence: list[str] = Field(default_factory=list)
+    counter_evidence: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingRoiSystemGainSchema(CamelModel):
+    """Expected training return for one physiological system (#478).
+
+    ``system`` is one of ``threshold``/``vo2max``/``endurance``/``anaerobic``;
+    ``gain`` is a coarse return bucket (``large``/``moderate``/``small``/
+    ``maintenance``) with a short ``rationale``.
+    """
+
+    system: str
+    gain: str
+    rationale: str = ""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingRoiEmphasisSchema(CamelModel):
+    """A suggested weekly emphasis line, e.g. ``2× Threshold`` (#478)."""
+
+    system: str
+    label: str
+    sessions: int
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingRoiRecommendationSchema(CamelModel):
+    """ROI-based recommendation derived from the model + limiter (#478).
+
+    Machine-readable expected gain per system plus a suggested weekly emphasis and
+    a natural-language rationale that cites the model. ``sufficient`` is ``False``
+    when the model has no confident limiter — the caller should keep its own
+    periodization rather than act on this.
+    """
+
+    sufficient: bool = False
+    limiter: Optional[str] = None
+    confidence: float = 0.0
+    hypothesis: str = ""
+    rationale: str = ""
+    expected_gain: list[TrainingRoiSystemGainSchema] = Field(default_factory=list)
+    weekly_emphasis: list[TrainingRoiEmphasisSchema] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePerformanceModelSchema(CamelModel):
+    """Deterministic, per-attribute Athlete Performance Model (#475).
+
+    Complements :class:`AthleteModelSchema` (LLM qualitative profile) with a
+    rule-based, evidence-backed quantitative model. ``attributes`` is keyed by
+    attribute name (``vo2max``, ``ftp``, ``map``, ``fractional_utilization``,
+    ``aerobic_endurance``, ``fatigue_resistance``, ``anaerobic_capacity``, …).
+    ``likelyLimiter`` and the ranked ``limiters`` list come from limiter
+    detection (#477); ``recommendations`` is the ROI mapping derived from them
+    (#478).
+    """
+
+    attributes: dict[str, AthletePerformanceAttributeSchema] = Field(
+        default_factory=dict
+    )
+    likely_limiter: Optional[str] = None
+    limiters: list[AthletePerformanceLimiterSchema] = Field(default_factory=list)
+    recommendations: Optional[TrainingRoiRecommendationSchema] = None
+    source_window_days: Optional[int] = None
+    derived_from_rides: int = 0
+    updated_at: Optional[datetime] = None
+
+    @field_validator("limiters", mode="before")
+    @classmethod
+    def _limiters_default(cls, v: object) -> object:
+        # The DB column is nullable (unset before limiter detection ran, or on
+        # rows predating the migration); present it as an empty list.
+        return v if v is not None else []
+
+    @model_validator(mode="after")
+    def _derive_recommendations(self) -> "AthletePerformanceModelSchema":
+        # The ROI recommendation (#478) is a pure derivation of attributes + the
+        # ranked limiter list, so compute it here rather than persist it. Imported
+        # lazily to keep schemas free of a service dependency at import time.
+        if self.recommendations is None:
+            from services.roi_recommendation import recommend_training_roi
+
+            attrs = {k: v.model_dump() for k, v in self.attributes.items()}
+            limiters = [lim.model_dump() for lim in self.limiters]
+            self.recommendations = TrainingRoiRecommendationSchema.model_validate(
+                recommend_training_roi(attrs, limiters)
+            )
+        return self
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+AthleteMemoryFactStatus = Literal[
+    "active", "stale", "archived", "rejected", "user_confirmed", "needs_validation"
+]
+
+# A stable ``fact`` (FTP, max HR, weight) versus an ``observation`` of repeated
+# behaviour inferred from training history (#386).
+AthleteMemoryFactKind = Literal["fact", "observation"]
 
 
 class AthleteMemoryFactSchema(CamelModel):
     id: str
     fact: str
+    kind: AthleteMemoryFactKind = "observation"
     category: str
     source_snippet: str = ""
     source_exchange_id: Optional[str] = None
@@ -423,6 +642,7 @@ class AthleteMemoryFactSchema(CamelModel):
     last_confirmed_at: datetime
     confidence: float
     status: AthleteMemoryFactStatus
+    contradiction_note: Optional[str] = None
     observation_count: int
     updated_at: datetime
 
@@ -435,6 +655,165 @@ class AthleteMemoryFactSchema(CamelModel):
 
 class AthleteMemoryFactsResponse(CamelModel):
     facts: list[AthleteMemoryFactSchema]
+
+
+AthleteHypothesisStatus = Literal["proposed", "confirmed", "refuted"]
+
+
+class AthleteHypothesisSchema(CamelModel):
+    id: str
+    statement: str
+    category: str
+    rationale: str = ""
+    confidence: float
+    # Structured supporting evidence and the competing explanations still to be
+    # ruled out (#479). Deterministic performance-model hypotheses populate these;
+    # older LLM-formed hypotheses leave them empty (stored NULL -> []).
+    evidence: list[str] = Field(default_factory=list)
+    alternative_explanations: list[str] = Field(default_factory=list)
+    evidence_count: int
+    status: AthleteHypothesisStatus
+    first_proposed_at: datetime
+    updated_at: datetime
+
+    @field_validator("evidence", "alternative_explanations", mode="before")
+    @classmethod
+    def _default_list(cls, value: object) -> object:
+        return value or []
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteHypothesesResponse(CamelModel):
+    hypotheses: list[AthleteHypothesisSchema]
+
+
+class AthleteHypothesisUpdateRequest(CamelModel):
+    statement: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = None
+    rationale: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[AthleteHypothesisStatus] = None
+
+
+AthleteOpenQuestionStatus = Literal["open", "answered", "dismissed"]
+
+
+class AthleteOpenQuestionSchema(CamelModel):
+    """An open question the coach is tracking about the athlete (#385)."""
+
+    id: str
+    question: str
+    category: str
+    evidence: str = ""
+    needs: str = ""
+    evidence_count: int
+    status: AthleteOpenQuestionStatus
+    resolution: Optional[str] = None
+    first_asked_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteOpenQuestionsResponse(CamelModel):
+    open_questions: list[AthleteOpenQuestionSchema]
+
+
+class AthleteOpenQuestionUpdateRequest(CamelModel):
+    question: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = None
+    evidence: Optional[str] = None
+    needs: Optional[str] = None
+    resolution: Optional[str] = None
+    status: Optional[AthleteOpenQuestionStatus] = None
+
+
+AthleteExperimentStatus = Literal["suggested", "completed", "dismissed"]
+
+
+class AthleteExperimentSchema(CamelModel):
+    id: str
+    hypothesis_id: Optional[str] = None
+    question: str
+    protocol: str
+    rationale: str = ""
+    category: str
+    status: AthleteExperimentStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteExperimentsResponse(CamelModel):
+    experiments: list[AthleteExperimentSchema]
+
+
+class AthleteExperimentUpdateRequest(CamelModel):
+    question: Optional[str] = Field(default=None, min_length=1)
+    protocol: Optional[str] = Field(default=None, min_length=1)
+    rationale: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[AthleteExperimentStatus] = None
+
+
+AthletePredictionStatus = Literal["pending", "correct", "incorrect"]
+
+
+class AthletePredictionSchema(CamelModel):
+    id: str
+    prediction: str
+    expected_outcome: str
+    actual_outcome: Optional[str] = None
+    horizon: str = ""
+    category: str
+    confidence: float
+    status: AthletePredictionStatus
+    created_at: datetime
+    evaluated_at: Optional[datetime] = None
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthletePredictionAccuracy(CamelModel):
+    """Coaching-quality summary: how many predictions were checked and hit."""
+
+    evaluated: int
+    correct: int
+    accuracy: Optional[float] = None
+
+
+class AthletePredictionsResponse(CamelModel):
+    predictions: list[AthletePredictionSchema]
+    accuracy: AthletePredictionAccuracy
+
+
+class AthletePredictionUpdateRequest(CamelModel):
+    prediction: Optional[str] = Field(default=None, min_length=1)
+    expected_outcome: Optional[str] = Field(default=None, min_length=1)
+    actual_outcome: Optional[str] = None
+    horizon: Optional[str] = None
+    category: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: Optional[AthletePredictionStatus] = None
 
 
 class AthleteAvailabilityConstraintSchema(CamelModel):
@@ -459,6 +838,7 @@ class AthleteAvailabilityConstraintSchema(CamelModel):
 
 class AthleteMemoryFactObservationRequest(CamelModel):
     fact: str = Field(min_length=1)
+    kind: AthleteMemoryFactKind = "observation"
     category: str = "general"
     source_snippet: str = ""
     source_exchange_id: Optional[str] = None
@@ -467,6 +847,7 @@ class AthleteMemoryFactObservationRequest(CamelModel):
 
 class AthleteMemoryFactUpdateRequest(CamelModel):
     fact: Optional[str] = Field(default=None, min_length=1)
+    kind: Optional[AthleteMemoryFactKind] = None
     category: Optional[str] = None
     source_snippet: Optional[str] = None
     source_exchange_id: Optional[str] = None
@@ -487,7 +868,12 @@ class MemoryExportSchema(CamelModel):
     memory_updates_enabled: bool
     coach_memory: str
     athlete_context: Optional[AthleteContextSchema]
+    athlete_model: Optional[AthleteModelSchema] = None
     memory_facts: list[AthleteMemoryFactSchema]
+    hypotheses: list[AthleteHypothesisSchema] = []
+    open_questions: list[AthleteOpenQuestionSchema] = []
+    experiments: list[AthleteExperimentSchema] = []
+    predictions: list[AthletePredictionSchema] = []
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
@@ -552,6 +938,11 @@ class StravaActivitySchema(CamelModel):
     """Mirrors the TypeScript StravaActivity interface."""
 
     id: int
+    # Raw, non-numeric provider id (e.g. intervals.icu ``i166933341``). Carried
+    # as a string so it never round-trips through a JS ``Number`` and loses
+    # precision the way the numeric ``id`` does for 19-digit intervals hashes
+    # (#429 Bug B). When present it is the authoritative external key on import.
+    external_id: Optional[str] = None
     name: str
     type: str
     sport_type: Optional[str] = None
@@ -633,15 +1024,28 @@ class AskTrainerRequest(CamelModel):
 
 class PlanDayUpdateSchema(CamelModel):
     date: str
+    # Which session on ``date`` this update targets (#496). ``None`` means the
+    # day's first (lowest-slot) session, which is what every pre-two-a-day caller
+    # and every single-session day resolves to.
+    slot: Optional[int] = None
+    time_of_day: Optional[str] = None
     workout_type: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     duration_minutes: Optional[int] = None
+    # Optional planned-duration window (#368). A single value is the degenerate
+    # window min == max; when both are set, duration_minutes is the midpoint.
+    duration_min_minutes: Optional[int] = None
+    duration_max_minutes: Optional[int] = None
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
     workout_purpose: Optional[str] = None
     key_focus_points: Optional[list[str]] = None
+    # Marks the day done. Set by activity-sync when a ride auto-matches the day
+    # (services/ride_matching.mark_matched_days_completed); clients mark completion
+    # through the same per-day update path.
+    completed: Optional[bool] = None
 
 
 class AnalyseActivitiesResponse(CamelModel):
@@ -661,17 +1065,150 @@ class RideLabelUpdateSchema(CamelModel):
     label_override: str
 
 
-class TrainingDaySchema(CamelModel):
-    """Enough structure to pass to rateCompletedWorkout; rest stored as opaque JSON."""
+class PowerRange(CamelModel):
+    low: int
+    high: int
+
+
+class HeartRateRange(CamelModel):
+    low: int
+    high: int
+
+
+class PlanInterval(CamelModel):
+    duration: int  # seconds
+    power: int
+    rest: int  # seconds
+
+
+def _coerce_target_range(value: Any) -> Any:
+    """Lenient coercion of a target power/HR value into a ``{low, high}`` range.
+
+    The LLM occasionally emits a bare number (``"targetPower": 240``) or fills
+    only one bound. Treat a scalar as a degenerate range and mirror a lone bound
+    so one malformed value doesn't drop the whole day at the persist gate.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        v = int(value)
+        return {"low": v, "high": v}
+    if isinstance(value, str):
+        try:
+            v = int(float(value))
+        except ValueError:
+            return value
+        return {"low": v, "high": v}
+    if isinstance(value, dict):
+        low, high = value.get("low"), value.get("high")
+        if low is None and high is not None:
+            return {**value, "low": high}
+        if high is None and low is not None:
+            return {**value, "high": low}
+    return value
+
+
+def normalize_slot(value: Any) -> int:
+    """Coerce any stored/LLM slot value to a non-negative int, defaulting to 0.
+
+    Total by design: a slot is a storage key, so no input may raise. Missing,
+    ``None``, empty and unparseable values are all the legacy single-session day,
+    i.e. slot 0; negatives are clamped so ordering stays total.
+
+    Only genuine numbers and numeric strings are accepted. A bare ``int(value)``
+    would happily convert any object defining ``__int__`` — which is how a slot
+    that was never set turns into a real-looking slot 1 and silently mis-keys a
+    session. Booleans are excluded for the same reason.
+    """
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return 0 if value != value else max(0, int(value))  # NaN → 0
+    if isinstance(value, str):
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return 0
+    return 0
+
+
+def day_slot(day: Any) -> int:
+    """The session slot of ``day``, accepting a ``PlanDay``, dict or alias case.
+
+    Legacy days that predate two-a-days carry no slot at all and read back as 0.
+    """
+    if isinstance(day, PlanDay):
+        return day.slot
+    if isinstance(day, dict):
+        raw = day.get("slot")
+        if raw is None:
+            raw = day.get("session_slot")
+        return normalize_slot(raw)
+    return normalize_slot(getattr(day, "slot", None))
+
+
+def session_key(day: Any) -> tuple[str, int]:
+    """The unique identity of a plan session: ``(date, slot)`` (#496).
+
+    Date alone stopped being unique when a day became able to hold more than one
+    session, so every map/merge/sort over a plan must key on this instead. Use it
+    anywhere the old ``{d["date"]: d}`` shape appeared.
+    """
+    if isinstance(day, PlanDay):
+        return (str(day.date), day.slot)
+    if isinstance(day, dict):
+        return (str(day.get("date") or ""), day_slot(day))
+    return (str(getattr(day, "date", "") or ""), day_slot(day))
+
+
+class PlanDay(CamelModel):
+    """Canonical, self-normalizing training-plan *session*.
+
+    Every plan write is validated and dumped through this model at the pipeline
+    persist gate (``services/plan_pipeline.py``), so a day can never reach
+    storage with an incoherent duration (scalar ``durationMinutes`` vs a
+    ``durationMin/MaxMinutes`` window) — the recurring drift-bug class
+    (#368, #422). Lenient on input (LLM/legacy days may omit fields, use
+    snake_case, or send a scalar-only / window-only duration), strict and
+    canonical on output. ``extra="allow"`` preserves any unmodelled key so
+    typing never silently drops stored data.
+
+    A plan is a flat list of these, and a *date may repeat*: two-a-days are two
+    entries sharing one date and distinguished by ``slot`` (#496). The unique
+    identity of a session is therefore ``(date, slot)`` — see :func:`session_key`
+    — not the date alone. Keeping the session as the model (rather than nesting
+    ``sessions`` under a day container) is what lets this single persist gate go
+    on owning every duration/drift invariant unchanged.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        extra="allow",
+    )
 
     date: str
-    workout_type: str
-    title: str
-    description: str
-    duration_minutes: int
-    target_power: Optional[Any] = None
-    target_heart_rate: Optional[Any] = None
-    intervals: Optional[list[Any]] = None
+    # Ordered position of this session within its date: 0 is the first/only
+    # session, 1 the second, and so on. A legacy single-workout day carries no
+    # slot and reads back as slot 0, so every stored plan migrates losslessly.
+    slot: int = 0
+    # Optional free-text when-in-the-day hint ("am", "pm", "18:30"). Advisory
+    # only — ``slot`` is the identity and the ordering; this is for display and
+    # for the coach's AM/PM load reasoning.
+    time_of_day: Optional[str] = None
+    workout_type: str = "rest"
+    title: str = ""
+    description: str = ""
+    duration_minutes: int = 0
+    # Optional planned-duration window (#368). A single value is the degenerate
+    # window min == max; when both are set, duration_minutes is the midpoint.
+    duration_min_minutes: Optional[int] = None
+    duration_max_minutes: Optional[int] = None
+    target_power: Optional[PowerRange] = None
+    target_heart_rate: Optional[HeartRateRange] = None
+    intervals: Optional[list[PlanInterval]] = None
     completed: Optional[bool] = None
     feedback: Optional[WorkoutFeedbackSchema] = None
     coach_feedback: Optional[str] = None
@@ -681,6 +1218,83 @@ class TrainingDaySchema(CamelModel):
     # means a manual edit / coach-chat change and pins the day against automated
     # overwrites; see services/plan_pipeline.py. Clients cannot set this.
     source: Optional[str] = None
+
+    @field_validator("target_power", "target_heart_rate", mode="before")
+    @classmethod
+    def _coerce_ranges(cls, value: Any) -> Any:
+        return _coerce_target_range(value)
+
+    @field_validator("slot", mode="before")
+    @classmethod
+    def _coerce_slot(cls, value: Any) -> Any:
+        # Slot is a storage key, so it must never fail validation and drop a day
+        # at the persist gate: a missing/None/garbage slot is the legacy
+        # single-session day, i.e. slot 0. Negatives are clamped for the same
+        # reason (ordering must stay total and non-negative).
+        return normalize_slot(value)
+
+    @model_serializer(mode="wrap")
+    def _omit_default_slot(self, handler: Any) -> Any:
+        """Serialize slot 0 as absent, so a single-session day is stored as before.
+
+        Slot 0 *is* the legacy "no slot" day, so writing it out would rewrite every
+        stored plan on the first commit after #496 ships and — worse — make a
+        genuinely unchanged plan compare unequal to what is in the database, turning
+        every no-op write into a real write that cascades a login-summary refresh
+        and a ride-snapshot rebuild. Omitting the default keeps storage byte-stable
+        and no-op detection honest; readers already default a missing slot to 0.
+        """
+        data = handler(self)
+        if isinstance(data, dict) and data.get("slot") in (0, None):
+            data.pop("slot", None)
+        return data
+
+    @model_validator(mode="after")
+    def _coherent_duration(self) -> "PlanDay":
+        # Reconcile the scalar with the min/max window so every reader sees one
+        # coherent view. Shared arithmetic with normalize_duration_fields;
+        # imported lazily because services modules import schemas at load time.
+        from services.duration_range import reconcile_duration
+
+        lo, hi = reconcile_duration(
+            self.duration_minutes,
+            self.duration_min_minutes,
+            self.duration_max_minutes,
+        )
+        if lo is None and hi is None:
+            # Single value / rest day — leave the scalar untouched.
+            return self
+        self.duration_min_minutes = lo
+        self.duration_max_minutes = hi
+        self.duration_minutes = round((lo + hi) / 2)
+        return self
+
+
+# Back-compat alias: the canonical day model used to be TrainingDaySchema.
+TrainingDaySchema = PlanDay
+
+
+_DURATION_ALIAS_KEYS = frozenset(
+    {"durationMinutes", "durationMinMinutes", "durationMaxMinutes"}
+)
+
+
+def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
+    """Apply a partial per-day ``update`` onto a canonical ``day``.
+
+    Only fields the update actually sets (non-``None``) are applied. Duration is
+    treated as one unit: an update touching *any* duration field drops the base
+    day's other duration fields so the ``PlanDay`` validator rebuilds the trio
+    from the update alone — otherwise a new scalar could be crushed back to a
+    stale window's midpoint (#422). Unknown keys on the base day are preserved
+    (``PlanDay`` uses ``extra="allow"``).
+    """
+    patch = update.model_dump(by_alias=True, exclude_none=True)
+    base = day.model_dump(by_alias=True)
+    if _DURATION_ALIAS_KEYS & patch.keys():
+        for stale in _DURATION_ALIAS_KEYS - patch.keys():
+            base.pop(stale, None)
+    return PlanDay.model_validate({**base, **patch})
 
 
 class AskTrainerResponse(CamelModel):
@@ -715,6 +1329,14 @@ class RefreshLoginSummaryResponse(CamelModel):
     login_summary: str
 
 
+class TrainingStatusResponse(CamelModel):
+    """The dashboard status chip plus the coach's reason for it (#499)."""
+
+    label: Optional[str] = None
+    tone: Optional[str] = None
+    rationale: Optional[str] = None
+
+
 class RaceEventFeedbackRequest(CamelModel):
     event: RaceEventResponse
     action: str = "added"
@@ -746,6 +1368,34 @@ class MetricsHistoryResponse(BaseModel):
     snapshots: list[AthleteMetricSnapshotSchema]
 
 
+class ReasoningItem(BaseModel):
+    """A single supporting-evidence bullet, tagged with its knowledge source.
+
+    The ``source`` distinguishes where the knowledge comes from (issue #377) so
+    the athlete can tell a personal observation about themselves apart from
+    established sports science and from the coach's read of their metrics.
+    """
+
+    source: str
+    """One of ``personal_observation``, ``scientific_evidence``, ``coach_inference``."""
+    text: str
+    """The reasoning bullet itself, without any source-label prefix."""
+
+
+class ReadinessRecommendation(BaseModel):
+    """A single readiness recommendation together with the evidence behind it.
+
+    Each recommendation is transparent about *why* it was made: ``reasoning``
+    holds short supporting-evidence bullets, each tagged with its knowledge
+    source (personal observation, scientific evidence, or coach inference).
+    """
+
+    recommendation: str
+    """The actionable advice, e.g. "Prioritise 2–3 easy recovery rides this week."."""
+    reasoning: list[ReasoningItem] = []
+    """Source-tagged supporting-evidence bullets explaining the recommendation."""
+
+
 class ReadinessScoreResponse(BaseModel):
     """Response for the GET /ai/readiness-score endpoint."""
 
@@ -773,8 +1423,8 @@ class ReadinessScoreResponse(BaseModel):
     """Projected ATL at race day."""
     projected_tsb: Optional[float] = None
     """Projected TSB at race day."""
-    recommendations: list[str] = []
-    """Short, actionable bullet-point tips to improve race readiness."""
+    recommendations: list[ReadinessRecommendation] = []
+    """Actionable tips to improve race readiness, each with its supporting evidence."""
 
 
 # ---------------------------------------------------------------------------
@@ -849,6 +1499,7 @@ class RideMetricSchema(CamelModel):
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
+    feel_legs: Optional[str] = None
     label_override: Optional[str] = None
     plan_match_status: str = "unmatched"
     matched_plan_date: Optional[str] = None
@@ -861,49 +1512,94 @@ class RideMetricHistoryResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Weather: training location + upcoming forecast (#495)
+# ---------------------------------------------------------------------------
+
+
+class AthleteHomeLocationSchema(CamelModel):
+    """The athlete's persisted training location.
+
+    ``source`` is the authority marker: ``user_set`` (the athlete told the coach
+    where they train) always outranks ``inferred`` (clustered ride starts) and is
+    never overwritten by an inference pass.
+    """
+
+    latitude: float
+    longitude: float
+    label: str = ""
+    source: str = "inferred"
+    confidence: float = 0.0
+    ride_count: int = 0
+    updated_at: Optional[datetime] = None
+
+
+class AthleteHomeLocationResponse(CamelModel):
+    """Nullable wrapper — an athlete may not have a training location yet."""
+
+    location: Optional[AthleteHomeLocationSchema] = None
+
+
+class AthleteHomeLocationUpdate(CamelModel):
+    """Athlete-supplied training location; always stored as ``user_set``."""
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    label: str = ""
+
+
+class DailyForecastSchema(CamelModel):
+    """One day of the upcoming outlook near the athlete's training location.
+
+    ``load_flag`` is the coaching-relevant summary (``very_hot``, ``freezing``,
+    ``rain``, …) derived by :func:`services.weather_service.weather_load_flag`, so
+    the UI and the plan prompts read the same judgement.
+    """
+
+    date: str
+    condition: Optional[str] = None
+    weather_code: Optional[int] = None
+    temperature_max_c: Optional[float] = None
+    temperature_min_c: Optional[float] = None
+    precipitation_mm: Optional[float] = None
+    wind_speed_kph: Optional[float] = None
+    load_flag: Optional[str] = None
+
+
+class WeatherForecastResponse(CamelModel):
+    location: Optional[AthleteHomeLocationSchema] = None
+    days: list[DailyForecastSchema] = []
+
+
+# ---------------------------------------------------------------------------
 # Ride feedback
 # ---------------------------------------------------------------------------
 
 
 class RideFeedbackRequest(CamelModel):
-    """Structured post-ride feedback submitted by the athlete.
+    """Quick post-ride "how the legs felt" signal set from the dashboard.
 
-    The four fields are combined into a single human-readable ``user_note``
-    string that is stored on the ``RideMetric`` row and shown to the coach.
+    This is the only structured field captured by tapping an activity.  Richer
+    feedback (perceived effort, free-text notes, plan-match corrections) is
+    captured conversationally through the coach chat, not here.  ``legs`` may be
+    ``None`` to clear a previously set value.
     """
 
-    rpe: int = Field(ge=1, le=10)
-    """Perceived effort on a 1–10 scale (1 = very easy, 10 = maximal)."""
+    legs: Optional[Literal["fresh", "normal", "heavy"]] = None
+    """Subjective leg-freshness rating, or ``None`` to clear it."""
 
-    legs: Literal["fresh", "normal", "heavy"]
-    """Subjective leg-freshness rating."""
+    external_activity_id: Optional[str] = None
+    """Precision-safe provider id for non-Strava rides (e.g. intervals.icu).
 
-    intent: Literal[
-        "planned workout",
-        "recovery",
-        "commute",
-        "free ride",
-        "free activity",
-        "aborted",
-    ]
-    """What the athlete intended this activity to be."""
-
-    note: Optional[str] = None
-    """Optional free-text note."""
-
-    plan_match_feedback: Optional[
-        Literal["matched", "mostly_matched", "not_matched"]
-    ] = None
-    """Optional athlete correction for how well the activity matched the plan."""
+    Their synthesized 63-bit ``strava_activity_id`` is float64-corrupted through
+    the browser, so the path param cannot be trusted to find the row (#441).
+    When supplied, the backend keys the lookup off this string instead.
+    """
 
 
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""
 
     strava_activity_id: int
-    user_note: str
-    coach_note: Optional[str] = None
-    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     ride: Optional[RideMetricSchema] = None
 
 

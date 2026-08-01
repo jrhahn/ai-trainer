@@ -1,14 +1,18 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2, Target, ListChecks, RefreshCw } from 'lucide-react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2, Target, ListChecks, RefreshCw, History, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
-import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog } from '../services/user'
+import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
+import type { PlanDayHistoryEntry } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
+import { formatPlanDuration } from '../utils/planDuration'
+import { describeEntry, sourceLabel } from '../utils/planHistory'
+import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
@@ -33,8 +37,136 @@ function plannedWorkoutMatchesActivity(day: TrainingDay, activity: StravaActivit
   return type === 'cycling' || type.includes('ride')
 }
 
+function ChangeHistorySection({
+  expanded,
+  onToggle,
+  loading,
+  entries,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  loading: boolean
+  entries: PlanDayHistoryEntry[]
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-6 py-4 text-left"
+        aria-expanded={expanded}
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <History size={16} className="text-amber-500" />
+          Change history
+        </span>
+        {expanded ? (
+          <ChevronUp size={16} className="text-gray-400" />
+        ) : (
+          <ChevronDown size={16} className="text-gray-400" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-5">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+              <Loader2 size={13} className="animate-spin" />
+              Loading history…
+            </div>
+          ) : entries.length === 0 ? (
+            <p className="text-xs text-gray-400 py-2">
+              No recorded changes for this day yet.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {entries.map((entry) => (
+                <li key={entry.id} className="flex items-start gap-3">
+                  <span
+                    className={`mt-1 shrink-0 w-2 h-2 rounded-full ${
+                      entry.applied ? 'bg-amber-400' : 'bg-gray-300'
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <p
+                      className={`text-sm ${
+                        entry.applied ? 'text-gray-800' : 'text-gray-500 italic'
+                      }`}
+                    >
+                      {describeEntry(entry)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                      {!entry.applied && (
+                        <span className="inline-flex items-center gap-1 text-gray-400">
+                          <ShieldCheck size={11} />
+                          kept your version
+                        </span>
+                      )}
+                      <span>{sourceLabel(entry.source)}</span>
+                      <span>·</span>
+                      <span>{new Date(entry.recordedAt).toLocaleString()}</span>
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Tab strip listing every session planned for the date (#496).
+ *
+ * Only rendered for a genuine two-a-day — a single-session day shows no strip at
+ * all, so the page is unchanged for the common case.
+ */
+function SessionSwitcher({
+  sessions,
+  selected,
+  onSelect,
+}: {
+  sessions: TrainingDay[]
+  selected: TrainingDay
+  onSelect: (session: TrainingDay) => void
+}) {
+  if (sessions.length <= 1) return null
+  return (
+    <div
+      className="flex flex-wrap gap-2"
+      role="tablist"
+      aria-label="Sessions on this day"
+    >
+      {sessions.map((session) => {
+        const isSelected = sessionSlot(session) === sessionSlot(selected)
+        const label = sessionLabel(session, sessions.length)
+        return (
+          <button
+            key={sessionKey(session)}
+            type="button"
+            role="tab"
+            aria-selected={isSelected}
+            onClick={() => onSelect(session)}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+              isSelected
+                ? 'border-amber-400 bg-amber-50 text-amber-800'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <span className="text-xs font-bold uppercase opacity-70">{label}</span>
+            <span className="truncate max-w-[12rem]">{session.title}</span>
+            {session.completed && <CheckCircle size={13} className="text-green-500" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay, setTrainingPlan } = useAppStore(
@@ -47,7 +179,27 @@ export default function WorkoutPage() {
       setTrainingPlan: s.setTrainingPlan,
     }))
   )
+  // Every session on this date, AM→PM. The `?slot=` query param picks which one
+  // is open; without it the day's first session is shown, which is what a
+  // single-session day (and every pre-#496 link) resolves to.
+  const daySessions = sessionsForDate(trainingPlan, date)
+  const requestedSlot = Number(searchParams.get('slot'))
+  const day =
+    daySessions.find((d) => sessionSlot(d) === requestedSlot) ?? daySessions[0]
+  const selectSession = (session: TrainingDay) => {
+    const slot = sessionSlot(session)
+    setSearchParams(slot > 0 ? { slot: String(slot) } : {}, { replace: true })
+  }
   const [showForm, setShowForm] = useState(false)
+  // Auto-open history when the day isn't in the current plan window — for a
+  // pruned past day the change log is the whole reason to open the page (#357).
+  const [showHistory, setShowHistory] = useState(() => !day)
+
+  const { data: planHistory = [], isLoading: historyLoading } = useQuery({
+    queryKey: ['planHistory', date, authToken],
+    queryFn: () => fetchPlanHistory(authToken!, date!),
+    enabled: showHistory && !!authToken && !!date,
+  })
 
   const rateWorkoutMutation = useMutation({
     mutationFn: ({ dayWithFeedback }: { dayWithFeedback: TrainingDay }) => {
@@ -63,10 +215,15 @@ export default function WorkoutPage() {
     },
     onSuccess: async (rating: WorkoutRatingResult) => {
       if (rating.feedback) {
-        updateTrainingDay(day!.date, { coachFeedback: rating.feedback })
+        const slot = sessionSlot(day!)
+        updateTrainingDay(day!.date, { coachFeedback: rating.feedback }, slot)
         const latestPlan = await fetchTrainingPlan(authToken!)
+        // Only the reviewed session picks up the coach note — on a two-a-day the
+        // other session keeps its own feedback (#496).
         const withFeedback = latestPlan.map((d) =>
-          d.date === day!.date ? { ...d, coachFeedback: rating.feedback } : d
+          d.date === day!.date && sessionSlot(d) === slot
+            ? { ...d, coachFeedback: rating.feedback }
+            : d
         )
         setTrainingPlan(withFeedback)
         await saveTrainingPlan(authToken!, withFeedback)
@@ -74,26 +231,52 @@ export default function WorkoutPage() {
     },
   })
 
-  const day = trainingPlan.find((d) => d.date === date)
-
   if (!day) {
+    // The day fell out of the rolling plan window (e.g. a completed past day),
+    // but its change history still exists — surface it instead of a dead end (#357).
+    const label = date
+      ? parseLocalDate(date).toLocaleDateString(undefined, {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'This day'
     return (
-      <div className="text-center py-20">
-        <p className="text-gray-500">Workout not found.</p>
-        <button onClick={() => navigate('/')} className="mt-4 text-amber-600 hover:underline text-sm">
-          ← Back to Dashboard
+      <div className="space-y-6 max-w-2xl">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
+        >
+          <ArrowLeft size={16} />
+          Back to Dashboard
         </button>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <p className="text-sm font-semibold text-gray-800">{label}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            This day is no longer part of your current plan, but its change history
+            is still available.
+          </p>
+        </div>
+
+        <ChangeHistorySection
+          expanded={showHistory}
+          onToggle={() => setShowHistory((v) => !v)}
+          loading={historyLoading}
+          entries={planHistory}
+        />
       </div>
     )
   }
 
   const handleFeedback = async (feedback: WorkoutFeedback) => {
-    logWorkout(day.date, feedback)
+    const slot = sessionSlot(day)
+    logWorkout(day.date, feedback, slot)
     setShowForm(false)
 
     if (authToken) {
       try {
-        await saveWorkoutLog(authToken, day.date, feedback)
+        await saveWorkoutLog(authToken, day.date, feedback, slot)
       } catch {
         // keep optimistic local state even if the network fails
       }
@@ -119,6 +302,12 @@ export default function WorkoutPage() {
         Back to Dashboard
       </button>
 
+      <SessionSwitcher
+        sessions={daySessions}
+        selected={day}
+        onSelect={selectSession}
+      />
+
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -137,6 +326,10 @@ export default function WorkoutPage() {
                 month: 'long',
                 day: 'numeric',
               })}
+              {/* Names which of the day's sessions this is, so a two-a-day's
+                  header is never ambiguous (#496). */}
+              {daySessions.length > 1 &&
+                ` · ${sessionLabel(day, daySessions.length)}`}
             </p>
           </div>
           {day.completed && (
@@ -150,7 +343,7 @@ export default function WorkoutPage() {
         <div className="flex flex-wrap gap-4 mb-4">
           <div className="flex items-center gap-1.5 text-sm text-gray-600">
             <Clock size={16} className="text-amber-500" />
-            {day.durationMinutes} minutes
+            {formatPlanDuration(day)}
           </div>
           {day.targetPower && (
             <div className="flex items-center gap-1.5 text-sm text-gray-600">
@@ -315,6 +508,14 @@ export default function WorkoutPage() {
           </button>
         )}
       </div>
+
+      {/* Change history — "why did this workout change?" (#357) */}
+      <ChangeHistorySection
+        expanded={showHistory}
+        onToggle={() => setShowHistory((v) => !v)}
+        loading={historyLoading}
+        entries={planHistory}
+      />
 
       <AIChat contextWorkout={day} />
 

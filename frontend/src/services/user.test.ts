@@ -5,6 +5,9 @@ vi.mock('./api', () => ({ API_BASE: '/api/v1', apiFetch: mockApiFetch }))
 
 import {
   fetchCurrentUser,
+  fetchHomeLocation,
+  fetchWeatherForecast,
+  saveHomeLocation,
   updateCurrentUser,
   fetchTrainingPlan,
   fetchWorkoutLogs,
@@ -22,6 +25,16 @@ import {
   updateAthleteMemoryFact,
   confirmAthleteMemoryFact,
   deleteAthleteMemoryFact,
+  fetchAthleteOpenQuestions,
+  updateAthleteOpenQuestion,
+  answerAthleteOpenQuestion,
+  dismissAthleteOpenQuestion,
+  deleteAthleteOpenQuestion,
+  fetchValidationExperiments,
+  updateValidationExperiment,
+  completeValidationExperiment,
+  dismissValidationExperiment,
+  deleteValidationExperiment,
   deleteCurrentUser,
   recalculateMetrics,
   estimateFTP,
@@ -38,6 +51,10 @@ import {
   testAIKey,
   fetchMetricsHistory,
   fetchRideMetricsHistory,
+  fetchPlanHistory,
+  fetchPlanHistoryStats,
+  fetchAthleteModel,
+  saveAthleteModel,
 } from './user'
 import type { TrainingDay } from '../store/useAppStore'
 
@@ -189,6 +206,101 @@ describe('saveTrainingPlan', () => {
       method: 'PUT',
       body: { plan: [day] },
     })
+  })
+})
+
+describe('athlete model (#384)', () => {
+  it('fetches the long-term athlete model', async () => {
+    const model = {
+      ftpWatts: 260,
+      vo2max: 58,
+      pacingQuality: 'even',
+      recoveryAbility: '',
+      thresholdDurability: 'holds 30 min',
+      heatTolerance: '',
+      preferredTrainingStyle: 'intervals',
+      strengths: ['threshold'],
+      weaknesses: [],
+      riskFactors: [],
+      summary: 'Durable rider.',
+      confidence: 0.7,
+      updatedAt: '2026-07-10T00:00:00Z',
+    }
+    mockApiFetch.mockResolvedValue(model)
+
+    const result = await fetchAthleteModel('tok-123')
+
+    expect(result.ftpWatts).toBe(260)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-model', {
+      token: 'tok-123',
+    })
+  })
+
+  it('PUTs athlete edits without coach-owned fields', async () => {
+    const edit = {
+      ftpWatts: 265,
+      vo2max: null,
+      pacingQuality: 'even',
+      recoveryAbility: '',
+      thresholdDurability: '',
+      heatTolerance: '',
+      preferredTrainingStyle: '',
+      strengths: ['climbing'],
+      weaknesses: [],
+      riskFactors: [],
+      summary: 'edited',
+    }
+    mockApiFetch.mockResolvedValue({ ...edit, confidence: 0.5, updatedAt: null })
+
+    await saveAthleteModel('tok-123', edit)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/athlete-model', {
+      token: 'tok-123',
+      method: 'PUT',
+      body: edit,
+    })
+  })
+})
+
+describe('fetchPlanHistory', () => {
+  it('returns the entries array', async () => {
+    mockApiFetch.mockResolvedValue({
+      entries: [{ id: 'h1', date: '2026-05-01', source: 'coach_chat', applied: true }],
+      total: 1,
+    })
+
+    const result = await fetchPlanHistory('tok-123')
+
+    expect(result).toHaveLength(1)
+    expect(result[0].source).toBe('coach_chat')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history', { token: 'tok-123' })
+  })
+
+  it('appends an encoded date query when provided', async () => {
+    mockApiFetch.mockResolvedValue({ entries: [], total: 0 })
+
+    await fetchPlanHistory('tok-123', '2026-05-01')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history?date=2026-05-01', {
+      token: 'tok-123',
+    })
+  })
+})
+
+describe('fetchPlanHistoryStats', () => {
+  it('returns the stats object', async () => {
+    mockApiFetch.mockResolvedValue({
+      bySource: { coach_chat: 2 },
+      appliedCount: 2,
+      blockedCount: 1,
+      mostChangedDates: [{ date: '2026-05-01', count: 2 }],
+      total: 3,
+    })
+
+    const result = await fetchPlanHistoryStats('tok-123')
+
+    expect(result.total).toBe(3)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan-history/stats', { token: 'tok-123' })
   })
 })
 
@@ -401,6 +513,145 @@ describe('athlete memory facts', () => {
   })
 })
 
+describe('validation experiments', () => {
+  it('fetches the list and returns the experiments array', async () => {
+    const experiment = {
+      id: 'exp-1',
+      protocol: 'Perform a 30-minute threshold test.',
+    }
+    mockApiFetch.mockResolvedValue({ experiments: [experiment] })
+
+    const result = await fetchValidationExperiments('tok-123')
+
+    expect(result).toEqual([experiment])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/validation-experiments', {
+      token: 'tok-123',
+    })
+  })
+
+  it('patches an edit', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', protocol: 'Shorter recoveries' })
+
+    await updateValidationExperiment('tok-123', 'exp-1', {
+      protocol: 'Shorter recoveries',
+    })
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { protocol: 'Shorter recoveries' },
+      },
+    )
+  })
+
+  it('completes an experiment by setting completed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', status: 'completed' })
+
+    await completeValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { status: 'completed' },
+      },
+    )
+  })
+
+  it('dismisses an experiment by setting dismissed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'exp-1', status: 'dismissed' })
+
+    await dismissValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'PATCH',
+        body: { status: 'dismissed' },
+      },
+    )
+  })
+
+  it('deletes an experiment', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await deleteValidationExperiment('tok-123', 'exp-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/users/me/validation-experiments/exp-1',
+      {
+        token: 'tok-123',
+        method: 'DELETE',
+      },
+    )
+  })
+})
+
+describe('open questions (#385)', () => {
+  it('fetches the list and returns the openQuestions array', async () => {
+    const question = { id: 'oq-1', question: 'Is FTP underestimated?' }
+    mockApiFetch.mockResolvedValue({ openQuestions: [question] })
+
+    const result = await fetchAthleteOpenQuestions('tok-123')
+
+    expect(result).toEqual([question])
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions', {
+      token: 'tok-123',
+    })
+  })
+
+  it('patches an edit', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', needs: 'Threshold test' })
+
+    await updateAthleteOpenQuestion('tok-123', 'oq-1', { needs: 'Threshold test' })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { needs: 'Threshold test' },
+    })
+  })
+
+  it('answers a question by setting answered status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', status: 'answered' })
+
+    await answerAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { status: 'answered' },
+    })
+  })
+
+  it('dismisses a question by setting dismissed status', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'oq-1', status: 'dismissed' })
+
+    await dismissAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'PATCH',
+      body: { status: 'dismissed' },
+    })
+  })
+
+  it('deletes a question', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await deleteAthleteOpenQuestion('tok-123', 'oq-1')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/open-questions/oq-1', {
+      token: 'tok-123',
+      method: 'DELETE',
+    })
+  })
+})
+
 describe('deleteCurrentUser', () => {
   it('calls DELETE on the user endpoint', async () => {
     mockApiFetch.mockResolvedValue(undefined)
@@ -540,54 +791,54 @@ describe('fit uploads', () => {
   })
 })
 
-describe('submitRideFeedback', () => {
-  it('patches the ride-feedback endpoint with structured data', async () => {
+describe('setRideLegs', () => {
+  it('patches the ride-feedback endpoint with the legs rating', async () => {
     mockApiFetch.mockResolvedValue({
       stravaActivityId: 9001,
-      userNote: 'RPE 7/10 | legs: heavy | intent: planned workout | Felt strong',
+      ride: { stravaActivityId: 9001, feelLegs: 'heavy' },
     })
 
-    const { submitRideFeedback } = await import('./user')
-    const result = await submitRideFeedback('tok-abc', 9001, {
-      rpe: 7,
-      legs: 'heavy',
-      intent: 'planned workout',
-      note: 'Felt strong',
-    })
+    const { setRideLegs } = await import('./user')
+    const result = await setRideLegs('tok-abc', 9001, 'heavy')
 
     expect(result.stravaActivityId).toBe(9001)
-    expect(result.userNote).toContain('RPE 7/10')
+    expect(result.ride?.feelLegs).toBe('heavy')
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9001', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: { rpe: 7, legs: 'heavy', intent: 'planned workout', note: 'Felt strong' },
+      body: { legs: 'heavy', externalActivityId: null },
     })
   })
 
-  it('omits note when undefined', async () => {
+  it('sends null to clear the legs rating', async () => {
     mockApiFetch.mockResolvedValue({
       stravaActivityId: 9002,
-      userNote: 'RPE 4/10 | legs: fresh | intent: recovery',
+      ride: { stravaActivityId: 9002, feelLegs: null },
     })
 
-    const { submitRideFeedback } = await import('./user')
-    await submitRideFeedback('tok-abc', 9002, {
-      rpe: 4,
-      legs: 'fresh',
-      intent: 'recovery',
-      planMatchFeedback: 'mostly_matched',
-    })
+    const { setRideLegs } = await import('./user')
+    await setRideLegs('tok-abc', 9002, null)
 
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9002', {
       token: 'tok-abc',
       method: 'PATCH',
-      body: {
-        rpe: 4,
-        legs: 'fresh',
-        intent: 'recovery',
-        planMatchFeedback: 'mostly_matched',
-        note: undefined,
-      },
+      body: { legs: null, externalActivityId: null },
+    })
+  })
+
+  it('sends the precision-safe external id for intervals rides (#441)', async () => {
+    mockApiFetch.mockResolvedValue({
+      stravaActivityId: 9003,
+      ride: { stravaActivityId: 9003, feelLegs: 'fresh' },
+    })
+
+    const { setRideLegs } = await import('./user')
+    await setRideLegs('tok-abc', 9003, 'fresh', 'i84213307')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-feedback/9003', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { legs: 'fresh', externalActivityId: 'i84213307' },
     })
   })
 })
@@ -694,5 +945,92 @@ describe('metrics history', () => {
     const result = await fetchRideMetricsHistory('tok')
     expect(result).toHaveLength(1)
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-metrics-history', { token: 'tok' })
+  })
+})
+
+describe('weather forecast and training location (#495)', () => {
+  const location = {
+    latitude: 47.99,
+    longitude: 7.85,
+    label: 'Freiburg',
+    source: 'user_set',
+    confidence: 1,
+    rideCount: 0,
+  }
+
+  it('unwraps the location and days from the forecast response', async () => {
+    mockApiFetch.mockResolvedValue({
+      location,
+      days: [{ date: '2026-08-01', condition: 'rain', temperatureMaxC: 17 }],
+    })
+
+    const result = await fetchWeatherForecast('tok')
+
+    expect(result.location).toEqual(location)
+    expect(result.days).toHaveLength(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/weather-forecast', {
+      token: 'tok',
+    })
+  })
+
+  it('defaults a location-less forecast response to no location and no days', async () => {
+    mockApiFetch.mockResolvedValue({})
+
+    const result = await fetchWeatherForecast('tok')
+
+    expect(result).toEqual({ location: null, days: [] })
+  })
+
+  it('reads the stored training location', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    expect(await fetchHomeLocation('tok')).toEqual(location)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+    })
+  })
+
+  it('returns null when no training location is stored', async () => {
+    mockApiFetch.mockResolvedValue({ location: null })
+    expect(await fetchHomeLocation('tok')).toBeNull()
+
+    mockApiFetch.mockResolvedValue({})
+    expect(await fetchHomeLocation('tok')).toBeNull()
+  })
+
+  it('PUTs an override with the label the athlete typed', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    const result = await saveHomeLocation('tok', {
+      latitude: 47.99,
+      longitude: 7.85,
+      label: 'Freiburg',
+    })
+
+    expect(result).toEqual(location)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+      method: 'PUT',
+      body: { latitude: 47.99, longitude: 7.85, label: 'Freiburg' },
+    })
+  })
+
+  it('sends an empty label rather than undefined when none was given', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    await saveHomeLocation('tok', { latitude: 52.52, longitude: 13.4 })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+      method: 'PUT',
+      body: { latitude: 52.52, longitude: 13.4, label: '' },
+    })
+  })
+
+  it('returns null when the save response carries no location', async () => {
+    mockApiFetch.mockResolvedValue({})
+    expect(
+      await saveHomeLocation('tok', { latitude: 1, longitude: 2 }),
+    ).toBeNull()
   })
 })

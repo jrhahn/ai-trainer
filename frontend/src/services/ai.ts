@@ -6,6 +6,7 @@ import type {
   StravaActivity,
   TrainingDay,
 } from '../store/useAppStore'
+import type { AthleteModel, AthletePerformanceModel } from './user'
 import { apiFetch } from './api'
 
 export type { AiProvider }
@@ -20,6 +21,8 @@ export interface PlanDayUpdate {
   title?: string
   description?: string
   durationMinutes?: number
+  durationMinMinutes?: number
+  durationMaxMinutes?: number
   targetPower?: TrainingDay['targetPower']
   targetHeartRate?: TrainingDay['targetHeartRate']
   intervals?: TrainingDay['intervals']
@@ -161,6 +164,33 @@ export async function extractAthleteFacts(
   }))
 }
 
+// #384: re-derive the long-term athlete model from training history on demand.
+export async function refreshAthleteModel(authToken: string): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/ai/refresh-athlete-model', {
+    token: authToken,
+    method: 'POST',
+  })
+}
+
+// #475/#477/#478: read the deterministic, evidence-backed performance model.
+export async function fetchAthletePerformanceModel(
+  authToken: string
+): Promise<AthletePerformanceModel> {
+  return apiFetch<AthletePerformanceModel>('/ai/athlete-performance-model', {
+    token: authToken,
+  })
+}
+
+// Re-derive the deterministic performance model from training history on demand.
+export async function refreshAthletePerformanceModel(
+  authToken: string
+): Promise<AthletePerformanceModel> {
+  return apiFetch<AthletePerformanceModel>('/ai/refresh-athlete-performance-model', {
+    token: authToken,
+    method: 'POST',
+  })
+}
+
 export async function fetchRaceEventFeedback(
   event: RaceEvent,
   authToken: string,
@@ -207,6 +237,21 @@ export async function rateCompletedWorkout(
   }
 }
 
+export type ReasoningSource =
+  | 'personal_observation'
+  | 'scientific_evidence'
+  | 'coach_inference'
+
+export interface ReasoningItem {
+  source: ReasoningSource
+  text: string
+}
+
+export interface ReadinessRecommendation {
+  recommendation: string
+  reasoning: ReasoningItem[]
+}
+
 export interface ReadinessScore {
   score: number
   formScore: number
@@ -220,7 +265,32 @@ export interface ReadinessScore {
   projectedCtl?: number | null
   projectedAtl?: number | null
   projectedTsb?: number | null
-  recommendations: string[]
+  recommendations: ReadinessRecommendation[]
+}
+
+interface BackendReasoningItem {
+  source?: string
+  text?: string
+}
+
+interface BackendReadinessRecommendation {
+  recommendation: string
+  reasoning?: BackendReasoningItem[]
+}
+
+const REASONING_SOURCES: readonly ReasoningSource[] = [
+  'personal_observation',
+  'scientific_evidence',
+  'coach_inference',
+]
+
+function normalizeReasoning(items?: BackendReasoningItem[]): ReasoningItem[] {
+  return (items ?? []).map((item) => {
+    const source = REASONING_SOURCES.includes(item.source as ReasoningSource)
+      ? (item.source as ReasoningSource)
+      : 'coach_inference'
+    return { source, text: item.text ?? '' }
+  })
 }
 
 interface BackendReadinessScore {
@@ -236,7 +306,7 @@ interface BackendReadinessScore {
   projected_ctl?: number | null
   projected_atl?: number | null
   projected_tsb?: number | null
-  recommendations?: string[]
+  recommendations?: BackendReadinessRecommendation[]
 }
 
 export async function fetchReadinessScore(authToken: string): Promise<ReadinessScore> {
@@ -254,7 +324,10 @@ export async function fetchReadinessScore(authToken: string): Promise<ReadinessS
     projectedCtl: raw.projected_ctl,
     projectedAtl: raw.projected_atl,
     projectedTsb: raw.projected_tsb,
-    recommendations: raw.recommendations ?? [],
+    recommendations: (raw.recommendations ?? []).map((rec) => ({
+      recommendation: rec.recommendation,
+      reasoning: normalizeReasoning(rec.reasoning),
+    })),
   }
 }
 
@@ -264,6 +337,30 @@ export async function refreshLoginSummary(authToken: string): Promise<string> {
     method: 'POST',
   })
   return raw.loginSummary ?? ''
+}
+
+export interface TrainingStatusBadge {
+  label: string
+  tone: 'positive' | 'steady' | 'caution'
+  rationale: string
+}
+
+/** Regenerate the coach-authored dashboard status badge (#499).
+ *
+ * The badge is deliberately not computed in the browser: the backend owns it so
+ * the coach holds the same label the athlete is reading and can explain it.
+ */
+export async function refreshTrainingStatus(
+  authToken: string
+): Promise<TrainingStatusBadge | null> {
+  const raw = await apiFetch<{
+    label?: string
+    tone?: string
+    rationale?: string
+  }>('/ai/refresh-training-status', { token: authToken, method: 'POST' })
+  if (!raw.label) return null
+  const tone = raw.tone === 'positive' || raw.tone === 'caution' ? raw.tone : 'steady'
+  return { label: raw.label, tone, rationale: raw.rationale ?? '' }
 }
 
 export interface NextRideRecommendationResult {

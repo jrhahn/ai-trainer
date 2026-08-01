@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { sessionSlot, sessionsForDate } from '../utils/planSessions'
 
 /**
  * Storage key for the JWT auth token.
@@ -94,6 +95,7 @@ import {
   fetchRaceEvents,
   fetchRideMetricsHistory,
   fetchTrainingPlan,
+  fetchWeatherForecast,
   fetchWorkoutLogs,
 } from '../services/user'
 
@@ -127,10 +129,26 @@ export interface WorkoutFeedback {
 
 export interface TrainingDay {
   date: string
+  /**
+   * Ordered position of this session within its date (#496). A date may hold
+   * more than one session (AM yoga + PM endurance), so `(date, slot)` — not the
+   * date alone — identifies a session. Absent on legacy single-session days and
+   * read as 0; use utils/planSessions helpers rather than reading it directly.
+   */
+  slot?: number
+  /** Free-text when-in-the-day hint ("am", "pm", "18:30"); display only. */
+  timeOfDay?: string
   workoutType: 'rest' | 'endurance' | 'intervals' | 'tempo' | 'race' | 'recovery' | 'strength'
   title: string
   description: string
   durationMinutes: number
+  /**
+   * Optional planned-duration window (#368). A single value is the degenerate
+   * window durationMinMinutes === durationMaxMinutes; when both are set,
+   * durationMinutes is the midpoint. Use utils/planDuration helpers to read them.
+   */
+  durationMinMinutes?: number
+  durationMaxMinutes?: number
   targetPower?: { low: number; high: number }
   targetHeartRate?: { low: number; high: number }
   intervals?: Array<{ duration: number; power: number; rest: number }>
@@ -178,6 +196,11 @@ export interface IntervalsConnection {
 
 export interface StravaActivity {
   id: number
+  // Raw provider id (e.g. intervals.icu `i166933341`) as a string. The numeric
+  // `id` above is a 19-digit hash for intervals activities and loses precision
+  // as a JS Number; `external_id` is round-trip-safe and is what the backend
+  // persists as the activity's external key (#429 Bug B).
+  external_id?: string
   name: string
   type: string
   sport_type?: string
@@ -243,11 +266,40 @@ export interface RideMetricPoint {
   normalizedPowerW?: number
   coachNote?: string | null
   userNote?: string | null
+  feelLegs?: 'fresh' | 'normal' | 'heavy' | null
   labelOverride?: string | null
   planMatchStatus?: 'unmatched' | 'auto_matched' | 'ambiguous' | 'manual_matched'
   matchedPlanDate?: string | null
   matchedPlanSnapshot?: Partial<TrainingDay> | null
   matchedAt?: string | null
+}
+
+/**
+ * One day of the upcoming outlook near the athlete's training location (#495).
+ * Keyed by ISO date so planned days can look their own forecast up; days beyond
+ * the ~16-day horizon are simply absent.
+ */
+export interface DailyForecast {
+  date: string
+  condition?: string | null
+  weatherCode?: number | null
+  temperatureMaxC?: number | null
+  temperatureMinC?: number | null
+  precipitationMm?: number | null
+  windSpeedKph?: number | null
+  /** Coaching-relevant summary: very_hot | hot | cold | freezing | rain | … */
+  loadFlag?: string | null
+}
+
+export interface AthleteHomeLocation {
+  latitude: number
+  longitude: number
+  label: string
+  /** user_set beats inferred; latest_ride means nothing is persisted yet. */
+  source: string
+  confidence: number
+  rideCount?: number
+  updatedAt?: string | null
 }
 
 export interface RiderAssessment {
@@ -257,6 +309,11 @@ export interface RiderAssessment {
   rideInsights?: string
   lastRideFeedback?: string
   loginSummary?: string
+  /** Coach-authored dashboard status badge (#499) — written by the backend
+   * status pipeline, never computed here, so the coach can explain it. */
+  trainingStatusLabel?: string
+  trainingStatusTone?: 'positive' | 'steady' | 'caution'
+  trainingStatusRationale?: string
 }
 
 interface AppState {
@@ -286,6 +343,9 @@ interface AppState {
   raceEvents: RaceEvent[]
   metricsHistory: AthleteMetricSnapshot[]
   rideMetricsHistory: RideMetricPoint[]
+  /** Upcoming forecast keyed by ISO date, for the weather shown on planned days. */
+  weatherForecast: Record<string, DailyForecast>
+  homeLocation: AthleteHomeLocation | null
   pendingFeedbackRideIds: number[]
   dataLoadWarning: string | null
 
@@ -295,7 +355,8 @@ interface AppState {
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
   setTrainingPlan: (plan: TrainingDay[]) => void
-  logWorkout: (date: string, feedback: WorkoutFeedback) => void
+  /** Log feedback for one session; `slot` defaults to the day's first (#496). */
+  logWorkout: (date: string, feedback: WorkoutFeedback, slot?: number) => void
   setStravaConnection: (connection: StravaConnection | null) => void
   setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
@@ -308,7 +369,16 @@ interface AppState {
   setIntervalsAutoSyncEnabled: (enabled: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
-  updateTrainingDay: (date: string, updates: Partial<TrainingDay>) => void
+  /**
+   * Patch one planned session. `slot` picks which session on `date` when the day
+   * holds a two-a-day (#496); omit it to patch the day's first session, which is
+   * the only one a single-session day has.
+   */
+  updateTrainingDay: (
+    date: string,
+    updates: Partial<TrainingDay>,
+    slot?: number
+  ) => void
   resetAll: () => void
   addChatMessage: (msg: ChatMessage) => void
   setCoachMemory: (memory: string) => void
@@ -319,11 +389,18 @@ interface AppState {
   setChatHistory: (history: ChatMessage[]) => void
   clearChatHistory: () => void
   setMetricsHistory: (history: AthleteMetricSnapshot[]) => void
+  setWeatherForecast: (days: DailyForecast[]) => void
+  setHomeLocation: (location: AthleteHomeLocation | null) => void
   setRideMetricsHistory: (history: RideMetricPoint[]) => void
   updateRideMetric: (ride: RideMetricPoint) => void
   updateRideMetricLabel: (stravaActivityId: number, labelOverride: string) => void
+  updateRideMetricLegs: (
+    stravaActivityId: number,
+    feelLegs: 'fresh' | 'normal' | 'heavy' | null,
+  ) => void
   addPendingFeedbackRide: (id: number) => void
   clearPendingFeedbackRides: () => void
+  removePendingFeedbackRides: (ids: number[]) => void
   toggleExpertMode: () => void
   pendingCoachMessage: string | null
   setPendingCoachMessage: (msg: string | null) => void
@@ -350,6 +427,8 @@ const dataState = {
   raceEvents: [] as RaceEvent[],
   metricsHistory: [] as AthleteMetricSnapshot[],
   rideMetricsHistory: [] as RideMetricPoint[],
+  weatherForecast: {} as Record<string, DailyForecast>,
+  homeLocation: null as AthleteHomeLocation | null,
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
   dataLoadWarning: null as string | null,
@@ -362,12 +441,35 @@ const initialState = {
   ...dataState,
 }
 
+/**
+ * The key a session's workout log is stored under (#496).
+ *
+ * The first session of a date keeps the bare date, so every log written before
+ * two-a-days existed still resolves; only the extra sessions add a `#slot`
+ * suffix. This mirrors the backend's `GET /users/me/workouts` keying exactly.
+ */
+export function workoutLogKey(date: string, slot?: number): string {
+  const resolved = sessionSlot({ date, slot })
+  return resolved === 0 ? date : `${date}#${resolved}`
+}
+
+/** The slot an update targets: the given one, or the day's first session. */
+function targetSlot(
+  plan: TrainingDay[],
+  date: string,
+  slot: number | undefined
+): number {
+  if (slot !== undefined) return slot
+  const sessions = sessionsForDate(plan, date)
+  return sessions.length > 0 ? sessionSlot(sessions[0]) : 0
+}
+
 function mergePlanWithWorkouts(
   plan: TrainingDay[],
   workoutLogs: Record<string, WorkoutFeedback>
 ): TrainingDay[] {
   return plan.map((day) => {
-    const feedback = workoutLogs[day.date]
+    const feedback = workoutLogs[workoutLogKey(day.date, day.slot)]
     return feedback ? { ...day, completed: true, feedback } : day
   })
 }
@@ -393,13 +495,21 @@ export const useAppStore = create<AppState>()(
     },
     setUserProfile: (profile) => set({ userProfile: profile }),
     setTrainingPlan: (plan) => set({ trainingPlan: plan }),
-    logWorkout: (date, feedback) =>
-      set((state) => ({
-        workoutLogs: { ...state.workoutLogs, [date]: feedback },
-        trainingPlan: state.trainingPlan.map((day) =>
-          day.date === date ? { ...day, completed: true, feedback } : day
-        ),
-      })),
+    logWorkout: (date, feedback, slot) =>
+      set((state) => {
+        const target = targetSlot(state.trainingPlan, date, slot)
+        return {
+          workoutLogs: {
+            ...state.workoutLogs,
+            [workoutLogKey(date, target)]: feedback,
+          },
+          trainingPlan: state.trainingPlan.map((day) =>
+            day.date === date && sessionSlot(day) === target
+              ? { ...day, completed: true, feedback }
+              : day
+          ),
+        }
+      }),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
@@ -412,12 +522,17 @@ export const useAppStore = create<AppState>()(
     setIntervalsAutoSyncEnabled: (enabled) => set({ intervalsAutoSyncEnabled: enabled }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
-    updateTrainingDay: (date, updates) =>
-      set((state) => ({
-        trainingPlan: state.trainingPlan.map((day) =>
-          day.date === date ? { ...day, ...updates } : day
-        ),
-      })),
+    updateTrainingDay: (date, updates, slot) =>
+      set((state) => {
+        const target = targetSlot(state.trainingPlan, date, slot)
+        return {
+          trainingPlan: state.trainingPlan.map((day) =>
+            day.date === date && sessionSlot(day) === target
+              ? { ...day, ...updates }
+              : day
+          ),
+        }
+      }),
     resetAll: () => {
       persistToken(null)
       set(initialState)
@@ -439,6 +554,11 @@ export const useAppStore = create<AppState>()(
     setChatHistory: (history) => set({ chatHistory: history }),
     clearChatHistory: () => set({ chatHistory: [] }),
     setMetricsHistory: (history) => set({ metricsHistory: history }),
+    setWeatherForecast: (days) =>
+      set({
+        weatherForecast: Object.fromEntries(days.map((day) => [day.date, day])),
+      }),
+    setHomeLocation: (location) => set({ homeLocation: location }),
     setRideMetricsHistory: (history) => set({ rideMetricsHistory: history }),
     updateRideMetric: (ride) =>
       set((state) => ({
@@ -454,6 +574,14 @@ export const useAppStore = create<AppState>()(
             : ride
         ),
       })),
+    updateRideMetricLegs: (stravaActivityId, feelLegs) =>
+      set((state) => ({
+        rideMetricsHistory: state.rideMetricsHistory.map((ride) =>
+          ride.stravaActivityId === stravaActivityId
+            ? { ...ride, feelLegs }
+            : ride
+        ),
+      })),
     addPendingFeedbackRide: (id) =>
       set((state) => ({
         pendingFeedbackRideIds: state.pendingFeedbackRideIds.includes(id)
@@ -461,6 +589,15 @@ export const useAppStore = create<AppState>()(
           : [...state.pendingFeedbackRideIds, id],
       })),
     clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
+    removePendingFeedbackRides: (ids) =>
+      set((state) => {
+        const remove = new Set(ids)
+        return {
+          pendingFeedbackRideIds: state.pendingFeedbackRideIds.filter(
+            (id) => !remove.has(id)
+          ),
+        }
+      }),
     setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
     toggleExpertMode: () =>
       set((state) => {
@@ -471,12 +608,18 @@ export const useAppStore = create<AppState>()(
     loadUserData: async (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
       if (!token) return
+      // Dedupe concurrent loads for the same token: the App effect loads on every
+      // authToken change while the login pages also call loadUserData(token)
+      // directly, which otherwise fires two full parallel loads. The in-flight
+      // caller keeps running and the isLoadingUserData overlay covers the window
+      // for whichever caller is skipped here (#458).
+      if (get().isLoadingUserData && get().authToken === token) return
 
       set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
       const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
       const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
 
-      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult] =
+      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult, weatherForecastResult] =
         await Promise.allSettled([
           track(fetchCurrentUser(token)),
           track(fetchTrainingPlan(token)),
@@ -486,7 +629,16 @@ export const useAppStore = create<AppState>()(
           track(fetchRaceEvents(token)),
           track(fetchMetricsHistory(token)),
           track(fetchRideMetricsHistory(token)),
+          track(fetchWeatherForecast(token)),
         ])
+
+      // If the session was torn down while we were loading (manual logout, or an
+      // AUTH_EXPIRED_EVENT from a 401 on one of the parallel fetches), do not
+      // resurrect it by writing these now-stale results back. The logout /
+      // re-login that changed the token owns the resulting state (#454).
+      if (get().authToken !== token) {
+        return
+      }
 
       // Auth errors from the user endpoint must clear the session — app can't continue.
       if (userResult.status === 'rejected') {
@@ -512,6 +664,12 @@ export const useAppStore = create<AppState>()(
       if (raceEventsResult.status === 'rejected') failed.push('race events')
       if (metricsHistoryResult.status === 'rejected') failed.push('fitness metrics')
       if (rideMetricsHistoryResult.status === 'rejected') failed.push('ride history')
+      // The forecast is decoration on top of the plan, not data the dashboard
+      // needs to function, so a failed lookup stays silent rather than nagging.
+      const weather =
+        weatherForecastResult.status === 'fulfilled'
+          ? weatherForecastResult.value
+          : { location: null, days: [] }
 
       set({
         authToken: token,
@@ -535,6 +693,8 @@ export const useAppStore = create<AppState>()(
         raceEvents: raceEventsResult.status === 'fulfilled' ? raceEventsResult.value : [],
         metricsHistory: metricsHistoryResult.status === 'fulfilled' ? metricsHistoryResult.value : [],
         rideMetricsHistory: rideMetricsHistoryResult.status === 'fulfilled' ? rideMetricsHistoryResult.value : [],
+        weatherForecast: Object.fromEntries(weather.days.map((day) => [day.date, day])),
+        homeLocation: weather.location,
         dataLoadWarning: failed.length > 0
           ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
           : null,

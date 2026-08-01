@@ -130,6 +130,26 @@ def test_sanitize_intervals_streams_list_shape():
     assert result["latlng"]["data"] == [[1.0, 2.0], [1.1, 2.1]]
 
 
+def test_sanitize_intervals_streams_typed_stream_list_shape():
+    # The shape Intervals.icu actually returns from /activity/{id}/streams:
+    # a list of typed-stream objects. Previously fell through both branches and
+    # collected nothing, so every intervals ride was classified "unknown" (#409).
+    result = isvc.sanitize_intervals_streams(
+        [
+            {"type": "time", "data": [0, 1, 2]},
+            {"type": "watts", "data": [100, 200, 150]},
+            {"type": "heartrate", "data": [120, 130, 128]},
+            {"type": "latlng", "data": [[1.0, 2.0], [1.1, 2.1], [1.2, 2.2]]},
+            {"type": "unsupported", "data": [1, 2, 3]},
+        ]
+    )
+    assert result["time"] == {"data": [0.0, 1.0, 2.0]}
+    assert result["watts"] == {"data": [100.0, 200.0, 150.0]}
+    assert result["heartrate"] == {"data": [120.0, 130.0, 128.0]}
+    assert result["latlng"] == {"data": [[1.0, 2.0], [1.1, 2.1], [1.2, 2.2]]}
+    assert "unsupported" not in result
+
+
 def test_sanitize_intervals_streams_other_type():
     assert isvc.sanitize_intervals_streams(None) == {}
 
@@ -155,6 +175,43 @@ def test_map_activity_to_imported_activity():
     assert imported.sport_type == "Ride"
     assert imported.start_lat == 52.5
     assert imported.summary_avg_power_w == 210
+
+
+def test_normalize_provider_intervals_extracts_work_and_recovery():
+    detail = {
+        "icu_intervals": [
+            {"type": "WORK", "moving_time": 240, "average_watts": 361, "max_watts": 420},
+            {"type": "RECOVERY", "moving_time": 180, "average_watts": 150},
+            {"type": "WORK", "elapsed_time": 240, "icu_average_watts": 359},
+            {"type": "WORK", "moving_time": 0, "average_watts": 300},  # dropped: no dur
+            {"type": "WORK", "moving_time": 60},  # dropped: no power
+        ]
+    }
+    out = isvc.normalize_provider_intervals(detail)
+    assert out is not None
+    assert len(out) == 3
+    assert out[0] == {
+        "duration_secs": 240,
+        "avg_power": 361,
+        "type": "WORK",
+        "peak_power": 420,
+    }
+    assert out[2]["avg_power"] == 359  # icu_average_watts fallback
+    # No interval data → None
+    assert isvc.normalize_provider_intervals({}) is None
+
+
+def test_map_activity_carries_provider_intervals_into_ride_input():
+    imported = isvc.map_activity_to_imported_activity(
+        {"id": 9, "start_date_local": "2026-07-28T17:00:00", "type": "Ride"},
+        {"icu_intervals": [{"type": "WORK", "moving_time": 240, "average_watts": 360}]},
+        {},
+    )
+    assert imported is not None
+    ride = imported.to_ride_input()
+    assert ride["_provider_intervals"] == [
+        {"duration_secs": 240, "avg_power": 360, "type": "WORK"}
+    ]
 
 
 def test_map_activity_returns_none_without_id_or_date():

@@ -5,6 +5,371 @@ All notable changes to the backend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.50.0] - 2026-07-30
+
+### Added
+
+- **Multiple sessions per day — two-a-days** (`schemas.py`, `services/plan_pipeline.py`,
+  `services/ride_matching.py`, `services/plan_constraints.py`, `services/dates.py`,
+  `models.py`, `crud.py`, `routers/users.py`, migration `20260802_000001`) — a plan
+  can now hold an AM yoga session *and* a PM endurance ride on the same date, each
+  with its own type, duration, targets and intervals. `PlanDay` gains a `slot`
+  (0 = first/AM) and an optional `timeOfDay`, so a session's identity is
+  **`(date, slot)`** rather than the date alone — `schemas.session_key` /
+  `day_slot` / `normalize_slot` are the one place that is decided. Keeping the
+  session as the model, instead of nesting a `sessions` list under a day
+  container, is what lets the canonical `PlanDay` persist gate go on owning every
+  duration/drift invariant (#368/#422/#424) unchanged.
+- **Per-session executed-activity matching** (`services/ride_matching.py`,
+  `models.RideMetric.matched_plan_slot`) — `apply_ride_plan_matches` groups a date's
+  planned sessions and assigns each of the day's rides to the session it best fits,
+  greedy over sport plausibility then duration, with chronological order as the
+  tiebreak so "earlier activity → earlier slot" resolves the obvious way. The
+  morning gym session and the evening ride now each attribute to their own planned
+  session; before, one won and every other activity was forced to
+  `MATCH_UNMATCHED`. Rides left over once every session is filled stay cleanly
+  unmatched and keep the existing `Additional` / `Too much` labelling.
+- **Per-session completion and feedback** (`models.WorkoutLog.slot`,
+  `crud.upsert_workout_log`, `POST /users/me/workouts/{date}`) — ticking the morning
+  yoga marks *that* session done and leaves the evening ride pending, and each
+  session carries its own workout log. `GET /users/me/workouts` keys the first
+  session of a date by the bare date, so existing clients read exactly what they
+  read before, and only the extra sessions of a two-a-day add a `date#slot` key.
+- **Per-session coach prompts** (`services/dates.py`) — `annotate_plan_days` now
+  emits `sessionOrder` / `sessionCount` / `sessionLabel` and orders sessions by slot
+  within a date, so the coach can reason about AM/PM load ordering (move the hard PM
+  session out of the heat, leave the easy AM one alone — #495 × #496). A
+  single-session day gets no session annotations at all, keeping every existing
+  prompt byte-identical.
+
+### Changed
+
+- **The plan pipeline is keyed by session, not by date** (`services/plan_pipeline.py`)
+  — user-pin protection, completed-day preservation, trained-day preservation, the
+  concurrent-edit merge, source stamping and `PlanDayHistory` all moved from
+  `{date: day}` to `(date, slot)`. A pin now protects one session rather than
+  freezing the whole day, and the change log records one row per session instead of
+  one conflated row per date. Per-day updates without a `slot` target the date's
+  first session, so every pre-existing caller behaves exactly as before.
+- **Required-workout constraints apply per day, not per session**
+  (`services/plan_constraints.py`) — a required session is satisfied once *some*
+  session on the date qualifies, and only the date's first session is coerced when
+  none does. Without this a two-a-day would have had both halves rewritten into
+  "Required endurance session".
+- **`slot: 0` is not serialized** (`schemas.PlanDay`) — slot 0 *is* the legacy
+  "no slot" day, so it is omitted on dump. Writing it would rewrite every stored
+  plan on the first commit after this change and, worse, make an unchanged plan
+  compare unequal to the database — turning every no-op write into a real write that
+  cascades a login-summary refresh and a ride-snapshot rebuild.
+
+### Fixed
+
+- **`normalize_slot` no longer accepts arbitrary objects** (`schemas.py`) — a bare
+  `int(value)` converts anything defining `__int__`, which silently turned an unset
+  slot into a real-looking slot 1 and mis-keyed the session. Only genuine numbers and
+  numeric strings are accepted now; booleans are excluded for the same reason.
+
+## [0.49.0] - 2026-07-30
+
+### Added
+
+- **Persisted, editable athlete training location** (`models.py`, `crud.py`,
+  `services/home_location.py`, `routers/users.py`, migration
+  `20260801_000001`) — the weather anchor is no longer re-derived on every request
+  from whichever ride happened to carry GPS last, where a single holiday ride moved
+  the whole forecast. A new `athlete_home_location` attribute stores lat/lng, a
+  place label, a `source` marker and a confidence, seeded by **clustering typical
+  ride start points** (`cluster_ride_starts`) rather than taking the latest ride.
+  `resolve_training_location` prefers the stored attribute and still falls back to
+  the latest ride with GPS, so nothing regresses for athletes with no stored row.
+  The write gate in `upsert_athlete_home_location` refuses to let an `inferred`
+  pass overwrite a `user_set` row — the stale-snapshot clobber class (#342/#345/#346)
+  applied to location — and `GET`/`PUT /users/me/home-location` make it editable.
+- **Coach-agent location override** (`routers/ai.py`, `services/home_location.py`)
+  — "I mostly train near Freiburg now" in coach chat is recognised deterministically
+  (narrow, high-confidence phrasing, so a place mentioned in passing never moves the
+  base), geocoded through Open-Meteo's key-free geocoding API, and stored as
+  `user_set`. The router applies it before the model replies and appends a
+  deterministic confirmation note, so the athlete is told what actually happened
+  rather than what the prose claims (the #437 honesty pattern).
+- **Cached daily forecast + planned-day weather API** (`services/weather_service.py`,
+  `routers/users.py`, `schemas.py`) — `fetch_daily_forecast` caches Open-Meteo's
+  daily outlook for an hour per location, keyed on coordinates rounded to ~11 km so
+  nearby athletes share one lookup, and a single 16-day fetch is sliced to serve
+  every shorter horizon. No per-request upstream calls. `GET
+  /users/me/weather-forecast` exposes the per-day condition, high/low, precipitation,
+  wind and coaching `load_flag` that the dashboard shows on planned days.
+- **Per-athlete weather tolerances as confidence-scored beliefs**
+  (`services/weather_preference.py`, `services/learning_pipeline.py`) — "everyone
+  slows in the heat" is a population average, not an athlete. The conditions already
+  stored on every `RideMetric` are now correlated against **outcome** (intensity
+  factor and session length in each condition bucket versus the athlete's own
+  mild-weather baseline) and **behaviour** (rode outdoors in the wet anyway, or moved
+  indoors), and written as `AthleteHypothesis` rows under a new
+  `weather_preference` category with evidence, alternative explanations and a
+  confidence that grows with sample size and effect. Inconclusive or contradictory
+  evidence asserts **nothing** rather than inventing a pattern. Beliefs share the
+  existing merge/decay lifecycle, and one the athlete stated themselves ("I actually
+  love the rain", also captured from chat) is exempt from decay — absent ride data is
+  not a counter-argument to what they told us.
+- **Weather for indoor rides** (`services/weather_service.py`,
+  `services/activity_sync.py`, `routers/strava.py`, `routers/ai.py`) —
+  `enrich_activity_weather` now accepts the athlete's training location as a fallback
+  for activities with no GPS, tagged `weather_source="open_meteo_home"` and without
+  touching `start_lat`/`start_lng`. That is what makes "it was 34 °C and the athlete
+  rode inside" a learnable behavioural signal instead of a blank row.
+
+### Changed
+
+- **Weather-aware coaching, conditioned on the learned tolerances**
+  (`services/prompts.py`, `services/ai_service.py`, `services/weather_service.py`) —
+  `training_weather_context_for_user` now names the training location, and carries the
+  learned tolerances alongside the forecast so the coach cannot act on one without the
+  other. A new `weather_scheduling_rule` (wired into the coach chat prompt only when a
+  forecast exists) tells it to *adapt rather than rewrite*: move or soften intensity on
+  extreme-heat days, offer an indoor or cooler window in severe conditions — but never
+  for conditions this athlete demonstrably handles well, weighting each call by the
+  belief's confidence, and always saying when weather is the reason a session changed.
+  The coach chat prompt receives the forecast for the first time (`ask_trainer`), which
+  is where "should I ride tomorrow?" is actually asked.
+- **Plan-change narration can explain a weather-driven move**
+  (`services/coach_summary.py`, `services/plan_maintenance.py`, `services/prompts.py`)
+  — the nightly adaptation now passes the forecast it acted on into
+  `narrate_plan_changes`, so a session moved off a 38 °C day is explained as exactly
+  that instead of reading as unexplained plan churn (#439), with an explicit
+  instruction never to invent a weather reason for an unrelated change.
+- **Continuous learning refreshes the weather model** (`services/learning_pipeline.py`)
+  — two new best-effort steps re-cluster the training location and update the weather
+  tolerances after every import, ordered so a ride imported in the same batch can be
+  weather-tagged from a freshly seeded location.
+
+## [0.48.0] - 2026-07-29
+
+### Added
+
+- **Update the athlete model before the plan** (`services/prompts.py`) — a new
+  `update_model_before_plan_rule`, wired unconditionally into the coach chat system
+  prompt (`ask_trainer_system`), stops the coach from treating the training plan as
+  its primary state and reflexively editing it in response to new information. The
+  coach now follows an explicit belief-before-decision order: new evidence → update
+  the athlete model and shift its hypotheses → re-estimate confidence → only then
+  decide whether the current plan is still the highest-value choice. A belief update
+  does **not** imply a plan change — lower confidence in a hypothesis often leaves
+  the best plan unchanged, and "no change" is an explicit, valid outcome. When the
+  understanding shifts, the coach names what changed (which hypothesis, roughly from
+  what confidence to what, and why) **before** any plan talk, and keeps `planUpdates`
+  empty when the model moved but the plan should stand. This prevents oscillating,
+  contradictory plan changes where a follow-up question silently reverses an earlier
+  edit (#491).
+
+## [0.47.0] - 2026-07-29
+
+### Added
+
+- **Reveal uncertainty in coaching recommendations** (`services/prompts.py`) — a
+  new `reveal_uncertainty_rule`, wired unconditionally into the coach chat system
+  prompt (`ask_trainer_system`), stops the coach from arguing that a
+  recommendation is the single truth. A recommendation is framed as a judgement
+  call under incomplete data, not a verdict: when the call is genuinely uncertain
+  (low/moderate confidence, diverging physiology vs athlete-context layers, or the
+  athlete pushing back with their own signals) the coach must surface **both** the
+  supporting **and** the contradicting evidence, state a rough confidence, and name
+  the open unknowns (missing HRV, weak recovery model, uncertain other-sport
+  power) — optionally as a short *recommendation / confidence / supporting /
+  contradicting / unknowns* breakdown — and may defer to the athlete's judgement or
+  a low-cost test rather than insisting. High-confidence, one-sided calls are told
+  the opposite: state it plainly and do not manufacture doubt (#490).
+
+## [0.46.0] - 2026-07-29
+
+### Added
+
+- **Explainable coaching conversation & proactive insight (Level 2)**
+  (`services/prompts.py`, `services/ai_service.py`, `routers/ai.py`) — the coach
+  chat (`ask_trainer`) now receives the deterministic Athlete Performance Model
+  (#476), its detected limiter (#477), the ROI recommendation (#478) and the
+  active testable hypotheses (#479) as structured context. New prompt sections
+  (`performance_model_section`, `active_hypotheses_section`, reusing
+  `athlete_performance_roi_section`) expose each claim's **evidence, confidence
+  and what is still missing**, and a new `coach_explainability_rule` instructs the
+  coach to (a) justify any recommendation on demand, drilling *claim → model
+  attribute/limiter → concrete workouts/trends → confidence & uncertainty*, never
+  presenting an inferred estimate as a measured fact, and (b) **proactively**
+  surface a materially higher-return training emphasis — phrased as a hypothesis
+  with an offer to explain — when the model implies one. ROI context is omitted
+  when the model has no confident limiter so the coach falls back to its usual
+  reasoning (#480).
+
+## [0.45.0] - 2026-07-29
+
+### Added
+
+- **Continuous coaching hypotheses (Level 1, automatic)**
+  (`services/hypothesis_engine.py`, `crud.py`, `models.py`, `schemas.py`,
+  `services/learning_pipeline.py`, Alembic
+  `20260731_000001_add_hypothesis_evidence_alternatives`) — a deterministic engine
+  forms testable coaching hypotheses **after every session** straight from the
+  Athlete Performance Model and its detected limiter (no LLM): e.g. *"the current
+  limiter is likely threshold utilization"*, *"the athlete has developed a strong
+  aerobic engine"*, *"FTP could be underestimated"*. Each hypothesis carries the
+  epic's required `evidence` (the athlete's own FTP/MAP/fractional-utilization
+  numbers), `confidence` (inherited from the underlying limiter/attribute, never a
+  guess) and `alternative_explanations` (the competing readings still to rule out).
+  Hypotheses persist through the existing merge lifecycle so repeated confirming
+  observations raise `confidence`/`evidenceCount` instead of duplicating, while a
+  hypothesis the model no longer supports decays and is eventually retired
+  (`crud.decay_unsupported_model_hypotheses`). Generation runs as a per-import step
+  in the continuous-learning pipeline right after the model refresh, and the
+  structured `evidence`/`alternativeExplanations` are surfaced on the existing
+  `GET /users/me/athlete-hypotheses` API for the conversation layer and frontend
+  (#479).
+
+## [0.44.0] - 2026-07-29
+
+### Added
+
+- **ROI-based training recommendation** (`services/roi_recommendation.py`,
+  `schemas.py`, `services/prompts.py`, `services/ai_service.py`,
+  `routers/ai.py`) — a deterministic engine maps the Athlete Performance Model
+  and its detected limiter to an **expected-gain-per-physiological-system** map
+  (`threshold`/`vo2max`/`endurance`/`anaerobic`, each `large`/`moderate`/`small`/
+  `maintenance`), a suggested weekly emphasis (e.g. `2× Threshold  1× VO₂max
+  1× Long endurance`) and a natural-language rationale that cites the athlete's
+  own numbers (FTP vs MAP, fractional utilization, aerobic base). Surfaced
+  machine-readable on the performance-model API as `recommendations` and injected
+  into the physiology layer of `next-ride-recommendation`, so the coach explains
+  *why* a stimulus has the highest return rather than prescribing generic
+  periodization. When the model has no confident limiter the recommendation is
+  `sufficient: false` and the coach falls back to its existing reasoning (#478).
+
+## [0.43.0] - 2026-07-29
+
+### Added
+
+- **Athlete Performance Model — data layer** (`models.py`, `schemas.py`,
+  `crud.py`, `routers/ai.py`, migrations `20260729_000001` /
+  `20260730_000001`) — a new persistent, per-attribute, evidence-backed
+  `AthletePerformanceModel` (one row per athlete) plus an
+  `AthletePerformanceSnapshot` time series. Distinct from the LLM-derived
+  qualitative `AthleteModel` (#384): this one is deterministic and quantitative,
+  where **every** attribute carries its own estimate/score, `confidence`,
+  `evidence` and `missingInformation`. Exposed read-only at
+  `GET /ai/athlete-performance-model` (empty model, not 404, when never
+  derived) with an on-demand `POST /ai/refresh-athlete-performance-model`
+  (#475).
+- **Cross-workout physiological inference engine**
+  (`services/athlete_model_inference.py`, `services/analysis.py`,
+  `services/learning_pipeline.py`) — a compact per-ride `perf_signals` blob
+  (power-duration envelope, HR drift, first/second-half power & HR splits) is
+  persisted on `RideMetric` at the `build_ride_metrics_chain` choke point, and a
+  deterministic, pure engine aggregates it over a rolling window to infer FTP,
+  MAP, VO₂max, fractional utilization, aerobic endurance, fatigue resistance and
+  anaerobic capacity. No attribute is emitted without a confidence; missing
+  signals report `unknown` rather than being guessed (VO₂max stays `unknown`
+  until a body-weight source exists). Runs as a best-effort step in the
+  continuous-learning pipeline after each import (#476).
+- **Physiological limiter detection** (`services/limiter_detection.py`,
+  `models.py`, `schemas.py`, `crud.py`, migration `20260730_000001`) — a
+  deterministic engine reads the performance model and returns a
+  confidence-ranked list of candidate limiters (`threshold`, `vo2max`,
+  `endurance_durability`), each with `evidence` **and** `counterEvidence`,
+  reproducing the "if the engine is already big, raise the floor" reasoning from
+  the gap between the aerobic ceiling (MAP) and sustainable threshold power
+  (fractional utilization). The top candidate is written back to
+  `likelyLimiter` and the full ranking to `limiters`, both surfaced on the
+  performance-model API. Missing signals return a low-confidence
+  `insufficient_data` entry rather than guessing (#477).
+- **`batch_id` on `plan_day_history`** (`models.py`, `crud.py`,
+  `routers/users.py`, migration `20260720_000001`) — every per-day row written
+  by one pipeline commit (`record_plan_day_changes`) now shares a `batch_id`, so
+  a coach run (a plan generation, nightly tune-up or single chat edit) can be
+  reassembled from the append-only log for debugging and is exposed on the
+  plan-history API as `batchId`. This lets the Coach Timeline collapse a run into
+  one card instead of one per changed day (#435).
+
+## [0.42.0] - 2026-07-19
+
+### Added
+
+- **Daily duration-refresh job** (`services/duration_refresh.py`, `main.py`,
+  `config.py`) — a scheduled task re-derives `RideMetric.duration_seconds` from
+  each source's *current* `moving_time` over a recent lookback window
+  (`duration_refresh_lookback_days`, default 21) and recomputes the metrics
+  chain. This is the standing prevention for intervals.icu populating
+  `moving_time` only minutes after upload: an early sync could store wall-clock
+  `elapsed_time` and, because the ride was already imported, never correct it.
+  The one-off backfill CLI is now a thin wrapper over the same
+  `refresh_user_durations` logic (#429).
+- **Long-term athlete model in next-ride recommendations**
+  (`services/prompts.py`, `services/ai_service.py`, `services/ride_matching.py`)
+  — the durable structured athlete model (#384) is now threaded into the
+  next-ride recommendation prompt, not only ask-trainer, so suggestions also
+  use FTP, VO2 max, threshold durability, recovery and heat tolerance. Gated on
+  `memory_updates_enabled`, mirroring ask-trainer (#403).
+
+### Fixed
+
+- **Activity duration uses `moving_time`, not `elapsed_time`** — imported ride
+  durations now exclude pauses, so a long stop no longer inflates a ride to
+  wall-clock time (e.g. 8h28 instead of 4h25) (#427).
+- **intervals.icu id corruption prevented at the source** — the raw provider id
+  is now carried end-to-end as a string `external_id` (schema → intervals
+  `_activity_response` → frontend store → analyse persistence), so new rows
+  store the true uncorrupted hash instead of a float64-mangled one. A
+  float-tolerant join still corrects pre-existing rows (#429).
+- **Coach duration changes now update `durationMinutes`** — when the coach
+  rewrites a session's prose it also updates the structured duration field, so
+  the saved plan matches what the coach promised (#422).
+- **One-off production duration correction** for a mis-stored ride on
+  2026-07-18 (#426).
+
+### Changed
+
+- **Canonical typed `PlanDay` persist gate** — plan days are normalised by
+  `schemas.PlanDay` at a single gate in `plan_pipeline`; field invariants belong
+  there rather than in scattered call sites (#424).
+- **Source-aware duration backfill** — the `backfill_activity_moving_time`
+  script re-derives durations for both Strava (exact id) and intervals.icu
+  (float-tolerant id) sources (#429).
+
+## [0.41.0] - 2026-07-13
+
+### Added
+
+- **Continuous athlete-learning pipeline** (`services/learning_pipeline.py`,
+  `services/activity_sync.py`, `config.py`) — every completed workout now runs a
+  per-athlete learning step immediately, instead of the athlete-knowledge passes
+  only running once a week. `run_learning_step` composes the existing passes in
+  the weekly schedule's dependency order — insights + athlete-model refresh
+  (analyse, compare against the model, update observations and confidence) →
+  contradiction/anomaly detection → hypotheses → open questions — with each pass
+  best-effort so a failure is recorded and never aborts the others. The
+  persisted observations/hypotheses/open questions are the coach's evolving
+  notes (they already surface in coach prompts), so the step emits a structured
+  audit line rather than clobbering the athlete-editable coach memory (#346).
+  `activity_sync._persist_and_adapt` triggers the step after new workouts are
+  imported via `learn_from_completed_workouts`, guarded so a learning failure
+  can never break the sync. Gated by the new `continuous_learning_enabled`
+  setting (default on); the weekly jobs remain registered as a backstop (#388).
+
+## [0.40.0] - 2026-07-05
+
+### Added
+
+- **Athlete-facing plan-change history & analytics** (`routers/users.py`, `crud.py`)
+  — two new endpoints scoped to the current user surface the append-only
+  `plan_day_history` log (previously admin-read only, #343):
+  `GET /users/me/plan-history` (optional `?date=`, newest-first) returns the
+  per-day change timeline including blocked automated attempts (`applied=false`,
+  where a user pin or completed day kept the athlete's version), and
+  `GET /users/me/plan-history/stats` returns aggregate analytics
+  (changes by trigger, applied-vs-blocked counts, most-changed days) via the new
+  grouped-SQL `crud.plan_day_history_stats`. Trigger keys are returned raw; the
+  frontend owns friendly labelling. The live plan still comes from
+  `TrainingPlan.plan` — this is read-only history (#357).
+
 ## [0.39.9] - 2026-07-04
 
 ### Removed

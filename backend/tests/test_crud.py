@@ -4,7 +4,7 @@ These tests call crud functions directly against the test database, bypassing
 the HTTP routers, to verify the data-access logic in isolation.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -589,6 +589,71 @@ async def test_delete_chat_messages(db: AsyncSession) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Availability constraint lifting (#437)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deactivate_availability_constraints_for_dates(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.upsert_availability_constraint(
+        db, user.id, constraint_type="required_workout", constraint_date="2026-07-24",
+        weekday="friday", expires_on="2026-07-24",
+    )
+    await crud.upsert_availability_constraint(
+        db, user.id, constraint_type="no_training", constraint_date="2026-07-25",
+        weekday="saturday", expires_on="2026-07-25",
+    )
+
+    lifted = await crud.deactivate_availability_constraints_for_dates(
+        db, user.id, ["2026-07-24"]
+    )
+    assert [c.constraint_date for c in lifted] == ["2026-07-24"]
+
+    active = await crud.list_active_availability_constraints(
+        db, user.id, today="2026-07-22"
+    )
+    # Only the Saturday constraint is still active.
+    assert [c.constraint_date for c in active] == ["2026-07-25"]
+
+
+@pytest.mark.asyncio
+async def test_deactivate_availability_constraints_for_dates_empty(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    assert await crud.deactivate_availability_constraints_for_dates(db, user.id, []) == []
+
+
+@pytest.mark.asyncio
+async def test_get_last_flagged_constraint_dates(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    # An earlier flagged reply, then a later one that supersedes it.
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="old",
+        timestamp="2026-07-20T10:00:00Z",
+        flagged_constraint_dates=["2026-07-20"],
+    )
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="new",
+        timestamp="2026-07-21T10:00:00Z",
+        flagged_constraint_dates=["2026-07-24"],
+    )
+    # A plain reply after it must not clear the last flagged set.
+    await crud.create_chat_message(
+        db, user.id, role="assistant", content="chit-chat",
+        timestamp="2026-07-21T11:00:00Z",
+    )
+    assert await crud.get_last_flagged_constraint_dates(db, user.id) == ["2026-07-24"]
+
+
+@pytest.mark.asyncio
+async def test_get_last_flagged_constraint_dates_none(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    assert await crud.get_last_flagged_constraint_dates(db, user.id) == []
+
+
+# ---------------------------------------------------------------------------
 # CoachMemory
 # ---------------------------------------------------------------------------
 
@@ -710,10 +775,235 @@ async def test_observe_athlete_memory_fact_repeated_observations_increase_confid
 
 
 @pytest.mark.asyncio
+async def test_observe_athlete_memory_fact_persists_and_reclassifies_kind(
+    db: AsyncSession,
+) -> None:
+    """kind is stored, defaults to observation, and re-observing can promote it (#386)."""
+    user = await _make_user(db)
+
+    # An unspecified kind defaults to the safer "observation".
+    default = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Prefers MTB", category="preference"
+    )
+    assert default.kind == "observation"
+
+    # A stable value can be recorded explicitly as a fact.
+    ftp = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is about 250 W", kind="fact", category="general"
+    )
+    assert ftp.kind == "fact"
+
+    # An unrecognised label collapses to "observation".
+    weird = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Weird one", kind="hunch", category="general"
+    )
+    assert weird.kind == "observation"
+
+    # Re-observing the same row with a new kind re-classifies it.
+    promoted = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="Prefers MTB", kind="fact", category="preference"
+    )
+    assert promoted.id == default.id
+    assert promoted.kind == "fact"
+
+    # A direct update can reclassify too.
+    updated = await crud.update_athlete_memory_fact(
+        db, user.id, promoted.id, kind="observation"
+    )
+    assert updated is not None
+    assert updated.kind == "observation"
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confidence_decays_after_grace_period(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers morning rides",
+        category="preference",
+        confidence=0.7,
+        observed_at=observed_at,
+        trusted=True,
+    )
+
+    # Within the grace window confidence is untouched.
+    fresh = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=fresh) == 0
+    assert fact.confidence == 0.7
+
+    # Past the grace window it erodes linearly with idle days.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 20)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 1
+    assert fact.confidence == pytest.approx(
+        0.7 - crud.ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY * 20
+    )
+    assert fact.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_decay_marks_fact_stale_and_observation_revives_it(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Skips long rides in winter",
+        category="adherence",
+        confidence=0.4,
+        observed_at=observed_at,
+    )
+
+    # Enough idle days to fall below the stale threshold.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 40)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later)
+    assert fact.status == "stale"
+    assert fact.confidence < crud.ATHLETE_MEMORY_STALE_CONFIDENCE
+
+    # A fresh observation revives the fact and rebuilds confidence.
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Skips long rides in winter",
+        category="adherence",
+        observed_at=later,
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    assert revived.confidence > 0.0
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confirmed_facts_do_not_decay(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Races cyclocross every autumn",
+        category="motivation",
+        confidence=0.7,
+        observed_at=observed_at,
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    confirmed_confidence = fact.confidence
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 200)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "user_confirmed"
+    assert fact.confidence == confirmed_confidence
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_archives_obsolete_observation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers gravel over road",
+        category="preference",
+        confidence=0.6,
+        observed_at=observed_at,
+    )
+
+    # Just before the archive window the fact has decayed but is still on file.
+    before = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS - 1)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=before)
+    assert fact.status in {"active", "stale"}
+
+    # Past the archive window an unmentioned observation is archived.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 1
+    assert fact.status == "archived"
+
+    # Archiving is idempotent: a second pass reports no further change.
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+
+    # Archived facts drop out of the default management view but remain on file.
+    active = await crud.list_athlete_memory_facts(db, user.id, now=later)
+    assert fact.id not in {f.id for f in active}
+    all_facts = await crud.list_athlete_memory_facts(
+        db, user.id, include_inactive=True, now=later
+    )
+    assert fact.id in {f.id for f in all_facts}
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_archived_fact_revived_by_observation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Trains best in the evening",
+        category="preference",
+        confidence=0.5,
+        observed_at=observed_at,
+    )
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 10)
+    await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later)
+    assert fact.status == "archived"
+
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Trains best in the evening",
+        category="preference",
+        observed_at=later,
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    # Fresh evidence refreshes confidence back above the default floor.
+    assert revived.confidence >= crud.ATHLETE_MEMORY_DEFAULT_CONFIDENCE
+
+
+@pytest.mark.asyncio
+async def test_athlete_memory_confirmed_facts_not_archived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Aims for a sub-9-hour gran fondo",
+        category="motivation",
+        confidence=0.7,
+        observed_at=observed_at,
+    )
+    await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 100)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "user_confirmed"
+
+
+@pytest.mark.asyncio
 async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejected(
     db: AsyncSession,
 ) -> None:
     user = await _make_user(db)
+    # Corroborated by a second observation, so it clears the evidence bar (#387).
+    included = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Responds well to clear recovery permission",
+        category="coaching",
+        confidence=0.6,
+    )
     included = await crud.observe_athlete_memory_fact(
         db,
         user.id,
@@ -774,6 +1064,91 @@ async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejecte
 
 
 @pytest.mark.asyncio
+async def test_single_observation_capped_and_withheld_until_corroborated(
+    db: AsyncSession,
+) -> None:
+    """A single event never promotes itself into trusted, coach-visible memory (#387)."""
+    user = await _make_user(db)
+
+    # However confident the extraction claims to be, a first sighting is capped
+    # below the prompt threshold and left out of coach prompts.
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Fades in the final interval of long sessions",
+        category="fatigue_response",
+        confidence=0.95,
+    )
+    assert fact.observation_count == 1
+    assert fact.confidence <= crud.ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP
+    assert fact.confidence < crud.ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id not in {f.id for f in prompt_facts}
+
+    # A second, corroborating observation grows confidence past the bar and,
+    # having met the evidence minimum, the fact now informs coaching.
+    corroborated = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Fades in the final interval of long sessions",
+        category="fatigue_response",
+        confidence=0.95,
+    )
+    assert corroborated.id == fact.id
+    assert corroborated.observation_count == crud.ATHLETE_MEMORY_MIN_EVIDENCE
+    assert corroborated.confidence >= crud.ATHLETE_MEMORY_PROMPT_MIN_CONFIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_trusted_observation_bypasses_evidence_gate(db: AsyncSession) -> None:
+    """A vetted, trusted write is usable at once — no re-earning trust (#387)."""
+    user = await _make_user(db)
+
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Targets a sub-9-hour gran fondo",
+        category="motivation",
+        confidence=0.75,
+        trusted=True,
+    )
+    # Trust is honoured directly and enough evidence is seeded to clear the bar.
+    assert fact.confidence == pytest.approx(0.75)
+    assert fact.observation_count >= crud.ATHLETE_MEMORY_MIN_EVIDENCE
+
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_untrusted_observation_does_not_reclassify_confirmed_fact(
+    db: AsyncSession,
+) -> None:
+    """One automated observation must not overwrite athlete-confirmed knowledge (#387)."""
+    user = await _make_user(db)
+
+    fact = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is 300 W", kind="fact", category="general"
+    )
+    confirmed = await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    assert confirmed is not None and confirmed.kind == "fact"
+
+    # An automated re-observation classifying it as a mere observation is ignored;
+    # the athlete-confirmed classification stands.
+    reobserved = await crud.observe_athlete_memory_fact(
+        db, user.id, fact="FTP is 300 W", kind="observation", category="general"
+    )
+    assert reobserved.id == fact.id
+    assert reobserved.kind == "fact"
+
+
+@pytest.mark.asyncio
 async def test_update_athlete_memory_fact_edits_and_rejects_fact(
     db: AsyncSession,
 ) -> None:
@@ -808,6 +1183,134 @@ async def test_update_athlete_memory_fact_edits_and_rejects_fact(
     )
     assert rejected is not None
     assert rejected.status == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_record_contradiction_lowers_confidence_and_flags_for_validation(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="FTP is around 320 W",
+        category="fitness",
+        confidence=0.8,
+    )
+    before = fact.confidence
+    now = datetime(2026, 7, 9, tzinfo=timezone.utc)
+
+    flagged = await crud.record_athlete_memory_fact_contradiction(
+        db,
+        fact,
+        reason="Held 400 W for 5x4 min on 2026-07-05 — well above the stored 320 W.",
+        now=now,
+    )
+    assert flagged.status == "needs_validation"
+    assert flagged.confidence == pytest.approx(
+        before - crud.ATHLETE_MEMORY_CONTRADICTION_PENALTY
+    )
+    assert "400 W" in (flagged.contradiction_note or "")
+    assert flagged.updated_at == now
+
+
+@pytest.mark.asyncio
+async def test_needs_validation_fact_visible_but_out_of_prompts(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Struggles in the heat",
+        category="fitness",
+        confidence=0.8,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Strong performances on three warm-weather rides."
+    )
+
+    # Surfaced in the default management view so the athlete can act on it.
+    visible = await crud.list_athlete_memory_facts(db, user.id)
+    assert fact.id in {f.id for f in visible}
+
+    # But withheld from coach prompts until the athlete validates or corrects it.
+    prompt_facts = await crud.get_prompt_athlete_memory_facts(db, user.id)
+    assert fact.id not in {f.id for f in prompt_facts}
+
+
+@pytest.mark.asyncio
+async def test_needs_validation_does_not_decay_or_archive(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Rarely rides in the rain",
+        category="preference",
+        confidence=0.8,
+        observed_at=observed_at,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Several rainy rides logged.", now=observed_at
+    )
+
+    # Long after the archive window it holds its flagged state, awaiting the athlete.
+    later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 30)
+    assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
+    assert fact.status == "needs_validation"
+
+
+@pytest.mark.asyncio
+async def test_fresh_observation_revives_contradicted_fact_and_clears_note(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers short intense sessions",
+        category="preference",
+        confidence=0.7,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Logged several long endurance rides."
+    )
+    assert fact.status == "needs_validation"
+
+    revived = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Prefers short intense sessions",
+        category="preference",
+    )
+    assert revived.id == fact.id
+    assert revived.status == "active"
+    assert revived.contradiction_note is None
+
+
+@pytest.mark.asyncio
+async def test_confirming_contradicted_fact_clears_note(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    fact = await crud.observe_athlete_memory_fact(
+        db,
+        user.id,
+        fact="Recovers slowly from hard blocks",
+        category="fitness",
+        confidence=0.7,
+    )
+    await crud.record_athlete_memory_fact_contradiction(
+        db, fact, reason="Back-to-back hard weeks with strong numbers."
+    )
+
+    confirmed = await crud.update_athlete_memory_fact(
+        db, user.id, fact.id, status="user_confirmed"
+    )
+    assert confirmed is not None
+    assert confirmed.status == "user_confirmed"
+    assert confirmed.contradiction_note is None
 
 
 @pytest.mark.asyncio
@@ -846,6 +1349,274 @@ async def test_delete_athlete_memory_fact_scoped_to_owner(
     # A different user cannot delete someone else's fact.
     assert await crud.delete_athlete_memory_fact(db, other.id, fact.id) is False
     assert await crud.get_athlete_memory_fact(db, owner.id, fact.id) is not None
+
+
+# ---------------------------------------------------------------------------
+# AthleteHypothesis
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_propose_athlete_hypothesis_creates_proposed(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Upper-body strength training suppresses next-day HR response",
+        category="fatigue response",
+        rationale="HR ~8 bpm low on the two days after gym sessions.",
+        confidence=0.38,
+    )
+
+    assert hypothesis.id is not None
+    assert hypothesis.status == "proposed"
+    assert hypothesis.category == "fatigue_response"
+    assert hypothesis.evidence_count == 1
+    assert hypothesis.confidence == pytest.approx(0.38)
+
+
+@pytest.mark.asyncio
+async def test_propose_athlete_hypothesis_strengthens_on_repeat(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Rides stronger in the second half of a block",
+        category="general",
+        confidence=0.3,
+    )
+    first_confidence = first.confidence
+    second = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="rides   STRONGER in the second half of a block",
+        category="general",
+        rationale="Two more blocks show the same rising trend.",
+    )
+
+    assert second.id == first.id
+    assert second.evidence_count == 2
+    assert second.confidence > first_confidence
+    assert second.rationale == "Two more blocks show the same rising trend."
+
+
+@pytest.mark.asyncio
+async def test_confirm_hypothesis_promotes_to_memory_fact(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Performs best with two recovery days before a race",
+        category="fatigue_response",
+        rationale="Best results followed a two-day taper twice.",
+        confidence=0.4,
+    )
+
+    updated = await crud.update_athlete_hypothesis(
+        db, user.id, hypothesis.id, status="confirmed"
+    )
+    assert updated is not None
+    assert updated.status == "confirmed"
+    assert updated.confidence >= crud.ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE
+
+    # Confirming promotes the statement into a durable memory fact.
+    facts = await crud.list_athlete_memory_facts(db, user.id)
+    assert any(
+        fact.fact == "Performs best with two recovery days before a race"
+        for fact in facts
+    )
+
+
+@pytest.mark.asyncio
+async def test_refuted_hypothesis_hidden_then_revived_by_evidence(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Struggles on back-to-back hard days",
+        category="fatigue_response",
+    )
+    await crud.update_athlete_hypothesis(
+        db, user.id, hypothesis.id, status="refuted"
+    )
+
+    # Refuted hypotheses drop out of the default (open) list.
+    open_only = await crud.list_athlete_hypotheses(db, user.id)
+    assert open_only == []
+    assert len(await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)) == 1
+
+    # Fresh supporting evidence reopens the question.
+    revived = await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Struggles on back-to-back hard days",
+        category="fatigue_response",
+    )
+    assert revived.id == hypothesis.id
+    assert revived.status == "proposed"
+    assert revived.evidence_count == 2
+
+
+@pytest.mark.asyncio
+async def test_delete_athlete_hypothesis_scoped_to_owner(db: AsyncSession) -> None:
+    owner = await _make_user(db)
+    other = await _make_user(db, email="other@example.com")
+    hypothesis = await crud.propose_athlete_hypothesis(
+        db, owner.id, statement="Fuels poorly on long rides", category="fueling"
+    )
+
+    assert await crud.delete_athlete_hypothesis(db, other.id, hypothesis.id) is False
+    assert await crud.delete_athlete_hypothesis(db, owner.id, hypothesis.id) is True
+    assert await crud.get_athlete_hypothesis(db, owner.id, hypothesis.id) is None
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_hypotheses(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.propose_athlete_hypothesis(
+        db, user.id, statement="Prefers hilly terrain", category="preference"
+    )
+
+    await crud.clear_athlete_memory(db, user.id)
+    assert await crud.list_athlete_hypotheses(db, user.id, include_resolved=True) == []
+
+
+# ---------------------------------------------------------------------------
+# AthleteExperiment
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_suggest_athlete_experiment_creates_suggested(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does upper-body strength suppress next-day HR?",
+        protocol="Repeat the gym session and compare HR on the next easy ride.",
+        rationale="A clear HR drop would confirm the hypothesis.",
+        category="fatigue response",
+        hypothesis_id="hyp-123",
+    )
+
+    assert experiment.id is not None
+    assert experiment.status == "suggested"
+    assert experiment.category == "fatigue_response"
+    assert experiment.hypothesis_id == "hyp-123"
+    assert experiment.protocol_key
+
+
+@pytest.mark.asyncio
+async def test_suggest_athlete_experiment_dedupes_on_protocol(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db)
+    first = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes over the same climb using identical pedals.",
+    )
+    second = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster for the same power?",
+        protocol="  compare BOTH bikes over the same climb using identical pedals. ",
+        rationale="Whichever is quicker at equal power wins.",
+    )
+
+    assert second.id == first.id
+    assert second.question == "Which bike is faster for the same power?"
+    assert second.rationale == "Whichever is quicker at equal power wins."
+    assert len(await crud.list_athlete_experiments(db, user.id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_dismissed_experiment_hidden_then_revived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Is threshold higher than assumed?",
+        protocol="Perform a 30-minute threshold test.",
+    )
+    await crud.update_athlete_experiment(
+        db, user.id, experiment.id, status="dismissed"
+    )
+
+    assert await crud.list_athlete_experiments(db, user.id) == []
+    assert (
+        len(await crud.list_athlete_experiments(db, user.id, include_resolved=True))
+        == 1
+    )
+
+    revived = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Is threshold higher than assumed?",
+        protocol="Perform a 30-minute threshold test.",
+    )
+    assert revived.id == experiment.id
+    assert revived.status == "suggested"
+
+
+@pytest.mark.asyncio
+async def test_completed_experiment_not_revived(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does heat cut power?",
+        protocol="Repeat the session under cooler conditions.",
+    )
+    await crud.update_athlete_experiment(
+        db, user.id, experiment.id, status="completed"
+    )
+
+    again = await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Does heat cut power?",
+        protocol="Repeat the session under cooler conditions.",
+    )
+    assert again.id == experiment.id
+    assert again.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_delete_athlete_experiment_scoped_to_owner(db: AsyncSession) -> None:
+    owner = await _make_user(db)
+    other = await _make_user(db, email="other-exp@example.com")
+    experiment = await crud.suggest_athlete_experiment(
+        db,
+        owner.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes using identical power pedals.",
+    )
+
+    assert await crud.delete_athlete_experiment(db, other.id, experiment.id) is False
+    assert await crud.delete_athlete_experiment(db, owner.id, experiment.id) is True
+    assert await crud.get_athlete_experiment(db, owner.id, experiment.id) is None
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_experiments(db: AsyncSession) -> None:
+    user = await _make_user(db)
+    await crud.suggest_athlete_experiment(
+        db,
+        user.id,
+        question="Which bike is faster?",
+        protocol="Compare both bikes using identical power pedals.",
+    )
+
+    await crud.clear_athlete_memory(db, user.id)
+    assert (
+        await crud.list_athlete_experiments(db, user.id, include_resolved=True) == []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1220,12 +1991,29 @@ async def test_record_plan_day_changes_inserts_rows(db: AsyncSession) -> None:
     assert len(rows) == 2
     assert all(r.source == "ride_review" for r in rows)
     assert all(r.applied is True for r in rows)  # default applied when omitted
+    # Every row from one call shares a batch id so the run can be reassembled.
+    assert rows[0].batch_id is not None
+    assert len({r.batch_id for r in rows}) == 1
 
     stored = await crud.list_plan_day_history(db, user.id)
     assert {r.date for r in stored} == {"2026-05-01", "2026-05-02"}
     by_date = {r.date: r for r in stored}
     assert by_date["2026-05-01"].old_day is None
     assert by_date["2026-05-02"].new_day == {"workoutType": "recovery"}
+
+
+@pytest.mark.asyncio
+async def test_record_plan_day_changes_distinct_batch_id_per_call(
+    db: AsyncSession,
+) -> None:
+    user = await _make_user(db, "hist-batch@example.com")
+    change = [{"date": "2026-05-01", "old_day": None, "new_day": {"workoutType": "z2"}}]
+
+    first = await crud.record_plan_day_changes(db, user.id, change, "generate")
+    second = await crud.record_plan_day_changes(db, user.id, change, "generate")
+
+    # Distinct coach runs get distinct batch ids even with the same source.
+    assert first[0].batch_id != second[0].batch_id
 
 
 @pytest.mark.asyncio
@@ -1309,3 +2097,218 @@ async def test_get_coach_memory_for_update_returns_row(db: AsyncSession) -> None
 async def test_get_coach_memory_for_update_missing_is_none(db: AsyncSession) -> None:
     user = await _make_user(db, "cm-lock-missing@example.com")
     assert await crud.get_coach_memory(db, user.id, for_update=True) is None
+
+
+# ---------------------------------------------------------------------------
+# AthletePrediction (#383)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_record_prediction_refreshes_pending_duplicate(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-dupe@example.com")
+    first = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="Recovered by tomorrow",
+        expected_outcome="HR baseline",
+        horizon="tomorrow",
+    )
+    second = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="  recovered BY tomorrow  ",  # same key, different casing/space
+        expected_outcome="Resting HR near baseline",
+        horizon="by tomorrow morning",
+    )
+    assert first.id == second.id
+    assert second.expected_outcome == "Resting HR near baseline"
+    assert second.horizon == "by tomorrow morning"
+    pending = await crud.list_athlete_predictions(db, user.id)
+    assert len(pending) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_prediction_requires_text_and_outcome(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-empty@example.com")
+    with pytest.raises(ValueError):
+        await crud.record_athlete_prediction(
+            db, user.id, prediction="   ", expected_outcome="something"
+        )
+    with pytest.raises(ValueError):
+        await crud.record_athlete_prediction(
+            db, user.id, prediction="a claim", expected_outcome="  "
+        )
+
+
+@pytest.mark.asyncio
+async def test_evaluate_prediction_is_idempotent(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-eval@example.com")
+    prediction = await crud.record_athlete_prediction(
+        db,
+        user.id,
+        prediction="Hits VO2 targets next ride",
+        expected_outcome="All reps at target power",
+        confidence=0.5,
+    )
+    resolved = await crud.evaluate_athlete_prediction(
+        db,
+        user.id,
+        prediction.id,
+        correct=True,
+        actual_outcome="Nailed every rep",
+    )
+    assert resolved is not None
+    assert resolved.status == "correct"
+    assert resolved.confidence == pytest.approx(0.7)
+    assert resolved.evaluated_at is not None
+
+    # Re-evaluating an already-scored prediction must not double-count.
+    again = await crud.evaluate_athlete_prediction(
+        db,
+        user.id,
+        prediction.id,
+        correct=False,
+        actual_outcome="ignored",
+    )
+    assert again is not None
+    assert again.status == "correct"
+    assert again.confidence == pytest.approx(0.7)
+
+
+@pytest.mark.asyncio
+async def test_prediction_accuracy_counts_only_resolved(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-acc@example.com")
+    correct = await crud.record_athlete_prediction(
+        db, user.id, prediction="p1", expected_outcome="o1"
+    )
+    wrong = await crud.record_athlete_prediction(
+        db, user.id, prediction="p2", expected_outcome="o2"
+    )
+    await crud.record_athlete_prediction(
+        db, user.id, prediction="p3", expected_outcome="o3"
+    )  # left pending
+    await crud.evaluate_athlete_prediction(
+        db, user.id, correct.id, correct=True, actual_outcome="hit"
+    )
+    await crud.evaluate_athlete_prediction(
+        db, user.id, wrong.id, correct=False, actual_outcome="miss"
+    )
+
+    evaluated, hits = await crud.get_athlete_prediction_accuracy(db, user.id)
+    assert (evaluated, hits) == (2, 1)
+
+
+@pytest.mark.asyncio
+async def test_clear_athlete_memory_removes_predictions(db: AsyncSession) -> None:
+    user = await _make_user(db, "pred-clear@example.com")
+    await crud.record_athlete_prediction(
+        db, user.id, prediction="p", expected_outcome="o"
+    )
+    await crud.clear_athlete_memory(db, user.id)
+    assert await crud.list_athlete_predictions(db, user.id, include_resolved=True) == []
+
+
+# ---------------------------------------------------------------------------
+# AthletePerformanceModel (#475)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_model_round_trip(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-model@example.com")
+    assert await crud.get_athlete_performance_model(db, user.id) is None
+
+    attributes = {
+        "ftp": {
+            "estimate": 302,
+            "score": None,
+            "confidence": 0.74,
+            "unit": "W",
+            "evidence": ["Best 20-min power 318 W across 3 rides"],
+            "missing_information": [],
+        },
+        "aerobic_endurance": {
+            "estimate": None,
+            "score": "high",
+            "confidence": 0.6,
+            "unit": None,
+            "evidence": ["4 h ride with 3.1% decoupling"],
+            "missing_information": [],
+        },
+    }
+    limiters = [
+        {
+            "limiter": "threshold",
+            "confidence": 0.72,
+            "evidence": ["FTP low vs MAP"],
+            "counter_evidence": [],
+        }
+    ]
+    created = await crud.upsert_athlete_performance_model(
+        db,
+        user.id,
+        attributes=attributes,
+        likely_limiter="threshold",
+        limiters=limiters,
+        source_window_days=120,
+        derived_from_rides=5,
+    )
+    assert created.attributes["ftp"]["estimate"] == 302
+    assert created.derived_from_rides == 5
+    assert created.likely_limiter == "threshold"
+    assert created.limiters[0]["confidence"] == 0.72
+
+    # Upsert overwrites in place (one row per user).
+    updated = await crud.upsert_athlete_performance_model(
+        db,
+        user.id,
+        attributes={"ftp": {"estimate": 310, "confidence": 0.8}},
+        derived_from_rides=6,
+    )
+    assert updated.user_id == created.user_id
+    assert updated.attributes["ftp"]["estimate"] == 310
+    assert "aerobic_endurance" not in updated.attributes
+
+    fetched = await crud.get_athlete_performance_model(db, user.id)
+    assert fetched is not None
+    assert fetched.attributes["ftp"]["estimate"] == 310
+    # Not re-passing limiters clears them (one derivation writes the full picture).
+    assert fetched.likely_limiter is None
+    assert fetched.limiters is None
+
+
+@pytest.mark.asyncio
+async def test_athlete_performance_snapshots_are_time_series(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-snap@example.com")
+    older = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 6, 1, tzinfo=timezone.utc)
+
+    await crud.create_athlete_performance_snapshot(
+        db, user.id, attributes={"ftp": {"estimate": 300, "confidence": 0.7}},
+        recorded_at=older,
+    )
+    await crud.create_athlete_performance_snapshot(
+        db, user.id, attributes={"ftp": {"estimate": 310, "confidence": 0.75}},
+        recorded_at=newer,
+    )
+
+    history = await crud.get_athlete_performance_snapshots(db, user.id)
+    assert [s.attributes["ftp"]["estimate"] for s in history] == [300, 310]
+
+
+@pytest.mark.asyncio
+async def test_upsert_ride_metric_persists_perf_signals(db: AsyncSession) -> None:
+    user = await _make_user(db, "perf-signals@example.com")
+    signals = {"duration_s": 3600, "power_curve": {"5": 360, "20": 300}}
+    ride = await crud.upsert_ride_metric(
+        db,
+        user.id,
+        strava_activity_id=12345,
+        activity_date="2026-07-20",
+        perf_signals=signals,
+    )
+    assert ride.perf_signals == signals
+
+    history = await crud.get_ride_metrics_history(db, user.id)
+    assert history[0].perf_signals["power_curve"]["5"] == 360

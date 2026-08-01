@@ -1,10 +1,11 @@
 """Login-summary pipeline: keeps the dashboard "recent training summary" fresh.
 
 The login summary is produced by an LLM from the rider assessment *and the
-current training plan*, so it goes stale whenever the plan changes. This module
-is a pipeline node that depends on the ``plan`` pipeline: when the plan changes
-the summary is invalidated (cleared), and it is lazily regenerated on the next
-dashboard load (the frontend re-requests it when it is missing).
+current training plan*, so it goes stale whenever either input changes. This
+module is a pipeline node that depends on the ``plan`` and ``assessment``
+pipelines: when an upstream input changes the summary is invalidated (cleared),
+and it is lazily regenerated on the next dashboard load (the frontend
+re-requests it when it is missing).
 
 Regeneration is an LLM call, so invalidation is intentionally cheap and the
 expensive work is deferred to load time — this debounces the many rapid plan
@@ -29,7 +30,11 @@ PIPELINE_NAME = "summary"
 
 
 async def regenerate(
-    db: AsyncSession, user: models.User, *, provider: str | None = None
+    db: AsyncSession,
+    user: models.User,
+    *,
+    provider: str | None = None,
+    timezone_name: str | None = None,
 ) -> str | None:
     """Regenerate and persist the login summary from current assessment + plan.
 
@@ -43,6 +48,12 @@ async def regenerate(
     existing_plan = await crud.get_training_plan(db, user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
+    # The athlete's one-tap "how the legs felt" rating lives on the ride, not the
+    # assessment. Read it at generation time so the summary reflects the real
+    # signal rather than an inferred effort number.
+    latest_ride = await crud.get_latest_ride_metric(db, user.id)
+    feel_legs = latest_ride.feel_legs if latest_ride is not None else None
+
     login_summary = await ai_service.generate_login_summary(
         ride_insights=assessment.ride_insights,
         last_ride_feedback=assessment.last_ride_feedback,
@@ -50,6 +61,19 @@ async def regenerate(
         estimated_ftp=assessment.estimated_ftp,
         training_plan=training_plan or None,
         provider=provider or resolve_user_provider(user),
+        feel_legs=feel_legs,
+        timezone_name=timezone_name,
+        # Let the summary flag an unconfirmed auto-classification instead of
+        # inventing a workout type from average power.
+        latest_ride_purpose=(
+            latest_ride.ride_purpose if latest_ride is not None else None
+        ),
+        latest_ride_confidence=(
+            latest_ride.classification_confidence if latest_ride is not None else None
+        ),
+        latest_ride_reason=(
+            latest_ride.classification_reason if latest_ride is not None else None
+        ),
     )
     if login_summary:
         await crud.upsert_rider_assessment(
@@ -66,13 +90,16 @@ async def invalidate(db: AsyncSession, user: models.User) -> bool:
     return await crud.invalidate_login_summary(db, user.id)
 
 
-async def _on_plan_changed(*, db: AsyncSession, user: models.User, **_: object) -> None:
-    """Pipeline hook: the plan changed upstream, so the summary is now stale."""
+async def _on_upstream_changed(
+    *, db: AsyncSession, user: models.User, **_: object
+) -> None:
+    """Pipeline hook: an upstream input (plan or assessment) changed, so the
+    summary is now stale."""
     await invalidate(db, user)
 
 
 graph.register(
     PIPELINE_NAME,
-    depends_on=("plan",),
-    on_upstream_changed=_on_plan_changed,
+    depends_on=("plan", "assessment"),
+    on_upstream_changed=_on_upstream_changed,
 )

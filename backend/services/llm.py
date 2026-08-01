@@ -98,7 +98,7 @@ TASK_FEEDBACK = "feedback"
 
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 
 def _resolve_model(provider_name: str, task: str) -> str:
@@ -306,16 +306,31 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
 def resolve_user_provider(user: models.User) -> str:
     """Return the AI provider name to use for *user*.
 
-    Respects the user's stored preference when the matching API key is
-    configured; falls back to the best globally-available provider.
+    A provider is usable when the user supplied their own key for it (BYOK), or
+    when admin-key fallback is enabled and the backend owner configured a global
+    key. Respects the user's stored preference when its provider is usable;
+    otherwise falls back to whichever provider is usable. Previously this looked
+    only at the global keys, so in BYOK-only mode a user with their own key was
+    routed to the wrong provider and got an "unknown key" error (#448).
     """
+
+    def _usable(user_key: str | None, global_key: str) -> bool:
+        if user_key:
+            return True
+        return bool(settings.allow_admin_ai_key_fallback and global_key)
+
+    gemini_usable = _usable(user.user_gemini_api_key, settings.gemini_api_key)
+    openai_usable = _usable(user.user_openai_api_key, settings.openai_api_key)
+
     stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
+    if stored == "gemini" and gemini_usable:
         return "gemini"
-    if stored == "openai" and settings.openai_api_key:
+    if stored == "openai" and openai_usable:
         return "openai"
-    if settings.gemini_api_key:
+    if gemini_usable:
         return "gemini"
-    if settings.openai_api_key:
+    if openai_usable:
         return "openai"
-    return "gemini"
+    # Nothing usable: return the user's stated preference so get_provider raises
+    # the correct provider-specific "key not configured" error.
+    return stored if stored in ("openai", "gemini") else "gemini"

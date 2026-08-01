@@ -148,11 +148,41 @@ class User(Base):
     athlete_context: Mapped["AthleteContext | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    athlete_model: Mapped["AthleteModel | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    athlete_performance_model: Mapped["AthletePerformanceModel | None"] = (
+        relationship(
+            back_populates="user", uselist=False, cascade="all, delete-orphan"
+        )
+    )
+    athlete_performance_snapshots: Mapped[
+        list["AthletePerformanceSnapshot"]
+    ] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="AthletePerformanceSnapshot.recorded_at",
+    )
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    athlete_hypotheses: Mapped[list["AthleteHypothesis"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    open_questions: Mapped[list["AthleteOpenQuestion"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    validation_experiments: Mapped[list["AthleteExperiment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    predictions: Mapped[list["AthletePrediction"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
+    )
+    home_location: Mapped["AthleteHomeLocation | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     strava_token: Mapped["StravaToken | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -216,15 +246,59 @@ class PlanDayHistory(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Which session on ``date`` this row describes (#496). A day may hold more
+    # than one session (two-a-days), so ``(date, slot)`` — not date alone — is
+    # what a history row is keyed to. Rows written before two-a-days existed, and
+    # every single-session day, carry slot 0.
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # All per-day rows written by a single pipeline commit share one ``batch_id``
+    # so a coach run (a plan generation, a nightly tune-up, one chat edit) can be
+    # reconstituted from the log — for debugging and to collapse the run into a
+    # single Coach Timeline card instead of one card per changed day. Nullable so
+    # rows written before this column existed keep working. See #435.
+    batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     old_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     new_day: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # One-line coach rationale for *this* day's change, backfilled after the run
+    # by the narrator (services/coach_summary.py) for automated triggers. Null
+    # for un-narrated triggers and for pre-#439 rows. Lives next to the diff it
+    # explains so the per-day "why" has a single home — no separate store. The
+    # run-level narrative lives in ``PlanChangeSummary`` keyed by ``batch_id``.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
 
     __table_args__ = (Index("ix_plan_day_history_user_date", "user_id", "date"),)
+
+
+class PlanChangeSummary(Base):
+    """One athlete-facing narrative per automated coach run (#439).
+
+    Keyed by the ``batch_id`` shared by that run's ``PlanDayHistory`` rows, this
+    holds the single plain-language summary of what the coach changed and why the
+    new plan is better. It drives the one coach ``ChatMessage`` posted per run and
+    lets the frontend suppress the redundant Coach-Timeline card for narrated
+    runs. Only automated triggers (nightly maintenance, adapt, auto-adapt, ride
+    review) are narrated; see ``services/coach_summary.NARRATED_SOURCES``.
+    """
+
+    __tablename__ = "plan_change_summary"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    batch_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, unique=True, index=True
+    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class WorkoutLog(Base):
@@ -235,6 +309,10 @@ class WorkoutLog(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # Which session on ``date`` this log belongs to (#496), so the morning gym
+    # session and the evening ride each carry their own feedback instead of one
+    # overwriting the other. Pre-two-a-day rows and single-session days are slot 0.
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     actual_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     average_power: Mapped[int | None] = mapped_column(Integer)
@@ -285,6 +363,10 @@ class ChatMessage(Base):
         DateTime(timezone=True), default=_utcnow
     )
     plan_update_count: Mapped[int | None] = mapped_column(Integer)
+    # ISO dates of availability constraints this assistant reply reported as
+    # blocking a coach-requested change. Lets a follow-up "lift that constraint"
+    # resolve "that" to the constraint the last override note flagged (#437).
+    flagged_constraint_dates: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
 
@@ -334,7 +416,62 @@ class AthleteContext(Base):
     user: Mapped["User"] = relationship(back_populates="athlete_context")
 
 
+class AthleteModel(Base):
+    """The long-term, structured model of an athlete's durable capabilities (#384).
+
+    Distinct from :class:`AthleteContext` (behavioural/coaching tendencies) and
+    from per-session ride data: this captures the athlete's *physiological and
+    performance profile* — the qualities that change slowly over months, such as
+    threshold power, VO2 max, how well they hold threshold, how quickly they
+    recover, and how they tolerate heat. The coach derives and refreshes it from
+    accumulated training history (see ``services.insight_generation``) and the
+    athlete can review and correct it. It is injected into coaching prompts as
+    stable knowledge about who the athlete is, not what they did yesterday.
+    """
+
+    __tablename__ = "athlete_model"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    # Quantitative capacity anchors (nullable until known).
+    ftp_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vo2max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Qualitative capability assessments, short free-text descriptors
+    # (e.g. "strong", "fades after 20 min", "handles heat well").
+    pacing_quality: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    recovery_ability: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    threshold_durability: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    heat_tolerance: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    preferred_training_style: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    strengths: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    weaknesses: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    risk_factors: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    # Short narrative overview and the coach's confidence in the current model.
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_model")
+
+
 class AthleteMemoryFact(Base):
+    """A durable piece of athlete knowledge the coach relies on.
+
+    Carries a ``kind`` discriminator (#386) separating stable **facts** (values
+    stated or measured about the athlete) from **observations** (patterns of
+    repeated behaviour inferred from training history). Both share one lifecycle
+    — confidence accrual, decay, contradiction and athlete validation — which is
+    why they live in a single table rather than two. The third knowledge type,
+    hypotheses that still need validation, is :class:`AthleteHypothesis`.
+    """
+
     __tablename__ = "athlete_memory_facts"
     __table_args__ = (
         Index(
@@ -356,6 +493,14 @@ class AthleteMemoryFact(Base):
     category: Mapped[str] = mapped_column(
         String(50), default="general", nullable=False
     )
+    # Which knowledge type this row is (#386): a stable ``fact`` stated or
+    # measured about the athlete (FTP, max HR, weight) versus an ``observation``
+    # of repeated behaviour the coach inferred from training history (prefers
+    # MTB, fades late in intervals). Hypotheses — claims that still need
+    # validation — live in their own :class:`AthleteHypothesis` table.
+    kind: Mapped[str] = mapped_column(
+        String(20), default="observation", nullable=False
+    )
     source_snippet: Mapped[str] = mapped_column(Text, default="", nullable=False)
     source_exchange_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     first_observed_at: Mapped[datetime] = mapped_column(
@@ -366,12 +511,245 @@ class AthleteMemoryFact(Base):
     )
     confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    # Set when fresh training evidence contradicts this fact: a human-readable
+    # reason surfaced to the athlete so they can validate or correct the fact.
+    contradiction_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     observation_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_memory_facts")
+
+
+class AthleteHypothesis(Base):
+    """A speculative, testable claim the coach forms about an athlete.
+
+    Distinct from :class:`AthleteMemoryFact`: a memory fact is something observed
+    or stated and trusted enough to inform coaching, whereas a hypothesis is a
+    tentative causal/predictive idea — e.g. "upper-body strength training
+    suppresses heart-rate response the following day" — that still ``needs
+    validation``. It accumulates supporting evidence over time and, once the
+    athlete confirms it, is promoted into a memory fact so it can inform advice.
+    """
+
+    __tablename__ = "athlete_hypotheses"
+    __table_args__ = (
+        Index(
+            "ix_athlete_hypotheses_user_category_key",
+            "user_id",
+            "category",
+            "statement_key",
+            unique=True,
+        ),
+        Index("ix_athlete_hypotheses_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    statement_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # Human-readable summary of the evidence that motivates the hypothesis.
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Structured supporting evidence (list of concrete observations) and the
+    # competing explanations the coach must still rule out (#479). Deterministic
+    # performance-model hypotheses populate these; older LLM-formed hypotheses
+    # leave them empty, so both are nullable.
+    evidence: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    alternative_explanations: Mapped[list[Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    # How many supporting observations back the hypothesis (the "Evidence" count).
+    evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # proposed (needs validation) -> confirmed | refuted.
+    status: Mapped[str] = mapped_column(
+        String(20), default="proposed", nullable=False
+    )
+    first_proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_hypotheses")
+
+
+class AthleteOpenQuestion(Base):
+    """An unanswered question the coach explicitly tracks about an athlete (#385).
+
+    Where an :class:`AthleteHypothesis` is a tentative *answer* the coach proposes
+    ("strength training suppresses HR response"), an open question is the coach
+    admitting what it does **not** yet know — a first-class, athlete-visible list
+    of the uncertainties it is actively trying to resolve ("Is FTP
+    underestimated?"). Each question records the ``evidence`` currently pointing
+    at it and what it still ``needs`` to be answered (e.g. a 30-minute threshold
+    test). The coach derives questions from training history and accrues evidence
+    when the same question recurs; once enough evidence exists the question
+    auto-closes to ``answered`` with a short ``resolution``, so the list stays a
+    live picture of open uncertainty rather than a growing pile.
+    """
+
+    __tablename__ = "athlete_open_questions"
+    __table_args__ = (
+        Index(
+            "ix_athlete_open_questions_user_category_key",
+            "user_id",
+            "category",
+            "question_key",
+            unique=True,
+        ),
+        Index("ix_athlete_open_questions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    question_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # The evidence currently on file that bears on the question (the "Evidence"
+    # block in the athlete-facing list).
+    evidence: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # What is still needed to answer it — a test, a comparison, or more
+    # observations (the "Needs" block).
+    needs: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # How many independent observations back the question; drives auto-close.
+    evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # open (still unanswered) -> answered | dismissed.
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    # The short answer recorded when the question closes, if any.
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_asked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="open_questions")
+
+
+class AthleteExperiment(Base):
+    """A concrete validation experiment the coach proposes to resolve uncertainty.
+
+    When a question about an athlete stays unsettled — most often because an
+    :class:`AthleteHypothesis` still ``needs validation`` — the coach proposes a
+    small, repeatable experiment the athlete can actually run rather than guessing
+    (e.g. "compare both bikes using identical power pedals" or "repeat the VO2
+    session with shorter recoveries"). Each experiment records the open question,
+    the protocol to run, and what a result would tell the coach; completing or
+    dismissing it resolves the suggestion.
+    """
+
+    __tablename__ = "validation_experiments"
+    __table_args__ = (
+        Index(
+            "ix_validation_experiments_user_key",
+            "user_id",
+            "protocol_key",
+            unique=True,
+        ),
+        Index("ix_validation_experiments_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # Soft reference to the hypothesis this experiment aims to validate, if any.
+    # Kept as a plain column (not a hard FK) so resolving or deleting a hypothesis
+    # never orphans a still-useful experiment.
+    hypothesis_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The open question / uncertainty the experiment is designed to settle.
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # The concrete protocol the athlete should run.
+    protocol: Mapped[str] = mapped_column(Text, nullable=False)
+    protocol_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    # What a result would tell the coach (expected signal / decision rule).
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # suggested (awaiting the athlete) -> completed | dismissed.
+    status: Mapped[str] = mapped_column(
+        String(20), default="suggested", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="validation_experiments")
+
+
+class AthletePrediction(Base):
+    """A forward-looking, checkable claim the coach makes about an athlete.
+
+    #383: to measure coaching quality the coach records each prediction it makes
+    ("the athlete should be fully recovered tomorrow") alongside the concrete
+    ``expected_outcome`` that would confirm it. Once enough time passes the
+    prediction is evaluated against what actually happened (``actual_outcome``):
+    a correct call nudges its ``confidence`` up, a wrong one reduces it, and the
+    running hit-rate across all evaluated predictions is the coach's measured
+    accuracy — the closing of the loop that keeps the coach honest.
+    """
+
+    __tablename__ = "athlete_predictions"
+    __table_args__ = (
+        Index(
+            "ix_athlete_predictions_user_key",
+            "user_id",
+            "prediction_key",
+            unique=True,
+        ),
+        Index("ix_athlete_predictions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # The coach's claim, e.g. "the athlete should be fully recovered tomorrow".
+    prediction: Mapped[str] = mapped_column(Text, nullable=False)
+    prediction_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The observable result that would confirm the prediction (how to check it).
+    expected_outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    # What actually happened, filled in when the prediction is evaluated.
+    actual_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the prediction can be checked, e.g. "tomorrow" or "next week" — free
+    # text kept for the athlete and to help the evaluator judge if it is due yet.
+    horizon: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # The coach's confidence in the prediction; rises on a correct call and falls
+    # on a wrong one when the prediction is evaluated.
+    confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # pending (awaiting outcome) -> correct | incorrect.
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="predictions")
 
 
 class AthleteAvailabilityConstraint(Base):
@@ -414,6 +792,45 @@ class AthleteAvailabilityConstraint(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="availability_constraints")
+
+
+class AthleteHomeLocation(Base):
+    """Where the athlete usually trains — the anchor for every weather lookup (#495).
+
+    Previously the training location was re-derived on every request from the
+    single latest ride that happened to carry GPS, so one holiday ride moved the
+    whole forecast. This persists it as a first-class athlete attribute, seeded by
+    clustering typical ride start points (:mod:`services.home_location`) and
+    overridable by the athlete through the coach ("I mostly train near X now").
+
+    ``source`` is the authority marker that keeps the two writers apart:
+    ``user_set`` beats ``inferred``, and the inference pass must never overwrite a
+    ``user_set`` row — the stale-snapshot clobber class the plan pipeline already
+    guards against (#342/#345/#346). ``confidence`` and ``ride_count`` record how
+    much history backed an inferred cluster so the coach can be honest about it.
+    """
+
+    __tablename__ = "athlete_home_location"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    # Human-readable place name ("Freiburg"); empty for a purely inferred centroid.
+    label: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    # "inferred" (clustered ride starts) | "user_set" (athlete told the coach).
+    source: Mapped[str] = mapped_column(
+        String(20), default="inferred", nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # How many ride starts fell inside the cluster this location came from.
+    ride_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="home_location")
 
 
 class StravaToken(Base):
@@ -490,6 +907,13 @@ class RiderAssessment(Base):
     ride_insights: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_ride_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     login_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The dashboard's training-status chip, written by the coach rather than by
+    # the browser (#499), so the label and the coach's explanation of it can
+    # never disagree. Cleared by ``services.status_pipeline`` when the plan or
+    # the athlete's activity changes, then lazily regenerated on the next load.
+    training_status_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    training_status_tone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    training_status_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
@@ -523,6 +947,81 @@ class AthleteMetricSnapshot(Base):
     source: Mapped[str] = mapped_column(String(50), default="strava_analysis")
 
     user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")
+
+
+class AthletePerformanceModel(Base):
+    """Deterministic, per-attribute physiological model of the athlete (#475).
+
+    Distinct from :class:`AthleteModel` (#384), which is an LLM-derived, qualitative
+    free-text profile with a single overall confidence. This model is the data
+    layer for the Athlete Performance Model epic (#474): a rule-based, quantitative
+    picture inferred across many workouts, where **every** attribute carries its own
+    estimate/score, confidence, evidence and missing information.
+
+    Attributes are stored as structured JSON keyed by attribute name (``vo2max``,
+    ``ftp``, ``map``, ``fractional_utilization``, ``aerobic_endurance``,
+    ``fatigue_resistance``, ``anaerobic_capacity``, …) so the set can grow without
+    schema churn. Each value is an ``AthletePerformanceAttribute``-shaped dict::
+
+        {"estimate": 302, "score": null, "confidence": 0.74, "unit": "W",
+         "evidence": [...], "missing_information": [...]}
+
+    The inference engine (#476) writes ``attributes``; limiter detection (#477)
+    writes ``likely_limiter`` and the ranked ``limiters`` list.
+    """
+
+    __tablename__ = "athlete_performance_models"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    # Structured per-attribute inferences, keyed by attribute name.
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    # Most probable physiological limiter (set by #477; None when undetermined).
+    likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Confidence-ranked candidate limiters (#477), each a dict with
+    # ``limiter``/``confidence``/``evidence``/``counter_evidence``.
+    limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    # Provenance: rolling window (days) and ride count the inference derived from.
+    source_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    derived_from_rides: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="athlete_performance_model")
+
+
+class AthletePerformanceSnapshot(Base):
+    """Time-series snapshot of the Athlete Performance Model (#475).
+
+    A new row is written each time the inference engine recomputes the model so
+    trends over months (e.g. "development over the last months" for Level 2) stay
+    queryable. Mirrors :class:`AthleteMetricSnapshot`.
+    """
+
+    __tablename__ = "athlete_performance_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+
+    user: Mapped["User"] = relationship(
+        back_populates="athlete_performance_snapshots"
+    )
 
 
 class RideMetric(Base):
@@ -593,9 +1092,17 @@ class RideMetric(Base):
         String(10), nullable=True
     )
     classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Compact per-ride physiological signals (power-duration envelope, HR drift,
+    # first/second-half power & HR) derived from the stream at analysis time and
+    # persisted so the cross-workout inference engine (#476) can aggregate them
+    # without re-fetching streams. NULL when no usable stream was available.
+    perf_signals: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Quick subjective leg-freshness the athlete taps on the dashboard
+    # ("fresh"/"normal"/"heavy"); NULL means not set and is ignored everywhere.
+    feel_legs: Mapped[str | None] = mapped_column(String(10), nullable=True)
     label_override: Mapped[str | None] = mapped_column(String(50), nullable=True)
     coach_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -604,6 +1111,11 @@ class RideMetric(Base):
         String(20), default="unmatched", nullable=False
     )
     matched_plan_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Which session on ``matched_plan_date`` this ride was matched to (#496).
+    # A date can hold several planned sessions, so the morning gym activity and
+    # the evening ride each point at their own slot instead of competing for the
+    # one day. NULL for unmatched rides and for pre-two-a-day rows (slot 0).
+    matched_plan_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_plan_snapshot: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     matched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -1,7 +1,9 @@
 import type {
   AiProvider,
+  AthleteHomeLocation,
   AthleteMetricSnapshot,
   ChatMessage,
+  DailyForecast,
   RiderAssessment,
   RaceEvent,
   RideMetricPoint,
@@ -158,15 +160,73 @@ export async function saveTrainingPlan(token: string, plan: TrainingDay[]): Prom
   return response.plan
 }
 
+/**
+ * One athlete-visible plan-day change (issue #357). `source` is the raw backend
+ * trigger key (`coach_chat`, `ride_review`, …) — map it via utils/planHistory.
+ * `applied === false` marks an automated change a user pin / completed day blocked.
+ */
+export interface PlanDayHistoryEntry {
+  id: string
+  date: string
+  source: string
+  applied: boolean
+  recordedAt: string
+  // Shared by all rows from one coach run so the Coach Timeline can collapse a
+  // run into a single card; null for rows written before the batch_id column.
+  batchId: string | null
+  oldDay: Partial<TrainingDay> | null
+  newDay: Partial<TrainingDay> | null
+  // One-line coach rationale for this day's change; null when not narrated.
+  reason?: string | null
+  // True when this run was narrated as a coach chat message — the Coach Timeline
+  // suppresses the redundant plan-update card for narrated runs.
+  narrated?: boolean
+}
+
+export interface PlanDayHistoryStats {
+  bySource: Record<string, number>
+  appliedCount: number
+  blockedCount: number
+  mostChangedDates: Array<{ date: string; count: number }>
+  total: number
+}
+
+export async function fetchPlanHistory(
+  token: string,
+  date?: string,
+): Promise<PlanDayHistoryEntry[]> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  const response = await apiFetch<{ entries: PlanDayHistoryEntry[]; total: number }>(
+    `/users/me/plan-history${query}`,
+    { token },
+  )
+  return response.entries
+}
+
+export async function fetchPlanHistoryStats(token: string): Promise<PlanDayHistoryStats> {
+  return apiFetch<PlanDayHistoryStats>('/users/me/plan-history/stats', { token })
+}
+
 export async function fetchWorkoutLogs(token: string): Promise<Record<string, WorkoutFeedback>> {
   return apiFetch<Record<string, WorkoutFeedback>>('/users/me/workouts', { token })
 }
 
-export async function saveWorkoutLog(token: string, date: string, feedback: WorkoutFeedback): Promise<void> {
+/**
+ * Persist feedback for one planned session.
+ *
+ * `slot` names which session on `date` (#496); omitted or 0 is the day's first
+ * session, which is what every single-session day has.
+ */
+export async function saveWorkoutLog(
+  token: string,
+  date: string,
+  feedback: WorkoutFeedback,
+  slot?: number
+): Promise<void> {
   await apiFetch(`/users/me/workouts/${date}`, {
     token,
     method: 'POST',
-    body: { feedback },
+    body: slot ? { feedback, slot } : { feedback },
   })
 }
 
@@ -240,11 +300,21 @@ export async function saveCoachMemoryRemote(token: string, memory: string): Prom
   return response.memory
 }
 
-export type AthleteMemoryFactStatus = 'active' | 'stale' | 'rejected' | 'user_confirmed'
+export type AthleteMemoryFactStatus =
+  | 'active'
+  | 'stale'
+  | 'archived'
+  | 'rejected'
+  | 'user_confirmed'
+  | 'needs_validation'
+
+// A stable fact (FTP, max HR, weight) vs an observation of repeated behaviour (#386).
+export type AthleteMemoryFactKind = 'fact' | 'observation'
 
 export interface AthleteMemoryFact {
   id: string
   fact: string
+  kind: AthleteMemoryFactKind
   category: string
   sourceSnippet: string
   sourceExchangeId: string | null
@@ -252,6 +322,7 @@ export interface AthleteMemoryFact {
   lastConfirmedAt: string
   confidence: number
   status: AthleteMemoryFactStatus
+  contradictionNote: string | null
   observationCount: number
   updatedAt: string
 }
@@ -266,7 +337,13 @@ export async function fetchAthleteMemoryFacts(token: string): Promise<AthleteMem
 
 export async function observeAthleteMemoryFact(
   token: string,
-  fact: { fact: string; category?: string; sourceSnippet?: string; confidence?: number }
+  fact: {
+    fact: string
+    kind?: AthleteMemoryFactKind
+    category?: string
+    sourceSnippet?: string
+    confidence?: number
+  }
 ): Promise<AthleteMemoryFact> {
   return apiFetch<AthleteMemoryFact>('/users/me/athlete-memory-facts', {
     token,
@@ -278,7 +355,12 @@ export async function observeAthleteMemoryFact(
 export async function updateAthleteMemoryFact(
   token: string,
   factId: string,
-  changes: { fact?: string; category?: string; status?: AthleteMemoryFactStatus }
+  changes: {
+    fact?: string
+    kind?: AthleteMemoryFactKind
+    category?: string
+    status?: AthleteMemoryFactStatus
+  }
 ): Promise<AthleteMemoryFact> {
   return apiFetch<AthleteMemoryFact>(`/users/me/athlete-memory-facts/${factId}`, {
     token,
@@ -296,6 +378,370 @@ export async function confirmAthleteMemoryFact(
 
 export async function deleteAthleteMemoryFact(token: string, factId: string): Promise<void> {
   await apiFetch(`/users/me/athlete-memory-facts/${factId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
+// #384: long-term structured athlete model (durable physiology & performance).
+export interface AthleteModel {
+  ftpWatts: number | null
+  vo2max: number | null
+  pacingQuality: string
+  recoveryAbility: string
+  thresholdDurability: string
+  heatTolerance: string
+  preferredTrainingStyle: string
+  strengths: string[]
+  weaknesses: string[]
+  riskFactors: string[]
+  summary: string
+  confidence: number
+  updatedAt: string | null
+}
+
+// Athlete-editable subset (excludes coach/server-owned confidence & updatedAt).
+export type AthleteModelEdit = Omit<AthleteModel, 'confidence' | 'updatedAt'>
+
+export async function fetchAthleteModel(token: string): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/users/me/athlete-model', { token })
+}
+
+export async function saveAthleteModel(
+  token: string,
+  model: AthleteModelEdit
+): Promise<AthleteModel> {
+  return apiFetch<AthleteModel>('/users/me/athlete-model', {
+    token,
+    method: 'PUT',
+    body: model,
+  })
+}
+
+export type AthleteHypothesisStatus = 'proposed' | 'confirmed' | 'refuted'
+
+export interface AthleteHypothesis {
+  id: string
+  statement: string
+  category: string
+  rationale: string
+  confidence: number
+  // Structured supporting evidence and the competing explanations still to rule
+  // out (#479). Empty for older LLM-formed hypotheses.
+  evidence: string[]
+  alternativeExplanations: string[]
+  evidenceCount: number
+  status: AthleteHypothesisStatus
+  firstProposedAt: string
+  updatedAt: string
+}
+
+// #475/#477/#478: deterministic, evidence-backed Athlete Performance Model.
+export interface AthletePerformanceAttribute {
+  estimate: number | null
+  score: string | null
+  confidence: number
+  unit: string | null
+  evidence: string[]
+  missingInformation: string[]
+}
+
+export interface AthletePerformanceLimiter {
+  limiter: string
+  confidence: number
+  evidence: string[]
+  counterEvidence: string[]
+}
+
+export interface TrainingRoiSystemGain {
+  system: string
+  gain: string
+  rationale: string
+}
+
+export interface TrainingRoiEmphasis {
+  system: string
+  label: string
+  sessions: number
+}
+
+export interface TrainingRoiRecommendation {
+  sufficient: boolean
+  limiter: string | null
+  confidence: number
+  hypothesis: string
+  rationale: string
+  expectedGain: TrainingRoiSystemGain[]
+  weeklyEmphasis: TrainingRoiEmphasis[]
+}
+
+export interface AthletePerformanceModel {
+  attributes: Record<string, AthletePerformanceAttribute>
+  likelyLimiter: string | null
+  limiters: AthletePerformanceLimiter[]
+  recommendations: TrainingRoiRecommendation | null
+  sourceWindowDays: number | null
+  derivedFromRides: number
+  updatedAt: string | null
+}
+
+export async function fetchAthleteHypotheses(token: string): Promise<AthleteHypothesis[]> {
+  const response = await apiFetch<{ hypotheses: AthleteHypothesis[] }>(
+    '/users/me/athlete-hypotheses',
+    { token }
+  )
+  return response.hypotheses
+}
+
+export async function updateAthleteHypothesis(
+  token: string,
+  hypothesisId: string,
+  changes: {
+    statement?: string
+    category?: string
+    rationale?: string
+    status?: AthleteHypothesisStatus
+  }
+): Promise<AthleteHypothesis> {
+  return apiFetch<AthleteHypothesis>(`/users/me/athlete-hypotheses/${hypothesisId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function confirmAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<AthleteHypothesis> {
+  return updateAthleteHypothesis(token, hypothesisId, { status: 'confirmed' })
+}
+
+export async function refuteAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<AthleteHypothesis> {
+  return updateAthleteHypothesis(token, hypothesisId, { status: 'refuted' })
+}
+
+export async function deleteAthleteHypothesis(
+  token: string,
+  hypothesisId: string
+): Promise<void> {
+  await apiFetch(`/users/me/athlete-hypotheses/${hypothesisId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
+export type AthleteOpenQuestionStatus = 'open' | 'answered' | 'dismissed'
+
+export interface AthleteOpenQuestion {
+  id: string
+  question: string
+  category: string
+  evidence: string
+  needs: string
+  evidenceCount: number
+  status: AthleteOpenQuestionStatus
+  resolution: string | null
+  firstAskedAt: string
+  updatedAt: string
+}
+
+export async function fetchAthleteOpenQuestions(
+  token: string
+): Promise<AthleteOpenQuestion[]> {
+  const response = await apiFetch<{ openQuestions: AthleteOpenQuestion[] }>(
+    '/users/me/open-questions',
+    { token }
+  )
+  return response.openQuestions
+}
+
+export async function updateAthleteOpenQuestion(
+  token: string,
+  questionId: string,
+  changes: {
+    question?: string
+    category?: string
+    evidence?: string
+    needs?: string
+    resolution?: string
+    status?: AthleteOpenQuestionStatus
+  }
+): Promise<AthleteOpenQuestion> {
+  return apiFetch<AthleteOpenQuestion>(`/users/me/open-questions/${questionId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function answerAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<AthleteOpenQuestion> {
+  return updateAthleteOpenQuestion(token, questionId, { status: 'answered' })
+}
+
+export async function dismissAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<AthleteOpenQuestion> {
+  return updateAthleteOpenQuestion(token, questionId, { status: 'dismissed' })
+}
+
+export async function deleteAthleteOpenQuestion(
+  token: string,
+  questionId: string
+): Promise<void> {
+  await apiFetch(`/users/me/open-questions/${questionId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
+export type AthleteExperimentStatus = 'suggested' | 'completed' | 'dismissed'
+
+export interface AthleteExperiment {
+  id: string
+  hypothesisId: string | null
+  question: string
+  protocol: string
+  rationale: string
+  category: string
+  status: AthleteExperimentStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchValidationExperiments(
+  token: string
+): Promise<AthleteExperiment[]> {
+  const response = await apiFetch<{ experiments: AthleteExperiment[] }>(
+    '/users/me/validation-experiments',
+    { token }
+  )
+  return response.experiments
+}
+
+export async function updateValidationExperiment(
+  token: string,
+  experimentId: string,
+  changes: {
+    question?: string
+    protocol?: string
+    rationale?: string
+    category?: string
+    status?: AthleteExperimentStatus
+  }
+): Promise<AthleteExperiment> {
+  return apiFetch<AthleteExperiment>(
+    `/users/me/validation-experiments/${experimentId}`,
+    {
+      token,
+      method: 'PATCH',
+      body: changes,
+    }
+  )
+}
+
+export async function completeValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<AthleteExperiment> {
+  return updateValidationExperiment(token, experimentId, { status: 'completed' })
+}
+
+export async function dismissValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<AthleteExperiment> {
+  return updateValidationExperiment(token, experimentId, { status: 'dismissed' })
+}
+
+export async function deleteValidationExperiment(
+  token: string,
+  experimentId: string
+): Promise<void> {
+  await apiFetch(`/users/me/validation-experiments/${experimentId}`, {
+    token,
+    method: 'DELETE',
+  })
+}
+
+export type AthletePredictionStatus = 'pending' | 'correct' | 'incorrect'
+
+export interface AthletePrediction {
+  id: string
+  prediction: string
+  expectedOutcome: string
+  actualOutcome: string | null
+  horizon: string
+  category: string
+  confidence: number
+  status: AthletePredictionStatus
+  createdAt: string
+  evaluatedAt: string | null
+  updatedAt: string
+}
+
+export interface AthletePredictionAccuracy {
+  evaluated: number
+  correct: number
+  accuracy: number | null
+}
+
+export interface AthletePredictionsResult {
+  predictions: AthletePrediction[]
+  accuracy: AthletePredictionAccuracy
+}
+
+export async function fetchAthletePredictions(
+  token: string
+): Promise<AthletePredictionsResult> {
+  return apiFetch<AthletePredictionsResult>('/users/me/predictions', { token })
+}
+
+export async function updateAthletePrediction(
+  token: string,
+  predictionId: string,
+  changes: {
+    prediction?: string
+    expectedOutcome?: string
+    actualOutcome?: string
+    horizon?: string
+    category?: string
+    status?: AthletePredictionStatus
+  }
+): Promise<AthletePrediction> {
+  return apiFetch<AthletePrediction>(`/users/me/predictions/${predictionId}`, {
+    token,
+    method: 'PATCH',
+    body: changes,
+  })
+}
+
+export async function markPredictionCorrect(
+  token: string,
+  predictionId: string
+): Promise<AthletePrediction> {
+  return updateAthletePrediction(token, predictionId, { status: 'correct' })
+}
+
+export async function markPredictionIncorrect(
+  token: string,
+  predictionId: string
+): Promise<AthletePrediction> {
+  return updateAthletePrediction(token, predictionId, { status: 'incorrect' })
+}
+
+export async function deleteAthletePrediction(
+  token: string,
+  predictionId: string
+): Promise<void> {
+  await apiFetch(`/users/me/predictions/${predictionId}`, {
     token,
     method: 'DELETE',
   })
@@ -385,32 +831,82 @@ export async function fetchRideMetricsHistory(token: string): Promise<RideMetric
   return response.rides
 }
 
-export async function submitRideFeedback(
+export interface WeatherForecastResult {
+  location: AthleteHomeLocation | null
+  days: DailyForecast[]
+}
+
+/**
+ * Upcoming daily outlook near the athlete's training location (#495), used for
+ * the weather shown on planned days. Served from the backend's hourly per-location
+ * cache, so calling this on every dashboard load costs no upstream requests.
+ */
+export async function fetchWeatherForecast(
+  token: string,
+): Promise<WeatherForecastResult> {
+  const response = await apiFetch<{
+    location?: AthleteHomeLocation | null
+    days?: DailyForecast[]
+  }>('/users/me/weather-forecast', { token })
+  return { location: response.location ?? null, days: response.days ?? [] }
+}
+
+/** Read the persisted training location, if the athlete has one. */
+export async function fetchHomeLocation(
+  token: string,
+): Promise<AthleteHomeLocation | null> {
+  const response = await apiFetch<{ location?: AthleteHomeLocation | null }>(
+    '/users/me/home-location',
+    { token },
+  )
+  return response.location ?? null
+}
+
+/**
+ * Set the athlete's training location explicitly. Stored as `user_set`, which
+ * pins it against the backend's ride-start inference.
+ */
+export async function saveHomeLocation(
+  token: string,
+  location: { latitude: number; longitude: number; label?: string },
+): Promise<AthleteHomeLocation | null> {
+  const response = await apiFetch<{ location?: AthleteHomeLocation | null }>(
+    '/users/me/home-location',
+    {
+      token,
+      method: 'PUT',
+      body: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: location.label ?? '',
+      },
+    },
+  )
+  return response.location ?? null
+}
+
+/**
+ * Set (or clear, with `legs: null`) the athlete's quick "how the legs felt"
+ * rating for a ride. Everything richer is captured conversationally with the
+ * coach, so this is the only structured field set directly from the dashboard.
+ */
+export async function setRideLegs(
   token: string,
   stravaActivityId: number,
-  feedback: {
-    rpe: number
-    legs: 'fresh' | 'normal' | 'heavy'
-    intent: 'planned workout' | 'recovery' | 'commute' | 'free ride' | 'free activity' | 'aborted'
-    planMatchFeedback?: 'matched' | 'mostly_matched' | 'not_matched'
-    note?: string
-  },
-): Promise<{
-  stravaActivityId: number
-  userNote: string
-  coachNote?: string | null
-  planUpdates?: Partial<TrainingDay>[]
-  ride?: RideMetricPoint | null
-}> {
-  return apiFetch<{
-    stravaActivityId: number
-    userNote: string
-    coachNote?: string | null
-    planUpdates?: Partial<TrainingDay>[]
-    ride?: RideMetricPoint | null
-  }>(
+  legs: 'fresh' | 'normal' | 'heavy' | null,
+  externalActivityId?: string | null,
+): Promise<{ stravaActivityId: number; ride?: RideMetricPoint | null }> {
+  // Non-Strava rides (e.g. intervals.icu) carry a synthesized 63-bit
+  // stravaActivityId that loses precision as a JS float64, so the path param
+  // cannot locate the row. Send the precision-safe external id so the backend
+  // can key the lookup off it (#441).
+  return apiFetch<{ stravaActivityId: number; ride?: RideMetricPoint | null }>(
     `/users/me/ride-feedback/${stravaActivityId}`,
-    { token, method: 'PATCH', body: feedback },
+    {
+      token,
+      method: 'PATCH',
+      body: { legs, externalActivityId: externalActivityId ?? null },
+    },
   )
 }
 

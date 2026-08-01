@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from datetime import date as _date
 from datetime import datetime, timedelta, timezone
 
@@ -17,7 +19,11 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services import athlete_model_inference
+from services import coach_summary
 from services import plan_pipeline
+from services import roi_recommendation
+from services import status_pipeline
 from services import summary_pipeline
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
@@ -29,7 +35,10 @@ from services.ai_service import (
 from services.analysis import (
     compare_planned_vs_actual,
     compute_readiness_score,
-    compute_readiness_recommendations,
+    build_readiness_recommendations,
+    keyword_observation_assignments,
+    attach_observation_assignments,
+    finalize_recommendations,
     compute_training_load,
     _project_training_load,
     project_training_load_from_seed,
@@ -38,9 +47,15 @@ from services.analysis import (
 )
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
-from services.availability import extract_availability_constraints
-from services.plan_constraints import filter_plan_updates_for_constraints
-from services.intervals_service import apply_summary_fallback
+from services.availability import (
+    extract_availability_constraints,
+    extract_constraint_lift,
+)
+from services.plan_constraints import (
+    describe_constraint_overrides,
+    filter_plan_updates_for_constraints,
+)
+from services.intervals_service import apply_summary_fallback, intervals_activity_id
 from services.rag import retrieve_cycling_context
 from services.ride_matching import (
     apply_ride_plan_matches,
@@ -48,8 +63,11 @@ from services.ride_matching import (
     review_matched_ride_and_adapt,
 )
 from services.strava_service import ensure_fresh_strava_token, fetch_activity_streams
+from services import home_location, weather_preference
 from services.weather_service import (
+    clear_forecast_cache,
     enrich_activity_weather,
+    home_coordinates_for_user,
     training_weather_context_for_user,
 )
 from services import llm as llm_service
@@ -107,7 +125,7 @@ def _activity_date_for_analysis(activity: schemas.StravaActivitySchema) -> str:
 
 
 def _activity_duration_for_analysis(activity: schemas.StravaActivitySchema) -> int:
-    return int(activity.elapsed_time or activity.moving_time or 0)
+    return int(activity.moving_time or activity.elapsed_time or 0)
 
 
 def _dedupe_analysis_activities(
@@ -174,13 +192,86 @@ async def _capture_availability_constraints_from_message(
     user_id: str,
     message: str,
     timezone_name: str | None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
+    """Sync availability constraints with the athlete's message.
+
+    Lifts requested constraints first so a same-message re-proposed edit sees the
+    post-lift state, then captures any newly stated constraints. Returns the
+    active constraints for the prompt and the constraints that were lifted (#437).
+    """
     today = app_today(timezone_name=timezone_name)
+
+    # Lift before capture: honour "lift that constraint" so the coach's edit to a
+    # previously blocked day can finally land in the same turn (#437).
+    lift = extract_constraint_lift(message, today=today)
+    lifted_rows: list[models.AthleteAvailabilityConstraint] = []
+    if lift["lift"]:
+        dates = lift["dates"] or await crud.get_last_flagged_constraint_dates(
+            db, user_id
+        )
+        if dates:
+            lifted_rows = await crud.deactivate_availability_constraints_for_dates(
+                db, user_id, dates
+            )
+    lifted = [
+        schemas.AthleteAvailabilityConstraintSchema.model_validate(
+            row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for row in lifted_rows
+    ]
+
     extracted = extract_availability_constraints(message, today=today)
     for item in extracted:
         await crud.upsert_availability_constraint(db, user_id, **item)
-    return await _active_availability_constraints_for_prompt(
+    constraints = await _active_availability_constraints_for_prompt(
         db, user_id, timezone_name
+    )
+    return constraints, lifted
+
+
+async def _capture_weather_signals_from_message(
+    db: AsyncSession,
+    user_id: str,
+    message: str,
+) -> str | None:
+    """Sync the athlete's weather-related self-reports from their message (#495).
+
+    Two independent captures, both deterministic and both best-effort:
+
+    * a stated training location ("I mostly train near Freiburg now") becomes the
+      ``user_set`` home-location attribute, which then outranks every inference
+      pass and re-anchors all weather lookups;
+    * a stated weather preference ("I actually love the rain") becomes evidence on
+      the corresponding weather-preference belief, reinforcing the same row the
+      ride data writes.
+
+    Returns a deterministic confirmation note when the location moved — the honest
+    record of what the backend actually did, independent of the model's prose (the
+    same contract as the availability-constraint lift note, #437).
+    """
+    try:
+        await weather_preference.capture_weather_preferences_from_message(
+            db, user_id, message
+        )
+    except Exception:
+        logger.warning("Weather-preference capture failed", exc_info=True)
+
+    try:
+        row = await home_location.capture_home_location_from_message(
+            db, user_id, message
+        )
+    except Exception:
+        logger.warning("Home-location capture failed", exc_info=True)
+        return None
+    if row is None:
+        return None
+
+    # A new base invalidates the cached forecast for the old one.
+    clear_forecast_cache()
+    where = row.label or f"{row.latitude:.2f}, {row.longitude:.2f}"
+    return (
+        f"(Note: I've set your usual training location to {where}, so your weather "
+        f"outlook and any weather-driven plan changes now use that.)"
     )
 
 
@@ -196,6 +287,55 @@ def _filter_plan_updates_for_availability_constraints(
     updates: list[dict], constraints: list[dict]
 ) -> list[dict]:
     return filter_plan_updates_for_constraints(updates, constraints)
+
+
+def _day_label(override: dict) -> str:
+    """Human-friendly day label for a constraint override note."""
+    weekday = override.get("weekday")
+    if weekday:
+        return str(weekday).capitalize()
+    return str(override.get("date") or "that day")
+
+
+def _format_constraint_override_note(overrides: list[dict]) -> str:
+    """Compose an honest note about coach-requested changes a constraint blocked.
+
+    The plan pipeline enforces hard availability constraints deterministically,
+    so these requests never land as asked. Without this, the coach would falsely
+    confirm the change (#414).
+    """
+    required = [o for o in overrides if o.get("constraintType") == "required_workout"]
+    unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
+    sentences: list[str] = []
+    if required:
+        days = ", ".join(_day_label(o) for o in required)
+        sentences.append(
+            f"I couldn't change {days}: it's pinned as a required session by one of "
+            f"your availability constraints, so the plan keeps it as-is. Let me know "
+            f"if you'd like to lift that constraint."
+        )
+    if unavailable:
+        days = ", ".join(_day_label(o) for o in unavailable)
+        sentences.append(
+            f"I couldn't schedule training on {days}: it's marked unavailable by one "
+            f"of your availability constraints."
+        )
+    return "(Note: " + " ".join(sentences) + ")"
+
+
+def _format_constraint_lift_note(lifted: list[dict]) -> str:
+    """Confirm, deterministically, which availability constraints were lifted.
+
+    The lift is applied by the router before the plan pipeline runs, so this is
+    the honest record of what happened — independent of whatever the model says
+    in its prose (#437).
+    """
+    days = ", ".join(_day_label(c) for c in lifted)
+    plural = "constraints" if len(lifted) > 1 else "constraint"
+    return (
+        f"(Note: I lifted the availability {plural} on {days}, so the plan can now "
+        f"be changed there.)"
+    )
 
 
 def _next_race_date_from_events(
@@ -226,6 +366,24 @@ def _request_timezone(request: Request) -> str | None:
     return request_timezone(request)
 
 
+def _training_status_badge(
+    user: models.User,
+) -> tuple[str | None, str | None, str | None] | None:
+    """The dashboard status badge the athlete is currently looking at (#499).
+
+    Handed to the coach so a question about the badge is answered from the badge
+    the coach itself wrote, rather than from a guess about what it might mean.
+    """
+    assessment = user.rider_assessment
+    if assessment is None or not assessment.training_status_label:
+        return None
+    return (
+        assessment.training_status_label,
+        assessment.training_status_tone,
+        assessment.training_status_rationale,
+    )
+
+
 
 async def _persist_collected_token_usage(
     db: AsyncSession,
@@ -235,6 +393,30 @@ async def _persist_collected_token_usage(
     consumed = finish_token_usage_collection(token)
     if consumed:
         await crud.increment_user_consumed_tokens(db, user, consumed)
+
+
+@asynccontextmanager
+async def _token_usage_scope(
+    db: AsyncSession, user: models.User
+) -> AsyncIterator[None]:
+    """Collect provider token usage for the enclosed block and always persist it.
+
+    Persisting/finishing in a ``finally`` guarantees the collection ContextVar is
+    reset exactly once on every exit path, so a raising block (e.g. an AI
+    rate-limit that becomes an ``HTTPException``) can't leak it. Previously each
+    call site had to remember to call ``finish_token_usage_collection`` in every
+    ``except`` branch, and un-handled exception types (classification errors, RAG
+    retrieval) leaked the collection entirely (#449). The persist itself is
+    best-effort: it must never mask the real error from the enclosed block.
+    """
+    token = begin_token_usage_collection()
+    try:
+        yield
+    finally:
+        try:
+            await _persist_collected_token_usage(db, user, token)
+        except Exception:  # noqa: BLE001 — never mask the enclosed block's error
+            logger.warning("Failed to persist collected token usage", exc_info=True)
 
 
 async def _auto_rate_ride(
@@ -343,9 +525,14 @@ async def _auto_adapt_plan(
             weather_context_section=weather_section,
             timezone_name=timezone_name,
         )
-        await plan_pipeline.commit_plan(
+        commit = await plan_pipeline.commit_plan(
             db, user, updated_plan, base_plan=plan, source="auto_adapt",
             timezone_name=timezone_name,
+        )
+        await coach_summary.narrate_plan_changes(
+            db, user, batch_id=commit.batch_id, source="auto_adapt",
+            applied_changes=commit.applied_changes, profile=profile,
+            rider_assessment=rider_assessment,
         )
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
@@ -353,6 +540,7 @@ async def _auto_adapt_plan(
 
 @router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
 async def analyse_activities(
+    request: Request,
     body: schemas.AnalyseActivitiesRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -403,11 +591,14 @@ async def analyse_activities(
 
     activity_payloads: list[dict] = []
     weather_by_id: dict[int, dict] = {}
+    # Resolved once for the batch so indoor rides still record conditions (#495).
+    home_coordinates = await home_coordinates_for_user(db, current_user.id)
     for activity in analysis_activities:
         activity_dict = activity.model_dump()
         weather_fields = await enrich_activity_weather(
             activity_dict,
             streams=streams_by_id.get(str(activity.id)),
+            fallback_coordinates=home_coordinates,
         )
         weather_by_id[activity.id] = weather_fields
         activity_payloads.append({**activity_dict, **weather_fields})
@@ -415,23 +606,22 @@ async def analyse_activities(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.analyse_strava_activities(
-            activity_payloads,
-            provider=resolve_user_provider(current_user),
-            streams_by_id=streams_by_id,
-            max_heart_rate=body.max_heart_rate,
-            training_plan=training_plan or None,
-            user_ftp=body.current_ftp
-            or (int(current_user.current_ftp) if current_user.current_ftp else None),
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.analyse_strava_activities(
+                activity_payloads,
+                provider=resolve_user_provider(current_user),
+                streams_by_id=streams_by_id,
+                max_heart_rate=body.max_heart_rate,
+                training_plan=training_plan or None,
+                user_ftp=body.current_ftp
+                or (int(current_user.current_ftp) if current_user.current_ftp else None),
+                timezone_name=_request_timezone(request),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # Normalise text fields: the LLM may return dicts or lists instead of strings.
     # The DB columns and Pydantic schema both expect plain strings.
@@ -513,15 +703,25 @@ async def analyse_activities(
                 or "cycling"
             )
             duration_seconds = int(
-                a_dict.get("elapsedTime")
-                or a_dict.get("elapsed_time")
-                or a_dict.get("movingTime")
+                a_dict.get("movingTime")
                 or a_dict.get("moving_time")
+                or a_dict.get("elapsedTime")
+                or a_dict.get("elapsed_time")
                 or 0
+            )
+            # Prefer the raw string external id (intervals ``i166933341``) so the
+            # persisted identity survives the float64 round-trip the numeric
+            # ``id`` suffers on the JS side, and matches what the sync path stores
+            # (#429 Bug B). Strava activities have no external_id and keep the id.
+            external_key = activity.external_id or str(activity.id)
+            legacy_activity_id = (
+                intervals_activity_id(activity.external_id)
+                if activity.external_id is not None
+                else activity.id
             )
             imported_activity = ImportedActivity(
                 source=body.source,
-                external_activity_id=str(activity.id),
+                external_activity_id=external_key,
                 name=a_dict.get("name"),
                 start_datetime=start_date_local or start_date or None,
                 activity_date=activity_date,
@@ -531,8 +731,8 @@ async def analyse_activities(
                 weather=weather_by_id.get(activity.id, {}),
                 summary_avg_power_w=a_dict.get("average_watts"),
                 summary_normalized_power_w=a_dict.get("weighted_average_watts"),
-                metadata={f"{body.source}_activity_id": str(activity.id)},
-                legacy_activity_id=activity.id,
+                metadata={f"{body.source}_activity_id": external_key},
+                legacy_activity_id=legacy_activity_id,
             )
             rides_input.append(imported_activity.to_ride_input())
         if rides_input:
@@ -593,6 +793,29 @@ async def analyse_activities(
         if raw_updates
         else None
     )
+    # Persist the plan adaptations here, through the shared constraint- and
+    # pin-respecting pipeline (source="ride_review", respect_pins=True, completed
+    # days skipped). Previously these were returned unpersisted and the client
+    # PUT its whole in-memory plan back via /users/me/plan (source="user_edit"),
+    # which reverted concurrent edits and bypassed pin/completed-day protection —
+    # a stale-snapshot clobber that rewrote pinned/completed days (#399).
+    if raw_updates:
+        plan_row = await crud.get_training_plan(db, current_user.id)
+        base_plan = plan_row.plan if plan_row is not None else []
+        commit = await plan_pipeline.commit_plan_updates(
+            db,
+            current_user,
+            raw_updates,
+            base_plan=base_plan,
+            source="ride_review",
+        )
+        await coach_summary.narrate_plan_changes(
+            db,
+            current_user,
+            batch_id=commit.batch_id,
+            source="ride_review",
+            applied_changes=commit.applied_changes,
+        )
     return schemas.AnalyseActivitiesResponse(
         assessment=assessment_schema, plan_updates=plan_updates
     )
@@ -626,30 +849,33 @@ async def generate_plan(
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
-    usage_token = begin_token_usage_collection()
-    try:
-        plan = await ai_service.generate_training_plan(
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            metrics_history_section=metrics_section,
-            weather_context_section=weather_section,
-            race_events=race_events,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            plan = await ai_service.generate_training_plan(
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                metrics_history_section=metrics_section,
+                weather_context_section=weather_section,
+                race_events=race_events,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        except AIResponseFormatError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=_AI_RESPONSE_FORMAT_DETAIL,
+            )
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
-    plan = await plan_pipeline.commit_plan(
+    commit = await plan_pipeline.commit_plan(
         db, current_user, plan, base_plan=base_plan, source="generate",
         timezone_name=timezone_name,
     )
-    return plan
+    return commit.plan
 
 
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)
@@ -667,8 +893,16 @@ async def ask_trainer(
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
-    availability_constraints = await _capture_availability_constraints_from_message(
+    (
+        availability_constraints,
+        lifted_constraints,
+    ) = await _capture_availability_constraints_from_message(
         db, current_user.id, body.question, timezone_name
+    )
+    # Capture weather self-reports before the forecast is read, so a location the
+    # athlete states in this very message anchors this turn's outlook (#495).
+    home_location_note = await _capture_weather_signals_from_message(
+        db, current_user.id, body.question
     )
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
@@ -689,6 +923,14 @@ async def ask_trainer(
         if (athlete_context_row is not None and memory_enabled)
         else None
     )
+    athlete_model_row = await crud.get_athlete_model(db, current_user.id)
+    athlete_model = (
+        schemas.AthleteModelSchema.model_validate(
+            athlete_model_row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        if (athlete_model_row is not None and memory_enabled)
+        else None
+    )
     athlete_memory_fact_rows = (
         await crud.get_prompt_athlete_memory_facts(db, current_user.id)
         if memory_enabled
@@ -700,6 +942,41 @@ async def ask_trainer(
         ).model_dump(by_alias=True, mode="json")
         for fact in athlete_memory_fact_rows
     ]
+    open_question_rows = (
+        await crud.list_athlete_open_questions(db, current_user.id)
+        if memory_enabled
+        else []
+    )
+    open_questions = [
+        schemas.AthleteOpenQuestionSchema.model_validate(
+            question, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for question in open_question_rows
+    ]
+
+    # Deterministic Athlete Performance Model (#476/#477), its ROI recommendation
+    # (#478) and the active testable hypotheses (#479) — the structured substrate
+    # the coach drills into to explain WHY on demand and to surface a higher-return
+    # emphasis proactively (#480).
+    performance_model: dict | None = None
+    performance_recommendation: dict | None = None
+    hypotheses: list[dict] = []
+    if memory_enabled:
+        perf_model_row = await crud.get_athlete_performance_model(db, current_user.id)
+        if perf_model_row is not None:
+            performance_model = schemas.AthletePerformanceModelSchema.model_validate(
+                perf_model_row, from_attributes=True
+            ).model_dump(by_alias=False, mode="json")
+            performance_recommendation = roi_recommendation.recommend_training_roi(
+                perf_model_row.attributes, perf_model_row.limiters
+            )
+        hypothesis_rows = await crud.list_athlete_hypotheses(db, current_user.id)
+        hypotheses = [
+            schemas.AthleteHypothesisSchema.model_validate(
+                hypothesis, from_attributes=True
+            ).model_dump(by_alias=False, mode="json")
+            for hypothesis in hypothesis_rows
+        ]
     chat_messages = await crud.get_chat_messages(db, current_user.id)
     conversation_history = [
         {"role": msg.role, "content": msg.content}
@@ -708,67 +985,136 @@ async def ask_trainer(
 
     # --- Fetch ride metrics history for structured LLM context ---
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
-    usage_token = begin_token_usage_collection()
-    classify_task = asyncio.ensure_future(
-        ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
-    )
-    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(
-        recent_metrics, timezone_name=timezone_name
-    )
-    race_events = await _race_events_for_prompt(db, current_user.id)
+    async with _token_usage_scope(db, current_user):
+        # Start question classification in parallel with the DB fetch (it's a pure LLM call).
+        classify_task = asyncio.ensure_future(
+            ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
+        )
+        try:
+            recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+            metrics_section = ride_metrics_context_section(
+                recent_metrics, timezone_name=timezone_name
+            )
+            race_events = await _race_events_for_prompt(db, current_user.id)
+            # The upcoming outlook near the athlete's training location plus their
+            # learned tolerances — the coach chat is where "should I ride tomorrow?"
+            # actually gets asked (#495). Cached per location, so this is cheap.
+            weather_section = await training_weather_context_for_user(
+                db, current_user.id
+            )
 
-    # --- Task 5: Await classification (likely already done), then conditionally retrieve RAG context ---
-    try:
-        classification = await classify_task
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    science_context = ""
-    rag_sources: list = []
-    if classification.get("needs_science_rag", False):
-        science_context, rag_sources = await retrieve_cycling_context(db, body.question)
+            # Await classification (likely already done), then conditionally retrieve RAG context.
+            classification = await classify_task
+            science_context = ""
+            rag_sources: list = []
+            if classification.get("needs_science_rag", False):
+                science_context, rag_sources = await retrieve_cycling_context(db, body.question)
 
-    try:
-        result = await ai_service.ask_trainer(
-            body.question,
-            plan,
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            coach_memory=coach_memory,
-            conversation_history=conversation_history,
-            context_workout=body.context_workout,
-            science_context=science_context,
-            classification=classification,
-            metrics_history_section=metrics_section,
-            race_events=race_events,
-            athlete_context=athlete_context,
-            athlete_memory_facts=athlete_memory_facts,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    except AIResponseFormatError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_AI_RESPONSE_FORMAT_DETAIL,
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+            result = await ai_service.ask_trainer(
+                body.question,
+                plan,
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                coach_memory=coach_memory,
+                conversation_history=conversation_history,
+                context_workout=body.context_workout,
+                science_context=science_context,
+                classification=classification,
+                metrics_history_section=metrics_section,
+                race_events=race_events,
+                athlete_context=athlete_context,
+                athlete_memory_facts=athlete_memory_facts,
+                athlete_model=athlete_model,
+                open_questions=open_questions,
+                performance_model=performance_model,
+                performance_recommendation=performance_recommendation,
+                hypotheses=hypotheses,
+                weather_context_section=weather_section,
+                training_status_badge=_training_status_badge(current_user),
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        except AIResponseFormatError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=_AI_RESPONSE_FORMAT_DETAIL,
+            )
+        finally:
+            # Never leave the classification task pending/unawaited (#450): if we
+            # bailed out before awaiting it above, cancel and drain it here.
+            if not classify_task.done():
+                classify_task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await classify_task
 
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
+    requested_updates = result.get("plan_updates") or []
     plan_updates = _filter_plan_updates_for_availability_constraints(
-        result.get("plan_updates") or [],
+        requested_updates,
         availability_constraints,
     )
     persisted_updated_plan: list[dict] | None = None
+
+    # Coach honesty: ``commit_plan_updates`` only patches days already present in
+    # the plan, so an update for a date the plan no longer contains (e.g. a past
+    # day that rolled off the window) is a silent no-op. Don't let the model claim
+    # success for a change that was never saved — append a correction to the reply
+    # (also stored on the assistant message below) and drop the dead update. Only
+    # do this when a plan exists; with no plan at all there is no window to reason
+    # about. (#364)
+    if plan_updates and plan:
+        plan_dates = {d.get("date") for d in plan if isinstance(d, dict)}
+        unresolved_dates = sorted(
+            {u.get("date") for u in plan_updates if u.get("date")} - plan_dates
+        )
+        if unresolved_dates:
+            joined = ", ".join(unresolved_dates)
+            result["response"] = (
+                f"{result['response']}\n\n"
+                f"(Note: I could not update {joined} — that day is not part of your "
+                f"current training plan, so no change was saved.)"
+            )
+            plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
+
+    # Coach honesty: hard availability constraints are enforced deterministically
+    # by the plan pipeline, so a requested change to a constrained day never lands
+    # as asked (a rest day on a required-session day is coerced back; training on
+    # an unavailable day is dropped). Without a note the coach falsely confirms the
+    # change (#414). Scope to days in the current plan window so dead dates stay
+    # owned by the note above.
+    flagged_constraint_dates: list[str] = []
+    if plan and availability_constraints:
+        plan_dates = {d.get("date") for d in plan if isinstance(d, dict)}
+        overrides = describe_constraint_overrides(
+            [u for u in requested_updates if u.get("date") in plan_dates],
+            availability_constraints,
+        )
+        if overrides:
+            result["response"] = (
+                f"{result['response']}\n\n{_format_constraint_override_note(overrides)}"
+            )
+            # Remember which constraints blocked this turn so a follow-up "lift
+            # that constraint" can resolve "that" to them (#437).
+            flagged_constraint_dates = [
+                o["date"] for o in overrides if o.get("date")
+            ]
+
+    # Coach honesty: confirm a lift deterministically, independent of the model's
+    # prose, so "pls lift that constraint" is not silently ignored (#437).
+    if lifted_constraints:
+        result["response"] = (
+            f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints)}"
+        )
+
+    # Coach honesty: the training location was moved by the router, before the model
+    # replied, so confirm it deterministically rather than hoping the prose does (#495).
+    if home_location_note:
+        result["response"] = f"{result['response']}\n\n{home_location_note}"
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
@@ -827,6 +1173,7 @@ async def ask_trainer(
         content=result["response"],
         timestamp=assistant_message_time.isoformat(),
         plan_update_count=len(plan_updates) if plan_updates else None,
+        flagged_constraint_dates=flagged_constraint_dates or None,
     )
 
     # Update coach memory in the background only when user has not disabled it
@@ -841,14 +1188,16 @@ async def ask_trainer(
 
     # Apply plan updates if any — through the shared constraint-respecting pipeline.
     if plan_updates:
-        persisted_updated_plan = await plan_pipeline.commit_plan_updates(
-            db,
-            current_user,
-            plan_updates,
-            base_plan=plan,
-            source="coach_chat",
-            timezone_name=timezone_name,
-        )
+        persisted_updated_plan = (
+            await plan_pipeline.commit_plan_updates(
+                db,
+                current_user,
+                plan_updates,
+                base_plan=plan,
+                source="coach_chat",
+                timezone_name=timezone_name,
+            )
+        ).plan
 
     # Merge RAG retrieval sources into the result.
     # rag_sources contains the full metadata for all retrieved chunks;
@@ -894,25 +1243,23 @@ async def race_event_feedback(
         recent_metrics, timezone_name=timezone_name
     )
     race_events = await _race_events_for_prompt(db, current_user.id)
-    usage_token = begin_token_usage_collection()
-    try:
-        feedback = await ai_service.race_event_feedback(
-            body.event.model_dump(by_alias=True),
-            plan,
-            profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            race_events=race_events,
-            metrics_history_section=metrics_section,
-            action=body.action,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            feedback = await ai_service.race_event_feedback(
+                body.event.model_dump(by_alias=True),
+                plan,
+                profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                race_events=race_events,
+                metrics_history_section=metrics_section,
+                action=body.action,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
     return schemas.RaceEventFeedbackResponse(feedback=feedback)
 
 
@@ -971,42 +1318,40 @@ async def rate_workout(
                 exc_info=True,
             )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.rate_completed_workout(
-            body.day.model_dump(by_alias=True),
-            profile,
-            provider=resolve_user_provider(current_user),
-            stream_delta=stream_delta,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.rate_completed_workout(
+                body.day.model_dump(by_alias=True),
+                profile,
+                provider=resolve_user_provider(current_user),
+                stream_delta=stream_delta,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
-    if result.get("flag_for_adaptation"):
-        # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        plan = existing_plan.plan if existing_plan is not None else []
-        day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
-        auto_feedback = {
-            "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
-            "perceivedEffort": day_feedback.get("perceivedEffort"),
-            "notes": day_feedback.get(
-                "notes", "Auto-triggered due to workout feedback"
-            ),
-            "completedAt": day_feedback.get("completedAt"),
-        }
-        await _auto_adapt_plan(
-            db,
-            current_user,
-            plan,
-            auto_feedback,
-            resolve_user_provider(current_user),
-            timezone_name=timezone_name,
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+        if result.get("flag_for_adaptation"):
+            # Auto-adapt the plan when the workout signals accumulated fatigue/illness/pain
+            existing_plan = await crud.get_training_plan(db, current_user.id)
+            plan = existing_plan.plan if existing_plan is not None else []
+            day_feedback = body.day.model_dump(by_alias=True).get("feedback", {}) or {}
+            auto_feedback = {
+                "actualDurationMinutes": day_feedback.get("actualDurationMinutes"),
+                "perceivedEffort": day_feedback.get("perceivedEffort"),
+                "notes": day_feedback.get(
+                    "notes", "Auto-triggered due to workout feedback"
+                ),
+                "completedAt": day_feedback.get("completedAt"),
+            }
+            await _auto_adapt_plan(
+                db,
+                current_user,
+                plan,
+                auto_feedback,
+                resolve_user_provider(current_user),
+                timezone_name=timezone_name,
+            )
 
     return schemas.RateWorkoutResponse(
         feedback=result.get("feedback", ""),
@@ -1042,21 +1387,19 @@ async def review_new_rides(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
-    usage_token = begin_token_usage_collection()
-    try:
-        review_text = await ai_service.batch_review_rides(
-            unreviewed,
-            profile=profile,
-            provider=resolve_user_provider(current_user),
-            training_plan=training_plan,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            review_text = await ai_service.batch_review_rides(
+                unreviewed,
+                profile=profile,
+                provider=resolve_user_provider(current_user),
+                training_plan=training_plan,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # Mark rides as reviewed so they are not presented again
     ride_ids = [m.strava_activity_id for m in unreviewed]
@@ -1080,24 +1423,119 @@ async def extract_athlete_facts(
     Candidates are returned for review only — nothing is persisted here. The
     client accepts chosen candidates via ``POST /users/me/athlete-memory-facts``.
     """
-    usage_token = begin_token_usage_collection()
-    try:
-        candidates = await ai_service.extract_athlete_facts(
-            body.transcript,
-            provider=resolve_user_provider(current_user),
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            candidates = await ai_service.extract_athlete_facts(
+                body.transcript,
+                provider=resolve_user_provider(current_user),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     return schemas.ExtractAthleteFactsResponse(
         candidates=[
             schemas.AthleteFactCandidateSchema.model_validate(candidate)
             for candidate in candidates
         ]
+    )
+
+
+@router.post("/refresh-athlete-model", response_model=schemas.AthleteModelSchema)
+async def refresh_athlete_model(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteModelSchema:
+    """Re-derive the long-term athlete model from training history on demand (#384).
+
+    Mirrors the weekly background derivation but is triggered by the athlete from
+    the settings UI. When the history yields nothing the current model (or an
+    empty one) is returned unchanged.
+    """
+    timezone_name = _request_timezone(request)
+    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=60)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
+
+    existing_row = await crud.get_athlete_model(db, current_user.id)
+    current_model = (
+        schemas.AthleteModelSchema.model_validate(
+            existing_row, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        if existing_row is not None
+        else None
+    )
+
+    async with _token_usage_scope(db, current_user):
+        try:
+            derived = await ai_service.derive_athlete_model(
+                metrics_section,
+                current_model=current_model,
+                provider=resolve_user_provider(current_user),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+
+    if derived is not None:
+        model = await crud.upsert_athlete_model(db, current_user.id, **derived)
+        return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
+
+    if existing_row is not None:
+        return schemas.AthleteModelSchema.model_validate(
+            existing_row, from_attributes=True
+        )
+    return schemas.AthleteModelSchema()
+
+
+@router.get(
+    "/athlete-performance-model",
+    response_model=schemas.AthletePerformanceModelSchema,
+)
+async def get_athlete_performance_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePerformanceModelSchema:
+    """Return the athlete's deterministic, evidence-backed performance model (#475).
+
+    An athlete with no derived model yet gets an empty model (no attributes) rather
+    than a 404, so the frontend can render a clean "not enough data" state.
+    """
+    row = await crud.get_athlete_performance_model(db, current_user.id)
+    if row is None:
+        return schemas.AthletePerformanceModelSchema()
+    return schemas.AthletePerformanceModelSchema.model_validate(
+        row, from_attributes=True
+    )
+
+
+@router.post(
+    "/refresh-athlete-performance-model",
+    response_model=schemas.AthletePerformanceModelSchema,
+)
+async def refresh_athlete_performance_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthletePerformanceModelSchema:
+    """Re-run the deterministic inference engine on demand (#476).
+
+    Mirrors the post-import/weekly refresh but athlete-triggered. Returns the
+    (possibly empty) current model when the history yields no usable signals.
+    """
+    row = await athlete_model_inference.refresh_performance_model(db, current_user)
+    if row is None:
+        existing = await crud.get_athlete_performance_model(db, current_user.id)
+        if existing is None:
+            return schemas.AthletePerformanceModelSchema()
+        return schemas.AthletePerformanceModelSchema.model_validate(
+            existing, from_attributes=True
+        )
+    return schemas.AthletePerformanceModelSchema.model_validate(
+        row, from_attributes=True
     )
 
 
@@ -1138,16 +1576,15 @@ async def resolve_ride_match(
                 exc_info=True,
             )
 
-    usage_token = begin_token_usage_collection()
-    coach_note, plan_updates = await review_matched_ride_and_adapt(
-        db,
-        current_user,
-        ride,
-        plan,
-        provider=resolve_user_provider(current_user),
-        streams=streams,
-    )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        coach_note, plan_updates = await review_matched_ride_and_adapt(
+            db,
+            current_user,
+            ride,
+            plan,
+            provider=resolve_user_provider(current_user),
+            streams=streams,
+        )
 
     validated_updates = (
         [schemas.PlanDayUpdateSchema.model_validate(u) for u in plan_updates]
@@ -1177,6 +1614,15 @@ async def readiness_score(
     # --- Load training plan ---
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
+
+    # --- Load the coach's personal observations of the athlete ---
+    # Only prompt-safe facts, and only when the athlete has memory enabled.
+    observation_facts = (
+        await crud.get_prompt_athlete_memory_facts(db, current_user.id)
+        if current_user.memory_updates_enabled
+        else []
+    )
+    observations = [fact.fact for fact in observation_facts]
 
     # --- Resolve FTP (rider assessment takes precedence over profile) ---
     ftp = 0.0
@@ -1257,6 +1703,33 @@ async def readiness_score(
         projected_atl = projected_load["atl"]
         projected_tsb = projected_load["tsb"]
 
+    # --- Build recommendations, then weave in the coach's observations ---
+    recommendations = build_readiness_recommendations(
+        ctl=current_result["ctl"],
+        atl=current_result["atl"],
+        tsb=current_result["tsb"],
+        score=current_result["score"],
+        days_until_race=days_until_race,
+    )
+    if observations:
+        assignments: dict[int, list[str]] | None = None
+        if settings.readiness_observation_matching == "llm":
+            try:
+                assignments = await ai_service.match_observations_to_recommendations(
+                    recommendations,
+                    observations,
+                    provider=resolve_user_provider(current_user),
+                )
+            except Exception:
+                logger.exception(
+                    "LLM observation matching failed; falling back to keyword matching"
+                )
+                assignments = None
+        if assignments is None:
+            assignments = keyword_observation_assignments(recommendations, observations)
+        attach_observation_assignments(recommendations, assignments)
+    finalize_recommendations(recommendations)
+
     return schemas.ReadinessScoreResponse(
         score=current_result["score"],
         form_score=current_result["form_score"],
@@ -1270,13 +1743,7 @@ async def readiness_score(
         projected_ctl=projected_ctl,
         projected_atl=projected_atl,
         projected_tsb=projected_tsb,
-        recommendations=compute_readiness_recommendations(
-            ctl=current_result["ctl"],
-            atl=current_result["atl"],
-            tsb=current_result["tsb"],
-            score=current_result["score"],
-            days_until_race=days_until_race,
-        ),
+        recommendations=recommendations,
     )
 
 
@@ -1320,6 +1787,7 @@ async def refresh_knowledge(
     "/refresh-login-summary", response_model=schemas.RefreshLoginSummaryResponse
 )
 async def refresh_login_summary(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RefreshLoginSummaryResponse:
@@ -1335,19 +1803,57 @@ async def refresh_login_summary(
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        login_summary = await summary_pipeline.regenerate(
-            db, current_user, provider=resolve_user_provider(current_user)
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            login_summary = await summary_pipeline.regenerate(
+                db,
+                current_user,
+                provider=resolve_user_provider(current_user),
+                timezone_name=_request_timezone(request),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
+
+
+@router.post("/refresh-training-status", response_model=schemas.TrainingStatusResponse)
+async def refresh_training_status(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.TrainingStatusResponse:
+    """Regenerate the dashboard's coach-authored training-status badge (#499).
+
+    Called by the frontend when the stored badge is missing — either never
+    generated, or invalidated by the status pipeline after a plan or activity
+    change. Always returns a renderable badge: the pipeline falls back to a
+    deterministic label when the provider cannot produce a usable one.
+    """
+    if current_user.rider_assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No rider assessment found — please complete a Strava analysis first",
+        )
+
+    async with _token_usage_scope(db, current_user):
+        try:
+            label, tone, rationale = await status_pipeline.regenerate(
+                db,
+                current_user,
+                provider=resolve_user_provider(current_user),
+                timezone_name=_request_timezone(request),
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+
+    return schemas.TrainingStatusResponse(
+        label=label, tone=tone, rationale=rationale
+    )
 
 
 @router.post(
@@ -1413,6 +1919,14 @@ async def next_ride_recommendation(
         for fact in athlete_memory_fact_rows
     ]
 
+    # --- ROI recommendation from the deterministic performance model (#478) ---
+    performance_recommendation: dict | None = None
+    perf_model_row = await crud.get_athlete_performance_model(db, current_user.id)
+    if perf_model_row is not None:
+        performance_recommendation = roi_recommendation.recommend_training_roi(
+            perf_model_row.attributes, perf_model_row.limiters
+        )
+
     # --- Resolve the ride(s) to use for the recommendation ---
     if body.strava_activity_id is not None:
         target_ride = await crud.get_ride_metric_by_strava_id(
@@ -1453,28 +1967,27 @@ async def next_ride_recommendation(
                 else None
             )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        result = await ai_service.recommend_next_session(
-            rides=rides,
-            plan=plan,
-            profile=profile,
-            provider=resolve_user_provider(current_user),
-            rider_assessment=rider_assessment,
-            coach_memory=coach_memory,
-            athlete_context=athlete_context,
-            athlete_memory_facts=athlete_memory_facts,
-            ctl=ctl,
-            atl=atl,
-            tsb=tsb,
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            result = await ai_service.recommend_next_session(
+                rides=rides,
+                plan=plan,
+                profile=profile,
+                provider=resolve_user_provider(current_user),
+                rider_assessment=rider_assessment,
+                coach_memory=coach_memory,
+                athlete_context=athlete_context,
+                athlete_memory_facts=athlete_memory_facts,
+                performance_recommendation=performance_recommendation,
+                ctl=ctl,
+                atl=atl,
+                tsb=tsb,
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     # --- Apply plan updates using the same logic as ask-trainer ---
     plan_updates = _filter_plan_updates_for_availability_constraints(
@@ -1540,21 +2053,19 @@ async def process_pending_feedbacks(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
 
-    usage_token = begin_token_usage_collection()
-    try:
-        login_summary = await ai_service.generate_summary_from_ride_feedbacks(
-            rides=rides,
-            assessment=assessment_dict,
-            training_plan=training_plan or None,
-            provider=resolve_user_provider(current_user),
-            timezone_name=timezone_name,
-        )
-    except AIRateLimitError:
-        finish_token_usage_collection(usage_token)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-        )
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with _token_usage_scope(db, current_user):
+        try:
+            login_summary = await ai_service.generate_summary_from_ride_feedbacks(
+                rides=rides,
+                assessment=assessment_dict,
+                training_plan=training_plan or None,
+                provider=resolve_user_provider(current_user),
+                timezone_name=timezone_name,
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
 
     if login_summary and current_user.rider_assessment is not None:
         await crud.upsert_rider_assessment(

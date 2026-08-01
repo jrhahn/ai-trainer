@@ -1,15 +1,53 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { WheelEvent } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw, Scale } from 'lucide-react'
+import {
+  Send,
+  Bot,
+  User,
+  Brain,
+  Trash2,
+  CalendarCheck,
+  BookOpen,
+  RotateCcw,
+  Scale,
+  HelpCircle,
+  Lightbulb,
+  FlaskConical,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
-import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
+import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
+import {
+  clearChatHistoryRemote,
+  fetchCoachMemory,
+  fetchCurrentUser,
+  fetchPlanHistory,
+  fetchAthleteOpenQuestions,
+  fetchAthleteHypotheses,
+  fetchValidationExperiments,
+} from '../services/user'
+import type {
+  AthleteExperiment,
+  AthleteHypothesis,
+  AthleteOpenQuestion,
+  PlanDayHistoryEntry,
+} from '../services/user'
+import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
+import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
-const VISIBLE_EXCHANGE_LIMIT = 4
+const VISIBLE_ITEM_LIMIT = 4
+
+const EVENT_META: Record<TimelineEventKind, { icon: LucideIcon; iconClass: string }> = {
+  'plan-update': { icon: CalendarCheck, iconClass: 'text-green-600' },
+  'open-question': { icon: HelpCircle, iconClass: 'text-blue-500' },
+  hypothesis: { icon: Lightbulb, iconClass: 'text-amber-500' },
+  experiment: { icon: FlaskConical, iconClass: 'text-purple-500' },
+}
 
 // Render headings as plain paragraphs so the chat uses a uniform font size
 const MARKDOWN_COMPONENTS: Components = {
@@ -64,6 +102,33 @@ function groupMessagesIntoExchanges(messages: ChatMessage[]): ChatExchange[] {
   return exchanges.reverse()
 }
 
+// The unified Coach Timeline feed: conversation exchanges and system events share
+// one chronological (newest-first) stream so plan updates and recommendations read
+// in context rather than as separate cards (#418).
+type FeedItem =
+  | { type: 'exchange'; id: string; timestamp: string; exchange: ChatExchange }
+  | { type: 'event'; id: string; timestamp: string; event: TimelineEvent }
+
+function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem[] {
+  const exchangeItems: FeedItem[] = exchanges.map((exchange) => ({
+    type: 'exchange',
+    id: exchange.id,
+    // An exchange is placed by its most recent message; the empty welcome state
+    // sorts to the end (no timestamp) so real events surface above it.
+    timestamp: exchange.messages.at(-1)?.timestamp ?? '',
+    exchange,
+  }))
+  const eventItems: FeedItem[] = events.map((event) => ({
+    type: 'event',
+    id: event.id,
+    timestamp: event.timestamp,
+    event,
+  }))
+  return [...exchangeItems, ...eventItems].sort((a, b) =>
+    a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
+  )
+}
+
 export default function AIChat({ contextWorkout, className }: Props) {
   const {
     authToken,
@@ -102,7 +167,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
-  const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
@@ -127,32 +193,62 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
   const displayExchanges = groupMessagesIntoExchanges(displayMessages)
-  const visibleExchanges = displayExchanges.slice(0, visibleExchangeCount)
-  const olderExchangeCount = Math.max(displayExchanges.length - visibleExchangeCount, 0)
+  const feedItems = buildFeed(displayExchanges, timelineEvents)
+  const visibleFeedItems = feedItems.slice(0, visibleItemCount)
+  const olderItemCount = Math.max(feedItems.length - visibleItemCount, 0)
+  // The active exchange (a just-sent question awaiting its answer) always sorts to
+  // the top of the feed, so the typing indicator belongs to the first item.
+  const firstItem = visibleFeedItems[0]
   const showLoadingInLatestExchange =
-    loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+    loading &&
+    firstItem?.type === 'exchange' &&
+    firstItem.exchange.messages.at(-1)?.role === 'user'
+
+  // Pull plan changes and open learning-pipeline recommendations into the timeline.
+  // Re-fetched after each exchange since a coach reply may adjust the plan or raise
+  // new questions. Failures degrade to no events rather than breaking the chat.
+  useEffect(() => {
+    if (!authToken) return
+    let cancelled = false
+    void (async () => {
+      const [history, questions, hypotheses, experiments] = await Promise.all([
+        fetchPlanHistory(authToken).catch(() => [] as PlanDayHistoryEntry[]),
+        fetchAthleteOpenQuestions(authToken).catch(() => [] as AthleteOpenQuestion[]),
+        fetchAthleteHypotheses(authToken).catch(() => [] as AthleteHypothesis[]),
+        fetchValidationExperiments(authToken).catch(() => [] as AthleteExperiment[]),
+      ])
+      if (cancelled) return
+      setTimelineEvents([
+        ...planUpdateEvents(history),
+        ...recommendationEvents(questions, hypotheses, experiments),
+      ])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, chatHistory.length])
 
   useEffect(() => {
-    setVisibleExchangeCount(VISIBLE_EXCHANGE_LIMIT)
+    setVisibleItemCount(VISIBLE_ITEM_LIMIT)
   }, [chatHistory.length])
 
-  const loadOlderExchanges = useCallback(() => {
-    setVisibleExchangeCount((count) => Math.min(count + VISIBLE_EXCHANGE_LIMIT, displayExchanges.length))
-  }, [displayExchanges.length])
+  const loadOlderItems = useCallback(() => {
+    setVisibleItemCount((count) => Math.min(count + VISIBLE_ITEM_LIMIT, feedItems.length))
+  }, [feedItems.length])
 
   const handleMessagesScroll = () => {
     const container = messagesRef.current
-    if (!container || olderExchangeCount === 0) return
+    if (!container || olderItemCount === 0) return
 
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
     if (distanceFromBottom < 96) {
-      loadOlderExchanges()
+      loadOlderItems()
     }
   }
 
   const handleMessagesWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (event.deltaY > 0 && olderExchangeCount > 0) {
-      loadOlderExchanges()
+    if (event.deltaY > 0 && olderItemCount > 0) {
+      loadOlderItems()
     }
   }
 
@@ -224,15 +320,31 @@ export default function AIChat({ contextWorkout, className }: Props) {
               Why this advice?
             </summary>
             <dl className="mt-1 space-y-1">
+              {/* Rationale layers map onto the shared knowledge sources (#377):
+                  the physiology read is a coach inference, the personal-context
+                  read is a personal observation. Cited science, when any, shows
+                  in the Sources block above as the scientific-evidence source. */}
               {msg.physiologyRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">The numbers: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.coach_inference.className}`}
+                    >
+                      {REASONING_SOURCE_META.coach_inference.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.physiologyRationale}</dd>
                 </div>
               )}
               {msg.contextRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">Knowing you: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.personal_observation.className}`}
+                    >
+                      {REASONING_SOURCE_META.personal_observation.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.contextRationale}</dd>
                 </div>
               )}
@@ -273,6 +385,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
       </div>
     </div>
   )
+
+  const renderTimelineEvent = (event: TimelineEvent) => {
+    const { icon: Icon, iconClass } = EVENT_META[event.kind]
+    return (
+      <div
+        key={event.id}
+        data-testid="timeline-event"
+        data-event-kind={event.kind}
+        className="flex items-start gap-2.5 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2"
+      >
+        <Icon size={16} className={`mt-0.5 flex-shrink-0 ${iconClass}`} />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{event.title}</p>
+          <p className="text-sm text-gray-700">{event.body}</p>
+        </div>
+      </div>
+    )
+  }
 
   async function sendMessage(msgOverride?: string, options?: { skipAddUserMessage?: boolean }) {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
@@ -376,7 +506,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot size={18} className="text-amber-500" />
-          <span className="font-semibold text-sm text-gray-800">AI Coach Chat</span>
+          <span className="font-semibold text-sm text-gray-800">Coach Timeline</span>
         </div>
         <div className="flex items-center gap-1">
           {coachMemory && (
@@ -449,7 +579,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         </div>
       )}
 
-      {/* Messages are newest exchange first, while each exchange reads question before answer. */}
+      {/* The feed is newest-first: conversation exchanges and system events (plan
+          updates, recommendations) interleaved by time; each exchange reads question
+          before answer. */}
       <div
         ref={messagesRef}
         aria-label="Coach chat messages"
@@ -457,18 +589,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
         onWheel={handleMessagesWheel}
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
       >
-        {visibleExchanges.map((exchange, exchangeIndex) => (
-          <div
-            key={exchange.id}
-            className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
-          >
-            {exchange.messages.map((msg, messageIndex) => renderMessage(msg, `${exchange.id}-${messageIndex}`))}
-            {exchangeIndex === 0 && showLoadingInLatestExchange && renderLoadingIndicator()}
-          </div>
-        ))}
+        {visibleFeedItems.map((item, itemIndex) =>
+          item.type === 'event' ? (
+            renderTimelineEvent(item.event)
+          ) : (
+            <div
+              key={item.id}
+              className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
+            >
+              {item.exchange.messages.map((msg, messageIndex) =>
+                renderMessage(msg, `${item.id}-${messageIndex}`),
+              )}
+              {itemIndex === 0 && showLoadingInLatestExchange && renderLoadingIndicator()}
+            </div>
+          ),
+        )}
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
 
-        {olderExchangeCount > 0 && (
+        {olderItemCount > 0 && (
           <div
             className="relative -mt-2 flex min-h-[70%] justify-center pt-8"
             data-testid="older-history-fade"

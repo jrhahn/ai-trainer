@@ -90,6 +90,117 @@ async def test_readiness_score_no_ride_data(client, auth_headers):
     assert "tsb" in body
     assert "recommendations" in body
     assert isinstance(body["recommendations"], list)
+    # Each recommendation explains itself with supporting-evidence reasoning.
+    for rec in body["recommendations"]:
+        assert rec["recommendation"]
+        assert isinstance(rec["reasoning"], list)
+        assert rec["reasoning"]
+
+
+async def _seed_observation(client, auth_headers, fact: str) -> None:
+    """Persist a coach-visible observation.
+
+    Observed twice so it clears the evidence bar: a single sighting stays a
+    low-confidence candidate withheld from coaching (#387).
+    """
+    for _ in range(2):
+        created = await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={"fact": fact, "category": "behaviour", "confidence": 0.9},
+        )
+        assert created.status_code == 201
+
+
+def _reasoning_lines(body: dict) -> list[dict]:
+    return [bullet for rec in body["recommendations"] for bullet in rec["reasoning"]]
+
+
+def _has_personal_observation(body: dict, snippet: str) -> bool:
+    return any(
+        bullet["source"] == "personal_observation" and snippet in bullet["text"]
+        for bullet in _reasoning_lines(body)
+    )
+
+
+@pytest.mark.asyncio
+async def test_readiness_score_keyword_observation_matching(
+    client, auth_headers, monkeypatch
+):
+    """With keyword matching configured, observations weave in without any LLM call."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(
+        ai_router.settings, "readiness_observation_matching", "keyword"
+    )
+    # If keyword mode is honoured the LLM matcher must never be called.
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        AsyncMock(side_effect=AssertionError("LLM matcher must not be called")),
+    )
+    await _seed_observation(
+        client, auth_headers, "Tends to skip easy endurance rides when motivation dips."
+    )
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
+    assert _has_personal_observation(
+        response.json(), "Tends to skip easy endurance rides"
+    )
+
+
+@pytest.mark.asyncio
+async def test_readiness_score_llm_observation_matching(
+    client, auth_headers, monkeypatch
+):
+    """Default LLM matching routes observations via the matcher's assignments."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(ai_router.settings, "readiness_observation_matching", "llm")
+
+    async def fake_matcher(recommendations, observations, provider="openai"):
+        # Route every observation onto the last recommendation.
+        return {len(recommendations) - 1: list(observations)}
+
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        fake_matcher,
+    )
+    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recommendations"][-1]["reasoning"][0] == {
+        "source": "personal_observation",
+        "text": "Prefers riding solo in the mornings.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_readiness_score_llm_matching_falls_back_on_error(
+    client, auth_headers, monkeypatch
+):
+    """If the LLM matcher raises, keyword matching still surfaces observations."""
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(ai_router.settings, "readiness_observation_matching", "llm")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        AsyncMock(side_effect=RuntimeError("llm down")),
+    )
+    await _seed_observation(
+        client, auth_headers, "Tends to skip easy endurance rides when motivation dips."
+    )
+
+    response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    assert response.status_code == 200
+    assert _has_personal_observation(
+        response.json(), "Tends to skip easy endurance rides"
+    )
 
 
 @pytest.mark.asyncio

@@ -386,6 +386,20 @@ def test_classify_ride_purpose_intervals_below_thresholds():
     assert result == "interval_sprints"
 
 
+def test_plan_updates_rule_defers_on_provisional_classification():
+    """The coach must treat unknown/low-confidence ride classifications as provisional
+    and defer to the athlete's firsthand account rather than asserting the type (#409)."""
+    from services.prompts import ask_trainer_plan_updates_rule
+
+    rule = ask_trainer_plan_updates_rule(None)
+    lowered = rule.lower()
+    assert "provisional" in lowered
+    # Must instruct deferring to the athlete's stated session over the auto-guess.
+    assert "firsthand account" in lowered
+    # Must forbid re-labelling a reported session as something else (the observed bug).
+    assert "unknown" in lowered and "confidence" in lowered
+
+
 # ---------------------------------------------------------------------------
 # _detect_intervals — edge cases
 # ---------------------------------------------------------------------------
@@ -643,6 +657,59 @@ async def test_analyse_strava_activities_no_streams():
 
 
 @pytest.mark.asyncio
+async def test_analyse_strava_activities_grounds_time_in_zone_from_streams():
+    """Streams + entered FTP produce a grounded time-in-zone line in the prompt (#468)."""
+    activities = [
+        {
+            "id": 10,
+            "name": "Endurance ride",
+            "type": "Ride",
+            "distance": 50000,
+            "movingTime": 3600,
+            "startDate": "2026-07-25T08:00:00Z",
+            # snake_case power fields (as router's model_dump() emits) so the
+            # labeled block — where the time-in-zone line is appended — renders.
+            "average_watts": 200,
+            "weighted_average_watts": 205,
+        }
+    ]
+    # A flat ~200 W stream at FTP 320 is squarely Zone 2 (176–240 W).
+    streams_by_id = {
+        "10": {
+            "watts": {"data": [200.0] * 10},
+            "time": {"data": [float(i * 30) for i in range(10)]},
+        }
+    }
+
+    ai_response = json.dumps(
+        {
+            "riderType": "endurance",
+            "notes": "Solid aerobic base.",
+            "rideInsights": "Endurance ride.",
+            "lastRideFeedback": "Nice steady effort.",
+        }
+    )
+    captured: dict[str, str] = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured["user_msg"] = user_msg
+        return ai_response
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        await ai_service.analyse_strava_activities(
+            activities,
+            provider="openai",
+            streams_by_id=streams_by_id,
+            user_ftp=320,
+        )
+
+    msg = captured["user_msg"]
+    # Zone boundaries with the Z2 ceiling, and measured time-in-zone (all in Z2).
+    assert "Zone 2 / endurance ceiling = 240 W" in msg
+    assert "time in zones: Z2" in msg
+
+
+@pytest.mark.asyncio
 async def test_generate_training_plan_calls_chat():
     """generate_training_plan should return the plan list from AI response."""
     profile = {
@@ -667,6 +734,121 @@ async def test_generate_training_plan_calls_chat():
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     assert result == fake_plan
+
+
+@pytest.mark.asyncio
+async def test_generate_training_plan_repairs_invalid_day():
+    """A day that fails PlanDay validation triggers a re-prompt, then succeeds (#422)."""
+    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
+               "fitnessLevel": "intermediate"}
+    invalid = {"date": "2026-04-10", "workoutType": "endurance", "title": "x",
+               "description": "y", "durationMinutes": "lots"}  # non-numeric duration
+    valid = [{"date": "2026-04-10", "workoutType": "endurance", "title": "x",
+              "description": "y", "durationMinutes": 90}]
+    prompts: list[str] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        prompts.append(user_msg)
+        payload = {"plan": [invalid]} if len(prompts) == 1 else {"plan": valid}
+        return json.dumps(payload)
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.generate_training_plan(profile, provider="openai")
+
+    assert len(prompts) == 2  # retried once
+    assert result[0]["durationMinutes"] == 90
+    assert "invalid" in prompts[1].lower()  # correction fed back to the model
+
+
+@pytest.mark.asyncio
+async def test_generate_training_plan_gives_up_after_max_attempts():
+    """After the repair budget is exhausted the caller gets a format error, not a 500."""
+    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
+               "fitnessLevel": "intermediate"}
+    invalid = {"date": "2026-04-10", "durationMinutes": "lots"}
+    calls = 0
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        nonlocal calls
+        calls += 1
+        return json.dumps({"plan": [invalid]})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        with pytest.raises(ai_service.AIResponseFormatError):
+            await ai_service.generate_training_plan(profile, provider="openai")
+
+    assert calls == ai_service._MAX_PLAN_VALIDATION_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_match_observations_to_recommendations_routes_by_llm():
+    """LLM matcher routes each observation to its assigned recommendation index."""
+    recs = [
+        {"recommendation": "Prioritise recovery rides."},
+        {"recommendation": "Add one long endurance ride."},
+    ]
+    observations = [
+        "Athlete overreaches when feeling fresh.",
+        "Tends to skip long rides.",
+    ]
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps(
+            {
+                "assignments": [
+                    {"observationIndex": 0, "recommendationIndex": 0},
+                    {"observationIndex": 1, "recommendationIndex": 1},
+                ]
+            }
+        )
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.match_observations_to_recommendations(
+            recs, observations, provider="openai"
+        )
+
+    assert result == {
+        0: ["Athlete overreaches when feeling fresh."],
+        1: ["Tends to skip long rides."],
+    }
+
+
+@pytest.mark.asyncio
+async def test_match_observations_omitted_or_null_falls_back_to_primary():
+    """Observations the model omits or marks irrelevant land on the primary rec."""
+    recs = [{"recommendation": "A"}, {"recommendation": "B"}]
+    observations = ["relevant to B", "irrelevant", "never mentioned"]
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps(
+            {
+                "assignments": [
+                    {"observationIndex": 0, "recommendationIndex": 1},
+                    {"observationIndex": 1, "recommendationIndex": None},
+                    # observationIndex 2 omitted entirely
+                ]
+            }
+        )
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        result = await ai_service.match_observations_to_recommendations(
+            recs, observations, provider="openai"
+        )
+
+    assert result[1] == ["relevant to B"]
+    # Irrelevant + omitted both fall back to the primary recommendation, in order.
+    assert result[0] == ["irrelevant", "never mentioned"]
+
+
+@pytest.mark.asyncio
+async def test_match_observations_empty_inputs_skip_llm():
+    """No observations or recommendations → no LLM call, empty assignments."""
+    with patch.object(ai_service, "_chat", side_effect=AssertionError("should not call")):
+        assert await ai_service.match_observations_to_recommendations([], ["x"]) == {}
+        assert (
+            await ai_service.match_observations_to_recommendations([{"recommendation": "A"}], [])
+            == {}
+        )
 
 
 @pytest.mark.asyncio
@@ -2182,6 +2364,55 @@ def test_rate_workout_system_prompt_backward_compatible_fields():
     assert '"flag_for_adaptation"' in prompt
 
 
+def test_rate_workout_user_flags_low_confidence_classification():
+    """A low/medium-confidence category must be surfaced as uncertain, with an
+    instruction to ask the athlete rather than narrate it as fact."""
+    from services.prompts import rate_workout_user
+
+    day = {
+        "workoutType": "intervals",
+        "title": "VO2max 4x4",
+        "description": "4x4 min VO2max",
+        "durationMinutes": 75,
+    }
+    analysis = {
+        "ride_category": "tempo",
+        "classification_confidence": "medium",
+        "classification_reason": "Average power in tempo band with no distinct "
+        "interval blocks detected.",
+        "avg_power_w": 242,
+        "intervals_detected": [],
+    }
+    prompt = rate_workout_user(day, feedback={}, actual_ride_analysis=analysis)
+
+    assert "Classification confidence: medium" in prompt
+    assert "no distinct interval blocks" in prompt
+    # Must tell the coach not to assert the category and to ask the athlete.
+    assert "not certain" in prompt
+    assert "ask them what they actually did" in prompt
+
+
+def test_rate_workout_user_omits_uncertainty_note_for_high_confidence():
+    """A high-confidence classification should not carry the 'ask the athlete' note."""
+    from services.prompts import rate_workout_user
+
+    day = {"workoutType": "intervals", "title": "VO2max 4x4", "durationMinutes": 75}
+    analysis = {
+        "ride_category": "interval_vo2max",
+        "classification_confidence": "high",
+        "classification_reason": "Structured vo2max intervals detected.",
+        "avg_power_w": 242,
+        "intervals_detected": [
+            {"duration_secs": 240, "avg_power_w": 360, "power_pct_ftp": 112}
+        ],
+    }
+    prompt = rate_workout_user(day, feedback={}, actual_ride_analysis=analysis)
+
+    assert "Classification confidence: high" in prompt
+    assert "not certain" not in prompt
+    assert "ask them what they actually did" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_ride():
     """For a short/ambiguous ride the AI may signal needs_athlete_feedback=true."""
@@ -2463,12 +2694,55 @@ def test_athlete_memory_facts_section_filters_untrusted_facts():
         ]
     )
 
-    assert "Evidence-backed athlete memory facts" in section
+    assert "Evidence-backed athlete memory" in section
     assert "Does too much when fresh" in section
     assert "Added extra intervals after rest." in section
     assert "Uses MTB races as motivation" in section
     assert "Maybe dislikes gym work" not in section
     assert "Only trains indoors" not in section
+
+
+def test_athlete_memory_facts_section_groups_facts_and_observations():
+    """Stable facts and inferred observations land under distinct labels (#386)."""
+    from services.prompts import athlete_memory_facts_section
+
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "FTP is about 250 W",
+                "kind": "fact",
+                "category": "general",
+                "confidence": 0.85,
+                "status": "active",
+            },
+            {
+                "fact": "Fades in the final interval of VO2 sessions",
+                "kind": "observation",
+                "category": "recurring_issues",
+                "confidence": 0.7,
+                "status": "active",
+            },
+        ]
+    )
+
+    fact_label_at = section.index("Stable athlete facts")
+    obs_label_at = section.index("Behavioural observations")
+    # Both groups render, each under its own heading, facts first.
+    assert fact_label_at < obs_label_at
+    assert "FTP is about 250 W" in section[fact_label_at:obs_label_at]
+    assert "Fades in the final interval" in section[obs_label_at:]
+
+
+def test_athlete_memory_facts_section_defaults_missing_kind_to_observation():
+    """Legacy rows without a kind are treated as observations, not facts (#386)."""
+    from services.prompts import athlete_memory_facts_section
+
+    section = athlete_memory_facts_section(
+        [{"fact": "Prefers MTB", "category": "general", "confidence": 0.8, "status": "active"}]
+    )
+
+    assert "Behavioural observations" in section
+    assert "Stable athlete facts" not in section
 
 
 def test_ask_trainer_system_includes_athlete_memory_facts():
@@ -2494,7 +2768,7 @@ def test_ask_trainer_system_includes_athlete_memory_facts():
         ],
     )
 
-    assert "Evidence-backed athlete memory facts" in prompt
+    assert "Evidence-backed athlete memory" in prompt
     assert "Does too much when fresh" in prompt
     assert "Repeatedly added extra work after rest." in prompt
     assert "confidence" in prompt
@@ -3350,6 +3624,620 @@ async def test_extract_athlete_facts_handles_malformed_payload():
 
 
 # ---------------------------------------------------------------------------
+# generate_athlete_insights — infer durable patterns from training history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "fact": "Performs best after one recovery day",
+                    "kind": "observation",
+                    "category": "fatigue_response",
+                    "confidence": 0.6,
+                    "sourceSnippet": "Strong sessions followed rest days on 05-03 and 05-10.",
+                },
+                {
+                    # Confidence above the cap is clamped to 0.9.
+                    "fact": "Estimated FTP around 250 W",
+                    "kind": "fact",
+                    "category": "general",
+                    "confidence": 1.4,
+                },
+                {
+                    # A missing kind falls back to the safer "observation".
+                    "fact": "Tolerates heat well",
+                    "category": "general",
+                    "confidence": 0.5,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_facts=["Prefers morning rides"],
+            provider="openai",
+        )
+
+    assert [c["fact"] for c in candidates] == [
+        "Performs best after one recovery day",
+        "Estimated FTP around 250 W",
+        "Tolerates heat well",
+    ]
+    assert [c["kind"] for c in candidates] == ["observation", "fact", "observation"]
+    assert candidates[1]["confidence"] == 0.9
+    # History and the existing-facts guard both reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "Prefers morning rides" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights("   ", provider="openai")
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"fact": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.5},
+            {"fact": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.7},
+        ]
+        candidates += [
+            {"fact": f"Pattern {i}", "category": "general", "confidence": 0.4}
+            for i in range(ai_service.MAX_GENERATED_INSIGHTS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights(
+            "history", provider="openai"
+        )
+
+    facts = [c["fact"] for c in candidates]
+    assert facts.count("Fades late in long rides") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_INSIGHTS
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_insights_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_insights("history", provider="openai")
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
+# generate_athlete_hypotheses — form explicit, testable ideas from history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "statement": "Upper-body strength suppresses next-day HR response",
+                    "category": "fatigue_response",
+                    "confidence": 0.38,
+                    "rationale": "HR ~8 bpm low the day after gym on 05-03 and 05-10.",
+                },
+                {
+                    # Confidence above the hypothesis cap is clamped to 0.6.
+                    "statement": "Rides stronger in the second half of a block",
+                    "category": "general",
+                    "confidence": 0.95,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_facts=["Prefers morning rides"],
+            existing_hypotheses=["Fuels poorly on long rides"],
+            provider="openai",
+        )
+
+    assert [c["statement"] for c in candidates] == [
+        "Upper-body strength suppresses next-day HR response",
+        "Rides stronger in the second half of a block",
+    ]
+    assert candidates[0]["confidence"] == 0.38
+    assert candidates[1]["confidence"] == 0.6
+    # History, existing facts, and existing hypotheses all reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "Prefers morning rides" in captured[0][1]
+    assert "Fuels poorly on long rides" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"statement": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.4},
+            {"statement": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.5},
+        ]
+        candidates += [
+            {"statement": f"Idea {i}", "category": "general", "confidence": 0.3}
+            for i in range(ai_service.MAX_GENERATED_HYPOTHESES + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "history", provider="openai"
+        )
+
+    statements = [c["statement"] for c in candidates]
+    assert statements.count("Fades late in long rides") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_HYPOTHESES
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_hypotheses_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_hypotheses(
+            "history", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
+# generate_validation_experiments — propose experiments to resolve uncertainty
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "question": "Does upper-body strength suppress next-day HR?",
+                    "protocol": "Repeat the gym session, compare HR next easy ride.",
+                    "rationale": "A clear HR drop confirms the hypothesis.",
+                    "category": "fatigue_response",
+                },
+                {
+                    # Missing rationale defaults to empty; category defaults.
+                    "question": "Which bike is faster?",
+                    "protocol": "Compare both bikes over the same climb.",
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "Open questions:\n- upper-body strength suppresses next-day HR",
+            existing_experiments=["Perform a 30-minute threshold test."],
+            provider="openai",
+        )
+
+    assert [c["protocol"] for c in candidates] == [
+        "Repeat the gym session, compare HR next easy ride.",
+        "Compare both bikes over the same climb.",
+    ]
+    assert candidates[1]["rationale"] == ""
+    assert candidates[1]["category"] == "general"
+    # Uncertainties and already-suggested experiments both reach the model.
+    assert "upper-body strength" in captured[0][1]
+    assert "Perform a 30-minute threshold test." in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_empty_context_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"question": "q", "protocol": "Repeat the VO2 session", "category": "general"},
+            {"question": "q", "protocol": " repeat THE vo2 session ", "category": "general"},
+        ]
+        candidates += [
+            {"question": "q", "protocol": f"Experiment {i}", "category": "general"}
+            for i in range(ai_service.MAX_GENERATED_EXPERIMENTS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "uncertainty", provider="openai"
+        )
+
+    protocols = [c["protocol"] for c in candidates]
+    assert protocols.count("Repeat the VO2 session") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_EXPERIMENTS
+
+
+@pytest.mark.asyncio
+async def test_generate_validation_experiments_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_validation_experiments(
+            "uncertainty", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
+# generate_athlete_predictions — make checkable, forward-looking predictions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_returns_normalised_candidates():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "candidates": [
+                {
+                    "prediction": "The athlete will be fully recovered tomorrow",
+                    "expectedOutcome": "Resting HR back to baseline, ready for intensity",
+                    "horizon": "tomorrow",
+                    "confidence": 0.7,
+                    "category": "fatigue_response",
+                },
+                {
+                    # Missing horizon defaults to empty; confidence clamps to 1.0.
+                    "prediction": "Fatigue forces an easier week within 10 days",
+                    "expectedOutcome": "A drop in weekly TSS",
+                    "confidence": 1.4,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "Recent activity history (newest first):\n  2026-05-10 | ...",
+            existing_predictions=["The athlete will PR the local climb"],
+            provider="openai",
+        )
+
+    assert [c["prediction"] for c in candidates] == [
+        "The athlete will be fully recovered tomorrow",
+        "Fatigue forces an easier week within 10 days",
+    ]
+    assert candidates[0]["horizon"] == "tomorrow"
+    assert candidates[1]["horizon"] == ""
+    assert candidates[1]["confidence"] == 1.0
+    # History and existing predictions both reach the model.
+    assert "2026-05-10" in captured[0][1]
+    assert "PR the local climb" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_requires_expected_outcome():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "candidates": [
+                {"prediction": "Something vague", "confidence": 0.5},
+                {
+                    "prediction": "Will hit interval targets",
+                    "expectedOutcome": "Completes all reps at target power",
+                    "confidence": 0.6,
+                },
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    # The candidate without an expected outcome cannot be checked and is dropped.
+    assert [c["prediction"] for c in candidates] == ["Will hit interval targets"]
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_empty_history_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "   ", provider="openai"
+        )
+
+    assert candidates == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_dedupes_and_caps():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        candidates = [
+            {"prediction": "Recovers by tomorrow", "expectedOutcome": "HR baseline", "confidence": 0.6},
+            {"prediction": " recovers BY tomorrow ", "expectedOutcome": "HR baseline", "confidence": 0.7},
+        ]
+        candidates += [
+            {"prediction": f"Prediction {i}", "expectedOutcome": "outcome", "confidence": 0.5}
+            for i in range(ai_service.MAX_GENERATED_PREDICTIONS + 5)
+        ]
+        return json.dumps({"candidates": candidates})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    predictions = [c["prediction"] for c in candidates]
+    assert predictions.count("Recovers by tomorrow") == 1
+    assert len(candidates) == ai_service.MAX_GENERATED_PREDICTIONS
+
+
+@pytest.mark.asyncio
+async def test_generate_athlete_predictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        candidates = await ai_service.generate_athlete_predictions(
+            "history", provider="openai"
+        )
+
+    assert candidates == []
+
+
+# ---------------------------------------------------------------------------
+# evaluate_athlete_predictions — score pending predictions against the data
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_returns_scored_verdicts():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "evaluations": [
+                {"index": 0, "verdict": "correct", "actualOutcome": "HR back to baseline on 05-11"},
+                {"index": 1, "verdict": "incorrect", "actualOutcome": "Still fatigued, missed targets"},
+                # 'unknown' verdicts are dropped so the prediction stays pending.
+                {"index": 2, "verdict": "unknown", "actualOutcome": "Too early to tell"},
+            ]
+        })
+
+    predictions = [
+        {"prediction": "Recovered tomorrow", "expected_outcome": "HR baseline", "horizon": "tomorrow"},
+        {"prediction": "Hits VO2 targets", "expected_outcome": "All reps at power", "horizon": "next ride"},
+        {"prediction": "Easier week soon", "expected_outcome": "TSS drop", "horizon": "2 weeks"},
+    ]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "Recent activity history:\n  2026-05-11 | ...",
+            predictions,
+            provider="openai",
+        )
+
+    assert evaluations == [
+        {"index": 0, "correct": True, "actual_outcome": "HR back to baseline on 05-11"},
+        {"index": 1, "correct": False, "actual_outcome": "Still fatigued, missed targets"},
+    ]
+    # The predictions and their expected outcomes reach the model.
+    assert "Recovered tomorrow" in captured[0][1]
+    assert "HR baseline" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_no_predictions_skips_model():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", [], provider="openai"
+        )
+
+    assert evaluations == []
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_drops_out_of_range_and_dupes():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "evaluations": [
+                {"index": 0, "verdict": "correct", "actualOutcome": "ok"},
+                {"index": 0, "verdict": "incorrect", "actualOutcome": "dupe ignored"},
+                {"index": 9, "verdict": "correct", "actualOutcome": "out of range"},
+            ]
+        })
+
+    predictions = [
+        {"prediction": "p0", "expected_outcome": "o0", "horizon": ""},
+    ]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", predictions, provider="openai"
+        )
+
+    assert evaluations == [{"index": 0, "correct": True, "actual_outcome": "ok"}]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_athlete_predictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    predictions = [{"prediction": "p0", "expected_outcome": "o0", "horizon": ""}]
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        evaluations = await ai_service.evaluate_athlete_predictions(
+            "history", predictions, provider="openai"
+        )
+
+    assert evaluations == []
+
+
+# ---------------------------------------------------------------------------
+# detect_athlete_fact_contradictions — flag stored facts fresh data disagrees with
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_returns_valid_indexed_reasons():
+    captured: list[tuple[str, str]] = []
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        captured.append((system_prompt, user_msg))
+        return json.dumps({
+            "contradictions": [
+                {"factIndex": 0, "reason": "Held 400 W for 5x4 min — above stored 320 W FTP."},
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "Recent activity history:\n  2026-07-05 | 5x4 min @ 400 W",
+            ["FTP is around 320 W", "Prefers morning rides"],
+            provider="openai",
+        )
+
+    assert contradictions == [
+        {"factIndex": 0, "reason": "Held 400 W for 5x4 min — above stored 320 W FTP."}
+    ]
+    # Both the history and the numbered facts reach the model.
+    assert "400 W" in captured[0][1]
+    assert "0. FTP is around 320 W" in captured[0][1]
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_drops_out_of_range_and_blank():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({
+            "contradictions": [
+                {"factIndex": 5, "reason": "out of range"},
+                {"factIndex": 0, "reason": "  "},
+                {"factIndex": 1, "reason": "Contradicted by the data."},
+                {"factIndex": 1, "reason": "duplicate index, ignored"},
+            ]
+        })
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "history", ["fact a", "fact b"], provider="openai"
+        )
+
+    assert contradictions == [{"factIndex": 1, "reason": "Contradicted by the data."}]
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_skips_model_without_facts_or_history():
+    called = False
+
+    async def fake_chat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return "{}"
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        assert await ai_service.detect_athlete_fact_contradictions(
+            "history", [], provider="openai"
+        ) == []
+        assert await ai_service.detect_athlete_fact_contradictions(
+            "   ", ["a fact"], provider="openai"
+        ) == []
+
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_detect_contradictions_handles_malformed_payload():
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        return json.dumps({"unexpected": "shape"})
+
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        contradictions = await ai_service.detect_athlete_fact_contradictions(
+            "history", ["a fact"], provider="openai"
+        )
+
+    assert contradictions == []
+
+
+# ---------------------------------------------------------------------------
 # Communication style — opener variation rules
 # ---------------------------------------------------------------------------
 
@@ -3518,6 +4406,123 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
     assert '"relativeDay": "tomorrow"' in system_prompt
     assert "copy the plan entry's weekday/dateLabel fields" in system_prompt
     assert "check every weekday/date pair" in system_prompt
+
+
+def test_login_summary_system_prompt_warns_on_unconfirmed_classification():
+    from services.prompts import refresh_login_summary_system
+
+    prompt = refresh_login_summary_system()
+    assert "UNCONFIRMED" in prompt
+    assert "unknown or low/medium confidence" in prompt
+    assert "ask the athlete what they actually did" in prompt
+
+
+def test_login_summary_user_flags_unknown_or_low_confidence_ride():
+    """The most recent ride's unknown/low-confidence classification must be
+    surfaced as an explicit 'do not assert a type' instruction."""
+    from services.prompts import refresh_login_summary_user
+
+    msg = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="unknown",
+        latest_ride_confidence="low",
+        latest_ride_reason="Insufficient stream data to classify ride reliably.",
+    )
+    assert "could not be reliably auto-classified" in msg
+    assert "Insufficient stream data" in msg
+    assert "Do NOT state or imply a specific session type" in msg
+
+    # A high-confidence classification carries no such caveat.
+    msg_high = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="interval_vo2max",
+        latest_ride_confidence="high",
+    )
+    assert "could not be reliably auto-classified" not in msg_high
+
+
+@pytest.mark.asyncio
+async def test_generate_login_summary_anchors_next_session_to_today(monkeypatch):
+    """Regression: the login summary called the next session "today" even when it
+    was days away, because the prompt never received an authoritative today."""
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 7, 24)
+    )
+    monkeypatch.setattr(
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n"
+            "- Today is Friday, July 24, 2026 (2026-07-24).\n"
+            "- Yesterday was Thursday, July 23, 2026 (2026-07-23).\n"
+            "- Tomorrow is Saturday, July 25, 2026 (2026-07-25)."
+        ),
+    )
+
+    async def fake_chat(
+        provider: str,
+        system_prompt: str,
+        user_msg: str,
+        json_mode: bool = False,
+        task: str = "plan",
+    ) -> str:
+        captured["system_prompt"] = system_prompt
+        captured["user_msg"] = user_msg
+        return json.dumps(
+            {
+                "loginSummary": (
+                    "Fresh legs today, nice work.\n"
+                    "- Next session: your Long Aerobic Base Build is this Saturday."
+                )
+            }
+        )
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    summary = await ai_service.generate_login_summary(
+        ride_insights="Solid aerobic base building.",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=250,
+        training_plan=[
+            {
+                "date": "2026-07-24",
+                "workoutType": "rest",
+                "title": "Complete Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-07-25",
+                "workoutType": "endurance",
+                "title": "Long Aerobic Base Build",
+                "durationMinutes": 180,
+            },
+        ],
+        timezone_name="Europe/Berlin",
+    )
+
+    assert summary  # non-empty means it passed the completeness check
+    user_msg = str(captured["user_msg"])
+    system_prompt = str(captured["system_prompt"])
+    # Authoritative "today" anchor reaches the prompt.
+    assert "Today is Friday, July 24, 2026 (2026-07-24)." in user_msg
+    # Plan days are annotated: today is a rest day; the next real session is tomorrow.
+    assert '"relativeDay": "today"' in user_msg
+    assert '"date": "2026-07-25"' in user_msg
+    assert '"weekday": "Saturday"' in user_msg
+    assert '"relativeDay": "tomorrow"' in user_msg
+    # System prompt instructs the model not to assume the next session is today.
+    assert "never assume it is today" in system_prompt
 
 
 @pytest.mark.asyncio
