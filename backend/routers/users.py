@@ -31,6 +31,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service, metrics_service
 from services import assessment_pipeline
+from services import athlete_inquiry
 from services import plan_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -869,6 +870,114 @@ async def delete_athlete_open_question(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/inquiries", response_model=schemas.AthleteInquiriesResponse)
+async def list_athlete_inquiries(
+    include_resolved: bool = Query(False, alias="includeResolved"),
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteInquiriesResponse:
+    inquiries = await crud.list_athlete_inquiries(
+        db, current_user.id, include_resolved=include_resolved
+    )
+    return schemas.AthleteInquiriesResponse(
+        inquiries=[
+            schemas.AthleteInquirySchema.model_validate(i, from_attributes=True)
+            for i in inquiries
+        ]
+    )
+
+
+@router.post(
+    "/inquiries/{inquiry_id}/answer",
+    response_model=schemas.AthleteInquiryAnswerResponse,
+)
+async def answer_athlete_inquiry(
+    inquiry_id: str,
+    body: schemas.AthleteInquiryAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteInquiryAnswerResponse:
+    """Answer a pinned inquiry (#506).
+
+    The answer is judged, and the reply the coach gives back is persisted into the
+    chat so the exchange stays part of the conversation rather than vanishing with
+    the pin.
+    """
+    inquiry = await crud.get_athlete_inquiry(db, current_user.id, inquiry_id)
+    if inquiry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if inquiry.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question is no longer waiting for an answer",
+        )
+
+    question_asked = inquiry.question
+    try:
+        inquiry, accepted, coach_reply = await athlete_inquiry.submit_inquiry_answer(
+            db, current_user, inquiry, body.answer
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    # Record the exchange in the chat: the question as the coach asked it, the
+    # athlete's answer, and what the coach said back. Without this the answered
+    # question disappears from the timeline entirely once the pin clears.
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await crud.create_chat_message(
+        db, current_user.id, role="assistant", content=question_asked, timestamp=now_iso
+    )
+    await crud.create_chat_message(
+        db, current_user.id, role="user", content=body.answer.strip(), timestamp=now_iso
+    )
+    if coach_reply.strip():
+        await crud.create_chat_message(
+            db,
+            current_user.id,
+            role="assistant",
+            content=coach_reply.strip(),
+            timestamp=now_iso,
+        )
+
+    return schemas.AthleteInquiryAnswerResponse(
+        inquiry=schemas.AthleteInquirySchema.model_validate(
+            inquiry, from_attributes=True
+        ),
+        accepted=accepted,
+        coach_reply=coach_reply,
+    )
+
+
+@router.post(
+    "/inquiries/{inquiry_id}/dismiss", response_model=schemas.AthleteInquirySchema
+)
+async def dismiss_athlete_inquiry(
+    inquiry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteInquirySchema:
+    inquiry = await crud.dismiss_athlete_inquiry(db, current_user.id, inquiry_id)
+    if inquiry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return schemas.AthleteInquirySchema.model_validate(inquiry, from_attributes=True)
+
+
+@router.delete(
+    "/inquiries/{inquiry_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_athlete_inquiry(
+    inquiry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    deleted = await crud.delete_athlete_inquiry(db, current_user.id, inquiry_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/validation-experiments", response_model=schemas.AthleteExperimentsResponse
 )
@@ -1060,6 +1169,9 @@ async def export_memory(
     predictions = await crud.list_athlete_predictions(
         db, current_user.id, include_resolved=True
     )
+    inquiries = await crud.list_athlete_inquiries(
+        db, current_user.id, include_resolved=True
+    )
     return schemas.MemoryExportSchema(
         exported_at=datetime.now(timezone.utc),
         memory_updates_enabled=current_user.memory_updates_enabled,
@@ -1097,6 +1209,10 @@ async def export_memory(
         predictions=[
             schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
             for p in predictions
+        ],
+        inquiries=[
+            schemas.AthleteInquirySchema.model_validate(i, from_attributes=True)
+            for i in inquiries
         ],
     )
 

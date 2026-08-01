@@ -29,6 +29,9 @@ knowledge in the same reconciled state a full weekly cycle would:
 5. **Resolve open questions** — record new coaching uncertainties and close the
    ones the new data now answers
    (:func:`services.open_question_generation.generate_user_open_questions`).
+6. **Ask the athlete** — raise the questions none of the steps above could ever
+   settle from data, pinned in the chat for the athlete to answer
+   (:func:`services.athlete_inquiry.generate_user_inquiries`).
 
 Each step is best-effort: a failure in one is logged and never aborts the others
 or the surrounding activity sync. The persisted observations, hypotheses and
@@ -49,6 +52,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import models
 from config import settings
 from services import (
+    athlete_inquiry,
     athlete_model_inference,
     contradiction_detection,
     home_location,
@@ -75,6 +79,7 @@ class LearningStepResult:
     hypotheses: int = 0
     performance_hypotheses: int = 0
     open_questions: int = 0
+    inquiries: int = 0
     performance_model: int = 0
     home_location: int = 0
     weather_preferences: int = 0
@@ -88,6 +93,7 @@ class LearningStepResult:
             or self.hypotheses
             or self.performance_hypotheses
             or self.open_questions
+            or self.inquiries
             or self.performance_model
             or self.home_location
             or self.weather_preferences
@@ -266,10 +272,22 @@ async def run_learning_step(
         timezone_name,
         result,
     )
+    # Last: what none of the passes above could ever infer is what is left to ask
+    # the athlete about, so this runs against a fully reconciled knowledge base
+    # and does not ask about something the same sync just worked out (#506).
+    result.inquiries = await _run_step(
+        "inquiries",
+        athlete_inquiry.generate_user_inquiries,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
 
     logger.info(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
-        "hypotheses=%s performance_hypotheses=%s open_questions=%s "
+        "hypotheses=%s performance_hypotheses=%s open_questions=%s inquiries=%s "
         "performance_model=%s home_location=%s weather_preferences=%s failed=%s",
         user.id,
         result.observations,
@@ -277,6 +295,7 @@ async def run_learning_step(
         result.hypotheses,
         result.performance_hypotheses,
         result.open_questions,
+        result.inquiries,
         result.performance_model,
         result.home_location,
         result.weather_preferences,

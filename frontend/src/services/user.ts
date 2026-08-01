@@ -602,6 +602,67 @@ export async function deleteAthleteOpenQuestion(
   })
 }
 
+export type AthleteInquiryStatus =
+  | 'pending'
+  | 'answered'
+  | 'needs_settings'
+  | 'dismissed'
+
+/** A question the coach put to the athlete because data cannot answer it (#506). */
+export interface AthleteInquiry {
+  id: string
+  question: string
+  category: string
+  whyAsking: string
+  settingsHint: string
+  status: AthleteInquiryStatus
+  answer: string | null
+  askCount: number
+  followUpNote: string | null
+  askedAt: string
+  answeredAt: string | null
+  updatedAt: string
+}
+
+export interface AthleteInquiryAnswerResult {
+  inquiry: AthleteInquiry
+  /** Whether the answer resolved the question. */
+  accepted: boolean
+  /** What the coach said back: the acknowledgement, rephrasing, or hand-off. */
+  coachReply: string
+}
+
+export async function fetchAthleteInquiries(
+  token: string
+): Promise<AthleteInquiry[]> {
+  const response = await apiFetch<{ inquiries: AthleteInquiry[] }>(
+    '/users/me/inquiries',
+    { token }
+  )
+  return response.inquiries
+}
+
+export async function answerAthleteInquiry(
+  token: string,
+  inquiryId: string,
+  answer: string
+): Promise<AthleteInquiryAnswerResult> {
+  return apiFetch<AthleteInquiryAnswerResult>(
+    `/users/me/inquiries/${inquiryId}/answer`,
+    { token, method: 'POST', body: { answer } }
+  )
+}
+
+export async function dismissAthleteInquiry(
+  token: string,
+  inquiryId: string
+): Promise<AthleteInquiry> {
+  return apiFetch<AthleteInquiry>(`/users/me/inquiries/${inquiryId}/dismiss`, {
+    token,
+    method: 'POST',
+  })
+}
+
 export type AthleteExperimentStatus = 'suggested' | 'completed' | 'dismissed'
 
 export interface AthleteExperiment {

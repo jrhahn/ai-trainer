@@ -172,6 +172,9 @@ class User(Base):
     open_questions: Mapped[list["AthleteOpenQuestion"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    inquiries: Mapped[list["AthleteInquiry"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     validation_experiments: Mapped[list["AthleteExperiment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -637,6 +640,83 @@ class AthleteOpenQuestion(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="open_questions")
+
+
+class AthleteInquiry(Base):
+    """A question the coach puts to the athlete because data can never answer it (#506).
+
+    The coach's other uncertainty records all resolve themselves by *waiting*: an
+    :class:`AthleteOpenQuestion` accrues evidence until the training history settles
+    it, and an :class:`AthleteExperiment` asks the athlete to produce that evidence
+    with a test. An inquiry is the residual — the things no future ride will ever
+    reveal, because they live in the athlete's head or their week rather than in
+    their power file: why a session was skipped, whether a niggle is still there,
+    what they actually want from the season, whether the power meter got swapped.
+
+    Generation is therefore gated on *inferability*: the coach first reasons about
+    what the incoming data stream will tell it, and only asks about what is left
+    over. ``why_asking`` records that justification in the coach's own words, and
+    ``settings_hint`` names the place the athlete can state the answer themselves.
+
+    A pending inquiry is pinned in the chat until it is dealt with. An answer that
+    does not actually answer the question buys one kind rephrasing (``ask_count``
+    tops out at :data:`ATHLETE_INQUIRY_MAX_ASKS`); if the second reply still misses,
+    the inquiry moves to ``needs_settings`` and the coach stops asking rather than
+    nagging.
+    """
+
+    __tablename__ = "athlete_inquiries"
+    __table_args__ = (
+        Index(
+            "ix_athlete_inquiries_user_category_key",
+            "user_id",
+            "category",
+            "question_key",
+            unique=True,
+        ),
+        Index("ix_athlete_inquiries_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # The question as currently put to the athlete. Rewritten in place when the
+    # coach rephrases after an answer that missed.
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # Dedupe key derived from the *original* phrasing, so a rephrasing does not
+    # let the same inquiry be raised twice.
+    question_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), default="general", nullable=False
+    )
+    # Why the coach cannot work this out on its own — shown to the athlete so the
+    # question reads as reasoning rather than interrogation.
+    why_asking: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Where in Settings the athlete can state or change this themselves; used for
+    # the hand-off once the coach gives up asking.
+    settings_hint: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # pending (awaiting the athlete) -> answered | needs_settings | dismissed.
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    # The athlete's most recent reply, kept even when it did not resolve the
+    # question — a partial answer still beats nothing.
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How many times this has been put to the athlete (1 = first ask).
+    ask_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # The coach's note when a reply missed: the rephrasing hint, or the hand-off
+    # to Settings once asking stops.
+    follow_up_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="inquiries")
 
 
 class AthleteExperiment(Base):
