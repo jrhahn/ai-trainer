@@ -327,6 +327,9 @@ interface AppState {
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
   riderAssessment: RiderAssessment | null
+  /** Advisory warning when the stored FTP is implausible against the
+   * athlete's maximal aerobic power.  Null when the pair looks sane. */
+  ftpPlausibilityWarning: string | null
   stravaAnalysisComplete: boolean
   lastStravaActivityId: number | null
   stravaAutoSyncEnabled: boolean
@@ -357,6 +360,7 @@ interface AppState {
   setStravaConnection: (connection: StravaConnection | null) => void
   setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
+  setFtpPlausibilityWarning: (warning: string | null) => void
   setStravaAnalysisComplete: (v: boolean) => void
   setLastStravaActivityId: (id: number | null) => void
   setStravaAutoSyncEnabled: (enabled: boolean) => void
@@ -409,6 +413,7 @@ const dataState = {
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
   riderAssessment: null as RiderAssessment | null,
+  ftpPlausibilityWarning: null as string | null,
   stravaAnalysisComplete: false,
   lastStravaActivityId: null as number | null,
   stravaAutoSyncEnabled: true,
@@ -508,6 +513,7 @@ export const useAppStore = create<AppState>()(
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
+    setFtpPlausibilityWarning: (warning) => set({ ftpPlausibilityWarning: warning }),
     setStravaAnalysisComplete: (v) => set({ stravaAnalysisComplete: v }),
     setLastStravaActivityId: (id) => set({ lastStravaActivityId: id }),
     setStravaAutoSyncEnabled: (enabled) => set({ stravaAutoSyncEnabled: enabled }),
@@ -673,6 +679,7 @@ export const useAppStore = create<AppState>()(
         stravaConnection: user.stravaConnection,
         intervalsConnection: user.intervalsConnection,
         riderAssessment: user.riderAssessment,
+        ftpPlausibilityWarning: user.ftpPlausibilityWarning,
         stravaAnalysisComplete: user.stravaAnalysisComplete,
         lastStravaActivityId: user.lastStravaActivityId ?? null,
         stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,

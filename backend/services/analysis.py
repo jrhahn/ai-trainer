@@ -28,6 +28,17 @@ FTP_POWER_DURATION_FACTORS: tuple[tuple[float, float], ...] = (
 # Shorter efforts are useful for fitting a power-duration curve, but are too
 # VO2-heavy to convert directly to FTP.
 CRITICAL_POWER_DURATIONS: tuple[float, ...] = (5.0, 8.0, 12.0, 20.0, 30.0, 40.0)
+
+# Duration whose maximal mean power stands in for MAP (maximal aerobic power,
+# i.e. power at VO2max).  Best ~5-minute power is the conventional field proxy.
+MAP_DURATION_MINUTES = 5.0
+
+# FTP is a sustainable effort strictly below the aerobic ceiling: for trained
+# cyclists it lands at roughly 72-85 % of MAP.  These bounds widen that band so
+# only genuinely impossible pairings trip the check — a ratio outside them means
+# one of the two numbers is wrong, not that the athlete is unusual.
+FTP_MAP_RATIO_MIN = 0.65
+FTP_MAP_RATIO_MAX = 0.90
 FTP_ESTIMATE_DURATIONS: tuple[float, ...] = tuple(
     sorted(
         {minutes for minutes, _factor in FTP_POWER_DURATION_FACTORS}
@@ -298,6 +309,39 @@ def _ftp_candidates_from_power_duration_points(
         candidates.append(cp)
 
     return candidates
+
+
+def check_ftp_against_map(ftp: int | None, map_5min: int | None) -> str | None:
+    """Return a warning when an FTP is implausible against the athlete's MAP.
+
+    ``map_5min`` is the best 5-minute mean power, used as the MAP proxy.  FTP
+    sits below that aerobic ceiling by definition, so a ratio at or above
+    ``FTP_MAP_RATIO_MAX`` means one of the two numbers is wrong — most often a
+    mistyped FTP.  A ratio under ``FTP_MAP_RATIO_MIN`` is not impossible, but in
+    practice means a stale FTP or a 5-minute window contaminated by a sprint.
+
+    The warning is advisory: the athlete owns their FTP and nothing here
+    overrides it.  Returns ``None`` when the pair is plausible or either value
+    is missing.
+    """
+    if not ftp or not map_5min or ftp <= 0 or map_5min <= 0:
+        return None
+
+    ratio = ftp / map_5min
+    if ratio >= FTP_MAP_RATIO_MAX:
+        return (
+            f"FTP of {ftp} W is {ratio:.0%} of your best 5-minute power "
+            f"({map_5min} W). FTP is a sustainable effort below maximal aerobic "
+            f"power — normally 72-85 % of it — so this FTP looks too high. "
+            f"Training zones and TSS derived from it will be overstated."
+        )
+    if ratio < FTP_MAP_RATIO_MIN:
+        return (
+            f"FTP of {ftp} W is only {ratio:.0%} of your best 5-minute power "
+            f"({map_5min} W). That gap is unusually large — your FTP may be out "
+            f"of date, or that 5-minute effort may not have been a steady one."
+        )
+    return None
 
 
 def compute_hr_zones(max_hr: int) -> dict:
@@ -1896,9 +1940,11 @@ def estimate_ftp_over_time(
             enough to smooth noise while still tracking gradual FTP changes.
 
     Returns:
-        List of ``{"date": str, "ftp": int, "raw_ftp": int}`` dicts ordered
-        by date.  Returns an empty list when no valid FTP estimates can be
-        produced.
+        List of ``{"date": str, "ftp": int, "raw_ftp": int, "map_5min": int |
+        None}`` dicts ordered by date.  ``map_5min`` is the best 5-minute mean
+        power across the same smoothing window, used downstream as a maximal
+        aerobic power proxy to sanity-check FTP.  Returns an empty list when no
+        valid FTP estimates can be produced.
     """
     import datetime as _dt
 
@@ -1906,6 +1952,10 @@ def estimate_ftp_over_time(
         tuple[str, dict[float, tuple[float, int, int]], list[float], list[float] | None]
     ] = []
     raw_estimates: list[tuple[str, int]] = []
+    # Collected independently of the FTP candidates below: a hard 5-minute
+    # effort is meaningful MAP evidence even in a ride that yields no usable
+    # threshold estimate.
+    map_points: list[tuple[str, float]] = []
 
     for ride in rides:
         activity_date = ride.get("activity_date", "")
@@ -1921,6 +1971,10 @@ def estimate_ftp_over_time(
             continue
 
         points = _best_power_points(watts, time_data, FTP_ESTIMATE_DURATIONS)
+        map_point = points.get(MAP_DURATION_MINUTES)
+        if map_point is not None:
+            map_points.append((activity_date, map_point[0]))
+
         usable_hr = hr_data if hr_data and len(hr_data) == len(watts) else None
         candidates = _ftp_candidates_from_power_duration_points(
             points,
@@ -1951,7 +2005,14 @@ def estimate_ftp_over_time(
             end_date = None
 
         if end_date is None:
-            result.append({"date": date_str, "ftp": raw_ftp, "raw_ftp": raw_ftp})
+            result.append(
+                {
+                    "date": date_str,
+                    "ftp": raw_ftp,
+                    "raw_ftp": raw_ftp,
+                    "map_5min": None,
+                }
+            )
             continue
 
         start_date = end_date - window
@@ -1983,7 +2044,20 @@ def estimate_ftp_over_time(
             require_hr_for_short_efforts=False,
         )
         smoothed_ftp = max(envelope_candidates) if envelope_candidates else raw_ftp
-        result.append({"date": date_str, "ftp": smoothed_ftp, "raw_ftp": raw_ftp})
+
+        window_map = [
+            power
+            for d_str, power in map_points
+            if _in_window(d_str, start_date, end_date)
+        ]
+        result.append(
+            {
+                "date": date_str,
+                "ftp": smoothed_ftp,
+                "raw_ftp": raw_ftp,
+                "map_5min": round(max(window_map)) if window_map else None,
+            }
+        )
 
     return result
 

@@ -33,7 +33,11 @@ from services import ai_service, metrics_service
 from services import assessment_pipeline
 from services import athlete_inquiry
 from services import plan_pipeline
-from services.analysis import AVG_POWER_TO_FTP_RATIO, build_ride_metrics_chain
+from services.analysis import (
+    AVG_POWER_TO_FTP_RATIO,
+    build_ride_metrics_chain,
+    check_ftp_against_map,
+)
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
 from services import llm as llm_service
@@ -107,7 +111,9 @@ async def _backfill_ride_weather_bg(user_id: str, access_token: str | None) -> N
         _weather_backfill_users_in_progress.discard(user_id)
 
 
-def _user_to_response(user: models.User) -> schemas.UserResponse:
+def _user_to_response(
+    user: models.User, ftp_plausibility_warning: str | None = None
+) -> schemas.UserResponse:
     strava_connection = None
     if user.strava_token is not None:
         strava_connection = schemas.StravaConnectionSchema(
@@ -151,6 +157,7 @@ def _user_to_response(user: models.User) -> schemas.UserResponse:
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
         consumed_tokens=user.consumed_tokens or 0,
+        ftp_plausibility_warning=ftp_plausibility_warning,
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
         intervals_connection=intervals_connection,
@@ -220,11 +227,35 @@ async def _sync_race_context(
     return events
 
 
+async def _ftp_plausibility_warning(
+    db: AsyncSession, user: models.User
+) -> str | None:
+    """Check the stored FTP against the athlete's recorded MAP proxy.
+
+    Advisory only — a bad ratio is surfaced, never silently corrected.  A
+    lookup failure must not break profile reads, so errors degrade to no
+    warning.
+    """
+    if not user.current_ftp:
+        return None
+    try:
+        map_5min = await crud.get_latest_map_5min(db, user.id)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "MAP lookup failed for FTP plausibility check", exc_info=True
+        )
+        return None
+    return check_ftp_against_map(user.current_ftp, map_5min)
+
+
 @router.get("", response_model=schemas.UserResponse)
 async def get_me(
+    db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
-    return _user_to_response(current_user)
+    return _user_to_response(
+        current_user, await _ftp_plausibility_warning(db, current_user)
+    )
 
 
 @router.put("", response_model=schemas.UserResponse)
@@ -241,7 +272,9 @@ async def update_me(
         setattr(current_user, field, value)
     await db.flush()
     await db.refresh(current_user)
-    return _user_to_response(current_user)
+    return _user_to_response(
+        current_user, await _ftp_plausibility_warning(db, current_user)
+    )
 
 
 @router.delete("")
@@ -1276,6 +1309,7 @@ async def get_metrics_history(
             schemas.AthleteMetricSnapshotSchema(
                 recorded_at=s.recorded_at.isoformat(),
                 ftp=s.ftp,
+                map_5min=s.map_5min,
                 ctl=s.ctl,
                 atl=s.atl,
                 tsb=s.tsb,

@@ -38,6 +38,7 @@ interface BackendUserResponse {
   consumedTokens: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
+  ftpPlausibilityWarning?: string | null
   riderAssessment?: RiderAssessment | null
   stravaConnection?: StravaConnection | null
   intervalsConnection?: IntervalsConnection | null
@@ -53,6 +54,10 @@ export interface LoadedUserData {
   lastIntervalsActivityId: number | null
   intervalsAutoSyncEnabled: boolean
   aiProvider: AiProvider
+  /** Advisory message when the stored FTP is implausible against the
+   * athlete's recorded maximal aerobic power.  Null when the pair looks sane
+   * or no MAP reference has been recorded yet. */
+  ftpPlausibilityWarning: string | null
   riderAssessment: RiderAssessment | null
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
@@ -101,6 +106,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
     intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled ?? true,
     aiProvider: user.aiProvider ?? 'openai',
+    ftpPlausibilityWarning: user.ftpPlausibilityWarning ?? null,
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,
     intervalsConnection: user.intervalsConnection ?? null,

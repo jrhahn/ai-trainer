@@ -1061,6 +1061,40 @@ describe('AIChat pinned inquiry resilience (#506)', () => {
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
   })
 
+  it('keeps the rephrased wording when a stale list fetch lands after the answer', async () => {
+    // Answering appends chat messages, which re-runs the list effect. Hold that
+    // refetch open so it resolves *after* the rephrase is applied, carrying the
+    // pre-rephrase wording — the ordering that made this flaky in CI.
+    setupStore()
+    let release: (value: unknown) => void = () => {}
+    mockFetchAthleteInquiries
+      .mockResolvedValueOnce([inquiry()])
+      .mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ askCount: 2, question: 'Is it a fixed commitment on Tuesdays?' }),
+      accepted: false,
+      coachReply: 'Let me put it another way.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pinned-inquiry')).toHaveTextContent(
+        'Is it a fixed commitment on Tuesdays?',
+      ),
+    )
+
+    // The stale list (askCount 1) must not roll the pin back to the old wording.
+    release([inquiry()])
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('pinned-inquiry')).toHaveTextContent(
+      'Is it a fixed commitment on Tuesdays?',
+    )
+  })
+
   it('leaves the other pending question untouched when one is rephrased', async () => {
     setupStore()
     const second = inquiry({ id: 'inq-2', question: 'How is sleep at the moment?' })

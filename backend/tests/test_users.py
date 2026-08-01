@@ -870,3 +870,73 @@ async def test_plan_write_read_roundtrip_is_canonical_and_lossless(client, auth_
     assert day["durationMaxMinutes"] == 240
     assert day["durationMinutes"] == round((180 + 240) / 2)  # 210 — coherent
     assert day["someFutureField"] == "keep-me"  # unknown key preserved end-to-end
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"currentFTP": 1500},  # typo: above any human threshold power
+        {"currentFTP": 5},
+        {"maxHeartRate": 40},
+        {"maxHeartRate": 400},
+        {"restingHeartRate": 5},
+        # Relative check: resting HR cannot sit at or above max HR.
+        {"restingHeartRate": 180, "maxHeartRate": 175},
+    ],
+)
+async def test_update_me_rejects_implausible_metrics(client, auth_headers, payload):
+    response = await client.put(
+        "/api/v1/users/me", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_me_accepts_plausible_metrics(client, auth_headers):
+    response = await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"currentFTP": 280, "maxHeartRate": 190, "restingHeartRate": 48},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["currentFTP"] == 280
+    # No MAP recorded yet, so there is nothing to check FTP against.
+    assert body["ftpPlausibilityWarning"] is None
+
+
+@pytest.mark.asyncio
+async def test_ftp_plausibility_warning_uses_recorded_map(client, auth_headers):
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"currentFTP": 300}
+    )
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user_id = me.json()["id"]
+
+    # Best 5-min power of 310 W puts FTP at 97 % of MAP — impossible.
+    async with TestSessionLocal() as db:
+        await crud.create_athlete_metric_snapshot(
+            db, user_id, ftp=300, map_5min=310, source="ftp_estimation"
+        )
+        await db.commit()
+
+    warned = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert warned.status_code == 200
+    warning = warned.json()["ftpPlausibilityWarning"]
+    assert warning is not None
+    assert "too high" in warning
+
+    # A MAP that puts FTP at 78 % clears the check.
+    async with TestSessionLocal() as db:
+        await crud.create_athlete_metric_snapshot(
+            db, user_id, ftp=300, map_5min=385, source="ftp_estimation"
+        )
+        await db.commit()
+
+    cleared = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert cleared.json()["ftpPlausibilityWarning"] is None

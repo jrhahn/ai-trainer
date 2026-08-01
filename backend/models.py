@@ -1018,6 +1018,9 @@ class AthleteMetricSnapshot(Base):
         DateTime(timezone=True), default=_utcnow
     )
     ftp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Best 5-minute mean power at the time of the snapshot — the maximal aerobic
+    # power proxy that FTP is sanity-checked against (FTP must sit below it).
+    map_5min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ctl: Mapped[float | None] = mapped_column(nullable=True)
     atl: Mapped[float | None] = mapped_column(nullable=True)
     tsb: Mapped[float | None] = mapped_column(nullable=True)

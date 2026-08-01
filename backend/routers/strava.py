@@ -472,7 +472,6 @@ async def _run_import_background(
             ftp_series = estimate_ftp_over_time(
                 rides,
                 max_heart_rate=max_heart_rate,
-                resting_heart_rate=resting_heart_rate,
             )
         except Exception:  # noqa: BLE001
             logger.warning(
@@ -496,6 +495,7 @@ async def _run_import_background(
                             user_id,
                             ftp=point["ftp"],
                             threshold_hr=None,
+                            map_5min=point.get("map_5min"),
                             source="ftp_estimation",
                             recorded_at=ride_dt,
                         )

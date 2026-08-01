@@ -30,8 +30,10 @@ export default function SettingsPage() {
     lastIntervalsActivityId,
     intervalsAutoSyncEnabled,
     aiProvider,
+    ftpPlausibilityWarning,
     setAiProvider,
     setUserProfile,
+    setFtpPlausibilityWarning,
     setStravaAutoSyncEnabled,
     setIntervalsAutoSyncEnabled,
     resetAll,
@@ -40,6 +42,7 @@ export default function SettingsPage() {
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
+      ftpPlausibilityWarning: s.ftpPlausibilityWarning,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
       lastStravaActivityId: s.lastStravaActivityId,
@@ -49,6 +52,7 @@ export default function SettingsPage() {
       aiProvider: s.aiProvider,
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
+      setFtpPlausibilityWarning: s.setFtpPlausibilityWarning,
       setStravaAutoSyncEnabled: s.setStravaAutoSyncEnabled,
       setIntervalsAutoSyncEnabled: s.setIntervalsAutoSyncEnabled,
       resetAll: s.resetAll,
@@ -125,6 +129,7 @@ export default function SettingsPage() {
     try {
       const updated = await updateCurrentUser(authToken, { currentFTP: parsed })
       setUserProfile(updated.profile)
+      setFtpPlausibilityWarning(updated.ftpPlausibilityWarning)
       setFtpDraft(null)
       setFtpMsg({ type: 'success', text: `FTP updated to ${parsed} W.` })
       setTimeout(() => setFtpMsg(null), 3000)
@@ -445,6 +450,16 @@ export default function SettingsPage() {
             }`}
           >
             {ftpMsg.text}
+          </div>
+        )}
+
+        {/* Advisory only — the athlete's FTP is never overridden. */}
+        {ftpPlausibilityWarning && (
+          <div
+            role="alert"
+            className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
+          >
+            {ftpPlausibilityWarning}
           </div>
         )}
 

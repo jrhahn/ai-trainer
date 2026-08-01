@@ -31,6 +31,22 @@ if TYPE_CHECKING:
 _UPPER_ACRONYMS = {"ftp", "hr"}
 
 
+# ---------------------------------------------------------------------------
+# Physiological bounds for athlete-entered metrics
+# ---------------------------------------------------------------------------
+
+# Outer limits, not expectations: they exist to reject typos (a 1500 W FTP, a
+# 40 bpm max HR) before the value reaches zone maths or the coach prompt, while
+# staying well clear of any real athlete.  Relative plausibility — FTP against
+# maximal aerobic power, resting against max HR — is checked separately.
+FTP_MIN_WATTS = 30
+FTP_MAX_WATTS = 700
+MAX_HR_MIN_BPM = 120
+MAX_HR_MAX_BPM = 230
+RESTING_HR_MIN_BPM = 25
+RESTING_HR_MAX_BPM = 120
+
+
 def _to_camel(name: str) -> str:
     parts = name.split("_")
     result = parts[0].lower()
@@ -164,6 +180,11 @@ class UserResponse(CamelModel):
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
     consumed_tokens: int = 0
+    ftp_plausibility_warning: Optional[str] = None
+    """Advisory message when ``current_ftp`` is implausible against the
+    athlete's recorded maximal aerobic power.  ``null`` when the pair looks
+    sane or no MAP reference has been recorded yet.  Never auto-corrects the
+    stored FTP — the athlete owns that value."""
     # related
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
@@ -186,9 +207,15 @@ class UpdateProfileRequest(CamelModel):
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
     follows_training_plan: Optional[bool] = None
-    max_heart_rate: Optional[int] = None
-    resting_heart_rate: Optional[int] = None
-    current_ftp: Optional[int] = None
+    max_heart_rate: Optional[int] = Field(
+        default=None, ge=MAX_HR_MIN_BPM, le=MAX_HR_MAX_BPM
+    )
+    resting_heart_rate: Optional[int] = Field(
+        default=None, ge=RESTING_HR_MIN_BPM, le=RESTING_HR_MAX_BPM
+    )
+    current_ftp: Optional[int] = Field(
+        default=None, ge=FTP_MIN_WATTS, le=FTP_MAX_WATTS
+    )
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
     is_onboarded: Optional[bool] = None
@@ -207,6 +234,24 @@ class UpdateProfileRequest(CamelModel):
         if value not in {"race", "general_fitness"}:
             raise ValueError("training_goal must be 'race' or 'general_fitness'")
         return value
+
+    @model_validator(mode="after")
+    def resting_hr_below_max_hr(self) -> "UpdateProfileRequest":
+        """Reject a resting HR at or above max HR.
+
+        Only checked when both arrive in the same request; a partial update
+        that touches one of them is validated against its absolute bounds only,
+        since the counterpart on the profile may itself be the stale value.
+        """
+        if (
+            self.resting_heart_rate is not None
+            and self.max_heart_rate is not None
+            and self.resting_heart_rate >= self.max_heart_rate
+        ):
+            raise ValueError(
+                "resting_heart_rate must be below max_heart_rate"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -1357,6 +1402,10 @@ class RaceEventFeedbackResponse(CamelModel):
 class AthleteMetricSnapshotSchema(CamelModel):
     recorded_at: str
     ftp: Optional[int] = None
+    map_5min: Optional[int] = None
+    """Best 5-minute power (W) at the time of the snapshot — the maximal
+    aerobic power proxy.  ``null`` on snapshots recorded before this was
+    tracked, or when no ride in the window contained a 5-minute effort."""
     ctl: Optional[float] = None
     atl: Optional[float] = None
     tsb: Optional[float] = None
@@ -1661,11 +1710,25 @@ class EstimateFTPRequest(CamelModel):
     updated values.
     """
 
-    max_heart_rate: Optional[int] = None
+    max_heart_rate: Optional[int] = Field(
+        default=None, ge=MAX_HR_MIN_BPM, le=MAX_HR_MAX_BPM
+    )
     """Athlete's maximum heart rate in bpm."""
 
-    resting_heart_rate: Optional[int] = None
+    resting_heart_rate: Optional[int] = Field(
+        default=None, ge=RESTING_HR_MIN_BPM, le=RESTING_HR_MAX_BPM
+    )
     """Athlete's resting heart rate in bpm."""
+
+    @model_validator(mode="after")
+    def resting_hr_below_max_hr(self) -> "EstimateFTPRequest":
+        if (
+            self.resting_heart_rate is not None
+            and self.max_heart_rate is not None
+            and self.resting_heart_rate >= self.max_heart_rate
+        ):
+            raise ValueError("resting_heart_rate must be below max_heart_rate")
+        return self
 
 
 class EstimateFTPResponse(CamelModel):

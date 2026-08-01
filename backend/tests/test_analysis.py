@@ -400,6 +400,45 @@ def test_estimate_ftp_over_time_produces_curve():
     assert isinstance(result, list)
     assert len(result) >= 1
     assert all("ftp" in r and "raw_ftp" in r and "date" in r for r in result)
+    # A 5-minute MAP proxy is emitted alongside every FTP point, and FTP must
+    # land below it.
+    assert all("map_5min" in r for r in result)
+    for point in result:
+        if point["map_5min"] is not None:
+            assert point["ftp"] < point["map_5min"]
+
+
+def test_check_ftp_against_map_flags_ftp_at_or_above_map():
+    # FTP above the aerobic ceiling is impossible, not merely unusual.
+    warning = analysis.check_ftp_against_map(320, 300)
+    assert warning is not None
+    assert "too high" in warning
+
+    # Right at the upper bound still trips.
+    assert (
+        analysis.check_ftp_against_map(
+            round(300 * analysis.FTP_MAP_RATIO_MAX), 300
+        )
+        is not None
+    )
+
+
+def test_check_ftp_against_map_flags_implausibly_low_ftp():
+    warning = analysis.check_ftp_against_map(150, 400)
+    assert warning is not None
+    assert "out of date" in warning
+
+
+def test_check_ftp_against_map_accepts_normal_physiology():
+    # 78 % of MAP sits squarely in the trained-cyclist band.
+    assert analysis.check_ftp_against_map(280, 360) is None
+
+
+def test_check_ftp_against_map_needs_both_values():
+    assert analysis.check_ftp_against_map(None, 400) is None
+    assert analysis.check_ftp_against_map(280, None) is None
+    assert analysis.check_ftp_against_map(0, 400) is None
+    assert analysis.check_ftp_against_map(280, 0) is None
 
 
 def test_estimate_ftp_over_time_empty_and_invalid():
