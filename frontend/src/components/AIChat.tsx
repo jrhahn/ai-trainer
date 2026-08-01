@@ -290,6 +290,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
   // effect below is not even re-run to cancel it. Re-pinning a question they just
   // answered is worse than picking up a new one a cycle late.
   const handledInquiryIdsRef = useRef<Set<string>>(new Set())
+  // Rephrased questions the athlete has not answered yet, keyed by id. Answering
+  // appends chat messages, which re-runs the list effect below — so a fetch
+  // carrying the pre-rephrase wording can resolve after the rephrase is applied
+  // and roll the pin back to the question the coach already moved on from.
+  // handledInquiryIdsRef cannot cover this: a rephrase is still pending, so the
+  // question must stay pinned rather than be filtered out.
+  const rephrasedInquiriesRef = useRef<Map<string, AthleteInquiry>>(new Map())
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
@@ -342,7 +349,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ...recommendationEvents(questions, hypotheses, experiments),
       ])
       setPendingInquiries(
-        inquiries.filter((item) => !handledInquiryIdsRef.current.has(item.id)),
+        inquiries
+          .filter((item) => !handledInquiryIdsRef.current.has(item.id))
+          .map((item) => {
+            // askCount only ever grows, so it orders the two versions without
+            // depending on which request resolved first.
+            const local = rephrasedInquiriesRef.current.get(item.id)
+            return local && local.askCount > item.askCount ? local : item
+          }),
       )
     })()
     return () => {
@@ -631,6 +645,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
     // else (answered, or handed off to settings) leaves the pin for good.
     if (result.inquiry.status !== 'pending') {
       handledInquiryIdsRef.current.add(result.inquiry.id)
+      rephrasedInquiriesRef.current.delete(result.inquiry.id)
+    } else {
+      rephrasedInquiriesRef.current.set(result.inquiry.id, result.inquiry)
     }
     setPendingInquiries((current) =>
       result.inquiry.status === 'pending'
@@ -643,6 +660,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     if (!authToken) return
     await dismissAthleteInquiry(authToken, inquiry.id)
     handledInquiryIdsRef.current.add(inquiry.id)
+    rephrasedInquiriesRef.current.delete(inquiry.id)
     setPendingInquiries((current) => current.filter((item) => item.id !== inquiry.id))
   }
 

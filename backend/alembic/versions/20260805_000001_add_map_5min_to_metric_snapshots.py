@@ -1,7 +1,7 @@
 """add map_5min to athlete_metric_snapshots
 
-Revision ID: 20260804_000001
-Revises: 20260803_000001
+Revision ID: 20260805_000001
+Revises: 20260804_000001
 Create Date: 2026-07-31 00:00:00.000000
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
 
-revision = "20260804_000001"
-down_revision = "20260803_000001"
+revision = "20260805_000001"
+down_revision = "20260804_000001"
 branch_labels = None
 depends_on = None
 
