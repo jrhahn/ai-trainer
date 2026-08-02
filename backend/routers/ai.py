@@ -942,8 +942,9 @@ async def ask_trainer(
         ).model_dump(by_alias=True, mode="json")
         for fact in athlete_memory_fact_rows
     ]
+    # Capped, not the full list (#512) — see get_prompt_athlete_open_questions.
     open_question_rows = (
-        await crud.list_athlete_open_questions(db, current_user.id)
+        await crud.get_prompt_athlete_open_questions(db, current_user.id)
         if memory_enabled
         else []
     )
@@ -983,7 +984,10 @@ async def ask_trainer(
             performance_recommendation = roi_recommendation.recommend_training_roi(
                 perf_model_row.attributes, perf_model_row.limiters
             )
-        hypothesis_rows = await crud.list_athlete_hypotheses(db, current_user.id)
+        # Capped, not the full list (#512) — see get_prompt_athlete_hypotheses.
+        hypothesis_rows = await crud.get_prompt_athlete_hypotheses(
+            db, current_user.id
+        )
         hypotheses = [
             schemas.AthleteHypothesisSchema.model_validate(
                 hypothesis, from_attributes=True

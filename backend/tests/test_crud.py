@@ -1486,6 +1486,147 @@ async def test_clear_athlete_memory_removes_hypotheses(db: AsyncSession) -> None
 
 
 # ---------------------------------------------------------------------------
+# Prompt-facing caps for hypotheses and open questions (#512)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_prompt_hypotheses_are_capped_while_the_list_stays_complete(
+    db: AsyncSession,
+) -> None:
+    """The coach reads the strongest few; the athlete-facing list stays whole."""
+    user = await _make_user(db)
+    # Confidence descends with the index, so the expected survivors are known.
+    for index in range(crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT + 5):
+        await crud.propose_athlete_hypothesis(
+            db,
+            user.id,
+            statement=f"Hypothesis number {index}",
+            category="fatigue_response",
+            confidence=0.9 - index * 0.01,
+        )
+
+    prompt = await crud.get_prompt_athlete_hypotheses(db, user.id)
+    assert len(prompt) == crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT
+    assert [h.statement for h in prompt] == [
+        f"Hypothesis number {index}"
+        for index in range(crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT)
+    ]
+
+    # The API/UI path is untouched — capping is a prompt concern only.
+    assert (
+        len(await crud.list_athlete_hypotheses(db, user.id))
+        == crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT + 5
+    )
+
+
+@pytest.mark.asyncio
+async def test_prompt_hypotheses_grow_no_further_once_capped(
+    db: AsyncSession,
+) -> None:
+    """Adding another hypothesis must not make the prompt any bigger (#512)."""
+    user = await _make_user(db)
+    for index in range(crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT):
+        await crud.propose_athlete_hypothesis(
+            db, user.id, statement=f"Baseline {index}", category="general"
+        )
+    before = await crud.get_prompt_athlete_hypotheses(db, user.id)
+
+    await crud.propose_athlete_hypothesis(
+        db, user.id, statement="One more idea", category="general"
+    )
+    after = await crud.get_prompt_athlete_hypotheses(db, user.id)
+
+    assert len(after) == len(before) == crud.ATHLETE_HYPOTHESIS_PROMPT_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_prompt_hypotheses_drop_low_confidence_and_stale_ones(
+    db: AsyncSession,
+) -> None:
+    """A barely-held or long-unsupported belief is not worth prompt tokens."""
+    user = await _make_user(db)
+    now = datetime.now(timezone.utc)
+    await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Still actively supported",
+        category="general",
+        confidence=0.6,
+        observed_at=now,
+    )
+    await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="Decayed to near nothing",
+        category="general",
+        confidence=0.1,
+        observed_at=now,
+    )
+    await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement="No fresh evidence in months",
+        category="general",
+        confidence=0.6,
+        observed_at=now
+        - timedelta(days=crud.ATHLETE_HYPOTHESIS_PROMPT_STALE_AFTER_DAYS + 1),
+    )
+
+    prompt = await crud.get_prompt_athlete_hypotheses(db, user.id, now=now)
+    assert [h.statement for h in prompt] == ["Still actively supported"]
+
+
+@pytest.mark.asyncio
+async def test_prompt_open_questions_are_capped_by_evidence(
+    db: AsyncSession,
+) -> None:
+    """The best-evidenced questions survive; the rest wait their turn."""
+    user = await _make_user(db)
+    for index in range(crud.ATHLETE_OPEN_QUESTION_PROMPT_LIMIT + 4):
+        await crud.record_athlete_open_question(
+            db, user.id, question=f"Question number {index}", category="general"
+        )
+    # One extra observation lifts a single question above the rest without
+    # reaching the auto-close threshold.
+    await crud.record_athlete_open_question(
+        db, user.id, question="Question number 7", category="general"
+    )
+
+    prompt = await crud.get_prompt_athlete_open_questions(db, user.id)
+    assert len(prompt) == crud.ATHLETE_OPEN_QUESTION_PROMPT_LIMIT
+    assert prompt[0].question == "Question number 7"
+    assert all(question.status == "open" for question in prompt)
+
+    assert (
+        len(await crud.list_athlete_open_questions(db, user.id))
+        == crud.ATHLETE_OPEN_QUESTION_PROMPT_LIMIT + 4
+    )
+
+
+@pytest.mark.asyncio
+async def test_prompt_open_questions_drop_stale_ones(db: AsyncSession) -> None:
+    """A question nothing has added to in months is no longer being worked on."""
+    user = await _make_user(db)
+    now = datetime.now(timezone.utc)
+    await crud.record_athlete_open_question(
+        db, user.id, question="Is FTP underestimated?", category="general",
+        observed_at=now,
+    )
+    await crud.record_athlete_open_question(
+        db,
+        user.id,
+        question="Does altitude blunt recovery?",
+        category="general",
+        observed_at=now
+        - timedelta(days=crud.ATHLETE_OPEN_QUESTION_PROMPT_STALE_AFTER_DAYS + 1),
+    )
+
+    prompt = await crud.get_prompt_athlete_open_questions(db, user.id, now=now)
+    assert [q.question for q in prompt] == ["Is FTP underestimated?"]
+
+
+# ---------------------------------------------------------------------------
 # AthleteExperiment
 # ---------------------------------------------------------------------------
 

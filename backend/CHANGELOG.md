@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Coach prompt carries a bounded set of hypotheses and open questions**
+  (`crud.py`, `routers/ai.py`) — both sections used to render *everything* the
+  coach had ever wondered about. In production that was 62 hypotheses (every one
+  still `proposed` — nothing had ever retired one) and 21 open questions, i.e.
+  6,063 tokens, 29 % of a 21,300-token coach message, growing every week that the
+  weekly generators ran regardless of what the athlete did. Two new prompt-facing
+  accessors mirror the existing `get_prompt_athlete_memory_facts`:
+  `get_prompt_athlete_hypotheses` takes the 8 strongest by confidence and
+  evidence, and `get_prompt_athlete_open_questions` the 5 best-evidenced;
+  both drop records with no fresh evidence in 8 weeks, and hypotheses below the
+  seed confidence (only reachable by active decay) are dropped as well. The
+  unbounded `list_*` functions are untouched, so the expert-mode UI and the
+  memory export still show the athlete the complete picture — the cap is a prompt
+  concern only. Measured against the same production athlete: 6,063 → 1,478
+  tokens, **−4,585 per coach message** (−22 % of the whole prompt), and adding a
+  100th hypothesis no longer makes it bigger (#512, epic #510).
 - **Gemini runs Flash-Lite on every task** (`config.py`, `services/llm.py`,
   `.env.example`) — all four task defaults move from `gemini-3.5-flash` to
   `gemini-3.5-flash-lite`: $0.30/$2.50 per M input/output tokens against

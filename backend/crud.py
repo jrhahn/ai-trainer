@@ -1169,6 +1169,21 @@ ATHLETE_HYPOTHESIS_CONFIRM_CONFIDENCE = 0.75
 # backs, rather than leaving a stale duplicate around.
 ATHLETE_HYPOTHESIS_DECAY_STEP = 0.2
 ATHLETE_HYPOTHESIS_RETIRE_CONFIDENCE = 0.2
+# Prompt-facing cap (#512). This table only grows: a weekly generator keeps
+# proposing, and in production all 62 rows were still ``proposed`` — nothing had
+# ever retired one — so the section was 3,560 tokens (17 %) of every coach
+# message and got more expensive each week no matter what the athlete did. The
+# coach does not need to recite every idea it has ever had; it needs the ones it
+# can actually defend. Eight is roughly what fits in a conversation before the
+# hypotheses drown out the answer. The floor is the confidence a hypothesis is
+# seeded with, so only one actively knocked down by
+# :func:`decay_unsupported_model_hypotheses` falls below it.
+ATHLETE_HYPOTHESIS_PROMPT_LIMIT = 8
+ATHLETE_HYPOTHESIS_PROMPT_MIN_CONFIDENCE = ATHLETE_MEMORY_DEFAULT_CONFIDENCE
+# The generators run weekly and re-propose what the data still supports, which
+# bumps ``updated_at``. Surviving eight such passes without one fresh
+# observation means the evidence has moved on.
+ATHLETE_HYPOTHESIS_PROMPT_STALE_AFTER_DAYS = 56
 
 
 def _normalise_hypothesis_key(statement: str) -> str:
@@ -1210,6 +1225,41 @@ async def list_athlete_hypotheses(
         )
     )
     return list(result)
+
+
+async def get_prompt_athlete_hypotheses(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    now: datetime | None = None,
+    min_confidence: float = ATHLETE_HYPOTHESIS_PROMPT_MIN_CONFIDENCE,
+    stale_after_days: int = ATHLETE_HYPOTHESIS_PROMPT_STALE_AFTER_DAYS,
+    limit: int = ATHLETE_HYPOTHESIS_PROMPT_LIMIT,
+) -> list[models.AthleteHypothesis]:
+    """Return only the hypotheses worth spending coach-prompt tokens on (#512).
+
+    :func:`list_athlete_hypotheses` stays unbounded for the API and the
+    expert-mode UI, which are meant to show the athlete everything. A prompt is
+    the opposite situation: it pays for every row on every message, so it takes
+    the strongest few and lets the rest wait for their evidence. Ordering is
+    inherited from ``list_athlete_hypotheses`` (confidence, then evidence), so
+    the survivors are the ones the coach is most able to defend.
+    """
+    reference = now or datetime.now(timezone.utc)
+    cutoff = reference - timedelta(days=stale_after_days)
+    prompt_hypotheses: list[models.AthleteHypothesis] = []
+    for hypothesis in await list_athlete_hypotheses(db, user_id):
+        # A belief the coach barely holds is not worth asserting to the athlete,
+        # however tentatively — and a hypothesis that has gone this long without
+        # a single fresh observation is one the evidence stopped supporting.
+        if hypothesis.confidence < min_confidence:
+            continue
+        if _as_aware_utc(hypothesis.updated_at) < cutoff:
+            continue
+        prompt_hypotheses.append(hypothesis)
+        if len(prompt_hypotheses) >= limit:
+            break
+    return prompt_hypotheses
 
 
 async def propose_athlete_hypothesis(
@@ -1408,6 +1458,15 @@ _ATHLETE_OPEN_QUESTION_OPEN_STATUSES = ("open",)
 # Independent observations at/above which an open question has "sufficient
 # evidence" and auto-closes as answered (see issue #385).
 ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE = 3
+# Prompt-facing cap (#512), for the same reason as the hypothesis cap above: 21
+# open questions were 2,503 tokens (12 %) of every coach message, and a question
+# only auto-closes once it reaches the evidence threshold, so a question nothing
+# ever gathers evidence for is re-sent forever. Five is enough for the coach to
+# recognise an opening in the conversation; more just crowds out the reply. There
+# is no confidence to filter on here, so it is the best-evidenced five — the ones
+# closest to being answerable.
+ATHLETE_OPEN_QUESTION_PROMPT_LIMIT = 5
+ATHLETE_OPEN_QUESTION_PROMPT_STALE_AFTER_DAYS = 56
 
 
 def _normalise_open_question_key(question: str) -> str:
@@ -1450,6 +1509,35 @@ async def list_athlete_open_questions(
         )
     )
     return list(result)
+
+
+async def get_prompt_athlete_open_questions(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    now: datetime | None = None,
+    stale_after_days: int = ATHLETE_OPEN_QUESTION_PROMPT_STALE_AFTER_DAYS,
+    limit: int = ATHLETE_OPEN_QUESTION_PROMPT_LIMIT,
+) -> list[models.AthleteOpenQuestion]:
+    """Return only the open questions worth carrying in a coach prompt (#512).
+
+    The athlete-facing list stays complete via
+    :func:`list_athlete_open_questions`; this is the bounded view the coach
+    reads on every message. Ordering is inherited, so the survivors are the
+    best-evidenced ones — the questions closest to being answerable.
+    """
+    reference = now or datetime.now(timezone.utc)
+    cutoff = reference - timedelta(days=stale_after_days)
+    prompt_questions: list[models.AthleteOpenQuestion] = []
+    for question in await list_athlete_open_questions(db, user_id):
+        # A question that has gathered nothing new in this long is not one the
+        # coach is still actively working on.
+        if _as_aware_utc(question.updated_at) < cutoff:
+            continue
+        prompt_questions.append(question)
+        if len(prompt_questions) >= limit:
+            break
+    return prompt_questions
 
 
 async def record_athlete_open_question(
