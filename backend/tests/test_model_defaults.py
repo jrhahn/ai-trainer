@@ -49,13 +49,18 @@ def test_openai_defaults():
 
 
 def test_gemini_defaults():
-    """Gemini defaults all tasks to gemini-3.5-flash."""
+    """Gemini defaults all tasks to gemini-3.5-flash-lite (#511).
+
+    Flash-Lite is 5x cheaper on input and 3.6x cheaper on output than Flash; the
+    workload is overwhelmingly structured JSON extraction under explicit
+    instructions. Any task can be raised back via its env var.
+    """
     from config import settings
 
-    assert settings.gemini_classify_model == "gemini-3.5-flash"
-    assert settings.gemini_plan_model == "gemini-3.5-flash"
-    assert settings.gemini_coach_model == "gemini-3.5-flash"
-    assert settings.gemini_feedback_model == "gemini-3.5-flash"
+    assert settings.gemini_classify_model == "gemini-3.5-flash-lite"
+    assert settings.gemini_plan_model == "gemini-3.5-flash-lite"
+    assert settings.gemini_coach_model == "gemini-3.5-flash-lite"
+    assert settings.gemini_feedback_model == "gemini-3.5-flash-lite"
 
 
 # ---------------------------------------------------------------------------
