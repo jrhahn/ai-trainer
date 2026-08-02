@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Test suite runs in 4 minutes instead of 19** (`tests/conftest.py`) — the
+  autouse `reset_db` fixture rebuilt the entire schema, 26 tables and 35 indexes,
+  before *every one* of the 1501 tests, on an on-disk sqlite file. Setup cost
+  0.63 s per test against ~0.01 s for the test itself, so roughly 16 of the 19
+  minutes were fixture, not test. Two changes, no test touched: the schema is now
+  built once per process and each test only empties the tables (`DELETE`, children
+  first — deliberately not a wrapping transaction, since many tests commit for
+  real and some exercise background tasks that open their own sessions), and the
+  database lives in `/dev/shm` under a per-process name instead of a shared
+  `./pytest.db`, falling back to the temp directory off Linux. Measured:
+  `1501 passed` in 263 s, down from ~19 min; the same three modules went from
+  96.3 s to 8.6 s. The per-process name also retires a recurring false alarm —
+  a killed run used to leave `pytest.db` corrupted so the *next* run failed with
+  `no such table` (which reads exactly like a schema regression, cf. #496), and
+  two concurrent runs gave each other `disk I/O error`. Neither is possible now;
+  leftovers from killed runs are swept on the next start (#520).
 - **Coach prompt carries a bounded set of hypotheses and open questions**
   (`crud.py`, `routers/ai.py`) — both sections used to render *everything* the
   coach had ever wondered about. In production that was 62 hypotheses (every one
