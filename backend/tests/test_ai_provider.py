@@ -142,3 +142,129 @@ async def test_generate_plan_uses_gemini_when_user_prefers_it(client, auth_heade
     )
     assert response.status_code == 200
     assert mock_ai_service["generate_training_plan"].called
+
+
+# ---------------------------------------------------------------------------
+# Thinking config — off, but not every model accepts an explicit zero (#511)
+# ---------------------------------------------------------------------------
+
+
+def test_zero_thinking_budget_sent_when_the_model_accepts_it():
+    from google.genai import types
+
+    from services.llm import GeminiProvider
+
+    provider = GeminiProvider(model="gemini-3.5-flash", api_key="fake")
+    config = provider._build_config("sys", False, types)
+
+    assert config.thinking_config.thinking_budget == 0
+
+
+def test_thinking_config_omitted_for_models_that_reject_a_zero_budget():
+    """These 400 on an explicit zero, so they are left at their default.
+
+    A budget of 1 is not a substitute — they treat it as a hint rather than a
+    cap and spend thinking tokens anyway.
+    """
+    from google.genai import types
+
+    from services.llm import GeminiProvider
+
+    for model in ("gemini-3.5-flash-lite", "gemini-3.6-flash"):
+        config = GeminiProvider(model=model, api_key="fake")._build_config(
+            "sys", False, types
+        )
+        assert config.thinking_config is None
+
+
+def test_build_config_still_sets_json_mode():
+    from google.genai import types
+
+    from services.llm import GeminiProvider
+
+    provider = GeminiProvider(model="gemini-3.5-flash-lite", api_key="fake")
+
+    assert provider._build_config("s", True, types).response_mime_type == "application/json"
+    assert provider._build_config("s", False, types).response_mime_type is None
+
+
+@pytest.mark.asyncio
+async def test_generate_retries_without_thinking_config_on_400(monkeypatch):
+    """An unknown model that rejects a zero budget self-heals instead of failing.
+
+    Without this, bumping to such a model would 400 every single call.
+    """
+    from google.genai import errors as genai_errors, types
+
+    import services.llm as llm
+
+    model = "gemini-9.9-flash-unknown"
+    monkeypatch.setattr(
+        llm, "_ZERO_THINKING_BUDGET_UNSUPPORTED", set(), raising=True
+    )
+
+    seen: list[object] = []
+
+    class _FakeModels:
+        async def generate_content(self, *, model, contents, config):
+            seen.append(config.thinking_config)
+            if config.thinking_config is not None:
+                raise genai_errors.ClientError(400, {"error": {"message": "bad"}})
+            return object()
+
+    class _FakeAio:
+        models = _FakeModels()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeClient:
+        aio = _FakeAio()
+
+        def __init__(self, api_key=None):
+            pass
+
+    fake_genai = type("genai", (), {"Client": _FakeClient})
+
+    provider = llm.GeminiProvider(model=model, api_key="fake")
+    await provider._generate("hi", "sys", False, fake_genai, genai_errors, types)
+
+    assert len(seen) == 2, "expected one rejected attempt then one retry"
+    assert seen[0] is not None and seen[1] is None
+    assert model in llm._ZERO_THINKING_BUDGET_UNSUPPORTED
+
+
+@pytest.mark.asyncio
+async def test_generate_does_not_swallow_a_429(monkeypatch):
+    """Rate limits still surface as AIRateLimitError, not as a thinking retry."""
+    from google.genai import errors as genai_errors, types
+
+    import services.llm as llm
+
+    class _FakeModels:
+        async def generate_content(self, *, model, contents, config):
+            raise genai_errors.ClientError(429, {"error": {"message": "slow down"}})
+
+    class _FakeAio:
+        models = _FakeModels()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeClient:
+        aio = _FakeAio()
+
+        def __init__(self, api_key=None):
+            pass
+
+    fake_genai = type("genai", (), {"Client": _FakeClient})
+    provider = llm.GeminiProvider(model="gemini-3.5-flash", api_key="fake")
+
+    with pytest.raises(llm.AIRateLimitError):
+        await provider._generate("hi", "sys", False, fake_genai, genai_errors, types)

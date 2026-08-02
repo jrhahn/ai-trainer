@@ -25,6 +25,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   concern only. Measured against the same production athlete: 6,063 → 1,478
   tokens, **−4,585 per coach message** (−22 % of the whole prompt), and adding a
   100th hypothesis no longer makes it bigger (#512, epic #510).
+- **Gemini runs Flash-Lite on every task** (`config.py`, `services/llm.py`,
+  `.env.example`) — all four task defaults move from `gemini-3.5-flash` to
+  `gemini-3.5-flash-lite`: $0.30/$2.50 per M input/output tokens against
+  $1.50/$9.00, a flat 5x on input. The workload justifies it — `TASK_CLASSIFY`
+  alone covers the whole continuous-learning chain (~8 calls per imported ride:
+  insights, athlete model, hypotheses, inquiries, open questions, experiments,
+  predictions), which is structured JSON extraction under explicit instructions
+  rather than open reasoning. The conversational coach is the one task where the
+  difference could show, so each task stays independently overridable:
+  `GEMINI_COACH_MODEL=gemini-3.5-flash` raises it back with no deploy. Measured
+  against production before the change: ~21,300 tokens per coach message and
+  ~8 M tokens over three months (#511, epic #510).
+
+### Fixed
+
+- **Thinking config adapts to the model instead of assuming a zero budget**
+  (`services/llm.py`) — `GeminiProvider._build_config` hard-coded
+  `thinking_budget=0`, which `gemini-3.5-flash-lite` rejects outright with `400
+  INVALID_ARGUMENT`. Left as it was, the model switch above would have failed
+  *every* Gemini call rather than degrading quality. Models that refuse a zero
+  are now left at their default, which measured at zero thinking tokens across
+  repeat calls; `thinking_budget=1` is deliberately **not** the workaround, as
+  those models treat it as a hint rather than a cap and spent 0–1,348 thinking
+  tokens call to call on an identical prompt (billed at the output rate).
+  Which models refuse a zero does not follow naming — `gemini-3.1-flash-lite`
+  accepts one while the non-lite `gemini-3.6-flash` does not — so rather than
+  infer it from the model string, `_generate` retries a 400 once without the
+  thinking config and remembers the model for the process. A future model bump
+  therefore degrades instead of taking every call down (cf. #401).
 
 ## [0.50.0] - 2026-07-30
 
