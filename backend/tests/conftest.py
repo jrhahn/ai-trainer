@@ -1,6 +1,9 @@
+import asyncio
+import atexit
 import glob
 import os
 import sys
+import tempfile
 from unittest.mock import AsyncMock
 
 # On NixOS, the dynamic linker reads LD_LIBRARY_PATH only at process startup,
@@ -19,7 +22,63 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./pytest.db")
+_DB_FILE_PREFIX = "ai-trainer-pytest-"
+_DB_SIDECAR_SUFFIXES = ("", "-journal", "-wal", "-shm")
+
+
+def _stale_db_files(directory: str) -> list[str]:
+    """Return leftover test databases whose pytest process is gone (#520).
+
+    A run that is killed (tool timeout, Ctrl-C) never reaches :mod:`atexit`, so
+    its database file survives.  It is harmless — no live run shares a name with
+    it — but sweeping it keeps the directory from filling up over months.
+    """
+    stale: list[str] = []
+    for path in glob.glob(os.path.join(directory, f"{_DB_FILE_PREFIX}*.db")):
+        pid = os.path.basename(path)[len(_DB_FILE_PREFIX) : -len(".db")]
+        try:
+            os.kill(int(pid), 0)
+        except (ValueError, ProcessLookupError):
+            stale.append(path)
+        except PermissionError:  # someone else's live process
+            continue
+    return stale
+
+
+def _test_database_url() -> str:
+    """Pick a private, RAM-backed sqlite file for this pytest process (#520).
+
+    The suite used to hard-code ``./pytest.db``, which made the database a
+    *shared, persistent* resource: a killed run left it corrupted and the next
+    run failed with ``no such table`` (looking exactly like a schema regression,
+    cf. #496), and two concurrent runs gave each other ``disk I/O error``.  A
+    per-process file removes the sharing, and putting it in ``/dev/shm`` removes
+    the fsync — measured at roughly two thirds of the fixture cost, since the
+    schema is rebuilt on every test.
+
+    ``/dev/shm`` is Linux-only, so anything else falls back to the temp
+    directory; ``DATABASE_URL`` still wins over both.
+    """
+    directory = "/dev/shm"
+    if not os.access(directory, os.W_OK):
+        directory = tempfile.gettempdir()
+    for path in _stale_db_files(directory):
+        _unlink_db(path)
+    return os.path.join(directory, f"{_DB_FILE_PREFIX}{os.getpid()}.db")
+
+
+def _unlink_db(path: str) -> None:
+    for suffix in _DB_SIDECAR_SUFFIXES:
+        try:
+            os.unlink(path + suffix)
+        except OSError:
+            pass
+
+
+_TEST_DB_PATH = _test_database_url()
+if not os.environ.get("DATABASE_URL"):
+    atexit.register(_unlink_db, _TEST_DB_PATH)
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
 os.environ.setdefault("STRAVA_CLIENT_ID", "test-client-id")
 os.environ.setdefault("STRAVA_CLIENT_SECRET", "test-client-secret")
@@ -55,11 +114,37 @@ ai_router.async_session_maker = TestSessionLocal
 intervals_router.async_session_maker = TestSessionLocal
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def reset_db():
+async def _create_schema() -> None:
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    # The connections this opened belong to the loop we are about to close, so
+    # hand the pool back empty; pytest's own loop then opens its own.
+    await test_engine.dispose()
+
+
+# Once per process, not once per test.  Building the schema means 26 tables and
+# 35 indexes, and doing that 1501 times was ~16 of the suite's ~19 minutes (#520).
+asyncio.run(_create_schema())
+
+# Children before parents, so the deletes below never trip a foreign key.
+_TABLES_NEWEST_FIRST = list(reversed(Base.metadata.sorted_tables))
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_db():
+    """Give each test an empty database — by emptying it, not by rebuilding it.
+
+    Deleting rows rather than rolling back a wrapping transaction is deliberate:
+    plenty of tests commit for real, and several exercise background tasks that
+    open their *own* sessions (see ``ai_router.async_session_maker`` above).  A
+    shared outer transaction would have to be threaded through all of them.
+    Emptying the tables leaves every one of those paths exactly as it was, so
+    this is a speed change and not a semantics change.
+    """
+    async with test_engine.begin() as conn:
+        for table in _TABLES_NEWEST_FIRST:
+            await conn.execute(table.delete())
     yield
 
 
