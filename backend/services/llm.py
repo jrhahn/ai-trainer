@@ -98,7 +98,18 @@ TASK_FEEDBACK = "feedback"
 
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-3.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+# Gemini models that reject an explicit ``thinking_budget=0`` with a 400
+# INVALID_ARGUMENT. Verified against the live API on 2026-08-02; note this does
+# not follow model family or naming — ``gemini-3.1-flash-lite`` accepts a zero
+# while the non-lite ``gemini-3.6-flash`` does not — so it cannot be inferred
+# from the model string and is discovered at runtime instead (see ``_generate``).
+# Seeded with what is known so the common case never pays a failed request.
+_ZERO_THINKING_BUDGET_UNSUPPORTED: set[str] = {
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+}
 
 
 def _resolve_model(provider_name: str, task: str) -> str:
@@ -204,33 +215,62 @@ class GeminiProvider:
         self._model = model
         self._api_key = api_key or settings.gemini_api_key
 
-    @staticmethod
-    def _build_config(
-        system: str, json_mode: bool, types: object
+    def _build_config(self, system: str, json_mode: bool, types: object) -> object:
+        # Thinking tokens bill at the output rate, so they stay off. Most models
+        # accept an explicit zero budget; the ones that don't are left at their
+        # default, which measured at zero thinking tokens across repeat calls.
+        # A budget of 1 is deliberately NOT used as the workaround — those models
+        # treat it as a hint rather than a cap and spent 0–1,348 thinking tokens
+        # from call to call on an identical prompt.
+        kwargs: dict = {
+            "system_instruction": system,
+            "response_mime_type": "application/json" if json_mode else None,
+        }
+        if self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED:
+            kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        return types.GenerateContentConfig(**kwargs)
+
+    async def _generate(
+        self, contents: object, system: str, json_mode: bool, genai, genai_errors, types
     ) -> object:
-        # Disable thinking/reasoning (thinking_budget=0) to prevent the hidden
-        # chain-of-thought tokens that cause cost explosions with Gemini 2.5 Flash.
-        return types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type="application/json" if json_mode else None,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
+        """Call generate_content, learning which models refuse a zero budget.
+
+        A model that rejects ``thinking_budget=0`` fails *every* request rather
+        than degrading, which would take the whole app down on a model bump. The
+        API reports only ``INVALID_ARGUMENT`` with no field detail, so the 400 is
+        retried once without the thinking config and the model is remembered for
+        the rest of the process. A 400 raised for any other reason simply fails
+        again on the retry and propagates.
+        """
+        while True:
+            config = self._build_config(system, json_mode, types)
+            sent_thinking_config = self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED
+            try:
+                client = genai.Client(api_key=self._api_key)
+                async with client.aio as aio_client:
+                    return await aio_client.models.generate_content(
+                        model=self._model, contents=contents, config=config
+                    )
+            except genai_errors.ClientError as exc:
+                if exc.code == 429:
+                    raise AIRateLimitError(str(exc)) from exc
+                if exc.code == 400 and sent_thinking_config:
+                    logger.warning(
+                        "Model %s rejected thinking_budget=0; retrying without it "
+                        "and disabling it for this model",
+                        self._model,
+                    )
+                    _ZERO_THINKING_BUDGET_UNSUPPORTED.add(self._model)
+                    continue
+                raise
 
     async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = self._build_config(system, json_mode, types)
-        try:
-            client = genai.Client(api_key=self._api_key)
-            async with client.aio as aio_client:
-                response = await aio_client.models.generate_content(
-                    model=self._model, contents=user, config=config
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
+        response = await self._generate(
+            user, system, json_mode, genai, genai_errors, types
+        )
         _record_token_usage(_gemini_total_tokens(response))
         return response.text or ""
 
@@ -240,7 +280,6 @@ class GeminiProvider:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = self._build_config(system, json_mode, types)
         contents = [
             types.Content(
                 role="model" if m["role"] == "assistant" else "user",
@@ -248,16 +287,9 @@ class GeminiProvider:
             )
             for m in messages
         ]
-        try:
-            client = genai.Client(api_key=self._api_key)
-            async with client.aio as aio_client:
-                response = await aio_client.models.generate_content(
-                    model=self._model, contents=contents, config=config
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
+        response = await self._generate(
+            contents, system, json_mode, genai, genai_errors, types
+        )
         _record_token_usage(_gemini_total_tokens(response))
         return response.text or ""
 

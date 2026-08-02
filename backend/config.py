@@ -146,10 +146,15 @@ class Settings(BaseSettings):
     openai_coach_model: str = "gpt-4o"
     openai_feedback_model: str = "gpt-4o"
 
-    gemini_classify_model: str = "gemini-3.5-flash"
-    gemini_plan_model: str = "gemini-3.5-flash"
-    gemini_coach_model: str = "gemini-3.5-flash"
-    gemini_feedback_model: str = "gemini-3.5-flash"
+    # Gemini defaults to Flash-Lite on every task (#511): $0.30/$2.50 per M tokens
+    # against $1.50/$9.00 for Flash, for work that is overwhelmingly structured
+    # JSON extraction under explicit instructions. Raise an individual task back
+    # to "gemini-3.5-flash" via its env var if its output quality suffers — the
+    # conversational coach is the one to watch.
+    gemini_classify_model: str = "gemini-3.5-flash-lite"
+    gemini_plan_model: str = "gemini-3.5-flash-lite"
+    gemini_coach_model: str = "gemini-3.5-flash-lite"
+    gemini_feedback_model: str = "gemini-3.5-flash-lite"
 
     # ------------------------------------------------------------------
     # Readiness recommendations
