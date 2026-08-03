@@ -2018,6 +2018,83 @@ def test_ride_metrics_context_section_low_confidence_shows_reason():
     assert "Ride too short" in section
 
 
+# ---------------------------------------------------------------------------
+# ride_metrics_context_section — prose window (#513)
+# ---------------------------------------------------------------------------
+
+
+def _windowed_metrics(count: int) -> list:
+    """`count` rides, newest first, each carrying prose the window can drop."""
+
+    class FakeMetric:
+        def __init__(self, index: int) -> None:
+            self.activity_date = f"2026-05-{30 - index:02d}"
+            self.ride_purpose = "endurance"
+            self.classification_confidence = "low"
+            self.classification_reason = f"reason for ride {index}"
+            self.tss = 80.0
+            self.normalized_power_w = 190
+            self.ctl_after = 55.0
+            self.atl_after = 60.0
+            self.tsb_after = -5.0
+            self.summary = f"summary for ride {index}"
+            self.coach_note = f"coach note for ride {index}"
+            self.user_note = f"athlete note for ride {index}"
+            self.matched_plan_snapshot = {"title": f"planned ride {index}"}
+
+    return [FakeMetric(i) for i in range(count)]
+
+
+def test_prose_window_keeps_every_ride_but_only_recent_coach_notes():
+    """The window trims prose, never rides — a trend question still has its data."""
+    from services.prompts import ride_metrics_context_section
+
+    section = ride_metrics_context_section(_windowed_metrics(10), prose_window=3)
+
+    # Every ride keeps its metrics line, including the oldest.
+    for index in range(10):
+        assert f"summary for ride {index}" in section
+        assert f"2026-05-{30 - index:02d}" in section
+
+    # The coach's own notes stop at the window.
+    for index in range(3):
+        assert f"coach note for ride {index}" in section
+    for index in range(3, 10):
+        assert f"coach note for ride {index}" not in section
+        assert f"reason for ride {index}" not in section
+        assert f"planned ride {index}" not in section
+
+
+def test_prose_window_never_drops_the_athletes_own_words():
+    """Coach notes are reconstructible from the data; what the athlete said is not."""
+    from services.prompts import ride_metrics_context_section
+
+    section = ride_metrics_context_section(_windowed_metrics(10), prose_window=3)
+
+    for index in range(10):
+        assert f"athlete note for ride {index}" in section
+
+
+def test_prose_window_defaults_to_the_full_history():
+    """The analysis paths pass no window and must see exactly what they saw before."""
+    from services.prompts import ride_metrics_context_section
+
+    metrics = _windowed_metrics(10)
+    assert ride_metrics_context_section(metrics) == ride_metrics_context_section(
+        metrics, prose_window=None
+    )
+    assert "coach note for ride 9" in ride_metrics_context_section(metrics)
+
+
+def test_prose_window_larger_than_the_history_changes_nothing():
+    from services.prompts import ride_metrics_context_section
+
+    metrics = _windowed_metrics(4)
+    assert ride_metrics_context_section(
+        metrics, prose_window=99
+    ) == ride_metrics_context_section(metrics)
+
+
 def test_ride_metrics_context_section_high_confidence_omits_reason_line():
     """For high-confidence rides the reason sub-line should not appear."""
     from services.prompts import ride_metrics_context_section

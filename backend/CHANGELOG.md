@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The coach stops re-reading its own old ride notes** (`services/prompts.py`,
+  `routers/ai.py`) — the ride-metrics history was the largest data section of the
+  coach prompt at 5,063 tokens, 24 % of a 21,300-token message. Measured against
+  production, the coach's *own* past notes were 2,278 of those tokens — 45 % of
+  the section, ~104 tokens per ride across 22 of 30 rides — replayed in full on
+  every single turn. `ride_metrics_context_section` gains a `prose_window`: the
+  newest N rides keep everything, older rides keep their metrics line and lose
+  the `Coach:` note, the classification rationale and the planned-workout title.
+  The 30-ride window itself is untouched, so "how has my form trended this month"
+  still has every date, TSS and CTL/ATL/TSB it needs — this is a cut of prose,
+  not of history. The athlete's own notes are deliberately never windowed: they
+  are a fraction of the cost (250 tokens across 30 rides) and the one thing in
+  the section the coach cannot reconstruct from data. The coach path uses a
+  window of 7 — about a week for this athlete, whose 30 rides span 33 days — and
+  the nine analysis call sites pass no window, so their prompts are byte-for-byte
+  unchanged. Measured: 5,063 → 2,520 tokens, **−2,543 per coach message**
+  (#513, epic #510).
+
 ### Fixed
 
 - **The coach-memory background write no longer deadlocks against its own
