@@ -139,7 +139,11 @@
           compose_files="$compose_files --file compose.smtp.yml"
         fi
 
-        ids=$(/usr/bin/docker compose --ansi never --project-directory "{{ app_dir }}" $compose_files ps -aq || true)
+        # No "|| true" here on purpose: it used to turn "I could not list the
+        # containers" into "there is nothing to clean up", so this guard
+        # reported removed=0 and Ansible marked it ok on every single run while
+        # doing nothing at all (#527). If enumeration fails, the deploy stops.
+        ids=$(/usr/bin/docker compose --ansi never --project-directory "{{ app_dir }}" $compose_files ps -aq)
         removed=0
         for id in $ids; do
           image_id=$(/usr/bin/docker inspect --format='{% raw %}{{.Image}}{% endraw %}' "$id" 2>/dev/null || true)
@@ -151,6 +155,11 @@
         printf '%s\n' "$removed"
       args:
         executable: /bin/sh
+        # docker compose resolves --file relative to the working directory, not
+        # to --project-directory. Without this the task ran in the remote user's
+        # home and every invocation died on "open /root/compose.yml: no such
+        # file or directory" (#527).
+        chdir: "{{ app_dir }}"
       register: stale_compose_containers
       changed_when: stale_compose_containers.stdout | int > 0
 
