@@ -3043,7 +3043,10 @@ def training_status_section(
 
 
 def ride_metrics_context_section(
-    metrics: list, timezone_name: str | None = None
+    metrics: list,
+    timezone_name: str | None = None,
+    *,
+    prose_window: int | None = None,
 ) -> str:
     """Build a compact structured-text block from a list of RideMetric ORM objects.
 
@@ -3054,12 +3057,24 @@ def ride_metrics_context_section(
         2026-04-18 | threshold_intervals | TSS 98 | NP 268W | CTL 62.3 | ATL 71.4 | TSB -9.1 | "4×8 min @ FTP"
           Coach: "Good effort, slightly over target power in intervals 3-4."
           User: "Legs felt heavy but pushed through." [consider asking for feedback]
+
+    *prose_window* limits how far back the coach's **own** past notes are
+    replayed.  Beyond the newest *prose_window* rides only the metrics line
+    survives — the numbers a trend question is actually answered from — while the
+    ``Coach:`` note, the classification rationale and the planned-workout title
+    are dropped.  Measured against production, coach notes alone were 2,278 of
+    the section's 5,063 tokens across 30 rides, roughly 104 per ride, re-read on
+    every single message (#513).  The athlete's own words are deliberately *not*
+    windowed: they are a fraction of the cost and they are the one thing here
+    the coach cannot reconstruct from data.  ``None`` keeps every ride in full,
+    which is what the analysis paths want.
     """
     if not metrics:
         return ""
 
     lines: list[str] = ["Recent activity history (newest first):"]
-    for m in metrics:
+    for index, m in enumerate(metrics):
+        prose = prose_window is None or index < prose_window
         parts: list[str] = []
 
         # Date
@@ -3131,7 +3146,7 @@ def ride_metrics_context_section(
         line = " | ".join(parts)
         lines.append(f"  {line}")
 
-        if isinstance(matched_snapshot, dict):
+        if prose and isinstance(matched_snapshot, dict):
             title = matched_snapshot.get("title") or matched_snapshot.get("workoutType")
             duration = matched_snapshot.get("durationMinutes")
             if title:
@@ -3139,12 +3154,12 @@ def ride_metrics_context_section(
                 lines.append(f"    Planned workout: {title}{duration_part}")
 
         # Classification reason — only shown when confidence is not high
-        if reason and confidence != "high":
+        if prose and reason and confidence != "high":
             lines.append(f"    [classification: {reason}]")
 
         # Coach note
         coach_note = getattr(m, "coach_note", None)
-        if coach_note:
+        if prose and coach_note:
             lines.append(f'    Coach: "{coach_note}"')
 
         # Quick leg-freshness the athlete tapped on the dashboard (may be unset)

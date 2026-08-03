@@ -100,6 +100,14 @@ _RATE_LIMIT_DETAIL = (
 _AI_RESPONSE_FORMAT_DETAIL = (
     "The AI service returned an empty response. Please try again."
 )
+# How far back the coach re-reads its own past ride notes (#513).  The history
+# window stays at 30 rides so trend questions keep their numbers; only the prose
+# tail is cut, and the coach's own notes were 45 % of that section in production
+# (2,278 of 5,063 tokens, re-read on every message).  Seven rides is about a week
+# for this athlete — the 30 rides span 33 days — so "how did last week go" is
+# still answered from full notes, while the coach stops quoting itself from six
+# weeks ago.
+RIDE_NOTE_PROSE_WINDOW = 7
 
 
 def _analysis_activity_log_sample(
@@ -1009,8 +1017,13 @@ async def ask_trainer(
         )
         try:
             recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+            # Keep the full 30-ride window — trend questions are answered from the
+            # metrics lines — but stop replaying the coach's own older notes back
+            # to it on every message (#513).
             metrics_section = ride_metrics_context_section(
-                recent_metrics, timezone_name=timezone_name
+                recent_metrics,
+                timezone_name=timezone_name,
+                prose_window=RIDE_NOTE_PROSE_WINDOW,
             )
             race_events = await _race_events_for_prompt(db, current_user.id)
             # The upcoming outlook near the athlete's training location plus their
