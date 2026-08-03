@@ -268,3 +268,66 @@ async def test_generate_does_not_swallow_a_429(monkeypatch):
 
     with pytest.raises(llm.AIRateLimitError):
         await provider._generate("hi", "sys", False, fake_genai, genai_errors, types)
+
+
+# ---------------------------------------------------------------------------
+# Implicit-cache accounting (#514)
+# ---------------------------------------------------------------------------
+
+
+class _FakeUsage:
+    def __init__(self, total: int, cached: int | None) -> None:
+        self.total_token_count = total
+        if cached is not None:
+            self.cached_content_token_count = cached
+
+
+class _FakeResponse:
+    def __init__(self, total: int, cached: int | None = None) -> None:
+        self.usage_metadata = _FakeUsage(total, cached)
+
+
+def test_cached_tokens_are_recorded_separately_from_the_total():
+    """A cache hit is invisible in the total, so it has to be counted on its own.
+
+    Without this the prompt reorder in #514 cannot be distinguished from a no-op:
+    the same prompt reports the same total whether it was billed at the full rate
+    or at a tenth of it.
+    """
+    from services import llm
+
+    token = llm.begin_token_usage_collection()
+    try:
+        llm._record_gemini_usage(_FakeResponse(total=20_000, cached=6_900))
+        usage = llm._token_usage.get()
+        assert usage.total == 20_000
+        assert usage.cached == 6_900
+    finally:
+        llm.finish_token_usage_collection(token)
+
+
+def test_a_cache_miss_leaves_the_cached_counter_at_zero():
+    from services import llm
+
+    token = llm.begin_token_usage_collection()
+    try:
+        llm._record_gemini_usage(_FakeResponse(total=20_000, cached=0))
+        llm._record_gemini_usage(_FakeResponse(total=1_000))  # field absent entirely
+        usage = llm._token_usage.get()
+        assert usage.total == 21_000
+        assert usage.cached == 0
+    finally:
+        llm.finish_token_usage_collection(token)
+
+
+def test_usage_without_metadata_is_not_an_error():
+    """Providers and stubs that report nothing must not break a chat turn."""
+    from services import llm
+
+    token = llm.begin_token_usage_collection()
+    try:
+        llm._record_gemini_usage(object())
+        assert llm.finish_token_usage_collection(token) == 0
+    except BaseException:
+        llm.finish_token_usage_collection(token)
+        raise

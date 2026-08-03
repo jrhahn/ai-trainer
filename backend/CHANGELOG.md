@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Coach prompt is assembled so Gemini's implicit cache can actually hit**
+  (`services/prompts.py`, `services/llm.py`) — implicit caching bills a repeated
+  prefix at 10 % of the input rate, but it matches from the very first token and
+  needs at least 4,096 of them. `ask_trainer_system` opened with today's date and
+  closed with thousands of tokens of fixed rules, so the shared prefix between two
+  consecutive turns was **676 tokens — below the minimum**. The cache could not
+  engage at all; not rarely, never. The rule blocks are identical for every
+  athlete on every day, so they now come first and the volatile athlete data
+  follows: the shared prefix goes to **5,145 tokens**, 94 % of the prompt, and two
+  requests from *different athletes on different days* share it. No instruction
+  text changed except one positional reference — "the Current local date context
+  above" is now "the Current local date context section", since the rule is read
+  before the data it points at. Three things stay at the end on purpose: the JSON
+  output contract, because format compliance is worth more than the ~200 tokens it
+  would add to the prefix; the weather rules, because they are conditional; and
+  the reasoning framework, because its second step depends on whether ride metrics
+  exist — anything conditional in the prefix would break it for the whole request.
+  `cached_content_token_count` is now read and logged, without which a cache hit
+  is indistinguishable from a miss: the token total is identical either way
+  (#514, epic #510).
+
 - **The coach stops re-reading its own old ride notes** (`services/prompts.py`,
   `routers/ai.py`) — the ride-metrics history was the largest data section of the
   coach prompt at 5,063 tokens, 24 % of a 21,300-token message. Measured against

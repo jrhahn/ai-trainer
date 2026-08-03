@@ -1685,32 +1685,21 @@ def ask_trainer_system(
         "question instead of silently violating the constraint."
     )
 
-    return (
-        f"{COACH_PERSONA} Answer the athlete's question concisely and practically.\n"
-        f"Today's date: {today}\n"
-        f"{date_context}\n"
-        f"Athlete profile: {json.dumps(profile)}\n"
-        f"{race_profile_section}"
-        f"Last 7 days of training (historical context, not upcoming): {json.dumps(last_7_days)}\n"
-        f"Upcoming plan (today and future only, next {len(next_n_days)} days): {json.dumps(next_n_days)}"
-        f"{assessment_section}"
-        f"{metrics_section}"
-        f"{events_section}"
-        f"{weather_section}"
-        f"{status_badge_section}"
-        f"{training_load_section}"
-        f"{durable_context_section}"
-        f"{durable_model_section}"
-        f"{perf_model_section}"
-        f"{roi_section}"
-        f"{hypotheses_section}"
-        f"{durable_memory_facts_section}"
-        f"{durable_open_questions_section}"
-        f"{pinned_inquiries_section}"
-        f"{memory_section}"
-        f"{workout_section}"
-        f"{classification_section}"
-        f"{science_section}"
+    # --- Cache-friendly assembly (#514) ---------------------------------------
+    # Gemini's implicit caching bills a repeated *prefix* at 10 % of the input
+    # rate, but only matches from the very first token.  This prompt used to open
+    # with today's date and close with ~6,900 tokens of fixed rules, so the prefix
+    # changed on every single turn and the cache could never hit.  The rules are
+    # identical for every athlete on every day, so they go first and the volatile
+    # athlete data goes after them.  Google's own guidance is the same: put large
+    # and common contents at the beginning.
+    #
+    # Anything conditional is kept *out* of this block — a rule that appears only
+    # sometimes would break the prefix for the whole request, which is why the
+    # weather rules, the output contract and the reasoning framework sit in the
+    # closing block below instead.
+    static_instructions = (
+        f"{COACH_PERSONA} Answer the athlete's question concisely and practically."
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{explainability_instructions}"
@@ -1720,22 +1709,13 @@ def ask_trainer_system(
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
         f"{constraint_instructions}"
-        f"{weather_instructions}"
         f"{outlook_instructions}\n\n"
-        "Before writing your response, reason through: "
-        "(1) what the athlete is really asking, "
-        + (
-            "(2) what their current CTL/ATL/TSB from actual rides suggests about their fatigue state, "
-            if metrics_history_section
-            else "(2) what their recent training history suggests about their fatigue state, "
-        )
-        + "(3) whether the request conflicts with training principles, "
-        "(4) the most helpful coaching answer. "
-        'Put this reasoning in a "thinking" field — it will not be shown to the athlete.\n'
         "Always take today's date into account when answering — for example when calculating "
         "days until a race, suggesting which workout is next, or referencing past sessions.\n"
         "Date awareness rules:\n"
-        "- Treat the Current local date context above as authoritative, regardless of model "
+        # Named, not positional: this block is now read before the data it points
+        # at, and a rule that says "above" would be pointing at nothing (#514).
+        "- Treat the Current local date context section as authoritative, regardless of model "
         "knowledge or conversation history.\n"
         "- When using words like today, tomorrow, or yesterday, anchor them to the exact dates "
         "listed there.\n"
@@ -1782,7 +1762,57 @@ def ask_trainer_system(
         "to let the adaptation settle. Saturday is your long endurance ride — 2.5 hours in Z2, "
         "which is the cornerstone of your base block. Sunday is rest. That sequence gives you "
         "quality stress followed by two easier days, which is exactly right given your TSB is "
-        'currently sitting around −15. Any of those sessions you want to talk through?"\n\n'
+        'currently sitting around −15. Any of those sessions you want to talk through?"'
+    )
+
+    # Everything below changes from turn to turn, so none of it can be part of a
+    # cacheable prefix — which is exactly why it now follows the rules (#514).
+    athlete_data = (
+        f"\n\nAthlete data for this conversation\n"
+        f"Today's date: {today}\n"
+        f"{date_context}\n"
+        f"Athlete profile: {json.dumps(profile)}\n"
+        f"{race_profile_section}"
+        f"Last 7 days of training (historical context, not upcoming): {json.dumps(last_7_days)}\n"
+        f"Upcoming plan (today and future only, next {len(next_n_days)} days): {json.dumps(next_n_days)}"
+        f"{assessment_section}"
+        f"{metrics_section}"
+        f"{events_section}"
+        f"{weather_section}"
+        f"{status_badge_section}"
+        f"{training_load_section}"
+        f"{durable_context_section}"
+        f"{durable_model_section}"
+        f"{perf_model_section}"
+        f"{roi_section}"
+        f"{hypotheses_section}"
+        f"{durable_memory_facts_section}"
+        f"{durable_open_questions_section}"
+        f"{pinned_inquiries_section}"
+        f"{memory_section}"
+        f"{workout_section}"
+        f"{classification_section}"
+        f"{science_section}"
+    )
+
+    # The output contract stays last on purpose.  Response-format compliance is
+    # the one thing that genuinely benefits from being the most recent
+    # instruction, so it is not worth trading for the ~200 tokens it would add to
+    # the cached prefix.  The weather rules join it here because they are
+    # conditional, and the reasoning framework because its second step depends on
+    # whether ride metrics exist.
+    closing_instructions = (
+        f"{weather_instructions}"
+        "\n\nBefore writing your response, reason through: "
+        "(1) what the athlete is really asking, "
+        + (
+            "(2) what their current CTL/ATL/TSB from actual rides suggests about their fatigue state, "
+            if metrics_history_section
+            else "(2) what their recent training history suggests about their fatigue state, "
+        )
+        + "(3) whether the request conflicts with training principles, "
+        "(4) the most helpful coaching answer. "
+        'Put this reasoning in a "thinking" field — it will not be shown to the athlete.\n\n'
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
         '- "thinking": your internal reasoning (required, but never shown to the athlete)\n'
         '- "response": your natural language answer as a string (required)\n'
@@ -1795,6 +1825,8 @@ def ask_trainer_system(
         '- "ride_note_update": optional object — only include when the athlete is describing a specific ride\n'
         f"{plan_updates_rule}"
     )
+
+    return static_instructions + athlete_data + closing_instructions
 
 
 # ---------------------------------------------------------------------------
