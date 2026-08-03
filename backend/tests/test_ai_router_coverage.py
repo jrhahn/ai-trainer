@@ -353,21 +353,27 @@ async def test_review_new_rides_503_on_rate_limit(
 
 @pytest.mark.asyncio
 async def test_refresh_knowledge_queued(client, auth_headers):
-    """refresh_knowledge returns 200 with status=started when OPENAI_API_KEY is set."""
-    response = await client.post("/api/v1/ai/refresh-knowledge", headers=auth_headers)
+    """refresh_knowledge returns 200 with status=started when a provider key is set."""
+    # The background task must be stubbed: FastAPI runs it for real once the
+    # response is returned, and the ingestion embeds against the live API.
+    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock):
+        response = await client.post(
+            "/api/v1/ai/refresh-knowledge", headers=auth_headers
+        )
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "started"
 
 
 @pytest.mark.asyncio
-async def test_refresh_knowledge_503_without_openai_key(
+async def test_refresh_knowledge_503_without_any_embedding_key(
     client, auth_headers, monkeypatch
 ):
-    """refresh_knowledge returns 503 when OPENAI_API_KEY is not configured."""
+    """503 only when *no* provider can embed — Gemini alone is enough (#515)."""
     from config import settings
 
-    monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
 
     response = await client.post("/api/v1/ai/refresh-knowledge", headers=auth_headers)
     assert response.status_code == 503

@@ -157,6 +157,22 @@ class Settings(BaseSettings):
     gemini_feedback_model: str = "gemini-3.5-flash-lite"
 
     # ------------------------------------------------------------------
+    # Embeddings (cycling-science RAG)
+    #
+    # Separate from the chat models above: retrieval only works when the
+    # corpus and the query are embedded by the same model, so a change here
+    # means re-running scripts/ingest_cycling_science.py (#515).
+    #
+    # "gemini-embedding-001" is the GA model; "gemini-embedding-2" is its
+    # successor and also emits 768 dimensions under Matryoshka truncation, so
+    # it is a drop-in override. Both are pinned to a name that was verified
+    # against the live model list — text-embedding-004 has been withdrawn.
+    # ------------------------------------------------------------------
+    embedding_provider: str = "gemini"
+    gemini_embedding_model: str = "gemini-embedding-001"
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # ------------------------------------------------------------------
     # Readiness recommendations
     #
     # How the coach's personal observations of the athlete (athlete-memory

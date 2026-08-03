@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Science RAG works under the Gemini-only production config, and no longer
+  costs a classification call when there is nothing to retrieve**
+  (`services/embeddings.py` (new), `services/rag.py`, `routers/ai.py`,
+  `scripts/ingest_cycling_science.py`, migration `20260806_000001`) — retrieval
+  embedded queries by calling OpenAI directly, but prod runs Gemini-only with an
+  empty `OPENAI_API_KEY`, so `retrieve_cycling_context` could never return
+  anything; `POST /ai/refresh-knowledge` was likewise permanently 503 there,
+  which is why `knowledge_chunks` still held 0 rows. Embeddings now go through a
+  provider abstraction mirroring `llm.get_provider`. **The model named in #515,
+  `text-embedding-004`, no longer exists** — checking the live model list against
+  the production key returned only `gemini-embedding-001`, `gemini-embedding-2`
+  and `-2-preview`, the same retirement trap as #401 — so the default is
+  `gemini-embedding-001`, verified live, and overridable by env. Both Gemini
+  models emit 3072 dimensions natively and truncate to **768** via Matryoshka,
+  which is what the resized pgvector column stores; 768 also keeps the vector
+  under pgvector's 2000-dimension ceiling for an HNSW index. The migration
+  **deletes** existing rows rather than casting them: a vector is only comparable
+  to others from the same model, so a 1536-dimension corpus is worthless once
+  queries are embedded by a different one (prod held 0 rows, so nothing was
+  lost). Re-running the ingestion script rebuilds it — it upserts by
+  `(source_id, chunk_index)`. Separately, `classify_question` fired on **every**
+  ask-trainer request purely to decide whether to retrieve, i.e. ~125 LLM calls a
+  month to gate a path that could only return `""`; it is now preceded by a
+  cached `SELECT EXISTS` on the corpus and skipped entirely while that corpus is
+  empty, which also drops the half-filled `Question classification:` line from
+  the prompt rather than emitting `category=None`.
 - **Coach prompt is assembled so Gemini's implicit cache can actually hit**
   (`services/prompts.py`, `services/llm.py`) — implicit caching bills a repeated
   prefix at 10 % of the input rate, but it matches from the very first token and

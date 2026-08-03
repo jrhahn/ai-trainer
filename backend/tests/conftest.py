@@ -256,3 +256,20 @@ def mock_ai_service(monkeypatch):
     for name, mock in mocks.items():
         monkeypatch.setattr(ai_service, name, mock)
     return mocks
+
+
+@pytest.fixture(autouse=True)
+def science_corpus_present(monkeypatch):
+    """Pretend the cycling-science corpus is populated.
+
+    The suite runs on SQLite, where ``knowledge_corpus_is_populated`` is always
+    False, so without this the classification/RAG gate added in #515 would be
+    permanently closed and every test covering that path would silently stop
+    exercising it. The gate's own behaviour — both answers — is tested directly
+    in ``tests/test_rag.py``.
+    """
+    import routers.ai as ai_router
+
+    monkeypatch.setattr(
+        ai_router, "knowledge_corpus_is_populated", AsyncMock(return_value=True)
+    )
