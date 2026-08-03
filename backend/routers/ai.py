@@ -56,7 +56,12 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
 )
 from services.intervals_service import apply_summary_fallback, intervals_activity_id
-from services.rag import retrieve_cycling_context
+from services.embeddings import embedding_provider_is_configured
+from services.rag import (
+    knowledge_corpus_is_populated,
+    reset_corpus_cache,
+    retrieve_cycling_context,
+)
 from services.ride_matching import (
     apply_ride_plan_matches,
     resolve_manual_match,
@@ -1011,9 +1016,21 @@ async def ask_trainer(
     # --- Fetch ride metrics history for structured LLM context ---
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
     async with _token_usage_scope(db, current_user):
-        # Start question classification in parallel with the DB fetch (it's a pure LLM call).
-        classify_task = asyncio.ensure_future(
-            ai_service.classify_question(body.question, provider=resolve_user_provider(current_user))
+        # Classification exists to decide whether to retrieve science context, so
+        # it is only worth an LLM call when there is a corpus to retrieve from.
+        # With none ingested it used to spend one call per chat message to gate a
+        # path that could only ever return "" (#515). The check is a cached
+        # SELECT EXISTS, so this costs nothing once the corpus is there.
+        science_available = await knowledge_corpus_is_populated(db)
+        classify_task = (
+            # Start it in parallel with the DB fetch (it's a pure LLM call).
+            asyncio.ensure_future(
+                ai_service.classify_question(
+                    body.question, provider=resolve_user_provider(current_user)
+                )
+            )
+            if science_available
+            else None
         )
         try:
             recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
@@ -1034,7 +1051,7 @@ async def ask_trainer(
             )
 
             # Await classification (likely already done), then conditionally retrieve RAG context.
-            classification = await classify_task
+            classification = await classify_task if classify_task else {}
             science_context = ""
             rag_sources: list = []
             if classification.get("needs_science_rag", False):
@@ -1077,7 +1094,7 @@ async def ask_trainer(
         finally:
             # Never leave the classification task pending/unawaited (#450): if we
             # bailed out before awaiting it above, cancel and drain it here.
-            if not classify_task.done():
+            if classify_task is not None and not classify_task.done():
                 classify_task.cancel()
                 with suppress(asyncio.CancelledError, Exception):
                     await classify_task
@@ -1799,6 +1816,10 @@ async def _run_knowledge_refresh() -> None:
         from scripts.ingest_cycling_science import main as ingest_main  # noqa: PLC0415
 
         await ingest_main()
+        # The corpus-presence answer is cached per process; without this the
+        # worker that just filled the corpus keeps skipping classification and
+        # retrieval until it restarts.
+        reset_corpus_cache()
         logger.info("Knowledge base refresh completed successfully")
     except Exception:
         logger.exception("Knowledge base refresh failed")
@@ -1812,13 +1833,18 @@ async def refresh_knowledge(
     """Queue a background refresh of the cycling science knowledge base.
 
     Runs the ingestion script (seed corpus + Semantic Scholar API) as a
-    background task and returns immediately.  Requires ``OPENAI_API_KEY`` to
-    be set in the environment; returns HTTP 503 if it is absent.
+    background task and returns immediately.  Requires an embedding provider
+    key; returns HTTP 503 if none is configured.
     """
-    if not settings.openai_api_key:
+    # Used to demand OPENAI_API_KEY specifically, which made this endpoint
+    # permanently unavailable on the Gemini-only production config (#515).
+    if not embedding_provider_is_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OPENAI_API_KEY is not configured; cannot refresh knowledge base",
+            detail=(
+                "No embedding provider is configured (set GEMINI_API_KEY or "
+                "OPENAI_API_KEY); cannot refresh knowledge base"
+            ),
         )
     background_tasks.add_task(_run_knowledge_refresh)
     return schemas.RefreshKnowledgeResponse(

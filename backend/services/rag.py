@@ -4,40 +4,83 @@ Retrieves top-k relevant chunks from the knowledge_chunks table using
 cosine similarity on pgvector embeddings, and returns a formatted context
 string plus a sources list for citation.
 
+Embedding is delegated to ``services.embeddings`` so retrieval works under the
+Gemini-only production config; it used to call OpenAI directly, which meant a
+prod deployment with an empty ``OPENAI_API_KEY`` could never retrieve anything
+(#515).
+
 Falls back to an empty result gracefully when:
 - The database is not PostgreSQL (e.g. SQLite in tests)
 - The pgvector extension is not installed
 - The knowledge_chunks table is empty or missing
+- No embedding provider is configured
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
-from openai import AsyncOpenAI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.embeddings import embed_query, to_pgvector_literal
+
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIM = 1536
+# Cached per process: the corpus is loaded by an ingestion run, not by request
+# traffic, so this flips at most once in a process's lifetime. ``None`` means
+# "not checked yet".
+_corpus_populated: bool | None = None
 
 
-def _make_openai() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+def reset_corpus_cache() -> None:
+    """Forget the cached corpus-presence answer (after an ingestion run, or in tests)."""
+    global _corpus_populated
+    _corpus_populated = None
 
 
 async def _embed(text_input: str) -> list[float]:
-    """Return the embedding vector for *text_input* using OpenAI."""
-    client = _make_openai()
-    response = await client.embeddings.create(
-        model=EMBEDDING_MODEL,
-        input=text_input,
-    )
-    return response.data[0].embedding
+    """Return the embedding vector for *text_input*."""
+    return await embed_query(text_input)
+
+
+async def knowledge_corpus_is_populated(db: AsyncSession) -> bool:
+    """True when knowledge_chunks holds at least one row.
+
+    Used to skip work that only makes sense against a real corpus. Cheap
+    (``SELECT EXISTS`` with ``LIMIT 1``) and cached per process, so it costs one
+    query per worker rather than one per request. Any error — missing table,
+    non-PostgreSQL dialect — is reported as "not populated", which is the
+    conservative answer: it disables retrieval rather than pretending it works.
+    """
+    global _corpus_populated
+    if _corpus_populated is not None:
+        return _corpus_populated
+
+    try:
+        dialect = db.bind.dialect.name if db.bind else ""
+        if dialect != "postgresql":
+            _corpus_populated = False
+            return False
+        result = await db.execute(
+            text("SELECT EXISTS (SELECT 1 FROM knowledge_chunks LIMIT 1)")
+        )
+        _corpus_populated = bool(result.scalar())
+    except Exception:
+        logger.debug(
+            "Could not determine whether the knowledge corpus is populated; "
+            "treating it as empty",
+            exc_info=True,
+        )
+        _corpus_populated = False
+
+    if not _corpus_populated:
+        logger.info(
+            "Cycling-science corpus is empty; science retrieval is disabled. "
+            "Run scripts/ingest_cycling_science.py to populate it."
+        )
+    return _corpus_populated
 
 
 async def retrieve_cycling_context(
@@ -57,8 +100,7 @@ async def retrieve_cycling_context(
             return "", []
 
         embedding = await _embed(query)
-        # Format as a pgvector literal string: '[0.1,0.2,…]'
-        vec_literal = "[" + ",".join(str(v) for v in embedding) + "]"
+        vec_literal = to_pgvector_literal(embedding)
 
         sql = text(
             """
