@@ -28,6 +28,22 @@ from services.embeddings import embed_query, to_pgvector_literal
 
 logger = logging.getLogger(__name__)
 
+# Minimum cosine similarity a chunk must reach to be worth putting in front of
+# the coach. Without a floor every question returned five chunks — ~2,400 tokens
+# introduced as "relevant cycling science research" — however unrelated it was
+# (#528).
+#
+# Calibrated against the production corpus (140 chunks, gemini-embedding-001 at
+# 768 dimensions) over 12 questions: science questions peaked at 0.744–0.792,
+# off-topic ones at 0.551–0.675. 0.70 sits in that gap. Note the populations
+# only separate on the *best* hit — an off-topic question can beat the weakest
+# kept chunk of a real one — so this drops trailing weak chunks on genuine
+# questions too, which is the intended trade.
+#
+# Re-measure when the corpus or the embedding model changes; the numbers above
+# are the baseline.
+MIN_SIMILARITY = 0.70
+
 # Cached per process: the corpus is loaded by an ingestion run, not by request
 # traffic, so this flips at most once in a process's lifetime. ``None`` means
 # "not checked yet".
@@ -87,12 +103,18 @@ async def retrieve_cycling_context(
     db: AsyncSession,
     query: str,
     k: int = 5,
+    min_similarity: float | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Embed *query*, search knowledge_chunks by cosine similarity, and return
     a (context_string, sources_list) tuple.
 
+    Chunks below *min_similarity* (default :data:`MIN_SIMILARITY`) are dropped,
+    so a question the corpus has nothing to say about yields an empty context
+    instead of the five least-bad rows.
+
     Returns ("", []) on any error so callers do not need special-case handling.
     """
+    floor = MIN_SIMILARITY if min_similarity is None else min_similarity
     try:
         # Only works with PostgreSQL + pgvector.
         dialect = db.bind.dialect.name if db.bind else ""
@@ -127,6 +149,11 @@ async def retrieve_cycling_context(
 
         for row in rows:
             title, content, source_type, doi, url, similarity = row
+            # Filtered here rather than in SQL: a WHERE clause on the computed
+            # distance would stop the HNSW index being used for the ORDER BY,
+            # and this discards at most *k* rows.
+            if float(similarity) < floor:
+                continue
             context_parts.append(
                 f"[Source: {title}]\n{content}"
             )
@@ -137,6 +164,14 @@ async def retrieve_cycling_context(
                 source["url"] = url
             source["similarity"] = round(float(similarity), 4)
             sources.append(source)
+
+        if not context_parts:
+            logger.debug(
+                "No cycling-science chunk reached the %.2f similarity floor for %r",
+                floor,
+                query,
+            )
+            return "", []
 
         context_str = "\n\n---\n\n".join(context_parts)
         return context_str, sources

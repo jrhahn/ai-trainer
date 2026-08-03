@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Science retrieval drops chunks below a similarity floor** (`services/rag.py`)
+  — `retrieve_cycling_context` returned the top 5 rows unconditionally, so any
+  question produced ~2,400 tokens of text introduced to the coach as "relevant
+  cycling science research", however unrelated. Measured against the production
+  corpus (140 chunks, `gemini-embedding-001`, 768 dimensions) over 12 questions:
+  science questions peak at 0.744–0.792, off-topic ones at 0.551–0.675 — "Move
+  my Monday ride to Tuesday" returned strength-training passages at 0.589–0.617.
+  `MIN_SIMILARITY = 0.70` sits in that gap, and an all-weak result set now
+  returns `("", [])` instead of the five least-bad rows. Note the two
+  populations only separate on the *best* hit — an off-topic question can beat
+  the weakest kept chunk of a genuine one — so this also trims trailing weak
+  chunks on real questions, which is the intended trade: four strong chunks beat
+  five padded ones. Filtered in Python rather than SQL so the `WHERE` clause
+  cannot stop the HNSW index serving the `ORDER BY`. `classify_question` was
+  previously the only thing standing between an unrelated question and that
+  block of text.
+
 - **Science RAG works under the Gemini-only production config, and no longer
   costs a classification call when there is nothing to retrieve**
   (`services/embeddings.py` (new), `services/rag.py`, `routers/ai.py`,

@@ -83,6 +83,83 @@ async def test_retrieve_cycling_context_formats_results():
 
 
 @pytest.mark.asyncio
+async def test_chunks_below_the_similarity_floor_are_dropped():
+    """Off-topic questions must not arrive as 'relevant research' (#528)."""
+    mock_db = MagicMock()
+    mock_db.bind = MagicMock()
+    mock_db.bind.dialect = MagicMock()
+    mock_db.bind.dialect.name = "postgresql"
+
+    mock_rows = [
+        ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.78),
+        ("Strength Training", "Heavy lifting improves economy.", "seed", None, None, 0.61),
+    ]
+    mock_result = MagicMock()
+    mock_result.fetchall = MagicMock(return_value=mock_rows)
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        context, sources = await rag.retrieve_cycling_context(mock_db, "power zones")
+
+    assert "Power Zones" in context
+    assert "Strength Training" not in context
+    assert [s["title"] for s in sources] == ["Power Zones"]
+
+
+@pytest.mark.asyncio
+async def test_an_all_weak_result_set_returns_nothing_at_all():
+    """Better no context than five least-bad chunks under an 'evidence' heading."""
+    mock_db = MagicMock()
+    mock_db.bind = MagicMock()
+    mock_db.bind.dialect = MagicMock()
+    mock_db.bind.dialect.name = "postgresql"
+
+    # The measured off-topic band: "Move my Monday ride to Tuesday" scored these.
+    mock_rows = [
+        ("Strength Training", "Heavy lifting.", "seed", None, None, 0.617),
+        ("Periodization", "Build then peak.", "seed", None, None, 0.596),
+        ("Hrv Guided Training", "RMSSD trends.", "seed", None, None, 0.589),
+    ]
+    mock_result = MagicMock()
+    mock_result.fetchall = MagicMock(return_value=mock_rows)
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        context, sources = await rag.retrieve_cycling_context(
+            mock_db, "Move my Monday ride to Tuesday"
+        )
+
+    assert context == ""
+    assert sources == []
+
+
+@pytest.mark.asyncio
+async def test_the_floor_can_be_overridden_per_call():
+    mock_db = MagicMock()
+    mock_db.bind = MagicMock()
+    mock_db.bind.dialect = MagicMock()
+    mock_db.bind.dialect.name = "postgresql"
+
+    mock_rows = [("Recovery", "Sleep matters.", "seed", None, None, 0.61)]
+    mock_result = MagicMock()
+    mock_result.fetchall = MagicMock(return_value=mock_rows)
+    mock_db.execute = AsyncMock(return_value=mock_result)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        context, sources = await rag.retrieve_cycling_context(
+            mock_db, "recovery", min_similarity=0.5
+        )
+
+    assert "Recovery" in context
+    assert len(sources) == 1
+
+
+def test_the_floor_sits_between_the_measured_populations():
+    """Science questions peaked at 0.744+, off-topic ones at 0.675 and below."""
+    assert 0.675 < rag.MIN_SIMILARITY < 0.744
+
+
+@pytest.mark.asyncio
 async def test_retrieve_cycling_context_returns_empty_when_no_rows():
     """When the table is empty, retrieval must return empty results."""
     mock_db = MagicMock()
