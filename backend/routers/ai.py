@@ -1229,6 +1229,19 @@ async def ask_trainer(
     if persisted_updated_plan is not None:
         result["updated_plan"] = persisted_updated_plan
 
+    # Close this request's transaction before the response — and therefore before
+    # the background tasks queued above — instead of leaving it to the get_db
+    # teardown, which FastAPI runs *after* them (#522).  _update_memory_bg opens
+    # its own session on purpose, so that it re-reads memory the athlete may have
+    # edited while the model was generating (#346); an open transaction here is
+    # a writer it has to wait behind.  Under postgres the two never touch the
+    # same rows and coexist, but sqlite locks the whole file, so under test the
+    # memory write blocked for the full 5 s busy timeout and then failed —
+    # silently, because _update_memory_bg is deliberately fail-safe.  This must
+    # stay the last statement of the handler: every write above it, including
+    # commit_plan_updates, has to be inside the transaction it closes.
+    await db.commit()
+
     return schemas.AskTrainerResponse.model_validate(result)
 
 

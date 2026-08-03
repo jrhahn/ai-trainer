@@ -386,6 +386,40 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_background_memory_update_reaches_the_database(
+    client, auth_headers, mock_ai_service
+):
+    """The queued coach-memory write must actually land (#522).
+
+    It is a background task, and FastAPI runs those *before* the `get_db`
+    dependency's teardown commits — so while the handler's transaction stayed
+    open, `_update_memory_bg` waited on its own connection for the full sqlite
+    busy timeout and then failed. It failed silently, too, because that task
+    swallows exceptions by design so a broken memory update cannot break the
+    chat. Nothing asserted the write, so 22 tests stayed green while the path
+    they covered never once succeeded. This is that assertion.
+    """
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "When is the best time to ride tomorrow?"},
+    )
+    assert response.status_code == 200
+
+    async with TestSessionLocal() as db:
+        row = await crud.get_coach_memory(db, user_id)
+
+    assert row is not None, "the background memory update never reached the database"
+    assert row.memory == "Prefers morning workouts."
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
     client, auth_headers, mock_ai_service
 ):
@@ -398,10 +432,6 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
     token = auth_headers["Authorization"].split(" ", 1)[1]
     user_id = decode_token(token)
     async with TestSessionLocal() as db:
-        # Skip the background memory write so the two sequential requests don't
-        # race for the SQLite lock.
-        user = await crud.get_user_by_id(db, user_id)
-        user.memory_updates_enabled = False
         await crud.upsert_training_plan(
             db,
             user_id,

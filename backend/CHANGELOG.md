@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coach-memory background write no longer deadlocks against its own
+  request** (`routers/ai.py`) — `_update_memory_bg` is queued as a background
+  task, and FastAPI runs those *before* the `get_db` dependency's teardown
+  commits. The handler's transaction was therefore still open when the task
+  opened its own session to write `coach_memory`, which is exactly the point of
+  that separate session (#346: re-read memory the athlete may have edited while
+  the model was generating). Under postgres the two never touch the same rows;
+  under sqlite one writer locks the whole file, so in the test suite the write
+  waited out the full 5 s busy timeout and then failed — **every time**, not
+  intermittently. It failed silently too, because that task swallows exceptions
+  by design so a broken memory update cannot break the chat. `ask_trainer` now
+  commits as its last statement, before the response and therefore before the
+  background task. Measured: 22 tests were paying that 5 s wait (113 s of the
+  suite), the suite drops from 263 s to 148 s, and a full run now reports zero
+  `database is locked` errors where the affected path previously never once
+  succeeded. A test now asserts the memory actually reaches the database — the
+  assertion whose absence let 22 green tests cover a guaranteed failure — and
+  the `memory_updates_enabled = False` workaround in
+  `test_ask_trainer_lifts_flagged_constraint_and_edit_lands`, added to dodge
+  what looked like a race, is gone (#522).
+
 ### Changed
 
 - **Test suite runs in 4 minutes instead of 19** (`tests/conftest.py`) — the
