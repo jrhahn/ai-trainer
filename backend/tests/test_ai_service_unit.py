@@ -4374,9 +4374,102 @@ def test_ask_trainer_system_includes_authoritative_date_rules():
 
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in prompt
-    assert "Treat the Current local date context above as authoritative" in prompt
+    # Named rather than positional since #514 moved the rules ahead of the data:
+    # "above" would now point at nothing. The authority of the section is the
+    # part this guards, not where it sits.
+    assert "Treat the Current local date context section as authoritative" in prompt
     assert "copy it from that date context" in prompt
     assert "copy the plan entry's weekday/dateLabel fields" in prompt
+
+
+def _cache_order_prompt(**overrides) -> str:
+    from services.prompts import ask_trainer_system
+
+    kwargs = dict(
+        profile={"ftp": 250},
+        today="2026-05-26",
+        last_7_days=[],
+        next_n_days=[],
+        assessment_section="",
+        memory_section="",
+        workout_section="",
+        plan_updates_rule="",
+        date_context="Current local date context (Europe/Berlin):\n- Today is Tuesday.",
+    )
+    kwargs.update(overrides)
+    return ask_trainer_system(**kwargs)
+
+
+def test_static_rules_precede_all_volatile_data_for_gemini_caching():
+    """Gemini's implicit cache only matches a prefix, so the rules must come first.
+
+    Every volatile item after the rules is fine; a single volatile item *before*
+    them moves the cache boundary to zero and silently costs 10x on input (#514).
+    """
+    prompt = _cache_order_prompt(
+        metrics_history_section="Recent activity history (newest first):\n  2026-05-25 | TSS 80",
+    )
+
+    last_static = max(
+        prompt.index(marker)
+        for marker in (
+            "Activity feedback rules:",
+            "Hard constraint rules:",
+            "Outlook rules:",
+            "Date awareness rules:",
+            "Response quality rules",
+        )
+    )
+    # Markers have to be strings that appear *only* in the data — several rule
+    # blocks name the sections they talk about ("Upcoming plan", "Current local
+    # date context"), so those match inside the static text and prove nothing.
+    first_volatile = min(
+        prompt.index(marker)
+        for marker in (
+            "Athlete data for this conversation",
+            "Today's date: 2026-05-26",
+            'Athlete profile: {"ftp": 250}',
+            "2026-05-25 | TSS 80",
+        )
+    )
+    assert last_static < first_volatile, (
+        "volatile athlete data appears before the static rule block — "
+        "this breaks the cacheable prefix"
+    )
+
+
+def test_the_cacheable_prefix_is_identical_across_different_athletes_and_days():
+    """The whole point: two unrelated requests must share a long literal prefix."""
+    import os
+
+    monday = _cache_order_prompt(
+        profile={"ftp": 250},
+        today="2026-05-26",
+        date_context="Current local date context: Tuesday",
+        metrics_history_section="Recent activity history (newest first):\n  a",
+    )
+    other_athlete_other_day = _cache_order_prompt(
+        profile={"ftp": 310, "name": "Someone Else"},
+        today="2027-11-02",
+        date_context="Current local date context: Thursday",
+        metrics_history_section="Recent activity history (newest first):\n  b",
+    )
+
+    shared = len(os.path.commonprefix([monday, other_athlete_other_day]))
+    # The static block is thousands of characters; anything in the hundreds would
+    # mean something volatile crept back toward the front.
+    assert shared > 4000, f"shared prefix collapsed to {shared} characters"
+    assert monday[:shared].startswith("You are a knowledgeable cycling coach")
+
+
+def test_output_contract_stays_last_where_the_model_reads_it_most_reliably():
+    """Format compliance is worth more than the ~200 tokens it would add to the prefix."""
+    prompt = _cache_order_prompt(plan_updates_rule="- planUpdates: an array")
+
+    assert prompt.rstrip().endswith("- planUpdates: an array")
+    assert prompt.index("ALWAYS respond with a valid JSON object") > prompt.index(
+        "Athlete profile:"
+    )
 
 
 @pytest.mark.asyncio

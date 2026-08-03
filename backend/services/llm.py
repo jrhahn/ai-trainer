@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenUsage:
     total: int = 0
+    # Input tokens Gemini served from its implicit cache, billed at 10 % of the
+    # normal input rate.  Tracked separately because it is the only way to tell
+    # whether the cache-friendly prompt order actually works (#514) — the totals
+    # look identical whether the cache hits or not.
+    cached: int = 0
 
 
 _token_usage: ContextVar[TokenUsage | None] = ContextVar("token_usage", default=None)
@@ -85,6 +90,34 @@ def _gemini_total_tokens(response: object) -> int | None:
     if usage is None:
         return None
     return _attribute_int(usage, "total_token_count")
+
+
+def _gemini_cached_tokens(response: object) -> int | None:
+    """Input tokens Gemini served from its implicit cache, if it reports any."""
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return None
+    return _attribute_int(usage, "cached_content_token_count")
+
+
+def _record_gemini_usage(response: object) -> None:
+    """Record a Gemini call's tokens, including what the implicit cache covered.
+
+    Caching is invisible in the total — a cached prompt reports the same token
+    count, only cheaper — so without this the reorder in #514 could not be told
+    apart from a no-op.
+    """
+    _record_token_usage(_gemini_total_tokens(response))
+    cached = _gemini_cached_tokens(response)
+    if not cached or cached <= 0:
+        return
+    usage = _token_usage.get()
+    if usage is not None:
+        usage.cached += int(cached)
+    total = _gemini_total_tokens(response) or 0
+    logger.info(
+        "Gemini implicit cache hit: %d of %d tokens served from cache", cached, total
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +304,7 @@ class GeminiProvider:
         response = await self._generate(
             user, system, json_mode, genai, genai_errors, types
         )
-        _record_token_usage(_gemini_total_tokens(response))
+        _record_gemini_usage(response)
         return response.text or ""
 
     async def chat_history(
@@ -290,7 +323,7 @@ class GeminiProvider:
         response = await self._generate(
             contents, system, json_mode, genai, genai_errors, types
         )
-        _record_token_usage(_gemini_total_tokens(response))
+        _record_gemini_usage(response)
         return response.text or ""
 
 
