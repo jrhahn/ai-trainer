@@ -708,6 +708,28 @@ describe('AIChat — Coach Timeline events', () => {
   })
 })
 
+/**
+ * Type into the pinned inquiry's answer box and wait for the state to land.
+ *
+ * `fireEvent.change` only queues the React state update. Submitting before it
+ * flushes makes every submit path a no-op rather than merely late: `submit`
+ * bails on an empty box, and the Send button carries `disabled={!answer.trim()}`.
+ * The failure then reads as "the handler was never called", which looks like a
+ * component bug instead of a test race — and waiting on the call count does not
+ * help, because the call never happens (#534).
+ */
+async function typeAnswer(value: string) {
+  // Re-fires the change until it sticks. PinnedInquiry clears its answer state
+  // in an effect keyed on the question, so a change applied before that effect
+  // runs is wiped and a single fireEvent silently loses the text.
+  await waitFor(() => {
+    const current = screen.getByLabelText(/^Answer:/)
+    fireEvent.change(current, { target: { value } })
+    expect(current).toHaveValue(value)
+  })
+  return screen.getByLabelText(/^Answer:/)
+}
+
 describe('AIChat pinned inquiries (#506)', () => {
   const inquiry = (overrides = {}) => ({
     id: 'inq-1',
@@ -763,8 +785,7 @@ describe('AIChat pinned inquiries (#506)', () => {
     render(<AIChat />)
 
     const pin = await screen.findByTestId('pinned-inquiry')
-    const box = screen.getByLabelText(/^Answer:/)
-    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
@@ -795,7 +816,7 @@ describe('AIChat pinned inquiries (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    await typeAnswer('dunno')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     const pin = await screen.findByTestId('pinned-inquiry')
@@ -818,7 +839,7 @@ describe('AIChat pinned inquiries (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'still dunno' } })
+    await typeAnswer('still dunno')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
@@ -850,7 +871,7 @@ describe('AIChat pinned inquiries (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(await screen.findByText(/Couldn't send that answer/)).toBeInTheDocument()
@@ -897,8 +918,7 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    const box = screen.getByLabelText(/^Answer:/)
-    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    const box = await typeAnswer('Work trips.')
     fireEvent.keyDown(box, { key: 'Enter' })
 
     await waitFor(() =>
@@ -912,8 +932,7 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    const box = screen.getByLabelText(/^Answer:/)
-    fireEvent.change(box, { target: { value: 'Work trips,' } })
+    const box = await typeAnswer('Work trips,')
     fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
 
     expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
@@ -943,13 +962,14 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    const box = screen.getByLabelText(/^Answer:/)
-    fireEvent.change(box, { target: { value: 'Work trips.' } })
+    const box = await typeAnswer('Work trips.')
     fireEvent.keyDown(box, { key: 'Enter' })
     fireEvent.keyDown(box, { key: 'Enter' })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(mockAnswerAthleteInquiry).toHaveBeenCalledTimes(1)
+    // waitFor still catches a genuine double send: at two calls this can never
+    // settle on one, so the test times out rather than passing.
+    await waitFor(() => expect(mockAnswerAthleteInquiry).toHaveBeenCalledTimes(1))
     release(answered('Noted.'))
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
   })
@@ -961,7 +981,7 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
@@ -995,7 +1015,7 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     // Session ends (expiry or sign-out) while the question is still pinned.
     useAppStore.setState({ authToken: null })
 
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     // Wait for the send to settle before skipping: both buttons disable while one
     // is in flight, so a same-tick second click would never reach the handler.
@@ -1078,7 +1098,7 @@ describe('AIChat pinned inquiry resilience (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    await typeAnswer('dunno')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() =>
@@ -1107,7 +1127,7 @@ describe('AIChat pinned inquiry resilience (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'dunno' } })
+    await typeAnswer('dunno')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() =>
@@ -1139,7 +1159,7 @@ describe('AIChat pinned inquiry resilience (#506)', () => {
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    fireEvent.change(screen.getByLabelText(/^Answer:/), { target: { value: 'Work trips.' } })
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
 
