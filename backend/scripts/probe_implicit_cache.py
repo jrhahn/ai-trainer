@@ -38,14 +38,56 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Runs both from the repo and from anywhere the file is dropped — the point of
+# the probe is to measure a *deployment*, and copying one file into a running
+# container beats mutating its application code.
+for _candidate in (Path(__file__).resolve().parent.parent, Path.cwd()):
+    if (_candidate / "config.py").exists():
+        sys.path.insert(0, str(_candidate))
+        break
 
 from config import settings  # noqa: E402
 from services.llm import _ZERO_THINKING_BUDGET_UNSUPPORTED  # noqa: E402
-from services.prompts import coach_static_prefix  # noqa: E402
 
 # Enough of a question to get an answer, short enough not to matter.
 QUESTION = "In one sentence: should I ride easy today?"
+
+
+def coach_prefix() -> tuple[str, str]:
+    """Return the cacheable prefix of the coach prompt, and how it was obtained.
+
+    Prefers :func:`prompts.coach_static_prefix`. A deployment older than #538
+    has no such function, and that is exactly the deployment worth probing, so
+    the prefix is otherwise derived the same way the finding was: render two
+    prompts for different athletes on different days and take what they share.
+    By definition that *is* the cacheable prefix of those two requests.
+    """
+    from services import prompts
+
+    if hasattr(prompts, "coach_static_prefix"):
+        return prompts.coach_static_prefix(), "prompts.coach_static_prefix()"
+
+    def render(seed: int) -> str:
+        # Required arguments only: an older signature may not have every
+        # optional section, and the shared head does not depend on them.
+        return prompts.ask_trainer_system(
+            profile={"name": f"Athlete{seed}", "ftp": 250 + seed},
+            today=f"2026-08-0{seed}",
+            last_7_days=[{"date": f"2026-07-2{seed}", "tss": 60 + seed}],
+            next_n_days=[{"date": f"2026-08-0{seed}", "workoutType": "endurance"}],
+            assessment_section=f"\n\nAssessment {seed}",
+            memory_section=f"\n\nCoach memory: note {seed}",
+            workout_section=f"\n\nWorkout {seed}",
+            plan_updates_rule='\n- "planUpdates": array',
+        )
+
+    a, b = render(1), render(2)
+    shared = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        shared += 1
+    return a[:shared], "longest common prefix of two renders"
 
 
 async def _one_call(model: str, prefix: str, placement: str) -> dict[str, int]:
@@ -97,11 +139,11 @@ async def main() -> int:
         print("GEMINI_API_KEY is not set", file=sys.stderr)
         return 1
 
-    prefix = coach_static_prefix()
+    prefix, how = coach_prefix()
     placements = (
         ("system", "content") if args.placement == "both" else (args.placement,)
     )
-    print(f"coach prefix: {len(prefix)} chars (~{len(prefix) // 4} tokens)\n")
+    print(f"coach prefix: {len(prefix)} chars (~{len(prefix) // 4} tokens) via {how}\n")
     print(f"{'model':<26} {'placement':<10} {'call':>4} {'input':>7} {'cached':>7} {'hit':>6}")
 
     any_hit = False
