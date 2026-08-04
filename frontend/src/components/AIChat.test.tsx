@@ -785,7 +785,7 @@ describe('AIChat pinned inquiries (#506)', () => {
     render(<AIChat />)
 
     const pin = await screen.findByTestId('pinned-inquiry')
-    const box = await typeAnswer('Work trips.')
+    await typeAnswer('Work trips.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
