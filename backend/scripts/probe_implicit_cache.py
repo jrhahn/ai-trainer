@@ -20,6 +20,23 @@ times in a row and prints what the API reports, for each placement:
 
 The first call of each run populates; a hit, if it comes, shows on the second.
 
+Result against production on 2026-08-04, coach prefix 20,521 chars / 4,270
+tokens as the API counts them:
+
+    model                      placement  call   input  cached    hit
+    gemini-3.5-flash-lite      system       1-3   4284       0   0.0%
+    gemini-3.5-flash-lite      content      1-3   4284       0   0.0%
+    gemini-3.5-flash           system         1   4284       0   0.0%
+    gemini-3.5-flash           system       2-3   4284    2030  47.4%
+    gemini-3.5-flash           content      1-2   4284       0   0.0%
+    gemini-3.5-flash           content        3   4284    2033  47.5%
+
+So the mechanism works and our prefix is fine — ``flash-lite`` simply does not
+serve cache hits, which the pricing page states outright ("context caching: not
+available"). Placement made no difference on the model that does cache, so the
+``system_instruction`` the app already uses is not the problem. Re-run this at
+the next model bump rather than assuming; that is what it is for.
+
 Usage:
     cd backend
     python scripts/probe_implicit_cache.py

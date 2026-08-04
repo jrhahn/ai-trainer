@@ -17,18 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *entire* system prompt, which contains today's date and the plan: it varies by
   construction and never could measure the prefix. Measured directly instead,
   the prefix is byte-identical across athletes, dates and every combination of
-  optional sections — 20,521 characters, roughly 5,130 tokens — so #514's
-  reordering did hold. It is now `prompts.coach_static_prefix()` with tests that
-  fail if anything volatile is placed inside it, ahead of it, or if a prompt
-  diet takes it under the model's minimum request size. Production can say what
-  was charged but never why, so this is the only place the property can be
-  checked. What remains unknown is whether the model serves an implicit hit at
-  all: Google's documented minimum-token table lists no `flash-lite` variant,
-  the two consecutive production calls with byte-identical prompts still
-  reported `cached=0`, and other users report the same on flash-lite.
-  `scripts/probe_implicit_cache.py` settles that against the live API — the real
-  prefix, repeated calls, and an A/B between `system_instruction` and
-  leading-content placement. (#538)
+  optional sections — 20,521 characters, 4,270 tokens as the API counts them —
+  so #514's reordering did hold. It is now `prompts.coach_static_prefix()` with
+  tests that fail if anything volatile is placed inside it, ahead of it, or if a
+  prompt diet takes it under the model's minimum request size. Production can
+  say what was charged but never why, so this is the only place the property can
+  be checked. `scripts/probe_implicit_cache.py` then answered the question the
+  logs could not, against the live API: `gemini-3.5-flash-lite` returned
+  `cached=0` on all six calls in both placements, while `gemini-3.5-flash`
+  returned 2,030 of 4,284 tokens cached from the second call on. The mechanism
+  works and our prefix is fine — the coach model simply does not offer context
+  caching, which the pricing page states outright. Nothing to fix in the prompt;
+  buying the discount by moving the coach to `flash` would cost about four times
+  more, since flash bills input at $1.50/M against flash-lite's $0.30/M. (#538)
 
 - **Per-call LLM cost accounting** (`services/token_accounting.py` (new),
   `services/llm.py`, `crud.py`, `models.py`, migration `20260808_000001`,
