@@ -27,13 +27,10 @@ import models
 from config import settings
 from services import ai_service
 from services.insight_generation import seconds_until_next_weekly_run
-from services.llm import (
-    begin_token_usage_collection,
-    finish_token_usage_collection,
-    resolve_user_provider,
-)
+from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -91,17 +88,12 @@ async def detect_user_contradictions(
     if not metrics_section.strip():
         return 0
 
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="contradiction-detection"):
         contradictions = await ai_service.detect_athlete_fact_contradictions(
             metrics_section,
             [fact.fact for fact in checkable],
             provider=resolve_user_provider(user),
         )
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     flagged = 0
     for contradiction in contradictions:

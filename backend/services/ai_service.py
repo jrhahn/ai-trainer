@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 import schemas
 
+from . import token_accounting
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
     LTHR_RATIO,
@@ -202,12 +203,10 @@ def _parse_ai_json(text: str) -> Any:
     stripped = re.sub(r"(\d+)\s+[a-zA-Z_]+(?=\s*[,}\]\n])", r"\1", extracted)
     repaired = repair_json(stripped)
     if repaired != stripped:
-        logger.warning(
-            "json_repair altered AI response (original=%d chars, repaired=%d chars); "
-            "result may have truncated or inferred values",
-            len(stripped),
-            len(repaired),
-        )
+        # Reported through token_accounting so the line carries the task, model
+        # and prompt_sha of the call that produced the malformed JSON — a
+        # prompt that keeps needing repair is a prompt to fix (#516).
+        token_accounting.note_json_repair(len(stripped), len(repaired))
     return json.loads(repaired)
 
 

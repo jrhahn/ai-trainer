@@ -276,15 +276,35 @@ async def test_generate_does_not_swallow_a_429(monkeypatch):
 
 
 class _FakeUsage:
-    def __init__(self, total: int, cached: int | None) -> None:
+    def __init__(
+        self,
+        total: int,
+        cached: int | None,
+        prompt: int | None = None,
+        candidates: int | None = None,
+        thoughts: int | None = None,
+    ) -> None:
         self.total_token_count = total
         if cached is not None:
             self.cached_content_token_count = cached
+        if prompt is not None:
+            self.prompt_token_count = prompt
+        if candidates is not None:
+            self.candidates_token_count = candidates
+        if thoughts is not None:
+            self.thoughts_token_count = thoughts
 
 
 class _FakeResponse:
-    def __init__(self, total: int, cached: int | None = None) -> None:
-        self.usage_metadata = _FakeUsage(total, cached)
+    def __init__(
+        self,
+        total: int,
+        cached: int | None = None,
+        prompt: int | None = None,
+        candidates: int | None = None,
+        thoughts: int | None = None,
+    ) -> None:
+        self.usage_metadata = _FakeUsage(total, cached, prompt, candidates, thoughts)
 
 
 def test_cached_tokens_are_recorded_separately_from_the_total():
@@ -296,38 +316,137 @@ def test_cached_tokens_are_recorded_separately_from_the_total():
     """
     from services import llm
 
-    token = llm.begin_token_usage_collection()
-    try:
-        llm._record_gemini_usage(_FakeResponse(total=20_000, cached=6_900))
-        usage = llm._token_usage.get()
-        assert usage.total == 20_000
-        assert usage.cached == 6_900
-    finally:
-        llm.finish_token_usage_collection(token)
+    tokens = llm._gemini_call_tokens(_FakeResponse(total=20_000, cached=6_900))
+    assert tokens.total == 20_000
+    assert tokens.cached == 6_900
 
 
 def test_a_cache_miss_leaves_the_cached_counter_at_zero():
     from services import llm
 
-    token = llm.begin_token_usage_collection()
-    try:
-        llm._record_gemini_usage(_FakeResponse(total=20_000, cached=0))
-        llm._record_gemini_usage(_FakeResponse(total=1_000))  # field absent entirely
-        usage = llm._token_usage.get()
-        assert usage.total == 21_000
-        assert usage.cached == 0
-    finally:
-        llm.finish_token_usage_collection(token)
+    assert llm._gemini_call_tokens(_FakeResponse(total=20_000, cached=0)).cached == 0
+    # The field can be absent entirely rather than zero.
+    assert llm._gemini_call_tokens(_FakeResponse(total=1_000)).cached == 0
+
+
+def test_gemini_input_and_output_are_split_for_pricing():
+    """Input and output bill at very different rates, so the split is the point (#516)."""
+    from services import llm
+
+    tokens = llm._gemini_call_tokens(
+        _FakeResponse(total=12_500, cached=9_000, prompt=12_000, candidates=500)
+    )
+    assert tokens.input == 12_000
+    assert tokens.output == 500
+    # cached is a subset of input, not a fourth bucket
+    assert tokens.cached == 9_000
+
+
+def test_thinking_tokens_count_as_output():
+    """They bill at the output rate, so a model ignoring thinking_budget=0 must show up."""
+    from services import llm
+
+    tokens = llm._gemini_call_tokens(
+        _FakeResponse(total=3_000, prompt=2_000, candidates=400, thoughts=600)
+    )
+    assert tokens.output == 1_000
+
+
+def test_openai_usage_is_split_including_its_cache_field():
+    from services import llm
+
+    class _Details:
+        cached_tokens = 800
+
+    class _Usage:
+        prompt_tokens = 1_000
+        completion_tokens = 250
+        total_tokens = 1_250
+        prompt_tokens_details = _Details()
+
+    class _Resp:
+        usage = _Usage()
+
+    tokens = llm._openai_call_tokens(_Resp())
+    assert (tokens.input, tokens.output, tokens.cached, tokens.total) == (
+        1_000,
+        250,
+        800,
+        1_250,
+    )
 
 
 def test_usage_without_metadata_is_not_an_error():
     """Providers and stubs that report nothing must not break a chat turn."""
     from services import llm
 
-    token = llm.begin_token_usage_collection()
-    try:
-        llm._record_gemini_usage(object())
-        assert llm.finish_token_usage_collection(token) == 0
-    except BaseException:
-        llm.finish_token_usage_collection(token)
-        raise
+    tokens = llm._gemini_call_tokens(object())
+    assert (tokens.input, tokens.output, tokens.cached, tokens.total) == (0, 0, 0, 0)
+    assert llm._openai_call_tokens(object()).total == 0
+
+
+# ---------------------------------------------------------------------------
+# Per-call attribution (#516)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_chat_records_the_task_and_the_model_it_resolved_to(monkeypatch):
+    """The provider is the only layer that knows which model the task resolved to."""
+    import services.llm as llm
+    from services import token_accounting
+
+    monkeypatch.setattr(llm.settings, "gemini_api_key", "gemini-key")
+    monkeypatch.setattr(llm.settings, "gemini_classify_model", "gemini-classify-x")
+
+    class _Resp:
+        text = "ok"
+        usage_metadata = _FakeUsage(900, 100, prompt=800, candidates=100)
+
+    async def fake_generate(self, contents, system, json_mode, *args):
+        return _Resp()
+
+    monkeypatch.setattr(llm.GeminiProvider, "_generate", fake_generate)
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        token_accounting, "record_call", lambda **kw: recorded.append(kw)
+    )
+
+    provider = llm.get_provider("gemini", task=llm.TASK_CLASSIFY)
+    assert await provider.chat("system prompt", "is this a training question?") == "ok"
+
+    assert len(recorded) == 1
+    assert recorded[0]["task"] == llm.TASK_CLASSIFY
+    assert recorded[0]["model"] == "gemini-classify-x"
+    assert recorded[0]["input_tokens"] == 800
+    assert recorded[0]["output_tokens"] == 100
+    assert recorded[0]["ok"] is True
+    assert recorded[0]["latency_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_a_failing_call_is_still_recorded(monkeypatch):
+    """A model that rejects every request must not be free in the cost logs (#401)."""
+    import services.llm as llm
+    from services import token_accounting
+
+    monkeypatch.setattr(llm.settings, "gemini_api_key", "gemini-key")
+
+    async def boom(self, contents, system, json_mode, *args):
+        raise llm.AIRateLimitError("429")
+
+    monkeypatch.setattr(llm.GeminiProvider, "_generate", boom)
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        token_accounting, "record_call", lambda **kw: recorded.append(kw)
+    )
+
+    provider = llm.get_provider("gemini", task=llm.TASK_COACH)
+    with pytest.raises(llm.AIRateLimitError):
+        await provider.chat("system", "user")
+
+    assert len(recorded) == 1
+    assert recorded[0]["ok"] is False
+    assert recorded[0]["error"] == "AIRateLimitError"

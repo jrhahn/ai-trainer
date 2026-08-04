@@ -41,7 +41,7 @@ from services.analysis import (
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.dates import app_today_iso
 from services import llm as llm_service
-from services.llm import begin_token_usage_collection, finish_token_usage_collection
+from services.token_accounting import track_llm_usage
 from services.ride_matching import apply_ride_plan_matches
 from services.weather_service import (
     backfill_missing_ride_weather,
@@ -87,14 +87,6 @@ def _provider(user: models.User) -> str:
     if stored == "openai" and (user.user_openai_api_key or settings.openai_api_key):
         return "openai"
     return _default_provider()
-
-
-async def _persist_collected_token_usage(
-    db: AsyncSession, user: models.User, token
-) -> None:
-    consumed = finish_token_usage_collection(token)
-    if consumed:
-        await crud.increment_user_consumed_tokens(db, user, consumed)
 
 
 async def _backfill_ride_weather_bg(user_id: str, access_token: str | None) -> None:
@@ -1809,24 +1801,21 @@ async def _analyse_fit_import(
     parsed: _ParsedFitActivity,
 ) -> dict | None:
     provider = current_user.ai_provider or "openai"
-    usage_token = begin_token_usage_collection()
-    try:
-        ai_result = await ai_service.analyse_fit_activity(
-            sport_type=parsed.sport_type,
-            duration_minutes=parsed.duration_minutes,
-            avg_power=parsed.avg_power,
-            avg_hr=parsed.avg_hr,
-            max_heart_rate=current_user.max_heart_rate,
-            provider=provider,
-        )
-    except Exception:
-        finish_token_usage_collection(usage_token)
-        logger.warning(
-            "AI analysis failed for .fit upload; skipping feedback", exc_info=True
-        )
-        return None
-
-    await _persist_collected_token_usage(db, current_user, usage_token)
+    async with track_llm_usage(db, current_user, source="api:analyse_fit_import"):
+        try:
+            ai_result = await ai_service.analyse_fit_activity(
+                sport_type=parsed.sport_type,
+                duration_minutes=parsed.duration_minutes,
+                avg_power=parsed.avg_power,
+                avg_hr=parsed.avg_hr,
+                max_heart_rate=current_user.max_heart_rate,
+                provider=provider,
+            )
+        except Exception:
+            logger.warning(
+                "AI analysis failed for .fit upload; skipping feedback", exc_info=True
+            )
+            return None
 
     if ai_result:
         for field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):

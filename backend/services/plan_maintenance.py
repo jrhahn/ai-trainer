@@ -15,11 +15,12 @@ from config import settings
 from services import ai_service
 from services import coach_summary
 from services.dates import app_today_iso, app_timezone
-from services.llm import begin_token_usage_collection, finish_token_usage_collection, resolve_user_provider
+from services.llm import resolve_user_provider
 from services import plan_pipeline
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +107,7 @@ async def maintain_user_training_plan(
     if constraints:
         profile = {**profile, "availabilityConstraints": constraints}
 
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="plan-maintenance"):
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [],
@@ -119,10 +119,6 @@ async def maintain_user_training_plan(
             race_events=_race_events_for_prompt(race_events),
             timezone_name=timezone_name,
         )
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     # Hard-constraint enforcement, concurrent-edit protection and persistence
     # are owned by the shared plan pipeline so every trigger behaves identically.

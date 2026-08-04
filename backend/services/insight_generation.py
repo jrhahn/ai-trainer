@@ -22,14 +22,11 @@ import models
 from config import settings
 from services import ai_service
 from services.dates import app_timezone
-from services.llm import (
-    begin_token_usage_collection,
-    finish_token_usage_collection,
-    resolve_user_provider,
-)
+from services.llm import resolve_user_provider
 from schemas import AthleteModelSchema
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -101,17 +98,12 @@ async def generate_user_insights(
     existing_facts = [fact.fact for fact in existing]
 
     provider = resolve_user_provider(user)
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="insight-generation"):
         candidates = await ai_service.generate_athlete_insights(
             metrics_section,
             existing_facts=existing_facts,
             provider=provider,
         )
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     observed = 0
     for candidate in candidates:
@@ -150,22 +142,18 @@ async def _refresh_athlete_model(
         else None
     )
 
-    usage_token = begin_token_usage_collection()
-    try:
-        derived_model = await ai_service.derive_athlete_model(
-            metrics_section,
-            current_model=current_model,
-            provider=provider,
-        )
-    except Exception:
-        logger.warning(
-            "Athlete model derivation failed for user_id=%s", user.id, exc_info=True
-        )
-        return
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
+    async with track_llm_usage(db, user, source="athlete-model-derivation"):
+        try:
+            derived_model = await ai_service.derive_athlete_model(
+                metrics_section,
+                current_model=current_model,
+                provider=provider,
+            )
+        except Exception:
+            logger.warning(
+                "Athlete model derivation failed for user_id=%s", user.id, exc_info=True
+            )
+            return
 
     if derived_model is not None:
         await crud.upsert_athlete_model(db, user.id, **derived_model)

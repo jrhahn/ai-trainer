@@ -160,12 +160,33 @@ async def create_user(
 
 
 async def increment_user_consumed_tokens(
-    db: AsyncSession, user: models.User, tokens: int
+    db: AsyncSession,
+    user: models.User,
+    tokens: int,
+    *,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cached_tokens: int = 0,
 ) -> None:
-    """Add provider-reported LLM tokens to a user's running usage counter."""
-    if tokens <= 0:
+    """Add provider-reported LLM tokens to a user's running usage counters.
+
+    The split is kept alongside the total because input and output bill at very
+    different rates and cached input at a tenth of the input rate, so the total
+    alone cannot be converted into a cost (#516). ``cached_tokens`` is a subset
+    of ``input_tokens``, not a fourth bucket.
+    """
+    if tokens <= 0 and input_tokens <= 0 and output_tokens <= 0:
         return
-    user.consumed_tokens = int(user.consumed_tokens or 0) + int(tokens)
+    user.consumed_tokens = int(user.consumed_tokens or 0) + max(0, int(tokens))
+    user.consumed_input_tokens = int(user.consumed_input_tokens or 0) + max(
+        0, int(input_tokens)
+    )
+    user.consumed_output_tokens = int(user.consumed_output_tokens or 0) + max(
+        0, int(output_tokens)
+    )
+    user.consumed_cached_tokens = int(user.consumed_cached_tokens or 0) + max(
+        0, int(cached_tokens)
+    )
     await db.flush()
 
 

@@ -38,6 +38,7 @@ from services.intervals_service import (
     apply_summary_fallback,
 )
 from services.learning_pipeline import learn_from_completed_workouts
+from services.token_accounting import track_llm_usage
 from services.ride_matching import (
     apply_ride_plan_matches,
     mark_matched_days_completed,
@@ -663,7 +664,18 @@ async def run_activity_sync(
                             source=source, checked=1, skipped=1
                         )
                     else:
-                        source_result = await sync_fn(db, user)
+                        # Wrapped here rather than inside each helper because a
+                        # synced ride triggers coach work — the per-ride review
+                        # in review_matched_ride_and_adapt is two LLM calls —
+                        # that ran outside every collection scope and was
+                        # therefore billed to nobody (#516). Steps that open
+                        # their own scope (the learning chain) still report
+                        # under their own source; nesting means their tokens are
+                        # persisted once, by the inner scope.
+                        async with track_llm_usage(
+                            db, user, source=f"job:{source}-sync"
+                        ):
+                            source_result = await sync_fn(db, user)
                     result.add(source_result)
                     await db.commit()
             except Exception:

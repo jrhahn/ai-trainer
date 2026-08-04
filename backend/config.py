@@ -168,6 +168,11 @@ class Settings(BaseSettings):
     # it is a drop-in override. Both are pinned to a name that was verified
     # against the live model list — text-embedding-004 has been withdrawn.
     # ------------------------------------------------------------------
+    # Write full prompts and responses to the log. Off by default and meant for
+    # a deliberate debugging session only: prompts carry the athlete's health
+    # data, which has no business sitting in a log file (#499/#516).
+    log_llm_payloads: bool = False
+
     embedding_provider: str = "gemini"
     gemini_embedding_model: str = "gemini-embedding-001"
     openai_embedding_model: str = "text-embedding-3-small"

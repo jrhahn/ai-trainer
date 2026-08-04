@@ -135,18 +135,20 @@ def test_parse_ai_json_logs_warning_when_repair_alters_input(caplog):
 
     # Truncated JSON — repair_json will close the open string and add missing braces
     raw = '{"description": "Zone 2 ride with focus on cade'
-    with caplog.at_level(logging.WARNING, logger="backend.services.ai_service"):
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
         ai_service._parse_ai_json(raw)
-    assert any("json_repair altered" in r.message for r in caplog.records)
+    # Reported through token_accounting so the line carries the task/model/
+    # prompt_sha of the call that produced the bad JSON (#516).
+    assert any("LLM json_repair" in r.getMessage() for r in caplog.records)
 
 
 def test_parse_ai_json_does_not_log_when_input_is_valid(caplog):
     import logging
 
     raw = '{"key": "value"}'
-    with caplog.at_level(logging.WARNING, logger="backend.services.ai_service"):
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
         ai_service._parse_ai_json(raw)
-    assert not any("json_repair altered" in r.message for r in caplog.records)
+    assert not any("LLM json_repair" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

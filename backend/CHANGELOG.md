@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-call LLM cost accounting** (`services/token_accounting.py` (new),
+  `services/llm.py`, `crud.py`, `models.py`, migration `20260808_000001`,
+  `config.py`) — "which feature is costing me money" was not answerable from
+  anything the app recorded; the numbers in #510 were produced by rebuilding
+  prompts by hand against the production database. Every provider call now
+  emits one line naming the task, the resolved model, the source, the
+  input/output/cached split, the latency and a `prompt_sha`, so a cost jump can
+  be traced to a prompt edit:
+
+      LLM call task=coach provider=gemini model=gemini-3.5-flash-lite
+      source=api:ask_trainer input=12043 output=486 cached=9820 total=12529
+      latency_ms=3120 json_mode=false ok=true prompt_sha=d9c3367e7392
+
+  Failed calls are logged too (`ok=false error=…`) — a model that starts
+  rejecting every request was otherwise free in the cost logs, which is exactly
+  what #401 looked like. `json_repair` firing is reported against the task,
+  model and `prompt_sha` of the call that produced the bad JSON, since the
+  response is parsed long after the call line is written. `users` gains
+  `consumed_input_tokens` / `consumed_output_tokens` / `consumed_cached_tokens`
+  next to the existing total: input and output bill ~6× apart and cached input
+  at a tenth of input, so a single total cannot be converted to a cost at all.
+  Cached is a *subset* of input in both providers' reporting, not a fourth
+  bucket. Gemini's thinking tokens are counted as output because that is how
+  they bill, so a model ignoring `thinking_budget=0` shows up instead of
+  looking free. Prompt/response content stays behind `LOG_LLM_PAYLOADS`,
+  default off — prompts carry the athlete's health data (#499). Contrary to
+  the issue, the eight weekly generator jobs were already collecting usage; the
+  one real hole was the per-ride review chain in `activity_sync`
+  (`review_matched_ride_and_adapt`, two calls per matched ride), which ran
+  outside every scope and was billed to nobody. It is now wrapped at the sync
+  runner, and nesting means a step with its own scope still persists its tokens
+  exactly once. (#516)
+
+### Changed
+
+- **One way to collect and persist token usage** (`services/token_accounting.py`,
+  `routers/ai.py`, `routers/users.py`, and the nine job/service modules) —
+  fifteen call sites each repeated the same begin/try/finally/increment
+  boilerplate. They now share `track_llm_usage(db, user, source=...)`, which is
+  also where the `source` label comes from: `api:ask_trainer`,
+  `job:intervals-sync`, `plan-maintenance`, and so on. (#516)
+
 ### Fixed
 
 - **Activity sync stops re-requesting permanently dead intervals.icu ids**

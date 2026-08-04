@@ -19,11 +19,8 @@ import crud
 import models
 import schemas
 from services import ai_service
-from services.llm import (
-    begin_token_usage_collection,
-    finish_token_usage_collection,
-    resolve_user_provider,
-)
+from services.llm import resolve_user_provider
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +81,7 @@ async def narrate_plan_changes(
                 user.rider_assessment, from_attributes=True
             ).model_dump(by_alias=True)
         provider = resolve_user_provider(user)
-        usage_token = begin_token_usage_collection()
-        try:
+        async with track_llm_usage(db, user, source="coach-narration"):
             parsed = await ai_service.summarize_plan_changes(
                 applied_changes,
                 profile,
@@ -95,10 +91,6 @@ async def narrate_plan_changes(
                 training_load_section=training_load_section,
                 weather_context_section=weather_context_section,
             )
-        finally:
-            consumed = finish_token_usage_collection(usage_token)
-            if consumed:
-                await crud.increment_user_consumed_tokens(db, user, consumed)
 
         summary = (parsed.get("summary") or "").strip()
         if not summary:

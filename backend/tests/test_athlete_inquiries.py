@@ -16,7 +16,7 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import ai_service, athlete_inquiry
+from services import ai_service, athlete_inquiry, token_accounting
 from services.prompts import (
     ask_trainer_system,
     generate_inquiries_system,
@@ -1098,13 +1098,24 @@ async def test_tokens_spent_on_generation_are_billed_to_the_athlete(monkeypatch)
     )
 
     async def fake_generate(*args, **kwargs):
+        # Report usage the way a real provider call does, so this exercises the
+        # whole path from provider through the scope to the user's counters.
+        token_accounting.record_call(
+            task="classify",
+            provider="gemini",
+            model="gemini-3.5-flash-lite",
+            system_prompt="prompt",
+            json_mode=True,
+            latency_ms=5,
+            input_tokens=1000,
+            output_tokens=234,
+            cached_tokens=600,
+            total_tokens=1234,
+        )
         return []
 
     monkeypatch.setattr(
         athlete_inquiry.ai_service, "generate_athlete_inquiries", fake_generate
-    )
-    monkeypatch.setattr(
-        athlete_inquiry, "finish_token_usage_collection", lambda token: 1234
     )
 
     async with TestSessionLocal() as db:
@@ -1116,6 +1127,10 @@ async def test_tokens_spent_on_generation_are_billed_to_the_athlete(monkeypatch)
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
     assert (user.consumed_tokens or 0) == before + 1234
+    # The split is what makes the total priceable (#516).
+    assert user.consumed_input_tokens == 1000
+    assert user.consumed_output_tokens == 234
+    assert user.consumed_cached_tokens == 600
 
 
 @pytest.mark.asyncio
@@ -1126,12 +1141,20 @@ async def test_tokens_spent_judging_an_answer_are_billed_to_the_athlete(
     inquiry = await _record(user_id, question="How is sleep?")
 
     async def fake_evaluate(*args, **kwargs):
+        token_accounting.record_call(
+            task="classify",
+            provider="gemini",
+            model="gemini-3.5-flash-lite",
+            system_prompt="prompt",
+            json_mode=True,
+            latency_ms=5,
+            input_tokens=30,
+            output_tokens=12,
+            total_tokens=42,
+        )
         return {"answered": True, "fact": "", "reply": "Thanks.", "question": ""}
 
     monkeypatch.setattr(ai_service, "evaluate_inquiry_answer", fake_evaluate)
-    monkeypatch.setattr(
-        athlete_inquiry, "finish_token_usage_collection", lambda token: 42
-    )
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)

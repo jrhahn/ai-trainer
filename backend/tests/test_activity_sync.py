@@ -667,6 +667,53 @@ async def test_activity_sync_isolates_per_user_source_failures(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sync_bills_its_llm_calls_to_the_athlete(monkeypatch):
+    """Coach work triggered by a sync used to be billed to nobody (#516).
+
+    ``review_matched_ride_and_adapt`` is two LLM calls per matched ride and ran
+    outside every collection scope, so ``consumed_tokens`` was a floor rather
+    than a measurement — the whole reason cost analysis had to be done by hand
+    against the production database.
+    """
+    from services import token_accounting
+
+    user_id = await _create_user(
+        email="activity-sync-billing@example.com",
+        strava=True,
+        strava_cursor=100,
+    )
+
+    async def fake_strava(db, user):
+        token_accounting.record_call(
+            task="feedback",
+            provider="gemini",
+            model="gemini-3.5-flash-lite",
+            system_prompt="rate this ride",
+            json_mode=True,
+            latency_ms=10,
+            input_tokens=4_000,
+            output_tokens=300,
+            cached_tokens=1_000,
+            total_tokens=4_300,
+        )
+        return activity_sync.SourceSyncResult(source="strava", checked=1, imported=1)
+
+    async def fake_intervals(db, user):
+        return activity_sync.SourceSyncResult(source="intervals", checked=1, skipped=1)
+
+    monkeypatch.setattr(activity_sync, "sync_strava_for_user", fake_strava)
+    monkeypatch.setattr(activity_sync, "sync_intervals_for_user", fake_intervals)
+
+    await activity_sync.run_activity_sync(TestSessionLocal)
+
+    user = await _get_user(user_id)
+    assert user.consumed_tokens == 4_300
+    assert user.consumed_input_tokens == 4_000
+    assert user.consumed_output_tokens == 300
+    assert user.consumed_cached_tokens == 1_000
+
+
+@pytest.mark.asyncio
 async def test_import_triggers_continuous_learning(monkeypatch):
     """A freshly imported workout runs one learning step for the athlete (#388)."""
     user_id = await _create_user(
