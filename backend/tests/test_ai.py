@@ -2206,9 +2206,17 @@ async def test_apply_ride_plan_matches_sets_mismatch_label_for_gross_duration_de
 
 
 @pytest.mark.asyncio
-async def test_apply_ride_plan_matches_accepts_combined_same_day_endurance_rides(
+async def test_apply_ride_plan_matches_accepts_a_long_day_split_by_a_stop(
     client, auth_headers
 ):
+    """A four-hour day recorded as two files still satisfies the plan (#543).
+
+    This used to assert the same for a morning road ride and an afternoon MTB
+    ride — two separate trainings whose durations happened to add up. Summing
+    now requires the recordings to be parts of one session, so the two halves
+    here sit fifteen minutes apart; the separated case is pinned in
+    ``test_plan_sessions.py``.
+    """
     import crud
     from auth import decode_token
     from services.ride_matching import apply_ride_plan_matches
@@ -2232,8 +2240,9 @@ async def test_apply_ride_plan_matches_accepts_combined_same_day_endurance_rides
             user_id,
             strava_activity_id=71001,
             activity_date="2026-06-20",
+            activity_start_datetime="2026-06-20T08:00:00Z",
             sport_type="Ride",
-            activity_name="Morning Road Cycling",
+            activity_name="Long Ride, Part One",
             duration_seconds=180 * 60,
         )
         await crud.upsert_ride_metric(
@@ -2241,8 +2250,9 @@ async def test_apply_ride_plan_matches_accepts_combined_same_day_endurance_rides
             user_id,
             strava_activity_id=71002,
             activity_date="2026-06-20",
+            activity_start_datetime="2026-06-20T11:15:00Z",
             sport_type="MountainBikeRide",
-            activity_name="Afternoon Mountain Biking",
+            activity_name="Long Ride, Part Two",
             duration_seconds=60 * 60,
         )
 

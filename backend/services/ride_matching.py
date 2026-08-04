@@ -14,6 +14,7 @@ import models
 import schemas
 from services import ai_service
 from services import coach_summary
+from services.activity_identity import activities_form_one_session
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
 from services.duration_range import duration_range
@@ -293,6 +294,22 @@ def _is_cycling_ride(ride: models.RideMetric) -> bool:
     return "ride" in sport_type or "cycling" in sport_type or "bike" in sport_type
 
 
+def _rides_are_one_split_session(rides: list[models.RideMetric]) -> bool:
+    """Do these recordings look like one session that was saved in parts?
+
+    Adding two rides' durations together only says something about a planned
+    session if they were one ride to begin with. Same sport and no meaningful
+    gap between them is what makes that plausible; a morning commute and an
+    evening ride fail it despite both being cycling (#543).
+    """
+    return activities_form_one_session(
+        [
+            (ride.sport_type, ride.activity_start_datetime, ride.duration_seconds)
+            for ride in rides
+        ]
+    )
+
+
 def _combined_duration_matches_plan(
     rides: list[models.RideMetric],
     plan_duration_min: int,
@@ -560,7 +577,14 @@ async def apply_ride_plan_matches(
                 and plan_duration_min
             ):
                 best_match = _best_matching_ride(date_rides, plan_duration_min)
-                combined_matches = _combined_duration_matches_plan(
+                # Both conditions, in this order: the durations may only be
+                # added up once the recordings have been shown to be parts of
+                # one session. A sum that happens to fit the plan is not
+                # evidence of anything on its own — a commute plus an evening
+                # ride reached exactly that sum and completed the day (#543).
+                combined_matches = _rides_are_one_split_session(
+                    date_rides
+                ) and _combined_duration_matches_plan(
                     date_rides,
                     plan_duration_min,
                 )

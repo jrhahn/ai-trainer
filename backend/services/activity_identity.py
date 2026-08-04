@@ -8,6 +8,12 @@ from datetime import datetime, timezone
 CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS = 10 * 60
 
+# How far apart two recordings may sit and still be read as one interrupted
+# session. Generous enough for a café stop or a battery swap, and far below the
+# ~9 h between the two halves of a commute — which is the pair this number
+# exists to keep apart (#543).
+SPLIT_SESSION_MAX_GAP_SECONDS = 90 * 60
+
 
 def normalize_activity_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
@@ -204,3 +210,54 @@ def are_near_duplicate_activities(
         other_start = other_start.replace(tzinfo=None)
 
     return abs((start - other_start).total_seconds()) <= 30 * 60
+
+
+def activities_form_one_session(
+    activities: list[tuple[str | None, str | None, int | float | None]],
+    *,
+    max_gap_seconds: int = SPLIT_SESSION_MAX_GAP_SECONDS,
+) -> bool:
+    """True when these recordings look like one session that got split.
+
+    Each entry is ``(sport_type, activity_start_datetime, duration_seconds)``.
+
+    Distinct from :func:`are_near_duplicate_activities`, which asks whether two
+    files describe *the same* ride. This asks whether several files describe
+    consecutive *parts* of one — a café stop, a battery swap, an accidental
+    stop and restart. They must therefore not overlap much and must be adjacent
+    in time, where duplicates overlap almost entirely.
+
+    Callers use it to decide whether adding durations up means anything: two
+    halves of one ride sum to the session that was planned, a morning commute
+    and an evening ride do not (#543).
+
+    A missing or unparseable start, or a non-positive duration, returns False.
+    Adjacency is a claim about a timeline; without one it cannot be made, and
+    the caller should fall back to treating the activities separately.
+    """
+    if len(activities) < 2:
+        return False
+
+    families = {activity_family(sport_type) for sport_type, _, _ in activities}
+    if len(families) != 1:
+        return False
+
+    intervals: list[tuple[float, float]] = []
+    for _sport_type, start_value, duration_seconds in activities:
+        interval = _activity_interval(start_value, duration_seconds)
+        if interval is None:
+            return False
+        start, end = interval
+        intervals.append((start.timestamp(), end))
+
+    intervals.sort()
+    for (_previous_start, previous_end), (next_start, _next_end) in zip(
+        intervals, intervals[1:]
+    ):
+        # A negative gap is an overlap, which is a duplicate-detection concern
+        # and not this function's business; clamping keeps it from reading as
+        # "very adjacent" here.
+        gap = max(0.0, next_start - previous_end)
+        if gap > max_gap_seconds:
+            return False
+    return True

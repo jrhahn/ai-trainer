@@ -265,6 +265,7 @@ async def _add_ride(
     sport_type: str,
     duration_seconds: int,
     start: str | None = None,
+    intensity_factor: float | None = None,
 ) -> None:
     async with TestSessionLocal() as db:
         db.add(
@@ -275,6 +276,7 @@ async def _add_ride(
                 activity_start_datetime=start,
                 sport_type=sport_type,
                 duration_seconds=duration_seconds,
+                intensity_factor=intensity_factor,
             )
         )
         await db.commit()
@@ -378,3 +380,100 @@ async def test_matched_sessions_complete_independently():
     saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
     assert saved[0].get("completed") is True
     assert not saved[1].get("completed")
+
+
+# ---------------------------------------------------------------------------
+# Several activities, ONE planned session (#543)
+#
+# Adding two rides' durations together may only stand in for a planned session
+# when they were one ride to begin with. The sum fitting proves nothing on its
+# own — a commute plus an evening ride hit it exactly and completed the day.
+# ---------------------------------------------------------------------------
+
+
+async def _match_and_read(user_id: str, plan: list[dict], date: str, ids: list[int]):
+    async with TestSessionLocal() as db:
+        await ride_matching.apply_ride_plan_matches(db, user_id, plan, ids)
+        await db.commit()
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+    return {r.strava_activity_id: r for r in rides}
+
+
+@pytest.mark.asyncio
+async def test_a_ride_split_by_a_stop_counts_as_the_planned_session():
+    """Ended at 10:00, restarted at 10:15: two files, one 120-minute session."""
+    date = "2026-08-16"
+    plan = [_session(date, "endurance", duration=120)]
+    user_id = await _create_user("split-session@example.com", plan)
+    await _add_ride(user_id, 9301, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
+    await _add_ride(user_id, 9302, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T10:15:00Z")
+
+    by_id = await _match_and_read(user_id, plan, date, [9301, 9302])
+
+    assert by_id[9301].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9302].plan_match_status == ride_matching.MATCH_AUTO
+    # One session, so both halves point at the same one.
+    assert by_id[9301].matched_plan_slot == by_id[9302].matched_plan_slot
+    assert by_id[9301].label_override == ride_matching.LABEL_OK
+    assert by_id[9302].label_override == ride_matching.LABEL_OK
+
+
+@pytest.mark.asyncio
+async def test_a_commute_and_an_evening_ride_do_not_add_up_to_the_session():
+    """The regression: 60' + 70' = 130' fits a 120' plan, nine hours apart.
+
+    Before #543 both were marked done. Now the closer-fitting ride takes the
+    session and the commute is an extra.
+    """
+    date = "2026-08-17"
+    plan = [_session(date, "endurance", duration=120)]
+    user_id = await _create_user("commute-pair@example.com", plan)
+    await _add_ride(user_id, 9401, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T07:30:00Z")
+    await _add_ride(user_id, 9402, date, sport_type="Ride",
+                    duration_seconds=70 * 60, start=f"{date}T17:30:00Z")
+
+    by_id = await _match_and_read(user_id, plan, date, [9401, 9402])
+
+    assert by_id[9402].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9401].plan_match_status == ride_matching.MATCH_UNMATCHED
+    assert by_id[9401].label_override == ride_matching.LABEL_ADDITIONAL
+
+
+@pytest.mark.asyncio
+async def test_a_hard_extra_ride_is_flagged_as_too_much_not_merely_additional():
+    """Same shape, but the ride that missed out was a hard one."""
+    date = "2026-08-18"
+    plan = [_session(date, "endurance", duration=120)]
+    user_id = await _create_user("hard-extra@example.com", plan)
+    await _add_ride(user_id, 9501, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T07:30:00Z",
+                    intensity_factor=0.9)
+    await _add_ride(user_id, 9502, date, sport_type="Ride",
+                    duration_seconds=70 * 60, start=f"{date}T17:30:00Z")
+
+    by_id = await _match_and_read(user_id, plan, date, [9501, 9502])
+
+    assert by_id[9502].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9501].plan_match_status == ride_matching.MATCH_UNMATCHED
+    assert by_id[9501].label_override == ride_matching.LABEL_TOO_MUCH
+
+
+@pytest.mark.asyncio
+async def test_without_start_times_the_rides_are_never_summed():
+    """Adjacency is a claim about a timeline; there is none here, so no sum."""
+    date = "2026-08-19"
+    plan = [_session(date, "endurance", duration=120)]
+    user_id = await _create_user("no-start-time@example.com", plan)
+    await _add_ride(user_id, 9601, date, sport_type="Ride",
+                    duration_seconds=60 * 60)
+    await _add_ride(user_id, 9602, date, sport_type="Ride",
+                    duration_seconds=70 * 60)
+
+    by_id = await _match_and_read(user_id, plan, date, [9601, 9602])
+
+    assert by_id[9602].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9601].plan_match_status == ride_matching.MATCH_UNMATCHED
