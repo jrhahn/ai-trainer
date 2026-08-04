@@ -53,6 +53,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach-memory updates are billed to the athlete who caused them**
+  (`services/token_accounting.py`, `routers/ai.py`) — the accounting from #516
+  went live and immediately reported four of seventeen calls in a 90-minute
+  production window as `source=unscoped`, ~3,000 tokens each, all the same
+  `prompt_sha`. They came from `_update_memory_bg`, which FastAPI runs as a
+  `BackgroundTasks` callback — that is, *after* the response, and therefore
+  after the request's session and its `ContextVar` scope are both gone.
+  `BackgroundTasks` and a request-scoped scope are structurally incompatible,
+  so the task now opens its own via `track_llm_usage_detached(session_maker,
+  user_id, source="bg:update_coach_memory")`. That variant exists rather than
+  reusing `track_llm_usage` because it must not hold a session across the
+  provider call: the memory update deliberately reads and writes in separate
+  short sessions so an athlete's concurrent edit is neither blocked nor
+  clobbered (#346, #522). It opens one session at the end, only if something
+  was actually spent. The whole retry loop shares one scope, so up to three
+  attempts bill once — including the attempts that abandon the write, since the
+  tokens were spent either way. A call outside every scope is now logged at
+  WARNING rather than as the word `unscoped` inside a routine INFO line, which
+  is why this took a month to notice. `_update_memory_bg` is the only
+  background task that calls the model; the Strava/intervals imports and the
+  weather backfill do not. (#537)
+
 - **Activity sync stops re-requesting permanently dead intervals.icu ids**
   (`services/intervals_service.py`, `services/activity_sync.py`, `crud.py`,
   `routers/intervals.py`, migration `20260807_000001`) — the reclassification
