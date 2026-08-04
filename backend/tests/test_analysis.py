@@ -50,6 +50,122 @@ def test_detect_intervals():
     assert analysis.detect_intervals([1.0], [0.0], 0.0) == []
 
 
+def test_noisy_offroad_vo2max_set_is_detected_not_tempo():
+    """A 4x4 VO2max set ridden off-road must survive the spiky power stream.
+
+    Regression: mountain-bike power drops below the work threshold for
+    a second or two constantly (coasting, technical sections), which used to
+    shatter each 4-min effort into discarded sub-blocks so the whole ride read
+    as a steady "tempo" ride.  Rolling-mean smoothing keeps the efforts intact.
+    """
+    import random
+
+    rng = random.Random(1)
+    ftp = 320.0
+
+    def noisy(base: float, secs: int, jitter: float) -> list[float]:
+        return [max(0.0, base + rng.gauss(0, jitter)) for _ in range(secs)]
+
+    watts: list[float] = noisy(210, 15 * 60, 70)  # warmup on rolling dirt
+    for _ in range(4):
+        seg = noisy(360, 4 * 60, 90)  # 4 min @ ~360W (~112% FTP)
+        for i in range(0, len(seg), 20):
+            if rng.random() < 0.3:
+                seg[i] = rng.uniform(80, 200)  # coasting / technical dips
+        watts += seg + noisy(150, 3 * 60, 60)  # recovery
+    watts += noisy(200, 10 * 60, 70)  # cooldown
+    time_stream = [float(i) for i in range(len(watts))]
+
+    # Average power sits right in the tempo band, so avg-power classification
+    # alone (the old fallback) mislabels the ride.
+    assert 0.70 < (sum(watts) / len(watts)) / ftp < 0.80
+
+    intervals = analysis.detect_intervals(watts, time_stream, ftp)
+    assert len(intervals) == 4  # one clean block per rep, no fragments
+    for iv in intervals:
+        assert 210 <= iv["duration_secs"] <= 260  # ~4 min each
+        assert iv["avg_power"] / ftp > 1.05  # VO2max intensity
+
+    category = analysis.classify_ride_purpose(watts, time_stream, ftp)
+    assert category == "interval_vo2max"
+
+    confidence, _reason = analysis.classify_ride_confidence_and_reason(
+        category, len(watts), intervals
+    )
+    assert confidence == "high"
+
+
+def test_classify_from_provider_intervals_vo2max():
+    """4 work reps at ~112% FTP (recoveries interleaved) → vo2max."""
+    ftp = 320.0
+    provider = [
+        {"type": "WORK", "duration_secs": 240, "avg_power": 361},
+        {"type": "RECOVERY", "duration_secs": 180, "avg_power": 150},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 359},
+        {"type": "RECOVERY", "duration_secs": 180, "avg_power": 140},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 367},
+        {"type": "WORK", "duration_secs": 240, "avg_power": 352},
+    ]
+    purpose, work = analysis.classify_from_provider_intervals(provider, ftp)
+    assert purpose == "interval_vo2max"
+    assert len(work) == 4  # recoveries excluded
+    confidence, _ = analysis.classify_ride_confidence_and_reason(purpose, 6072, work)
+    assert confidence == "high"
+
+
+def test_classify_from_provider_intervals_recovery_only_is_unknown():
+    ftp = 320.0
+    assert analysis.classify_from_provider_intervals(
+        [
+            {"type": "RECOVERY", "duration_secs": 300, "avg_power": 150},
+            {"duration_secs": 600, "avg_power": 180},  # 56% FTP, sub-threshold
+        ],
+        ftp,
+    ) == ("unknown", [])
+    assert analysis.classify_from_provider_intervals([], ftp) == ("unknown", [])
+    assert analysis.classify_from_provider_intervals(
+        [{"type": "WORK", "duration_secs": 240, "avg_power": 360}], 0
+    ) == ("unknown", [])
+
+
+def test_build_ride_metrics_chain_uses_provider_intervals_without_stream():
+    """When the raw stream is missing, provider intervals rescue the ride from an
+    "unknown" label (regression for the July-28 intervals.icu VO2max ride)."""
+    ride = {
+        "strava_activity_id": 1,
+        "activity_source": "intervals",
+        "activity_date": "2026-07-28",
+        "sport_type": "cycling",
+        "duration_seconds": 6072,
+        "streams": {},  # no usable stream
+        "_summary_avg_power_w": 242,
+        "_provider_intervals": [
+            {"type": "WORK", "duration_secs": 240, "avg_power": 361},
+            {"type": "RECOVERY", "duration_secs": 180, "avg_power": 150},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 359},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 367},
+            {"type": "WORK", "duration_secs": 240, "avg_power": 352},
+        ],
+    }
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert len(metrics) == 1
+    assert metrics[0]["ride_purpose"] == "interval_vo2max"
+    assert metrics[0]["classification_confidence"] == "high"
+
+
+def test_build_ride_metrics_chain_unknown_without_stream_or_intervals():
+    """No stream and no provider intervals still yields unknown."""
+    ride = {
+        "strava_activity_id": 2,
+        "activity_date": "2026-07-28",
+        "sport_type": "cycling",
+        "duration_seconds": 3600,
+        "streams": {},
+    }
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert metrics[0]["ride_purpose"] == "unknown"
+
+
 def test_compute_hr_drift():
     assert analysis.compute_hr_drift([0, 1, 2]) is None or True  # n<=2 guard below
     assert analysis.compute_hr_drift([1.0, 2.0]) is None
@@ -62,6 +178,21 @@ def test_stream_duration_seconds():
     assert analysis._stream_duration_seconds([5.0]) == 1.0
     assert analysis._stream_duration_seconds([0.0, 10.0]) == pytest.approx(20.0)
     assert analysis._stream_duration_seconds([10.0, 0.0]) == 0.0  # negative elapsed
+
+
+def test_stream_duration_seconds_excludes_long_pause():
+    # 60s of riding, a 30-minute stop, then 60s more: moving time is ~120s,
+    # not the ~32-minute wall-clock span (#427).
+    moving_block = list(range(0, 61))  # 0..60, one sample per second
+    after_pause = list(range(1860, 1921))  # resumes 30 min later
+    time_stream = [float(t) for t in moving_block + after_pause]
+
+    duration = analysis._stream_duration_seconds(time_stream)
+
+    # 120s of 1s gaps kept; the single 1800s gap excluded. Plus one sample
+    # spacing (~0.99s).
+    assert duration == pytest.approx(120 + 120 / 121)
+    assert duration < 200  # nowhere near the ~1920s elapsed span
 
 
 def test_compute_training_load_ftp_guard():
@@ -106,28 +237,109 @@ def test_compute_readiness_score_bands(tsb, expected_band):
     assert result["days_until_race"] == 5
 
 
+def _texts(recs: list[dict]) -> list[str]:
+    return [r["recommendation"] for r in recs]
+
+
 def test_compute_readiness_recommendations_covers_all_branches():
     # Heavy fatigue + low fitness + far race + low score
-    tips = analysis.compute_readiness_recommendations(ctl=20, atl=90, tsb=-25, score=30, days_until_race=30)
+    recs = analysis.compute_readiness_recommendations(ctl=20, atl=90, tsb=-25, score=30, days_until_race=30)
+    tips = _texts(recs)
     assert any("heavily fatigued" in t for t in tips)
     assert any("base" in t for t in tips)
 
     # Optimal form + high fitness + taper window + on-track score
-    tips2 = analysis.compute_readiness_recommendations(ctl=90, atl=70, tsb=15, score=60, days_until_race=14)
+    tips2 = _texts(analysis.compute_readiness_recommendations(ctl=90, atl=70, tsb=15, score=60, days_until_race=14))
     assert any("optimal" in t.lower() for t in tips2)
     assert any("taper" in t.lower() for t in tips2)
 
     # Very fresh + race day
-    tips3 = analysis.compute_readiness_recommendations(ctl=50, atl=20, tsb=30, score=80, days_until_race=0)
+    tips3 = _texts(analysis.compute_readiness_recommendations(ctl=50, atl=20, tsb=30, score=80, days_until_race=0))
     assert any("Race day" in t for t in tips3)
 
     # Mid fatigue branches + 3-10 day window
-    tips4 = analysis.compute_readiness_recommendations(ctl=45, atl=55, tsb=-12, score=70, days_until_race=7)
+    tips4 = _texts(analysis.compute_readiness_recommendations(ctl=45, atl=55, tsb=-12, score=70, days_until_race=7))
     assert any("rest day" in t.lower() for t in tips4)
 
     # slight fatigue + last-days window
-    tips5 = analysis.compute_readiness_recommendations(ctl=65, atl=66, tsb=-3, score=70, days_until_race=2)
+    tips5 = _texts(analysis.compute_readiness_recommendations(ctl=65, atl=66, tsb=-3, score=70, days_until_race=2))
     assert any("rest up" in t.lower() for t in tips5)
+
+
+def test_compute_readiness_recommendations_include_supporting_evidence():
+    """Every recommendation must explain why: metric values + scientific rationale."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=45, atl=55, tsb=-12.3, score=52, days_until_race=14
+    )
+    assert recs, "expected at least one recommendation"
+    for rec in recs:
+        assert rec["recommendation"]
+        # Each recommendation carries supporting-evidence reasoning bullets.
+        assert len(rec["reasoning"]) >= 2
+        sources = {bullet["source"] for bullet in rec["reasoning"]}
+        # Scientific evidence and the coach's read of the metrics are both cited.
+        assert analysis.SOURCE_SCIENTIFIC_EVIDENCE in sources
+        assert analysis.SOURCE_COACH_INFERENCE in sources
+        # The "Research:" prefix is dropped in favour of the source tag.
+        for bullet in rec["reasoning"]:
+            assert not bullet["text"].startswith("Research:")
+
+    reasoning_text = " ".join(b["text"] for rec in recs for b in rec["reasoning"])
+    # Current metrics are surfaced with their concrete values.
+    assert "-12.3" in reasoning_text  # TSB
+    assert "45.0" in reasoning_text  # CTL
+    assert "52" in reasoning_text  # readiness score
+    assert "14 days" in reasoning_text  # days until race
+
+
+def test_compute_readiness_recommendations_weave_in_personal_observations():
+    """Observations about the athlete are routed to the matching recommendation."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=90,
+        atl=70,
+        tsb=15,  # optimal-form / "race" theme active
+        score=60,
+        days_until_race=14,  # taper window / "race" theme active
+        observations=[
+            "Athlete gets nervous and starts races too fast.",
+            "Tends to skip easy endurance rides when motivation dips.",
+        ],
+    )
+
+    def reasoning_for(substr: str) -> list[dict]:
+        return next(r["reasoning"] for r in recs if substr in r["recommendation"])
+
+    def personal_texts(substr: str) -> list[str]:
+        return [
+            b["text"]
+            for b in reasoning_for(substr)
+            if b["source"] == analysis.SOURCE_PERSONAL_OBSERVATION
+        ]
+
+    # Race-nerves observation lands on a race-themed recommendation…
+    assert "Athlete gets nervous and starts races too fast." in personal_texts(
+        "optimal for racing"
+    )
+    # …and the consistency flaw lands on the fitness-themed recommendation.
+    assert "Tends to skip easy endurance rides when motivation dips." in personal_texts(
+        "consistent training and avoid gaps"
+    )
+
+    # Personal observations lead the reasoning, ahead of the coach-inference bullet.
+    race_bullets = reasoning_for("optimal for racing")
+    assert race_bullets[0]["source"] == analysis.SOURCE_PERSONAL_OBSERVATION
+
+
+def test_compute_readiness_recommendations_unmatched_observation_falls_back():
+    """An observation matching no active theme still surfaces on the primary rec."""
+    recs = analysis.compute_readiness_recommendations(
+        ctl=90, atl=70, tsb=15, score=60, days_until_race=0,
+        observations=["Prefers riding in the morning before work."],
+    )
+    assert recs[0]["reasoning"][0] == {
+        "source": analysis.SOURCE_PERSONAL_OBSERVATION,
+        "text": "Prefers riding in the morning before work.",
+    }
 
 
 def test_project_training_load_from_seed():
@@ -188,6 +400,45 @@ def test_estimate_ftp_over_time_produces_curve():
     assert isinstance(result, list)
     assert len(result) >= 1
     assert all("ftp" in r and "raw_ftp" in r and "date" in r for r in result)
+    # A 5-minute MAP proxy is emitted alongside every FTP point, and FTP must
+    # land below it.
+    assert all("map_5min" in r for r in result)
+    for point in result:
+        if point["map_5min"] is not None:
+            assert point["ftp"] < point["map_5min"]
+
+
+def test_check_ftp_against_map_flags_ftp_at_or_above_map():
+    # FTP above the aerobic ceiling is impossible, not merely unusual.
+    warning = analysis.check_ftp_against_map(320, 300)
+    assert warning is not None
+    assert "too high" in warning
+
+    # Right at the upper bound still trips.
+    assert (
+        analysis.check_ftp_against_map(
+            round(300 * analysis.FTP_MAP_RATIO_MAX), 300
+        )
+        is not None
+    )
+
+
+def test_check_ftp_against_map_flags_implausibly_low_ftp():
+    warning = analysis.check_ftp_against_map(150, 400)
+    assert warning is not None
+    assert "out of date" in warning
+
+
+def test_check_ftp_against_map_accepts_normal_physiology():
+    # 78 % of MAP sits squarely in the trained-cyclist band.
+    assert analysis.check_ftp_against_map(280, 360) is None
+
+
+def test_check_ftp_against_map_needs_both_values():
+    assert analysis.check_ftp_against_map(None, 400) is None
+    assert analysis.check_ftp_against_map(280, None) is None
+    assert analysis.check_ftp_against_map(0, 400) is None
+    assert analysis.check_ftp_against_map(280, 0) is None
 
 
 def test_estimate_ftp_over_time_empty_and_invalid():

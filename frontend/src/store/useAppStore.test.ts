@@ -9,6 +9,7 @@ const {
   mockFetchRaceEvents,
   mockFetchMetricsHistory,
   mockFetchRideMetricsHistory,
+  mockFetchWeatherForecast,
 } = vi.hoisted(() => ({
   mockFetchCurrentUser: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
@@ -18,6 +19,7 @@ const {
   mockFetchRaceEvents: vi.fn(),
   mockFetchMetricsHistory: vi.fn(),
   mockFetchRideMetricsHistory: vi.fn(),
+  mockFetchWeatherForecast: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
@@ -29,6 +31,7 @@ vi.mock('../services/user', () => ({
   fetchRaceEvents: mockFetchRaceEvents,
   fetchMetricsHistory: mockFetchMetricsHistory,
   fetchRideMetricsHistory: mockFetchRideMetricsHistory,
+  fetchWeatherForecast: mockFetchWeatherForecast,
 }))
 
 import { useAppStore } from './useAppStore'
@@ -52,6 +55,9 @@ const mockDay: TrainingDay = {
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
+  // Weather is additive dashboard context (#495): default it to "nothing known"
+  // so every hydration test stays about the data it is actually asserting.
+  mockFetchWeatherForecast.mockResolvedValue({ location: null, days: [] })
 })
 
 describe('chatHistory actions', () => {
@@ -97,6 +103,29 @@ describe('ride metric actions', () => {
         labelOverride: 'Solid',
       }),
     )
+  })
+
+  it('sets and clears feelLegs without touching other fields', () => {
+    const ride: RideMetricPoint = {
+      stravaActivityId: 77,
+      activityDate: '2026-06-20',
+      sportType: 'Ride',
+      userNote: 'Chatted with coach',
+    }
+    useAppStore.getState().setRideMetricsHistory([ride])
+
+    useAppStore.getState().updateRideMetricLegs(77, 'heavy')
+    expect(useAppStore.getState().rideMetricsHistory[0]).toEqual(
+      expect.objectContaining({
+        stravaActivityId: 77,
+        feelLegs: 'heavy',
+        userNote: 'Chatted with coach',
+      }),
+    )
+
+    useAppStore.getState().updateRideMetricLegs(77, null)
+    expect(useAppStore.getState().rideMetricsHistory[0].feelLegs).toBeNull()
+    expect(useAppStore.getState().rideMetricsHistory[0].userNote).toBe('Chatted with coach')
   })
 })
 
@@ -216,6 +245,20 @@ describe('loadUserData', () => {
     mockFetchRideMetricsHistory.mockResolvedValue([
       { activityDate: '2024-01-10', sportType: 'cycling', tss: 80, ctlAfter: 45.2, atlAfter: 60.1, tsbAfter: -14.9 },
     ])
+    mockFetchWeatherForecast.mockResolvedValue({
+      location: {
+        latitude: 47.99,
+        longitude: 7.85,
+        label: 'Freiburg',
+        source: 'user_set',
+        confidence: 1,
+        rideCount: 0,
+      },
+      days: [
+        { date: '2024-01-15', condition: 'rain', temperatureMaxC: 9.4, loadFlag: 'rain' },
+        { date: '2024-01-16', condition: 'clear', temperatureMaxC: 12.1 },
+      ],
+    })
 
     await useAppStore.getState().loadUserData('token-123')
 
@@ -230,6 +273,10 @@ describe('loadUserData', () => {
     expect(state.raceEvents[0].distanceKm).toBe(120)
     expect(state.stravaConnection?.athleteName).toBe('Alice Rider')
     expect(state.metricsHistory).toHaveLength(1)
+    // Forecast arrives keyed by ISO date so planned days can look themselves up (#495).
+    expect(Object.keys(state.weatherForecast)).toEqual(['2024-01-15', '2024-01-16'])
+    expect(state.weatherForecast['2024-01-15'].loadFlag).toBe('rain')
+    expect(state.homeLocation?.label).toBe('Freiburg')
     expect(state.metricsHistory[0].ftp).toBe(260)
     expect(state.rideMetricsHistory).toHaveLength(1)
     expect(state.rideMetricsHistory[0].ctlAfter).toBe(45.2)
@@ -368,5 +415,102 @@ describe('loadUserData auth handling', () => {
     await useAppStore.getState().loadUserData('tok-1')
 
     expect(useAppStore.getState().dataLoadWarning).toMatch(/Failed to load your profile/)
+  })
+})
+
+describe('weather forecast state (#495)', () => {
+  const rainDay = {
+    date: '2026-08-02',
+    condition: 'rain',
+    temperatureMaxC: 16.4,
+    loadFlag: 'rain',
+  }
+
+  it('starts with no forecast and no training location', () => {
+    expect(useAppStore.getState().weatherForecast).toEqual({})
+    expect(useAppStore.getState().homeLocation).toBeNull()
+  })
+
+  it('setWeatherForecast keys the days by ISO date', () => {
+    useAppStore.getState().setWeatherForecast([
+      { date: '2026-08-01', condition: 'clear', temperatureMaxC: 38.6 },
+      rainDay,
+    ])
+
+    const forecast = useAppStore.getState().weatherForecast
+    expect(Object.keys(forecast)).toEqual(['2026-08-01', '2026-08-02'])
+    expect(forecast['2026-08-02']).toEqual(rainDay)
+  })
+
+  it('setWeatherForecast replaces the previous outlook rather than merging', () => {
+    useAppStore.getState().setWeatherForecast([rainDay])
+    useAppStore.getState().setWeatherForecast([
+      { date: '2026-08-03', condition: 'snow', temperatureMaxC: -1 },
+    ])
+
+    expect(Object.keys(useAppStore.getState().weatherForecast)).toEqual(['2026-08-03'])
+  })
+
+  it('setWeatherForecast with no days clears the outlook', () => {
+    useAppStore.getState().setWeatherForecast([rainDay])
+    useAppStore.getState().setWeatherForecast([])
+
+    expect(useAppStore.getState().weatherForecast).toEqual({})
+  })
+
+  it('setHomeLocation stores and clears the training location', () => {
+    const location = {
+      latitude: 52.52,
+      longitude: 13.4,
+      label: 'Berlin',
+      source: 'user_set',
+      confidence: 1,
+      rideCount: 0,
+    }
+
+    useAppStore.getState().setHomeLocation(location)
+    expect(useAppStore.getState().homeLocation).toEqual(location)
+
+    useAppStore.getState().setHomeLocation(null)
+    expect(useAppStore.getState().homeLocation).toBeNull()
+  })
+
+  it('a failed forecast lookup leaves the dashboard usable and warns about nothing', async () => {
+    // Weather is decoration on top of the plan, not data the dashboard needs, so
+    // a forecast outage must stay silent instead of nagging (#495).
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: {
+        name: 'Alice',
+        email: 'alice@example.com',
+        bikeType: 'road',
+        trainingGoal: 'general_fitness',
+        weeklyHours: 10,
+        followsTrainingPlan: true,
+        fitnessLevel: 'intermediate',
+      },
+      isOnboarded: true,
+      stravaAnalysisComplete: true,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+      riderAssessment: null,
+      stravaConnection: null,
+    })
+    mockFetchTrainingPlan.mockResolvedValue([mockDay])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+    mockFetchWeatherForecast.mockRejectedValue(new Error('Open-Meteo down'))
+
+    await useAppStore.getState().loadUserData('token-123')
+
+    const state = useAppStore.getState()
+    expect(state.weatherForecast).toEqual({})
+    expect(state.homeLocation).toBeNull()
+    expect(state.trainingPlan).toHaveLength(1)
+    expect(state.dataLoadWarning).toBeNull()
   })
 })

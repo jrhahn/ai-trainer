@@ -12,9 +12,14 @@ Usage:
 
 Environment variables:
     DATABASE_URL            — required (PostgreSQL with pgvector)
-    OPENAI_API_KEY          — required (text-embedding-3-small)
+    GEMINI_API_KEY          — required unless embeddings are set to OpenAI
+    OPENAI_API_KEY          — alternative embedding provider
     SEMANTIC_SCHOLAR_API_KEY — optional; raises the API rate limit from
                                1 req/s (unauthenticated) to 10 req/s
+
+Embeddings go through ``services.embeddings``, which follows the configured
+provider — the corpus must be embedded by the same model that embeds queries at
+retrieval time, or the vectors are not comparable.
 
 The script is fully idempotent — it upserts by (source_id, chunk_index)
 so it is safe to re-run without duplicating data.
@@ -37,10 +42,23 @@ import time
 from pathlib import Path
 from typing import Any
 
+import sys
+
 import httpx
-from openai import AsyncOpenAI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+# Allow ``python scripts/ingest_cycling_science.py`` from backend/ to import the
+# top-level app modules (services, config, ...).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from services.embeddings import (  # noqa: E402
+    EMBEDDING_DIM,
+    embed_documents,
+    embedding_provider_is_configured,
+    get_embedder,
+    to_pgvector_literal,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -52,11 +70,11 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+asyncpg://aitrainer:aitrainer@localhost/aitrainer"
 )
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 S2_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIM = 1536
+# Gemini's embedding endpoint caps a single request; batching keeps each call
+# well inside that and inside the per-chunk input-token limit.
+EMBED_BATCH_SIZE = 32
 
 # Chunk parameters in tokens (cl100k_base encoding).
 # When tiktoken is unavailable, a character-based approximation is used instead
@@ -195,11 +213,16 @@ def _chunk_text(text_input: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def _embed_batch(texts: list[str], client: AsyncOpenAI) -> list[list[float]]:
-    """Embed a batch of texts using OpenAI text-embedding-3-small."""
-    response = await client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    # Results are ordered by index
-    return [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
+async def _embed_batch(texts: list[str]) -> list[list[float]]:
+    """Embed *texts* with the configured provider, in provider-sized batches."""
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), EMBED_BATCH_SIZE):
+        vectors.extend(await embed_documents(texts[start : start + EMBED_BATCH_SIZE]))
+    if len(vectors) != len(texts):
+        raise RuntimeError(
+            f"Embedding provider returned {len(vectors)} vectors for {len(texts)} chunks"
+        )
+    return vectors
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +241,7 @@ async def _upsert_chunks(
     async with session_maker() as session:
         inserted = 0
         for chunk in chunks:
-            vec_literal = "[" + ",".join(str(v) for v in chunk["embedding"]) + "]"
+            vec_literal = to_pgvector_literal(chunk["embedding"])
             sql = text(
                 """
                 INSERT INTO knowledge_chunks
@@ -259,10 +282,7 @@ async def _upsert_chunks(
 # ---------------------------------------------------------------------------
 
 
-async def ingest_seed_corpus(
-    session_maker: async_sessionmaker,
-    openai_client: AsyncOpenAI,
-) -> int:
+async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
     """Ingest the hand-written markdown files from backend/knowledge/."""
     if not KNOWLEDGE_DIR.exists():
         logger.warning("knowledge/ directory not found at %s; skipping seed corpus", KNOWLEDGE_DIR)
@@ -282,7 +302,7 @@ async def ingest_seed_corpus(
 
         logger.info("  %s → %d chunk(s)", md_path.name, len(text_chunks))
 
-        embeddings = await _embed_batch(text_chunks, openai_client)
+        embeddings = await _embed_batch(text_chunks)
         chunk_rows: list[dict[str, Any]] = []
         for idx, (chunk_text, embedding) in enumerate(zip(text_chunks, embeddings)):
             chunk_rows.append(
@@ -345,10 +365,7 @@ async def _fetch_s2_papers(
     return []
 
 
-async def ingest_semantic_scholar(
-    session_maker: async_sessionmaker,
-    openai_client: AsyncOpenAI,
-) -> int:
+async def ingest_semantic_scholar(session_maker: async_sessionmaker) -> int:
     """Query Semantic Scholar and ingest paper abstracts."""
     # Deduplicate papers across queries by source_id
     papers_by_id: dict[str, dict[str, Any]] = {}
@@ -380,7 +397,7 @@ async def ingest_semantic_scholar(
         url = pdf_info.get("url")
 
         text_chunks = _chunk_text(abstract)
-        embeddings = await _embed_batch(text_chunks, openai_client)
+        embeddings = await _embed_batch(text_chunks)
 
         chunk_rows: list[dict[str, Any]] = []
         for idx, (chunk_text, embedding) in enumerate(zip(text_chunks, embeddings)):
@@ -408,21 +425,25 @@ async def ingest_semantic_scholar(
 
 
 async def main() -> None:
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY is required for embedding generation")
+    if not embedding_provider_is_configured():
+        raise RuntimeError(
+            "No embedding provider configured; set GEMINI_API_KEY or OPENAI_API_KEY"
+        )
 
     engine = create_async_engine(DATABASE_URL, echo=False)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
-    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
     logger.info("=== Cycling Science Ingestion ===")
+    logger.info(
+        "Embedding with %s (%d dimensions)", get_embedder().model, EMBEDDING_DIM
+    )
 
     logger.info("Step 1: Seed corpus (knowledge/ markdown files)")
-    seed_count = await ingest_seed_corpus(session_maker, openai_client)
+    seed_count = await ingest_seed_corpus(session_maker)
     logger.info("  → %d seed chunks upserted", seed_count)
 
     logger.info("Step 2: Semantic Scholar papers")
-    paper_count = await ingest_semantic_scholar(session_maker, openai_client)
+    paper_count = await ingest_semantic_scholar(session_maker)
     logger.info("  → %d paper chunks upserted", paper_count)
 
     logger.info("Total chunks upserted: %d", seed_count + paper_count)

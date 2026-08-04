@@ -300,6 +300,91 @@ async def test_recommend_next_session_prompt_separates_physiology_and_context():
 
 
 @pytest.mark.asyncio
+async def test_recommend_next_session_prompt_surfaces_roi_recommendation():
+    """A sufficient ROI recommendation (#478) reaches the physiology layer with its
+    limiter, expected gain and rationale so the coach explains the WHY."""
+    from services import limiter_detection
+    from services import roi_recommendation
+
+    attrs = {
+        "ftp": {"estimate": 250, "confidence": 0.6},
+        "map": {"estimate": 360, "confidence": 0.6},
+        "fractional_utilization": {"estimate": 0.69, "confidence": 0.6},
+        "vo2max": {"estimate": 62, "confidence": 0.5},
+        "aerobic_endurance": {"score": "high", "confidence": 0.6},
+        "fatigue_resistance": {"score": "above_average", "confidence": 0.6},
+    }
+    limiters = limiter_detection.detect_limiters(attrs)
+    recommendation = roi_recommendation.recommend_training_roi(attrs, limiters)
+    assert recommendation["sufficient"] is True  # guard the fixture
+
+    captured: dict[str, str] = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        captured["user"] = user_msg
+        return json.dumps(
+            {
+                "response": "Threshold work is the better return right now.",
+                "next_session_recommendation": "Do a threshold session.",
+                "recommendation_type": "keep_as_planned",
+                "planUpdates": None,
+            }
+        )
+
+    with patch.object(ai_service, "_chat", new=fake_chat):
+        await ai_service.recommend_next_session(
+            rides=[FakeRideMetric()],
+            plan=PLAN_WITH_INTERVALS,
+            profile=PROFILE,
+            performance_recommendation=recommendation,
+            ctl=55.0,
+            atl=60.0,
+            tsb=-5.0,
+        )
+
+    user = captured["user"]
+    assert "Performance-model ROI" in user
+    # The ROI block sits in the physiology layer, before the athlete-context layer.
+    assert user.index("Performance-model ROI") < user.index("Athlete-context layer:")
+    assert "Expected gain per system: threshold: large" in user
+    assert "2× Threshold" in user
+    assert "250" in user and "360" in user  # rationale cites the numbers
+
+
+@pytest.mark.asyncio
+async def test_recommend_next_session_omits_roi_when_insufficient():
+    """An insufficient/low-confidence model adds no ROI block — the coach falls
+    back to its own physiology reasoning."""
+    from services import roi_recommendation
+
+    recommendation = roi_recommendation.recommend_training_roi({}, [])
+    assert recommendation["sufficient"] is False
+
+    captured: dict[str, str] = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        captured["user"] = user_msg
+        return json.dumps(
+            {
+                "response": "Keep as planned.",
+                "next_session_recommendation": "Keep as planned.",
+                "recommendation_type": "keep_as_planned",
+                "planUpdates": None,
+            }
+        )
+
+    with patch.object(ai_service, "_chat", new=fake_chat):
+        await ai_service.recommend_next_session(
+            rides=[FakeRideMetric()],
+            plan=PLAN_WITH_INTERVALS,
+            profile=PROFILE,
+            performance_recommendation=recommendation,
+        )
+
+    assert "Performance-model ROI" not in captured["user"]
+
+
+@pytest.mark.asyncio
 async def test_recommend_next_session_prompt_blocks_repeat_vo2_after_hard_ride():
     """Prompt should reject tomorrow VO2 when actual recent history already has VO2."""
     captured: dict[str, str] = {}
@@ -574,16 +659,18 @@ async def test_next_ride_recommendation_forwards_structured_athlete_context(
             "coachingRisks": ["does too much when fresh"],
         },
     )
-    await client.post(
-        "/api/v1/users/me/athlete-memory-facts",
-        headers=auth_headers,
-        json={
-            "fact": "Motivation improves after easy social rides",
-            "category": "motivation",
-            "sourceSnippet": "User said group rides help them reset.",
-            "confidence": 0.8,
-        },
-    )
+    # Observed twice so it clears the evidence bar and reaches the coach (#387).
+    for _ in range(2):
+        await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={
+                "fact": "Motivation improves after easy social rides",
+                "category": "motivation",
+                "sourceSnippet": "User said group rides help them reset.",
+                "confidence": 0.8,
+            },
+        )
 
     response = await client.post(
         "/api/v1/ai/next-ride-recommendation",

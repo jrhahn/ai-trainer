@@ -1,0 +1,380 @@
+"""Tests for multiple sessions per day — two-a-days (#496).
+
+A plan is a flat list where a *date may repeat*: two sessions sharing one date
+are distinguished by ``slot``. These lock in the three things that had to change
+for that to work: the session identity itself, the pipeline's per-session
+keying (pins, completion, history, merge), and ride↔session matching.
+
+They also pin the backward-compatibility contract: a legacy single-workout day
+carries no ``slot``, must keep carrying none through a round-trip, and must keep
+behaving exactly as it did before.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+import crud
+import models
+import schemas
+from auth import hash_password
+from services import plan_pipeline, ride_matching
+from services.dates import annotate_plan_days
+from tests.conftest import TestSessionLocal
+
+
+def _session(
+    date: str,
+    workout_type: str = "endurance",
+    *,
+    slot: int | None = None,
+    duration: int = 60,
+    completed: bool = False,
+    time_of_day: str | None = None,
+    title: str | None = None,
+) -> dict:
+    day: dict = {
+        "date": date,
+        "workoutType": workout_type,
+        "title": title or f"{workout_type} {date}",
+        "description": "Session",
+        "durationMinutes": duration,
+        "completed": completed,
+    }
+    if slot is not None:
+        day["slot"] = slot
+    if time_of_day is not None:
+        day["timeOfDay"] = time_of_day
+    return day
+
+
+async def _create_user(email: str, plan: list[dict]) -> str:
+    async with TestSessionLocal() as db:
+        user = models.User(
+            email=email,
+            name="Rider",
+            hashed_password=hash_password("Str0ng!Pass"),
+            is_onboarded=True,
+            bike_type="road",
+            training_goal="general_fitness",
+            fitness_level="intermediate",
+            current_ftp=250,
+            ai_provider="gemini",
+        )
+        db.add(user)
+        await db.flush()
+        await crud.upsert_training_plan(db, user.id, plan)
+        await db.commit()
+        return user.id
+
+
+async def _get_plan(user_id: str) -> list[dict]:
+    async with TestSessionLocal() as db:
+        row = await crud.get_training_plan(db, user_id)
+        return row.plan if row is not None else []
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: a day can hold two sessions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_plan_holds_two_sessions_on_one_date():
+    """AM yoga + PM endurance both survive a commit, each with its own fields."""
+    date = "2026-08-04"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30, time_of_day="am"),
+        _session(date, "endurance", slot=1, duration=120, time_of_day="pm"),
+    ]
+    user_id = await _create_user("two-a-day@example.com", [])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, plan, base_plan=[], source="generate"
+        )
+        await db.commit()
+
+    saved = await _get_plan(user_id)
+    assert len(saved) == 2
+    by_slot = {schemas.day_slot(d): d for d in saved}
+    assert by_slot[0]["workoutType"] == "recovery"
+    assert by_slot[0]["durationMinutes"] == 30
+    assert by_slot[1]["workoutType"] == "endurance"
+    assert by_slot[1]["durationMinutes"] == 120
+
+
+@pytest.mark.asyncio
+async def test_completing_one_session_leaves_the_other_pending():
+    """Ticking the morning yoga must not freeze or complete the evening ride."""
+    date = "2026-08-05"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30, completed=True),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("per-session-complete@example.com", plan)
+
+    # An automated trigger proposes rewriting both sessions.
+    proposal = [
+        _session(date, "intervals", slot=0, duration=90),
+        _session(date, "tempo", slot=1, duration=75),
+    ]
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, proposal, base_plan=plan, source="nightly_maintenance"
+        )
+        await db.commit()
+
+    saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
+    # The completed AM session is historical fact — untouched.
+    assert saved[0]["workoutType"] == "recovery"
+    assert saved[0]["completed"] is True
+    # The PM session was never completed, so the automated retune lands.
+    assert saved[1]["workoutType"] == "tempo"
+
+
+@pytest.mark.asyncio
+async def test_pin_protects_one_session_not_the_whole_day():
+    """A user pin guards the session they edited; the other stays adjustable."""
+    date = "2026-08-06"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("per-session-pin@example.com", plan)
+
+    # The athlete edits only the morning session.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": date, "slot": 0, "workoutType": "strength", "title": "Gym"}],
+            base_plan=plan,
+            source="user_edit",
+        )
+        await db.commit()
+
+    pinned_plan = await _get_plan(user_id)
+    assert {schemas.day_slot(d): d.get("source") for d in pinned_plan}[0] == "user"
+
+    # An automated trigger then tries to rewrite both sessions.
+    proposal = [
+        _session(date, "intervals", slot=0, duration=90),
+        _session(date, "tempo", slot=1, duration=75),
+    ]
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, proposal, base_plan=pinned_plan, source="auto_adapt"
+        )
+        await db.commit()
+
+    saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
+    assert saved[0]["workoutType"] == "strength"  # pin held
+    assert saved[1]["workoutType"] == "tempo"  # sibling still adjustable
+
+
+@pytest.mark.asyncio
+async def test_history_records_one_row_per_session():
+    """A two-a-day's change log is per session, not one conflated row per date."""
+    date = "2026-08-07"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("per-session-history@example.com", plan)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db,
+            user,
+            [
+                _session(date, "recovery", slot=0, duration=30),
+                _session(date, "tempo", slot=1, duration=75),
+            ],
+            base_plan=plan,
+            source="adapt",
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rows = await crud.list_plan_day_history(db, user_id, date=date)
+
+    changed = [row for row in rows if row.applied]
+    assert len(changed) == 1
+    # Only the PM session changed, and the row says so.
+    assert changed[0].slot == 1
+    assert changed[0].new_day["workoutType"] == "tempo"
+
+
+@pytest.mark.asyncio
+async def test_slotless_update_targets_the_days_first_session():
+    """Every pre-#496 caller sends no slot and must keep hitting slot 0."""
+    date = "2026-08-08"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("slotless-update@example.com", plan)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan_updates(
+            db, user, [{"date": date, "durationMinutes": 45}],
+            base_plan=plan, source="user_edit",
+        )
+        await db.commit()
+
+    saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
+    assert saved[0]["durationMinutes"] == 45
+    assert saved[1]["durationMinutes"] == 120
+
+
+@pytest.mark.asyncio
+async def test_legacy_single_session_plan_round_trips_without_a_slot():
+    """A stored plan written before #496 must come back byte-identical."""
+    plan = [_session("2026-08-09", "endurance"), _session("2026-08-10", "rest")]
+    user_id = await _create_user("legacy-roundtrip@example.com", plan)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, plan, base_plan=plan, source="generate"
+        )
+        await db.commit()
+
+    saved = await _get_plan(user_id)
+    assert all("slot" not in day for day in saved)
+    assert [d["workoutType"] for d in saved] == ["endurance", "rest"]
+
+
+# ---------------------------------------------------------------------------
+# Ride ↔ session matching
+# ---------------------------------------------------------------------------
+
+
+async def _add_ride(
+    user_id: str,
+    activity_id: int,
+    date: str,
+    *,
+    sport_type: str,
+    duration_seconds: int,
+    start: str | None = None,
+) -> None:
+    async with TestSessionLocal() as db:
+        db.add(
+            models.RideMetric(
+                user_id=user_id,
+                strava_activity_id=activity_id,
+                activity_date=date,
+                activity_start_datetime=start,
+                sport_type=sport_type,
+                duration_seconds=duration_seconds,
+            )
+        )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_two_activities_match_their_own_sessions():
+    """The morning gym session and the evening ride each attach to their session.
+
+    Before #496 the day held one plan entry, so exactly one activity could match
+    and the other was forced to MATCH_UNMATCHED.
+    """
+    date = "2026-08-13"
+    plan = [
+        _session(date, "strength", slot=0, duration=45, time_of_day="am"),
+        _session(date, "endurance", slot=1, duration=120, time_of_day="pm"),
+    ]
+    user_id = await _create_user("two-activities@example.com", plan)
+    await _add_ride(
+        user_id, 9001, date,
+        sport_type="WeightTraining", duration_seconds=45 * 60,
+        start=f"{date}T07:00:00Z",
+    )
+    await _add_ride(
+        user_id, 9002, date,
+        sport_type="Ride", duration_seconds=120 * 60,
+        start=f"{date}T18:00:00Z",
+    )
+
+    async with TestSessionLocal() as db:
+        await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9001, 9002])
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+
+    by_id = {r.strava_activity_id: r for r in rides}
+    assert by_id[9001].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9001].matched_plan_slot == 0
+    assert by_id[9001].matched_plan_snapshot["workoutType"] == "strength"
+    assert by_id[9002].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9002].matched_plan_slot == 1
+    assert by_id[9002].matched_plan_snapshot["workoutType"] == "endurance"
+
+
+@pytest.mark.asyncio
+async def test_extra_activity_on_a_two_a_day_stays_cleanly_unmatched():
+    """A third ride has no session left, so it is an extra — not a false match."""
+    date = "2026-08-14"
+    plan = [
+        _session(date, "recovery", slot=0, duration=30),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("extra-activity@example.com", plan)
+    await _add_ride(user_id, 9101, date, sport_type="Ride", duration_seconds=30 * 60,
+                    start=f"{date}T07:00:00Z")
+    await _add_ride(user_id, 9102, date, sport_type="Ride", duration_seconds=120 * 60,
+                    start=f"{date}T12:00:00Z")
+    await _add_ride(user_id, 9103, date, sport_type="Ride", duration_seconds=25 * 60,
+                    start=f"{date}T20:00:00Z")
+
+    async with TestSessionLocal() as db:
+        await ride_matching.apply_ride_plan_matches(
+            db, user_id, plan, [9101, 9102, 9103]
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+
+    by_id = {r.strava_activity_id: r for r in rides}
+    matched = [r for r in by_id.values() if r.plan_match_status == ride_matching.MATCH_AUTO]
+    assert len(matched) == 2
+    assert {r.matched_plan_slot for r in matched} == {0, 1}
+    assert by_id[9103].plan_match_status == ride_matching.MATCH_UNMATCHED
+    assert by_id[9103].matched_plan_slot is None
+
+
+@pytest.mark.asyncio
+async def test_matched_sessions_complete_independently():
+    """Only the sessions actually ridden are marked done."""
+    date = "2026-08-15"
+    plan = [
+        _session(date, "strength", slot=0, duration=45),
+        _session(date, "endurance", slot=1, duration=120),
+    ]
+    user_id = await _create_user("session-completion@example.com", plan)
+    await _add_ride(
+        user_id, 9201, date, sport_type="WeightTraining",
+        duration_seconds=45 * 60, start=f"{date}T07:00:00Z",
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        matched = await ride_matching.apply_ride_plan_matches(
+            db, user_id, plan, [9201]
+        )
+        await ride_matching.mark_matched_days_completed(db, user, plan, matched)
+        await db.commit()
+
+    saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
+    assert saved[0].get("completed") is True
+    assert not saved[1].get("completed")

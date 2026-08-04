@@ -609,3 +609,206 @@ async def test_activity_sync_isolates_per_user_source_failures(monkeypatch):
     assert result.users == 2
     assert result.imported == 1
     assert result.failed == 1
+
+
+@pytest.mark.asyncio
+async def test_import_triggers_continuous_learning(monkeypatch):
+    """A freshly imported workout runs one learning step for the athlete (#388)."""
+    user_id = await _create_user(
+        email="learn-on-import@example.com", strava=True, strava_cursor=100
+    )
+    learned_for: list[str] = []
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            {
+                "id": 101,
+                "name": "Morning Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T08:00:00Z",
+                "start_date_local": "2026-06-10T10:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
+
+    async def fake_fetch_streams(*args, **kwargs):
+        return {"watts": {"data": [200, 210, 220]}, "time": {"data": [0, 60, 120]}}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    async def fake_review(*args, **kwargs):
+        return "ok", []
+
+    async def fake_learn(db, user, **kwargs):
+        learned_for.append(user.id)
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+
+    assert result.imported == 1
+    assert learned_for == [user_id]
+
+
+@pytest.mark.asyncio
+async def test_no_import_skips_continuous_learning(monkeypatch):
+    """Learning is not triggered on a sync that imports nothing new."""
+    user_id = await _create_user(
+        email="learn-noop@example.com", strava=True, strava_cursor=100
+    )
+    learn_calls = 0
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return []  # nothing newer than the cursor
+
+    async def fake_learn(db, user, **kwargs):
+        nonlocal learn_calls
+        learn_calls += 1
+
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+
+    assert result.imported == 0
+    assert learn_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_reclassify_backfill_upgrades_unknown_intervals_ride(monkeypatch):
+    """A still-'unknown' intervals ride is reclassified from provider laps while
+    preserving athlete edits, and the login summary is invalidated (#482)."""
+    from services.dates import app_today
+
+    user_id = await _create_user(
+        email="reclassify@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("cursor"),
+    )
+    today = app_today()
+
+    async with TestSessionLocal() as db:
+        # An in-window intervals ride the old classifier left as unknown/low.
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=intervals_activity_id("i777"),
+            activity_source="intervals",
+            external_activity_id="i777",
+            activity_date=today.isoformat(),
+            sport_type="cycling",
+            duration_seconds=6072,
+            normalized_power_w=242,
+            tss=96.0,
+            ftp_used=250,
+            ride_purpose="unknown",
+            classification_confidence="low",
+            classification_reason="Insufficient stream data to classify ride reliably.",
+        )
+        # An athlete edit that must survive reclassification.
+        row = await crud.get_ride_metric_by_external_id(db, user_id, "i777")
+        row.label_override = "Perfect"
+        # A cached summary that must be cleared when a ride is reclassified.
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=250, login_summary="stale summary"
+        )
+        await db.commit()
+
+    async def fake_detail(api_key, activity_id):
+        assert activity_id == "i777"
+        return {
+            "icu_intervals": [
+                {"type": "WORK", "moving_time": 240, "average_watts": 300},
+                {"type": "RECOVERY", "moving_time": 180, "average_watts": 120},
+                {"type": "WORK", "moving_time": 240, "average_watts": 305},
+                {"type": "WORK", "moving_time": 240, "average_watts": 298},
+                {"type": "WORK", "moving_time": 240, "average_watts": 302},
+            ]
+        }
+
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        changed = await activity_sync._reclassify_unknown_intervals_rides(db, user)
+        await db.commit()
+
+    assert changed == 1
+    async with TestSessionLocal() as db:
+        row = await crud.get_ride_metric_by_external_id(db, user_id, "i777")
+        assert row.ride_purpose == "interval_vo2max"
+        assert row.classification_confidence == "high"
+        assert row.label_override == "Perfect"  # edit preserved
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert not assessment.login_summary  # invalidated
+
+
+@pytest.mark.asyncio
+async def test_reclassify_backfill_skips_rides_outside_window(monkeypatch):
+    """Rides older than the backfill window are never re-fetched."""
+    from datetime import timedelta
+
+    from services.dates import app_today
+
+    user_id = await _create_user(
+        email="reclassify-old@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("cursor"),
+    )
+    old_date = (
+        app_today()
+        - timedelta(days=activity_sync.INTERVALS_RECLASSIFY_WINDOW_DAYS + 5)
+    ).isoformat()
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=intervals_activity_id("i-old"),
+            activity_source="intervals",
+            external_activity_id="i-old",
+            activity_date=old_date,
+            sport_type="cycling",
+            duration_seconds=6072,
+            ftp_used=250,
+            ride_purpose="unknown",
+        )
+        await db.commit()
+
+    fetched = False
+
+    async def fake_detail(api_key, activity_id):
+        nonlocal fetched
+        fetched = True
+        return {}
+
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        changed = await activity_sync._reclassify_unknown_intervals_rides(db, user)
+
+    assert changed == 0
+    assert fetched is False  # out-of-window ride never re-fetched

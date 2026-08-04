@@ -97,7 +97,7 @@ def test_overtraining_memory_fact_included_when_high_confidence():
         },
     ])
 
-    assert "Evidence-backed athlete memory facts" in section
+    assert "Evidence-backed athlete memory" in section
     assert "Adds extra intervals when feeling fresh" in section
     assert "coaching_risk" in section
 
@@ -321,7 +321,44 @@ def test_mtb_context_excluded_when_empty():
     )
 
     assert "Structured athlete context" not in msg
-    assert "Evidence-backed athlete memory facts" not in msg
+    assert "Evidence-backed athlete memory" not in msg
+
+
+def test_athlete_model_reaches_next_ride_prompt():
+    """The durable athlete model (#384) must be threaded into the next-ride
+    recommendation user message, not just the ask-trainer prompt (#403).
+    """
+    msg = next_ride_recommendation_user(
+        rides=[],
+        plan=[],
+        profile={},
+        athlete_model={
+            "ftp_watts": 268,
+            "vo2max": 58.4,
+            "threshold_durability": "fades after 40 min at threshold",
+            "confidence": 0.7,
+            "updated_at": "2026-07-01",
+        },
+    )
+
+    assert "Long-term athlete model" in msg
+    assert "268" in msg
+    assert "fades after 40 min at threshold" in msg
+    # confidence/updated_at are metadata and must be suppressed.
+    assert "0.7" not in msg
+    assert "2026-07-01" not in msg
+
+
+def test_athlete_model_absent_when_not_provided():
+    """No athlete model → no phantom model section in the next-ride prompt."""
+    msg = next_ride_recommendation_user(
+        rides=[],
+        plan=[],
+        profile={},
+        athlete_model=None,
+    )
+
+    assert "Long-term athlete model" not in msg
 
 
 # ---------------------------------------------------------------------------

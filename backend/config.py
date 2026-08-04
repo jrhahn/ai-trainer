@@ -12,6 +12,13 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Canonical set of environment names treated as non-production ("dev"). Used to
+# relax production-only requirements (strong JWT secret, at-rest encryption key).
+# Shared with auth.py so both agree on what counts as a dev environment — a
+# previous split definition meant APP_ENV=local/dev/testing was "dev" for the
+# JWT check but "production" for the encryption-key check.
+DEV_ENVS = frozenset({"development", "dev", "local", "test", "testing"})
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -30,6 +37,20 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
     activity_sync_interval_seconds: int = 1800
+    duration_refresh_lookback_days: int = 21
+    """How many days back the daily duration-refresh job re-checks moving_time.
+
+    intervals.icu computes ``moving_time`` a few minutes after upload, so an
+    early sync can store the wrong (elapsed) duration; the daily job re-derives
+    ``duration_seconds`` from the current ``moving_time`` for rides in this
+    window and recomputes the metrics chain (#429 Bug A)."""
+    continuous_learning_enabled: bool = True
+    """Run the athlete-learning step after every completed workout is imported (#388).
+
+    When enabled, each freshly imported workout triggers a per-athlete learning
+    pass (observations, contradictions, hypotheses, open questions) inline with
+    activity sync. The weekly batch jobs remain as a backstop. Set to ``false``
+    to fall back to weekly-only learning (e.g. to cap per-sync token spend)."""
 
     # ------------------------------------------------------------------
     # Database
@@ -82,9 +103,14 @@ class Settings(BaseSettings):
     omitted, in which case secrets are stored as plaintext.
     """
 
+    @property
+    def is_dev_environment(self) -> bool:
+        """Whether APP_ENV names a non-production (dev/test) environment."""
+        return self.app_env.lower() in DEV_ENVS
+
     @model_validator(mode="after")
     def _require_encryption_key_in_production(self) -> "Settings":
-        if self.app_env not in ("development", "test") and not self.strava_encryption_key:
+        if not self.is_dev_environment and not self.strava_encryption_key:
             raise ValueError(
                 "STRAVA_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
                 "Generate one with: "
@@ -120,10 +146,42 @@ class Settings(BaseSettings):
     openai_coach_model: str = "gpt-4o"
     openai_feedback_model: str = "gpt-4o"
 
-    gemini_classify_model: str = "gemini-2.5-flash"
-    gemini_plan_model: str = "gemini-2.5-flash"
-    gemini_coach_model: str = "gemini-2.5-flash"
-    gemini_feedback_model: str = "gemini-2.5-flash"
+    # Gemini defaults to Flash-Lite on every task (#511): $0.30/$2.50 per M tokens
+    # against $1.50/$9.00 for Flash, for work that is overwhelmingly structured
+    # JSON extraction under explicit instructions. Raise an individual task back
+    # to "gemini-3.5-flash" via its env var if its output quality suffers — the
+    # conversational coach is the one to watch.
+    gemini_classify_model: str = "gemini-3.5-flash-lite"
+    gemini_plan_model: str = "gemini-3.5-flash-lite"
+    gemini_coach_model: str = "gemini-3.5-flash-lite"
+    gemini_feedback_model: str = "gemini-3.5-flash-lite"
+
+    # ------------------------------------------------------------------
+    # Embeddings (cycling-science RAG)
+    #
+    # Separate from the chat models above: retrieval only works when the
+    # corpus and the query are embedded by the same model, so a change here
+    # means re-running scripts/ingest_cycling_science.py (#515).
+    #
+    # "gemini-embedding-001" is the GA model; "gemini-embedding-2" is its
+    # successor and also emits 768 dimensions under Matryoshka truncation, so
+    # it is a drop-in override. Both are pinned to a name that was verified
+    # against the live model list — text-embedding-004 has been withdrawn.
+    # ------------------------------------------------------------------
+    embedding_provider: str = "gemini"
+    gemini_embedding_model: str = "gemini-embedding-001"
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # ------------------------------------------------------------------
+    # Readiness recommendations
+    #
+    # How the coach's personal observations of the athlete (athlete-memory
+    # facts) are matched to readiness recommendations:
+    #   "llm"     – ask the LLM which recommendation each observation supports
+    #               (nuanced, default; falls back to keyword on any failure)
+    #   "keyword" – deterministic keyword/theme matching (no LLM call)
+    # ------------------------------------------------------------------
+    readiness_observation_matching: str = "llm"
 
     # ------------------------------------------------------------------
     # Computed helpers

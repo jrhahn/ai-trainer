@@ -28,6 +28,17 @@ FTP_POWER_DURATION_FACTORS: tuple[tuple[float, float], ...] = (
 # Shorter efforts are useful for fitting a power-duration curve, but are too
 # VO2-heavy to convert directly to FTP.
 CRITICAL_POWER_DURATIONS: tuple[float, ...] = (5.0, 8.0, 12.0, 20.0, 30.0, 40.0)
+
+# Duration whose maximal mean power stands in for MAP (maximal aerobic power,
+# i.e. power at VO2max).  Best ~5-minute power is the conventional field proxy.
+MAP_DURATION_MINUTES = 5.0
+
+# FTP is a sustainable effort strictly below the aerobic ceiling: for trained
+# cyclists it lands at roughly 72-85 % of MAP.  These bounds widen that band so
+# only genuinely impossible pairings trip the check — a ratio outside them means
+# one of the two numbers is wrong, not that the athlete is unusual.
+FTP_MAP_RATIO_MIN = 0.65
+FTP_MAP_RATIO_MAX = 0.90
 FTP_ESTIMATE_DURATIONS: tuple[float, ...] = tuple(
     sorted(
         {minutes for minutes, _factor in FTP_POWER_DURATION_FACTORS}
@@ -49,6 +60,27 @@ MIN_ENDURANCE_RIDE_SECS = 30 * 60
 # Rides shorter than this are in the aerobic zone but too brief to confirm
 # meaningful adaptation.
 MIN_HIGH_CONFIDENCE_ENDURANCE_SECS = 45 * 60
+
+# Rolling-average window used to smooth the power stream before interval
+# detection.  Off-road / mountain-bike power is extremely spiky — power drops
+# below the work threshold for a second or two constantly (coasting, technical
+# sections) even inside a hard, sustained interval.  Thresholding the raw,
+# instantaneous stream therefore shatters a single 4-min effort into many
+# sub-block fragments that get discarded, so a genuine VO2max set reads as a
+# steady "tempo" ride.  A short centred rolling mean removes that jitter while
+# preserving the shape of efforts down to ~1 min; it is intentionally small so
+# sub-minute sprints are not flattened away.
+INTERVAL_SMOOTHING_SECS = 10.0
+
+# Maps a single hard-effort bucket to the overall ride category used when every
+# detected interval falls in the same bucket.  Shared by the stream-based
+# classifier and the provider-interval fallback so both agree.
+_INTERVAL_BUCKET_TO_CATEGORY = {
+    "sprint": "interval_sprints",
+    "vo2max": "interval_vo2max",
+    "threshold": "interval_threshold",
+    "sweetspot": "interval_sweetspot",
+}
 
 # Rough proxy used when no algorithmic FTP estimate is available: a cyclist's
 # true FTP is typically ~75 % of their raw average power across all recent rides
@@ -279,6 +311,39 @@ def _ftp_candidates_from_power_duration_points(
     return candidates
 
 
+def check_ftp_against_map(ftp: int | None, map_5min: int | None) -> str | None:
+    """Return a warning when an FTP is implausible against the athlete's MAP.
+
+    ``map_5min`` is the best 5-minute mean power, used as the MAP proxy.  FTP
+    sits below that aerobic ceiling by definition, so a ratio at or above
+    ``FTP_MAP_RATIO_MAX`` means one of the two numbers is wrong — most often a
+    mistyped FTP.  A ratio under ``FTP_MAP_RATIO_MIN`` is not impossible, but in
+    practice means a stale FTP or a 5-minute window contaminated by a sprint.
+
+    The warning is advisory: the athlete owns their FTP and nothing here
+    overrides it.  Returns ``None`` when the pair is plausible or either value
+    is missing.
+    """
+    if not ftp or not map_5min or ftp <= 0 or map_5min <= 0:
+        return None
+
+    ratio = ftp / map_5min
+    if ratio >= FTP_MAP_RATIO_MAX:
+        return (
+            f"FTP of {ftp} W is {ratio:.0%} of your best 5-minute power "
+            f"({map_5min} W). FTP is a sustainable effort below maximal aerobic "
+            f"power — normally 72-85 % of it — so this FTP looks too high. "
+            f"Training zones and TSS derived from it will be overstated."
+        )
+    if ratio < FTP_MAP_RATIO_MIN:
+        return (
+            f"FTP of {ftp} W is only {ratio:.0%} of your best 5-minute power "
+            f"({map_5min} W). That gap is unusually large — your FTP may be out "
+            f"of date, or that 5-minute effort may not have been a steady one."
+        )
+    return None
+
+
 def compute_hr_zones(max_hr: int) -> dict:
     """Compute 5 standard HR training zones based on percentage of max HR."""
     return {
@@ -290,6 +355,38 @@ def compute_hr_zones(max_hr: int) -> dict:
     }
 
 
+def _smooth_power(
+    watts: list[float], time_stream: list[float], window_secs: float
+) -> list[float]:
+    """Return a centred time-windowed rolling mean of ``watts``.
+
+    For each sample the mean covers all samples whose timestamp lies within
+    ``± window_secs / 2`` of it, so the result tracks sustained effort while
+    ignoring one- or two-second spikes and dips.  ``time_stream`` is assumed
+    monotonic non-decreasing (Strava/intervals streams are).  A non-positive
+    window returns the input unchanged so callers can disable smoothing.
+    """
+    n = len(watts)
+    if window_secs <= 0 or n == 0:
+        return watts
+
+    half = window_secs / 2.0
+    out: list[float] = [0.0] * n
+    lo = 0
+    hi = 0
+    acc = 0.0
+    for i in range(n):
+        t = time_stream[i]
+        while hi < n and time_stream[hi] <= t + half:
+            acc += watts[hi]
+            hi += 1
+        while time_stream[lo] < t - half:
+            acc -= watts[lo]
+            lo += 1
+        out[i] = acc / (hi - lo)
+    return out
+
+
 def detect_intervals(
     watts: list[float],
     time_stream: list[float],
@@ -297,6 +394,7 @@ def detect_intervals(
     work_threshold_pct: float = 0.85,
     min_interval_secs: float = 30.0,
     recovery_gap_secs: float = 30.0,
+    smoothing_secs: float = INTERVAL_SMOOTHING_SECS,
 ) -> list[dict]:
     """Detect interval blocks in a power stream relative to FTP.
 
@@ -304,6 +402,12 @@ def detect_intervals(
     ``work_threshold_pct × ftp``.  Short recoveries (< ``recovery_gap_secs``)
     between high-power blocks are merged into the preceding interval so noisy
     one-second dips do not split a single effort into many fragments.
+
+    The on/off decision runs against a short rolling mean of the power stream
+    (``smoothing_secs``) rather than the raw, instantaneous values, so spiky
+    off-road power does not fragment a sustained effort into discarded blocks
+   .  Reported ``avg_power``/``peak_power`` are still measured from the
+    raw stream inside the detected boundaries.
 
     Returns a list of dicts, each with:
         ``start_idx``, ``end_idx``, ``duration_secs``,
@@ -314,6 +418,7 @@ def detect_intervals(
 
     threshold = ftp * work_threshold_pct
     n = len(watts)
+    signal = _smooth_power(watts, time_stream, smoothing_secs)
 
     # --- Phase 1: build raw on/off blocks ---
     blocks: list[tuple[int, int]] = []  # (start, end) inclusive
@@ -321,7 +426,7 @@ def detect_intervals(
     block_start = 0
 
     for i in range(n):
-        above = watts[i] >= threshold
+        above = signal[i] >= threshold
         if above and not in_block:
             in_block = True
             block_start = i
@@ -379,21 +484,72 @@ def compute_hr_drift(hr_segment: list[float]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
+# Gaps larger than this between consecutive time samples mean the ride was
+# paused/stopped (auto-pause or stopped recording), not normal sampling. Such
+# gaps are excluded so the duration reflects moving time rather than wall-clock
+# time including long breaks (#427).
+_PAUSE_GAP_SECONDS = 60.0
+
+
 def _stream_duration_seconds(time_stream: list[float]) -> float:
-    """Estimate ride duration from a Strava-style time stream."""
+    """Estimate ride *moving* duration from a Strava-style time stream.
+
+    Strava's time stream counts elapsed seconds from the start, so a long stop
+    appears as a large gap between two consecutive samples (auto-pause or
+    stopped recording). Gaps above ``_PAUSE_GAP_SECONDS`` are excluded so the
+    result reflects moving time, not wall-clock time including breaks (#427).
+    A ride with no such gaps yields the same value as before.
+    """
     if not time_stream:
         return 0.0
     if len(time_stream) == 1:
         return 1.0
 
-    elapsed = time_stream[-1] - time_stream[0]
-    if elapsed < 0:
+    if time_stream[-1] - time_stream[0] < 0:
         return 0.0
 
-    sample_spacing = elapsed / max(1, len(time_stream) - 1)
+    moving = 0.0
+    for prev, cur in zip(time_stream, time_stream[1:]):
+        dt = cur - prev
+        if 0 < dt <= _PAUSE_GAP_SECONDS:
+            moving += dt
+
+    sample_spacing = moving / max(1, len(time_stream) - 1)
     if sample_spacing <= 0:
         sample_spacing = 1.0
-    return elapsed + sample_spacing
+    return moving + sample_spacing
+
+
+def _classify_interval_bucket(
+    avg_power: float, duration_secs: float, ftp: float
+) -> str | None:
+    """Bucket one hard effort into sprint/vo2max/threshold/sweetspot.
+
+    Returns ``None`` when the effort is not hard enough to count as an interval
+    (≤ 85 % FTP and not matching a structured band).  The thresholds are shared
+    by the stream-based classifier and the provider-interval fallback so a ride
+    is labelled the same regardless of which signal was available.
+    """
+    if ftp <= 0:
+        return None
+    pct = avg_power / ftp
+    dur_min = duration_secs / 60.0
+    if pct > 1.30 and dur_min < 2:
+        return "sprint"
+    if pct > 1.05 and dur_min <= 5:
+        return "vo2max"
+    if 0.95 <= pct <= 1.05 and dur_min <= 12:
+        return "threshold"
+    if 0.88 <= pct < 0.95 and 10 <= dur_min <= 20:
+        return "sweetspot"
+    if pct > 0.85:
+        # Catch-all for other hard efforts
+        if dur_min < 2:
+            return "sprint"
+        if dur_min <= 5:
+            return "vo2max"
+        return "threshold"
+    return None
 
 
 def classify_ride_purpose(
@@ -446,24 +602,9 @@ def classify_ride_purpose(
     # Classify each detected interval by its relative power and duration
     interval_types: list[str] = []
     for iv in intervals:
-        dur_min = iv["duration_secs"] / 60.0
-        pct = iv["avg_power"] / ftp
-        if pct > 1.30 and dur_min < 2:
-            interval_types.append("sprint")
-        elif pct > 1.05 and dur_min <= 5:
-            interval_types.append("vo2max")
-        elif 0.95 <= pct <= 1.05 and dur_min <= 12:
-            interval_types.append("threshold")
-        elif 0.88 <= pct < 0.95 and 10 <= dur_min <= 20:
-            interval_types.append("sweetspot")
-        elif pct > 0.85:
-            # Catch-all for other hard efforts
-            if dur_min < 2:
-                interval_types.append("sprint")
-            elif dur_min <= 5:
-                interval_types.append("vo2max")
-            else:
-                interval_types.append("threshold")
+        bucket = _classify_interval_bucket(iv["avg_power"], iv["duration_secs"], ftp)
+        if bucket is not None:
+            interval_types.append(bucket)
 
     unique_types = set(interval_types)
     if not unique_types:
@@ -478,12 +619,66 @@ def classify_ride_purpose(
     if len(unique_types) > 1:
         return "mixed"
     sole_type = next(iter(unique_types))
-    return {
-        "sprint": "interval_sprints",
-        "vo2max": "interval_vo2max",
-        "threshold": "interval_threshold",
-        "sweetspot": "interval_sweetspot",
-    }.get(sole_type, "endurance")
+    return _INTERVAL_BUCKET_TO_CATEGORY.get(sole_type, "endurance")
+
+
+def classify_from_provider_intervals(
+    provider_intervals: list[dict],
+    ftp: float,
+    min_interval_secs: float = 30.0,
+) -> tuple[str, list[dict]]:
+    """Classify a ride from a provider's own structured interval/lap data.
+
+    A fallback for when the raw power stream is missing or unusable — common for
+    intervals.icu rides, whose per-second stream can be absent even though the
+    provider computes clean per-interval averages server-side (the very numbers
+    the athlete sees in their interval breakdown).  Without this a genuine
+    interval session with no usable stream is mislabelled ``unknown``.
+
+    Each item in ``provider_intervals`` should carry ``duration_secs`` and
+    ``avg_power`` (watts); an optional ``type`` of ``"WORK"``/``"RECOVERY"`` is
+    honoured when present so recovery valleys are not counted as efforts.
+
+    Returns ``(ride_purpose, work_intervals)`` where ``work_intervals`` use the
+    same dict shape as :func:`detect_intervals`.  ``ride_purpose`` is
+    ``"unknown"`` when no qualifying hard effort is found.
+    """
+    if not provider_intervals or ftp <= 0:
+        return "unknown", []
+
+    interval_types: list[str] = []
+    work_intervals: list[dict] = []
+    for iv in provider_intervals:
+        try:
+            duration = float(iv.get("duration_secs") or 0)
+            avg = float(iv.get("avg_power") or 0)
+        except (TypeError, ValueError):
+            continue
+        if duration < min_interval_secs or avg <= 0:
+            continue
+        itype = str(iv.get("type") or "").upper()
+        if itype == "RECOVERY":
+            continue
+        bucket = _classify_interval_bucket(avg, duration, ftp)
+        if bucket is None:
+            continue
+        interval_types.append(bucket)
+        peak = iv.get("peak_power")
+        work_intervals.append(
+            {
+                "duration_secs": round(duration),
+                "avg_power": round(avg),
+                "peak_power": round(float(peak)) if peak else round(avg),
+            }
+        )
+
+    unique_types = set(interval_types)
+    if not unique_types:
+        return "unknown", []
+    if len(unique_types) > 1:
+        return "mixed", work_intervals
+    sole_type = next(iter(unique_types))
+    return _INTERVAL_BUCKET_TO_CATEGORY.get(sole_type, "unknown"), work_intervals
 
 
 def classify_ride_confidence_and_reason(
@@ -705,98 +900,382 @@ def compute_readiness_score(
     }
 
 
+# --- Knowledge-source categories for recommendation reasoning (issue #377) ---
+# Every reasoning bullet is tagged with where its knowledge comes from so the
+# athlete can tell a personal observation apart from established sports science
+# and from the coach's own read of the numbers.
+SOURCE_PERSONAL_OBSERVATION = "personal_observation"
+"""A habit/tendency the coach has observed about *this* athlete."""
+SOURCE_SCIENTIFIC_EVIDENCE = "scientific_evidence"
+"""General sports-science findings that apply to any athlete."""
+SOURCE_COACH_INFERENCE = "coach_inference"
+"""The coach's interpretation of the athlete's current metrics."""
+
+_SCIENTIFIC_EVIDENCE_PREFIX = "Research: "
+
+
+def reasoning_item(source: str, text: str) -> dict:
+    """Build a source-tagged reasoning bullet ``{"source": ..., "text": ...}``."""
+    return {"source": source, "text": text}
+
+
+def _classify_reasoning(text: str) -> dict:
+    """Tag a raw reasoning string with its knowledge source.
+
+    Bullets prefixed with ``Research:`` state general sports science and are
+    tagged :data:`SOURCE_SCIENTIFIC_EVIDENCE` (the prefix is stripped, since the
+    source label now conveys it). Everything else is the coach reading the
+    athlete's current numbers — :data:`SOURCE_COACH_INFERENCE`.
+    """
+    if text.startswith(_SCIENTIFIC_EVIDENCE_PREFIX):
+        return reasoning_item(
+            SOURCE_SCIENTIFIC_EVIDENCE, text[len(_SCIENTIFIC_EVIDENCE_PREFIX) :]
+        )
+    return reasoning_item(SOURCE_COACH_INFERENCE, text)
+
+
+_OBSERVATION_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "recovery": (
+        "recover",
+        "rest",
+        "fatigue",
+        "tired",
+        "overtrain",
+        "burnout",
+        "sleep",
+        "sick",
+        "illness",
+        "injur",
+        "sore",
+    ),
+    "freshness": ("fresh", "overreach", "impatient", "eager", "too hard", "goes hard"),
+    "intensity": (
+        "interval",
+        "intensity",
+        "vo2",
+        "threshold",
+        "hard session",
+        "avoid hard",
+        "hate hard",
+    ),
+    "race": ("race", "taper", "nervous", "anxi", "peak", "event", "compet", "pacing"),
+    "fitness": (
+        "consist",
+        "skip",
+        "miss",
+        "motivat",
+        "volume",
+        "endurance",
+        "long ride",
+        "base",
+        "lazy",
+        "commit",
+    ),
+}
+
+
+def keyword_observation_assignments(
+    recs: list[dict], observations: list[str]
+) -> dict[int, list[str]]:
+    """Route each observation to a recommendation index by keyword/theme matching.
+
+    Deterministic, no LLM call. Each observation (a persisted athlete-memory
+    fact — a habit, tendency or flaw) is assigned to the recommendation whose
+    theme its text best matches. Observations that match no active theme fall
+    back to the primary recommendation (index 0) rather than being dropped.
+
+    Returns ``{recommendation_index: [observation, ...]}`` preserving order.
+    """
+    assignments: dict[int, list[str]] = {}
+    if not recs or not observations:
+        return assignments
+
+    theme_to_index: dict[str, int] = {}
+    for index, rec in enumerate(recs):
+        theme_to_index.setdefault(rec.get("theme", ""), index)
+
+    seen: set[str] = set()
+    for observation in observations:
+        text = observation.casefold()
+        if text in seen:
+            continue
+        seen.add(text)
+        target = 0
+        for theme, keywords in _OBSERVATION_THEME_KEYWORDS.items():
+            if theme in theme_to_index and any(k in text for k in keywords):
+                target = theme_to_index[theme]
+                break
+        assignments.setdefault(target, []).append(observation)
+    return assignments
+
+
+def attach_observation_assignments(
+    recs: list[dict], assignments: dict[int, list[str]]
+) -> None:
+    """Prepend routed observations as personal-observation reasoning bullets.
+
+    Personal observations lead the reasoning, ahead of the coach-inference and
+    scientific-evidence bullets, and are tagged
+    :data:`SOURCE_PERSONAL_OBSERVATION`. ``assignments`` maps a recommendation
+    index to the observation strings destined for it (see
+    :func:`keyword_observation_assignments`).
+    """
+    for index, observations in assignments.items():
+        if not (0 <= index < len(recs)) or not observations:
+            continue
+        bullets = [
+            reasoning_item(SOURCE_PERSONAL_OBSERVATION, obs) for obs in observations
+        ]
+        recs[index]["reasoning"] = bullets + recs[index]["reasoning"]
+
+
+def finalize_recommendations(recs: list[dict]) -> list[dict]:
+    """Drop internal theme tagging, leaving the public recommendation shape."""
+    for rec in recs:
+        rec.pop("theme", None)
+    return recs
+
+
+def build_readiness_recommendations(
+    ctl: float,
+    atl: float,
+    tsb: float,
+    score: float,
+    days_until_race: int,
+) -> list[dict]:
+    """Build the base readiness recommendations, before personal observations.
+
+    Recommendations are derived from the athlete's current CTL (fitness), ATL
+    (fatigue), TSB (form), overall score, and the time left until race day.
+    Every recommendation is transparent about *why* it was made: each carries
+    ``reasoning`` bullets pairing the coach's read of the athlete's **current
+    metrics** (:data:`SOURCE_COACH_INFERENCE`) with the **scientific rationale**
+    behind the tip (:data:`SOURCE_SCIENTIFIC_EVIDENCE`). Personal observations
+    are woven in later by :func:`attach_observation_assignments`.
+
+    Returns a list of ``{"recommendation": str, "reasoning": list[dict],
+    "theme": str}`` dicts, where each reasoning bullet is a source-tagged
+    ``{"source": str, "text": str}`` item. ``theme`` is an internal routing tag
+    for matching personal observations; call :func:`finalize_recommendations`
+    to strip it.
+    """
+    recs: list[dict] = []
+
+    def add(recommendation: str, theme: str, reasoning: list[str]) -> None:
+        recs.append(
+            {"recommendation": recommendation, "reasoning": reasoning, "theme": theme}
+        )
+
+    # --- TSB / form feedback ---
+    if tsb < -20:
+        add(
+            "You are heavily fatigued — prioritise 2–3 easy recovery rides this week.",
+            "recovery",
+            [
+                f"Your Training Stress Balance (TSB) is {tsb:.1f}, well below the −20 fatigue threshold.",
+                "Deeply negative form means acute fatigue is outpacing your fitness base.",
+                "Research: adaptation happens during recovery, not during the overload itself — riding easy lets you absorb the load.",
+            ],
+        )
+    elif tsb < -10:
+        add(
+            "Fatigue is elevated — include at least one full rest day before intensity work.",
+            "recovery",
+            [
+                f"TSB is {tsb:.1f}, in the elevated-fatigue band (−20 to −10).",
+                "Training hard while under-recovered raises injury and illness risk without adding fitness.",
+                "Research: a rest day restores glycogen and neuromuscular readiness so the next hard session lands cleanly.",
+            ],
+        )
+    elif tsb < 0:
+        add(
+            "Slight fatigue: balance training stress with adequate sleep and nutrition.",
+            "recovery",
+            [
+                f"TSB is {tsb:.1f} — mildly negative, so you are carrying a little fatigue.",
+                "This is a normal, productive training zone as long as recovery keeps pace.",
+                "Research: sleep and fuelling are the primary levers that convert training stress into adaptation.",
+            ],
+        )
+    elif tsb <= 10:
+        add(
+            "Form is neutral — good time for quality interval sessions to build fitness.",
+            "intensity",
+            [
+                f"TSB is {tsb:.1f}, in the neutral 0–10 range.",
+                "You are fresh enough to hit target power but not so tapered that you would waste the freshness.",
+                "Research: high-quality intervals performed in a rested state drive the biggest VO2max and threshold gains.",
+            ],
+        )
+    elif tsb <= 20:
+        add(
+            "Form is optimal for racing. Maintain with short openers; avoid heavy loads.",
+            "race",
+            [
+                f"TSB is {tsb:.1f}, inside the +5 to +15 peak-form window (extended to +20 here).",
+                "This is the freshness sweet spot where power and fatigue resistance peak together.",
+                "Research: short opener efforts keep the legs sharp without eroding the form you have built.",
+            ],
+        )
+    else:
+        add(
+            "You are very fresh — consider adding some intensity to avoid detraining.",
+            "freshness",
+            [
+                f"TSB is {tsb:.1f}, above +20 — you are carrying very little fatigue.",
+                "Excess freshness usually means training load has dropped too far and fitness may start to fade.",
+                "Research: detraining begins within ~1–2 weeks of reduced load, so a stimulus preserves fitness.",
+            ],
+        )
+
+    # --- CTL / fitness feedback ---
+    if ctl < 30:
+        add(
+            "Build your fitness base with consistent 45–90 min rides 3–4 times per week.",
+            "fitness",
+            [
+                f"Your Chronic Training Load (CTL) is {ctl:.1f}, indicating a low fitness base.",
+                "Consistency matters more than intensity at this stage.",
+                "Research: aerobic base built from frequent steady rides raises mitochondrial density and fat oxidation.",
+            ],
+        )
+    elif ctl < 60:
+        add(
+            "Add one longer endurance ride per week (2–3 h) to raise your fitness base.",
+            "fitness",
+            [
+                f"CTL is {ctl:.1f} — a developing base with room to grow.",
+                "A weekly long ride is the most efficient way to lift chronic load without overreaching.",
+                "Research: extended endurance rides expand plasma volume and capillary density, raising sustainable CTL.",
+            ],
+        )
+    elif ctl < 80:
+        add(
+            "Fitness is solid — focus on quality over quantity; one hard session per week.",
+            "fitness",
+            [
+                f"CTL is {ctl:.1f}, a solid fitness base.",
+                "Further gains now come from sharpening intensity rather than piling on volume.",
+                "Research: with a mature base, polarised training (mostly easy plus targeted hard efforts) yields the best returns.",
+            ],
+        )
+    else:
+        add(
+            "High fitness level — protect your CTL with consistent training and avoid gaps.",
+            "fitness",
+            [
+                f"CTL is {ctl:.1f}, a high fitness level.",
+                "The priority shifts from building to defending the fitness you have.",
+                "Research: CTL decays roughly twice as fast as it builds, so training gaps are costly at this level.",
+            ],
+        )
+
+    # --- Race-specific advice ---
+    if days_until_race > 0:
+        if days_until_race > 21:
+            add(
+                f"{days_until_race} days to race: now is the time to accumulate training load.",
+                "race",
+                [
+                    f"There are {days_until_race} days until race day — outside the taper window.",
+                    "Fitness built now still has time to be absorbed before you peak.",
+                    "Research: meaningful CTL gains take 4+ weeks, so this is the window to add load.",
+                ],
+            )
+        elif days_until_race > 10:
+            add(
+                f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity.",
+                "race",
+                [
+                    f"Race day is {days_until_race} days out, the start of the taper window.",
+                    "Cutting volume while keeping intensity sheds fatigue without losing fitness.",
+                    "Research: taper meta-analyses show a ~20–50 % volume reduction over 1–3 weeks maximises performance.",
+                ],
+            )
+        elif days_until_race > 3:
+            add(
+                f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep.",
+                "race",
+                [
+                    f"Only {days_until_race} days remain — deep in the taper.",
+                    "Short race-pace efforts maintain sharpness while fatigue continues to clear.",
+                    "Research: TSB rises most in the final week of a taper, which is what lifts race-day form.",
+                ],
+            )
+        else:
+            plural = "s" if days_until_race != 1 else ""
+            add(
+                f"{days_until_race} day{plural} to race: rest up, eat well, and visualise your race plan.",
+                "race",
+                [
+                    f"Race day is {days_until_race} day{plural} away.",
+                    "There is no fitness left to gain — the goal now is to arrive fresh and fuelled.",
+                    "Research: full glycogen stores and quality sleep in the final days are strong predictors of race performance.",
+                ],
+            )
+    elif days_until_race == 0:
+        add(
+            "Race day! Warm up well and trust your training.",
+            "race",
+            [
+                "The race is today.",
+                "A structured warm-up primes your cardiovascular and neuromuscular systems for a fast start.",
+                "Research: your fitness is fixed now — execution and pacing determine the outcome.",
+            ],
+        )
+
+    # --- Overall score nudge ---
+    if score < 40:
+        add(
+            "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days.",
+            "fitness",
+            [
+                f"Your readiness score is {score:.0f}, below the 40 mark.",
+                "Both fitness and form need work to reach a race-ready state.",
+                "Research: a well-timed taper on top of a solid base is what pushes readiness into the target range.",
+            ],
+        )
+    elif score < 65:
+        add(
+            "You are on track — keep consistent training and manage fatigue leading up to race day.",
+            "fitness",
+            [
+                f"Your readiness score is {score:.0f}, in the on-track 40–65 band.",
+                "Steady progress with controlled fatigue will carry you toward race readiness.",
+                "Research: consistency plus fatigue management is the most reliable route to peaking on time.",
+            ],
+        )
+
+    # Tag each raw bullet with its knowledge source (issue #377).
+    for rec in recs:
+        rec["reasoning"] = [_classify_reasoning(text) for text in rec["reasoning"]]
+
+    return recs
+
+
 def compute_readiness_recommendations(
     ctl: float,
     atl: float,
     tsb: float,
     score: float,
     days_until_race: int,
-) -> list[str]:
-    """Generate short, actionable bullet-point recommendations to improve race readiness.
+    observations: list[str] | None = None,
+) -> list[dict]:
+    """Build readiness recommendations and weave in personal observations.
 
-    Recommendations are derived from the athlete's current CTL (fitness), ATL
-    (fatigue), TSB (form), overall score, and the time left until race day.
-
-    Returns a list of short strings — each is one bullet point.
+    Convenience wrapper around :func:`build_readiness_recommendations` that uses
+    deterministic keyword matching (:func:`keyword_observation_assignments`) to
+    route ``observations`` — free-text athlete-memory facts — to the most
+    relevant recommendation. For LLM-based matching, compose the building blocks
+    directly (see ``routers/ai.py``). Returns a list of
+    ``{"recommendation": str, "reasoning": list[dict]}`` dicts, where each
+    reasoning bullet is a source-tagged ``{"source": str, "text": str}`` item.
     """
-    tips: list[str] = []
-
-    # --- TSB / form feedback ---
-    if tsb < -20:
-        tips.append(
-            "You are heavily fatigued — prioritise 2–3 easy recovery rides this week."
-        )
-    elif tsb < -10:
-        tips.append(
-            "Fatigue is elevated — include at least one full rest day before intensity work."
-        )
-    elif tsb < 0:
-        tips.append(
-            "Slight fatigue: balance training stress with adequate sleep and nutrition."
-        )
-    elif tsb <= 10:
-        tips.append(
-            "Form is neutral — good time for quality interval sessions to build fitness."
-        )
-    elif tsb <= 20:
-        tips.append(
-            "Form is optimal for racing. Maintain with short openers; avoid heavy loads."
-        )
-    else:
-        tips.append(
-            "You are very fresh — consider adding some intensity to avoid detraining."
-        )
-
-    # --- CTL / fitness feedback ---
-    if ctl < 30:
-        tips.append(
-            "Build your fitness base with consistent 45–90 min rides 3–4 times per week."
-        )
-    elif ctl < 60:
-        tips.append(
-            "Add one longer endurance ride per week (2–3 h) to raise your fitness base."
-        )
-    elif ctl < 80:
-        tips.append(
-            "Fitness is solid — focus on quality over quantity; one hard session per week."
-        )
-    else:
-        tips.append(
-            "High fitness level — protect your CTL with consistent training and avoid gaps."
-        )
-
-    # --- Race-specific advice ---
-    if days_until_race > 0:
-        if days_until_race > 21:
-            tips.append(
-                f"{days_until_race} days to race: now is the time to accumulate training load."
-            )
-        elif days_until_race > 10:
-            tips.append(
-                f"{days_until_race} days to race: begin tapering — reduce volume by ~20 % while keeping intensity."
-            )
-        elif days_until_race > 3:
-            tips.append(
-                f"{days_until_race} days to race: taper fully — short, sharp sessions only; prioritise sleep."
-            )
-        else:
-            tips.append(
-                f"{days_until_race} day{'s' if days_until_race != 1 else ''} to race: rest up, eat well, and visualise your race plan."
-            )
-    elif days_until_race == 0:
-        tips.append("Race day! Warm up well and trust your training.")
-
-    # --- Overall score nudge ---
-    if score < 40:
-        tips.append(
-            "Target score ≥ 65 for race day: build fitness now and taper the last 7–10 days."
-        )
-    elif score < 65:
-        tips.append(
-            "You are on track — keep consistent training and manage fatigue leading up to race day."
-        )
-
-    return tips
+    recs = build_readiness_recommendations(ctl, atl, tsb, score, days_until_race)
+    if observations:
+        assignments = keyword_observation_assignments(recs, observations)
+        attach_observation_assignments(recs, assignments)
+    return finalize_recommendations(recs)
 
 
 def _project_training_load(
@@ -935,6 +1414,45 @@ def _normalized_power(watts: list[float], time_stream: list[float]) -> float | N
     return mean_fourth**0.25
 
 
+# Standard (Coggan) 7-zone power model, as fractions of FTP. The six internal
+# boundaries separate Z1..Z7; the shared source of truth for both time-in-zone
+# accounting and the zone-boundary block handed to the coach (#468).
+_POWER_ZONE_BOUNDARY_FRACTIONS = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50]
+_POWER_ZONE_NAMES = [
+    "Active Recovery",
+    "Endurance",
+    "Tempo",
+    "Threshold",
+    "VO2max",
+    "Anaerobic Capacity",
+    "Neuromuscular Power",
+]
+
+
+def power_zone_boundaries(ftp: float) -> list[dict]:
+    """Return the 7 standard power zones as absolute watt ranges for *ftp*.
+
+    Each entry: ``{"zone": "Z2", "name": "Endurance", "low_w": 176,
+    "high_w": 240}``. ``low_w`` is ``None`` for Z1 (open below) and ``high_w``
+    is ``None`` for Z7 (open above). Boundaries mirror
+    :func:`_time_in_power_zones` so a ride's time-in-zone and the boundaries the
+    coach reasons from can never disagree (#468). Returns ``[]`` for a
+    non-positive FTP.
+    """
+    if ftp <= 0:
+        return []
+    fractions = _POWER_ZONE_BOUNDARY_FRACTIONS
+    edges_w = [round(frac * ftp) for frac in fractions]
+    zones: list[dict] = []
+    for i, name in enumerate(_POWER_ZONE_NAMES):
+        low_w = edges_w[i - 1] if i > 0 else None
+        high_w = edges_w[i] if i < len(edges_w) else None
+        zones.append(
+            {"zone": f"Z{i + 1}", "name": name, "low_w": low_w, "high_w": high_w}
+        )
+    return zones
+
+
 def _time_in_power_zones(
     watts: list[float], time_stream: list[float], ftp: float
 ) -> dict:
@@ -953,7 +1471,7 @@ def _time_in_power_zones(
     if not watts or not time_stream or len(watts) != len(time_stream) or ftp <= 0:
         return {k: round(v) for k, v in zones.items()}
 
-    boundaries = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50]
+    boundaries = _POWER_ZONE_BOUNDARY_FRACTIONS
 
     for i in range(len(watts)):
         pct = watts[i] / ftp
@@ -1302,6 +1820,88 @@ def compute_ftp_from_streams(
     return computed_ftp, computed_threshold_hr
 
 
+# Durations (minutes) captured in the per-ride power-duration envelope. Spans
+# anaerobic (1 min) through MAP/VO2max (3-6 min) to threshold/endurance (20-60
+# min) so the cross-workout inference engine (#476) can read every system.
+PERF_SIGNAL_DURATIONS_MIN: tuple[float, ...] = (1, 3, 4, 5, 8, 10, 20, 30, 60)
+
+
+def compute_ride_performance_signals(
+    streams: dict,
+    duration_seconds: int | None = None,
+) -> dict | None:
+    """Derive compact per-ride physiological signals from a stream.
+
+    Returns a small JSON-serialisable dict persisted on ``RideMetric.perf_signals``
+    so the cross-workout inference engine (#476) can aggregate across many rides
+    without re-fetching streams. Returns ``None`` when there is no usable power
+    stream (nothing physiological can be inferred).
+
+    The blob holds:
+
+    - ``power_curve``: best average power (W) over each standard duration present
+      in the ride — the power-duration envelope points feeding FTP/MAP/anaerobic.
+    - ``duration_s``: ride moving duration from the time stream.
+    - ``avg_hr`` / ``max_hr`` / ``hr_drift_slope``: HR response and whole-ride
+      cardiac drift (bpm per sample, via :func:`compute_hr_drift`).
+    - ``first_half_power`` / ``second_half_power`` and the HR equivalents: split at
+      the time midpoint, so the engine can score fatigue resistance and aerobic
+      decoupling (little degradation -> durable).
+    """
+    watts: list[float] = streams.get("watts", {}).get("data", []) or []
+    time_data: list[float] = streams.get("time", {}).get("data", []) or []
+    hr_data: list[float] = streams.get("heartrate", {}).get("data", []) or []
+
+    if not watts or not time_data or len(watts) != len(time_data):
+        return None
+
+    total_secs = time_data[-1] - time_data[0] if len(time_data) > 1 else 0.0
+    if total_secs <= 0:
+        return None
+
+    signals: dict = {"duration_s": round(total_secs)}
+
+    power_curve: dict[str, int] = {}
+    for minutes in PERF_SIGNAL_DURATIONS_MIN:
+        # Only probe durations the ride is long enough to actually contain.
+        if total_secs < minutes * 60 * 0.9:
+            continue
+        best, _, _ = best_n_min_power(watts, time_data, minutes)
+        if best is not None:
+            power_curve[str(int(minutes))] = round(best)
+    signals["power_curve"] = power_curve
+
+    usable_hr = hr_data if hr_data and len(hr_data) == len(watts) else None
+    if usable_hr:
+        signals["avg_hr"] = round(sum(usable_hr) / len(usable_hr))
+        signals["max_hr"] = round(max(usable_hr))
+        drift = compute_hr_drift(usable_hr)
+        if drift is not None:
+            signals["hr_drift_slope"] = round(drift, 5)
+
+    # Split at the time midpoint (robust to uneven sampling) for fatigue resistance.
+    mid_time = time_data[0] + total_secs / 2.0
+    split = next(
+        (i for i, t in enumerate(time_data) if t >= mid_time), len(watts) // 2
+    )
+    if 0 < split < len(watts):
+        first_p = _segment_average(watts, 0, split - 1)
+        second_p = _segment_average(watts, split, len(watts) - 1)
+        if first_p is not None:
+            signals["first_half_power"] = round(first_p)
+        if second_p is not None:
+            signals["second_half_power"] = round(second_p)
+        if usable_hr:
+            first_hr = _segment_average(usable_hr, 0, split - 1)
+            second_hr = _segment_average(usable_hr, split, len(usable_hr) - 1)
+            if first_hr is not None:
+                signals["first_half_hr"] = round(first_hr)
+            if second_hr is not None:
+                signals["second_half_hr"] = round(second_hr)
+
+    return signals
+
+
 # ---------------------------------------------------------------------------
 # Ride-metrics chain computation
 # ---------------------------------------------------------------------------
@@ -1340,9 +1940,11 @@ def estimate_ftp_over_time(
             enough to smooth noise while still tracking gradual FTP changes.
 
     Returns:
-        List of ``{"date": str, "ftp": int, "raw_ftp": int}`` dicts ordered
-        by date.  Returns an empty list when no valid FTP estimates can be
-        produced.
+        List of ``{"date": str, "ftp": int, "raw_ftp": int, "map_5min": int |
+        None}`` dicts ordered by date.  ``map_5min`` is the best 5-minute mean
+        power across the same smoothing window, used downstream as a maximal
+        aerobic power proxy to sanity-check FTP.  Returns an empty list when no
+        valid FTP estimates can be produced.
     """
     import datetime as _dt
 
@@ -1350,6 +1952,10 @@ def estimate_ftp_over_time(
         tuple[str, dict[float, tuple[float, int, int]], list[float], list[float] | None]
     ] = []
     raw_estimates: list[tuple[str, int]] = []
+    # Collected independently of the FTP candidates below: a hard 5-minute
+    # effort is meaningful MAP evidence even in a ride that yields no usable
+    # threshold estimate.
+    map_points: list[tuple[str, float]] = []
 
     for ride in rides:
         activity_date = ride.get("activity_date", "")
@@ -1365,6 +1971,10 @@ def estimate_ftp_over_time(
             continue
 
         points = _best_power_points(watts, time_data, FTP_ESTIMATE_DURATIONS)
+        map_point = points.get(MAP_DURATION_MINUTES)
+        if map_point is not None:
+            map_points.append((activity_date, map_point[0]))
+
         usable_hr = hr_data if hr_data and len(hr_data) == len(watts) else None
         candidates = _ftp_candidates_from_power_duration_points(
             points,
@@ -1395,7 +2005,14 @@ def estimate_ftp_over_time(
             end_date = None
 
         if end_date is None:
-            result.append({"date": date_str, "ftp": raw_ftp, "raw_ftp": raw_ftp})
+            result.append(
+                {
+                    "date": date_str,
+                    "ftp": raw_ftp,
+                    "raw_ftp": raw_ftp,
+                    "map_5min": None,
+                }
+            )
             continue
 
         start_date = end_date - window
@@ -1427,7 +2044,20 @@ def estimate_ftp_over_time(
             require_hr_for_short_efforts=False,
         )
         smoothed_ftp = max(envelope_candidates) if envelope_candidates else raw_ftp
-        result.append({"date": date_str, "ftp": smoothed_ftp, "raw_ftp": raw_ftp})
+
+        window_map = [
+            power
+            for d_str, power in map_points
+            if _in_window(d_str, start_date, end_date)
+        ]
+        result.append(
+            {
+                "date": date_str,
+                "ftp": smoothed_ftp,
+                "raw_ftp": raw_ftp,
+                "map_5min": round(max(window_map)) if window_map else None,
+            }
+        )
 
     return result
 
@@ -1591,6 +2221,15 @@ def build_ride_metrics_chain(
         watts: list[float] = streams.get("watts", {}).get("data", [])
         time_data: list[float] = streams.get("time", {}).get("data", [])
 
+        # Compact per-ride physiological signals for the cross-workout inference
+        # engine (#476). Best-effort: never let signal extraction break the chain.
+        try:
+            perf_signals = compute_ride_performance_signals(
+                streams, ride.get("duration_seconds")
+            )
+        except Exception:  # pragma: no cover - defensive
+            perf_signals = None
+
         # --- Per-ride metrics ---
         avg_power: int | None = None
         np_value: int | None = None
@@ -1614,6 +2253,42 @@ def build_ride_metrics_chain(
             # Missing or mismatched streams are not enough evidence for a
             # training-purpose label.
             ride_purpose = "unknown"
+
+        # Provider-interval fallback: when the raw stream gives us no shape
+        # (missing/unusable, so ``unknown``), fall back to the provider's own
+        # structured interval breakdown — intervals.icu ships clean per-interval
+        # averages even when the per-second stream is absent, so a real interval
+        # session is classified instead of silently reading as "unknown".
+        if ride_purpose in (None, "unknown") and ftp > 0:
+            provider_intervals = ride.get("_provider_intervals")
+            if provider_intervals:
+                p_purpose, p_intervals = classify_from_provider_intervals(
+                    provider_intervals, ftp
+                )
+                if p_purpose != "unknown":
+                    ride_purpose = p_purpose
+                    intervals = p_intervals
+
+        # --- Prefer the provider's own headline figures over stream recompute ---
+        # Providers (intervals.icu / Strava) compute avg/NP/TSS from full-resolution
+        # data. The stream we ingest can be downsampled or gap-stripped, which both
+        # inflates the sample-count mean and collapses NP onto avg (#466: avg == NP,
+        # ~20 W above Strava). Trust the provider figure when present; the stream
+        # computation above remains the fallback (and still drives ride_purpose and
+        # interval detection, which need shape rather than a single headline number).
+        summary_avg = ride.get("_summary_avg_power_w")
+        summary_np = ride.get("_summary_np_w")
+        summary_tss = ride.get("_summary_tss")
+        if summary_avg is not None:
+            avg_power = int(round(summary_avg))
+        if summary_np is not None:
+            np_value = int(round(summary_np))
+            if ftp > 0:
+                intensity_factor = round(np_value / ftp, 3)
+        if summary_tss is not None:
+            tss = float(summary_tss)
+        elif summary_np is not None and ftp > 0:
+            tss = compute_ride_tss(ride.get("duration_seconds") or 0, float(np_value), ftp)
 
         # --- CTL/ATL decay and update ---
         activity_date_str = ride["activity_date"]
@@ -1684,6 +2359,7 @@ def build_ride_metrics_chain(
                 "ride_purpose": ride_purpose,
                 "classification_confidence": classification_confidence,
                 "classification_reason": classification_reason,
+                "perf_signals": perf_signals,
                 "summary": summary,
             }
         )

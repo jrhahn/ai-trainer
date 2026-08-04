@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenUsage:
     total: int = 0
+    # Input tokens Gemini served from its implicit cache, billed at 10 % of the
+    # normal input rate.  Tracked separately because it is the only way to tell
+    # whether the cache-friendly prompt order actually works (#514) — the totals
+    # look identical whether the cache hits or not.
+    cached: int = 0
 
 
 _token_usage: ContextVar[TokenUsage | None] = ContextVar("token_usage", default=None)
@@ -87,6 +92,34 @@ def _gemini_total_tokens(response: object) -> int | None:
     return _attribute_int(usage, "total_token_count")
 
 
+def _gemini_cached_tokens(response: object) -> int | None:
+    """Input tokens Gemini served from its implicit cache, if it reports any."""
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return None
+    return _attribute_int(usage, "cached_content_token_count")
+
+
+def _record_gemini_usage(response: object) -> None:
+    """Record a Gemini call's tokens, including what the implicit cache covered.
+
+    Caching is invisible in the total — a cached prompt reports the same token
+    count, only cheaper — so without this the reorder in #514 could not be told
+    apart from a no-op.
+    """
+    _record_token_usage(_gemini_total_tokens(response))
+    cached = _gemini_cached_tokens(response)
+    if not cached or cached <= 0:
+        return
+    usage = _token_usage.get()
+    if usage is not None:
+        usage.cached += int(cached)
+    total = _gemini_total_tokens(response) or 0
+    logger.info(
+        "Gemini implicit cache hit: %d of %d tokens served from cache", cached, total
+    )
+
+
 # ---------------------------------------------------------------------------
 # Task type constants
 # ---------------------------------------------------------------------------
@@ -98,7 +131,18 @@ TASK_FEEDBACK = "feedback"
 
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+# Gemini models that reject an explicit ``thinking_budget=0`` with a 400
+# INVALID_ARGUMENT. Verified against the live API on 2026-08-02; note this does
+# not follow model family or naming — ``gemini-3.1-flash-lite`` accepts a zero
+# while the non-lite ``gemini-3.6-flash`` does not — so it cannot be inferred
+# from the model string and is discovered at runtime instead (see ``_generate``).
+# Seeded with what is known so the common case never pays a failed request.
+_ZERO_THINKING_BUDGET_UNSUPPORTED: set[str] = {
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+}
 
 
 def _resolve_model(provider_name: str, task: str) -> str:
@@ -204,34 +248,63 @@ class GeminiProvider:
         self._model = model
         self._api_key = api_key or settings.gemini_api_key
 
-    @staticmethod
-    def _build_config(
-        system: str, json_mode: bool, types: object
+    def _build_config(self, system: str, json_mode: bool, types: object) -> object:
+        # Thinking tokens bill at the output rate, so they stay off. Most models
+        # accept an explicit zero budget; the ones that don't are left at their
+        # default, which measured at zero thinking tokens across repeat calls.
+        # A budget of 1 is deliberately NOT used as the workaround — those models
+        # treat it as a hint rather than a cap and spent 0–1,348 thinking tokens
+        # from call to call on an identical prompt.
+        kwargs: dict = {
+            "system_instruction": system,
+            "response_mime_type": "application/json" if json_mode else None,
+        }
+        if self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED:
+            kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        return types.GenerateContentConfig(**kwargs)
+
+    async def _generate(
+        self, contents: object, system: str, json_mode: bool, genai, genai_errors, types
     ) -> object:
-        # Disable thinking/reasoning (thinking_budget=0) to prevent the hidden
-        # chain-of-thought tokens that cause cost explosions with Gemini 2.5 Flash.
-        return types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type="application/json" if json_mode else None,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
+        """Call generate_content, learning which models refuse a zero budget.
+
+        A model that rejects ``thinking_budget=0`` fails *every* request rather
+        than degrading, which would take the whole app down on a model bump. The
+        API reports only ``INVALID_ARGUMENT`` with no field detail, so the 400 is
+        retried once without the thinking config and the model is remembered for
+        the rest of the process. A 400 raised for any other reason simply fails
+        again on the retry and propagates.
+        """
+        while True:
+            config = self._build_config(system, json_mode, types)
+            sent_thinking_config = self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED
+            try:
+                client = genai.Client(api_key=self._api_key)
+                async with client.aio as aio_client:
+                    return await aio_client.models.generate_content(
+                        model=self._model, contents=contents, config=config
+                    )
+            except genai_errors.ClientError as exc:
+                if exc.code == 429:
+                    raise AIRateLimitError(str(exc)) from exc
+                if exc.code == 400 and sent_thinking_config:
+                    logger.warning(
+                        "Model %s rejected thinking_budget=0; retrying without it "
+                        "and disabling it for this model",
+                        self._model,
+                    )
+                    _ZERO_THINKING_BUDGET_UNSUPPORTED.add(self._model)
+                    continue
+                raise
 
     async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = self._build_config(system, json_mode, types)
-        try:
-            client = genai.Client(api_key=self._api_key)
-            async with client.aio as aio_client:
-                response = await aio_client.models.generate_content(
-                    model=self._model, contents=user, config=config
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
-        _record_token_usage(_gemini_total_tokens(response))
+        response = await self._generate(
+            user, system, json_mode, genai, genai_errors, types
+        )
+        _record_gemini_usage(response)
         return response.text or ""
 
     async def chat_history(
@@ -240,7 +313,6 @@ class GeminiProvider:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        config = self._build_config(system, json_mode, types)
         contents = [
             types.Content(
                 role="model" if m["role"] == "assistant" else "user",
@@ -248,17 +320,10 @@ class GeminiProvider:
             )
             for m in messages
         ]
-        try:
-            client = genai.Client(api_key=self._api_key)
-            async with client.aio as aio_client:
-                response = await aio_client.models.generate_content(
-                    model=self._model, contents=contents, config=config
-                )
-        except genai_errors.ClientError as exc:
-            if exc.code == 429:
-                raise AIRateLimitError(str(exc)) from exc
-            raise
-        _record_token_usage(_gemini_total_tokens(response))
+        response = await self._generate(
+            contents, system, json_mode, genai, genai_errors, types
+        )
+        _record_gemini_usage(response)
         return response.text or ""
 
 
@@ -306,16 +371,31 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
 def resolve_user_provider(user: models.User) -> str:
     """Return the AI provider name to use for *user*.
 
-    Respects the user's stored preference when the matching API key is
-    configured; falls back to the best globally-available provider.
+    A provider is usable when the user supplied their own key for it (BYOK), or
+    when admin-key fallback is enabled and the backend owner configured a global
+    key. Respects the user's stored preference when its provider is usable;
+    otherwise falls back to whichever provider is usable. Previously this looked
+    only at the global keys, so in BYOK-only mode a user with their own key was
+    routed to the wrong provider and got an "unknown key" error (#448).
     """
+
+    def _usable(user_key: str | None, global_key: str) -> bool:
+        if user_key:
+            return True
+        return bool(settings.allow_admin_ai_key_fallback and global_key)
+
+    gemini_usable = _usable(user.user_gemini_api_key, settings.gemini_api_key)
+    openai_usable = _usable(user.user_openai_api_key, settings.openai_api_key)
+
     stored = user.ai_provider
-    if stored == "gemini" and settings.gemini_api_key:
+    if stored == "gemini" and gemini_usable:
         return "gemini"
-    if stored == "openai" and settings.openai_api_key:
+    if stored == "openai" and openai_usable:
         return "openai"
-    if settings.gemini_api_key:
+    if gemini_usable:
         return "gemini"
-    if settings.openai_api_key:
+    if openai_usable:
         return "openai"
-    return "gemini"
+    # Nothing usable: return the user's stated preference so get_provider raises
+    # the correct provider-specific "key not configured" error.
+    return stored if stored in ("openai", "gemini") else "gemini"

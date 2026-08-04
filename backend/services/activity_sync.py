@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services.analysis import build_ride_metrics_chain
+from services import summary_pipeline
+from services.analysis import (
+    build_ride_metrics_chain,
+    build_rule_based_summary,
+    classify_from_provider_intervals,
+    classify_ride_confidence_and_reason,
+)
 from services.activity_imports import (
     ImportedActivity,
     find_existing_import,
@@ -26,11 +32,14 @@ from services.intervals_service import (
     fetch_recent_activities as fetch_recent_intervals_activities,
     intervals_activity_id,
     map_activity_to_imported_activity,
+    normalize_provider_intervals,
     sanitize_intervals_streams,
     apply_summary_fallback,
 )
+from services.learning_pipeline import learn_from_completed_workouts
 from services.ride_matching import (
     apply_ride_plan_matches,
+    mark_matched_days_completed,
     review_matched_ride_and_adapt,
 )
 from services.llm import resolve_user_provider
@@ -41,7 +50,10 @@ from services.strava_service import (
     ensure_fresh_strava_token,
     fetch_activity_streams_strict as fetch_strava_activity_streams,
 )
-from services.weather_service import enrich_activity_weather
+from services.weather_service import (
+    enrich_activity_weather,
+    home_coordinates_for_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +68,7 @@ class SourceSyncResult:
     skipped: int = 0
     adapted: int = 0
     failed: int = 0
+    reclassified: int = 0
 
 
 @dataclass(slots=True)
@@ -66,6 +79,7 @@ class ActivitySyncResult:
     skipped: int = 0
     adapted: int = 0
     failed: int = 0
+    reclassified: int = 0
 
     def add(self, source: SourceSyncResult) -> None:
         self.source_checks += source.checked
@@ -73,6 +87,7 @@ class ActivitySyncResult:
         self.skipped += source.skipped
         self.adapted += source.adapted
         self.failed += source.failed
+        self.reclassified += source.reclassified
 
 
 
@@ -170,7 +185,7 @@ def _strava_activity_to_imported_activity(
         activity_date=activity_date,
         sport_type=activity.get("sport_type") or activity.get("type") or "cycling",
         duration_seconds=int(
-            activity.get("elapsed_time") or activity.get("moving_time") or 0
+            activity.get("moving_time") or activity.get("elapsed_time") or 0
         ),
         streams=streams,
         start_lat=(
@@ -233,20 +248,46 @@ async def _persist_and_adapt(
     auto_matched = await apply_ride_plan_matches(
         db, user.id, training_plan, imported_ids
     )
+    # A synced ride is proof the athlete did that day, so mark its matched plan day
+    # completed — nothing else sets that flag automatically, which left auto-matched
+    # days unprotected against an automated regenerate dropping them. Best-effort:
+    # it must never break the sync that triggered it.
+    try:
+        await mark_matched_days_completed(db, user, training_plan, auto_matched)
+    except Exception:
+        logger.warning("Failed to mark matched plan days completed", exc_info=True)
     streams_by_id = {
         ride["strava_activity_id"]: ride.get("streams") or {} for ride in rides
     }
     adapted = 0
     for ride_metric in auto_matched:
+        # Re-read the plan before each adaptation so an earlier ride's committed
+        # changes are visible to the next one. Passing the same pre-loop snapshot
+        # as every ride's base_plan made a later adaptation to an already-changed
+        # day look like a concurrent user edit and get dropped (stale-snapshot
+        # clobber, #452).
+        current_plan_row = await crud.get_training_plan(db, user.id)
+        current_plan = (
+            current_plan_row.plan if current_plan_row is not None else training_plan
+        )
         await review_matched_ride_and_adapt(
             db,
             user,
             ride_metric,
-            training_plan,
+            current_plan,
             provider=resolve_user_provider(user),
             streams=streams_by_id.get(ride_metric.strava_activity_id),
         )
         adapted += 1
+
+    # Continuous athlete learning (#388): now that completed workouts are on
+    # file, run one learning step so the coach evolves from the new evidence
+    # immediately instead of waiting for the weekly batch jobs. Best-effort —
+    # it must never break the sync that triggered it.
+    await learn_from_completed_workouts(
+        db, user, timezone_name=settings.app_timezone
+    )
+
     return len(metrics_chain), adapted
 
 
@@ -286,6 +327,9 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
     imported_ids: list[int] = []
     imported_activities: list[ImportedActivity] = []
     retry_barrier: int | None = None  # smallest id we must not advance past (#325)
+    # Resolved once for the batch: indoor rides have no GPS, so their conditions
+    # come from the athlete's training location (#495).
+    home_coordinates = await home_coordinates_for_user(db, user.id)
     for activity in new_activities:
         activity_id = int(activity["id"])
         try:
@@ -306,7 +350,9 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
             )
             continue
         streams = _sanitize_strava_streams(raw_streams)
-        weather = await enrich_activity_weather(activity, streams=streams)
+        weather = await enrich_activity_weather(
+            activity, streams=streams, fallback_coordinates=home_coordinates
+        )
         imported = _strava_activity_to_imported_activity(activity, streams, weather)
         if imported is None:
             result.skipped += 1
@@ -342,6 +388,99 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
     return result
 
 
+# Bounds for the unknown-ride reclassification backfill: only recent rides are
+# retried, and only a few per tick, so it never fans out into a large re-fetch
+# of the whole history (#482).
+INTERVALS_RECLASSIFY_WINDOW_DAYS = 45
+INTERVALS_RECLASSIFY_LIMIT = 25
+
+
+def _resolve_user_ftp(user: models.User) -> float:
+    ftp = float(user.current_ftp or 0)
+    if (
+        ftp <= 0
+        and user.rider_assessment is not None
+        and user.rider_assessment.estimated_ftp
+    ):
+        ftp = float(user.rider_assessment.estimated_ftp)
+    return ftp
+
+
+async def _reclassify_unknown_intervals_rides(
+    db: AsyncSession, user: models.User
+) -> int:
+    """Re-fetch provider laps for still-``unknown`` intervals rides and reclassify.
+
+    The nightly sync skips activities that were already imported, so a ride
+    imported before provider-interval classification existed (or before its
+    per-second stream was available) stays ``unknown`` forever. This bounded
+    backfill re-fetches only those rows' structured intervals and upgrades the
+    classification in place via :func:`crud.update_ride_metric_classification`,
+    which leaves power/load and every athlete-edited field untouched (#482).
+
+    Returns the number of rides whose classification changed.
+    """
+    token = user.intervals_token
+    if token is None:
+        return 0
+    ftp = _resolve_user_ftp(user)
+    if ftp <= 0:
+        return 0
+
+    since = (
+        app_today() - timedelta(days=INTERVALS_RECLASSIFY_WINDOW_DAYS)
+    ).isoformat()
+    candidates = await crud.get_unclassified_intervals_ride_metrics(
+        db, user.id, since_date=since, limit=INTERVALS_RECLASSIFY_LIMIT
+    )
+
+    changed = 0
+    for row in candidates:
+        activity_id = row.external_activity_id
+        if not activity_id:
+            continue
+        try:
+            detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
+        except IntervalsDataUnavailable:
+            continue  # transient — retry on a later tick
+        provider_intervals = normalize_provider_intervals(detail)
+        if not provider_intervals:
+            continue
+        purpose, work = classify_from_provider_intervals(provider_intervals, ftp)
+        if purpose == "unknown":
+            continue
+        duration_s = row.duration_seconds or 0
+        confidence, reason = classify_ride_confidence_and_reason(
+            purpose, duration_s, work
+        )
+        summary = build_rule_based_summary(
+            purpose,
+            duration_s,
+            float(row.normalized_power_w) if row.normalized_power_w else None,
+            row.tss,
+            work,
+        )
+        await crud.update_ride_metric_classification(
+            row,
+            ride_purpose=purpose,
+            classification_confidence=confidence,
+            classification_reason=reason,
+            summary=summary,
+        )
+        changed += 1
+
+    if changed:
+        # Reclassification changes what the dashboard summary should say.
+        await summary_pipeline.invalidate(db, user)
+        logger.info(
+            "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
+            user.id,
+            changed,
+            len(candidates),
+        )
+    return changed
+
+
 async def sync_intervals_for_user(
     db: AsyncSession, user: models.User
 ) -> SourceSyncResult:
@@ -349,6 +488,17 @@ async def sync_intervals_for_user(
     if user.intervals_token is None or not user.intervals_auto_sync_enabled:
         result.skipped = 1
         return result
+
+    # Reclassify any still-``unknown`` intervals rides first — this runs every
+    # tick independent of whether there are new activities, since the fix targets
+    # already-imported rides the new-activity loop skips (#482). Best-effort: a
+    # provider hiccup here must not abort the rest of the sync.
+    try:
+        result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
+    except Exception:
+        logger.warning(
+            "Intervals reclassify backfill failed user=%s", user.id, exc_info=True
+        )
 
     today = app_today()
     activities = await fetch_recent_intervals_activities(
@@ -495,12 +645,13 @@ async def run_activity_sync(
 
     duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
     logger.info(
-        "Activity sync finished users=%s source_checks=%s imported=%s skipped=%s adapted=%s failed=%s duration_ms=%s",
+        "Activity sync finished users=%s source_checks=%s imported=%s skipped=%s adapted=%s reclassified=%s failed=%s duration_ms=%s",
         result.users,
         result.source_checks,
         result.imported,
         result.skipped,
         result.adapted,
+        result.reclassified,
         result.failed,
         duration_ms,
     )

@@ -1,15 +1,59 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { WheelEvent } from 'react'
-import { Send, Bot, User, Brain, Trash2, CalendarCheck, BookOpen, RotateCcw, Scale } from 'lucide-react'
+import {
+  Send,
+  Bot,
+  User,
+  Brain,
+  Trash2,
+  CalendarCheck,
+  BookOpen,
+  RotateCcw,
+  Scale,
+  HelpCircle,
+  Lightbulb,
+  FlaskConical,
+  Pin,
+  Settings,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
-import { clearChatHistoryRemote, fetchCoachMemory, fetchCurrentUser } from '../services/user'
+import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
+import {
+  answerAthleteInquiry,
+  clearChatHistoryRemote,
+  dismissAthleteInquiry,
+  fetchCoachMemory,
+  fetchCurrentUser,
+  fetchPlanHistory,
+  fetchAthleteInquiries,
+  fetchAthleteOpenQuestions,
+  fetchAthleteHypotheses,
+  fetchValidationExperiments,
+} from '../services/user'
+import type {
+  AthleteExperiment,
+  AthleteHypothesis,
+  AthleteInquiry,
+  AthleteOpenQuestion,
+  PlanDayHistoryEntry,
+} from '../services/user'
+import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
+import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 
-const VISIBLE_EXCHANGE_LIMIT = 4
+const VISIBLE_ITEM_LIMIT = 4
+
+const EVENT_META: Record<TimelineEventKind, { icon: LucideIcon; iconClass: string }> = {
+  'plan-update': { icon: CalendarCheck, iconClass: 'text-green-600' },
+  'open-question': { icon: HelpCircle, iconClass: 'text-blue-500' },
+  hypothesis: { icon: Lightbulb, iconClass: 'text-amber-500' },
+  experiment: { icon: FlaskConical, iconClass: 'text-purple-500' },
+}
 
 // Render headings as plain paragraphs so the chat uses a uniform font size
 const MARKDOWN_COMPONENTS: Components = {
@@ -64,6 +108,139 @@ function groupMessagesIntoExchanges(messages: ChatMessage[]): ChatExchange[] {
   return exchanges.reverse()
 }
 
+// The unified Coach Timeline feed: conversation exchanges and system events share
+// one chronological (newest-first) stream so plan updates and recommendations read
+// in context rather than as separate cards (#418).
+type FeedItem =
+  | { type: 'exchange'; id: string; timestamp: string; exchange: ChatExchange }
+  | { type: 'event'; id: string; timestamp: string; event: TimelineEvent }
+
+function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem[] {
+  const exchangeItems: FeedItem[] = exchanges.map((exchange) => ({
+    type: 'exchange',
+    id: exchange.id,
+    // An exchange is placed by its most recent message; the empty welcome state
+    // sorts to the end (no timestamp) so real events surface above it.
+    timestamp: exchange.messages.at(-1)?.timestamp ?? '',
+    exchange,
+  }))
+  const eventItems: FeedItem[] = events.map((event) => ({
+    type: 'event',
+    id: event.id,
+    timestamp: event.timestamp,
+    event,
+  }))
+  return [...exchangeItems, ...eventItems].sort((a, b) =>
+    a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
+  )
+}
+
+// A question the coach could never answer from data, pinned above the feed until
+// the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
+// as an ordinary chat message it would be buried by the next exchange, which is
+// exactly how these questions went unanswered before.
+function PinnedInquiry({
+  inquiry,
+  onAnswer,
+  onSkip,
+}: {
+  inquiry: AthleteInquiry
+  onAnswer: (answer: string) => Promise<void>
+  onSkip: () => Promise<void>
+}) {
+  const [answer, setAnswer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // A fresh question after a rephrasing must not inherit the text that missed.
+  useEffect(() => {
+    setAnswer('')
+    setError('')
+  }, [inquiry.id, inquiry.question])
+
+  const submit = async () => {
+    if (!answer.trim() || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onAnswer(answer.trim())
+      setAnswer('')
+    } catch {
+      setError("Couldn't send that answer — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // No in-flight guard here: both buttons carry `disabled={busy}`, so a second
+  // click cannot reach this. `submit` still needs its own check because Enter can
+  // fire on an empty box.
+  const skip = async () => {
+    setBusy(true)
+    try {
+      await onSkip()
+    } catch {
+      setError("Couldn't skip that — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="pinned-inquiry"
+      className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5"
+    >
+      <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+        <Pin size={11} />
+        {inquiry.askCount > 1 ? 'Still needs an answer' : 'Your coach needs an answer'}
+      </p>
+      <p className="text-sm text-gray-800">{inquiry.question}</p>
+      {inquiry.whyAsking && (
+        <p className="mt-1 text-[11px] text-gray-500">{inquiry.whyAsking}</p>
+      )}
+      <textarea
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            void submit()
+          }
+        }}
+        placeholder="Type your answer..."
+        aria-label={`Answer: ${inquiry.question}`}
+        rows={2}
+        disabled={busy}
+        className="mt-2 w-full resize-none rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-amber-500 disabled:opacity-50"
+      />
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !answer.trim()}
+          className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+        >
+          Send
+        </button>
+        <button
+          onClick={() => void skip()}
+          disabled={busy}
+          className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 disabled:opacity-50"
+        >
+          Skip for now
+        </button>
+        {inquiry.settingsHint && (
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-gray-400">
+            <Settings size={11} />
+            {inquiry.settingsHint}
+          </span>
+        )}
+      </div>
+      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 export default function AIChat({ contextWorkout, className }: Props) {
   const {
     authToken,
@@ -102,10 +279,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
-  const [visibleExchangeCount, setVisibleExchangeCount] = useState(VISIBLE_EXCHANGE_LIMIT)
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [pendingInquiries, setPendingInquiries] = useState<AthleteInquiry[]>([])
+  const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
+  // Inquiries the athlete has already answered or skipped. A list fetch can be in
+  // flight when they deal with one — and a skip changes no chat message, so the
+  // effect below is not even re-run to cancel it. Re-pinning a question they just
+  // answered is worse than picking up a new one a cycle late.
+  const handledInquiryIdsRef = useRef<Set<string>>(new Set())
+  // Rephrased questions the athlete has not answered yet, keyed by id. Answering
+  // appends chat messages, which re-runs the list effect below — so a fetch
+  // carrying the pre-rephrase wording can resolve after the rephrase is applied
+  // and roll the pin back to the question the coach already moved on from.
+  // handledInquiryIdsRef cannot cover this: a rephrase is still pending, so the
+  // question must stay pinned rather than be filtered out.
+  const rephrasedInquiriesRef = useRef<Map<string, AthleteInquiry>>(new Map())
   // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
   const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
@@ -127,32 +318,73 @@ export default function AIChat({ contextWorkout, className }: Props) {
       ? chatHistory
       : [{ role: 'assistant', content: welcomeContent, timestamp: '' }]
   const displayExchanges = groupMessagesIntoExchanges(displayMessages)
-  const visibleExchanges = displayExchanges.slice(0, visibleExchangeCount)
-  const olderExchangeCount = Math.max(displayExchanges.length - visibleExchangeCount, 0)
+  const feedItems = buildFeed(displayExchanges, timelineEvents)
+  const visibleFeedItems = feedItems.slice(0, visibleItemCount)
+  const olderItemCount = Math.max(feedItems.length - visibleItemCount, 0)
+  // The active exchange (a just-sent question awaiting its answer) always sorts to
+  // the top of the feed, so the typing indicator belongs to the first item.
+  const firstItem = visibleFeedItems[0]
   const showLoadingInLatestExchange =
-    loading && displayExchanges[0]?.messages.at(-1)?.role === 'user'
+    loading &&
+    firstItem?.type === 'exchange' &&
+    firstItem.exchange.messages.at(-1)?.role === 'user'
+
+  // Pull plan changes and open learning-pipeline recommendations into the timeline.
+  // Re-fetched after each exchange since a coach reply may adjust the plan or raise
+  // new questions. Failures degrade to no events rather than breaking the chat.
+  useEffect(() => {
+    if (!authToken) return
+    let cancelled = false
+    void (async () => {
+      const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
+        fetchPlanHistory(authToken).catch(() => [] as PlanDayHistoryEntry[]),
+        fetchAthleteOpenQuestions(authToken).catch(() => [] as AthleteOpenQuestion[]),
+        fetchAthleteHypotheses(authToken).catch(() => [] as AthleteHypothesis[]),
+        fetchValidationExperiments(authToken).catch(() => [] as AthleteExperiment[]),
+        fetchAthleteInquiries(authToken).catch(() => [] as AthleteInquiry[]),
+      ])
+      if (cancelled) return
+      setTimelineEvents([
+        ...planUpdateEvents(history),
+        ...recommendationEvents(questions, hypotheses, experiments),
+      ])
+      setPendingInquiries(
+        inquiries
+          .filter((item) => !handledInquiryIdsRef.current.has(item.id))
+          .map((item) => {
+            // askCount only ever grows, so it orders the two versions without
+            // depending on which request resolved first.
+            const local = rephrasedInquiriesRef.current.get(item.id)
+            return local && local.askCount > item.askCount ? local : item
+          }),
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, chatHistory.length])
 
   useEffect(() => {
-    setVisibleExchangeCount(VISIBLE_EXCHANGE_LIMIT)
+    setVisibleItemCount(VISIBLE_ITEM_LIMIT)
   }, [chatHistory.length])
 
-  const loadOlderExchanges = useCallback(() => {
-    setVisibleExchangeCount((count) => Math.min(count + VISIBLE_EXCHANGE_LIMIT, displayExchanges.length))
-  }, [displayExchanges.length])
+  const loadOlderItems = useCallback(() => {
+    setVisibleItemCount((count) => Math.min(count + VISIBLE_ITEM_LIMIT, feedItems.length))
+  }, [feedItems.length])
 
   const handleMessagesScroll = () => {
     const container = messagesRef.current
-    if (!container || olderExchangeCount === 0) return
+    if (!container || olderItemCount === 0) return
 
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
     if (distanceFromBottom < 96) {
-      loadOlderExchanges()
+      loadOlderItems()
     }
   }
 
   const handleMessagesWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (event.deltaY > 0 && olderExchangeCount > 0) {
-      loadOlderExchanges()
+    if (event.deltaY > 0 && olderItemCount > 0) {
+      loadOlderItems()
     }
   }
 
@@ -224,15 +456,31 @@ export default function AIChat({ contextWorkout, className }: Props) {
               Why this advice?
             </summary>
             <dl className="mt-1 space-y-1">
+              {/* Rationale layers map onto the shared knowledge sources (#377):
+                  the physiology read is a coach inference, the personal-context
+                  read is a personal observation. Cited science, when any, shows
+                  in the Sources block above as the scientific-evidence source. */}
               {msg.physiologyRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">The numbers: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.coach_inference.className}`}
+                    >
+                      {REASONING_SOURCE_META.coach_inference.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.physiologyRationale}</dd>
                 </div>
               )}
               {msg.contextRationale && (
                 <div className="text-xs text-gray-500">
-                  <dt className="inline font-medium text-gray-600">Knowing you: </dt>
+                  <dt className="inline">
+                    <span
+                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.personal_observation.className}`}
+                    >
+                      {REASONING_SOURCE_META.personal_observation.label}
+                    </span>
+                  </dt>
                   <dd className="inline">{msg.contextRationale}</dd>
                 </div>
               )}
@@ -273,6 +521,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
       </div>
     </div>
   )
+
+  const renderTimelineEvent = (event: TimelineEvent) => {
+    const { icon: Icon, iconClass } = EVENT_META[event.kind]
+    return (
+      <div
+        key={event.id}
+        data-testid="timeline-event"
+        data-event-kind={event.kind}
+        className="flex items-start gap-2.5 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2"
+      >
+        <Icon size={16} className={`mt-0.5 flex-shrink-0 ${iconClass}`} />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{event.title}</p>
+          <p className="text-sm text-gray-700">{event.body}</p>
+        </div>
+      </div>
+    )
+  }
 
   async function sendMessage(msgOverride?: string, options?: { skipAddUserMessage?: boolean }) {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
@@ -360,6 +626,44 @@ export default function AIChat({ contextWorkout, className }: Props) {
     void sendMessageRef.current?.(pendingCoachMessage)
   }, [pendingCoachMessage, setPendingCoachMessage])
 
+  // The oldest unanswered question gets the pin: one question at a time, and the
+  // one that has been waiting longest rather than the newest distraction.
+  const pinnedInquiry = pendingInquiries[0]
+
+  const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string) => {
+    if (!authToken) return
+    const result = await answerAthleteInquiry(authToken, inquiry.id, answer)
+    // Mirror what the backend just persisted into the chat, so the exchange stays
+    // readable in the timeline after the pin clears.
+    const timestamp = new Date().toISOString()
+    addChatMessage({ role: 'assistant', content: inquiry.question, timestamp })
+    addChatMessage({ role: 'user', content: answer, timestamp })
+    if (result.coachReply) {
+      addChatMessage({ role: 'assistant', content: result.coachReply, timestamp })
+    }
+    // A rephrased question comes back still pending and re-pins itself; anything
+    // else (answered, or handed off to settings) leaves the pin for good.
+    if (result.inquiry.status !== 'pending') {
+      handledInquiryIdsRef.current.add(result.inquiry.id)
+      rephrasedInquiriesRef.current.delete(result.inquiry.id)
+    } else {
+      rephrasedInquiriesRef.current.set(result.inquiry.id, result.inquiry)
+    }
+    setPendingInquiries((current) =>
+      result.inquiry.status === 'pending'
+        ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
+        : current.filter((item) => item.id !== result.inquiry.id),
+    )
+  }
+
+  const handleInquirySkip = async (inquiry: AthleteInquiry) => {
+    if (!authToken) return
+    await dismissAthleteInquiry(authToken, inquiry.id)
+    handledInquiryIdsRef.current.add(inquiry.id)
+    rephrasedInquiriesRef.current.delete(inquiry.id)
+    setPendingInquiries((current) => current.filter((item) => item.id !== inquiry.id))
+  }
+
   const handleClearChatHistory = async () => {
     if (!authToken) return
     clearChatHistory()
@@ -376,7 +680,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot size={18} className="text-amber-500" />
-          <span className="font-semibold text-sm text-gray-800">AI Coach Chat</span>
+          <span className="font-semibold text-sm text-gray-800">Coach Timeline</span>
         </div>
         <div className="flex items-center gap-1">
           {coachMemory && (
@@ -410,6 +714,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         <div className="mx-3 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
           Couldn't refresh coach state — data may be slightly out of date.
         </div>
+      )}
+
+      {pinnedInquiry && (
+        <PinnedInquiry
+          inquiry={pinnedInquiry}
+          onAnswer={(answer) => handleInquiryAnswer(pinnedInquiry, answer)}
+          onSkip={() => handleInquirySkip(pinnedInquiry)}
+        />
       )}
 
       {/* Input */}
@@ -449,7 +761,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         </div>
       )}
 
-      {/* Messages are newest exchange first, while each exchange reads question before answer. */}
+      {/* The feed is newest-first: conversation exchanges and system events (plan
+          updates, recommendations) interleaved by time; each exchange reads question
+          before answer. */}
       <div
         ref={messagesRef}
         aria-label="Coach chat messages"
@@ -457,18 +771,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
         onWheel={handleMessagesWheel}
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
       >
-        {visibleExchanges.map((exchange, exchangeIndex) => (
-          <div
-            key={exchange.id}
-            className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
-          >
-            {exchange.messages.map((msg, messageIndex) => renderMessage(msg, `${exchange.id}-${messageIndex}`))}
-            {exchangeIndex === 0 && showLoadingInLatestExchange && renderLoadingIndicator()}
-          </div>
-        ))}
+        {visibleFeedItems.map((item, itemIndex) =>
+          item.type === 'event' ? (
+            renderTimelineEvent(item.event)
+          ) : (
+            <div
+              key={item.id}
+              className="flex flex-col gap-2 border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
+            >
+              {item.exchange.messages.map((msg, messageIndex) =>
+                renderMessage(msg, `${item.id}-${messageIndex}`),
+              )}
+              {itemIndex === 0 && showLoadingInLatestExchange && renderLoadingIndicator()}
+            </div>
+          ),
+        )}
         {loading && !showLoadingInLatestExchange && renderLoadingIndicator()}
 
-        {olderExchangeCount > 0 && (
+        {olderItemCount > 0 && (
           <div
             className="relative -mt-2 flex min-h-[70%] justify-center pt-8"
             data-testid="older-history-fade"

@@ -38,7 +38,7 @@ async def test_retrieve_cycling_context_returns_empty_on_exception():
     # Make db.execute raise to simulate pgvector not being installed
     mock_db.execute = AsyncMock(side_effect=RuntimeError("relation does not exist"))
 
-    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 1536):
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
         context, sources = await rag.retrieve_cycling_context(mock_db, "intervals")
 
     assert context == ""
@@ -62,7 +62,7 @@ async def test_retrieve_cycling_context_formats_results():
     mock_result.fetchall = MagicMock(return_value=mock_rows)
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    embedding = [0.1] * 1536
+    embedding = [0.1] * 768
     with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=embedding):
         context, sources = await rag.retrieve_cycling_context(mock_db, "power zones")
 
@@ -94,7 +94,7 @@ async def test_retrieve_cycling_context_returns_empty_when_no_rows():
     mock_result.fetchall = MagicMock(return_value=[])
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.0] * 1536):
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.0] * 768):
         context, sources = await rag.retrieve_cycling_context(mock_db, "nutrition")
 
     assert context == ""
@@ -193,9 +193,8 @@ async def test_ask_trainer_science_context_forwarded_to_ai_service(
 @pytest.mark.asyncio
 async def test_refresh_knowledge_queues_background_task(client, auth_headers):
     """Authenticated request must queue the ingestion background task and return 200."""
-    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock) as mock_refresh:
-        with patch("routers.ai.settings") as mock_settings:
-            mock_settings.openai_api_key = "test-key"
+    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock):
+        with patch("routers.ai.embedding_provider_is_configured", return_value=True):
             response = await client.post(
                 "/api/v1/ai/refresh-knowledge",
                 headers=auth_headers,
@@ -208,6 +207,21 @@ async def test_refresh_knowledge_queues_background_task(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_refresh_knowledge_runs_with_only_a_gemini_key(client, auth_headers):
+    """Prod is Gemini-only; demanding an OpenAI key made this endpoint dead there (#515)."""
+    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock):
+        with patch("services.embeddings.settings") as mock_settings:
+            mock_settings.gemini_api_key = "gemini-key"
+            mock_settings.openai_api_key = ""
+            response = await client.post(
+                "/api/v1/ai/refresh-knowledge",
+                headers=auth_headers,
+            )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_refresh_knowledge_requires_authentication(client):
     """Unauthenticated request must be rejected with HTTP 401."""
     response = await client.post("/api/v1/ai/refresh-knowledge")
@@ -215,16 +229,127 @@ async def test_refresh_knowledge_requires_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_refresh_knowledge_returns_503_when_no_openai_key(client, auth_headers):
-    """When OPENAI_API_KEY is absent the endpoint must return HTTP 503."""
-    import os
-
-    with patch("routers.ai.settings") as mock_settings:
-        mock_settings.openai_api_key = ""
+async def test_refresh_knowledge_returns_503_without_any_embedding_key(
+    client, auth_headers
+):
+    """With no embedding provider configured the endpoint must return HTTP 503."""
+    with patch("routers.ai.embedding_provider_is_configured", return_value=False):
         response = await client.post(
             "/api/v1/ai/refresh-knowledge",
             headers=auth_headers,
         )
 
     assert response.status_code == 503
-    assert "OPENAI_API_KEY" in response.json()["detail"]
+    assert "embedding provider" in response.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Corpus-presence gate (#515)
+# ---------------------------------------------------------------------------
+
+
+def _pg_db(scalar_result: object) -> MagicMock:
+    db = MagicMock()
+    db.bind = MagicMock()
+    db.bind.dialect = MagicMock()
+    db.bind.dialect.name = "postgresql"
+    result = MagicMock()
+    result.scalar = MagicMock(return_value=scalar_result)
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+@pytest.fixture(autouse=True)
+def _clear_corpus_cache():
+    """The corpus answer is cached per process; each test needs a clean slate."""
+    rag.reset_corpus_cache()
+    yield
+    rag.reset_corpus_cache()
+
+
+@pytest.mark.asyncio
+async def test_corpus_is_reported_empty_on_sqlite():
+    db = MagicMock()
+    db.bind = MagicMock()
+    db.bind.dialect = MagicMock()
+    db.bind.dialect.name = "sqlite"
+
+    assert await rag.knowledge_corpus_is_populated(db) is False
+
+
+@pytest.mark.asyncio
+async def test_corpus_is_reported_populated_when_rows_exist():
+    assert await rag.knowledge_corpus_is_populated(_pg_db(True)) is True
+
+
+@pytest.mark.asyncio
+async def test_a_missing_table_counts_as_an_empty_corpus():
+    """Conservative answer: disable retrieval rather than pretend it works."""
+    db = _pg_db(True)
+    db.execute = AsyncMock(side_effect=RuntimeError("relation does not exist"))
+
+    assert await rag.knowledge_corpus_is_populated(db) is False
+
+
+@pytest.mark.asyncio
+async def test_the_corpus_answer_is_queried_once_per_process():
+    """Otherwise the guard would add a query to every chat message it saves a call on."""
+    db = _pg_db(True)
+
+    await rag.knowledge_corpus_is_populated(db)
+    await rag.knowledge_corpus_is_populated(db)
+    await rag.knowledge_corpus_is_populated(db)
+
+    assert db.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_classification_is_skipped_when_there_is_no_corpus(
+    client, auth_headers, mock_ai_service
+):
+    """No LLM call may be spent gating a retrieval that cannot return anything (#515)."""
+    with patch(
+        "routers.ai.knowledge_corpus_is_populated",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        response = await client.post(
+            "/api/v1/ai/ask-trainer",
+            headers=auth_headers,
+            json={"question": "Is polarized training better?"},
+        )
+
+    assert response.status_code == 200
+    mock_ai_service["classify_question"].assert_not_called()
+    # The prompt must not carry a half-filled classification line either.
+    assert mock_ai_service["ask_trainer"].call_args.kwargs.get("classification") == {}
+
+
+@pytest.mark.asyncio
+async def test_classification_still_runs_once_the_corpus_exists(
+    client, auth_headers, mock_ai_service
+):
+    mock_ai_service["classify_question"].return_value = {
+        "category": "science_question",
+        "needs_science_rag": True,
+    }
+
+    with patch(
+        "routers.ai.knowledge_corpus_is_populated",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        with patch(
+            "routers.ai.retrieve_cycling_context",
+            new_callable=AsyncMock,
+            return_value=("Zone 2 builds aerobic base.", []),
+        ) as mock_rag:
+            response = await client.post(
+                "/api/v1/ai/ask-trainer",
+                headers=auth_headers,
+                json={"question": "Is polarized training better?"},
+            )
+
+    assert response.status_code == 200
+    mock_ai_service["classify_question"].assert_called_once()
+    mock_rag.assert_awaited_once()

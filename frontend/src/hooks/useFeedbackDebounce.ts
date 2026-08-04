@@ -21,7 +21,7 @@ export function useFeedbackDebounce(): { isPending: boolean } {
     riderAssessment,
     setRiderAssessment,
     setRideMetricsHistory,
-    clearPendingFeedbackRides,
+    removePendingFeedbackRides,
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -29,7 +29,7 @@ export function useFeedbackDebounce(): { isPending: boolean } {
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,
       setRideMetricsHistory: s.setRideMetricsHistory,
-      clearPendingFeedbackRides: s.clearPendingFeedbackRides,
+      removePendingFeedbackRides: s.removePendingFeedbackRides,
     }))
   )
 
@@ -76,7 +76,9 @@ export function useFeedbackDebounce(): { isPending: boolean } {
       } catch {
         // Silently ignore — the user_note is already persisted in the DB
       } finally {
-        clearPendingFeedbackRides()
+        // Clear only the ids this run actually processed — rides added during
+        // the in-flight window stay pending for the next run (#457).
+        removePendingFeedbackRides(ids)
       }
     }, DEBOUNCE_MS)
 
@@ -86,8 +88,10 @@ export function useFeedbackDebounce(): { isPending: boolean } {
         timerRef.current = null
       }
     }
+    // Key on the id set (not just its length) so a same-length add/remove still
+    // resets the debounce and re-snapshots the ids to process (#457).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFeedbackRideIds.length])
+  }, [pendingFeedbackRideIds.join(',')])
 
   return { isPending: pendingFeedbackRideIds.length > 0 }
 }

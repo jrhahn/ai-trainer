@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from services import assessment_pipeline
 from services.analysis import apply_ctl_atl_decay, compute_ride_tss
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,16 @@ async def _rebuild_metric_snapshots(
     all_metrics: list[models.RideMetric],
     ftp_value: int,
 ) -> None:
+    # RideMetric rows carry no power-duration data, so a rebuild cannot
+    # recompute the MAP proxy.  Carry the last known value across the wipe and
+    # re-attach it to the newest snapshot, otherwise a manual recalculation
+    # would silently disable the FTP-vs-MAP plausibility check until the next
+    # Strava import.
+    preserved_map_5min = await crud.get_latest_map_5min(db, user.id)
+
     await crud.delete_athlete_metric_snapshots(db, user.id)
+    newest_snapshot: models.AthleteMetricSnapshot | None = None
+    newest_recorded_at: datetime | None = None
     for metric in all_metrics:
         if metric.activity_date:
             try:
@@ -110,7 +120,7 @@ async def _rebuild_metric_snapshots(
         else:
             ride_dt = datetime.now(timezone.utc)
 
-        await crud.create_athlete_metric_snapshot(
+        snapshot = await crud.create_athlete_metric_snapshot(
             db,
             user.id,
             ftp=ftp_value,
@@ -120,6 +130,15 @@ async def _rebuild_metric_snapshots(
             source="manual_recalculate",
             recorded_at=ride_dt,
         )
+        # ``all_metrics`` is not guaranteed to be date-ordered, so track the
+        # newest by timestamp rather than by iteration order.
+        if newest_recorded_at is None or ride_dt > newest_recorded_at:
+            newest_snapshot = snapshot
+            newest_recorded_at = ride_dt
+
+    if newest_snapshot is not None and preserved_map_5min is not None:
+        newest_snapshot.map_5min = preserved_map_5min
+        await db.flush()
 
 
 async def _refresh_rider_assessment_feedback(
@@ -140,8 +159,9 @@ async def _refresh_rider_assessment_feedback(
         hr_zones=user.rider_assessment.hr_zones,
         ride_insights=user.rider_assessment.ride_insights,
         last_ride_feedback=build_last_ride_feedback(latest_metric, ftp_value),
-        login_summary=user.rider_assessment.login_summary,
     )
+    # last_ride_feedback feeds the login summary; mark it stale so it regenerates.
+    await assessment_pipeline.notify_changed(db, user)
 
 
 def _recalculate_metric_chain(

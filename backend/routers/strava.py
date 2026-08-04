@@ -22,12 +22,16 @@ from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
+from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
     ensure_fresh_strava_token,
     fetch_activity_streams,
 )
-from services.weather_service import enrich_activity_weather
+from services.weather_service import (
+    enrich_activity_weather,
+    home_coordinates_for_user,
+)
 
 router = APIRouter(tags=["strava"])
 STATE_TTL_SECONDS = 600
@@ -35,7 +39,9 @@ _oauth_states: dict[str, tuple[str, float]] = {}
 
 logger = logging.getLogger(__name__)
 
-# Per-user background import progress  {user_id: {status, total, processed, skipped, error}}
+# Per-user background import progress  {user_id: {status, total, processed, skipped, error}}.
+# In-process, single-replica only (see docs/multi_replica.md); bounded via
+# prune_progress so completed entries don't accumulate forever (#326).
 _import_progress: dict[int, dict] = {}
 
 
@@ -351,6 +357,10 @@ async def _run_import_background(
         rides: list[dict] = []
         skipped = 0
         keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
+        # Resolved once for the whole import: indoor rides carry no GPS, so their
+        # conditions come from the athlete's training location (#495).
+        async with async_session_maker() as db:
+            home_coordinates = await home_coordinates_for_user(db, user_id)
         async with httpx.AsyncClient() as client:
             for idx, activity in enumerate(all_activities):
                 activity_id = activity.get("id")
@@ -376,7 +386,7 @@ async def _run_import_background(
                     activity.get("sport_type") or activity.get("type") or "cycling"
                 )
                 duration_seconds: int = int(
-                    activity.get("elapsed_time") or activity.get("moving_time") or 0
+                    activity.get("moving_time") or activity.get("elapsed_time") or 0
                 )
                 activity_name = activity.get("name")
 
@@ -414,7 +424,7 @@ async def _run_import_background(
                     continue
 
                 weather_fields = await enrich_activity_weather(
-                    activity, streams=streams
+                    activity, streams=streams, fallback_coordinates=home_coordinates
                 )
 
                 imported_activity = ImportedActivity(
@@ -462,7 +472,6 @@ async def _run_import_background(
             ftp_series = estimate_ftp_over_time(
                 rides,
                 max_heart_rate=max_heart_rate,
-                resting_heart_rate=resting_heart_rate,
             )
         except Exception:  # noqa: BLE001
             logger.warning(
@@ -486,19 +495,20 @@ async def _run_import_background(
                             user_id,
                             ftp=point["ftp"],
                             threshold_hr=None,
+                            map_5min=point.get("map_5min"),
                             source="ftp_estimation",
                             recorded_at=ride_dt,
                         )
                     await db.commit()
 
-        _import_progress[user_id] = {
+        _import_progress[user_id] = mark_finished({
             "status": "done",
             "total": len(all_activities),
             "processed": len(all_activities),
             "imported": len(metrics_chain),
             "skipped": skipped,
             "error": "",
-        }
+        })
     except Exception as exc:  # noqa: BLE001
         prev = _import_progress.get(user_id, {})
         logger.error(
@@ -509,14 +519,14 @@ async def _run_import_background(
             exc,
             exc_info=True,
         )
-        _import_progress[user_id] = {
+        _import_progress[user_id] = mark_finished({
             "status": "error",
             "total": prev.get("total", 0),
             "processed": prev.get("processed", 0),
             "imported": prev.get("imported", 0),
             "skipped": prev.get("skipped", 0),
             "error": str(exc),
-        }
+        })
 
 
 @router.get("/strava/activities")
@@ -585,20 +595,25 @@ async def import_strava_history(
         (datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp()
     )
 
-    # Prevent stacking duplicate background tasks: if one is already running, bail out.
-    current_progress = _import_progress.get(current_user.id, {})
-    if current_progress.get("status") == "running":
-        return {"status": "already_running"}
+    # Drop stale completed entries so the store can't grow without bound (#326).
+    prune_progress(_import_progress)
 
-    # Mark started immediately so the progress endpoint sees "running" right away
-    _import_progress[current_user.id] = {
-        "status": "running",
-        "total": 0,
-        "processed": 0,
-        "imported": 0,
-        "skipped": 0,
-        "error": "",
-    }
+    # Atomically claim the running slot: if one is already running, bail out
+    # without stacking a duplicate background task.
+    started = try_mark_running(
+        _import_progress,
+        current_user.id,
+        {
+            "status": "running",
+            "total": 0,
+            "processed": 0,
+            "imported": 0,
+            "skipped": 0,
+            "error": "",
+        },
+    )
+    if not started:
+        return {"status": "already_running"}
 
     background_tasks.add_task(
         _run_import_background,
@@ -619,6 +634,7 @@ async def get_import_progress(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ImportProgressResponse:
     """Return the current background import progress for the authenticated user."""
+    prune_progress(_import_progress)
     progress = _import_progress.get(current_user.id)
     if progress is None:
         return schemas.ImportProgressResponse(status="idle")

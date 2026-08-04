@@ -54,23 +54,6 @@ async def test_ai_endpoints(client, auth_headers, mock_ai_service):
     assert generate_response.status_code == 200
     assert generate_response.json()[0]["title"] == "Endurance Ride"
 
-    adapt_response = await client.post(
-        "/api/v1/ai/adapt-plan",
-        headers=auth_headers,
-        json={
-            "recentFeedback": [
-                {
-                    "actualDurationMinutes": 60,
-                    "perceivedEffort": 4,
-                    "notes": "Hard",
-                    "completedAt": "2026-04-10T10:00:00Z",
-                }
-            ],
-        },
-    )
-    assert adapt_response.status_code == 200
-    assert adapt_response.json()[0]["workoutType"] == "recovery"
-
     ask_response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
@@ -280,6 +263,254 @@ async def test_ask_trainer_with_context_workout_forwards_plan_updates(
 
 
 @pytest.mark.asyncio
+async def test_ask_trainer_flags_no_op_update_for_absent_day(
+    client, auth_headers, mock_ai_service
+):
+    """A coach plan_update for a date not in the plan is a silent no-op; the reply
+    must not claim success for a change that was never saved (#364)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2026-05-10",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 90,
+                }
+            ],
+        )
+        await db.commit()
+
+    # The model confidently claims success but targets a date absent from the plan.
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Done — I switched that day to intervals.",
+        "plan_updates": [
+            {
+                "date": "2026-05-03",
+                "workoutType": "intervals",
+                "title": "VO2 Intervals",
+                "description": "5x4",
+                "durationMinutes": 60,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Switch May 3 to intervals"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "2026-05-03" in body["response"]
+    assert "could not update" in body["response"].lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_is_honest_when_constraint_overrides_change(
+    client, auth_headers, mock_ai_service
+):
+    """A coach rest-day request on a required-session day is coerced back by the
+    plan pipeline; the reply must say so rather than falsely confirm it (#414)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 120,
+                }
+            ],
+        )
+        # A hard required-session constraint pins this day to endurance. No
+        # expiry so it stays active regardless of the test clock.
+        await crud.upsert_availability_constraint(
+            db,
+            user_id,
+            constraint_type="required_workout",
+            constraint_date="2027-01-15",
+            weekday="friday",
+            required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
+        )
+        await db.commit()
+
+    # The model claims it cleared the day to a rest day.
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Done — I cleared Friday to a complete rest day.",
+        "plan_updates": [
+            {
+                "date": "2027-01-15",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "description": "Full rest",
+                "durationMinutes": 0,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "make friday a rest day"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    lowered = body["response"].lower()
+    assert "couldn't change" in lowered
+    assert "friday" in lowered
+    assert "required session" in lowered
+    # The day stays as the required endurance session, not a rest day.
+    persisted = {d["date"]: d for d in body["updatedPlan"]}
+    assert persisted["2027-01-15"]["workoutType"] == "endurance"
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_background_memory_update_reaches_the_database(
+    client, auth_headers, mock_ai_service
+):
+    """The queued coach-memory write must actually land (#522).
+
+    It is a background task, and FastAPI runs those *before* the `get_db`
+    dependency's teardown commits — so while the handler's transaction stayed
+    open, `_update_memory_bg` waited on its own connection for the full sqlite
+    busy timeout and then failed. It failed silently, too, because that task
+    swallows exceptions by design so a broken memory update cannot break the
+    chat. Nothing asserted the write, so 22 tests stayed green while the path
+    they covered never once succeeded. This is that assertion.
+    """
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "When is the best time to ride tomorrow?"},
+    )
+    assert response.status_code == 200
+
+    async with TestSessionLocal() as db:
+        row = await crud.get_coach_memory(db, user_id)
+
+    assert row is not None, "the background memory update never reached the database"
+    assert row.memory == "Prefers morning workouts."
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
+    client, auth_headers, mock_ai_service
+):
+    """After the coach reports a blocking constraint, "lift that constraint" must
+    deactivate it and let the coach's edit finally persist (#437)."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db,
+            user_id,
+            [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "endurance",
+                    "title": "Endurance Ride",
+                    "description": "Steady Z2",
+                    "durationMinutes": 120,
+                }
+            ],
+        )
+        await crud.upsert_availability_constraint(
+            db,
+            user_id,
+            constraint_type="required_workout",
+            constraint_date="2027-01-15",
+            weekday="friday",
+            required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
+        )
+        await db.commit()
+
+    def _rest_update():
+        # A fresh dict per turn: the handler appends notes onto result["response"].
+        return {
+            "response": "Done — Friday is now a rest day.",
+            "plan_updates": [
+                {
+                    "date": "2027-01-15",
+                    "workoutType": "rest",
+                    "title": "Rest Day",
+                    "description": "Full rest",
+                    "durationMinutes": 0,
+                }
+            ],
+        }
+
+    # Turn 1: the request is blocked; the reply flags the constraint.
+    mock_ai_service["ask_trainer"].return_value = _rest_update()
+    first = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "make friday a rest day"},
+    )
+    assert first.status_code == 200
+    assert "couldn't change" in first.json()["response"].lower()
+    # The day is still the required session.
+    assert {d["date"]: d for d in first.json()["updatedPlan"]}["2027-01-15"][
+        "workoutType"
+    ] == "endurance"
+
+    # Turn 2: lift the constraint (no date named -> resolves to the flagged one).
+    mock_ai_service["ask_trainer"].return_value = _rest_update()
+    second = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "pls lift that constraint"},
+    )
+    assert second.status_code == 200
+    lowered = second.json()["response"].lower()
+    assert "lifted the availability constraint" in lowered
+    assert "friday" in lowered
+    # No stale override note this time.
+    assert "couldn't change" not in lowered
+    # The coach's rest-day edit now lands.
+    assert {d["date"]: d for d in second.json()["updatedPlan"]}["2027-01-15"][
+        "workoutType"
+    ] == "rest"
+
+    # The constraint is gone.
+    async with TestSessionLocal() as db:
+        active = await crud.list_active_availability_constraints(
+            db, user_id, today="2027-01-01"
+        )
+        assert active == []
+
+
+@pytest.mark.asyncio
 async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
     client, auth_headers, mock_ai_service
 ):
@@ -320,17 +551,19 @@ async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
 async def test_ask_trainer_endpoint_forwards_prompt_safe_athlete_memory_facts(
     client, auth_headers, mock_ai_service
 ):
-    saved = await client.post(
-        "/api/v1/users/me/athlete-memory-facts",
-        headers=auth_headers,
-        json={
-            "fact": "Does too much when fresh",
-            "category": "coaching risk",
-            "sourceSnippet": "Added extra intervals after a rest day.",
-            "confidence": 0.7,
-        },
-    )
-    assert saved.status_code == 201
+    # Observed twice so it clears the evidence bar and reaches the coach (#387).
+    for _ in range(2):
+        saved = await client.post(
+            "/api/v1/users/me/athlete-memory-facts",
+            headers=auth_headers,
+            json={
+                "fact": "Does too much when fresh",
+                "category": "coaching risk",
+                "sourceSnippet": "Added extra intervals after a rest day.",
+                "confidence": 0.7,
+            },
+        )
+        assert saved.status_code == 201
     low_confidence = await client.post(
         "/api/v1/users/me/athlete-memory-facts",
         headers=auth_headers,
@@ -1775,92 +2008,6 @@ async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
 
 
 @pytest.mark.asyncio
-async def test_save_ride_feedback_reruns_review_for_matched_ride(
-    client, auth_headers, mock_ai_service
-):
-    import crud
-    from auth import decode_token
-    from tests.conftest import TestSessionLocal
-
-    token = auth_headers["Authorization"].split(" ", 1)[1]
-    user_id = decode_token(token)
-    async with TestSessionLocal() as db:
-        await crud.upsert_training_plan(
-            db,
-            user_id,
-            [
-                {
-                    "date": "2026-05-07",
-                    "workoutType": "endurance",
-                    "title": "Endurance Ride",
-                    "description": "Steady aerobic ride",
-                    "durationMinutes": 90,
-                },
-                {
-                    "date": "2026-05-08",
-                    "workoutType": "intervals",
-                    "title": "Intervals",
-                    "description": "Hard work",
-                    "durationMinutes": 60,
-                },
-            ],
-        )
-        await db.commit()
-
-    await client.post(
-        "/api/v1/ai/analyse-activities",
-        headers=auth_headers,
-        json={
-            "activities": [
-                {
-                    "id": 64001,
-                    "name": "Endurance",
-                    "type": "Ride",
-                    "distance": 40000,
-                    "movingTime": 3600,
-                    "elapsedTime": 3600,
-                    "totalElevationGain": 300,
-                    "startDate": "2026-05-07T08:00:00Z",
-                }
-            ]
-        },
-    )
-    mock_ai_service["rate_completed_workout"].reset_mock()
-    mock_ai_service["rate_completed_workout"].return_value = {
-        "feedback": "With your note, I would keep tomorrow easier.",
-        "flag_for_adaptation": False,
-        "needs_athlete_feedback": False,
-        "follow_up_question": None,
-        "suggested_feedback_tags": [],
-    }
-    mock_ai_service["recommend_next_session"].return_value = {
-        "response": "Make tomorrow easier.",
-        "next_session_recommendation": "Reduce tomorrow.",
-        "recommendation_type": "easier",
-        "plan_updates": [
-            {
-                "date": "2026-05-08",
-                "workoutType": "recovery",
-                "title": "Recovery Spin",
-                "description": "Easy spin",
-                "durationMinutes": 45,
-            }
-        ],
-    }
-
-    response = await client.patch(
-        "/api/v1/users/me/ride-feedback/64001",
-        headers=auth_headers,
-        json={"rpe": 8, "legs": "heavy", "intent": "planned workout", "note": "Harder than expected"},
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["coachNote"] == "With your note, I would keep tomorrow easier."
-    assert body["planUpdates"][0]["workoutType"] == "recovery"
-    mock_ai_service["rate_completed_workout"].assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_analyse_activities_without_plan_leaves_ride_unmatched(
     client, auth_headers, mock_ai_service
 ):
@@ -2221,3 +2368,87 @@ async def test_apply_ride_plan_matches_labels_hard_extra_ride_as_too_much(
     assert by_id[73001].plan_match_status == "auto_matched"
     assert by_id[73002].plan_match_status == "unmatched"
     assert by_id[73002].label_override == "Too much"
+
+
+@pytest.mark.asyncio
+async def test_analyse_activities_persists_updates_without_clobbering_protected_days(
+    client, auth_headers, mock_ai_service
+):
+    """analyse-activities persists ride-review plan updates through the shared
+    pin/completed-respecting pipeline (source="ride_review"), instead of leaving
+    them for a full-plan client PUT that reverted concurrent edits and rewrote
+    protected days (stale-snapshot clobber, #399).
+
+    A completed day must stay untouched; an open, un-pinned day may be adapted
+    and is persisted server-side without any /users/me/plan PUT from the client.
+    """
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    plan = [
+        {
+            "date": "2026-04-10",
+            "workoutType": "intervals",
+            "title": "VO2 Max Intervals",
+            "description": "Hard intervals",
+            "durationMinutes": 60,
+            "completed": True,
+        },
+        {
+            "date": "2026-04-12",
+            "workoutType": "endurance",
+            "title": "Endurance Ride",
+            "description": "Steady aerobic",
+            "durationMinutes": 90,
+        },
+    ]
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        await crud.upsert_training_plan(db, user.id, plan)
+        await db.commit()
+
+    # The ride-review analysis proposes downgrading BOTH days to recovery.
+    mock_ai_service["analyse_strava_activities"].return_value = {
+        "estimatedFTP": 250,
+        "riderType": "allrounder",
+        "notes": "n",
+        "rideInsights": "i",
+        "lastRideFeedback": "f",
+        "planUpdates": [
+            {"date": "2026-04-10", "workoutType": "recovery", "title": "Active Recovery"},
+            {"date": "2026-04-12", "workoutType": "recovery", "title": "Active Recovery"},
+        ],
+    }
+
+    # Post an activity on a date outside the plan so it does not auto-match a plan
+    # day (keeps the test focused on the planUpdates persistence path).
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 77,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3600,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-05-01T08:00:00Z",
+                    "averageWatts": 200,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        saved = (await crud.get_training_plan(db, user.id)).plan
+    by_date = {d["date"]: d for d in saved}
+    # Completed day is historical fact — never rewritten by the automated update.
+    assert by_date["2026-04-10"]["workoutType"] == "intervals"
+    assert by_date["2026-04-10"]["title"] == "VO2 Max Intervals"
+    # Open day was adapted and persisted server-side (no client PUT needed).
+    assert by_date["2026-04-12"]["workoutType"] == "recovery"

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from services.availability import extract_availability_constraints
+from services.availability import (
+    extract_availability_constraints,
+    extract_constraint_lift,
+)
 
 TODAY = date(2026, 6, 3)  # a Wednesday
 
@@ -81,3 +84,87 @@ def test_german_phrasing_supported():
         "Ich habe keine Zeit für training am freitag", today=TODAY
     )
     assert any(r["weekday"] == "friday" for r in result)
+
+
+def test_rest_day_not_pinned_as_required_session():
+    # #412: "tomorrow off? saturday and sunday i could do long endurance" must
+    # not cross-apply the long-session requirement onto the rest day. The prod
+    # bug pinned a required endurance session onto the exact day the athlete
+    # asked to take off, so the coach could never clear it.
+    result = extract_availability_constraints(
+        "and tomorrow off? saturday and sunday i could do long endurance",
+        today=TODAY,  # Wednesday -> tomorrow = Thursday 2026-06-04
+    )
+    required = [r for r in result if r["constraint_type"] == "required_workout"]
+    required_dates = {r["constraint_date"] for r in required}
+    # The off day (tomorrow) is not required.
+    assert "2026-06-04" not in required_dates
+    # Saturday and Sunday still get the long endurance requirement.
+    assert required_dates == {"2026-06-06", "2026-06-07"}
+    assert all(
+        r["required_workout"]["workoutType"] == "endurance" for r in required
+    )
+
+
+def test_intent_does_not_leak_across_clauses():
+    # A "no training" clause and a separate "long ride" clause each bind only to
+    # their own day, even when both appear in one message.
+    result = extract_availability_constraints(
+        "cannot ride monday. long ride on saturday", today=TODAY
+    )
+    by_date = {(r["constraint_type"], r["constraint_date"]) for r in result}
+    assert ("no_training", "2026-06-08") in by_date  # next monday
+    assert ("required_workout", "2026-06-06") in by_date  # saturday
+    # Monday is not also required, and saturday is not also a no-training day.
+    assert ("required_workout", "2026-06-08") not in by_date
+    assert ("no_training", "2026-06-06") not in by_date
+
+
+def test_same_intent_still_spans_days_joined_by_and():
+    # "and" joins same-intent days within one clause; both must be captured.
+    result = extract_availability_constraints(
+        "unavailable for training monday and today", today=TODAY
+    )
+    dates = {r["constraint_date"] for r in result}
+    assert dates == {"2026-06-08", "2026-06-03"}  # next monday, today
+
+
+# --- Lifting constraints (#437) -------------------------------------------
+
+
+def test_lift_bare_request_detected_without_dates():
+    # "pls lift that constraint" is the exact phrasing the override note invites.
+    result = extract_constraint_lift("pls lift that constraint", today=TODAY)
+    assert result == {"lift": True, "dates": []}
+
+
+def test_lift_german_sperre_aufheben_detected():
+    result = extract_constraint_lift("hebe die Sperre bitte auf", today=TODAY)
+    assert result["lift"] is True
+    assert result["dates"] == []
+
+
+def test_lift_with_named_day_resolves_date():
+    result = extract_constraint_lift(
+        "remove the constraint on friday", today=TODAY
+    )
+    assert result["lift"] is True
+    assert result["dates"] == ["2026-06-05"]  # next friday
+
+
+def test_lift_ignores_day_in_unrelated_clause():
+    # The day named in a separate clause is not swept into the lift.
+    result = extract_constraint_lift(
+        "cancel that constraint. monday i am unavailable", today=TODAY
+    )
+    assert result["lift"] is True
+    assert result["dates"] == []
+
+
+def test_no_lift_for_ordinary_message():
+    assert extract_constraint_lift("make friday a rest day", today=TODAY) == {
+        "lift": False,
+        "dates": [],
+    }
+    # "remove the warmup" is not a constraint lift.
+    assert extract_constraint_lift("remove the warmup", today=TODAY)["lift"] is False

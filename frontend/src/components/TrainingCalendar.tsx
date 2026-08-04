@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  Activity,
   CalendarDays,
   CheckCircle,
   ChevronLeft,
@@ -17,9 +18,12 @@ import {
 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import type { RaceEvent, TrainingDay } from '../store/useAppStore'
+import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
+import { formatPlanDuration } from '../utils/planDuration'
+import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
+import WeatherBadge from './WeatherBadge'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -43,11 +47,68 @@ const typeEmoji: Record<TrainingDay['workoutType'], string> = {
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+/**
+ * How demanding each workout type is, for picking a two-a-day's headline
+ * session — the one whose colour tints the calendar cell. An easy AM spin next
+ * to a PM interval block should read as an interval day, not a recovery day.
+ */
+const typeWeight: Record<TrainingDay['workoutType'], number> = {
+  rest: 0,
+  recovery: 1,
+  endurance: 2,
+  strength: 3,
+  tempo: 4,
+  intervals: 5,
+  race: 6,
+}
+
+/** The hardest session of a day, or `null` when nothing is planned. */
+function headlineSession(sessions: TrainingDay[]): TrainingDay | null {
+  if (sessions.length === 0) return null
+  return sessions.reduce((hardest, session) =>
+    typeWeight[session.workoutType] > typeWeight[hardest.workoutType] ? session : hardest
+  )
+}
+
 interface Props {
   editableEvents?: boolean
+  /** Overlay logged (actual) activities from rideMetricsHistory on each day (#369). */
+  showLoggedActivities?: boolean
   onRaceEventAdded?: (event: RaceEvent) => void
   onRaceEventRemoved?: (event: RaceEvent) => void
   onRaceEventUpdated?: (event: RaceEvent) => void
+}
+
+/** Short duration label for a logged ride, e.g. "1h 5m" or "45m". */
+function formatLoggedDuration(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return ''
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+/** Colour + label describing how a logged ride lines up with the plan (#369). */
+function loggedRideStatus(
+  ride: RideMetricPoint,
+  hasPlan: boolean
+): { dot: string; label: string } {
+  switch (ride.planMatchStatus) {
+    case 'auto_matched':
+    case 'manual_matched':
+      return { dot: 'bg-emerald-500', label: 'matched to plan' }
+    case 'ambiguous':
+      return { dot: 'bg-amber-500', label: 'ambiguous match' }
+    default:
+      return hasPlan
+        ? { dot: 'bg-sky-500', label: 'unmatched' }
+        : { dot: 'bg-sky-500', label: 'unplanned' }
+  }
+}
+
+function rideKey(ride: RideMetricPoint): string {
+  return ride.externalActivityId
+    ? `external:${ride.externalActivityId}`
+    : `strava:${ride.stravaActivityId}`
 }
 
 interface RaceEventForm {
@@ -96,6 +157,7 @@ function formatDistance(value: number): string {
 
 export default function TrainingCalendar({
   editableEvents = false,
+  showLoggedActivities = false,
   onRaceEventAdded,
   onRaceEventRemoved,
   onRaceEventUpdated,
@@ -105,6 +167,8 @@ export default function TrainingCalendar({
     authToken,
     plan,
     raceEvents,
+    rideMetricsHistory,
+    weatherForecast,
     addRaceEvent,
     removeRaceEvent,
     updateRaceEvent,
@@ -113,6 +177,8 @@ export default function TrainingCalendar({
       authToken: s.authToken,
       plan: s.trainingPlan,
       raceEvents: s.raceEvents,
+      rideMetricsHistory: s.rideMetricsHistory,
+      weatherForecast: s.weatherForecast,
       addRaceEvent: s.addRaceEvent,
       removeRaceEvent: s.removeRaceEvent,
       updateRaceEvent: s.updateRaceEvent,
@@ -135,6 +201,15 @@ export default function TrainingCalendar({
     return grouped
   }, [raceEvents])
 
+  const ridesByDate = useMemo(() => {
+    const grouped: Record<string, RideMetricPoint[]> = {}
+    if (!showLoggedActivities) return grouped
+    for (const ride of rideMetricsHistory) {
+      grouped[ride.activityDate] = [...(grouped[ride.activityDate] ?? []), ride]
+    }
+    return grouped
+  }, [rideMetricsHistory, showLoggedActivities])
+
   const monthLabel = visibleMonth.toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric',
@@ -146,26 +221,36 @@ export default function TrainingCalendar({
     const monday = new Date(firstCalendarDate)
     monday.setDate(firstCalendarDate.getDate() - ((dayOfWeek + 6) % 7))
 
-    const result: Array<Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }>> = []
+    type Cell = {
+      date: string
+      /** Every session planned for the date, AM→PM; empty when nothing is planned. */
+      sessions: TrainingDay[]
+      events: RaceEvent[]
+      rides: RideMetricPoint[]
+    }
+    const result: Cell[][] = []
     for (let w = 0; w < 6; w++) {
-      const week: Array<{ date: string; day: TrainingDay | null; events: RaceEvent[] }> = []
+      const week: Cell[] = []
       for (let d = 0; d < 7; d++) {
         const date = new Date(monday)
         date.setDate(monday.getDate() + w * 7 + d)
         const iso = formatIsoDate(date)
         week.push({
           date: iso,
-          day: plan.find((p) => p.date === iso) ?? null,
+          // A date may hold a two-a-day; the old `.find()` rendered only the
+          // first session and silently hid the other (#496).
+          sessions: sessionsForDate(plan, iso),
           events: racesByDate[iso] ?? [],
+          rides: ridesByDate[iso] ?? [],
         })
       }
       result.push(week)
     }
     return result
-  }, [plan, racesByDate, visibleMonth])
+  }, [plan, racesByDate, ridesByDate, visibleMonth])
 
   const selectedEvents = selectedDate ? racesByDate[selectedDate] ?? [] : []
-  const selectedPlanDay = selectedDate ? plan.find((day) => day.date === selectedDate) : null
+  const selectedPlanSessions = sessionsForDate(plan, selectedDate)
   const canSave =
     Boolean(authToken) &&
     Boolean(form.date) &&
@@ -278,11 +363,21 @@ export default function TrainingCalendar({
         </div>
         {weeks.map((week, wi) => (
           <div key={wi} className="grid grid-cols-7 border-b last:border-b-0">
-            {week.map(({ date, day, events }) => {
+            {week.map(({ date, sessions, events, rides }) => {
               const isToday = date === today
               const isPast = date < today
               const isVisibleMonth = parseLocalDate(date).getMonth() === visibleMonth.getMonth()
+              // The cell is tinted by the day's headline session — the hardest
+              // one — so a two-a-day reads as its heaviest load at a glance.
+              const day = headlineSession(sessions)
+              const allCompleted = sessions.length > 0 && sessions.every((s) => s.completed)
               const baseColor = day ? typeColors[day.workoutType] : 'bg-gray-50 text-gray-500 border-gray-200'
+              // A planned session in the past with nothing logged and no completion mark.
+              const isMissed =
+                showLoggedActivities &&
+                isPast &&
+                rides.length === 0 &&
+                sessions.some((s) => !s.completed && s.workoutType !== 'rest')
               return (
                 <button
                   key={date}
@@ -291,30 +386,90 @@ export default function TrainingCalendar({
                   onClick={() => {
                     if (editableEvents) {
                       openEventEditor(date)
-                    } else if (day) {
-                      navigate(`/workout/${day.date}`)
+                    } else if (sessions.length > 0 || rides.length > 0) {
+                      navigate(`/workout/${date}`)
                     }
                   }}
-                  className={`min-h-[104px] border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
+                  className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
                     isToday ? 'ring-2 ring-inset ring-amber-500' : ''
-                  } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !day.completed ? 'opacity-60' : ''}`}
+                  } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !allCompleted ? 'opacity-60' : ''}`}
                 >
-                  <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-xs font-bold">{parseLocalDate(date).getDate()}</span>
-                    {day?.completed && (
+                    {allCompleted ? (
                       <CheckCircle size={12} className="text-green-500 flex-shrink-0" />
+                    ) : (
+                      // Forecast on planned days inside the ~16-day horizon (#495).
+                      // Past and unplanned days show nothing rather than a stale
+                      // or irrelevant reading.
+                      day && !isPast && (
+                        <WeatherBadge
+                          forecast={weatherForecast[date]}
+                          size={10}
+                          className="flex-shrink-0 text-[10px] font-semibold"
+                        />
+                      )
                     )}
                   </div>
-                  {day ? (
+                  {sessions.length > 0 ? (
                     <>
-                      <div className="text-base leading-none mb-0.5">{typeEmoji[day.workoutType]}</div>
-                      <p className="text-xs font-medium leading-tight truncate">{day.title}</p>
-                      {day.workoutType !== 'rest' && (
-                        <p className="text-xs opacity-70">{day.durationMinutes}m</p>
+                      {/* Each session gets its own row, so "AM Yoga · PM
+                          Endurance" is visible without opening the day (#496). */}
+                      {sessions.map((session) => {
+                        const label = sessionLabel(session, sessions.length)
+                        return (
+                          <div key={sessionKey(session)} className="mb-0.5 last:mb-0">
+                            <div className="flex items-center gap-1">
+                              <span className="text-base leading-none">
+                                {typeEmoji[session.workoutType]}
+                              </span>
+                              {label && (
+                                <span className="text-[9px] font-bold uppercase opacity-70">
+                                  {label}
+                                </span>
+                              )}
+                              {sessions.length > 1 && session.completed && (
+                                <CheckCircle size={9} className="text-green-600 flex-shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-xs font-medium leading-tight truncate">
+                              {session.title}
+                            </p>
+                            {session.workoutType !== 'rest' && (
+                              <p className="text-xs opacity-70">{formatPlanDuration(session)}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {isMissed && (
+                        <p className="text-[10px] font-semibold text-red-600">missed</p>
                       )}
                     </>
                   ) : (
                     <p className="text-xs text-gray-400 mt-5">{editableEvents ? 'Add race' : ''}</p>
+                  )}
+                  {rides.length > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {rides.slice(0, 2).map((ride) => {
+                        const status = loggedRideStatus(ride, Boolean(day))
+                        const duration = formatLoggedDuration(ride.durationSeconds)
+                        const sport = ride.sportType.toLowerCase().replace(/_/g, ' ')
+                        return (
+                          <div
+                            key={rideKey(ride)}
+                            title={`Logged: ${sport}${duration ? ` · ${duration}` : ''} (${status.label})`}
+                            className="flex items-center gap-1 rounded border border-gray-200 bg-white/80 px-1 py-0.5 text-[10px] font-medium text-gray-700"
+                          >
+                            <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${status.dot}`} />
+                            <Activity size={9} className="flex-shrink-0 text-gray-500" />
+                            <span className="truncate">{duration || sport}</span>
+                          </div>
+                        )
+                      })}
+                      {rides.length > 2 && (
+                        <p className="text-[10px] font-semibold text-gray-500">+{rides.length - 2} more</p>
+                      )}
+                    </div>
                   )}
                   {events.length > 0 && (
                     <div className="absolute left-1.5 right-1.5 bottom-1.5 space-y-1">
@@ -360,15 +515,30 @@ export default function TrainingCalendar({
             </div>
 
             <div className="space-y-4 p-4">
-              {selectedPlanDay && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/workout/${selectedPlanDay.date}`)}
-                  className="text-xs font-semibold text-amber-700 hover:text-amber-800"
-                >
-                  Open planned workout
-                </button>
-              )}
+              {/* One link per planned session, so the evening ride is reachable
+                  from the calendar and not just the morning one (#496). */}
+              {selectedPlanSessions.map((session) => {
+                const label = sessionLabel(session, selectedPlanSessions.length)
+                const slot = sessionSlot(session)
+                return (
+                  <button
+                    key={sessionKey(session)}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        slot > 0
+                          ? `/workout/${session.date}?slot=${slot}`
+                          : `/workout/${session.date}`
+                      )
+                    }
+                    className="block text-xs font-semibold text-amber-700 hover:text-amber-800"
+                  >
+                    {label
+                      ? `Open ${label} planned workout`
+                      : 'Open planned workout'}
+                  </button>
+                )
+              })}
 
               {selectedEvents.length > 0 && (
                 <div className="space-y-2">

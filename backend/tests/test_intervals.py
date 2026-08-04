@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -10,7 +11,11 @@ from database import async_session_maker
 import models
 import schemas
 from routers import intervals as intervals_router
-from services.intervals_service import IntervalsAuthError, intervals_activity_id
+from services.intervals_service import (
+    IntervalsAPIError,
+    IntervalsAuthError,
+    intervals_activity_id,
+)
 
 
 @pytest.mark.asyncio
@@ -240,8 +245,69 @@ async def test_intervals_import_success_and_dedupe(auth_headers, monkeypatch):
     ride = rows[0]
     assert ride.strava_activity_id == intervals_activity_id("i123")
     assert ride.activity_name == "Garmin Morning Ride"
-    assert ride.avg_power_w == 215
+    # Provider average (average_watts=210) wins over the stream mean of 215
+    # ([200,220,210,230]/4) — the stream is downsampled/lossy (#466).
+    assert ride.avg_power_w == 210
     assert ride.tss is not None
+
+
+@pytest.mark.asyncio
+async def test_intervals_import_invalidates_cached_login_summary(
+    auth_headers, monkeypatch
+):
+    """Re-importing can change a ride's classification, so the cached login
+    summary must be cleared for lazy regeneration (#482)."""
+    import crud
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        return [
+            {
+                "id": "i777",
+                "name": "Evening Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T18:00:00",
+                "moving_time": 240,
+            }
+        ]
+
+    async def fake_fetch_activity_detail(*args, **kwargs):
+        return {"average_watts": 210}
+
+    async def fake_fetch_activity_streams(*args, **kwargs):
+        return {"watts": [200, 220, 210, 230], "time": [0, 60, 120, 180]}
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_detail", fake_fetch_activity_detail
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_streams", fake_fetch_activity_streams
+    )
+
+    # Seed a cached login summary that must be cleared by the import.
+    async with async_session_maker() as session:
+        await crud.upsert_rider_assessment(
+            session, user_id, estimated_ftp=280, login_summary="stale summary text"
+        )
+        await session.commit()
+
+    await intervals_router.run_intervals_import(
+        user_id=user_id,
+        api_key="secret",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=280,
+    )
+
+    async with async_session_maker() as session:
+        assessment = await crud.get_rider_assessment(session, user_id)
+    assert assessment is not None
+    assert not assessment.login_summary  # cleared for lazy regeneration
 
 
 @pytest.mark.asyncio
@@ -383,3 +449,102 @@ async def test_intervals_import_skips_activity_on_transient_failure(
             select(models.RideMetric).where(models.RideMetric.user_id == user_id)
         )
     assert ride is None  # nothing imported with degraded data
+
+
+# ---------------------------------------------------------------------------
+# Import endpoints: start guard, progress polling, error status (#326)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_intervals_token(user_id: str) -> None:
+    async with async_session_maker() as session:
+        session.add(
+            models.IntervalsToken(
+                user_id=user_id, api_key="secret", athlete_id="0", athlete_name="Rider"
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_start_intervals_import_starts(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_intervals_token(user_id)
+    intervals_router._intervals_import_progress.pop(user_id, None)
+    monkeypatch.setattr(intervals_router, "run_intervals_import", AsyncMock())
+
+    resp = await client.post("/api/v1/intervals/import-history", headers=auth_headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "started"
+    assert intervals_router._intervals_import_progress[user_id]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_start_intervals_import_already_running(client, auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_intervals_token(user_id)
+    intervals_router._intervals_import_progress[user_id] = {"status": "running"}
+    monkeypatch.setattr(intervals_router, "run_intervals_import", AsyncMock())
+
+    resp = await client.post("/api/v1/intervals/import-history", headers=auth_headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "already_running"
+
+
+@pytest.mark.asyncio
+async def test_get_intervals_import_progress_reports_status_then_idle(client, auth_headers):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    intervals_router._intervals_import_progress[user_id] = intervals_router.mark_finished(
+        {"status": "done", "total": 1, "processed": 1, "imported": 1, "skipped": 0,
+         "failed_activities": [], "error": ""}
+    )
+
+    resp = await client.get("/api/v1/intervals/import-progress", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "done"
+
+    intervals_router._intervals_import_progress.pop(user_id, None)
+    idle = await client.get("/api/v1/intervals/import-progress", headers=auth_headers)
+    assert idle.json()["status"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_intervals_import_api_error_sets_error(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        raise IntervalsAPIError("Intervals.icu list error 500")
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    await intervals_router.run_intervals_import(
+        user_id=user_id, api_key="k", athlete_id="0",
+        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+    )
+
+    progress = intervals_router._intervals_import_progress[user_id]
+    assert progress["status"] == "error"
+    assert "500" in progress["error"]
+    assert "finished_at" in progress
+
+
+@pytest.mark.asyncio
+async def test_intervals_import_generic_error_sets_error(auth_headers, monkeypatch):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def fake_fetch_recent_activities(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    await intervals_router.run_intervals_import(
+        user_id=user_id, api_key="k", athlete_id="0",
+        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+    )
+
+    progress = intervals_router._intervals_import_progress[user_id]
+    assert progress["status"] == "error"
+    assert "boom" in progress["error"]
+    assert "finished_at" in progress

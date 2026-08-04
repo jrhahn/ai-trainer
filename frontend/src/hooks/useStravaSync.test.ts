@@ -13,7 +13,7 @@ const {
   mockAnalyseStravaActivities,
   mockGenerateTrainingPlan,
   mockRefreshLoginSummary,
-  mockSaveTrainingPlan,
+  mockFetchTrainingPlan,
   mockUpdateCurrentUser,
   mockFetchCurrentUser,
   mockFetchMetricsHistory,
@@ -27,7 +27,7 @@ const {
   mockAnalyseStravaActivities: vi.fn(),
   mockGenerateTrainingPlan: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
-  mockSaveTrainingPlan: vi.fn(),
+  mockFetchTrainingPlan: vi.fn(),
   mockUpdateCurrentUser: vi.fn(),
   mockFetchCurrentUser: vi.fn(),
   mockFetchMetricsHistory: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('../services/ai', () => ({
 }))
 
 vi.mock('../services/user', () => ({
-  saveTrainingPlan: mockSaveTrainingPlan,
+  fetchTrainingPlan: mockFetchTrainingPlan,
   updateCurrentUser: mockUpdateCurrentUser,
   fetchCurrentUser: mockFetchCurrentUser,
   fetchMetricsHistory: mockFetchMetricsHistory,
@@ -94,7 +94,7 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue(undefined)
-  mockSaveTrainingPlan.mockResolvedValue([])
+  mockFetchTrainingPlan.mockResolvedValue([])
   mockGenerateTrainingPlan.mockResolvedValue([])
   mockRefreshLoginSummary.mockResolvedValue('')
   mockGetStravaActivities.mockResolvedValue([])
@@ -194,6 +194,53 @@ describe('useStravaSync', () => {
         'strava'
       )
       expect(result.current.analysisStatus).toBe('done')
+    })
+  })
+
+  it('re-fetches the authoritative plan on incremental sync instead of persisting the local snapshot (#399)', async () => {
+    const freshPlan = [
+      {
+        date: '2026-07-08',
+        workoutType: 'intervals',
+        title: 'VO2 Max Intervals',
+        description: 'Hard intervals',
+        durationMinutes: 60,
+      },
+    ]
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockGetNewStravaActivities.mockResolvedValue([
+      {
+        id: 201,
+        name: 'New Ride',
+        type: 'Ride',
+        distance: 20000,
+        moving_time: 3000,
+        start_date: '2025-01-11T08:00:00Z',
+        average_watts: 210,
+      },
+    ])
+    // Backend returns targeted plan updates (already persisted server-side under
+    // source="ride_review"). The hook must NOT PUT its stale in-memory plan back.
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: mockAssessment,
+      planUpdates: [{ date: '2026-07-08', workoutType: 'recovery', title: 'Active Recovery' }],
+    })
+    mockFetchTrainingPlan.mockResolvedValue(freshPlan)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      lastStravaActivityId: 100,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockGetNewStravaActivities).toHaveBeenCalled()
+      // Reconciles with the server's authoritative plan rather than the snapshot.
+      expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
+      expect(useAppStore.getState().trainingPlan).toEqual(freshPlan)
     })
   })
 

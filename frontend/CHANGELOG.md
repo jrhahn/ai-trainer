@@ -5,6 +5,179 @@ All notable changes to the frontend will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.33.0] - 2026-07-31
+
+### Added
+
+- **Expert mode shows the coach's model of the athlete** (`pages/DashboardPage.tsx`,
+  `components/AthletePerformanceModelCard.tsx`) — the performance-model card, until
+  now reachable only by scrolling Settings, is rendered on the dashboard whenever
+  expert mode is on, next to the training calendar, plan-changes and progression
+  panels. It states what the coach infers and how sure it is: each attribute (FTP,
+  MAP, VO₂max, fractional utilization, aerobic endurance, fatigue resistance,
+  anaerobic capacity) with a confidence bar, its evidence and what is still missing;
+  the likely limiter with its confidence, evidence *and* counter-evidence; open
+  working hypotheses with their alternative explanations; and the ride count and
+  window the whole thing was derived from. The card keeps its Settings mount for
+  non-expert users, and both mounts share one react-query cache, so opening the
+  dashboard costs no extra fetch. (#501)
+
+### Changed
+
+- **The dashboard status badge is written by the coach** (`pages/DashboardPage.tsx`,
+  `services/ai.ts`, `store/useAppStore.ts`) — the "On track" / "Slightly behind" chip
+  under the greeting is no longer computed in the browser; it is fetched with its
+  rationale from the backend status pipeline, so the coach can explain the exact word
+  it is shown rather than confabulating one. The browser-side heuristic it replaces
+  was wrong in three ways: it dropped `ambiguous` ride↔plan matches (which is what a
+  two-a-day produces), it counted a declined *optional* session as a miss, and it
+  could not see unplanned work at all. (#499)
+- **Card spacing is set by the caller** (`components/AthletePerformanceModelCard.tsx`)
+  — the component took a hardcoded `mt-6`; it now accepts an optional `className` and
+  the Settings page passes the margin, leaving that page unchanged.
+
+## [0.32.0] - 2026-07-30
+
+### Added
+
+- **Two-a-days across the UI** (`utils/planSessions.ts`, `components/TodayCard.tsx`,
+  `components/TrainingCalendar.tsx`, `pages/WorkoutPage.tsx`,
+  `store/useAppStore.ts`, `services/user.ts`) — a date can now hold more than one
+  planned session, so every `plan.find((d) => d.date === iso)` (which silently
+  rendered the first session and dropped the rest) was replaced with an explicit
+  list. A new `utils/planSessions` module owns the session identity — `(date, slot)`,
+  where a legacy day with no `slot` reads as slot 0 — plus `sessionsForDate`,
+  `sessionAtSlot` and `sessionLabel`.
+- **Today's card lists every session** (`components/TodayCard.tsx`) — AM yoga and PM
+  endurance each get their own card in slot order, labelled with the athlete's own
+  time-of-day wording ("AM"/"PM") or an explicit position ("2/2"). A single-workout
+  day renders exactly as before, with no label — a lone session must not sprout one
+  implying there is another.
+- **Calendar cells stack their sessions** (`components/TrainingCalendar.tsx`) — a
+  day cell shows each planned session with its own emoji, label, title and duration,
+  so "AM Yoga · PM Endurance" is readable without opening the day. The cell is tinted
+  by the day's *hardest* session, so an easy morning spin next to an evening interval
+  block reads as an interval day. The whole-day tick only appears once every session
+  is done, and the race-event modal offers one "Open planned workout" link per session.
+- **Workout page session switcher** (`pages/WorkoutPage.tsx`) — a two-a-day gets a
+  tab strip listing every session on the date; `?slot=` selects which one is open and
+  no slot opens the day's first, so every existing `/workout/:date` link keeps
+  working. Logging feedback and requesting a coach review now apply to the open
+  session rather than to the date.
+
+### Changed
+
+- **Store updates are per session** (`store/useAppStore.ts`) — `updateTrainingDay`
+  and `logWorkout` take an optional `slot`, defaulting to the day's first session.
+  Workout logs are keyed by session via the new `workoutLogKey`, which mirrors the
+  backend: the first session of a date keeps the bare date, so every log written
+  before two-a-days existed still resolves.
+
+## [0.31.0] - 2026-07-30
+
+### Added
+
+- **Weather on planned rides** (`components/WeatherBadge.tsx`, `utils/weather.ts`,
+  `components/TrainingCalendar.tsx`, `components/TodayCard.tsx`,
+  `components/WorkoutCard.tsx`, `store/useAppStore.ts`, `services/user.ts`) — the
+  upcoming forecast near the athlete's training location is fetched during dashboard
+  hydration and shown as a weather icon plus temperature on each planned day: in the
+  calendar grid, on today's session card, and on the upcoming-session rows. Extreme
+  days are colour-coded from the backend's coaching `loadFlag` so a 39 °C Saturday is
+  visible at a glance, and the full forecast (condition, range, precipitation, notable
+  wind) is exposed as an accessible label. Days outside the ~16-day horizon, days with
+  no planned session, and past days render nothing — an absent forecast must look
+  absent rather than like a guess. The icon/format logic is now shared with the
+  logged-activity weather that already existed, so planned and actual conditions read
+  as the same kind of information.
+- **Editable training location** (`components/HomeLocationSettings.tsx`,
+  `pages/SettingsPage.tsx`, `services/user.ts`) — a settings card showing where the
+  weather forecast is taken from, how much ride history backs an inferred location
+  (and with what confidence), and whether the athlete has overridden it. Saving stores
+  it as `user_set`, which the backend then protects from later inference, so an
+  override sticks. The card also points out that telling the coach "I mostly train
+  near Freiburg now" does the same thing.
+
+### Changed
+
+- **Deduplicated weather presentation** (`pages/DashboardPage.tsx`) — the
+  `WeatherIcon` and `formatTemperature` helpers that lived inside `DashboardPage`
+  moved to the shared `WeatherBadge` component and `utils/weather.ts`.
+
+## [0.30.0] - 2026-07-29
+
+### Added
+
+- **Athlete Model, limiter & hypotheses UI** (`components/AthletePerformanceModelCard.tsx`,
+  `services/ai.ts`, `services/user.ts`, `pages/SettingsPage.tsx`) — a read-only
+  "Coach's understanding" card surfaces the deterministic Athlete Performance
+  Model so the athlete can see the coach's evolving physiological picture, not
+  just a metrics dashboard. Each inferred attribute shows its estimate/score with
+  a **confidence bar**, its supporting evidence, and what is still missing; the
+  **likely limiter** is highlighted with its evidence and counter-evidence; and
+  the active **coaching hypotheses** list their evidence, confidence and
+  alternative explanations. Everything is framed as an inference with uncertainty
+  ("estimates with a confidence, not measured facts"), never as hard fact, with a
+  refresh action and a clean low-data empty state. Wires up
+  `fetchAthletePerformanceModel`/`refreshAthletePerformanceModel` and the
+  `AthletePerformanceModel` types, and extends `AthleteHypothesis` with
+  `evidence`/`alternativeExplanations` (#481).
+
+### Changed
+
+- **Collapse the Coach Timeline plan-change flood** (`utils/coachTimeline.ts`,
+  `services/user.ts`) — `planUpdateEvents` now groups applied plan-day changes by
+  their coach run (`batchId`) into a single concise card (e.g. "Plan generation:
+  21 days updated (18 changed, 2 added, 1 removed)") instead of one card per
+  changed day. Single-day runs keep their detailed diff; the full per-day detail
+  stays in the plan-history log for debugging. Cards are now labelled by the run
+  source ("Coach chat", "Plan generation", "Nightly tune-up") rather than a
+  generic "Plan update" (#435).
+
+## [0.29.0] - 2026-07-19
+
+### Changed
+
+- **Carry the raw provider activity id as `external_id`** (`store/useAppStore.ts`)
+  — the Strava activity type now keeps the raw provider id as a string so an
+  intervals.icu id survives the round-trip through the store without float64
+  precision loss, letting the backend persist the true uncorrupted hash (#429).
+
+## [0.28.0] - 2026-07-05
+
+### Added
+
+- **Athlete-facing plan-change history & analytics** (`pages/WorkoutPage.tsx`,
+  `components/PlanChangesPanel.tsx`, `utils/planHistory.ts`, `services/user.ts`)
+  — each workout day gains a collapsible "Change history" timeline explaining why
+  it changed (with blocked automated attempts marked "kept your version"), and the
+  dashboard gains a "Recent plan changes" analytics panel (totals, top triggers,
+  a per-training-day timeline) shown in expert mode. Backed by the new
+  `/users/me/plan-history[/stats]` endpoints;
+  friendly trigger labels are derived client-side (#357).
+
+### Fixed
+
+- **Change history is reachable for days outside the current plan window**
+  (`pages/WorkoutPage.tsx`) — a completed/past day is pruned from the rolling plan
+  window, and `WorkoutPage` previously dead-ended on "Workout not found." for any
+  date missing from the store, hiding its change history even though the log still
+  existed. Such dates now render a lightweight fallback that auto-opens the change
+  history for that day instead (#357).
+
+## [0.27.8] - 2026-07-04
+
+### Fixed
+
+- **Import-progress polling no longer freezes when an unrelated consumer unmounts**
+  (`hooks/useImportProgress.ts`) — the shared poll timer was stopped whenever *any*
+  polling consumer unmounted (`else if (poll)`), killing live updates for every
+  other listener. Polling consumers are now reference-counted, so the timer stops
+  only when the last one unmounts; full teardown still happens when no listeners
+  remain (#328).
+
 ## [0.27.7] - 2026-07-01
 
 ### Changed
