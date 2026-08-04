@@ -13,10 +13,14 @@ active, so a call can never be invisible — an unscoped call is labelled
 ``source=unscoped`` and is a bug worth grepping for.
 
 *The input/output/cached split.* Input and output bill at very different rates
-(currently $1.50/M vs $9.00/M for the coach model) and cached input at a tenth
-of the input rate, so a single total cannot be converted to a cost at all.
-Note that ``cached`` is a *subset* of ``input``, not a fourth bucket: both
-providers report the cache hit as part of the prompt count.
+— $0.30/M vs $2.50/M for the configured coach model, ``gemini-3.5-flash-lite``
+— so a single total cannot be converted to a cost at all. Note that ``cached``
+is a *subset* of ``input``, not a fourth bucket: both providers report the
+cache hit as part of the prompt count. It is always zero on the coach model:
+flash-lite offers no context caching, implicit or explicit, which #538
+established by probe and the pricing page states outright. The field is still
+collected because it is the first thing to check after a model change, and
+because a cached token bills at a tenth of an input token where it is offered.
 
 *Attribution.* :func:`track_llm_usage` is the way to collect and persist usage
 for work that has a request or job session. It replaced a begin/finish/persist

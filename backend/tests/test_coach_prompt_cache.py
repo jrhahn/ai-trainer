@@ -84,14 +84,17 @@ def test_the_prompts_diverge_only_after_the_prefix():
 def test_the_prefix_stays_above_the_implicit_cache_minimum():
     """Below the model's minimum request size, nothing is cached at all.
 
-    Google documents 4,096 tokens for the current Flash generation. Counting
-    them exactly needs the provider's tokeniser, so this uses the usual ~4
-    chars/token rule of thumb with headroom: the prefix measured 20,521
-    characters (~5,130 tokens) when this was written, and a prompt diet that
-    quietly takes it under the threshold should fail here rather than show up
-    as a bill.
+    Google documents 4,096 tokens for the current Flash generation. The live
+    API counted this prefix at 4,270 tokens for 20,521 characters — 4.8
+    chars/token, not the usual rule-of-thumb 4 — so the floor is set from the
+    measurement rather than the estimate, and sits just under today's length.
+
+    The coach model (``flash-lite``) offers no context caching at all, so this
+    currently guards a discount we cannot collect. It is kept because the
+    threshold is the thing a prompt diet would silently cross, and the model is
+    one env variable away from changing.
     """
-    assert len(coach_static_prefix()) >= 18_000
+    assert len(coach_static_prefix()) >= 20_000
 
 
 def test_the_prefix_carries_no_athlete_data():
