@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach prompt's cacheable prefix is now a named, tested thing**
+  (`services/prompts.py`, `tests/test_coach_prompt_cache.py` (new),
+  `scripts/probe_implicit_cache.py` (new)) — production reported `cached=0` on
+  every coach call, ~16,200 input tokens per question at the full rate. #538
+  read the varying `prompt_sha` as a varying prefix, but `prompt_sha` hashes the
+  *entire* system prompt, which contains today's date and the plan: it varies by
+  construction and never could measure the prefix. Measured directly instead,
+  the prefix is byte-identical across athletes, dates and every combination of
+  optional sections — 20,521 characters, roughly 5,130 tokens — so #514's
+  reordering did hold. It is now `prompts.coach_static_prefix()` with tests that
+  fail if anything volatile is placed inside it, ahead of it, or if a prompt
+  diet takes it under the model's minimum request size. Production can say what
+  was charged but never why, so this is the only place the property can be
+  checked. What remains unknown is whether the model serves an implicit hit at
+  all: Google's documented minimum-token table lists no `flash-lite` variant,
+  the two consecutive production calls with byte-identical prompts still
+  reported `cached=0`, and other users report the same on flash-lite.
+  `scripts/probe_implicit_cache.py` settles that against the live API — the real
+  prefix, repeated calls, and an A/B between `system_instruction` and
+  leading-content placement. (#538)
+
 - **Per-call LLM cost accounting** (`services/token_accounting.py` (new),
   `services/llm.py`, `crud.py`, `models.py`, migration `20260808_000001`,
   `config.py`) — "which feature is costing me money" was not answerable from
