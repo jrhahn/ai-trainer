@@ -1168,6 +1168,15 @@ class RideMetric(Base):
     atl_after: Mapped[float | None] = mapped_column(nullable=True)
     tsb_after: Mapped[float | None] = mapped_column(nullable=True)
     ride_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # When the provider answered 404 for this row's external_activity_id. The
+    # id is then permanently dead — rows imported before the id-precision fix
+    # (#427) carry float64-corrupted ids whose originals are unrecoverable — so
+    # every backfill that would re-fetch the activity skips the row instead of
+    # asking again on the next tick (#517). NULL means "never asked, or the
+    # last answer was not a 404".
+    provider_unfetchable_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     classification_confidence: Mapped[str | None] = mapped_column(
         String(10), nullable=True
     )

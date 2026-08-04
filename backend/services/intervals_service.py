@@ -35,6 +35,19 @@ class IntervalsDataUnavailable(Exception):
     """
 
 
+class IntervalsActivityNotFound(Exception):
+    """The activity id does not exist at Intervals.icu (HTTP 404).
+
+    Permanent, unlike :class:`IntervalsDataUnavailable`: asking again can only
+    produce the same 404, so callers must record the failure and stop
+    re-requesting the id rather than retrying it on every sync tick (#517).
+    Raised only by :func:`fetch_activity_detail` — every path fetches the detail
+    before the streams, so that one gate is enough to stop the retry loop
+    without changing what a stream 404 means for callers that fetch streams
+    on their own.
+    """
+
+
 def _is_transient_intervals_status(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
 
@@ -115,6 +128,10 @@ async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any
     if _is_transient_intervals_status(resp.status_code):
         raise IntervalsDataUnavailable(
             f"transient Intervals.icu status {resp.status_code} for activity {activity_id}"
+        )
+    if resp.status_code == 404:
+        raise IntervalsActivityNotFound(
+            f"Intervals.icu has no activity {activity_id}"
         )
     if not resp.is_success:
         return {}
