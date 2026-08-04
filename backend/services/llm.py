@@ -26,48 +26,30 @@ code edits (e.g. ``OPENAI_COACH_MODEL=gpt-4o``).
 from __future__ import annotations
 
 import logging
+import time
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 import models
 from config import settings
+from services import token_accounting
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TokenUsage:
-    total: int = 0
-    # Input tokens Gemini served from its implicit cache, billed at 10 % of the
-    # normal input rate.  Tracked separately because it is the only way to tell
-    # whether the cache-friendly prompt order actually works (#514) — the totals
-    # look identical whether the cache hits or not.
+class _CallTokens:
+    """One call's token counts, normalised across providers.
+
+    ``cached`` is a subset of ``input`` in both providers' reporting, not a
+    fourth bucket — billable input is ``input - cached``.
+    """
+
+    input: int = 0
+    output: int = 0
     cached: int = 0
-
-
-_token_usage: ContextVar[TokenUsage | None] = ContextVar("token_usage", default=None)
-
-
-def begin_token_usage_collection() -> Token[TokenUsage | None]:
-    """Start collecting provider-reported token usage for the current request."""
-    return _token_usage.set(TokenUsage())
-
-
-def finish_token_usage_collection(token: Token[TokenUsage | None]) -> int:
-    """Return collected token usage and restore the previous collection context."""
-    usage = _token_usage.get()
-    total = usage.total if usage is not None else 0
-    _token_usage.reset(token)
-    return total
-
-
-def _record_token_usage(tokens: int | None) -> None:
-    if not tokens or tokens <= 0:
-        return
-    usage = _token_usage.get()
-    if usage is not None:
-        usage.total += int(tokens)
+    total: int = 0
 
 
 def _attribute_int(obj: object, *names: str) -> int | None:
@@ -78,45 +60,38 @@ def _attribute_int(obj: object, *names: str) -> int | None:
     return None
 
 
-def _openai_total_tokens(response: object) -> int | None:
+def _openai_call_tokens(response: object) -> _CallTokens:
     usage = getattr(response, "usage", None)
     if usage is None:
-        return None
-    return _attribute_int(usage, "total_tokens")
+        return _CallTokens()
+    details = getattr(usage, "prompt_tokens_details", None)
+    return _CallTokens(
+        input=_attribute_int(usage, "prompt_tokens") or 0,
+        output=_attribute_int(usage, "completion_tokens") or 0,
+        cached=(_attribute_int(details, "cached_tokens") or 0) if details else 0,
+        total=_attribute_int(usage, "total_tokens") or 0,
+    )
 
 
-def _gemini_total_tokens(response: object) -> int | None:
-    usage = getattr(response, "usage_metadata", None)
-    if usage is None:
-        return None
-    return _attribute_int(usage, "total_token_count")
+def _gemini_call_tokens(response: object) -> _CallTokens:
+    """Normalise Gemini's usage metadata.
 
-
-def _gemini_cached_tokens(response: object) -> int | None:
-    """Input tokens Gemini served from its implicit cache, if it reports any."""
-    usage = getattr(response, "usage_metadata", None)
-    if usage is None:
-        return None
-    return _attribute_int(usage, "cached_content_token_count")
-
-
-def _record_gemini_usage(response: object) -> None:
-    """Record a Gemini call's tokens, including what the implicit cache covered.
-
-    Caching is invisible in the total — a cached prompt reports the same token
-    count, only cheaper — so without this the reorder in #514 could not be told
-    apart from a no-op.
+    Thinking tokens (``thoughts_token_count``) bill at the *output* rate, so
+    they are counted as output even though the API reports them separately —
+    otherwise a model that ignores ``thinking_budget=0`` would look free. They
+    should be zero given ``_build_config``; counting them is how a regression
+    there becomes visible instead of silently expensive.
     """
-    _record_token_usage(_gemini_total_tokens(response))
-    cached = _gemini_cached_tokens(response)
-    if not cached or cached <= 0:
-        return
-    usage = _token_usage.get()
-    if usage is not None:
-        usage.cached += int(cached)
-    total = _gemini_total_tokens(response) or 0
-    logger.info(
-        "Gemini implicit cache hit: %d of %d tokens served from cache", cached, total
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return _CallTokens()
+    output = _attribute_int(usage, "candidates_token_count") or 0
+    output += _attribute_int(usage, "thoughts_token_count") or 0
+    return _CallTokens(
+        input=_attribute_int(usage, "prompt_token_count") or 0,
+        output=output,
+        cached=_attribute_int(usage, "cached_content_token_count") or 0,
+        total=_attribute_int(usage, "total_token_count") or 0,
     )
 
 
@@ -166,6 +141,54 @@ def _resolve_model(provider_name: str, task: str) -> str:
     return OPENAI_MODEL
 
 
+async def _observed(
+    *,
+    task: str,
+    provider_name: str,
+    model: str,
+    system: str,
+    json_mode: bool,
+    invoke,
+    extract,
+):
+    """Run one provider call and record it, whether it succeeds or fails.
+
+    A failed call still costs latency and still says which task and model was
+    involved, so it is logged too — a model that starts rejecting every request
+    is otherwise invisible in the cost logs (see #401).
+    """
+    started = time.perf_counter()
+    try:
+        response = await invoke()
+    except Exception as exc:
+        token_accounting.record_call(
+            task=task,
+            provider=provider_name,
+            model=model,
+            system_prompt=system,
+            json_mode=json_mode,
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            ok=False,
+            error=type(exc).__name__,
+        )
+        raise
+    tokens = extract(response)
+    token_accounting.record_call(
+        task=task,
+        provider=provider_name,
+        model=model,
+        system_prompt=system,
+        json_mode=json_mode,
+        latency_ms=round((time.perf_counter() - started) * 1000),
+        input_tokens=tokens.input,
+        output_tokens=tokens.output,
+        cached_tokens=tokens.cached,
+        total_tokens=tokens.total,
+        ok=True,
+    )
+    return response
+
+
 class AIRateLimitError(Exception):
     """Raised when the AI provider returns a rate-limit (429) response."""
 
@@ -204,48 +227,67 @@ class LLMProvider(Protocol):
 
 class OpenAIProvider:
     _model: str = OPENAI_MODEL  # class-level default; overridden by __init__
+    _task: str = TASK_COACH
 
-    def __init__(self, model: str = OPENAI_MODEL, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str = OPENAI_MODEL,
+        api_key: str | None = None,
+        task: str = TASK_COACH,
+    ) -> None:
         from openai import AsyncOpenAI
 
         self._model = model
+        self._task = task
         self._client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
 
-    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+    async def _complete(self, system: str, messages: list, json_mode: bool) -> str:
         kwargs: dict = {}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        response = await self._client.chat.completions.create(
+        response = await _observed(
+            task=self._task,
+            provider_name="openai",
             model=self._model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            **kwargs,
+            system=system,
+            json_mode=json_mode,
+            invoke=lambda: self._client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "system", "content": system}, *messages],
+                **kwargs,
+            ),
+            extract=_openai_call_tokens,
         )
-        _record_token_usage(_openai_total_tokens(response))
-        return response.choices[0].message.content or ""
+        text = response.choices[0].message.content or ""
+        token_accounting.log_payload("response", text)
+        return text
+
+    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+        token_accounting.log_payload("system", system)
+        token_accounting.log_payload("user", user)
+        return await self._complete(
+            system, [{"role": "user", "content": user}], json_mode
+        )
 
     async def chat_history(
         self, system: str, messages: list[dict[str, str]], json_mode: bool = False
     ) -> str:
-        kwargs: dict = {}
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        response = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[{"role": "system", "content": system}, *messages],
-            **kwargs,
-        )
-        _record_token_usage(_openai_total_tokens(response))
-        return response.choices[0].message.content or ""
+        token_accounting.log_payload("system", system)
+        return await self._complete(system, list(messages), json_mode)
 
 
 class GeminiProvider:
     _model: str = GEMINI_MODEL  # class-level default; overridden by __init__
+    _task: str = TASK_COACH
 
-    def __init__(self, model: str = GEMINI_MODEL, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str = GEMINI_MODEL,
+        api_key: str | None = None,
+        task: str = TASK_COACH,
+    ) -> None:
         self._model = model
+        self._task = task
         self._api_key = api_key or settings.gemini_api_key
 
     def _build_config(self, system: str, json_mode: bool, types: object) -> object:
@@ -297,22 +339,36 @@ class GeminiProvider:
                     continue
                 raise
 
-    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+    async def _run(self, contents: object, system: str, json_mode: bool) -> str:
         from google import genai
         from google.genai import errors as genai_errors, types
 
-        response = await self._generate(
-            user, system, json_mode, genai, genai_errors, types
+        response = await _observed(
+            task=self._task,
+            provider_name="gemini",
+            model=self._model,
+            system=system,
+            json_mode=json_mode,
+            invoke=lambda: self._generate(
+                contents, system, json_mode, genai, genai_errors, types
+            ),
+            extract=_gemini_call_tokens,
         )
-        _record_gemini_usage(response)
-        return response.text or ""
+        text = response.text or ""
+        token_accounting.log_payload("response", text)
+        return text
+
+    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+        token_accounting.log_payload("system", system)
+        token_accounting.log_payload("user", user)
+        return await self._run(user, system, json_mode)
 
     async def chat_history(
         self, system: str, messages: list[dict[str, str]], json_mode: bool = False
     ) -> str:
-        from google import genai
-        from google.genai import errors as genai_errors, types
+        from google.genai import types
 
+        token_accounting.log_payload("system", system)
         contents = [
             types.Content(
                 role="model" if m["role"] == "assistant" else "user",
@@ -320,11 +376,7 @@ class GeminiProvider:
             )
             for m in messages
         ]
-        response = await self._generate(
-            contents, system, json_mode, genai, genai_errors, types
-        )
-        _record_gemini_usage(response)
-        return response.text or ""
+        return await self._run(contents, system, json_mode)
 
 
 def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
@@ -347,9 +399,13 @@ def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
                 )
             return _get_provider_global(name, task)
         if name == "openai":
-            return OpenAIProvider(model=_resolve_model("openai", task), api_key=user_key)
+            return OpenAIProvider(
+                model=_resolve_model("openai", task), api_key=user_key, task=task
+            )
         if name == "gemini":
-            return GeminiProvider(model=_resolve_model("gemini", task), api_key=user_key)
+            return GeminiProvider(
+                model=_resolve_model("gemini", task), api_key=user_key, task=task
+            )
         raise AIKeyNotConfiguredError(f"Unknown AI provider: {name}")
     return _get_provider_global(name, task)
 
@@ -357,15 +413,15 @@ def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
 def _get_provider_global(name: str, task: str) -> LLMProvider:
     """Return a provider using the global (backend-owner) settings keys."""
     if name == "gemini" and settings.gemini_api_key:
-        return GeminiProvider(model=_resolve_model("gemini", task))
+        return GeminiProvider(model=_resolve_model("gemini", task), task=task)
     if name == "openai" and settings.openai_api_key:
-        return OpenAIProvider(model=_resolve_model("openai", task))
+        return OpenAIProvider(model=_resolve_model("openai", task), task=task)
     if settings.gemini_api_key:
-        return GeminiProvider(model=_resolve_model("gemini", task))
+        return GeminiProvider(model=_resolve_model("gemini", task), task=task)
     if settings.openai_api_key:
-        return OpenAIProvider(model=_resolve_model("openai", task))
+        return OpenAIProvider(model=_resolve_model("openai", task), task=task)
     logger.warning("No AI provider API key configured; defaulting to GeminiProvider")
-    return GeminiProvider(model=_resolve_model("gemini", task))
+    return GeminiProvider(model=_resolve_model("gemini", task), task=task)
 
 
 def resolve_user_provider(user: models.User) -> str:

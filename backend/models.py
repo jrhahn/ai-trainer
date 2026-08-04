@@ -102,6 +102,19 @@ class User(Base):
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
     consumed_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    # The same tokens split by how they bill. Input and output differ by ~6× and
+    # cached input costs a tenth of input, so the total alone cannot be turned
+    # into a cost. ``consumed_cached_tokens`` is a subset of the input count,
+    # not a fourth bucket. Zero for everything consumed before #516.
+    consumed_input_tokens: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False, server_default="0"
+    )
+    consumed_output_tokens: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False, server_default="0"
+    )
+    consumed_cached_tokens: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False, server_default="0"
+    )
 
     use_estimated_ftp: Mapped[bool] = mapped_column(Boolean, default=False)
     strava_auto_sync_enabled: Mapped[bool] = mapped_column(

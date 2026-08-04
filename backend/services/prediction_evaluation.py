@@ -29,13 +29,10 @@ import models
 from config import settings
 from services import ai_service
 from services.insight_generation import seconds_until_next_weekly_run
-from services.llm import (
-    begin_token_usage_collection,
-    finish_token_usage_collection,
-    resolve_user_provider,
-)
+from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
 from services.scheduler import ScheduledJob
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +85,7 @@ async def evaluate_user_predictions(
     evaluated = 0
     generated = 0
 
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="prediction-evaluation"):
         pending = await crud.list_athlete_predictions(db, user.id)
         if pending:
             payload = [
@@ -139,10 +135,6 @@ async def evaluate_user_predictions(
                 observed_at=now,
             )
             generated += 1
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     return evaluated, generated
 

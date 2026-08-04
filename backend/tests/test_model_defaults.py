@@ -25,8 +25,9 @@ def _stub_openai_init():
     """Patch OpenAIProvider.__init__ so it sets _model/_client without hitting the API."""
     import services.llm as llm
 
-    def _fake_init(self, model=llm.OPENAI_MODEL):
+    def _fake_init(self, model=llm.OPENAI_MODEL, task=llm.TASK_COACH):
         self._model = model
+        self._task = task
         self._client = MagicMock()
 
     with patch("services.llm.OpenAIProvider.__init__", _fake_init):

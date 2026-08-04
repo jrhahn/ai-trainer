@@ -36,12 +36,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from services import ai_service
-from services.llm import (
-    begin_token_usage_collection,
-    finish_token_usage_collection,
-    resolve_user_provider,
-)
+from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
+from services.token_accounting import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +87,7 @@ async def generate_user_inquiries(
     previous = await crud.list_athlete_inquiries(db, user.id, include_resolved=True)
     asked_questions = [inquiry.question for inquiry in previous]
 
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="athlete-inquiry"):
         candidates = await ai_service.generate_athlete_inquiries(
             metrics_section,
             existing_facts=existing_facts,
@@ -99,10 +95,6 @@ async def generate_user_inquiries(
             max_candidates=capacity,
             provider=resolve_user_provider(user),
         )
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     recorded = 0
     for candidate in candidates:
@@ -146,8 +138,7 @@ async def submit_inquiry_answer(
 
     is_final_attempt = inquiry.ask_count >= crud.ATHLETE_INQUIRY_MAX_ASKS
 
-    usage_token = begin_token_usage_collection()
-    try:
+    async with track_llm_usage(db, user, source="athlete-inquiry"):
         verdict = await ai_service.evaluate_inquiry_answer(
             inquiry.question,
             cleaned,
@@ -156,10 +147,6 @@ async def submit_inquiry_answer(
             is_final_attempt=is_final_attempt,
             provider=resolve_user_provider(user),
         )
-    finally:
-        consumed = finish_token_usage_collection(usage_token)
-        if consumed:
-            await crud.increment_user_consumed_tokens(db, user, consumed)
 
     coach_reply = verdict.get("reply", "")
 
