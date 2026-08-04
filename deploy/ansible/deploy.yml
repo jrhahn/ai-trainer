@@ -131,6 +131,23 @@
         dest: "{{ app_dir }}/.env"
         mode: "0600"
 
+    # Built as its own step so the stale-container guard below can run *between*
+    # the build and the start. The build is what creates the problem the guard
+    # cleans up: see the comment on that task.
+    - name: Build Docker images
+      ansible.builtin.shell: |
+        set -eu
+        compose_files="--file compose.yml"
+        if [ -n "{{ authelia_notifier_smtp_address | default('') }}" ]; then
+          compose_files="$compose_files --file compose.smtp.yml"
+        fi
+        /usr/bin/docker compose --ansi never --project-directory "{{ app_dir }}" \
+          $compose_files build
+      args:
+        executable: /bin/sh
+        chdir: "{{ app_dir }}"
+      changed_when: true
+
     - name: Remove Compose containers with missing image metadata
       ansible.builtin.shell: |
         set -eu
@@ -139,6 +156,16 @@
           compose_files="$compose_files --file compose.smtp.yml"
         fi
 
+        # Runs AFTER the build, which is the only point where it can see what it
+        # is meant to catch. This host uses the containerd image store, so a
+        # build exports a manifest list and moves the tag; containerd's GC then
+        # deletes the image record the still-running containers point at. Before
+        # the build those images are healthy, so a guard placed ahead of it
+        # correctly finds nothing and the deploy fails anyway, on the compose
+        # module's own `compose images` pre-flight (#536). No dangling <none>
+        # image is ever left behind, which is why this looks like nothing
+        # deleted anything.
+        #
         # No "|| true" here on purpose: it used to turn "I could not list the
         # containers" into "there is nothing to clean up", so this guard
         # reported removed=0 and Ansible marked it ok on every single run while
@@ -163,10 +190,18 @@
       register: stale_compose_containers
       changed_when: stale_compose_containers.stdout | int > 0
 
-    - name: Build and start Docker services
+    # So "reported ok" can be told apart from "did not look" in the run log —
+    # the distinction that hid #527 for the guard's entire life.
+    - name: Report how many stale containers were removed
+      ansible.builtin.debug:
+        msg: "Stale compose containers removed: {{ stale_compose_containers.stdout | trim }}"
+
+    - name: Start Docker services
       community.docker.docker_compose_v2:
         project_src: "{{ app_dir }}"
         files: "{{ ['compose.yml'] + (['compose.smtp.yml'] if (authelia_notifier_smtp_address | default('')) else []) }}"
-        build: always
+        # Images are built by the dedicated task above, so the guard can run in
+        # between. Building here too would recreate the exact race this fixes.
+        build: never
         remove_orphans: true
         state: present
