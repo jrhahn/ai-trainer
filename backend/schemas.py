@@ -1768,6 +1768,11 @@ class ResolveRideMatchRequest(CamelModel):
 
     planned_date: str
     strava_activity_id: int
+    # Which session of that date the athlete meant. Ambiguity is most likely on
+    # a two-a-day, and without this the resolve could only ever land on the
+    # day's first session (#547). Omitted means "the only one there is", which
+    # is what every single-session day sends.
+    planned_slot: Optional[int] = None
 
 
 class ResolveRideMatchResponse(CamelModel):

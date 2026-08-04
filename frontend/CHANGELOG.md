@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.33.0] - 2026-07-31
+### Changed
+
+- **`resolveRideMatch` takes an optional session slot** (`services/ai.ts`) —
+  the backend can now be told which session of a two-a-day an activity was
+  (#547). Omitting the slot sends the previous body unchanged. The slot is sent
+  whenever it is passed, including `0`, which a truthiness check would have
+  dropped and turned into "unspecified" for every morning session. Nothing calls
+  this yet; the control that would let an athlete resolve an ambiguous match is
+  still missing, which is the open half of #547.
 
 ### Added
 

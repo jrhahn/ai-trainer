@@ -2008,6 +2008,67 @@ async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
 
 
 @pytest.mark.asyncio
+async def test_resolve_ride_match_honours_the_requested_session(
+    client, auth_headers, mock_ai_service
+):
+    """The endpoint carried no slot, so it could only ever resolve to the first
+    session of the date — on a two-a-day, the wrong one (#547).
+
+    ``matched_plan_slot`` is not exposed by ``RideMetricSchema``, so the check
+    goes to the row.
+    """
+    import crud
+    import models
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    date = "2026-05-07"
+    plan = [
+        {
+            "date": date,
+            "slot": 0,
+            "workoutType": "endurance",
+            "title": "Morning Endurance",
+            "durationMinutes": 90,
+        },
+        {
+            "date": date,
+            "slot": 1,
+            "workoutType": "intervals",
+            "title": "Evening Intervals",
+            "durationMinutes": 60,
+        },
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=64001, activity_date=date
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/resolve-ride-match",
+        headers=auth_headers,
+        json={
+            "plannedDate": date,
+            "stravaActivityId": 64001,
+            "plannedSlot": 1,
+        },
+    )
+    assert response.status_code == 200
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+    ride = next(r for r in rides if r.strava_activity_id == 64001)
+    assert isinstance(ride, models.RideMetric)
+    assert ride.matched_plan_slot == 1
+    assert ride.matched_plan_snapshot["workoutType"] == "intervals"
+
+
+@pytest.mark.asyncio
 async def test_analyse_activities_without_plan_leaves_ride_unmatched(
     client, auth_headers, mock_ai_service
 ):

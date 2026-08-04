@@ -1603,6 +1603,7 @@ async def resolve_ride_match(
         planned_date=body.planned_date,
         strava_activity_id=body.strava_activity_id,
         plan=plan,
+        planned_slot=body.planned_slot,
     )
     if ride is None:
         raise HTTPException(

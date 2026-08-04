@@ -542,6 +542,108 @@ async def test_the_coach_reviews_the_whole_session_not_the_half_it_was_handed(
     assert rated_days[0]["feedback"]["actualDurationMinutes"] == 120
 
 
+# ---------------------------------------------------------------------------
+# Resolving an ambiguous match on a two-a-day (#547)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_manual_resolve_can_name_the_evening_session():
+    """Without a slot this could only ever land on the day's first session.
+
+    Which is the wrong half of the problem: ambiguity is most likely exactly
+    when a date holds two sessions.
+    """
+    date = "2026-08-21"
+    plan = [
+        _session(date, "endurance", slot=0, duration=90),
+        _session(date, "intervals", slot=1, duration=60),
+    ]
+    user_id = await _create_user("resolve-slot@example.com", plan)
+    await _add_ride(user_id, 9801, date, sport_type="Ride",
+                    duration_seconds=75 * 60, start=f"{date}T07:00:00Z")
+
+    async with TestSessionLocal() as db:
+        ride = await ride_matching.resolve_manual_match(
+            db, user_id, planned_date=date, strava_activity_id=9801,
+            plan=plan, planned_slot=1,
+        )
+        await db.commit()
+
+    assert ride is not None
+    assert ride.matched_plan_slot == 1
+    assert ride.matched_plan_snapshot["workoutType"] == "intervals"
+
+
+@pytest.mark.asyncio
+async def test_a_manual_resolve_keeps_the_other_sessions_match():
+    """Resolving the evening must not throw away the morning's good match.
+
+    Every other ride of the date used to be unmatched wholesale, which was
+    invisible while a resolve could only target slot 0.
+    """
+    date = "2026-08-22"
+    plan = [
+        _session(date, "strength", slot=0, duration=45),
+        _session(date, "endurance", slot=1, duration=90),
+    ]
+    user_id = await _create_user("resolve-keeps@example.com", plan)
+    await _add_ride(user_id, 9901, date, sport_type="WeightTraining",
+                    duration_seconds=45 * 60, start=f"{date}T07:00:00Z")
+    await _add_ride(user_id, 9902, date, sport_type="Ride",
+                    duration_seconds=90 * 60, start=f"{date}T18:00:00Z")
+
+    async with TestSessionLocal() as db:
+        await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9901, 9902])
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        await ride_matching.resolve_manual_match(
+            db, user_id, planned_date=date, strava_activity_id=9902,
+            plan=plan, planned_slot=1,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+    by_id = {r.strava_activity_id: r for r in rides}
+
+    assert by_id[9902].plan_match_status == ride_matching.MATCH_MANUAL
+    assert by_id[9902].matched_plan_slot == 1
+    # The morning strength session was never in question.
+    assert by_id[9901].plan_match_status == ride_matching.MATCH_AUTO
+    assert by_id[9901].matched_plan_slot == 0
+
+
+@pytest.mark.asyncio
+async def test_a_manual_resolve_still_displaces_a_rival_for_the_same_session():
+    """The behaviour that had to survive the narrowing."""
+    date = "2026-08-23"
+    plan = [_session(date, "tempo", duration=80)]
+    user_id = await _create_user("resolve-displaces@example.com", plan)
+    await _add_ride(user_id, 9911, date, sport_type="Ride",
+                    duration_seconds=80 * 60, start=f"{date}T07:00:00Z")
+    await _add_ride(user_id, 9912, date, sport_type="Ride",
+                    duration_seconds=50 * 60, start=f"{date}T18:00:00Z")
+
+    async with TestSessionLocal() as db:
+        await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9911, 9912])
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        await ride_matching.resolve_manual_match(
+            db, user_id, planned_date=date, strava_activity_id=9912, plan=plan,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        rides = await crud.get_ride_metrics_by_date(db, user_id, date)
+    by_id = {r.strava_activity_id: r for r in rides}
+
+    assert by_id[9912].plan_match_status == ride_matching.MATCH_MANUAL
+    assert by_id[9911].plan_match_status == ride_matching.MATCH_UNMATCHED
+
+
 @pytest.mark.asyncio
 async def test_without_start_times_the_rides_are_never_summed():
     """Adjacency is a claim about a timeline; there is none here, so no sum."""

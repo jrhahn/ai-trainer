@@ -345,6 +345,31 @@ describe('resolveRideMatch', () => {
       body: { plannedDate: '2026-05-06', stravaActivityId: 7001 },
     })
   })
+
+  it('sends the chosen session on a two-a-day', async () => {
+    mockApiFetch.mockResolvedValue({ ride: { stravaActivityId: 7002 } })
+
+    await resolveRideMatch('token-123', '2026-05-06', 7002, 1)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
+      token: 'token-123',
+      method: 'POST',
+      body: { plannedDate: '2026-05-06', stravaActivityId: 7002, plannedSlot: 1 },
+    })
+  })
+
+  it('sends slot 0 explicitly when it is asked to', async () => {
+    // 0 is falsy, so the morning session has to survive the optional check.
+    mockApiFetch.mockResolvedValue({ ride: { stravaActivityId: 7003 } })
+
+    await resolveRideMatch('token-123', '2026-05-06', 7003, 0)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
+      token: 'token-123',
+      method: 'POST',
+      body: { plannedDate: '2026-05-06', stravaActivityId: 7003, plannedSlot: 0 },
+    })
+  })
 })
 
 describe('fetchReadinessScore', () => {
