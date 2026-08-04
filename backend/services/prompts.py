@@ -1532,88 +1532,19 @@ def rest_recommendation_rules() -> str:
     )
 
 
-def ask_trainer_system(
-    profile: dict,
-    today: str,
-    last_7_days: list[dict],
-    next_n_days: list[dict],
-    assessment_section: str,
-    memory_section: str,
-    workout_section: str,
-    plan_updates_rule: str,
-    athlete_context: dict | None = None,
-    athlete_memory_facts: list[dict] | None = None,
-    athlete_model: dict | None = None,
-    open_questions: list[dict] | None = None,
-    pending_inquiries: list[dict] | None = None,
-    performance_model: dict | None = None,
-    performance_recommendation: dict | None = None,
-    hypotheses: list[dict] | None = None,
-    science_context: str = "",
-    training_load: dict | None = None,
-    classification: dict | None = None,
-    metrics_history_section: str = "",
-    race_events_section: str = "",
-    weather_context_section: str = "",
-    training_status_badge: tuple[str | None, str | None, str | None] | None = None,
-    date_context: str = "",
-) -> str:
-    science_section = (
-        (
-            f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
-            f"{science_context}"
-            "\nWhen citing these sources, include the title in your response."
-        )
-        if science_context
-        else ""
-    )
+def coach_static_prefix() -> str:
+    """The cacheable head of the coach system prompt (#514, #538).
 
-    training_load_section = ""
-    if training_load and not metrics_history_section:
-        # Fall back to plan-derived CTL/ATL/TSB only when no actual-ride metrics are available
-        training_load_section = (
-            f"\n\nCurrent training load (estimated from plan): "
-            f"CTL (fitness)={training_load.get('ctl')} "
-            f"ATL (fatigue)={training_load.get('atl')} "
-            f"TSB (form)={training_load.get('tsb')}\n"
-            "Use TSB to guide your advice: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
-            "TSB > +10 before a key workout suggests freshness, intensity can be increased."
-        )
+    Byte-identical for every athlete, every day and every combination of
+    optional sections — that is the whole point, and
+    ``test_coach_prompt_cache.py`` holds it to that. It is a named function so
+    the property is testable and so ``scripts/probe_implicit_cache.py`` can
+    measure the real prefix rather than a stand-in.
 
-    metrics_section = (
-        f"\n\n{metrics_history_section}" if metrics_history_section else ""
-    )
-    events_section = f"\n\n{race_events_section}" if race_events_section else ""
-    # The upcoming per-day outlook plus what has been learned about this athlete's
-    # own weather tolerances (#495) — the coach may use it to move or soften a
-    # session, but only where this athlete's own history says the weather matters.
-    weather_section = (
-        f"\n\n{weather_context_section}" if weather_context_section else ""
-    )
-    # The athlete can see this badge on their dashboard and will ask about it by
-    # its exact words, so the coach has to be holding the same label it wrote.
-    status_badge_section = training_status_section(*(training_status_badge or (None, None, None)))
-    durable_context_section = athlete_context_section(athlete_context)
-    durable_model_section = athlete_model_section(athlete_model)
-    durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
-    durable_open_questions_section = open_questions_section(open_questions)
-    pinned_inquiries_section = pending_inquiries_section(pending_inquiries)
-    perf_model_section = performance_model_section(performance_model)
-    roi_section = athlete_performance_roi_section(performance_recommendation)
-    roi_section = f"\n\n{roi_section}" if roi_section else ""
-    hypotheses_section = active_hypotheses_section(hypotheses)
-    race_profile_section = race_profile_context_section(profile)
-    race_profile_section = (
-        f"\n\n{race_profile_section}\n" if race_profile_section else ""
-    )
-
-    classification_section = ""
-    if classification:
-        classification_section = (
-            f"\n\nQuestion classification: category={classification.get('category')} "
-            f"needs_science_rag={classification.get('needs_science_rag')}"
-        )
-
+    Nothing conditional belongs in here: a rule that appears only sometimes
+    breaks the prefix for the whole request. Volatile athlete data and the
+    output contract follow it in :func:`ask_trainer_system`.
+    """
     # Proactive solicitation and structured feedback extraction instructions
     feedback_instructions = (
         "\n\nActivity feedback rules:\n"
@@ -1627,7 +1558,6 @@ def ask_trainer_system(
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     explainability_instructions = coach_explainability_rule()
     uncertainty_instructions = reveal_uncertainty_rule()
-    weather_instructions = weather_scheduling_rule() if weather_context_section else ""
     model_before_plan_instructions = update_model_before_plan_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
@@ -1764,6 +1694,94 @@ def ask_trainer_system(
         "quality stress followed by two easier days, which is exactly right given your TSB is "
         'currently sitting around −15. Any of those sessions you want to talk through?"'
     )
+    return static_instructions
+
+
+def ask_trainer_system(
+    profile: dict,
+    today: str,
+    last_7_days: list[dict],
+    next_n_days: list[dict],
+    assessment_section: str,
+    memory_section: str,
+    workout_section: str,
+    plan_updates_rule: str,
+    athlete_context: dict | None = None,
+    athlete_memory_facts: list[dict] | None = None,
+    athlete_model: dict | None = None,
+    open_questions: list[dict] | None = None,
+    pending_inquiries: list[dict] | None = None,
+    performance_model: dict | None = None,
+    performance_recommendation: dict | None = None,
+    hypotheses: list[dict] | None = None,
+    science_context: str = "",
+    training_load: dict | None = None,
+    classification: dict | None = None,
+    metrics_history_section: str = "",
+    race_events_section: str = "",
+    weather_context_section: str = "",
+    training_status_badge: tuple[str | None, str | None, str | None] | None = None,
+    date_context: str = "",
+) -> str:
+    science_section = (
+        (
+            f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
+            f"{science_context}"
+            "\nWhen citing these sources, include the title in your response."
+        )
+        if science_context
+        else ""
+    )
+
+    training_load_section = ""
+    if training_load and not metrics_history_section:
+        # Fall back to plan-derived CTL/ATL/TSB only when no actual-ride metrics are available
+        training_load_section = (
+            f"\n\nCurrent training load (estimated from plan): "
+            f"CTL (fitness)={training_load.get('ctl')} "
+            f"ATL (fatigue)={training_load.get('atl')} "
+            f"TSB (form)={training_load.get('tsb')}\n"
+            "Use TSB to guide your advice: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
+            "TSB > +10 before a key workout suggests freshness, intensity can be increased."
+        )
+
+    metrics_section = (
+        f"\n\n{metrics_history_section}" if metrics_history_section else ""
+    )
+    events_section = f"\n\n{race_events_section}" if race_events_section else ""
+    # The upcoming per-day outlook plus what has been learned about this athlete's
+    # own weather tolerances (#495) — the coach may use it to move or soften a
+    # session, but only where this athlete's own history says the weather matters.
+    weather_section = (
+        f"\n\n{weather_context_section}" if weather_context_section else ""
+    )
+    # The athlete can see this badge on their dashboard and will ask about it by
+    # its exact words, so the coach has to be holding the same label it wrote.
+    status_badge_section = training_status_section(*(training_status_badge or (None, None, None)))
+    durable_context_section = athlete_context_section(athlete_context)
+    durable_model_section = athlete_model_section(athlete_model)
+    durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
+    durable_open_questions_section = open_questions_section(open_questions)
+    pinned_inquiries_section = pending_inquiries_section(pending_inquiries)
+    perf_model_section = performance_model_section(performance_model)
+    roi_section = athlete_performance_roi_section(performance_recommendation)
+    roi_section = f"\n\n{roi_section}" if roi_section else ""
+    hypotheses_section = active_hypotheses_section(hypotheses)
+    race_profile_section = race_profile_context_section(profile)
+    race_profile_section = (
+        f"\n\n{race_profile_section}\n" if race_profile_section else ""
+    )
+
+    classification_section = ""
+    if classification:
+        classification_section = (
+            f"\n\nQuestion classification: category={classification.get('category')} "
+            f"needs_science_rag={classification.get('needs_science_rag')}"
+        )
+
+    weather_instructions = weather_scheduling_rule() if weather_context_section else ""
+
+    static_instructions = coach_static_prefix()
 
     # Everything below changes from turn to turn, so none of it can be part of a
     # cacheable prefix — which is exactly why it now follows the rules (#514).
