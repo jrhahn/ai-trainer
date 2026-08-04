@@ -144,34 +144,48 @@ def build_status_facts(
         day_sessions = sessions_by_date.get(date, [])
         day_rides = rides_by_date.get(date, [])
 
-        # Pass 1 — activities the matcher pinned to one specific session.
-        claimed_by_slot: dict[int, Any] = {}
+        # Pass 1 — activities the matcher pinned to one specific session. A slot
+        # may hold several: a session recorded in two files is matched as two
+        # rides on one slot (#543), and letting only the first claim it turned
+        # the other half into an extra activity — or worse, into evidence for an
+        # unrelated session of the same date (#545).
+        claimed_by_slot: dict[int, list[Any]] = {}
         for ride in day_rides:
             if str(getattr(ride, "plan_match_status", "")) not in _DEFINITE_MATCH:
                 continue
             if str(getattr(ride, "matched_plan_date", "") or "") != date:
                 continue
             slot = schemas.normalize_slot(getattr(ride, "matched_plan_slot", None))
-            claimed_by_slot.setdefault(slot, ride)
+            claimed_by_slot.setdefault(slot, []).append(ride)
 
         # Pass 2 — everything else the athlete actually did on this date. An
         # ambiguous match lands here: the work is real, only its attribution is
         # uncertain, so it still earns credit against a session of that day.
-        claimed_ids = {id(r) for r in claimed_by_slot.values()}
+        claimed_ids = {
+            id(ride) for claimed in claimed_by_slot.values() for ride in claimed
+        }
         loose_rides = [r for r in day_rides if id(r) not in claimed_ids]
 
         for day in day_sessions:
             slot = schemas.day_slot(day)
             optional = _is_optional(day)
-            evidence_ride = claimed_by_slot.get(slot)
+            claimed = claimed_by_slot.get(slot) or []
+            evidence_ride = claimed[0] if claimed else None
             if evidence_ride is None and bool(day.get("completed")):
                 status = STATUS_DONE
                 evidence = "marked complete by the athlete"
             elif evidence_ride is not None:
                 status = STATUS_DONE
+                names = [
+                    str(getattr(r, "activity_name", None) or "recorded")
+                    for r in claimed
+                ]
                 evidence = (
-                    f"matched activity "
-                    f"{getattr(evidence_ride, 'activity_name', None) or 'recorded'}"
+                    f"matched activity {names[0]}"
+                    if len(names) == 1
+                    # Naming both halves is what makes the badge legible: the
+                    # athlete sees one session backed by the two files they rode.
+                    else f"matched activities {', '.join(names)}"
                 )
             elif loose_rides:
                 evidence_ride = loose_rides.pop(0)

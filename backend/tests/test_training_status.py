@@ -325,3 +325,79 @@ def test_fallback_flags_a_genuine_shortfall():
 
     assert facts["plannedDue"] == 4
     assert (label, tone) == ("Behind plan", "caution")
+
+
+# ---------------------------------------------------------------------------
+# A session recorded in two files (#543/#545)
+# ---------------------------------------------------------------------------
+
+
+def _matched(date: str, name: str, minutes: int, slot: int | None = None):
+    return _ride(
+        date,
+        plan_match_status="auto_matched",
+        matched_plan_date=date,
+        matched_plan_slot=slot,
+        activity_name=name,
+        duration_seconds=minutes * 60,
+    )
+
+
+def test_both_halves_of_a_split_session_belong_to_that_session():
+    """Two rides on one slot are one fulfilled session, not a session plus junk.
+
+    Only the first used to claim the slot; the second was reported as work the
+    plan never asked for, directly contradicting the match that put it there.
+    """
+    date = "2026-07-28"
+    plan = [_day(date, "endurance", durationMinutes=120)]
+    rides = [
+        _matched(date, "Long Ride, Part One", 60),
+        _matched(date, "Long Ride, Part Two", 60),
+    ]
+
+    facts = ts.build_status_facts(plan, rides, TODAY)
+
+    assert _by_date(facts, date)["status"] == ts.STATUS_DONE
+    assert facts["extraActivities"] == []
+    evidence = _by_date(facts, date)["evidence"]
+    assert "Part One" in evidence and "Part Two" in evidence
+
+
+def test_a_split_session_does_not_credit_another_session_of_that_day():
+    """The regression that made this worth fixing.
+
+    The unclaimed half fell into the loose pile, and the loose pile is what an
+    unmatched session takes its evidence from — so the evening session was
+    reported done on the strength of the morning ride's second file.
+    """
+    date = "2026-07-28"
+    plan = [
+        _day(date, "endurance", slot=0, durationMinutes=120),
+        _day(date, "intervals", slot=1, durationMinutes=60),
+    ]
+    rides = [
+        _matched(date, "Long Ride, Part One", 60, slot=0),
+        _matched(date, "Long Ride, Part Two", 60, slot=0),
+    ]
+
+    facts = ts.build_status_facts(plan, rides, TODAY)
+
+    assert _by_date(facts, date, slot=0)["status"] == ts.STATUS_DONE
+    # Nobody rode the evening intervals.
+    assert _by_date(facts, date, slot=1)["status"] == ts.STATUS_MISSED
+
+
+def test_a_genuine_extra_activity_is_still_reported_as_one():
+    """The grouping must not swallow work that really was unplanned."""
+    date = "2026-07-28"
+    plan = [_day(date, "endurance", durationMinutes=120)]
+    rides = [
+        _matched(date, "Planned Ride", 120),
+        _ride(date, activity_name="Evening Spin", duration_seconds=30 * 60),
+    ]
+
+    facts = ts.build_status_facts(plan, rides, TODAY)
+
+    assert _by_date(facts, date)["status"] == ts.STATUS_DONE
+    assert [e["name"] for e in facts["extraActivities"]] == ["Evening Spin"]
