@@ -18,10 +18,13 @@ of the input rate, so a single total cannot be converted to a cost at all.
 Note that ``cached`` is a *subset* of ``input``, not a fourth bucket: both
 providers report the cache hit as part of the prompt count.
 
-*Attribution.* :func:`track_llm_usage` is the one way to collect and persist
-usage. It replaced a begin/finish/persist boilerplate that each of fifteen call
-sites repeated, one of which (the per-ride review chain in ``activity_sync``)
-never had it at all, so scheduler-driven coaching was billed to nobody.
+*Attribution.* :func:`track_llm_usage` is the way to collect and persist usage
+for work that has a request or job session. It replaced a begin/finish/persist
+boilerplate that each of fifteen call sites repeated, one of which (the per-ride
+review chain in ``activity_sync``) never had it at all, so scheduler-driven
+coaching was billed to nobody. Work that outlives its session — a FastAPI
+``BackgroundTasks`` callback — uses :func:`track_llm_usage_detached` instead;
+using neither is the bug that both of those were.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import crud
 import models
@@ -141,6 +144,18 @@ def record_call(
     )
     scope = _scope.get()
     if scope is None:
+        # Deliberately louder than the line above: a call nobody is billed for
+        # is a bug, and #537 took a month to notice because the only evidence
+        # was the word "unscoped" inside a routine INFO line. Silence at
+        # WARNING is now the signal that attribution is complete.
+        logger.warning(
+            "LLM call billed to nobody task=%s model=%s prompt_sha=%s total=%d "
+            "— no collection scope was open; see track_llm_usage",
+            task,
+            model,
+            prompt_sha,
+            total_tokens,
+        )
         return
     scope.usage.input += max(0, input_tokens)
     scope.usage.output += max(0, output_tokens)
@@ -186,6 +201,32 @@ def log_payload(kind: str, text: str) -> None:
     logger.debug("LLM payload kind=%s source=%s\n%s", kind, current_source(), text)
 
 
+async def _persist_usage(
+    db: AsyncSession, user: models.User, source: str, usage: TokenUsage
+) -> None:
+    """Log the scope total and add it to the user's counters. Never commits."""
+    if not (usage.total or usage.input or usage.output):
+        return
+    logger.info(
+        "LLM usage source=%s user=%s calls=%d input=%d output=%d cached=%d total=%d",
+        source,
+        user.id,
+        usage.calls,
+        usage.input,
+        usage.output,
+        usage.cached,
+        usage.total,
+    )
+    await crud.increment_user_consumed_tokens(
+        db,
+        user,
+        usage.total,
+        input_tokens=usage.input,
+        output_tokens=usage.output,
+        cached_tokens=usage.cached,
+    )
+
+
 @asynccontextmanager
 async def track_llm_usage(
     db: AsyncSession, user: models.User, *, source: str
@@ -208,25 +249,50 @@ async def track_llm_usage(
     finally:
         usage = finish_collection(token)
         try:
+            await _persist_usage(db, user, source, usage)
+        except Exception:  # noqa: BLE001 — never mask the enclosed block's error
+            logger.warning("Failed to persist collected token usage", exc_info=True)
+
+
+@asynccontextmanager
+async def track_llm_usage_detached(
+    session_maker: async_sessionmaker[AsyncSession], user_id: str, *, source: str
+) -> AsyncIterator[None]:
+    """Collect usage for work that holds no session across its provider calls.
+
+    :func:`track_llm_usage` needs a live session and the ``User`` row for the
+    whole block, which a FastAPI ``BackgroundTasks`` callback has neither of: it
+    runs after the response, and therefore after the request's session *and*
+    after the ContextVar scope have been torn down. That is why every coach
+    question's memory update was billed to nobody (#537).
+
+    The session is opened once, at the end, purely to persist — so a provider
+    call that takes seconds is still never made with a transaction held open.
+    That property is load-bearing for the memory update, which deliberately
+    reads and writes in separate short sessions so an athlete's concurrent edit
+    is not blocked or clobbered (#346, #522).
+
+    *session_maker* is passed in rather than imported so the caller's factory —
+    including the one the test suite substitutes — is the one used.
+    """
+    token = begin_collection(source)
+    try:
+        yield
+    finally:
+        usage = finish_collection(token)
+        try:
             if usage.total or usage.input or usage.output:
-                logger.info(
-                    "LLM usage source=%s user=%s calls=%d input=%d output=%d "
-                    "cached=%d total=%d",
-                    source,
-                    user.id,
-                    usage.calls,
-                    usage.input,
-                    usage.output,
-                    usage.cached,
-                    usage.total,
-                )
-                await crud.increment_user_consumed_tokens(
-                    db,
-                    user,
-                    usage.total,
-                    input_tokens=usage.input,
-                    output_tokens=usage.output,
-                    cached_tokens=usage.cached,
-                )
+                async with session_maker() as session:
+                    user = await session.get(models.User, user_id)
+                    if user is None:
+                        logger.warning(
+                            "Cannot bill %d tokens from source=%s: user %s is gone",
+                            usage.total,
+                            source,
+                            user_id,
+                        )
+                    else:
+                        await _persist_usage(session, user, source, usage)
+                        await session.commit()
         except Exception:  # noqa: BLE001 — never mask the enclosed block's error
             logger.warning("Failed to persist collected token usage", exc_info=True)

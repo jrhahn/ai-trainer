@@ -79,6 +79,31 @@ def test_a_call_outside_any_scope_is_still_logged_and_marked(caplog):
     assert f"source={token_accounting.UNSCOPED}" in line
 
 
+def test_a_call_outside_any_scope_is_a_warning_not_a_detail(caplog):
+    """#537 hid for a month inside a routine INFO line; it now warns."""
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        _call()
+    warning = next(
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "billed to nobody" in r.getMessage()
+    )
+    assert "task=coach" in warning
+    assert "prompt_sha=" in warning
+
+
+@pytest.mark.asyncio
+async def test_a_scoped_call_does_not_warn(caplog):
+    """The warning is only useful if a correct call is silent."""
+    user_id = await _create_user("accounting-no-warning@example.com")
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+            async with token_accounting.track_llm_usage(db, user, source="api:x"):
+                _call()
+    assert not any("billed to nobody" in r.getMessage() for r in caplog.records)
+
+
 def test_a_failed_call_is_logged_with_its_error(caplog):
     with caplog.at_level(logging.INFO, logger="services.token_accounting"):
         _call(ok=False, error="AIRateLimitError", total_tokens=0)
@@ -224,6 +249,103 @@ async def test_the_scope_is_restored_after_it_closes():
         async with token_accounting.track_llm_usage(db, user, source="api:x"):
             assert token_accounting.current_source() == "api:x"
         assert token_accounting.current_source() == token_accounting.UNSCOPED
+
+
+# ---------------------------------------------------------------------------
+# Work that outlives its session (#537)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_detached_usage_is_billed_without_a_caller_session():
+    user_id = await _create_user("accounting-detached@example.com")
+
+    async with token_accounting.track_llm_usage_detached(
+        TestSessionLocal, user_id, source="bg:update_coach_memory"
+    ):
+        _call(input_tokens=2088, output_tokens=881, cached_tokens=0, total_tokens=2969)
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+    assert user.consumed_tokens == 2969
+    assert user.consumed_input_tokens == 2088
+    assert user.consumed_output_tokens == 881
+
+
+@pytest.mark.asyncio
+async def test_detached_usage_holds_no_session_during_the_call():
+    """The whole point of the detached variant (#346/#522).
+
+    A session opened around a provider call would hold a transaction for the
+    seconds it takes to generate, which is exactly what the memory update goes
+    out of its way to avoid.
+    """
+    opened: list[str] = []
+
+    def tracking_session_maker():
+        opened.append("open")
+        return TestSessionLocal()
+
+    user_id = await _create_user("accounting-detached-late@example.com")
+    async with token_accounting.track_llm_usage_detached(
+        tracking_session_maker, user_id, source="bg:x"
+    ):
+        assert opened == []  # nothing open while the provider is working
+        _call()
+    assert opened == ["open"]
+
+
+@pytest.mark.asyncio
+async def test_detached_usage_with_nothing_spent_opens_no_session():
+    """A no-op background task must not pay for a connection."""
+    opened: list[str] = []
+
+    def tracking_session_maker():
+        opened.append("open")
+        return TestSessionLocal()
+
+    async with token_accounting.track_llm_usage_detached(
+        tracking_session_maker, "irrelevant", source="bg:x"
+    ):
+        pass
+    assert opened == []
+
+
+@pytest.mark.asyncio
+async def test_detached_usage_survives_a_deleted_user(caplog):
+    """Billing a user who left must be reported, not raised at the task."""
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        async with token_accounting.track_llm_usage_detached(
+            TestSessionLocal, "no-such-user", source="bg:x"
+        ):
+            _call()
+    assert any("user no-such-user is gone" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_detached_usage_is_persisted_even_when_the_block_raises():
+    user_id = await _create_user("accounting-detached-raises@example.com")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        async with token_accounting.track_llm_usage_detached(
+            TestSessionLocal, user_id, source="bg:x"
+        ):
+            _call(input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99)
+            raise RuntimeError("boom")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+    assert user.consumed_tokens == 99
+
+
+@pytest.mark.asyncio
+async def test_detached_scope_is_restored_after_it_closes():
+    user_id = await _create_user("accounting-detached-restore@example.com")
+    async with token_accounting.track_llm_usage_detached(
+        TestSessionLocal, user_id, source="bg:x"
+    ):
+        assert token_accounting.current_source() == "bg:x"
+    assert token_accounting.current_source() == token_accounting.UNSCOPED
 
 
 def test_json_repair_is_reported_against_the_call_that_caused_it(caplog):

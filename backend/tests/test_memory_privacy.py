@@ -7,8 +7,10 @@ import logging
 import pytest
 
 import crud
+import models
 import routers.ai as ai_router
 from database import async_session_maker
+from services import token_accounting
 from services.llm import AIRateLimitError
 from tests.conftest import TestSessionLocal
 
@@ -371,3 +373,87 @@ async def test_memory_update_generic_error_is_swallowed(monkeypatch, caplog):
 
     assert "background update failed" in caplog.text
     assert await _current_memory(user_id) == "STAY"
+
+
+# ---------------------------------------------------------------------------
+# What the memory update costs (#537)
+# ---------------------------------------------------------------------------
+
+
+def _record_provider_call(input_tokens: int, output_tokens: int) -> None:
+    """Stand in for the provider call inside ``update_coach_memory``."""
+    token_accounting.record_call(
+        task="classify",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        system_prompt="update the coach memory",
+        json_mode=False,
+        latency_ms=2562,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=input_tokens + output_tokens,
+    )
+
+
+async def _consumed(user_id: str) -> tuple[int, int, int]:
+    async with TestSessionLocal() as s:
+        user = await s.get(models.User, user_id)
+        return (
+            user.consumed_tokens,
+            user.consumed_input_tokens,
+            user.consumed_output_tokens,
+        )
+
+
+@pytest.mark.asyncio
+async def test_memory_update_tokens_are_billed_to_the_athlete(monkeypatch):
+    """The background task ran outside every scope, so it cost nobody (#537)."""
+    user_id = await _seed_memory_user("mem-billed@example.com", "BASE")
+
+    async def fake_update(current_memory, *a, **k):
+        _record_provider_call(2088, 881)
+        return f"{current_memory} + turn"
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert await _consumed(user_id) == (2969, 2088, 881)
+
+
+@pytest.mark.asyncio
+async def test_memory_update_bills_every_retry_once(monkeypatch):
+    """Retries share one scope: three calls, one increment, nothing lost."""
+    user_id = await _seed_memory_user("mem-billed-retry@example.com", "EDIT-0")
+    calls = {"n": 0}
+
+    async def fake_update(current_memory, *a, **k):
+        calls["n"] += 1
+        _record_provider_call(100, 10)
+        # Every generation races a fresh athlete edit, so no attempt applies.
+        async with TestSessionLocal() as s:
+            await crud.upsert_coach_memory(s, user_id, f"EDIT-{calls['n']}")
+            await s.commit()
+        return f"{current_memory} + turn"
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    attempts = ai_router._MEMORY_UPDATE_MAX_ATTEMPTS
+    assert calls["n"] == attempts
+    # Abandoning the write must not abandon the bill — the tokens were spent.
+    assert await _consumed(user_id) == (110 * attempts, 100 * attempts, 10 * attempts)
+
+
+@pytest.mark.asyncio
+async def test_memory_update_bills_what_a_failing_call_already_spent(monkeypatch):
+    """A call that returns tokens and then raises still cost money."""
+    user_id = await _seed_memory_user("mem-billed-error@example.com", "STAY")
+
+    async def fake_update(*a, **k):
+        _record_provider_call(2088, 881)
+        raise ValueError("boom")
+
+    monkeypatch.setattr(ai_router.ai_service, "update_coach_memory", fake_update)
+    await ai_router._update_memory_bg(user_id, "q", "a", "openai")
+
+    assert await _consumed(user_id) == (2969, 2088, 881)

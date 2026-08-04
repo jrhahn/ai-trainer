@@ -76,7 +76,7 @@ from services.weather_service import (
 )
 from services import llm as llm_service
 from services.llm import resolve_user_provider
-from services.token_accounting import track_llm_usage
+from services.token_accounting import track_llm_usage, track_llm_usage_detached
 
 
 async def _set_ai_key(
@@ -454,34 +454,44 @@ async def _update_memory_bg(
     while the model is still generating is never clobbered by a stale
     request-time snapshot (#346). On a detected concurrent edit it retries
     against the fresh memory, up to a small bound.
+
+    The whole retry loop shares one usage scope, so the ~3,000 tokens this costs
+    per coach question are billed to the athlete once, however many attempts it
+    took. The scope has to be opened here rather than inherited from
+    ``ask_trainer``: background tasks run after the response, by which time that
+    scope is long closed and the call was attributed to nobody (#537).
     """
-    try:
-        for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
-            async with async_session_maker() as session:
-                row = await crud.get_coach_memory(session, user_id)
-                base_memory = row.memory if row is not None else ""
+    async with track_llm_usage_detached(
+        async_session_maker, user_id, source="bg:update_coach_memory"
+    ):
+        try:
+            for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
+                async with async_session_maker() as session:
+                    row = await crud.get_coach_memory(session, user_id)
+                    base_memory = row.memory if row is not None else ""
 
-            updated_memory = await ai_service.update_coach_memory(
-                base_memory, question, response, provider=provider
-            )
-            if not updated_memory or updated_memory == base_memory:
-                return
-
-            async with async_session_maker() as session:
-                applied = await crud.update_coach_memory_if_unchanged(
-                    session, user_id, expected=base_memory, new=updated_memory
+                updated_memory = await ai_service.update_coach_memory(
+                    base_memory, question, response, provider=provider
                 )
-                if applied:
-                    await session.commit()
+                if not updated_memory or updated_memory == base_memory:
                     return
-            # The memory changed under us while generating — retry on the fresh base.
-        logger.info(
-            "Coach memory update abandoned after repeated concurrent edits"
-        )
-    except AIRateLimitError:
-        logger.info("Coach memory update skipped due to AI rate limit")
-    except Exception:
-        logger.warning("Coach memory background update failed", exc_info=True)
+
+                async with async_session_maker() as session:
+                    applied = await crud.update_coach_memory_if_unchanged(
+                        session, user_id, expected=base_memory, new=updated_memory
+                    )
+                    if applied:
+                        await session.commit()
+                        return
+                # The memory changed under us while generating — retry on the
+                # fresh base.
+            logger.info(
+                "Coach memory update abandoned after repeated concurrent edits"
+            )
+        except AIRateLimitError:
+            logger.info("Coach memory update skipped due to AI rate limit")
+        except Exception:
+            logger.warning("Coach memory background update failed", exc_info=True)
 
 
 async def _auto_adapt_plan(
