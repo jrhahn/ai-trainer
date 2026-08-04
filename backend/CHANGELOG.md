@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two same-day activities only count as one session when they were one**
+  (`services/activity_identity.py`, `services/ride_matching.py`) — with several
+  activities on a day that has a single planned session, the matcher added their
+  durations up and, if the sum fit, marked *both* as the completed session. The
+  gate for that only asked whether every activity was cycling and the plan was
+  not a structured hard day; it never asked whether the two belonged together.
+  A 60-minute commute at 07:30 and a 70-minute ride at 17:30 therefore summed to
+  130 minutes and completed a 120-minute endurance day, as two separate
+  trainings. Summing now additionally requires the recordings to look like *one*
+  session: same activity family (`activity_family`, already the equality gate in
+  `are_near_duplicate_activities`) and no gap over 90 minutes between the end of
+  one and the start of the next — generous for a café stop, far below the ~9 h
+  of a commute pair. A missing start time or duration means no sum, since
+  adjacency is a claim about a timeline; all 719 production activities carry
+  one, so this only affects fixtures. When the gate does not hold, the existing
+  best-fit path takes over unchanged: the closest ride matches and the rest are
+  labelled `Additional` or `Too much`. Distinct from duplicate detection, which
+  asks whether two files describe the *same* ride and expects them to overlap —
+  parts of a split session follow one another. One deliberate test changed with
+  this: a four-hour day recorded as a morning road ride plus an afternoon MTB
+  ride used to assert both were done, and now pins the same-session reading
+  instead. (#543)
+
 ### Added
 
 - **The coach prompt's cacheable prefix is now a named, tested thing**
