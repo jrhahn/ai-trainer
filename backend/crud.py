@@ -3266,7 +3266,9 @@ async def get_unclassified_intervals_ride_metrics(
 
     Backs the reclassification backfill: bounded by ``since_date`` and ``limit``
     so it only ever re-fetches a small, recent set of laps from the provider
-    (#482).  Newest first.
+    (#482).  Rows the provider has already answered 404 for are excluded — their
+    id is permanently dead, and without this they would occupy the bounded
+    candidate slots on every tick forever (#517).  Newest first.
     """
     result = await db.scalars(
         select(models.RideMetric)
@@ -3278,6 +3280,7 @@ async def get_unclassified_intervals_ride_metrics(
                 models.RideMetric.ride_purpose.is_(None),
             ),
             models.RideMetric.activity_date >= since_date,
+            models.RideMetric.provider_unfetchable_at.is_(None),
         )
         .order_by(models.RideMetric.activity_date.desc())
         .limit(limit)
@@ -3304,6 +3307,15 @@ async def update_ride_metric_classification(
     row.classification_reason = classification_reason
     if summary is not None:
         row.summary = summary
+
+
+async def mark_ride_metric_unfetchable(row: models.RideMetric) -> None:
+    """Record that the provider answered 404 for this row's activity id (#517).
+
+    Touches nothing else: the ride's own metrics stay exactly as imported, only
+    the "do not ask the provider about this id again" marker is set.
+    """
+    row.provider_unfetchable_at = datetime.now(timezone.utc)
 
 
 async def set_ride_feel_legs(

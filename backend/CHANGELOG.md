@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Activity sync stops re-requesting permanently dead intervals.icu ids**
+  (`services/intervals_service.py`, `services/activity_sync.py`, `crud.py`,
+  `routers/intervals.py`, migration `20260807_000001`) — the reclassification
+  backfill fetched every still-`unknown` intervals ride on every 30-minute tick
+  and treated a 404 exactly like an empty detail: skip, forget, ask again. Over
+  a 36 h production window that was 1,201 `404 Not Found` requests, 17 distinct
+  ids retried 72 times each. The ids are the float64-corrupted ones from #427
+  (`978266860298001700`, `6755760447976027000`, …) whose originals are not
+  recoverable from anything we stored — the row's `source_metadata` holds the
+  same corrupted value — so those activities can never be fetched again.
+  `fetch_activity_detail` now raises `IntervalsActivityNotFound` on 404 instead
+  of returning `{}`, and the backfill records it on the row
+  (`ride_metrics.provider_unfetchable_at`) and excludes it from the candidate
+  query from then on. The marker is committed as soon as it is set, because the
+  backfill runs first in a tick that only commits at the end — a later
+  list-endpoint failure must not roll it back into another round of the same
+  404s. Only the marker is written; the ride's imported metrics are untouched.
+  The corrupted rows are retired rather than repaired: recovering an id would
+  mean guessing it from `(date, duration, distance)` against a fresh listing,
+  and a wrong guess attaches one ride's laps to another. 404 stays distinct from
+  429/5xx, which still raise `IntervalsDataUnavailable` and are still retried.
+  In the import loop a 404 now lets the cursor move past the activity, where a
+  transient failure still holds it.
+
 ### Changed
 
 - **Science retrieval drops chunks below a similarity floor** (`services/rag.py`)

@@ -17,6 +17,7 @@ from services.analysis import build_ride_metrics_chain
 from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
+    IntervalsActivityNotFound,
     IntervalsAuthError,
     IntervalsDataUnavailable,
     apply_summary_fallback,
@@ -409,6 +410,22 @@ async def run_intervals_import(
                     rides.append(ride)
             except IntervalsAuthError:
                 raise
+            except IntervalsActivityNotFound:
+                # Listed but no longer fetchable — report it as skipped instead
+                # of as an opaque error, and never retry it (#517).
+                logger.warning(
+                    "Intervals.icu activity no longer exists user=%s activity=%s",
+                    user_id,
+                    _activity_log_entry(activity),
+                )
+                failed.append(
+                    {
+                        "activity_id": None,
+                        "activity_name": activity.get("name"),
+                        "activity_date": None,
+                        "reason": "Activity no longer exists at Intervals.icu",
+                    }
+                )
             except IntervalsDataUnavailable as exc:
                 # Transient failure: surface for retry instead of importing an
                 # activity with missing stream/detail data as if complete (#352).

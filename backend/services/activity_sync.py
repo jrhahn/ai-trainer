@@ -26,6 +26,7 @@ from services.activity_imports import (
 )
 from services.dates import app_today
 from services.intervals_service import (
+    IntervalsActivityNotFound,
     IntervalsDataUnavailable,
     fetch_activity_detail as fetch_intervals_activity_detail,
     fetch_activity_streams as fetch_intervals_activity_streams,
@@ -435,6 +436,7 @@ async def _reclassify_unknown_intervals_rides(
     )
 
     changed = 0
+    retired = 0
     for row in candidates:
         activity_id = row.external_activity_id
         if not activity_id:
@@ -443,6 +445,13 @@ async def _reclassify_unknown_intervals_rides(
             detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
         except IntervalsDataUnavailable:
             continue  # transient — retry on a later tick
+        except IntervalsActivityNotFound:
+            # Permanent: the id is gone (or was never valid — see the corrupted
+            # ids from #427). Mark the row so it stops consuming a candidate
+            # slot and a provider request on every tick (#517).
+            await crud.mark_ride_metric_unfetchable(row)
+            retired += 1
+            continue
         provider_intervals = normalize_provider_intervals(detail)
         if not provider_intervals:
             continue
@@ -477,6 +486,17 @@ async def _reclassify_unknown_intervals_rides(
             user.id,
             changed,
             len(candidates),
+        )
+    if retired:
+        # Persist the markers now rather than with the rest of the tick: they
+        # are facts about the provider, and a later failure in this same sync
+        # (a list-endpoint error, say) must not roll them back into another
+        # round of the very 404s this is meant to stop (#517).
+        await db.commit()
+        logger.info(
+            "Intervals reclassify backfill user=%s retired=%s dead activity ids",
+            user.id,
+            retired,
         )
     return changed
 
@@ -577,6 +597,18 @@ async def sync_intervals_for_user(
             )
             result.skipped += 1
             outcomes.append((activity_id, False))
+            continue
+        except IntervalsActivityNotFound:
+            # The listing offered an activity that no longer exists. Permanent,
+            # so count it as handled and let the cursor move past it — holding
+            # the cursor here would re-request the same dead id forever (#517).
+            logger.warning(
+                "Intervals activity gone from provider user=%s activity=%s; skipping",
+                user.id,
+                activity_id,
+            )
+            result.skipped += 1
+            outcomes.append((activity_id, True))
             continue
         imported = map_activity_to_imported_activity(activity, detail, streams)
         if imported is None:

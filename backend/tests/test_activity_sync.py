@@ -531,6 +531,61 @@ async def test_intervals_transient_stream_failure_not_imported_and_retried(monke
 
 
 @pytest.mark.asyncio
+async def test_intervals_missing_activity_lets_the_cursor_move_past_it(monkeypatch):
+    """A 404 during import is permanent, so the cursor must not stall on it (#517).
+
+    Contrast with the transient case above: holding the cursor below a dead id
+    would re-request it on every tick for as long as the account exists.
+    """
+    from services.intervals_service import IntervalsActivityNotFound
+
+    user_id = await _create_user(
+        email="intervals-gone@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("intervals-old"),
+    )
+
+    async def fake_fetch_recent_intervals_activities(*args, **kwargs):
+        return [
+            {"id": "newest", "name": "Newest", "type": "Ride", "start_date_local": "2026-06-12T08:00:00", "elapsed_time": 3600},
+            {"id": "gone", "name": "Deleted", "type": "Ride", "start_date_local": "2026-06-11T08:00:00", "elapsed_time": 3600},
+            {"id": "older-good", "name": "Older", "type": "Ride", "start_date_local": "2026-06-10T08:00:00", "elapsed_time": 3600},
+        ]
+
+    detail_calls: list[str] = []
+
+    async def fake_detail(api_key, activity_id):
+        detail_calls.append(activity_id)
+        if activity_id == "gone":
+            raise IntervalsActivityNotFound("no activity gone")
+        return {}
+
+    async def fake_streams(api_key, activity_id):
+        return {}
+
+    async def fake_persist(db, user, activities):
+        return len(activities), 0
+
+    monkeypatch.setattr(activity_sync, "fetch_recent_intervals_activities", fake_fetch_recent_intervals_activities)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_streams", fake_streams)
+    monkeypatch.setattr(activity_sync, "_persist_and_adapt", fake_persist)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_intervals_for_user(db, user)
+        await db.commit()
+
+    user = await _get_user(user_id)
+    assert result.imported == 2  # newest + older-good
+    assert result.skipped == 1  # the dead one
+    assert "gone" in detail_calls
+    # The cursor clears the dead activity instead of stalling below it.
+    assert user.last_intervals_activity_id == intervals_activity_id("newest")
+
+
+@pytest.mark.asyncio
 async def test_intervals_cursor_stays_put_when_all_activities_fail_mapping(monkeypatch):
     """Regression for #322: intervals cursor must not move when every import fails."""
     original_cursor = intervals_activity_id("intervals-old")
@@ -763,6 +818,130 @@ async def test_reclassify_backfill_upgrades_unknown_intervals_ride(monkeypatch):
         assert row.label_override == "Perfect"  # edit preserved
         assessment = await crud.get_rider_assessment(db, user_id)
         assert not assessment.login_summary  # invalidated
+
+
+@pytest.mark.asyncio
+async def test_reclassify_backfill_retires_ids_the_provider_lost(monkeypatch):
+    """A 404 retires the row instead of being re-requested on the next tick.
+
+    The float64-corrupted ids from #427 can never resolve again, so the backfill
+    used to burn a candidate slot and a provider request on each of them every
+    30 minutes, forever (#517).
+    """
+    from services.dates import app_today
+    from services.intervals_service import IntervalsActivityNotFound
+
+    user_id = await _create_user(
+        email="reclassify-dead@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("cursor"),
+    )
+    dead_id = "978266860298001700"
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=int(dead_id),
+            activity_source="intervals",
+            external_activity_id=dead_id,
+            activity_date=app_today().isoformat(),
+            sport_type="cycling",
+            duration_seconds=6259,
+            tss=88.0,
+            ftp_used=250,
+            ride_purpose="unknown",
+        )
+        await db.commit()
+
+    requested: list[str] = []
+
+    async def fake_detail(api_key, activity_id):
+        requested.append(activity_id)
+        raise IntervalsActivityNotFound(f"no activity {activity_id}")
+
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        changed = await activity_sync._reclassify_unknown_intervals_rides(db, user)
+        await db.commit()
+
+    assert changed == 0
+    assert requested == [dead_id]
+
+    async with TestSessionLocal() as db:
+        row = await crud.get_ride_metric_by_external_id(db, user_id, dead_id)
+        assert row.provider_unfetchable_at is not None
+        # The ride's own imported metrics are untouched by the marker.
+        assert row.tss == 88.0
+
+    # Second tick: the retired row is no longer a candidate.
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await activity_sync._reclassify_unknown_intervals_rides(db, user)
+
+    assert requested == [dead_id]  # not asked again
+
+
+@pytest.mark.asyncio
+async def test_reclassify_backfill_commits_retirement_before_the_rest_of_the_sync(
+    monkeypatch,
+):
+    """The marker survives a later failure in the same sync tick (#517).
+
+    sync_intervals_for_user runs the backfill first and only commits at the very
+    end, so without an eager commit a failing list fetch would roll the markers
+    back and the next tick would repeat the same 404s.
+    """
+    from services.dates import app_today
+    from services.intervals_service import (
+        IntervalsAPIError,
+        IntervalsActivityNotFound,
+    )
+
+    user_id = await _create_user(
+        email="reclassify-dead-then-fail@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("cursor"),
+    )
+    dead_id = "6755760447976027000"
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=int(dead_id),
+            activity_source="intervals",
+            external_activity_id=dead_id,
+            activity_date=app_today().isoformat(),
+            sport_type="cycling",
+            duration_seconds=343,
+            ftp_used=250,
+            ride_purpose="unknown",
+        )
+        await db.commit()
+
+    async def fake_detail(api_key, activity_id):
+        raise IntervalsActivityNotFound(f"no activity {activity_id}")
+
+    async def failing_list(*args, **kwargs):
+        raise IntervalsAPIError("Intervals.icu list error 500")
+
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+    monkeypatch.setattr(
+        activity_sync, "fetch_recent_intervals_activities", failing_list
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        with pytest.raises(IntervalsAPIError):
+            await activity_sync.sync_intervals_for_user(db, user)
+        await db.rollback()  # what run_activity_sync's error path leaves behind
+
+    async with TestSessionLocal() as db:
+        row = await crud.get_ride_metric_by_external_id(db, user_id, dead_id)
+        assert row.provider_unfetchable_at is not None
 
 
 @pytest.mark.asyncio

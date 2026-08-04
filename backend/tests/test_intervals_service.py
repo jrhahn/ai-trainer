@@ -287,8 +287,14 @@ async def test_fetch_activity_detail_paths(monkeypatch):
     _patch_client(monkeypatch, _FakeResp(200, ["not a dict"]))
     assert await isvc.fetch_activity_detail("key", 9) == {}
 
-    # Permanent non-success (404) means the activity has no detail — empty dict.
+    # 404 is permanent and must be distinguishable from an empty detail, so
+    # callers can retire the id instead of re-requesting it forever (#517).
     _patch_client(monkeypatch, _FakeResp(404))
+    with pytest.raises(isvc.IntervalsActivityNotFound):
+        await isvc.fetch_activity_detail("key", 9)
+
+    # Other permanent non-successes still mean "no detail" — empty dict.
+    _patch_client(monkeypatch, _FakeResp(400))
     assert await isvc.fetch_activity_detail("key", 9) == {}
 
     _patch_client(monkeypatch, _FakeResp(403))
