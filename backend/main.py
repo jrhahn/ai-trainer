@@ -33,14 +33,29 @@ FRONTEND_URL = settings.primary_frontend_url
 _REQUEST_ID_HEADER = "X-Request-ID"
 
 
+async def _create_dev_schema() -> None:
+    """Create tables directly from the models — dev/test convenience only.
+
+    Alembic is the single source of truth for the schema in real deployments
+    (``entrypoint.sh`` runs ``alembic upgrade head`` before the app boots). There,
+    ``create_all`` would only create missing *tables* (never missing columns), so
+    it silently masks a forgotten migration and drifts from the migrated schema.
+    It is therefore skipped outside development/test, where migrations aren't run
+    and creating tables from the models is the convenient bootstrap (#327).
+    """
+    if settings.app_env not in ("development", "test"):
+        return
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
     _auth.warn_if_authelia_proxy_unprotected()
     # Fail fast if the pipeline dependency graph is not a DAG.
     pipeline_graph.validate()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await _create_dev_schema()
     scheduler = InProcessScheduler()
     scheduler.register(daily_plan_maintenance_job(async_session_maker))
     scheduler.register(activity_sync_job(async_session_maker))

@@ -93,6 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`create_all` no longer masks migration drift outside dev/test** (`main.py`) —
+  startup ran `Base.metadata.create_all` unconditionally, alongside the Alembic
+  history that `entrypoint.sh` applies (`alembic upgrade head`). Because
+  `create_all` only creates missing *tables* (never missing columns), in a
+  deployed environment it silently hid a forgotten migration and drifted from the
+  migrated schema (#327). Schema bootstrap via `create_all` is now gated to
+  `APP_ENV in {development, test}` (extracted to `_create_dev_schema`); real
+  deployments rely solely on Alembic as the single source of truth. Tests build
+  their schema directly and are unaffected.
+
 - **The coach-memory background write no longer deadlocks against its own
   request** (`routers/ai.py`) — `_update_memory_bg` is queued as a background
   task, and FastAPI runs those *before* the `get_db` dependency's teardown
