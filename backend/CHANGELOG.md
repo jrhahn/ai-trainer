@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A session recorded in two files is reviewed and counted as one**
+  (`services/ride_matching.py`, `services/training_status.py`) — when two
+  recordings were accepted as one planned session (#543) both were written as
+  matched, but only one was handed on. The coach therefore rated a 60-minute
+  half against the 120-minute plan and told the athlete they had done half of
+  what they did, and the training status let only the first recording claim the
+  session: the other became an "extra activity" the plan never asked for, or —
+  worse — was consumed as evidence that a *different* session of that date had
+  been ridden. `review_matched_ride_and_adapt` now recovers the whole group from
+  what the match already wrote to the rows (same `matched_plan_date` and slot,
+  looked up by the ride's own `activity_date` so a manual resolve onto another
+  date cannot drag in strangers) and describes the session by its total:
+  durations summed, average power weighted by duration rather than averaged,
+  notes and perceived effort taken from whichever half the athlete commented on.
+  The stream analysis stays scoped to the recording it was built from, which is
+  what its streams actually describe. The matcher still returns one
+  representative ride per session on purpose — returning both would buy two
+  coach notes and two LLM calls for one session — and now says so where the next
+  reader would otherwise "fix" it. `mark_matched_days_completed` was never
+  affected: it keys on `(date, slot)`, which both halves share. (#545)
+
 - **Two same-day activities only count as one session when they were one**
   (`services/activity_identity.py`, `services/ride_matching.py`) — with several
   activities on a day that has a single planned session, the matcher added their

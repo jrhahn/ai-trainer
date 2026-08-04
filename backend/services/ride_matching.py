@@ -377,6 +377,76 @@ def _ride_feedback_from_metric(ride: models.RideMetric) -> dict[str, Any]:
     return feedback
 
 
+def _session_feedback_from_metrics(
+    rides: list[models.RideMetric],
+) -> dict[str, Any]:
+    """What the athlete did in this session, across every recording of it.
+
+    A session split across two files is matched as two rides on one slot (#543).
+    Describing it by one of them told the athlete they had done half of what
+    they did, which is the opposite of what the match asserted (#545).
+
+    Duration is the sum. Average power is weighted by duration, so it is the
+    session's average and not the mean of two averages. Notes and perceived
+    effort come from whichever recording the athlete actually commented on —
+    they are a statement about the session, not about a file.
+    """
+    if not rides:
+        return {}
+    if len(rides) == 1:
+        return _ride_feedback_from_metric(rides[0])
+
+    commented = next((ride for ride in rides if ride.user_note), rides[0])
+    feedback = _ride_feedback_from_metric(commented)
+
+    total_seconds = sum(ride.duration_seconds or 0 for ride in rides)
+    if total_seconds:
+        feedback["actualDurationMinutes"] = max(1, round(total_seconds / 60))
+
+    weighted = [
+        (ride.avg_power_w, ride.duration_seconds)
+        for ride in rides
+        if ride.avg_power_w and ride.duration_seconds
+    ]
+    if weighted:
+        feedback["averagePower"] = round(
+            sum(power * seconds for power, seconds in weighted)
+            / sum(seconds for _power, seconds in weighted)
+        )
+    return feedback
+
+
+async def _session_group_rides(
+    db: AsyncSession, user_id: str, ride: models.RideMetric
+) -> list[models.RideMetric]:
+    """Every recording matched to the same planned session as *ride*.
+
+    ``apply_ride_plan_matches`` deliberately returns one representative ride per
+    matched session — reviewing each half separately would mean two coach notes
+    and two LLM calls for one session. The other halves are found here instead,
+    from what the match already wrote to the rows.
+
+    Looked up by the ride's own ``activity_date`` rather than by
+    ``matched_plan_date``: a manual resolve can attach a ride to a planned date
+    it was not recorded on, and the halves of a split session always share the
+    date they were ridden.
+    """
+    slot = _matched_slot(ride)
+    same_day = await crud.get_ride_metrics_by_date(db, user_id, ride.activity_date)
+    group = [
+        other
+        for other in same_day
+        if other.plan_match_status == MATCH_AUTO
+        and str(other.matched_plan_date or "") == str(ride.matched_plan_date or "")
+        and _matched_slot(other) == slot
+    ]
+    if not any(
+        other.strava_activity_id == ride.strava_activity_id for other in group
+    ):
+        group.append(ride)
+    return sorted(group, key=_ride_start_order)
+
+
 # Canonical implementation lives in the shared pipeline; kept as an alias so the
 # per-day merge logic never diverges between this module and the pipeline.
 _apply_plan_updates = plan_pipeline.apply_plan_updates
@@ -634,6 +704,11 @@ async def apply_ride_plan_matches(
                                 else LABEL_ADDITIONAL,
                             ),
                         )
+                # One entry per matched *session*, not per matched ride: when a
+                # split session put two rides on this slot, returning both would
+                # buy two coach notes and two LLM calls for one session. The
+                # other halves are recovered by _session_group_rides, so the
+                # review still sees the whole session (#545).
                 auto_matched.append(best_match)
             else:
                 for ride in date_rides:
@@ -808,8 +883,13 @@ async def review_matched_ride_and_adapt(
     if ftp <= 0 and user.rider_assessment is not None and user.rider_assessment.estimated_ftp:
         ftp = float(user.rider_assessment.estimated_ftp)
 
+    # The session may have been recorded in several files (#543). What the coach
+    # is told the athlete did has to be the session, not the file that happened
+    # to be handed over; the stream analysis below stays scoped to that one
+    # recording, because that is what its streams describe.
+    session_rides = await _session_group_rides(db, user.id, ride)
     day_for_rating = dict(plan_day)
-    day_for_rating["feedback"] = _ride_feedback_from_metric(ride)
+    day_for_rating["feedback"] = _session_feedback_from_metrics(session_rides)
     stream_delta = None
     ride_analysis = None
     if streams and ftp > 0:
@@ -877,7 +957,7 @@ async def review_matched_ride_and_adapt(
             else None
         )
         result = await ai_service.recommend_next_session(
-            rides=[ride],
+            rides=session_rides,
             plan=plan,
             profile=profile,
             provider=provider,

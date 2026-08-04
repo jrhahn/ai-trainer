@@ -142,6 +142,9 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
 
     ride = MagicMock(spec=models.RideMetric)
     ride.matched_plan_date = "2026-06-24"
+    # Every real RideMetric has one; the review now reads it to find the other
+    # recordings of the same session (#545).
+    ride.activity_date = "2026-06-24"
     ride.matched_plan_snapshot = _day("2026-06-24", "intervals")
     ride.ctl_after = None
     ride.atl_after = None
@@ -217,6 +220,7 @@ async def test_review_matched_ride_preserves_coach_pinned_day(monkeypatch):
 
     ride = MagicMock(spec=models.RideMetric)
     ride.matched_plan_date = matched_day
+    ride.activity_date = matched_day
     ride.matched_plan_snapshot = _day(matched_day, "intervals")
     ride.ctl_after = None
     ride.atl_after = None
@@ -281,6 +285,7 @@ async def test_review_matched_ride_respects_availability_constraints(monkeypatch
 
     ride = MagicMock(spec=models.RideMetric)
     ride.matched_plan_date = matched_day
+    ride.activity_date = matched_day
     ride.matched_plan_snapshot = _day(matched_day, "intervals")
     ride.ctl_after = None
     ride.atl_after = None

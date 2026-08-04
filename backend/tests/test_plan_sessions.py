@@ -462,6 +462,86 @@ async def test_a_hard_extra_ride_is_flagged_as_too_much_not_merely_additional():
     assert by_id[9501].label_override == ride_matching.LABEL_TOO_MUCH
 
 
+def test_session_feedback_adds_the_halves_up():
+    """Duration is the sum; average power is weighted by it, not averaged."""
+    halves = [
+        models.RideMetric(duration_seconds=60 * 60, avg_power_w=200, user_note=None),
+        models.RideMetric(duration_seconds=30 * 60, avg_power_w=140, user_note=None),
+    ]
+
+    feedback = ride_matching._session_feedback_from_metrics(halves)
+
+    assert feedback["actualDurationMinutes"] == 90
+    # 200 for an hour and 140 for half of one is 180, not 170.
+    assert feedback["averagePower"] == 180
+
+
+def test_session_feedback_takes_notes_from_the_half_that_has_them():
+    halves = [
+        models.RideMetric(duration_seconds=60 * 60, avg_power_w=None, user_note=None),
+        models.RideMetric(
+            duration_seconds=60 * 60, avg_power_w=None, user_note="Legs felt heavy"
+        ),
+    ]
+
+    feedback = ride_matching._session_feedback_from_metrics(halves)
+
+    assert feedback["notes"] == "Legs felt heavy"
+    assert feedback["actualDurationMinutes"] == 120
+
+
+@pytest.mark.asyncio
+async def test_the_coach_reviews_the_whole_session_not_the_half_it_was_handed(
+    monkeypatch,
+):
+    """The defect in #545: 60 + 60 was reviewed as 60 against a 120' plan.
+
+    The matcher returns one representative ride per session on purpose — two
+    would mean two coach notes for one session — so the review has to find the
+    other half itself.
+    """
+    date = "2026-08-20"
+    plan = [_session(date, "endurance", duration=120)]
+    user_id = await _create_user("split-review@example.com", plan)
+    await _add_ride(user_id, 9701, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
+    await _add_ride(user_id, 9702, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T10:15:00Z")
+
+    rated_days: list[dict] = []
+
+    async def fake_rate(day, profile, **kwargs):
+        rated_days.append(day)
+        return {"feedback": "Nicely done."}
+
+    monkeypatch.setattr(
+        ride_matching.ai_service, "rate_completed_workout", fake_rate
+    )
+
+    async def fake_recommend(**kwargs):
+        return {"plan_updates": None}
+
+    monkeypatch.setattr(
+        ride_matching.ai_service, "recommend_next_session", fake_recommend
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        matched = await ride_matching.apply_ride_plan_matches(
+            db, user_id, plan, [9701, 9702]
+        )
+        # One representative for the one session, both halves matched.
+        assert len(matched) == 1
+        for ride in matched:
+            await ride_matching.review_matched_ride_and_adapt(
+                db, user, ride, plan, provider="gemini"
+            )
+        await db.commit()
+
+    assert len(rated_days) == 1
+    assert rated_days[0]["feedback"]["actualDurationMinutes"] == 120
+
+
 @pytest.mark.asyncio
 async def test_without_start_times_the_rides_are_never_summed():
     """Adjacency is a claim about a timeline; there is none here, so no sum."""
