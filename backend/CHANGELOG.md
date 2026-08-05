@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A manual ride resolve can name which session of the day it was**
+  (`schemas.py`, `routers/ai.py`, `services/ride_matching.py`) —
+  `resolve_manual_match` has taken a `planned_slot` since two-a-days existed
+  (#496), but `ResolveRideMatchRequest` carried no such field, so the router
+  could not fill it and `_session_at_slot` always fell back to the date's first
+  session. Ambiguity is most likely exactly when a date holds two sessions,
+  which was the case the interface could not express. The request now carries an
+  optional `plannedSlot`; omitting it keeps the old behaviour, which is what
+  every single-session day sends. Adding it exposed a second problem that the
+  slot-0-only limitation had been hiding: the resolve unmatched *every* other
+  ride of the date, so answering "the evening one was the intervals" would have
+  discarded the morning ride's perfectly good match. Only rides still claiming
+  the same session are unmatched now — an ambiguous ride of that date, or one
+  matched to that same slot. An extra activity keeps its `Additional` /
+  `Too much` label, since it was never claiming the session. No UI calls this
+  endpoint yet; that half of #547 stays open. (#547)
+
 - **A session recorded in two files is reviewed and counted as one**
   (`services/ride_matching.py`, `services/training_status.py`) — when two
   recordings were accepted as one planned session (#543) both were written as

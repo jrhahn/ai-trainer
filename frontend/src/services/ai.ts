@@ -400,13 +400,19 @@ export async function resolveRideMatch(
   authToken: string,
   plannedDate: string,
   stravaActivityId: number,
+  // Which session of that date, when it holds more than one. Omitted means the
+  // only session there is, which is what a single-session day sends (#547).
+  plannedSlot?: number,
 ): Promise<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }> {
   return apiFetch<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }>(
     '/ai/resolve-ride-match',
     {
       token: authToken,
       method: 'POST',
-      body: { plannedDate, stravaActivityId },
+      body:
+        plannedSlot === undefined
+          ? { plannedDate, stravaActivityId }
+          : { plannedDate, stravaActivityId, plannedSlot },
     },
   )
 }

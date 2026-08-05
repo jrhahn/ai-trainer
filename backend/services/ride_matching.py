@@ -821,6 +821,7 @@ async def resolve_manual_match(
     if selected is None:
         return None
 
+    target_slot = schemas.day_slot(plan_day)
     for ride in rides:
         if ride.strava_activity_id == strava_activity_id:
             await crud.update_ride_match(
@@ -828,12 +829,12 @@ async def resolve_manual_match(
                 ride,
                 status=MATCH_MANUAL,
                 matched_plan_date=planned_date,
-                matched_plan_slot=schemas.day_slot(plan_day),
+                matched_plan_slot=target_slot,
                 matched_plan_snapshot=plan_day,
                 matched_at=_utcnow(),
                 label_override=_resolve_label(ride, None),
             )
-        else:
+        elif _competes_for_session(ride, planned_date, target_slot):
             await crud.update_ride_match(
                 db,
                 ride,
@@ -842,6 +843,28 @@ async def resolve_manual_match(
             )
 
     return selected
+
+
+def _competes_for_session(
+    ride: models.RideMetric, planned_date: str, slot: int
+) -> bool:
+    """Would *ride* still claim the session the athlete just assigned elsewhere?
+
+    Only those get unmatched. This used to unmatch every other ride of the date,
+    which was invisible while a resolve could only ever target the day's first
+    session — but ambiguity is most likely on a two-a-day, so answering "the
+    evening one was the intervals" would have thrown away the morning ride's
+    perfectly good match (#547). An extra activity keeps its label too: it was
+    never claiming this session.
+    """
+    if str(ride.plan_match_status or "") == MATCH_AMBIGUOUS:
+        return str(ride.matched_plan_date or "") == planned_date
+    if str(ride.plan_match_status or "") in {MATCH_AUTO, MATCH_MANUAL}:
+        return (
+            str(ride.matched_plan_date or "") == planned_date
+            and _matched_slot(ride) == slot
+        )
+    return False
 
 
 async def review_matched_ride_and_adapt(
