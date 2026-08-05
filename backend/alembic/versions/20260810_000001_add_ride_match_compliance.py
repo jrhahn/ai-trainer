@@ -3,9 +3,9 @@
 Persists the compliance badge that used to be computed only in the browser, so
 the coach can see the badge it is asked to explain (#551).
 
-Revision ID: 20260809_000001
-Revises: 20260808_000001
-Create Date: 2026-08-09 00:00:01
+Revision ID: 20260810_000001
+Revises: 20260809_000001
+Create Date: 2026-08-10 00:00:01
 """
 
 import json
@@ -18,8 +18,8 @@ from sqlalchemy import inspect as sa_inspect
 from services import plan_compliance
 
 
-revision = "20260809_000001"
-down_revision = "20260808_000001"
+revision = "20260810_000001"
+down_revision = "20260809_000001"
 branch_labels = None
 depends_on = None
 
