@@ -1227,3 +1227,57 @@ class RideMetric(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="ride_metrics")
+
+
+class LlmCall(Base):
+    """One provider call, kept after the container that made it is gone (#549).
+
+    #516 already emitted a structured line per call. Container logs die with the
+    container and every deploy recreates it, so the record covered "since the
+    last deploy" — hours on an active day, which is not enough to answer whether
+    a prompt change moved the bill (#538) or whether the spend actually came
+    down (#510).
+
+    Written from the collection scope in ``services.token_accounting``, so a
+    call is recorded exactly where its tokens are already counted. The log line
+    stays: it is what you read while something is going wrong, this is what you
+    query afterwards.
+    """
+
+    __tablename__ = "llm_calls"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # Nullable on purpose. A call made outside every scope belongs to nobody —
+    # that is the bug #537 fixed — and dropping the row would hide exactly the
+    # calls worth finding.
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    task: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    model: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(60), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # A subset of input_tokens, not a fourth bucket — both providers report the
+    # cache hit as part of the prompt count.
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    json_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Hash of the system prompt. The reason this is a column and not a log
+    # field: a cost jump is explained by joining spend to the prompt that
+    # produced it, which needs both to still exist.
+    prompt_sha: Mapped[str] = mapped_column(String(12), nullable=False)
+
+    __table_args__ = (
+        # Every question asked of this table is "over some period", usually
+        # narrowed to one source or model.
+        Index("ix_llm_calls_created_at", "created_at"),
+        Index("ix_llm_calls_source_created_at", "source", "created_at"),
+    )

@@ -70,14 +70,47 @@ class TokenUsage:
 
 
 @dataclass
+class CallRecord:
+    """One provider call, as it will be stored (#549).
+
+    Collected in the scope rather than written when it happens: ``record_call``
+    runs in the provider layer, which is synchronous and holds no session. The
+    scope already has to be open for the tokens to be billed at all, so the
+    records ride along with them and are inserted at the same moment.
+    """
+
+    task: str
+    provider: str
+    model: str
+    prompt_sha: str
+    json_mode: bool
+    latency_ms: int
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    total_tokens: int
+    ok: bool
+    error: str
+
+
+@dataclass
 class _Scope:
     source: str
     usage: TokenUsage = field(default_factory=TokenUsage)
+    records: list[CallRecord] = field(default_factory=list)
     # The most recent call, so a parse failure discovered after the provider
     # returned can still be attributed to the call that produced it.
     last_task: str = ""
     last_model: str = ""
     last_prompt_sha: str = ""
+
+
+@dataclass
+class Collection:
+    """What one closed scope collected: the totals, and the calls behind them."""
+
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    records: list[CallRecord] = field(default_factory=list)
 
 
 _scope: ContextVar[_Scope | None] = ContextVar("llm_usage_scope", default=None)
@@ -98,12 +131,16 @@ def begin_collection(source: str) -> Token[_Scope | None]:
     return _scope.set(_Scope(source=source))
 
 
-def finish_collection(token: Token[_Scope | None]) -> TokenUsage:
-    """Return the collected usage and restore the previous context."""
+def finish_collection(token: Token[_Scope | None]) -> Collection:
+    """Return what the scope collected and restore the previous context."""
     scope = _scope.get()
-    usage = scope.usage if scope is not None else TokenUsage()
+    collected = (
+        Collection(usage=scope.usage, records=scope.records)
+        if scope is not None
+        else Collection()
+    )
     _scope.reset(token)
-    return usage
+    return collected
 
 
 def record_call(
@@ -166,6 +203,22 @@ def record_call(
     scope.usage.cached += max(0, cached_tokens)
     scope.usage.total += max(0, total_tokens)
     scope.usage.calls += 1
+    scope.records.append(
+        CallRecord(
+            task=task,
+            provider=provider,
+            model=model,
+            prompt_sha=prompt_sha,
+            json_mode=json_mode,
+            latency_ms=max(0, latency_ms),
+            input_tokens=max(0, input_tokens),
+            output_tokens=max(0, output_tokens),
+            cached_tokens=max(0, cached_tokens),
+            total_tokens=max(0, total_tokens),
+            ok=ok,
+            error=error,
+        )
+    )
     scope.last_task = task
     scope.last_model = model
     scope.last_prompt_sha = prompt_sha
@@ -206,9 +259,17 @@ def log_payload(kind: str, text: str) -> None:
 
 
 async def _persist_usage(
-    db: AsyncSession, user: models.User, source: str, usage: TokenUsage
+    db: AsyncSession,
+    user: models.User,
+    source: str,
+    collected: Collection,
 ) -> None:
-    """Log the scope total and add it to the user's counters. Never commits."""
+    """Log the scope total, store its calls, bill the user. Never commits."""
+    usage = collected.usage
+    # The call rows go in first and unconditionally: a failed call reports zero
+    # tokens, and a model that has started rejecting every request is exactly
+    # what a cost table has to be able to show (#401).
+    await crud.record_llm_calls(db, user.id, source, collected.records)
     if not (usage.total or usage.input or usage.output):
         return
     logger.info(
@@ -251,9 +312,9 @@ async def track_llm_usage(
     try:
         yield
     finally:
-        usage = finish_collection(token)
+        collected = finish_collection(token)
         try:
-            await _persist_usage(db, user, source, usage)
+            await _persist_usage(db, user, source, collected)
         except Exception:  # noqa: BLE001 — never mask the enclosed block's error
             logger.warning("Failed to persist collected token usage", exc_info=True)
 
@@ -283,9 +344,13 @@ async def track_llm_usage_detached(
     try:
         yield
     finally:
-        usage = finish_collection(token)
+        collected = finish_collection(token)
+        usage = collected.usage
         try:
-            if usage.total or usage.input or usage.output:
+            # A call that spent nothing still happened, so the session opens for
+            # records too — a failed call reports zero tokens and is the most
+            # interesting row in the table.
+            if collected.records or usage.total or usage.input or usage.output:
                 async with session_maker() as session:
                     user = await session.get(models.User, user_id)
                     if user is None:
@@ -296,7 +361,7 @@ async def track_llm_usage_detached(
                             user_id,
                         )
                     else:
-                        await _persist_usage(session, user, source, usage)
+                        await _persist_usage(session, user, source, collected)
                         await session.commit()
         except Exception:  # noqa: BLE001 — never mask the enclosed block's error
             logger.warning("Failed to persist collected token usage", exc_info=True)

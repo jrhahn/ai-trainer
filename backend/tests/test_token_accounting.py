@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 import pytest
+from sqlalchemy import select
 
 import crud
 import models
@@ -346,6 +347,121 @@ async def test_detached_scope_is_restored_after_it_closes():
     ):
         assert token_accounting.current_source() == "bg:x"
     assert token_accounting.current_source() == token_accounting.UNSCOPED
+
+
+# ---------------------------------------------------------------------------
+# Records that outlive the container (#549)
+# ---------------------------------------------------------------------------
+
+
+async def _stored_calls() -> list[models.LlmCall]:
+    async with TestSessionLocal() as db:
+        rows = await db.execute(
+            select(models.LlmCall).order_by(models.LlmCall.created_at)
+        )
+        return list(rows.scalars())
+
+
+@pytest.mark.asyncio
+async def test_a_call_is_stored_with_everything_needed_to_price_it():
+    user_id = await _create_user("calls-stored@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        async with token_accounting.track_llm_usage(db, user, source="api:ask_trainer"):
+            _call()
+        await db.commit()
+
+    stored = await _stored_calls()
+    assert len(stored) == 1
+    row = stored[0]
+    assert row.user_id == user_id
+    assert (row.task, row.provider, row.model) == (
+        "coach",
+        "gemini",
+        "gemini-3.5-flash-lite",
+    )
+    assert row.source == "api:ask_trainer"
+    assert (row.input_tokens, row.output_tokens, row.cached_tokens) == (
+        12_000,
+        480,
+        9_000,
+    )
+    assert row.total_tokens == 12_480
+    assert row.latency_ms == 1234
+    assert row.ok is True
+    assert row.prompt_sha == token_accounting.prompt_fingerprint(
+        "You are a cycling coach."
+    )
+
+
+@pytest.mark.asyncio
+async def test_every_call_of_a_scope_is_stored_under_that_scopes_source():
+    user_id = await _create_user("calls-many@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        async with token_accounting.track_llm_usage(db, user, source="job:sync"):
+            _call(task="classify")
+            _call(task="plan")
+        await db.commit()
+
+    stored = await _stored_calls()
+    assert [row.task for row in stored] == ["classify", "plan"]
+    assert {row.source for row in stored} == {"job:sync"}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_call_is_stored_even_though_it_spent_nothing():
+    """A model rejecting every request is what a cost table has to show (#401)."""
+    user_id = await _create_user("calls-failed@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        async with token_accounting.track_llm_usage(db, user, source="api:x"):
+            _call(
+                ok=False,
+                error="AIRateLimitError",
+                input_tokens=0,
+                output_tokens=0,
+                cached_tokens=0,
+                total_tokens=0,
+            )
+        await db.commit()
+
+    stored = await _stored_calls()
+    assert len(stored) == 1
+    assert stored[0].ok is False
+    assert stored[0].error == "AIRateLimitError"
+    assert stored[0].total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_detached_work_stores_its_calls_too():
+    user_id = await _create_user("calls-detached@example.com")
+
+    async with token_accounting.track_llm_usage_detached(
+        TestSessionLocal, user_id, source="bg:update_coach_memory"
+    ):
+        _call(task="classify")
+
+    stored = await _stored_calls()
+    assert len(stored) == 1
+    assert stored[0].source == "bg:update_coach_memory"
+    assert stored[0].user_id == user_id
+
+
+@pytest.mark.asyncio
+async def test_an_unscoped_call_is_warned_about_but_not_stored(caplog):
+    """Known and deliberate: there is no session and no user to store it under.
+
+    The WARNING from #537 is the signal; a call reaching this point is a bug in
+    the caller, not something to file quietly under nobody.
+    """
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        _call()
+    assert any("billed to nobody" in r.getMessage() for r in caplog.records)
+    assert await _stored_calls() == []
 
 
 def test_json_repair_is_reported_against_the_call_that_caused_it(caplog):
