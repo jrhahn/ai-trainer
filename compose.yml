@@ -195,7 +195,64 @@ services:
       - traefik.http.routers.authelia-https.priority=1000
       - traefik.http.services.authelia.loadbalancer.server.port=9091
 
+  # --- Monitoring (#549) -----------------------------------------------------
+  # Neither service carries Traefik labels and both bind to 127.0.0.1, so
+  # nothing here is reachable from the internet. Reach Grafana with an SSH
+  # tunnel:
+  #
+  #     ssh -L 3000:127.0.0.1:3000 root@trainlikea.pro
+  #
+  # then open http://localhost:3000. A publicly reachable Grafana is a standing
+  # scan target, and this deployment has exactly one human who needs it.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Long enough to answer "did the bill come down after that change?"
+      # (#510) without the volume growing without bound.
+      - --storage.tsdb.retention.time=180d
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    labels:
+      - traefik.enable=false
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      # Only reachable through the SSH tunnel above, so this is a second lock
+      # on an already locked door — but a default password on a metrics UI is
+      # how those get found, so it stays settable and is documented in
+      # .env.example.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # No outbound calls: this instance has no internet-facing purpose.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    labels:
+      - traefik.enable=false
+
 volumes:
   postgres_data:
   letsencrypt_data:
   authelia_data:
+  prometheus_data:
+  grafana_data:

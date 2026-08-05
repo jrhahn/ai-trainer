@@ -1,0 +1,14 @@
+# Provisioned so a fresh Grafana volume comes up already wired (#549).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # Fixed, not generated. The dashboard's panels reference the datasource by
+    # uid; letting Grafana mint one (PBFA97CFB590B2093 on a fresh volume) leaves
+    # every panel pointing at a datasource that does not exist.
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

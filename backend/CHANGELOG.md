@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Prometheus metrics and a Grafana dashboard** (`services/metrics.py` (new),
+  `main.py`, `services/scheduler.py`, `compose.yml`, `monitoring/`) — the second
+  half of #549. `/metrics` exposes two kinds of series from two different
+  sources, deliberately. **LLM cost** is read from the `llm_calls` table at
+  scrape time: in-process counters would restart at zero on every deploy, which
+  is the exact failure the first half fixed, so `llm_calls_total`,
+  `llm_tokens_total` (input/output/cached) and `llm_latency_seconds_total`
+  are cumulative sums over the rows and survive a restart, and cannot disagree
+  with the records they come from. **App health** — `http_requests_total`,
+  `http_request_duration_seconds`, `scheduler_job_runs_total`,
+  `scheduler_job_duration_seconds`, `db_connection_pool` — is in-process, where
+  a reset on restart is what Prometheus expects anyway. Every label is bounded:
+  HTTP is labelled by the matched *route template*, so `/api/v1/users/{user_id}`
+  is one series and an unmatched path collapses to `route="unmatched"` instead
+  of minting one series per thing a scanner probes; `prompt_sha` appears
+  nowhere, being effectively unbounded and a SQL question rather than a time
+  series. `/metrics` is mounted at the root rather than under `/api` because
+  Traefik routes only `PathPrefix(/api)` and `/healthz`, which leaves it
+  reachable from the Compose network and from nowhere else. Grafana and
+  Prometheus bind to `127.0.0.1` with `traefik.enable=false` and are reached
+  through an SSH tunnel (`ssh -L 3000:127.0.0.1:3000`); a publicly reachable
+  Grafana is a standing scan target and this deployment has one human. The
+  dashboard covers spend by source, calls by task, failures by model, provider
+  latency, request rate/errors/p95 by route, scheduler duration and outcomes,
+  and the connection pool. Alerting is deliberately not included: useful
+  thresholds are hard to guess before there are weeks of data. (#549)
+
 - **Per-call LLM cost records survive the deploy that ends the container**
   (`models.py`, `crud.py`, `services/token_accounting.py`, migration
   `20260809_000001`) — #516 emitted one structured line per provider call, and
