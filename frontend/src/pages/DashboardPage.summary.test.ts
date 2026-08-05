@@ -6,6 +6,7 @@ import {
   matchScoreLabel,
   matchScoreBadgeStyle,
   buildMatchCoachPrompt,
+  rideMatchBadge,
 } from './DashboardPage'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 
@@ -281,5 +282,77 @@ describe('buildMatchCoachPrompt', () => {
     const ride = makeRideForScore({ activityName: undefined })
     const prompt = buildMatchCoachPrompt(ride, basePlan, 50)
     expect(prompt).toContain('my ride')
+  })
+})
+
+describe('rideMatchBadge', () => {
+  const recoveryPlan: Partial<TrainingDay> = {
+    workoutType: 'recovery',
+    title: 'Gentle Active Recovery Spin',
+    durationMinutes: 50,
+  }
+
+  it('shows the badge the backend scored rather than recomputing it', () => {
+    const ride = makeRideForScore({
+      durationSeconds: 4539,
+      normalizedPowerW: 160,
+      tss: 31.5,
+      matchScore: 85,
+      matchLabel: 'Recovery',
+    })
+
+    const badge = rideMatchBadge(ride, recoveryPlan)
+
+    expect(badge.label).toBe('Recovery')
+    expect(badge.score).toBe(85)
+  })
+
+  it('never labels a well-executed recovery spin that ran long as needs work', () => {
+    // The #551 regression: a recovery day with a duration went down the generic
+    // cycling ladder, where an unset targetPower left the clock as the only
+    // signal and 76 min against a planned 50 scored zero.
+    const ride = makeRideForScore({
+      durationSeconds: 4539,
+      normalizedPowerW: 160,
+      tss: 31.5,
+    })
+
+    const badge = rideMatchBadge(ride, recoveryPlan)
+
+    expect(badge.label).not.toBe('Needs work')
+    expect(badge.label).toBe('Warning')
+  })
+
+  it('falls back to the local score when the backend has none', () => {
+    const ride = makeRideForScore({ durationSeconds: 60 * 60, normalizedPowerW: 300 })
+
+    const badge = rideMatchBadge(ride, basePlan)
+
+    expect(badge.score).toBe(100)
+    expect(badge.label).toBe('Perfect')
+  })
+
+  it('lets an explicit label override the backend badge', () => {
+    const ride = makeRideForScore({
+      durationSeconds: 4539,
+      matchScore: 85,
+      matchLabel: 'Recovery',
+      labelOverride: 'Too much',
+    })
+
+    expect(rideMatchBadge(ride, recoveryPlan).label).toBe('Too much')
+  })
+
+  it('still renders a backend badge for a ride with no plan on screen', () => {
+    const ride = makeRideForScore({ matchScore: 20, matchLabel: 'Too much' })
+
+    const badge = rideMatchBadge(ride, null)
+
+    expect(badge.label).toBe('Too much')
+    expect(badge.style).toContain('bg-red-100')
+  })
+
+  it('falls back to a question mark when there is neither plan nor badge', () => {
+    expect(rideMatchBadge(makeRideForScore(), null).label).toBe('?')
   })
 })

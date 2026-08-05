@@ -1549,6 +1549,8 @@ class RideMetricSchema(CamelModel):
     user_note: Optional[str] = None
     feel_legs: Optional[str] = None
     label_override: Optional[str] = None
+    match_score: Optional[int] = None
+    match_label: Optional[str] = None
     plan_match_status: str = "unmatched"
     matched_plan_date: Optional[str] = None
     matched_plan_snapshot: Optional[Any] = None

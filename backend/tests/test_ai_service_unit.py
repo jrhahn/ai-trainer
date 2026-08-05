@@ -2299,7 +2299,10 @@ def test_ride_metrics_context_section_includes_matched_plan_snapshot():
         matched_plan_snapshot = {"title": "Planned Tempo", "durationMinutes": 80}
 
     section = ride_metrics_context_section([FakeMetric()])
-    assert "plan match:manual_matched" in section
+    # The linkage is phrased, never emitted as the bare enum: the coach read
+    # "plan match:manual_matched" as a verdict on execution (#551).
+    assert "plan linkage:linked to a planned session by the athlete" in section
+    assert "manual_matched" not in section
     assert "Planned workout: Planned Tempo, 80 min" in section
 
 
@@ -2331,7 +2334,9 @@ def test_ride_metrics_context_section_includes_duration_and_display_label():
 
     section = ride_metrics_context_section([FakeMetric()])
     assert "duration 205 min" in section
-    assert "display label:Close" in section
+    # An explicit label is reported as the badge the athlete is looking at, and
+    # marked as outranking anything computed from the plan (#551).
+    assert 'badge:"Close" (set explicitly, overrides the computed badge)' in section
     assert "Planned workout: Long Endurance Ride with Climbing Focus, 180 min" in section
 
 
@@ -2351,7 +2356,8 @@ def test_batch_review_user_includes_ambiguous_plan_match():
         [ride],
         training_plan=[{"date": "2026-05-06", "title": "Planned Intervals"}],
     )
-    assert "Plan match: ambiguous" in msg
+    assert "Plan linkage: linked to a planned session, but which one is uncertain" in msg
+    assert "ambiguous" not in msg
     assert "Matched planned workout: Planned Intervals" in msg
 
 

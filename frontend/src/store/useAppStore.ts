@@ -268,6 +268,14 @@ export interface RideMetricPoint {
   userNote?: string | null
   feelLegs?: 'fresh' | 'normal' | 'heavy' | null
   labelOverride?: string | null
+  /**
+   * The compliance badge scored on the backend against the matched plan day.
+   * Authoritative when present — the same value the coach sees, so the card and
+   * the chat can no longer disagree (#551). Absent for unmatched rides, where
+   * the local computation below still applies.
+   */
+  matchScore?: number | null
+  matchLabel?: string | null
   planMatchStatus?: 'unmatched' | 'auto_matched' | 'ambiguous' | 'manual_matched'
   matchedPlanDate?: string | null
   matchedPlanSnapshot?: Partial<TrainingDay> | null
