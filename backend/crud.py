@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
+from services import plan_compliance
 from services.activity_identity import are_near_duplicate_activities
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
@@ -3739,6 +3740,10 @@ async def update_ride_match(
 
     ``matched_plan_slot`` names which session on ``matched_plan_date`` the ride
     belongs to (#496); ``None`` is the single-session day.
+
+    The compliance badge is rescored here because this is the one funnel every
+    match write passes through, so the stored badge can never drift from the
+    plan day the ride is currently matched to (#551).
     """
     ride.plan_match_status = status
     ride.matched_plan_date = matched_plan_date
@@ -3746,5 +3751,8 @@ async def update_ride_match(
     ride.matched_plan_snapshot = matched_plan_snapshot
     ride.matched_at = matched_at
     ride.label_override = label_override
+    ride.match_score, ride.match_label = plan_compliance.score_and_label(
+        ride, matched_plan_snapshot
+    )
     await db.flush()
     return ride

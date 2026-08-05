@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from . import plan_compliance
 from .analysis import power_zone_boundaries
 from .dates import (
     annotate_plan_days,
@@ -15,6 +16,21 @@ from .dates import (
     app_today,
     app_today_iso,
     plan_day_date_labels,
+)
+
+# Shared instruction reused wherever the coach may be asked about a compliance
+# badge. The badge is scored on the backend and handed to the coach verbatim; it
+# used to be browser-only, so the coach reconstructed it from whatever looked
+# closest in context and confidently explained the wrong ride (#551).
+BADGE_GROUNDING_RULE = (
+    "The 'badge:' field on an activity above is the exact compliance badge the "
+    "athlete is looking at on that activity's card. When they ask why an activity "
+    "is labelled something, answer about the activity whose badge matches — and if "
+    "they say 'my last ride' or 'today's ride', that is the newest activity above, "
+    "even when an older one carries the same badge. Explain it from that activity's "
+    "own badge, score and grading basis. Never contradict a badge, never restate a "
+    "'plan linkage:' value as if it were a verdict on execution, and never explain a "
+    "badge using another activity's numbers."
 )
 
 # Shared instruction reused by every prompt that names when a planned session
@@ -891,9 +907,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
         '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
         "Pick the label that best reflects what actually happened. "
-        "When explaining a displayed label, rely on the recent activity history, matched "
-        "planned workout, duration, TSS/power/heart-rate evidence, and any explicit display "
-        "label. Do not invent data-quality or missing-stream explanations unless the provided "
+        f"{BADGE_GROUNDING_RULE} "
+        "Do not invent data-quality or missing-stream explanations unless the provided "
         "activity context explicitly says the data is missing or unreliable. "
         "CRITICAL — provisional classifications: an activity whose purpose is 'unknown' or whose "
         "classification confidence is low or medium (see the 'conf:' field and any "
@@ -3092,6 +3107,45 @@ def training_status_section(
 # ---------------------------------------------------------------------------
 
 
+_MATCH_LINKAGE_WORDING = {
+    "auto_matched": "linked to a planned session automatically",
+    "manual_matched": "linked to a planned session by the athlete",
+    "ambiguous": "linked to a planned session, but which one is uncertain",
+}
+
+
+def plan_linkage_phrase(status: str | None) -> str | None:
+    """How a ride's *linkage* to the plan is described to the coach.
+
+    Deliberately not the bare enum value. The coach read "plan match:auto_matched"
+    as a verdict on how the session went and told the athlete that a ride the
+    dashboard had badged "Needs work" had "logged as a successful match" (#551).
+    This field says only that a planned session was found for the ride — never
+    how well it was executed. That is the badge below, and only the badge.
+    """
+    if not status or status == "unmatched":
+        return None
+    return _MATCH_LINKAGE_WORDING.get(status, status)
+
+
+def compliance_badge_phrase(metric) -> str | None:
+    """The compliance badge the athlete sees on this activity card, if any.
+
+    An explicit ``label_override`` — set by the matcher for extra activities, or
+    by the coach correcting a badge — outranks the computed one, exactly as the
+    dashboard renders it.
+    """
+    override = getattr(metric, "label_override", None)
+    if override:
+        return f'"{override}" (set explicitly, overrides the computed badge)'
+    return plan_compliance.describe_badge(
+        getattr(metric, "match_score", None),
+        getattr(metric, "match_label", None),
+        getattr(metric, "matched_plan_snapshot", None),
+    )
+
+
+
 def ride_metrics_context_section(
     metrics: list,
     timezone_name: str | None = None,
@@ -3123,6 +3177,7 @@ def ride_metrics_context_section(
         return ""
 
     lines: list[str] = ["Recent activity history (newest first):"]
+    any_badge = False
     for index, m in enumerate(metrics):
         prose = prose_window is None or index < prose_window
         parts: list[str] = []
@@ -3185,13 +3240,15 @@ def ride_metrics_context_section(
         match_status = getattr(m, "plan_match_status", None)
         matched_date = getattr(m, "matched_plan_date", None)
         matched_snapshot = getattr(m, "matched_plan_snapshot", None)
-        label_override = getattr(m, "label_override", None)
-        if match_status and match_status != "unmatched":
-            parts.append(f"plan match:{match_status}")
+        linkage = plan_linkage_phrase(match_status)
+        if linkage:
+            parts.append(f"plan linkage:{linkage}")
             if matched_date:
                 parts.append(f"planned {matched_date}")
-        if label_override:
-            parts.append(f"display label:{label_override}")
+        badge = compliance_badge_phrase(m)
+        if badge:
+            parts.append(f"badge:{badge}")
+            any_badge = True
 
         line = " | ".join(parts)
         lines.append(f"  {line}")
@@ -3236,6 +3293,9 @@ def ride_metrics_context_section(
                 "    [no athlete feedback — consider asking how this ride felt]"
             )
 
+    # Only worth its tokens once there is a badge on screen to be asked about.
+    if any_badge:
+        lines.append(BADGE_GROUNDING_RULE)
     return "\n".join(lines)
 
 
@@ -3331,8 +3391,12 @@ def batch_review_user(
             parts.append(f"[classification note: {reason}]")
         match_status = getattr(m, "plan_match_status", None)
         matched_snapshot = getattr(m, "matched_plan_snapshot", None)
-        if match_status:
-            parts.append(f"Plan match: {match_status}")
+        linkage = plan_linkage_phrase(match_status)
+        if linkage:
+            parts.append(f"Plan linkage: {linkage}")
+        badge = compliance_badge_phrase(m)
+        if badge:
+            parts.append(f"Compliance badge: {badge}")
         if isinstance(matched_snapshot, dict):
             parts.append(
                 "Matched planned workout: "
@@ -3504,8 +3568,12 @@ def next_ride_recommendation_user(
                 ride_parts.append(f'Athlete feedback: "{user_note}"')
             match_status = getattr(m, "plan_match_status", None)
             matched_snapshot = getattr(m, "matched_plan_snapshot", None)
-            if match_status:
-                ride_parts.append(f"Plan match: {match_status}")
+            linkage = plan_linkage_phrase(match_status)
+            if linkage:
+                ride_parts.append(f"Plan linkage: {linkage}")
+            badge = compliance_badge_phrase(m)
+            if badge:
+                ride_parts.append(f"Compliance badge: {badge}")
             if isinstance(matched_snapshot, dict):
                 ride_parts.append(
                     "Matched planned workout: "
@@ -3659,8 +3727,12 @@ def process_pending_feedbacks_user(
                 ride_parts.append(f'Previous coach note: "{coach_note}"')
             match_status = getattr(m, "plan_match_status", None)
             matched_snapshot = getattr(m, "matched_plan_snapshot", None)
-            if match_status:
-                ride_parts.append(f"Plan match: {match_status}")
+            linkage = plan_linkage_phrase(match_status)
+            if linkage:
+                ride_parts.append(f"Plan linkage: {linkage}")
+            badge = compliance_badge_phrase(m)
+            if badge:
+                ride_parts.append(f"Compliance badge: {badge}")
             if isinstance(matched_snapshot, dict):
                 ride_parts.append(
                     "Matched planned workout: "

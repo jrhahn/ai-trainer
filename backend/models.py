@@ -1206,6 +1206,14 @@ class RideMetric(Base):
     # ("fresh"/"normal"/"heavy"); NULL means not set and is ignored everywhere.
     feel_legs: Mapped[str | None] = mapped_column(String(10), nullable=True)
     label_override: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # The compliance badge shown on the activity card, scored against the
+    # matched plan day by ``services.plan_compliance``. Persisted rather than
+    # derived in the browser so the coach can see the badge it is asked to
+    # explain instead of guessing at it (#551). NULL when the ride is unmatched
+    # or there is too little to compare. ``label_override`` still outranks
+    # ``match_label`` wherever a badge is displayed.
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    match_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
     coach_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

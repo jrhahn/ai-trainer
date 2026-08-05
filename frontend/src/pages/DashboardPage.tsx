@@ -247,9 +247,20 @@ function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[
   return unique
 }
 
+/**
+ * Days graded on how easy they stayed rather than on execution: rest and
+ * recovery, plus any day too unspecified to compare against.
+ *
+ * A recovery day belongs here even when it prescribes a duration. Sending it
+ * down the generic ladder instead scored a textbook easy spin that ran 26 min
+ * long as 0/100 → "Needs work", because plans state their recovery watts in
+ * prose and leave `targetPower` unset, leaving the clock as the only signal
+ * (#551). The backend scorer is the authority; this stays in step with it.
+ */
 function isRestOrNoTargetPlan(plan: Partial<TrainingDay>): boolean {
   const workoutType = plan.workoutType?.toLowerCase()
-  return workoutType === 'rest' || (!plan.durationMinutes && !plan.targetPower)
+  if (workoutType === 'rest' || workoutType === 'recovery') return true
+  return !plan.durationMinutes && !plan.targetPower
 }
 
 /** Non-cycling plans (strength, yoga, swim, etc.) that have no power target. */
@@ -462,6 +473,65 @@ export function planForRide(
   return null
 }
 
+/** Badge colours keyed by label, for a badge the backend scored without a plan here. */
+const LABEL_ONLY_BADGE_STYLES: Record<string, string> = {
+  perfect: 'bg-green-100 text-green-700',
+  ok: 'bg-green-100 text-green-700',
+  done: 'bg-green-100 text-green-700',
+  solid: 'bg-emerald-100 text-emerald-700',
+  recovery: 'bg-lime-100 text-lime-700',
+  close: 'bg-amber-100 text-amber-700',
+  partial: 'bg-amber-100 text-amber-700',
+  warning: 'bg-amber-100 text-amber-700',
+  additional: 'bg-blue-100 text-blue-700',
+  extra: 'bg-blue-100 text-blue-700',
+  'off plan': 'bg-orange-100 text-orange-700',
+  short: 'bg-orange-100 text-orange-700',
+  mismatch: 'bg-orange-100 text-orange-700',
+  'needs work': 'bg-red-100 text-red-700',
+  'too much': 'bg-red-100 text-red-700',
+  skipped: 'bg-red-100 text-red-700',
+}
+
+export interface RideBadge {
+  score: number | null
+  label: string
+  style: string
+}
+
+/**
+ * The compliance badge to render for a ride.
+ *
+ * The backend's persisted score/label wins whenever it has one: it is scored
+ * against the plan day the ride was actually matched to and is the same value
+ * handed to the coach, so the card and the chat cannot disagree (#551). The
+ * local computation remains as the fallback for rides the backend has not
+ * scored — unmatched activities, and anything imported before the backfill.
+ */
+export function rideMatchBadge(
+  ride: RideMetricPoint,
+  plan: Partial<TrainingDay> | null
+): RideBadge {
+  const backendLabel = ride.labelOverride ?? ride.matchLabel ?? null
+  const score = ride.matchScore ?? (plan ? computeMatchScore(ride, plan) : null)
+
+  if (!plan) {
+    return {
+      score,
+      label: backendLabel ?? '?',
+      style: backendLabel
+        ? LABEL_ONLY_BADGE_STYLES[backendLabel.toLowerCase()] ?? 'bg-gray-100 text-gray-500'
+        : 'bg-gray-100 text-gray-500',
+    }
+  }
+
+  return {
+    score,
+    label: matchScoreLabel(score, plan, backendLabel),
+    style: matchScoreBadgeStyle(score, plan, ride.labelOverride),
+  }
+}
+
 
 /** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
 export function buildMatchCoachPrompt(
@@ -484,7 +554,7 @@ export function buildMatchCoachPrompt(
   ].filter(Boolean).join(', ')
 
   const planLabel = plan.title ?? plan.workoutType ?? 'the planned session'
-  const label = matchScoreLabel(score, plan, ride.labelOverride)
+  const label = matchScoreLabel(score, plan, ride.labelOverride ?? ride.matchLabel)
   const scoreStr = score !== null ? ` with a ${score}% score` : ''
   const labelStr = [
     ` The displayed match label is "${label}"${scoreStr}.`,
@@ -857,11 +927,10 @@ export default function DashboardPage() {
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
               const plan = planForRide(ride, trainingPlan)
-              const score = plan ? computeMatchScore(ride, plan) : null
-              const scoreLabel = plan ? matchScoreLabel(score, plan, ride.labelOverride) : '?'
-              const scoreBadgeStyle = plan
-                ? matchScoreBadgeStyle(score, plan, ride.labelOverride)
-                : 'bg-gray-100 text-gray-500'
+              const { score, label: scoreLabel, style: scoreBadgeStyle } = rideMatchBadge(
+                ride,
+                plan
+              )
               return (
                 <div
                   key={rideActivityKey(ride)}

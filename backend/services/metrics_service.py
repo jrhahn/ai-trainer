@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import assessment_pipeline
+from services import assessment_pipeline, plan_compliance
 from services.analysis import apply_ctl_atl_decay, compute_ride_tss
 
 logger = logging.getLogger(__name__)
@@ -209,6 +209,23 @@ def _recalculate_metric_chain(
     return updated
 
 
+def _rescore_compliance_badges(all_metrics: list[models.RideMetric]) -> None:
+    """Re-derive each matched ride's badge from its freshly recomputed metrics.
+
+    An FTP change or a duration correction moves TSS and intensity factor, which
+    are exactly what the badge is scored from. Without this the stored badge —
+    and therefore what the coach is told the athlete is looking at — would keep
+    describing the old numbers (#551).
+    """
+    for metric in all_metrics:
+        snapshot = metric.matched_plan_snapshot
+        if not isinstance(snapshot, dict):
+            continue
+        metric.match_score, metric.match_label = plan_compliance.score_and_label(
+            metric, snapshot
+        )
+
+
 async def recalculate_metrics_for_user(
     db: AsyncSession,
     user: models.User,
@@ -238,6 +255,7 @@ async def recalculate_metrics_for_user(
         return 0, ftp_value
 
     updated = _recalculate_metric_chain(all_metrics, ftp_value)
+    _rescore_compliance_badges(all_metrics)
 
     await _rebuild_metric_snapshots(db, user, all_metrics, ftp_value)
     await _refresh_rider_assessment_feedback(db, user, all_metrics[-1], ftp_value)
