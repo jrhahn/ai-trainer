@@ -7,7 +7,7 @@ tests can patch a single module instead of mocking low-level session methods.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Sequence
 
 from sqlalchemy import String, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -186,6 +186,50 @@ async def increment_user_consumed_tokens(
     )
     user.consumed_cached_tokens = int(user.consumed_cached_tokens or 0) + max(
         0, int(cached_tokens)
+    )
+    await db.flush()
+
+
+async def record_llm_calls(
+    db: AsyncSession,
+    user_id: str | None,
+    source: str,
+    records: Sequence[Any],
+) -> None:
+    """Store one row per provider call so the record outlives the container.
+
+    The counters above answer "how much in total"; these rows answer "which
+    feature, which model, which prompt, when" — the questions #516 built the
+    log line for, which a deploy then threw away with the container (#549).
+
+    *records* are ``services.token_accounting.CallRecord`` instances, taken
+    structurally rather than by import so ``crud`` keeps knowing nothing about
+    the accounting layer.
+    """
+    if not records:
+        return
+    db.add_all(
+        [
+            models.LlmCall(
+                user_id=user_id,
+                task=record.task[:30],
+                provider=record.provider[:30],
+                model=record.model[:80],
+                source=source[:60],
+                input_tokens=record.input_tokens,
+                output_tokens=record.output_tokens,
+                cached_tokens=record.cached_tokens,
+                total_tokens=record.total_tokens,
+                latency_ms=record.latency_ms,
+                json_mode=record.json_mode,
+                ok=record.ok,
+                # Provider error strings carry the whole failed request in some
+                # SDKs; the class name is what a cost query groups by.
+                error=(record.error or None) and str(record.error)[:200],
+                prompt_sha=record.prompt_sha[:12],
+            )
+            for record in records
+        ]
     )
     await db.flush()
 

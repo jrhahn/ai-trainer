@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-call LLM cost records survive the deploy that ends the container**
+  (`models.py`, `crud.py`, `services/token_accounting.py`, migration
+  `20260809_000001`) — #516 emitted one structured line per provider call, and
+  those lines lived in the container's log. Every deploy recreates the
+  container, so the record only ever covered "since the last deploy": measured
+  right after one, the backend had 32 log lines and zero `LLM call` entries,
+  with four deploys in the preceding two days. The durable counters on `users`
+  are lifetime totals and cannot say which feature, which model, which prompt or
+  when — the questions #510 (did the bill actually come down?) and #538 (what
+  would a prompt diet buy?) both need. A row now goes into `llm_calls` for every
+  call: task, provider, model, source, the input/output/cached split, latency,
+  `json_mode`, ok/error and `prompt_sha`. Records are collected in the
+  collection scope rather than written where they happen, because `record_call`
+  runs in the synchronous provider layer and holds no session — the scope has to
+  be open for the tokens to be billed anyway, so the rows are inserted at the
+  same moment and under the same source. Failed calls are stored even though
+  they spent nothing: a model that has started rejecting every request is
+  exactly what a cost table has to show (#401). Calls made outside every scope
+  are still only warned about, since there is no user to attribute them to —
+  after #537 there should be none. The log line stays; it is what you read while
+  something is going wrong, this is what you query afterwards. No backfill is
+  possible: the records this table exists to keep were in logs that are already
+  gone. (#549)
+
 ### Fixed
 
 - **A manual ride resolve can name which session of the day it was**
