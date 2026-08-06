@@ -19,6 +19,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services import athlete_model_inference
+from services import motivation_inference
 from services import coach_summary
 from services import plan_pipeline
 from services import roi_recommendation
@@ -242,21 +243,24 @@ async def _capture_availability_constraints_from_message(
     return constraints, lifted
 
 
-async def _capture_weather_signals_from_message(
+async def _capture_self_reported_signals_from_message(
     db: AsyncSession,
     user_id: str,
     message: str,
 ) -> str | None:
-    """Sync the athlete's weather-related self-reports from their message (#495).
+    """Sync the athlete's self-reports from their message (#495, #563).
 
-    Two independent captures, both deterministic and both best-effort:
+    Three independent captures, all deterministic and all best-effort:
 
     * a stated training location ("I mostly train near Freiburg now") becomes the
       ``user_set`` home-location attribute, which then outranks every inference
       pass and re-anchors all weather lookups;
     * a stated weather preference ("I actually love the rain") becomes evidence on
       the corresponding weather-preference belief, reinforcing the same row the
-      ride data writes.
+      ride data writes;
+    * a stated motivation ("I don't care about races", "I want more trail time")
+      becomes evidence on the athlete's motivation model — what the training is
+      actually for.
 
     Returns a deterministic confirmation note when the location moved — the honest
     record of what the backend actually did, independent of the model's prose (the
@@ -268,6 +272,16 @@ async def _capture_weather_signals_from_message(
         )
     except Exception:
         logger.warning("Weather-preference capture failed", exc_info=True)
+
+    # What the athlete says they are training for (#563). Same contract as the
+    # captures around it: deterministic, best-effort, and unable to overwrite an
+    # objective the athlete set by hand.
+    try:
+        await motivation_inference.capture_motivation_from_message(
+            db, user_id, message
+        )
+    except Exception:
+        logger.warning("Motivation capture failed", exc_info=True)
 
     try:
         row = await home_location.capture_home_location_from_message(
@@ -903,7 +917,7 @@ async def ask_trainer(
     )
     # Capture weather self-reports before the forecast is read, so a location the
     # athlete states in this very message anchors this turn's outlook (#495).
-    home_location_note = await _capture_weather_signals_from_message(
+    home_location_note = await _capture_self_reported_signals_from_message(
         db, current_user.id, body.question
     )
     profile = _profile_with_availability_constraints(

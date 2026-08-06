@@ -19,17 +19,23 @@ knowledge in the same reconciled state a full weekly cycle would:
    update the confidence-scored weather tolerances derived from the conditions
    stored on each ride
    (:func:`services.weather_preference.refresh_weather_preferences`).
-3. **Detect anomalies** — flag stored knowledge the new evidence contradicts
+3. **Re-read what the athlete is training for** — update the motivation model
+   from what the new rides show about the modality they actually choose and the
+   structure they actually follow
+   (:func:`services.motivation_inference.refresh_motivation_from_behaviour`).
+   The conversational half of the same model is captured per chat turn, not
+   here.
+4. **Detect anomalies** — flag stored knowledge the new evidence contradicts
    (:func:`services.contradiction_detection.detect_user_contradictions`).
-4. **Create new hypotheses** — form tentative, testable ideas, both the
+5. **Create new hypotheses** — form tentative, testable ideas, both the
    deterministic performance-model hypotheses derived from the freshly refreshed
    model (:func:`services.hypothesis_engine.refresh_performance_hypotheses`) and
    the free-form LLM ones
    (:func:`services.hypothesis_generation.generate_user_hypotheses`).
-5. **Resolve open questions** — record new coaching uncertainties and close the
+6. **Resolve open questions** — record new coaching uncertainties and close the
    ones the new data now answers
    (:func:`services.open_question_generation.generate_user_open_questions`).
-6. **Ask the athlete** — raise the questions none of the steps above could ever
+7. **Ask the athlete** — raise the questions none of the steps above could ever
    settle from data, pinned in the chat for the athlete to answer
    (:func:`services.athlete_inquiry.generate_user_inquiries`).
 
@@ -59,6 +65,7 @@ from services import (
     hypothesis_engine,
     hypothesis_generation,
     insight_generation,
+    motivation_inference,
     open_question_generation,
     weather_preference,
 )
@@ -83,6 +90,7 @@ class LearningStepResult:
     performance_model: int = 0
     home_location: int = 0
     weather_preferences: int = 0
+    motivation: int = 0
     failed_steps: list[str] = field(default_factory=list)
 
     @property
@@ -97,6 +105,7 @@ class LearningStepResult:
             or self.performance_model
             or self.home_location
             or self.weather_preferences
+            or self.motivation
         )
 
 
@@ -245,6 +254,15 @@ async def run_learning_step(
         timezone_name,
         result,
     )
+    result.motivation = await _run_step(
+        "motivation",
+        motivation_inference.refresh_motivation_from_behaviour,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
     result.contradictions = await _run_step(
         "contradictions",
         contradiction_detection.detect_user_contradictions,
@@ -288,7 +306,8 @@ async def run_learning_step(
     logger.info(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
         "hypotheses=%s performance_hypotheses=%s open_questions=%s inquiries=%s "
-        "performance_model=%s home_location=%s weather_preferences=%s failed=%s",
+        "performance_model=%s home_location=%s weather_preferences=%s motivation=%s "
+        "failed=%s",
         user.id,
         result.observations,
         result.contradictions,
@@ -299,6 +318,7 @@ async def run_learning_step(
         result.performance_model,
         result.home_location,
         result.weather_preferences,
+        result.motivation,
         ",".join(result.failed_steps) or "none",
     )
     return result

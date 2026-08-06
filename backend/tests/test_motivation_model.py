@@ -397,6 +397,148 @@ def test_inferred_write_with_nothing_to_say_changes_nothing():
 
 
 # ---------------------------------------------------------------------------
+# Evidence: accrual, promotion, contradiction, bounded weight movement (#563)
+# ---------------------------------------------------------------------------
+
+
+def test_accrual_caps_a_first_sighting():
+    """An objective enters as a candidate, not as knowledge."""
+    merged = mm.merge_model(
+        mm.default_model(),
+        {"secondary_objectives": [{"text": "ride more trails", "confidence": 0.9}]},
+        accrue=True,
+    )
+
+    assert merged["secondary_objectives"][0]["confidence"] == pytest.approx(
+        mm.INITIAL_CONFIDENCE_CAP
+    )
+    assert merged["secondary_objectives"][0]["observation_count"] == 1
+
+
+def test_accrual_strengthens_a_repeated_entry():
+    stored = mm.merge_model(
+        mm.default_model(),
+        {"secondary_objectives": [{"text": "ride more trails"}]},
+        accrue=True,
+    )
+
+    merged = mm.merge_model(
+        stored, {"secondary_objectives": [{"text": "ride more trails"}]}, accrue=True
+    )
+
+    entry = merged["secondary_objectives"][0]
+    assert entry["confidence"] == pytest.approx(
+        mm.INITIAL_CONFIDENCE_CAP + mm.CONFIDENCE_STEP
+    )
+    assert entry["observation_count"] == 2
+
+
+def test_without_accrual_an_entry_is_replaced_not_strengthened():
+    """A direct write states the model; only evidence accrues."""
+    stored = mm.normalize_model(
+        {"secondary_objectives": [{"text": "ride more trails", "confidence": 0.8}]}
+    )
+
+    merged = mm.merge_model(
+        stored,
+        {"secondary_objectives": [{"text": "ride more trails", "confidence": 0.2}]},
+        accrue=False,
+    )
+
+    assert merged["secondary_objectives"][0]["confidence"] == pytest.approx(0.2)
+
+
+def test_promotion_needs_both_confidence_and_recurrence():
+    """One well-scored sighting is still one sighting."""
+    once = mm.normalize_model(
+        {
+            "secondary_objectives": [
+                {"text": "ride trails", "confidence": 0.9, "observation_count": 1}
+            ]
+        }
+    )
+    assert mm.promote_primary_objective(once)["primary_objective"] == ""
+
+    twice = mm.normalize_model(
+        {
+            "secondary_objectives": [
+                {"text": "ride trails", "confidence": 0.9, "observation_count": 2}
+            ]
+        }
+    )
+    assert mm.promote_primary_objective(twice)["primary_objective"] == "ride trails"
+
+
+def test_promotion_never_replaces_a_hand_set_objective():
+    stored = mm.normalize_model(
+        {
+            "primary_objective": "Ride the Trans-Alp",
+            "primary_objective_source": "user_set",
+            "secondary_objectives": [
+                {"text": "win races", "confidence": 0.99, "observation_count": 9}
+            ],
+        }
+    )
+
+    assert (
+        mm.promote_primary_objective(stored)["primary_objective"] == "Ride the Trans-Alp"
+    )
+
+
+def test_a_promoted_objective_leaves_the_secondary_list():
+    stored = mm.normalize_model(
+        {
+            "secondary_objectives": [
+                {"text": "ride trails", "confidence": 0.9, "observation_count": 3},
+                {"text": "climb faster", "confidence": 0.4},
+            ]
+        }
+    )
+
+    promoted = mm.promote_primary_objective(stored)
+
+    assert promoted["primary_objective"] == "ride trails"
+    assert [e["text"] for e in promoted["secondary_objectives"]] == ["climb faster"]
+
+
+def test_a_contradicted_entry_keeps_its_text_and_gains_a_reason():
+    """The tension goes to the athlete; the coach does not overrule them."""
+    flagged = mm.contradict_entry(
+        {"text": "Perform at races", "confidence": 0.7},
+        note="No race on your calendar.",
+    )
+
+    assert flagged["text"] == "Perform at races"
+    assert flagged["status"] == mm.STATUS_CONTRADICTED
+    assert flagged["contradiction_note"] == "No race on your calendar."
+    assert flagged["confidence"] < 0.7
+
+
+def test_weight_evidence_is_bounded_per_batch():
+    moved = mm.apply_weight_evidence(mm.DEFAULT_WEIGHTS, {"enjoyment": 0.9})
+
+    assert (
+        moved["enjoyment"] - mm.DEFAULT_WEIGHTS["enjoyment"]
+        <= mm.MAX_WEIGHT_NUDGE + 1e-9
+    )
+    assert sum(moved.values()) == pytest.approx(1.0)
+
+
+def test_weight_evidence_ignores_a_pinned_component():
+    moved = mm.apply_weight_evidence(
+        {"enjoyment": 0.4}, {"enjoyment": 0.05}, pinned=["enjoyment"]
+    )
+
+    assert moved["enjoyment"] == pytest.approx(0.4)
+
+
+def test_weight_evidence_ignores_unknown_components():
+    moved = mm.apply_weight_evidence(mm.DEFAULT_WEIGHTS, {"vibes": 0.5})
+
+    assert moved == mm.DEFAULT_WEIGHTS
+
+
+# ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
 
