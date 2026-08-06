@@ -122,6 +122,46 @@ ASK_TRAINER_EMPTY_RESPONSE_RETRIES = 2
 ASK_TRAINER_RETRY_BASE_DELAY = 0.5
 
 
+def _coach_prose_reply(raw: str) -> str | None:
+    """The answer inside a coach reply that ignored the JSON contract, if any.
+
+    ``json_mode`` is not a guarantee. When the model answers the athlete in
+    plain prose, ``repair_json`` returns an empty string — it repairs a
+    *truncated* object happily, so an empty repair means there was no structure
+    there to begin with — and the parse then raises (#558).
+
+    Prose is not retried. The same question produced prose on three consecutive
+    requests in production, so another attempt mostly buys another 17k input
+    tokens; and the prose is already the coach's answer. It is passed through as
+    the reply with no plan updates, which is not a loss: there is no structure
+    to read updates from either way.
+
+    Returns ``None`` for anything that looks like broken JSON rather than an
+    answer, or that carries no word at all — those belong on the retry path.
+    """
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+    candidate = (fenced.group(1) if fenced else raw).strip()
+    if not candidate or candidate.startswith(("{", "[")):
+        return None
+    # At least one real word, so "..." or "42" is not mistaken for an answer.
+    if not re.search(r"[^\W\d_]{3,}", candidate):
+        return None
+    return candidate
+
+
+def _coach_result(parsed: dict, response: str) -> dict:
+    """Shape one coach reply for the router; *parsed* is empty for prose."""
+    return {
+        "response": response,
+        "plan_updates": parsed.get("planUpdates"),
+        "sources": parsed.get("sources") or [],
+        "ride_note_update": parsed.get("ride_note_update"),
+        "ride_label_update": parsed.get("ride_label_update"),
+        "physiology_rationale": _clean_rationale(parsed.get("physiologyRationale")),
+        "context_rationale": _clean_rationale(parsed.get("contextRationale")),
+    }
+
+
 def _clean_rationale(value: object) -> str | None:
     """Normalise an optional rationale field to a trimmed string or ``None``."""
     if not isinstance(value, str):
@@ -197,10 +237,19 @@ def _next_race_date(
     return min(upcoming) if upcoming else None
 
 
+# Models sometimes write a unit into a numeric field — ``"durationMinutes": 180
+# minutes`` — which is not JSON. The unit is dropped, but *only* directly after
+# the colon that opens a value: an earlier version matched anywhere in the
+# document and quietly ate the unit out of the coach's own prose, turning
+# "Wir fahren am Samstag 4 Stunden, danach Pause" into "am Samstag 4, danach
+# Pause" for every athlete reading it (#516, fixed in #558).
+_UNIT_SUFFIXED_NUMBER = re.compile(r":(\s*-?\d+(?:\.\d+)?)\s+[a-zA-Z_]+(?=\s*[,}\]\n])")
+
+
 def _parse_ai_json(text: str) -> Any:
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     extracted = fenced.group(1).strip() if fenced else text.strip()
-    stripped = re.sub(r"(\d+)\s+[a-zA-Z_]+(?=\s*[,}\]\n])", r"\1", extracted)
+    stripped = _UNIT_SUFFIXED_NUMBER.sub(r":\1", extracted)
     repaired = repair_json(stripped)
     if repaired != stripped:
         # Reported through token_accounting so the line carries the task, model
@@ -791,25 +840,32 @@ async def ask_trainer(
         raw = await _chat_history(
             provider, system_prompt, messages, json_mode=True, task=TASK_COACH
         )
-        parsed = _parse_ai_json(raw)
+        # A reply that will not parse must not escape as a JSONDecodeError: the
+        # router has no handler for it, so it 500s with a traceback and the
+        # athlete's question is lost — a failed request never persists it (#558).
+        try:
+            parsed = _parse_ai_json(raw)
+        except (ValueError, TypeError):
+            parsed = None
+
+        if not isinstance(parsed, dict):
+            prose = _coach_prose_reply(raw)
+            if prose is not None:
+                # Shape only. The reply is the athlete's health data (#499).
+                logger.warning(
+                    "AI coach replied outside the JSON contract; using the prose "
+                    "as the answer (chars=%d fenced=%s)",
+                    len(raw),
+                    "```" in raw,
+                )
+                return _coach_result({}, prose)
+            parsed = {}
 
         # --- Task 2: Strip "thinking" — never expose internal reasoning ---
         parsed.pop("thinking", None)
         response = parsed.get("response")
         if isinstance(response, str) and response.strip():
-            return {
-                "response": response.strip(),
-                "plan_updates": parsed.get("planUpdates"),
-                "sources": parsed.get("sources") or [],
-                "ride_note_update": parsed.get("ride_note_update"),
-                "ride_label_update": parsed.get("ride_label_update"),
-                "physiology_rationale": _clean_rationale(
-                    parsed.get("physiologyRationale")
-                ),
-                "context_rationale": _clean_rationale(
-                    parsed.get("contextRationale")
-                ),
-            }
+            return _coach_result(parsed, response.strip())
 
         if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
             delay = ASK_TRAINER_RETRY_BASE_DELAY * (2**attempt)

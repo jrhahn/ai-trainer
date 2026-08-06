@@ -54,6 +54,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A coach reply in prose 500'd the request, and the unit stripper ate words
+  out of the coach's German** (`services/ai_service.py`) — two defects in
+  `_parse_ai_json`, found from one production incident where three coach
+  questions in a row returned "Sorry, something went wrong and I could not
+  respond".
+
+  The model was fine every time: all three calls logged `ok=true`, and 692
+  characters on 165 output tokens is 4.19 chars/token — the same ratio as the
+  replies that worked, so these were *complete* answers, not truncations.
+  `repair_json` returns an empty string only for text with no JSON structure at
+  all (a truncated object it repairs happily), so what came back was prose.
+  `json_mode` is not a guarantee. `ask_trainer` parsed outside any guard, the
+  retry loop only ever retried an *already parsed* reply whose `response` field
+  was empty, and `routers/ai.py` has no handler for `JSONDecodeError` — so the
+  designed 502-with-explanation never fired and the request 500'd with a
+  traceback. The athlete lost the turn outright: a failed request never
+  persists the question, so it was gone from `chat_messages` too. A prose reply
+  is now passed through as the answer, carrying no plan updates because there
+  is no structure to read them from. It is deliberately not retried: the same
+  question produced prose three times out of three, so another attempt mostly
+  buys another 17k input tokens, and the prose already *is* the coach's answer.
+  A reply with neither structure nor a word in it still ends as
+  `AIResponseFormatError` → 502, the path that already existed. Logged by shape
+  only — length and whether it was fenced — because the reply is the athlete's
+  health data (#499).
+
+  The second defect was silent and older. The unit stripper added in #516 turns
+  `"durationMinutes": 180 minutes` into `180`, but it matched anywhere in the
+  document, including inside the coach's own prose: any number followed by a
+  word and then a comma lost the word. `"Wir fahren am Samstag 4 Stunden,
+  danach Pause"` reached the athlete as `"am Samstag 4, danach Pause"`. Nothing
+  caught it — `note_json_repair` compares lengths *after* this substitution, so
+  the damage never appeared in a log — and it ran on all ~20 `_parse_ai_json`
+  call sites, so plan descriptions, ride notes and login summaries were exposed
+  too, not just the chat. The pattern now only matches directly after the colon
+  that opens a value, which is the one position #516 was about. (#558)
+
 - **Scheduler metrics were labelled with a name Prometheus owns**
   (`services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) —
   `scheduler_job_runs_total` and `scheduler_job_duration_seconds` used a `job`
