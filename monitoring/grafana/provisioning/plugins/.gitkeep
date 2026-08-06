@@ -1,0 +1,1 @@
+# Kept so Grafana stops logging an error for a missing optional directory.

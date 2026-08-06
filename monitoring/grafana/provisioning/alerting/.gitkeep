@@ -1,0 +1,2 @@
+# Kept so Grafana stops logging an error for a missing optional directory
+# on every boot. Alert rules land here when #549 gets its alerting half.

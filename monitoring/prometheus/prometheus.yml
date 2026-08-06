@@ -1,0 +1,17 @@
+# Prometheus scrape configuration (#549).
+#
+# One target: the backend's /metrics, reached over the Compose network. That
+# endpoint is not routed by Traefik (which only forwards /api and /healthz), so
+# it is reachable here and nowhere from outside.
+global:
+  # The LLM series are cumulative sums read from the database, so a slower
+  # scrape loses no counts — it only coarsens the resolution of the rate.
+  # 30 s keeps the query load negligible on a single-athlete deployment.
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: ai-trainer-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]

@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -19,6 +20,7 @@ from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
 from services.llm import AIKeyNotConfiguredError
+from services import metrics as metrics_service
 from services.open_question_generation import athlete_open_question_generation_job
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
@@ -97,9 +99,32 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     """
     request_id = request.headers.get(_REQUEST_ID_HEADER) or str(uuid.uuid4())
     request.state.request_id = request_id
-    response: Response = await call_next(request)
+    started = time.perf_counter()
+    try:
+        response: Response = await call_next(request)
+    except Exception:
+        # An unhandled error still consumed a request; counting it only on the
+        # success path would make the error rate look like zero.
+        _observe_request(request, 500, time.perf_counter() - started)
+        raise
+    _observe_request(request, response.status_code, time.perf_counter() - started)
     response.headers[_REQUEST_ID_HEADER] = request_id
     return response
+
+
+def _observe_request(request: Request, status: int, duration: float) -> None:
+    """Record one request against its *route template*, never its raw path.
+
+    ``/api/v1/users/{user_id}`` is one series; the raw paths would be one per
+    user, and an unmatched path one per thing a scanner probes (#549).
+    """
+    route = getattr(request.scope.get("route"), "path", None)
+    metrics_service.record_http_request(
+        method=request.method,
+        route=route or metrics_service.UNMATCHED_ROUTE,
+        status=status,
+        duration_seconds=duration,
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -194,3 +219,18 @@ def healthz() -> dict:
         "api_version": "v1",
         "allowed_origins": ALLOWED_ORIGINS,
     }
+
+
+@app.get("/metrics", tags=["ops"], include_in_schema=False)
+async def metrics() -> Response:
+    """Prometheus exposition, reachable only from inside the Docker network.
+
+    Deliberately mounted at the root and *not* under ``/api``: Traefik routes
+    only ``PathPrefix(/api)`` and ``/healthz`` to this service, so this path has
+    no public route and needs no auth of its own. Anything that changes those
+    router rules has to think about this endpoint — it names the athlete's
+    routes and what they cost.
+    """
+    async with async_session_maker() as session:
+        body, content_type = await metrics_service.render(session, engine=engine)
+    return Response(content=body, media_type=content_type)

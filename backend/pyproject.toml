@@ -30,6 +30,8 @@ dependencies = [
     # .fit file parsing
     "fitparse>=1.2.0",
     "python-multipart>=0.0.22",
+    # metrics exposition (#549)
+    "prometheus-client>=0.21.0",
 ]
 
 [dependency-groups]

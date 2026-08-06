@@ -57,6 +57,7 @@ class InProcessScheduler:
         lock = self._locks[name]
         if lock.locked():
             logger.info("Scheduler skipped job=%s reason=already_running", name)
+            _record(name, "skipped", 0)
             return JobRun(name=name, status="skipped")
 
         started = datetime.now(timezone.utc)
@@ -73,6 +74,7 @@ class InProcessScheduler:
                     exc,
                     exc_info=True,
                 )
+                _record(name, "failed", duration_ms)
                 return JobRun(
                     name=name,
                     status="failed",
@@ -82,6 +84,7 @@ class InProcessScheduler:
 
         duration_ms = _duration_ms(started)
         logger.info("Scheduler succeeded job=%s duration_ms=%s", name, duration_ms)
+        _record(name, "success", duration_ms)
         return JobRun(name=name, status="success", duration_ms=duration_ms)
 
     def start(self) -> list[asyncio.Task]:
@@ -111,6 +114,21 @@ class InProcessScheduler:
             )
             await self._sleep(delay)
             await self.run_once(job.name)
+
+
+def _record(job: str, status: str, duration_ms: int) -> None:
+    """Report a run to Prometheus without letting that break the scheduler.
+
+    Imported lazily so the scheduler keeps booting on a machine where the
+    metrics extra is not installed, and swallowing errors because a counter is
+    never worth losing a nightly job over.
+    """
+    try:
+        from services import metrics  # noqa: PLC0415
+
+        metrics.record_scheduler_run(job=job, status=status, duration_ms=duration_ms)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not record scheduler metrics", exc_info=True)
 
 
 def _duration_ms(started: datetime) -> int:
