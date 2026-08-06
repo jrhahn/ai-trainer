@@ -32,6 +32,7 @@ from database import async_session_maker, get_db
 from services import ai_service, metrics_service
 from services import assessment_pipeline
 from services import athlete_inquiry
+from services import motivation_model as motivation_model_service
 from services import plan_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -623,6 +624,49 @@ async def save_athlete_context(
         **body.model_dump(),
     )
     return schemas.AthleteContextSchema.model_validate(context, from_attributes=True)
+
+
+@router.get("/motivation-model", response_model=schemas.AthleteMotivationModelSchema)
+async def get_motivation_model(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteMotivationModelSchema:
+    """What the coach believes the athlete is optimizing for (#562).
+
+    Always answers with a complete model — an athlete with no stored row gets
+    the cold-start defaults rather than a 404, so no caller has to distinguish
+    "no motivation model" from "no motivation".
+    """
+    row = await crud.get_athlete_motivation_model(db, current_user.id)
+    payload = crud.motivation_model_as_dict(row)
+    payload["updated_at"] = row.updated_at if row is not None else None
+    return schemas.AthleteMotivationModelSchema.model_validate(payload)
+
+
+@router.put("/motivation-model", response_model=schemas.AthleteMotivationModelSchema)
+async def save_motivation_model(
+    body: schemas.AthleteMotivationModelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AthleteMotivationModelSchema:
+    """The athlete's own edit of their objective (#562, UI in #567).
+
+    Written as ``user_set``, which is what protects it from every later
+    inference pass (#563). Omitted fields are left as they are, so a partial
+    edit does not blank the rest of the model.
+    """
+    updates = body.model_dump(exclude_none=True)
+    row = await crud.upsert_athlete_motivation_model(
+        db,
+        current_user.id,
+        updates=updates,
+        source=motivation_model_service.SOURCE_USER_SET,
+    )
+    await db.commit()
+    await db.refresh(row)
+    payload = crud.motivation_model_as_dict(row)
+    payload["updated_at"] = row.updated_at
+    return schemas.AthleteMotivationModelSchema.model_validate(payload)
 
 
 @router.get("/athlete-model", response_model=schemas.AthleteModelSchema)

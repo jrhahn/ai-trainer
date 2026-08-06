@@ -397,7 +397,6 @@ AdherencePattern = Literal[
 class AthleteContextSchema(CamelModel):
     training_tendency: TrainingTendency = "unknown"
     rest_response: RestResponse = "unknown"
-    motivation_drivers: list[str] = Field(default_factory=list)
     adherence_pattern: AdherencePattern = "unknown"
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
@@ -415,6 +414,84 @@ class AthleteContextSchema(CamelModel):
 
 class AthleteContextRequest(AthleteContextSchema):
     pass
+
+
+MotivationSource = Literal["inferred", "user_set"]
+MotivationEntryStatus = Literal["active", "contradicted", "retired"]
+MotivationComponent = Literal[
+    "enjoyment", "adaptation", "consistency", "health", "race_performance"
+]
+
+
+class MotivationEntrySchema(CamelModel):
+    """One secondary objective or constraint, with the evidence behind it (#562).
+
+    The provenance fields are not decoration: the athlete can only correct an
+    inferred objective they can see the reason for (#567), and #566 needs to know
+    how long an objective has been standing before it moves a weight.
+    """
+
+    text: str
+    confidence: float = 0.35
+    source: MotivationSource = "inferred"
+    source_snippet: str = ""
+    status: MotivationEntryStatus = "active"
+    contradiction_note: str | None = None
+    first_observed_at: str | None = None
+    last_confirmed_at: str | None = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteMotivationModelSchema(CamelModel):
+    """What the athlete is optimizing for (#562).
+
+    A *preference* ("likes MTB") lives in :class:`AthleteMemoryFactSchema`. This
+    is the *objective* ("uses fitness to maximize enjoyable technical trail
+    riding") — what every planning decision is scored against (#564).
+    """
+
+    primary_objective: str = ""
+    primary_objective_source: MotivationSource = "inferred"
+    primary_objective_confidence: float = 0.0
+    primary_objective_snippet: str = ""
+    secondary_objectives: list[MotivationEntrySchema] = Field(default_factory=list)
+    constraints: list[MotivationEntrySchema] = Field(default_factory=list)
+    # Spans exactly MotivationComponent and sums to 1.0 — guaranteed by the
+    # persist gate in services.motivation_model, not re-checked by readers.
+    utility_weights: dict[str, float] = Field(default_factory=dict)
+    pinned_weights: list[MotivationComponent] = Field(default_factory=list)
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class AthleteMotivationModelRequest(CamelModel):
+    """An athlete's own edit of their motivation model (#567).
+
+    Every field is optional so a partial edit is a valid request; whatever is
+    sent is stored as ``user_set`` and is protected from later inference passes.
+    """
+
+    primary_objective: str | None = None
+    secondary_objectives: list[MotivationEntrySchema] | None = None
+    constraints: list[MotivationEntrySchema] | None = None
+    utility_weights: dict[str, float] | None = None
+    pinned_weights: list[MotivationComponent] | None = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
 
 
 class AthleteModelSchema(CamelModel):

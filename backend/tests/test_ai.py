@@ -520,7 +520,6 @@ async def test_ask_trainer_endpoint_forwards_structured_athlete_context(
         json={
             "trainingTendency": "overtrains",
             "restResponse": "restless",
-            "motivationDrivers": ["MTB", "race goal"],
             "adherencePattern": "adds_extra",
             "strengths": ["VO2max work"],
             "weaknesses": ["easy days"],

@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The athlete's objective is now data** (`models.AthleteMotivationModel`,
+  `services/motivation_model.py`, `crud.upsert_athlete_motivation_model`,
+  `GET`/`PUT /users/me/motivation-model`, migration
+  `20260811_000001`) — the first piece of #561. The coaching system treated
+  physiological performance as the optimization objective. For most athletes it
+  is only the enabling factor: they train to ride technical descents, to enjoy a
+  multi-day adventure, to feel good outdoors. This records what the training is
+  *for* — a primary objective, secondary objectives, constraints, and a utility
+  weight vector — as a first-class part of the athlete profile.
+
+  The distinction it turns on: **a preference is not an objective**. An
+  `AthleteMemoryFact` already said the athlete likes MTB. Nothing said they use
+  fitness to maximize enjoyable technical trail riding, and only the second is
+  something a planner can score against (#564) or a coach can explain itself
+  with (#565).
+
+  `AthleteContext.motivation_drivers` was the closest thing that existed — a
+  flat JSON list of free-text drivers with no structure, no provenance, and no
+  consumer that treated it as an objective. Its contents migrate into the new
+  model as `user_set` secondary objectives and the column is dropped, so
+  motivation has exactly one home. Drivers are deliberately *not* promoted to a
+  primary objective: "MTB" is a preference, and guessing an objective from one
+  is the conflation this exists to end.
+
+  `services/motivation_model.py` is the single normalization gate, in the spirit
+  of the `schemas.PlanDay` gate in `plan_pipeline` (#424). Two invariants live
+  there because both break silently: the weight vector spans exactly
+  `MOTIVATION_COMPONENTS` and sums to 1.0, so a utility score is comparable at
+  all; and `user_set` beats `inferred`, so the inference pass in #563 cannot
+  overwrite an objective the athlete stated by hand — the stale-snapshot clobber
+  class of #342/#345/#346, which `AthleteHomeLocation` guards the same way. A
+  third distinction earns its own tests: a field the caller omits means
+  "nothing to say", not "delete this", so a partial edit does not blank the
+  lists the athlete left alone.
+
+  The model reaches the coach and next-ride prompts through a compact
+  `motivation_model_section`, replacing what `motivation_drivers` used to
+  contribute rather than dropping it. The wording rules that make the coach
+  *explain* its recommendations in the athlete's own terms are #565.
+
 - **The coach's reply is constrained by a schema, and its shape is now a
   metric** (`services/coach_schema.py`, `services/llm.py`,
   `services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) — the

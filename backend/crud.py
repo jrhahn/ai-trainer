@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
-from services import plan_compliance
+from services import motivation_model, plan_compliance
 from services.activity_identity import are_near_duplicate_activities
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
@@ -637,7 +637,6 @@ async def upsert_athlete_context(
     *,
     training_tendency: str = "unknown",
     rest_response: str = "unknown",
-    motivation_drivers: list[str] | None = None,
     adherence_pattern: str = "unknown",
     strengths: list[str] | None = None,
     weaknesses: list[str] | None = None,
@@ -650,7 +649,6 @@ async def upsert_athlete_context(
     values = {
         "training_tendency": training_tendency,
         "rest_response": rest_response,
-        "motivation_drivers": list(motivation_drivers or []),
         "adherence_pattern": adherence_pattern,
         "strengths": list(strengths or []),
         "weaknesses": list(weaknesses or []),
@@ -666,6 +664,81 @@ async def upsert_athlete_context(
         db.add(existing)
     else:
         for attr, value in values.items():
+            setattr(existing, attr, value)
+    await db.flush()
+    return existing
+
+
+# ---------------------------------------------------------------------------
+# AthleteMotivationModel (what the athlete is optimizing for, #562)
+# ---------------------------------------------------------------------------
+
+
+async def get_athlete_motivation_model(
+    db: AsyncSession, user_id: str
+) -> models.AthleteMotivationModel | None:
+    """Return the athlete's stored motivation model, or None (#562)."""
+    return await db.get(models.AthleteMotivationModel, user_id)
+
+
+def motivation_model_as_dict(
+    row: models.AthleteMotivationModel | None,
+) -> dict[str, Any]:
+    """A stored motivation model as a normalized dict, defaults when absent.
+
+    Consumers — the planner (#564), the coach prompt (#565) — always get the
+    full shape, so none of them has to special-case an athlete who has no row
+    yet. Normalizing on read as well as on write also repairs a row written
+    before an invariant existed.
+    """
+    if row is None:
+        return motivation_model.default_model()
+    return motivation_model.normalize_model(
+        {
+            "primary_objective": row.primary_objective,
+            "primary_objective_source": row.primary_objective_source,
+            "primary_objective_confidence": row.primary_objective_confidence,
+            "primary_objective_snippet": row.primary_objective_snippet,
+            "secondary_objectives": row.secondary_objectives,
+            "constraints": row.constraints,
+            "utility_weights": row.utility_weights,
+            "pinned_weights": row.pinned_weights,
+        }
+    )
+
+
+async def upsert_athlete_motivation_model(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    updates: dict[str, Any],
+    source: str = motivation_model.SOURCE_INFERRED,
+    now: datetime | None = None,
+) -> models.AthleteMotivationModel:
+    """Merge an update into the athlete's motivation model and flush (#562).
+
+    ``updates`` is a partial model in the shape
+    :func:`services.motivation_model.normalize_model` accepts. The merge — and
+    with it the user-set override that stops an inference pass from overwriting
+    a hand-stated objective (#342/#345/#346) — happens in that module, so this
+    function stays the persistence half and every writer gets the same guard
+    whether or not it remembered to ask for one.
+    """
+    timestamp = now or datetime.now(timezone.utc)
+    existing = await get_athlete_motivation_model(db, user_id)
+    merged = motivation_model.merge_model(
+        motivation_model_as_dict(existing) if existing is not None else None,
+        updates,
+        source=source,
+        now=timestamp,
+    )
+    merged["updated_at"] = timestamp
+
+    if existing is None:
+        existing = models.AthleteMotivationModel(user_id=user_id, **merged)
+        db.add(existing)
+    else:
+        for attr, value in merged.items():
             setattr(existing, attr, value)
     await db.flush()
     return existing

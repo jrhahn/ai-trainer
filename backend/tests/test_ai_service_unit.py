@@ -2858,7 +2858,6 @@ def test_athlete_context_section_omits_empty_defaults():
         athlete_context_section(
             {
                 "trainingTendency": "unknown",
-                "motivationDrivers": [],
                 "coachingRisks": [],
                 "notes": "",
             }
@@ -2882,7 +2881,6 @@ def test_ask_trainer_system_includes_structured_athlete_context():
         athlete_context={
             "trainingTendency": "overtrains",
             "restResponse": "restless",
-            "motivationDrivers": ["MTB", "race goal"],
             "adherencePattern": "adds_extra",
             "coachingRisks": ["doing too much when fresh"],
             "notes": "Needs explicit permission to rest.",
@@ -2892,7 +2890,6 @@ def test_ask_trainer_system_includes_structured_athlete_context():
     assert "Structured athlete context (durable coaching model)" in prompt
     assert '"trainingTendency": "overtrains"' in prompt
     assert '"restResponse": "restless"' in prompt
-    assert '"motivationDrivers": ["MTB", "race goal"]' in prompt
     assert "doing too much when fresh" in prompt
     assert "stable knowledge" in prompt
 
