@@ -1712,7 +1712,7 @@ def coach_static_prefix() -> str:
     return static_instructions
 
 
-def ask_trainer_system(
+def ask_trainer_system_sections(
     profile: dict,
     today: str,
     last_7_days: list[dict],
@@ -1737,7 +1737,13 @@ def ask_trainer_system(
     weather_context_section: str = "",
     training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     date_context: str = "",
-) -> str:
+) -> dict[str, str]:
+    """The coach system prompt as named parts, in the order they are sent.
+
+    Split out so the prompt can be *measured* — where its bulk sits has been
+    guessed at twice and gone stale both times (#556). Joining the values is
+    :func:`ask_trainer_system` and produces exactly the string it always did.
+    """
     science_section = (
         (
             f"\n\nRelevant cycling science research (use this to ground your advice in evidence):\n"
@@ -1800,33 +1806,46 @@ def ask_trainer_system(
 
     # Everything below changes from turn to turn, so none of it can be part of a
     # cacheable prefix — which is exactly why it now follows the rules (#514).
-    athlete_data = (
-        f"\n\nAthlete data for this conversation\n"
-        f"Today's date: {today}\n"
-        f"{date_context}\n"
-        f"Athlete profile: {json.dumps(profile)}\n"
-        f"{race_profile_section}"
-        f"Last 7 days of training (historical context, not upcoming): {json.dumps(last_7_days)}\n"
-        f"Upcoming plan (today and future only, next {len(next_n_days)} days): {json.dumps(next_n_days)}"
-        f"{assessment_section}"
-        f"{metrics_section}"
-        f"{events_section}"
-        f"{weather_section}"
-        f"{status_badge_section}"
-        f"{training_load_section}"
-        f"{durable_context_section}"
-        f"{durable_model_section}"
-        f"{perf_model_section}"
-        f"{roi_section}"
-        f"{hypotheses_section}"
-        f"{durable_memory_facts_section}"
-        f"{durable_open_questions_section}"
-        f"{pinned_inquiries_section}"
-        f"{memory_section}"
-        f"{workout_section}"
-        f"{classification_section}"
-        f"{science_section}"
-    )
+    #
+    # Named parts rather than one f-string: joined they are the same characters
+    # as before, but they can also be measured, which is what #556 needs. Where
+    # the prompt's bulk actually sits has been guessed at twice and the guess
+    # went stale both times.
+    athlete_sections: dict[str, str] = {
+        "header": (
+            f"\n\nAthlete data for this conversation\n"
+            f"Today's date: {today}\n"
+            f"{date_context}\n"
+        ),
+        "profile": f"Athlete profile: {json.dumps(profile)}\n",
+        "race-profile": race_profile_section,
+        "plan-past": (
+            "Last 7 days of training (historical context, not upcoming): "
+            f"{json.dumps(last_7_days)}\n"
+        ),
+        "plan-upcoming": (
+            f"Upcoming plan (today and future only, next {len(next_n_days)} days): "
+            f"{json.dumps(next_n_days)}"
+        ),
+        "assessment": assessment_section,
+        "ride-metrics": metrics_section,
+        "races": events_section,
+        "weather": weather_section,
+        "status-badge": status_badge_section,
+        "training-load": training_load_section,
+        "athlete-context": durable_context_section,
+        "athlete-model": durable_model_section,
+        "performance-model": perf_model_section,
+        "roi": roi_section,
+        "hypotheses": hypotheses_section,
+        "memory-facts": durable_memory_facts_section,
+        "open-questions": durable_open_questions_section,
+        "pinned-inquiries": pinned_inquiries_section,
+        "coach-memory": memory_section,
+        "workout": workout_section,
+        "classification": classification_section,
+        "science": science_section,
+    }
 
     # The output contract stays last on purpose.  Response-format compliance is
     # the one thing that genuinely benefits from being the most recent
@@ -1859,7 +1878,16 @@ def ask_trainer_system(
         f"{plan_updates_rule}"
     )
 
-    return static_instructions + athlete_data + closing_instructions
+    return {
+        "static": static_instructions,
+        **athlete_sections,
+        "closing": closing_instructions,
+    }
+
+
+def ask_trainer_system(*args, **kwargs) -> str:
+    """The coach system prompt. Unchanged output; see the sections function."""
+    return "".join(ask_trainer_system_sections(*args, **kwargs).values())
 
 
 # ---------------------------------------------------------------------------

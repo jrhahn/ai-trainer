@@ -14,17 +14,24 @@ done: production tells us what the model charged, never why.
 
 from __future__ import annotations
 
-from services.prompts import ask_trainer_system, coach_static_prefix
+import logging
+
+from services import token_accounting
+from services.prompts import (
+    ask_trainer_system,
+    ask_trainer_system_sections,
+    coach_static_prefix,
+)
 
 
-def _render(seed: int, *, sparse: bool = False) -> str:
-    """A full coach prompt for a distinct athlete on a distinct day.
+def _kwargs(seed: int, *, sparse: bool = False) -> dict:
+    """Arguments for one coach prompt, for a distinct athlete on a distinct day.
 
     ``sparse`` drops every optional section, since a section that appears only
     for some athletes would break the prefix for everyone if it were placed
     inside it.
     """
-    return ask_trainer_system(
+    return dict(
         profile={"name": f"Athlete{seed}", "ftp": 250 + seed},
         today=f"2026-08-0{seed}",
         last_7_days=[{"date": f"2026-07-2{seed}", "tss": 60 + seed}],
@@ -50,6 +57,10 @@ def _render(seed: int, *, sparse: bool = False) -> str:
         training_status_badge=None if sparse else ("Building", f"r{seed}", "green"),
         date_context=f"Current local date context: 2026-08-0{seed}",
     )
+
+
+def _render(seed: int, *, sparse: bool = False) -> str:
+    return ask_trainer_system(**_kwargs(seed, sparse=sparse))
 
 
 def test_the_prefix_is_identical_for_different_athletes_on_different_days():
@@ -111,3 +122,61 @@ def test_the_prefix_carries_no_athlete_data():
         "Upcoming plan (",
     ):
         assert volatile not in prefix
+
+
+# ---------------------------------------------------------------------------
+# Measuring where the prompt's bulk sits (#556)
+# ---------------------------------------------------------------------------
+
+
+def test_the_sections_join_back_into_the_prompt_exactly():
+    """The measurement is only worth anything if it describes the real thing."""
+    sections = ask_trainer_system_sections(**_kwargs(1))
+
+    assert "".join(sections.values()) == _render(1)
+
+
+def test_the_static_block_and_the_output_contract_are_named_parts():
+    sections = ask_trainer_system_sections(**_kwargs(1))
+
+    assert sections["static"] == coach_static_prefix()
+    assert list(sections)[0] == "static"
+    assert list(sections)[-1] == "closing"
+
+
+def test_the_section_sizes_are_logged_without_any_of_their_content(caplog):
+    """These sections are the athlete's health data; only sizes may be logged."""
+    sections = ask_trainer_system_sections(**_kwargs(1))
+    prompt = "".join(sections.values())
+
+    with caplog.at_level(logging.INFO, logger="services.token_accounting"):
+        token_accounting.log_prompt_sections(prompt, sections)
+
+    line = next(
+        r.getMessage() for r in caplog.records if "LLM prompt sections" in r.getMessage()
+    )
+    assert f"total_chars={len(prompt)}" in line
+    assert "hypotheses=" in line and "ride-metrics=" in line
+    # Ordered biggest first: the question is which section to look at.
+    sizes = [
+        int(part.split("=")[1])
+        for part in line.split()
+        if "=" in part and part.split("=")[1].isdigit() and not part.startswith("total")
+    ]
+    assert sizes == sorted(sizes, reverse=True)
+    # No content, however small the section.
+    assert "Athlete1" not in line
+    assert "Weather 1" not in line
+
+
+def test_empty_sections_are_left_out_of_the_report(caplog):
+    sections = ask_trainer_system_sections(**_kwargs(2, sparse=True))
+
+    with caplog.at_level(logging.INFO, logger="services.token_accounting"):
+        token_accounting.log_prompt_sections("".join(sections.values()), sections)
+
+    line = next(
+        r.getMessage() for r in caplog.records if "LLM prompt sections" in r.getMessage()
+    )
+    assert "weather=" not in line
+    assert "science=" not in line

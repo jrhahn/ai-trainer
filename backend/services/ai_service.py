@@ -61,7 +61,7 @@ from .prompts import (
     ask_trainer_classify_user,
     ask_trainer_workout_section,
     ask_trainer_plan_updates_rule,
-    ask_trainer_system,
+    ask_trainer_system_sections,
     update_memory_system,
     update_memory_user,
     derive_athlete_model_system,
@@ -751,7 +751,7 @@ async def ask_trainer(
     ftp = float(profile.get("currentFTP") or 0)
     training_load = compute_training_load(plan, ftp) if ftp > 0 and plan else None
 
-    system_prompt = ask_trainer_system(
+    prompt_sections = ask_trainer_system_sections(
         profile,
         today,
         last_7_days,
@@ -777,6 +777,10 @@ async def ask_trainer(
         training_status_badge=training_status_badge,
         date_context=date_context,
     )
+    system_prompt = "".join(prompt_sections.values())
+    # Which part of the prompt is big is a question about the athlete's real
+    # data, so it is answered here rather than by a script rebuilding it (#556).
+    token_accounting.log_prompt_sections(system_prompt, prompt_sections)
     history = (conversation_history or [])[-MAX_CONVERSATION_HISTORY:]
     date_stamp = app_today_stamp(timezone_name=timezone_name)
     messages = [*history, {"role": "user", "content": f"{date_stamp}\n{question}"}]

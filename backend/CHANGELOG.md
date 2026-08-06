@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The coach prompt reports what it is made of** (`services/prompts.py`,
+  `services/ai_service.py`, `services/token_accounting.py`) — where the
+  prompt's bulk sits has been guessed at twice and gone stale both times: #510
+  measured it by hand against a ~21,300-token prompt, then #512 and #513
+  changed it, and the prompt is now ~16,200 tokens with roughly 11,900 of that
+  athlete data. `ask_trainer_system_sections` returns the prompt as named parts
+  in send order (`static`, the athlete sections, `closing`);
+  `ask_trainer_system` joins them and produces the byte-identical string it
+  always did. Every build emits one line naming each part's size, biggest
+  first, so the composition is always current and always about the real
+  athlete's real data — a script would have to duplicate the twenty-odd fetches
+  the endpoint does and would drift from them. Sizes only, never content: these
+  sections are the athlete's health data and it stays behind
+  `LOG_LLM_PAYLOADS` (#499). Characters rather than tokens, since counting
+  tokens needs the provider's tokeniser; the live API measured 4.8 chars/token
+  for this text (#549). The logging lives in `token_accounting` rather than in
+  `prompts`, which promises in its own docstring to stay free of I/O. (#556)
+
 ### Changed
 
 - **Every usage source is now `<kind>:<kebab-name>`** (`services/token_accounting.py`,

@@ -277,6 +277,35 @@ def note_json_repair(original_len: int, repaired_len: int) -> None:
     )
 
 
+def log_prompt_sections(prompt: str, sections: dict[str, str]) -> None:
+    """Report how big each part of a prompt is. Sizes only, never content.
+
+    Where the coach prompt's bulk sits has been guessed at twice and gone stale
+    both times: #510 measured it by hand against a ~21,300-token prompt, then
+    #512 and #513 changed it. Emitting it from the code that builds the prompt
+    keeps the answer current and about the real athlete's real data, where a
+    script would have to duplicate the twenty-odd fetches the endpoint does and
+    would drift from them (#556).
+
+    Characters, not tokens — counting tokens needs the provider's tokeniser.
+    The live API counted this prompt's static block at 4.8 chars/token (#549),
+    close enough to convert by eye.
+
+    Safe at INFO because it carries no prompt text: the content of these
+    sections is the athlete's health data, and that stays behind
+    ``LOG_LLM_PAYLOADS`` (#499). Empty sections are left out — a section that is
+    not there is not the question.
+    """
+    present = {name: len(text) for name, text in sections.items() if text}
+    ranked = sorted(present.items(), key=lambda item: item[1], reverse=True)
+    logger.info(
+        "LLM prompt sections total_chars=%d prompt_sha=%s %s",
+        len(prompt),
+        prompt_fingerprint(prompt),
+        " ".join(f"{name}={size}" for name, size in ranked),
+    )
+
+
 def log_payload(kind: str, text: str) -> None:
     """Log prompt/response content, but only when explicitly switched on.
 
