@@ -86,7 +86,7 @@ async def generate_user_hypotheses(
     )
     existing_hypotheses = [hypothesis.statement for hypothesis in hypotheses]
 
-    async with track_llm_usage(db, user, source="hypothesis-generation"):
+    async with track_llm_usage(db, user, source="step:hypothesis-generation"):
         candidates = await ai_service.generate_athlete_hypotheses(
             metrics_section,
             existing_facts=existing_facts,

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Every usage source is now `<kind>:<kebab-name>`** (`services/token_accounting.py`,
+  `routers/ai.py`, `routers/users.py`, the nine step modules,
+  `services/activity_sync.py`, `monitoring/grafana/dashboards/ai-trainer.json`) —
+  labels had drifted into three shapes: endpoints reported `api:ask_trainer`,
+  the sync reported `job:strava-sync`, and nine generator steps reported bare
+  names like `coach-narration`. The Grafana panel claimed the prefix told you
+  where the spend came from, which held for two thirds of the sources. The kind
+  now says what *opened the scope* — `api` an endpoint, `job` a scheduler job,
+  `bg` a background task, `step` a reusable unit that can run under any of
+  them. That is knowable where the code is written, unlike "what triggered
+  this": `coach-narration` is called from two endpoints, a scheduler job and
+  the ride-review chain, so a fixed `job:` would have been wrong most of the
+  time. Two related fixes fell out: `athlete-inquiry` covered both the nightly
+  generation and an athlete answering one, and is now
+  `step:athlete-inquiry-generation` / `step:athlete-inquiry-answer`; and the
+  `api:` prefix is no longer bolted on inside `_token_usage_scope`, nor the
+  sync label built by f-string, so the label in Grafana is a string that exists
+  verbatim in the code and grepping for one finds the other. `begin_collection`
+  warns on a malformed source, and a test walks every call site with `ast` and
+  checks its shape — it catches all fifteen of the old labels when the change
+  is reverted. Existing `llm_calls` rows and Prometheus series keep their old
+  labels; two days of data was the cheapest this rename will ever be. (#549)
+
 ### Fixed
 
 - **Scheduler metrics were labelled with a name Prometheus owns**

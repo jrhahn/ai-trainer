@@ -56,13 +56,13 @@ async def _seed_call(email: str, *, source: str, task: str = "coach") -> None:
 
 @pytest.mark.asyncio
 async def test_llm_series_are_built_from_the_stored_calls():
-    await _seed_call("metrics-llm@example.com", source="api:ask_trainer")
+    await _seed_call("metrics-llm@example.com", source="api:ask-trainer")
 
     body = await _render()
     lines = body.splitlines()
 
     def line(prefix: str) -> str:
-        return next(ln for ln in lines if ln.startswith(prefix) and "api:ask_trainer" in ln)
+        return next(ln for ln in lines if ln.startswith(prefix) and "api:ask-trainer" in ln)
 
     call = line("llm_calls_total")
     assert 'model="gemini-3.5-flash-lite"' in call

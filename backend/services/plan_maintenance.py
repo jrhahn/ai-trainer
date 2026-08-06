@@ -107,7 +107,7 @@ async def maintain_user_training_plan(
     if constraints:
         profile = {**profile, "availabilityConstraints": constraints}
 
-    async with track_llm_usage(db, user, source="plan-maintenance"):
+    async with track_llm_usage(db, user, source="step:plan-maintenance"):
         updated_plan = await ai_service.adapt_training_plan(
             plan,
             [],

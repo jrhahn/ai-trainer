@@ -88,7 +88,7 @@ async def detect_user_contradictions(
     if not metrics_section.strip():
         return 0
 
-    async with track_llm_usage(db, user, source="contradiction-detection"):
+    async with track_llm_usage(db, user, source="step:contradiction-detection"):
         contradictions = await ai_service.detect_athlete_fact_contradictions(
             metrics_section,
             [fact.fact for fact in checkable],

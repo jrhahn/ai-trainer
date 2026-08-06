@@ -85,7 +85,7 @@ async def evaluate_user_predictions(
     evaluated = 0
     generated = 0
 
-    async with track_llm_usage(db, user, source="prediction-evaluation"):
+    async with track_llm_usage(db, user, source="step:prediction-evaluation"):
         pending = await crud.list_athlete_predictions(db, user.id)
         if pending:
             payload = [

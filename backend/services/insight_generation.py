@@ -98,7 +98,7 @@ async def generate_user_insights(
     existing_facts = [fact.fact for fact in existing]
 
     provider = resolve_user_provider(user)
-    async with track_llm_usage(db, user, source="insight-generation"):
+    async with track_llm_usage(db, user, source="step:insight-generation"):
         candidates = await ai_service.generate_athlete_insights(
             metrics_section,
             existing_facts=existing_facts,
@@ -142,7 +142,7 @@ async def _refresh_athlete_model(
         else None
     )
 
-    async with track_llm_usage(db, user, source="athlete-model-derivation"):
+    async with track_llm_usage(db, user, source="step:athlete-model-derivation"):
         try:
             derived_model = await ai_service.derive_athlete_model(
                 metrics_section,

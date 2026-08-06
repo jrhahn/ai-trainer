@@ -75,7 +75,7 @@ async def generate_user_experiments(
     existing = await crud.list_athlete_experiments(db, user.id, include_resolved=True)
     existing_protocols = [experiment.protocol for experiment in existing]
 
-    async with track_llm_usage(db, user, source="experiment-suggestion"):
+    async with track_llm_usage(db, user, source="step:experiment-suggestion"):
         candidates = await ai_service.generate_validation_experiments(
             uncertainties_section,
             existing_experiments=existing_protocols,
