@@ -71,6 +71,13 @@ HTTP_DURATION = Histogram(
 # before anyone tried to read the panel.
 SCHEDULER_JOB_LABEL = "scheduler_job"
 
+COACH_REPLIES = Counter(
+    "coach_replies_total",
+    "Coach replies, by whether the reply honoured the JSON contract.",
+    ["contract"],
+    registry=REGISTRY,
+)
+
 SCHEDULER_RUNS = Counter(
     "scheduler_job_runs_total",
     "Scheduler job executions, by job and outcome.",
@@ -103,6 +110,23 @@ def record_http_request(
 ) -> None:
     HTTP_REQUESTS.labels(method=method, route=route, status=str(status)).inc()
     HTTP_DURATION.labels(method=method, route=route).observe(duration_seconds)
+
+
+def record_coach_reply(*, contract: str) -> None:
+    """Count one coach reply by whether it honoured the JSON contract (#558).
+
+    In-process, unlike the cost metrics: there is nothing durable to read this
+    from, and a counter reset on deploy is what Prometheus already handles —
+    ``increase()`` over a week is correct across restarts. That is fine here
+    precisely because the question is a *rate* over time ("how often does the
+    coach fall out of the contract"), not a running total anyone reads directly.
+
+    The point is that a prose reply is no longer an error but is still a
+    degraded turn: it carries no ``planUpdates``, so the coach silently cannot
+    change the plan on that turn. Without a number, "should the coach run on
+    Flash rather than Flash-Lite" stays a matter of opinion (#511, #558).
+    """
+    COACH_REPLIES.labels(contract=contract).inc()
 
 
 def record_scheduler_run(*, job: str, status: str, duration_ms: int) -> None:

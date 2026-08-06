@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach's reply is constrained by a schema, and its shape is now a
+  metric** (`services/coach_schema.py`, `services/llm.py`,
+  `services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) — the
+  root cause behind the prose replies below. `response_mime_type:
+  application/json` asks for JSON; a `response_schema` constrains generation to
+  it. The coach call now sends one, so a prose reply is prevented rather than
+  caught — and prevented on any model, which matters because the same failure
+  predates the switch to Flash-Lite (#511): the inquiry path was already
+  guarding against it while the coach still ran on Flash.
+
+  A schema is also a new way to lose data, so two things are pinned by tests. A
+  field the coach may write today but the schema omits would stop reaching the
+  plan tomorrow with no error anywhere — the drift-bug class of #422 and #424 —
+  so the `planUpdates` item covers every field of `schemas.PlanDayUpdateSchema`,
+  the canonical shape the persist gate accepts, and a test walks that model so a
+  field added there fails here instead of quietly going missing. And Gemini
+  emits properties in `propertyOrdering` order, so `thinking` is ordered before
+  `response`: the prompt asks the model to reason before it answers, and a
+  schema that emitted the answer first would delete the chain of thought — a
+  quality regression no assertion about JSON shape would catch. Only `thinking`
+  and `response` are required; requiring a plan update would push the model into
+  inventing edits nobody asked for. The schema is Gemini's dialect, which the
+  API only validates at request time, so a test parses it through
+  `types.Schema` — building a `GenerateContentConfig` proves nothing, it keeps a
+  raw dict as-is. `OpenAIProvider` accepts the argument and ignores it rather
+  than failing a call the athlete's own settings routed there.
+
+  `coach_replies_total{contract="json"|"prose"}` counts what actually comes
+  back, with a Grafana panel. A prose reply is no longer an error but is still a
+  degraded turn — it carries no `planUpdates`, so the coach silently cannot
+  change the plan — and without a number, "should the coach run on Flash rather
+  than Flash-Lite" stays a matter of opinion. In-process rather than read from a
+  table, unlike the cost metrics: the question is a rate over time, which
+  `increase()` answers correctly across the restarts a deploy causes. (#558)
+
 - **The coach prompt reports what it is made of** (`services/prompts.py`,
   `services/ai_service.py`, `services/token_accounting.py`) — where the
   prompt's bulk sits has been guessed at twice and gone stale both times: #510
@@ -53,6 +88,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   labels; two days of data was the cheapest this rename will ever be. (#549)
 
 ### Fixed
+
+- **A coach reply in prose 500'd the request, and the unit stripper ate words
+  out of the coach's German** (`services/ai_service.py`) — two defects in
+  `_parse_ai_json`, found from one production incident where three coach
+  questions in a row returned "Sorry, something went wrong and I could not
+  respond".
+
+  The model was fine every time: all three calls logged `ok=true`, and 692
+  characters on 165 output tokens is 4.19 chars/token — the same ratio as the
+  replies that worked, so these were *complete* answers, not truncations.
+  `repair_json` returns an empty string only for text with no JSON structure at
+  all (a truncated object it repairs happily), so what came back was prose.
+  `json_mode` is not a guarantee. `ask_trainer` parsed outside any guard, the
+  retry loop only ever retried an *already parsed* reply whose `response` field
+  was empty, and `routers/ai.py` has no handler for `JSONDecodeError` — so the
+  designed 502-with-explanation never fired and the request 500'd with a
+  traceback. The athlete lost the turn outright: a failed request never
+  persists the question, so it was gone from `chat_messages` too. A prose reply
+  is now passed through as the answer, carrying no plan updates because there
+  is no structure to read them from. It is deliberately not retried: the same
+  question produced prose three times out of three, so another attempt mostly
+  buys another 17k input tokens, and the prose already *is* the coach's answer.
+  A reply with neither structure nor a word in it still ends as
+  `AIResponseFormatError` → 502, the path that already existed. Logged by shape
+  only — length and whether it was fenced — because the reply is the athlete's
+  health data (#499).
+
+  The second defect was silent and older. The unit stripper added in #516 turns
+  `"durationMinutes": 180 minutes` into `180`, but it matched anywhere in the
+  document, including inside the coach's own prose: any number followed by a
+  word and then a comma lost the word. `"Wir fahren am Samstag 4 Stunden,
+  danach Pause"` reached the athlete as `"am Samstag 4, danach Pause"`. Nothing
+  caught it — `note_json_repair` compares lengths *after* this substitution, so
+  the damage never appeared in a log — and it ran on all ~20 `_parse_ai_json`
+  call sites, so plan descriptions, ride notes and login summaries were exposed
+  too, not just the chat. The pattern now only matches directly after the colon
+  that opens a value, which is the one position #516 was about. (#558)
 
 - **Scheduler metrics were labelled with a name Prometheus owns**
   (`services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) —

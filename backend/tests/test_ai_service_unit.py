@@ -152,6 +152,50 @@ def test_parse_ai_json_does_not_log_when_input_is_valid(caplog):
 
 
 # ---------------------------------------------------------------------------
+# _parse_ai_json — the unit stripper stays out of the prose (#558)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_ai_json_strips_a_unit_written_into_a_numeric_field():
+    """The behaviour #516 added, and the only one the stripper is allowed."""
+    raw = '{"durationMinutes": 180 minutes, "targetPower": 250 watts}'
+
+    result = ai_service._parse_ai_json(raw)
+
+    assert result["durationMinutes"] == 180
+    assert result["targetPower"] == 250
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # Each of these was verified to be damaged by the old document-wide
+        # regex: a number, a word, then a comma. A unit before the closing quote
+        # of a string was always safe, so no such case is listed here — it would
+        # pass with or without the fix.
+        "Wir fahren am Samstag 4 Stunden, danach Pause.",
+        "Das waren 3 Wochen, und jetzt kommt die Erholung.",
+        "Ride for 2 hours, then recover.",
+    ],
+)
+def test_parse_ai_json_leaves_the_coachs_prose_intact(sentence):
+    """The athlete used to read "am Samstag 4, danach Pause" (#558)."""
+    result = ai_service._parse_ai_json(json.dumps({"response": sentence}))
+
+    assert result["response"] == sentence
+
+
+def test_parse_ai_json_keeps_a_unit_before_a_literal_newline_in_prose():
+    """Models emit unescaped newlines inside strings; repair_json fixes those.
+
+    The old regex fired on the newline first and dropped the unit on the way.
+    """
+    raw = '{"response": "Sonntag 3 Stunden\nMontag frei"}'
+
+    assert ai_service._parse_ai_json(raw)["response"] == "Sonntag 3 Stunden\nMontag frei"
+
+
+# ---------------------------------------------------------------------------
 # _best_n_min_power
 # ---------------------------------------------------------------------------
 
@@ -1358,6 +1402,115 @@ async def test_ask_trainer_training_load_in_prompt():
     assert "CTL" in prompt
     assert "ATL" in prompt
     assert "TSB" in prompt
+
+
+# ---------------------------------------------------------------------------
+# ask_trainer — a reply that ignores the JSON contract (#558)
+#
+# Production, three requests in a row, same question: the model answered in
+# German prose, repair_json emptied it, json.loads raised, and the router — which
+# has no handler for JSONDecodeError — returned 500 with a traceback. The
+# athlete's question is not persisted on a failed request, so the turn was gone.
+# ---------------------------------------------------------------------------
+
+
+PROSE_REPLY = (
+    "Das klingt gut! Sonntag 2-3 Stunden Grundlage passt gut ins Wochenende, "
+    "solange du Samstag nicht überziehst."
+)
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_returns_a_prose_reply_as_the_answer():
+    calls: list[str] = []
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        calls.append(kwargs.get("task", ""))
+        return PROSE_REPLY
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="vllt gehn sonntag ja noch 2-3h grundlage?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert result["response"] == PROSE_REPLY
+    # Prose carries no structure, so there is nothing to write to the plan.
+    assert not result["plan_updates"]
+    assert result["sources"] == []
+    # And it costs exactly one call: the same prompt produced prose three times
+    # out of three in production, so retrying only buys another 17k input tokens.
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_logs_the_prose_reply_by_shape_and_never_by_content(caplog):
+    """The reply is the athlete's health data — sizes may be logged, text may not (#499)."""
+    import logging
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return PROSE_REPLY
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        with caplog.at_level(logging.WARNING, logger="services.ai_service"):
+            await ai_service.ask_trainer(
+                question="und sonntag?",
+                plan=PLAN_FOR_LOAD_TESTS,
+                profile=PROFILE_WITH_FTP,
+            )
+
+    line = next(
+        r.getMessage() for r in caplog.records if "outside the JSON contract" in r.getMessage()
+    )
+    assert f"chars={len(PROSE_REPLY)}" in line
+    assert "Grundlage" not in line
+    assert "Sonntag" not in line
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_raises_the_format_error_when_the_reply_holds_no_answer():
+    """Structure-less *and* wordless: that is the retry path, ending in a 502.
+
+    ``AIResponseFormatError`` is what ``routers/ai.py`` already turns into a 502
+    with an explanation; a bare ``JSONDecodeError`` is what it 500s on.
+    """
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return "{{{"
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        with patch.object(ai_service.asyncio, "sleep", new=AsyncMock()):
+            with pytest.raises(ai_service.AIResponseFormatError):
+                await ai_service.ask_trainer(
+                    question="und sonntag?",
+                    plan=PLAN_FOR_LOAD_TESTS,
+                    profile=PROFILE_WITH_FTP,
+                )
+
+
+@pytest.mark.asyncio
+async def test_ask_trainer_still_reads_plan_updates_out_of_a_valid_reply():
+    """The fallback must not swallow the structured path it sits next to."""
+
+    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+        return json.dumps({
+            "response": "Samstag 4 Stunden, danach Pause.",
+            "planUpdates": [{"date": "2026-04-16", "durationMinutes": 240}],
+            "sources": ["a"],
+        })
+
+    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
+        result = await ai_service.ask_trainer(
+            question="samstag lang?",
+            plan=PLAN_FOR_LOAD_TESTS,
+            profile=PROFILE_WITH_FTP,
+        )
+
+    assert result["plan_updates"] == [{"date": "2026-04-16", "durationMinutes": 240}]
+    assert result["sources"] == ["a"]
+    # The unit stripper used to turn this into "Samstag 4, danach Pause." (#558).
+    assert result["response"] == "Samstag 4 Stunden, danach Pause."
 
 
 # ---------------------------------------------------------------------------
@@ -3301,6 +3454,7 @@ async def test_ask_trainer_rest_prompt_handles_corrected_vo2_timing(monkeypatch)
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4504,6 +4658,7 @@ async def test_ask_trainer_passes_precomputed_date_context(monkeypatch):
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4546,6 +4701,7 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4727,6 +4883,7 @@ async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatc
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4800,6 +4957,7 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4879,7 +5037,9 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
         ),
     )
 
-    async def fake_chat(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         captured["system_prompt"] = system_prompt
         return json.dumps({"response": "ok", "sources": []})
 
@@ -4935,7 +5095,9 @@ async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
         lambda timezone_name=None: "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23).",
     )
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         captured["messages"] = messages
         return json.dumps({"response": "ok", "sources": []})
 
@@ -5059,7 +5221,9 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
     ride_note_update but not ride_label_update, so the router's result.pop("ride_label_update")
     always got None and label corrections were never persisted or sent to the frontend.
     """
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         return json.dumps({
             "response": "I've updated your activity label for June 24 to OK.",
             "ride_label_update": {"activity_date": "2026-06-24", "label": "OK"},
@@ -5079,7 +5243,9 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
 @pytest.mark.asyncio
 async def test_ask_trainer_ride_label_update_is_none_when_absent(monkeypatch):
     """ride_label_update must be None (not KeyError) when the LLM omits the field."""
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         return json.dumps({"response": "Great ride today!"})
 
     monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
