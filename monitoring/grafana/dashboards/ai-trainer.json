@@ -33,7 +33,7 @@
     {
       "type": "timeseries",
       "title": "Tokens per hour by source",
-      "description": "Which feature is spending. 'bg:' is background work, 'job:' the scheduler, 'api:' a request the athlete made.",
+      "description": "Which feature is spending. The prefix says what opened the scope: 'api:' an endpoint, 'job:' a scheduler job, 'bg:' a background task after a response, 'step:' a reusable step that runs under any of those \u2014 so a 'step:' cost can belong to either a request or a job.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 18, "x": 6, "y": 1 },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },

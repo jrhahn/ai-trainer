@@ -144,7 +144,7 @@ async def test_usage_reaches_the_users_counters_split_by_how_it_bills():
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
-        async with token_accounting.track_llm_usage(db, user, source="api:ask_trainer"):
+        async with token_accounting.track_llm_usage(db, user, source="api:ask-trainer"):
             _call()
         await db.commit()
 
@@ -188,7 +188,7 @@ async def test_a_nested_scope_bills_its_calls_once():
         user = await db.get(models.User, user_id)
         async with token_accounting.track_llm_usage(db, user, source="job:sync"):
             async with token_accounting.track_llm_usage(
-                db, user, source="insight-generation"
+                db, user, source="step:insight-generation"
             ):
                 _call(
                     input_tokens=500,
@@ -262,7 +262,7 @@ async def test_detached_usage_is_billed_without_a_caller_session():
     user_id = await _create_user("accounting-detached@example.com")
 
     async with token_accounting.track_llm_usage_detached(
-        TestSessionLocal, user_id, source="bg:update_coach_memory"
+        TestSessionLocal, user_id, source="bg:update-coach-memory"
     ):
         _call(input_tokens=2088, output_tokens=881, cached_tokens=0, total_tokens=2969)
 
@@ -368,7 +368,7 @@ async def test_a_call_is_stored_with_everything_needed_to_price_it():
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
-        async with token_accounting.track_llm_usage(db, user, source="api:ask_trainer"):
+        async with token_accounting.track_llm_usage(db, user, source="api:ask-trainer"):
             _call()
         await db.commit()
 
@@ -381,7 +381,7 @@ async def test_a_call_is_stored_with_everything_needed_to_price_it():
         "gemini",
         "gemini-3.5-flash-lite",
     )
-    assert row.source == "api:ask_trainer"
+    assert row.source == "api:ask-trainer"
     assert (row.input_tokens, row.output_tokens, row.cached_tokens) == (
         12_000,
         480,
@@ -441,13 +441,13 @@ async def test_detached_work_stores_its_calls_too():
     user_id = await _create_user("calls-detached@example.com")
 
     async with token_accounting.track_llm_usage_detached(
-        TestSessionLocal, user_id, source="bg:update_coach_memory"
+        TestSessionLocal, user_id, source="bg:update-coach-memory"
     ):
         _call(task="classify")
 
     stored = await _stored_calls()
     assert len(stored) == 1
-    assert stored[0].source == "bg:update_coach_memory"
+    assert stored[0].source == "bg:update-coach-memory"
     assert stored[0].user_id == user_id
 
 

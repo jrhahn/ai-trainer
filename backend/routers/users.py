@@ -1801,7 +1801,7 @@ async def _analyse_fit_import(
     parsed: _ParsedFitActivity,
 ) -> dict | None:
     provider = current_user.ai_provider or "openai"
-    async with track_llm_usage(db, current_user, source="api:analyse_fit_import"):
+    async with track_llm_usage(db, current_user, source="api:analyse-fit-import"):
         try:
             ai_result = await ai_service.analyse_fit_activity(
                 sport_type=parsed.sport_type,

@@ -87,7 +87,10 @@ async def generate_user_inquiries(
     previous = await crud.list_athlete_inquiries(db, user.id, include_resolved=True)
     asked_questions = [inquiry.question for inquiry in previous]
 
-    async with track_llm_usage(db, user, source="athlete-inquiry"):
+    # Distinct from answering one below: this is the nightly generation, that
+    # is the athlete replying. Sharing one label meant the dashboard could not
+    # tell scheduled machinery from something a person did (#549).
+    async with track_llm_usage(db, user, source="step:athlete-inquiry-generation"):
         candidates = await ai_service.generate_athlete_inquiries(
             metrics_section,
             existing_facts=existing_facts,
@@ -138,7 +141,7 @@ async def submit_inquiry_answer(
 
     is_final_attempt = inquiry.ask_count >= crud.ATHLETE_INQUIRY_MAX_ASKS
 
-    async with track_llm_usage(db, user, source="athlete-inquiry"):
+    async with track_llm_usage(db, user, source="step:athlete-inquiry-answer"):
         verdict = await ai_service.evaluate_inquiry_answer(
             inquiry.question,
             cleaned,

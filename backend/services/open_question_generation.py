@@ -86,7 +86,7 @@ async def generate_user_open_questions(
     )
     existing_questions = [question.question for question in questions]
 
-    async with track_llm_usage(db, user, source="open-question-generation"):
+    async with track_llm_usage(db, user, source="step:open-question-generation"):
         candidates = await ai_service.generate_open_questions(
             metrics_section,
             existing_facts=existing_facts,

@@ -81,7 +81,7 @@ async def narrate_plan_changes(
                 user.rider_assessment, from_attributes=True
             ).model_dump(by_alias=True)
         provider = resolve_user_provider(user)
-        async with track_llm_usage(db, user, source="coach-narration"):
+        async with track_llm_usage(db, user, source="step:coach-narration"):
             parsed = await ai_service.summarize_plan_changes(
                 applied_changes,
                 profile,

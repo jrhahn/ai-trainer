@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
@@ -51,6 +52,27 @@ logger = logging.getLogger(__name__)
 # Source label for a provider call made outside any collection scope. Its
 # tokens are reported in the log but billed to no user.
 UNSCOPED = "unscoped"
+
+# Every source is ``<kind>:<kebab-case-name>``. The kind says what *opened the
+# scope*, which is knowable where the code is written — unlike "what triggered
+# this", which is not: ``coach-narration`` runs under two endpoints, a
+# scheduler job and the ride-review chain, so any fixed answer would be wrong
+# most of the time.
+#
+#   api    an HTTP endpoint's own work
+#   job    a registered scheduler job
+#   bg     a FastAPI background task, running after the response
+#   step   a reusable unit of work that can run under any of the above
+#
+# Labels used to be a mix of ``api:ask_trainer``, ``job:strava-sync`` and bare
+# ``coach-narration``, which made the dashboards read as if a third of the
+# spend came from nowhere in particular (#549).
+SOURCE_KINDS = ("api", "job", "bg", "step")
+_SOURCE_PATTERN = re.compile(rf"^({'|'.join(SOURCE_KINDS)}):[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+def source_is_well_formed(source: str) -> bool:
+    return bool(_SOURCE_PATTERN.match(source))
 
 
 @dataclass
@@ -128,6 +150,15 @@ def current_source() -> str:
 
 def begin_collection(source: str) -> Token[_Scope | None]:
     """Start collecting provider usage for the current context."""
+    if not source_is_well_formed(source):
+        # Warned, not raised: a mislabelled scope still bills correctly, and
+        # accounting must never be the thing that fails a request. The warning
+        # is what stops the labels drifting apart again (#549).
+        logger.warning(
+            "LLM usage source %r is not <kind>:<kebab-name> with kind in %s",
+            source,
+            ", ".join(SOURCE_KINDS),
+        )
     return _scope.set(_Scope(source=source))
 
 

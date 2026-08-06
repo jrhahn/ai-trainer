@@ -652,9 +652,12 @@ async def run_activity_sync(
 
     result.users = len(users)
     for user_ref in users:
-        for source, sync_fn in (
-            ("strava", sync_strava_for_user),
-            ("intervals", sync_intervals_for_user),
+        # The usage label is spelled out rather than built from `source`, so
+        # every label in the app can be found by grepping for the string that
+        # appears in Grafana (#549).
+        for source, usage_source, sync_fn in (
+            ("strava", "job:strava-sync", sync_strava_for_user),
+            ("intervals", "job:intervals-sync", sync_intervals_for_user),
         ):
             try:
                 async with session_factory() as db:
@@ -672,9 +675,7 @@ async def run_activity_sync(
                         # their own scope (the learning chain) still report
                         # under their own source; nesting means their tokens are
                         # persisted once, by the inner scope.
-                        async with track_llm_usage(
-                            db, user, source=f"job:{source}-sync"
-                        ):
+                        async with track_llm_usage(db, user, source=usage_source):
                             source_result = await sync_fn(db, user)
                     result.add(source_result)
                     await db.commit()

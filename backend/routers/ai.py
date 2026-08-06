@@ -403,11 +403,12 @@ def _token_usage_scope(
 ) -> AbstractAsyncContextManager[None]:
     """Collect and persist provider token usage for one endpoint.
 
-    A thin alias for :func:`services.token_accounting.track_llm_usage` that
-    fixes the ``api:`` prefix, so every route reports a source in the same shape
-    and the scheduler's own scopes stay distinguishable in the logs (#516).
+    A thin alias for :func:`services.token_accounting.track_llm_usage`. The
+    ``api:`` prefix used to be added here; call sites now pass the whole label,
+    so the string in the code is the string in Grafana and grepping for one
+    finds the other (#549).
     """
-    return track_llm_usage(db, user, source=f"api:{source}")
+    return track_llm_usage(db, user, source=source)
 
 
 async def _auto_rate_ride(
@@ -462,7 +463,7 @@ async def _update_memory_bg(
     scope is long closed and the call was attributed to nobody (#537).
     """
     async with track_llm_usage_detached(
-        async_session_maker, user_id, source="bg:update_coach_memory"
+        async_session_maker, user_id, source="bg:update-coach-memory"
     ):
         try:
             for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
@@ -607,7 +608,7 @@ async def analyse_activities(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
 
-    async with _token_usage_scope(db, current_user, source="analyse_activities"):
+    async with _token_usage_scope(db, current_user, source="api:analyse-activities"):
         try:
             result = await ai_service.analyse_strava_activities(
                 activity_payloads,
@@ -850,7 +851,7 @@ async def generate_plan(
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
-    async with _token_usage_scope(db, current_user, source="generate_plan"):
+    async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:
             plan = await ai_service.generate_training_plan(
                 profile,
@@ -1003,7 +1004,7 @@ async def ask_trainer(
 
     # --- Fetch ride metrics history for structured LLM context ---
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
-    async with _token_usage_scope(db, current_user, source="ask_trainer"):
+    async with _token_usage_scope(db, current_user, source="api:ask-trainer"):
         # Classification exists to decide whether to retrieve science context, so
         # it is only worth an LLM call when there is a corpus to retrieve from.
         # With none ingested it used to spend one call per chat message to gate a
@@ -1292,7 +1293,7 @@ async def race_event_feedback(
         recent_metrics, timezone_name=timezone_name
     )
     race_events = await _race_events_for_prompt(db, current_user.id)
-    async with _token_usage_scope(db, current_user, source="race_event_feedback"):
+    async with _token_usage_scope(db, current_user, source="api:race-event-feedback"):
         try:
             feedback = await ai_service.race_event_feedback(
                 body.event.model_dump(by_alias=True),
@@ -1367,7 +1368,7 @@ async def rate_workout(
                 exc_info=True,
             )
 
-    async with _token_usage_scope(db, current_user, source="rate_workout"):
+    async with _token_usage_scope(db, current_user, source="api:rate-workout"):
         try:
             result = await ai_service.rate_completed_workout(
                 body.day.model_dump(by_alias=True),
@@ -1436,7 +1437,7 @@ async def review_new_rides(
     existing_plan = await crud.get_training_plan(db, current_user.id)
     training_plan = existing_plan.plan if existing_plan is not None else None
 
-    async with _token_usage_scope(db, current_user, source="review_new_rides"):
+    async with _token_usage_scope(db, current_user, source="api:review-new-rides"):
         try:
             review_text = await ai_service.batch_review_rides(
                 unreviewed,
@@ -1472,7 +1473,7 @@ async def extract_athlete_facts(
     Candidates are returned for review only — nothing is persisted here. The
     client accepts chosen candidates via ``POST /users/me/athlete-memory-facts``.
     """
-    async with _token_usage_scope(db, current_user, source="extract_athlete_facts"):
+    async with _token_usage_scope(db, current_user, source="api:extract-athlete-facts"):
         try:
             candidates = await ai_service.extract_athlete_facts(
                 body.transcript,
@@ -1518,7 +1519,7 @@ async def refresh_athlete_model(
         else None
     )
 
-    async with _token_usage_scope(db, current_user, source="refresh_athlete_model"):
+    async with _token_usage_scope(db, current_user, source="api:refresh-athlete-model"):
         try:
             derived = await ai_service.derive_athlete_model(
                 metrics_section,
@@ -1626,7 +1627,7 @@ async def resolve_ride_match(
                 exc_info=True,
             )
 
-    async with _token_usage_scope(db, current_user, source="resolve_ride_match"):
+    async with _token_usage_scope(db, current_user, source="api:resolve-ride-match"):
         coach_note, plan_updates = await review_matched_ride_and_adapt(
             db,
             current_user,
@@ -1862,7 +1863,7 @@ async def refresh_login_summary(
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    async with _token_usage_scope(db, current_user, source="refresh_login_summary"):
+    async with _token_usage_scope(db, current_user, source="api:refresh-login-summary"):
         try:
             login_summary = await summary_pipeline.regenerate(
                 db,
@@ -1897,7 +1898,7 @@ async def refresh_training_status(
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    async with _token_usage_scope(db, current_user, source="refresh_training_status"):
+    async with _token_usage_scope(db, current_user, source="api:refresh-training-status"):
         try:
             label, tone, rationale = await status_pipeline.regenerate(
                 db,
@@ -2026,7 +2027,7 @@ async def next_ride_recommendation(
                 else None
             )
 
-    async with _token_usage_scope(db, current_user, source="next_ride_recommendation"):
+    async with _token_usage_scope(db, current_user, source="api:next-ride-recommendation"):
         try:
             result = await ai_service.recommend_next_session(
                 rides=rides,
@@ -2112,7 +2113,7 @@ async def process_pending_feedbacks(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
 
-    async with _token_usage_scope(db, current_user, source="process_pending_feedbacks"):
+    async with _token_usage_scope(db, current_user, source="api:process-pending-feedbacks"):
         try:
             login_summary = await ai_service.generate_summary_from_ride_feedbacks(
                 rides=rides,
