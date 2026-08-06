@@ -925,6 +925,15 @@ async def ask_trainer(
         if (athlete_context_row is not None and memory_enabled)
         else None
     )
+    # What the athlete is training for (#562). Gated on the same memory switch
+    # as the rest of the durable profile: an athlete who turned memory off does
+    # not want their objective recalled either.
+    motivation_row = await crud.get_athlete_motivation_model(db, current_user.id)
+    motivation_model = (
+        crud.motivation_model_as_dict(motivation_row)
+        if (motivation_row is not None and memory_enabled)
+        else None
+    )
     athlete_model_row = await crud.get_athlete_model(db, current_user.id)
     athlete_model = (
         schemas.AthleteModelSchema.model_validate(
@@ -1062,6 +1071,7 @@ async def ask_trainer(
                 athlete_context=athlete_context,
                 athlete_memory_facts=athlete_memory_facts,
                 athlete_model=athlete_model,
+                motivation_model=motivation_model,
                 open_questions=open_questions,
                 pending_inquiries=pending_inquiries,
                 performance_model=performance_model,
@@ -1967,6 +1977,15 @@ async def next_ride_recommendation(
         if (athlete_context_row is not None and memory_enabled)
         else None
     )
+    # What the athlete is training for (#562). Gated on the same memory switch
+    # as the rest of the durable profile: an athlete who turned memory off does
+    # not want their objective recalled either.
+    motivation_row = await crud.get_athlete_motivation_model(db, current_user.id)
+    motivation_model = (
+        crud.motivation_model_as_dict(motivation_row)
+        if (motivation_row is not None and memory_enabled)
+        else None
+    )
     athlete_memory_fact_rows = (
         await crud.get_prompt_athlete_memory_facts(db, current_user.id)
         if memory_enabled
@@ -2038,6 +2057,7 @@ async def next_ride_recommendation(
                 coach_memory=coach_memory,
                 athlete_context=athlete_context,
                 athlete_memory_facts=athlete_memory_facts,
+                motivation_model=motivation_model,
                 performance_recommendation=performance_recommendation,
                 ctl=ctl,
                 atl=atl,

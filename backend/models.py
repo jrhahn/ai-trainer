@@ -164,6 +164,9 @@ class User(Base):
     athlete_model: Mapped["AthleteModel | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    motivation_model: Mapped["AthleteMotivationModel | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     athlete_performance_model: Mapped["AthletePerformanceModel | None"] = (
         relationship(
             back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -413,7 +416,6 @@ class AthleteContext(Base):
     rest_response: Mapped[str] = mapped_column(
         String(30), default="unknown", nullable=False
     )
-    motivation_drivers: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
     adherence_pattern: Mapped[str] = mapped_column(
         String(30), default="unknown", nullable=False
     )
@@ -430,6 +432,70 @@ class AthleteContext(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="athlete_context")
+
+
+class AthleteMotivationModel(Base):
+    """What the athlete is optimizing for — objectives, constraints, weights (#562).
+
+    The rest of the athlete profile answers *what the athlete is capable of*
+    (:class:`AthleteModel`, :class:`AthletePerformanceModel`) and *what they
+    like* (:class:`AthleteMemoryFact`). This answers what all of that is **for**.
+    Two athletes with identical FTP, CTL and race calendar need different
+    coaching when one rides to race and the other rides to reach the next
+    technical descent, and nothing else in the schema records that difference.
+
+    It replaces ``AthleteContext.motivation_drivers``, a flat list of free-text
+    drivers with no structure, no provenance and no consumer that treated it as
+    an objective. Here the objective is data the planner scores against (#564)
+    and the coach explains itself with (#565).
+
+    Every column is written through :mod:`services.motivation_model`, which is
+    the single normalization gate: ``utility_weights`` spans exactly
+    ``MOTIVATION_COMPONENTS`` and sums to 1.0, entries carry their own
+    confidence and source, and ``user_set`` beats ``inferred`` so an inference
+    pass can never overwrite an objective the athlete stated by hand — the
+    authority marker :class:`AthleteHomeLocation` uses, for the same reason
+    (#342/#345/#346).
+    """
+
+    __tablename__ = "athlete_motivation_model"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), primary_key=True
+    )
+    # The one statement everything else serves ("Maximize enjoyable technical
+    # trail riding"). Empty until inferred or stated.
+    primary_objective: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    primary_objective_source: Mapped[str] = mapped_column(
+        String(20), default="inferred", nullable=False
+    )
+    primary_objective_confidence: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False
+    )
+    # What the athlete actually said, so the coach can be honest about where an
+    # inferred objective came from and the athlete can correct it (#567).
+    primary_objective_snippet: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    # Ordered lists of entry envelopes: text plus confidence, source, status,
+    # snippet and observation timestamps. See ``motivation_model.normalize_entry``.
+    secondary_objectives: Mapped[Any] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    # Hard filters rather than soft weights: "avoid unnecessary crash risk",
+    # "maintain intrinsic motivation". The planner must not trade these away for
+    # utility (#564).
+    constraints: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    # component -> weight over MOTIVATION_COMPONENTS, summing to 1.0. Stored as
+    # data, not constants, so #566 can learn it and the athlete can inspect it.
+    utility_weights: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    # Components the athlete fixed by hand; excluded from learning (#566/#567).
+    pinned_weights: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="motivation_model")
 
 
 class AthleteModel(Base):

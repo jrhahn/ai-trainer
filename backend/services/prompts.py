@@ -987,6 +987,61 @@ def athlete_context_section(athlete_context: dict | None) -> str:
     )
 
 
+def motivation_model_section(motivation: dict | None) -> str:
+    """Render what the athlete is optimizing for (#562).
+
+    This replaces ``athlete_context.motivation_drivers``, which reached the
+    prompt as an unlabelled list of words the coach had to guess the meaning of.
+    An objective says what the training is *for*, so it is stated as such — and
+    kept deliberately compact, because the coach prompt is already ~16k tokens
+    (#510/#556).
+
+    The wording rules that make the coach *explain* itself in these terms are
+    #565; this section only puts the objective in front of it.
+    """
+    if not motivation:
+        return ""
+
+    primary = str(motivation.get("primary_objective") or "").strip()
+    secondary = [
+        str(entry.get("text") or "").strip()
+        for entry in motivation.get("secondary_objectives") or []
+        if isinstance(entry, dict) and entry.get("status") == "active"
+    ]
+    constraints = [
+        str(entry.get("text") or "").strip()
+        for entry in motivation.get("constraints") or []
+        if isinstance(entry, dict) and entry.get("status") == "active"
+    ]
+    secondary = [text for text in secondary if text]
+    constraints = [text for text in constraints if text]
+
+    if not (primary or secondary or constraints):
+        return ""
+
+    lines = ["\n\nWhat this athlete is training for (their own objective):"]
+    if primary:
+        # Confidence is surfaced so the coach can hold an inferred objective
+        # loosely — and ask about it — rather than asserting it back at the
+        # athlete as fact.
+        confidence = motivation.get("primary_objective_confidence")
+        inferred = motivation.get("primary_objective_source") != "user_set"
+        qualifier = ""
+        if inferred and isinstance(confidence, (int, float)):
+            qualifier = f" (inferred, confidence {float(confidence):.2f})"
+        lines.append(f"- Primary: {primary}{qualifier}")
+    if secondary:
+        lines.append(f"- Also matters: {'; '.join(secondary)}")
+    if constraints:
+        lines.append(f"- Must not be traded away: {'; '.join(constraints)}")
+    lines.append(
+        "Fitness is the means, not the end: this is what the training serves. "
+        "Treat it as the athlete's goal even where it differs from what would "
+        "maximise physiological adaptation."
+    )
+    return "\n".join(lines)
+
+
 def athlete_model_section(athlete_model: dict | None) -> str:
     """Render the long-term athlete model (#384) for a coaching prompt.
 
@@ -1724,6 +1779,7 @@ def ask_trainer_system_sections(
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
+    motivation_model: dict | None = None,
     open_questions: list[dict] | None = None,
     pending_inquiries: list[dict] | None = None,
     performance_model: dict | None = None,
@@ -1780,6 +1836,7 @@ def ask_trainer_system_sections(
     # its exact words, so the coach has to be holding the same label it wrote.
     status_badge_section = training_status_section(*(training_status_badge or (None, None, None)))
     durable_context_section = athlete_context_section(athlete_context)
+    durable_motivation_section = motivation_model_section(motivation_model)
     durable_model_section = athlete_model_section(athlete_model)
     durable_memory_facts_section = athlete_memory_facts_section(athlete_memory_facts)
     durable_open_questions_section = open_questions_section(open_questions)
@@ -1834,6 +1891,7 @@ def ask_trainer_system_sections(
         "status-badge": status_badge_section,
         "training-load": training_load_section,
         "athlete-context": durable_context_section,
+        "motivation-model": durable_motivation_section,
         "athlete-model": durable_model_section,
         "performance-model": perf_model_section,
         "roi": roi_section,
@@ -3503,6 +3561,7 @@ def next_ride_recommendation_user(
     athlete_context: dict | None = None,
     athlete_memory_facts: list[dict] | None = None,
     athlete_model: dict | None = None,
+    motivation_model: dict | None = None,
     performance_recommendation: dict | None = None,
     ctl: float | None = None,
     atl: float | None = None,
@@ -3532,6 +3591,10 @@ def next_ride_recommendation_user(
     structured_context = athlete_context_section(athlete_context).strip()
     if structured_context:
         athlete_context_parts.append(structured_context)
+
+    motivation = motivation_model_section(motivation_model).strip()
+    if motivation:
+        athlete_context_parts.append(motivation)
 
     structured_model = athlete_model_section(athlete_model).strip()
     if structured_model:

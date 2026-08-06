@@ -645,7 +645,6 @@ async def test_athlete_context_contract(client):
         await client.get("/api/v1/users/me/athlete-context", headers=headers)
     ).json()
     assert empty["trainingTendency"] == "unknown"
-    assert empty["motivationDrivers"] == []
     assert empty["coachingRisks"] == []
 
     saved = (
@@ -655,7 +654,6 @@ async def test_athlete_context_contract(client):
             json={
                 "trainingTendency": "overtrains",
                 "restResponse": "restless",
-                "motivationDrivers": ["MTB", "race goal"],
                 "adherencePattern": "adds_extra",
                 "strengths": ["VO2max work"],
                 "weaknesses": ["easy days"],
@@ -668,13 +666,88 @@ async def test_athlete_context_contract(client):
     ).json()
     assert saved["trainingTendency"] == "overtrains"
     assert saved["restResponse"] == "restless"
-    assert saved["motivationDrivers"] == ["MTB", "race goal"]
     assert saved["coachingRisks"] == ["doing too much when fresh"]
 
     retrieved = (
         await client.get("/api/v1/users/me/athlete-context", headers=headers)
     ).json()
     assert retrieved == saved
+
+
+# ---------------------------------------------------------------------------
+# 9b. Athlete motivation model contract (#562)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_motivation_model_contract(client):
+    """What the athlete is optimizing for, over the wire (#562).
+
+    The endpoint answers with a complete model even before anything is known, so
+    the UI (#567) and the planner (#564) never have to distinguish "no motivation
+    model" from "no motivation".
+    """
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"name": "Tia", "email": "tia@example.com", "password": "Str0ng!Pass"},
+    )
+    token = reg_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty = (
+        await client.get("/api/v1/users/me/motivation-model", headers=headers)
+    ).json()
+    assert empty["primaryObjective"] == ""
+    assert empty["secondaryObjectives"] == []
+    assert sum(empty["utilityWeights"].values()) == pytest.approx(1.0)
+
+    saved = (
+        await client.put(
+            "/api/v1/users/me/motivation-model",
+            headers=headers,
+            json={
+                "primaryObjective": "Maximize enjoyable technical trail riding",
+                "secondaryObjectives": [
+                    {"text": "Improve climbing speed"},
+                    {"text": "Complete marathon races"},
+                ],
+                "constraints": [{"text": "Avoid unnecessary crash risk"}],
+                "utilityWeights": {"enjoyment": 0.45, "adaptation": 0.25},
+                "pinnedWeights": ["enjoyment"],
+            },
+        )
+    ).json()
+
+    assert saved["primaryObjective"] == "Maximize enjoyable technical trail riding"
+    # An edit made through the API is the athlete's own word, so it is stored as
+    # user_set and protected from every later inference pass (#563).
+    assert saved["primaryObjectiveSource"] == "user_set"
+    assert [e["text"] for e in saved["secondaryObjectives"]] == [
+        "Improve climbing speed",
+        "Complete marathon races",
+    ]
+    assert saved["constraints"][0]["text"] == "Avoid unnecessary crash risk"
+    assert saved["utilityWeights"]["enjoyment"] == pytest.approx(0.45)
+    assert sum(saved["utilityWeights"].values()) == pytest.approx(1.0)
+    assert saved["pinnedWeights"] == ["enjoyment"]
+
+    retrieved = (
+        await client.get("/api/v1/users/me/motivation-model", headers=headers)
+    ).json()
+    assert retrieved["primaryObjective"] == saved["primaryObjective"]
+    assert retrieved["utilityWeights"] == saved["utilityWeights"]
+
+    # A partial edit must not blank the rest of the model.
+    patched = (
+        await client.put(
+            "/api/v1/users/me/motivation-model",
+            headers=headers,
+            json={"primaryObjective": "Ride the Trans-Alp end to end"},
+        )
+    ).json()
+    assert patched["primaryObjective"] == "Ride the Trans-Alp end to end"
+    assert len(patched["secondaryObjectives"]) == 2
+    assert patched["utilityWeights"]["enjoyment"] == pytest.approx(0.45)
 
 
 # ---------------------------------------------------------------------------

@@ -700,7 +700,6 @@ async def test_upsert_athlete_context_creates_new(db: AsyncSession) -> None:
         user.id,
         training_tendency="overtrains",
         rest_response="restless",
-        motivation_drivers=["MTB", "race goal"],
         adherence_pattern="adds_extra",
         strengths=["VO2max work"],
         weaknesses=["easy days"],
@@ -712,7 +711,6 @@ async def test_upsert_athlete_context_creates_new(db: AsyncSession) -> None:
 
     assert context.training_tendency == "overtrains"
     assert context.rest_response == "restless"
-    assert context.motivation_drivers == ["MTB", "race goal"]
     assert context.adherence_pattern == "adds_extra"
     assert context.coaching_risks == ["doing too much when fresh"]
 
@@ -724,20 +722,17 @@ async def test_upsert_athlete_context_updates_existing(db: AsyncSession) -> None
         db,
         user.id,
         training_tendency="overtrains",
-        motivation_drivers=["race goal"],
     )
     updated = await crud.upsert_athlete_context(
         db,
         user.id,
         training_tendency="balanced",
         rest_response="calm",
-        motivation_drivers=["fitness maintenance"],
         adherence_pattern="follows_plan",
     )
 
     assert updated.training_tendency == "balanced"
     assert updated.rest_response == "calm"
-    assert updated.motivation_drivers == ["fitness maintenance"]
     assert updated.adherence_pattern == "follows_plan"
 
 

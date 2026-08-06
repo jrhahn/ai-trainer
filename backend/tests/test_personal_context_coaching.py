@@ -21,6 +21,7 @@ import json
 
 import pytest
 
+from services.motivation_model import normalize_model
 from services.prompts import (
     ask_trainer_plan_updates_rule,
     ask_trainer_system,
@@ -199,9 +200,13 @@ def test_rest_recommendation_rule_offers_easy_ride_option():
 
 
 def test_social_motivation_context_reaches_ask_trainer_prompt():
-    """When motivation_drivers includes social interaction, that context must
-    appear in the system prompt so the coach can favour the group ride over
-    an equivalent gym session when the athlete needs a mental reset.
+    """When the athlete's objective is social, that must reach the system prompt
+    so the coach can favour the group ride over an equivalent gym session when
+    the athlete needs a mental reset.
+
+    Since #562 this arrives as the motivation model — an objective the planner
+    scores against — rather than as ``motivation_drivers``, an unlabelled list
+    of words the coach had to guess the meaning of.
     """
     prompt = ask_trainer_system(
         profile={},
@@ -212,13 +217,16 @@ def test_social_motivation_context_reaches_ask_trainer_prompt():
         memory_section="",
         workout_section="",
         plan_updates_rule=ask_trainer_plan_updates_rule(None),
-        athlete_context={
-            "motivationDrivers": ["social rides", "group dynamics", "mental reset"],
-            "trainingTendency": "balanced",
-        },
+        athlete_context={"trainingTendency": "balanced"},
+        motivation_model=normalize_model(
+            {
+                "primary_objective": "Ride socially — the group is the point",
+                "secondary_objectives": ["group dynamics", "mental reset"],
+            }
+        ),
     )
 
-    assert "social rides" in prompt
+    assert "Ride socially" in prompt
     assert "mental reset" in prompt or "group dynamics" in prompt
 
 
@@ -292,17 +300,23 @@ def test_mtb_preference_user_confirmed_fact_reaches_prompt():
 
 
 def test_mtb_context_field_reaches_next_ride_prompt():
-    """When athlete_context includes MTB as motivation driver, the structured
-    context block must appear in the next-ride recommendation user message.
+    """The athlete's objective must reach the next-ride recommendation message.
+
+    A trail rider's fitness serves the descents; the recommendation prompt has
+    to know that to pick between two physiologically equivalent options (#562,
+    scored in #564).
     """
     msg = next_ride_recommendation_user(
         rides=[],
         plan=[],
         profile={},
-        athlete_context={
-            "motivationDrivers": ["MTB", "technical trails"],
-            "trainingTendency": "balanced",
-        },
+        athlete_context={"trainingTendency": "balanced"},
+        motivation_model=normalize_model(
+            {
+                "primary_objective": "Maximize enjoyable technical MTB trail riding",
+                "secondary_objectives": ["technical trails"],
+            }
+        ),
     )
 
     assert "MTB" in msg
@@ -422,10 +436,13 @@ def test_both_layers_present_for_gym_vs_social_decision():
         memory_section="",
         workout_section="",
         plan_updates_rule=ask_trainer_plan_updates_rule(None),
-        athlete_context={
-            "motivationDrivers": ["social rides", "group dynamics"],
-            "trainingTendency": "balanced",
-        },
+        athlete_context={"trainingTendency": "balanced"},
+        motivation_model=normalize_model(
+            {
+                "primary_objective": "Ride socially — the group is the point",
+                "secondary_objectives": ["group dynamics"],
+            }
+        ),
         athlete_memory_facts=[
             {
                 "fact": "Social group rides improve motivation far more than solo gym sessions",
@@ -442,8 +459,8 @@ def test_both_layers_present_for_gym_vs_social_decision():
     # Physiology layer — TSB near zero means either option is viable
     assert "CTL" in prompt or "ctl" in prompt or "fitness" in prompt.lower()
 
-    # Personal context layer — social motivation must be visible
-    assert "social rides" in prompt
+    # Personal context layer — the athlete's own objective must be visible
+    assert "Ride socially" in prompt
     assert "Social group rides improve motivation" in prompt
 
     # The reasoning rule must instruct the model to favour context when
