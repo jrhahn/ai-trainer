@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scheduler metrics were labelled with a name Prometheus owns**
+  (`services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) —
+  `scheduler_job_runs_total` and `scheduler_job_duration_seconds` used a `job`
+  label. Prometheus writes its own `job` from the scrape config and, with the
+  default `honor_labels: false`, renames an exposed one out of the way. In
+  production the series arrived as
+  `scheduler_job_runs_total{job="ai-trainer-backend", exported_job="activity-sync"}`,
+  so the dashboard panels — which grouped by `job` — drew a single line for the
+  whole scrape target instead of one per scheduler job. The label is now
+  `scheduler_job`, and a test pins it by rendering the exposition and checking
+  at the label boundary (`job="` is a substring of `scheduler_job="`, so the
+  naive assertion passes either way). Series already stored under
+  `exported_job` stay until they age out of the 180-day retention. (#549)
+
 ### Added
 
 - **Prometheus metrics and a Grafana dashboard** (`services/metrics.py` (new),
