@@ -176,6 +176,23 @@ def _duration(job: str):
     )
 
 
+@pytest.mark.asyncio
+async def test_a_prose_coach_reply_is_counted_apart_from_a_contract_one():
+    """A prose reply is no longer an error but is still a degraded turn (#558).
+
+    It carries no ``planUpdates``, so the coach silently cannot change the plan
+    on that turn. The rate is what makes "Flash or Flash-Lite" answerable with
+    a number instead of an opinion.
+    """
+    metrics_service.record_coach_reply(contract="json")
+    metrics_service.record_coach_reply(contract="prose")
+
+    body = await _render()
+
+    assert 'coach_replies_total{contract="json"}' in body
+    assert 'coach_replies_total{contract="prose"}' in body
+
+
 def test_scheduler_runs_are_recorded():
     metrics_service.record_scheduler_run(
         job="metrics-test-job", status="success", duration_ms=1500

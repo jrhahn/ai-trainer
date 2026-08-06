@@ -3454,6 +3454,7 @@ async def test_ask_trainer_rest_prompt_handles_corrected_vo2_timing(monkeypatch)
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4657,6 +4658,7 @@ async def test_ask_trainer_passes_precomputed_date_context(monkeypatch):
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4699,6 +4701,7 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4880,6 +4883,7 @@ async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatc
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -4953,6 +4957,7 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
         messages: list[dict[str, str]],
         json_mode: bool = False,
         task: str = "coach",
+        response_schema: dict | None = None,
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
@@ -5032,7 +5037,9 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
         ),
     )
 
-    async def fake_chat(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         captured["system_prompt"] = system_prompt
         return json.dumps({"response": "ok", "sources": []})
 
@@ -5088,7 +5095,9 @@ async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
         lambda timezone_name=None: "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23).",
     )
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         captured["messages"] = messages
         return json.dumps({"response": "ok", "sources": []})
 
@@ -5212,7 +5221,9 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
     ride_note_update but not ride_label_update, so the router's result.pop("ride_label_update")
     always got None and label corrections were never persisted or sent to the frontend.
     """
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         return json.dumps({
             "response": "I've updated your activity label for June 24 to OK.",
             "ride_label_update": {"activity_date": "2026-06-24", "label": "OK"},
@@ -5232,7 +5243,9 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
 @pytest.mark.asyncio
 async def test_ask_trainer_ride_label_update_is_none_when_absent(monkeypatch):
     """ride_label_update must be None (not KeyError) when the LLM omits the field."""
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, task="coach"):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+    ):
         return json.dumps({"response": "Great ride today!"})
 
     monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)

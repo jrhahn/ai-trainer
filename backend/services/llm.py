@@ -219,9 +219,23 @@ def reset_user_ai_keys(token: Token[dict[str, str | None] | Any]) -> None:
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    async def chat(self, system: str, user: str, json_mode: bool = False) -> str: ...
+    # *response_schema* constrains a ``json_mode`` reply to a shape rather than
+    # asking for one (#558). It is a Gemini schema dict; a provider that cannot
+    # enforce it must ignore it rather than fail, since the caller picks the
+    # provider from the athlete's settings and cannot know which it got.
+    async def chat(
+        self,
+        system: str,
+        user: str,
+        json_mode: bool = False,
+        response_schema: dict | None = None,
+    ) -> str: ...
     async def chat_history(
-        self, system: str, messages: list[dict[str, str]], json_mode: bool = False
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        response_schema: dict | None = None,
     ) -> str: ...
 
 
@@ -262,7 +276,19 @@ class OpenAIProvider:
         token_accounting.log_payload("response", text)
         return text
 
-    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+    # *response_schema* is accepted and ignored: it is written in Gemini's
+    # schema dialect, and OpenAI's equivalent (``json_schema`` response format)
+    # needs a different document plus a strictness decision of its own. Ignoring
+    # it leaves this provider exactly as it was — ``json_object`` mode, prose
+    # still possible — rather than failing a call the athlete's settings routed
+    # here. Worth wiring up if OpenAI ever becomes more than a fallback.
+    async def chat(
+        self,
+        system: str,
+        user: str,
+        json_mode: bool = False,
+        response_schema: dict | None = None,
+    ) -> str:
         token_accounting.log_payload("system", system)
         token_accounting.log_payload("user", user)
         return await self._complete(
@@ -270,7 +296,11 @@ class OpenAIProvider:
         )
 
     async def chat_history(
-        self, system: str, messages: list[dict[str, str]], json_mode: bool = False
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        response_schema: dict | None = None,
     ) -> str:
         token_accounting.log_payload("system", system)
         return await self._complete(system, list(messages), json_mode)
@@ -290,7 +320,13 @@ class GeminiProvider:
         self._task = task
         self._api_key = api_key or settings.gemini_api_key
 
-    def _build_config(self, system: str, json_mode: bool, types: object) -> object:
+    def _build_config(
+        self,
+        system: str,
+        json_mode: bool,
+        types: object,
+        response_schema: dict | None = None,
+    ) -> object:
         # Thinking tokens bill at the output rate, so they stay off. Most models
         # accept an explicit zero budget; the ones that don't are left at their
         # default, which measured at zero thinking tokens across repeat calls.
@@ -301,12 +337,24 @@ class GeminiProvider:
             "system_instruction": system,
             "response_mime_type": "application/json" if json_mode else None,
         }
+        # The mime type asks for JSON; a schema *constrains* generation to it.
+        # Without one the model may answer in prose, which it did three times in
+        # a row in production and on more than one model generation (#558).
+        if json_mode and response_schema is not None:
+            kwargs["response_schema"] = response_schema
         if self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED:
             kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
         return types.GenerateContentConfig(**kwargs)
 
     async def _generate(
-        self, contents: object, system: str, json_mode: bool, genai, genai_errors, types
+        self,
+        contents: object,
+        system: str,
+        json_mode: bool,
+        genai,
+        genai_errors,
+        types,
+        response_schema: dict | None = None,
     ) -> object:
         """Call generate_content, learning which models refuse a zero budget.
 
@@ -318,7 +366,7 @@ class GeminiProvider:
         again on the retry and propagates.
         """
         while True:
-            config = self._build_config(system, json_mode, types)
+            config = self._build_config(system, json_mode, types, response_schema)
             sent_thinking_config = self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED
             try:
                 client = genai.Client(api_key=self._api_key)
@@ -339,7 +387,13 @@ class GeminiProvider:
                     continue
                 raise
 
-    async def _run(self, contents: object, system: str, json_mode: bool) -> str:
+    async def _run(
+        self,
+        contents: object,
+        system: str,
+        json_mode: bool,
+        response_schema: dict | None = None,
+    ) -> str:
         from google import genai
         from google.genai import errors as genai_errors, types
 
@@ -350,7 +404,7 @@ class GeminiProvider:
             system=system,
             json_mode=json_mode,
             invoke=lambda: self._generate(
-                contents, system, json_mode, genai, genai_errors, types
+                contents, system, json_mode, genai, genai_errors, types, response_schema
             ),
             extract=_gemini_call_tokens,
         )
@@ -358,13 +412,23 @@ class GeminiProvider:
         token_accounting.log_payload("response", text)
         return text
 
-    async def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+    async def chat(
+        self,
+        system: str,
+        user: str,
+        json_mode: bool = False,
+        response_schema: dict | None = None,
+    ) -> str:
         token_accounting.log_payload("system", system)
         token_accounting.log_payload("user", user)
-        return await self._run(user, system, json_mode)
+        return await self._run(user, system, json_mode, response_schema)
 
     async def chat_history(
-        self, system: str, messages: list[dict[str, str]], json_mode: bool = False
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        response_schema: dict | None = None,
     ) -> str:
         from google.genai import types
 
@@ -376,7 +440,7 @@ class GeminiProvider:
             )
             for m in messages
         ]
-        return await self._run(contents, system, json_mode)
+        return await self._run(contents, system, json_mode, response_schema)
 
 
 def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:

@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach's reply is constrained by a schema, and its shape is now a
+  metric** (`services/coach_schema.py`, `services/llm.py`,
+  `services/metrics.py`, `monitoring/grafana/dashboards/ai-trainer.json`) — the
+  root cause behind the prose replies below. `response_mime_type:
+  application/json` asks for JSON; a `response_schema` constrains generation to
+  it. The coach call now sends one, so a prose reply is prevented rather than
+  caught — and prevented on any model, which matters because the same failure
+  predates the switch to Flash-Lite (#511): the inquiry path was already
+  guarding against it while the coach still ran on Flash.
+
+  A schema is also a new way to lose data, so two things are pinned by tests. A
+  field the coach may write today but the schema omits would stop reaching the
+  plan tomorrow with no error anywhere — the drift-bug class of #422 and #424 —
+  so the `planUpdates` item covers every field of `schemas.PlanDayUpdateSchema`,
+  the canonical shape the persist gate accepts, and a test walks that model so a
+  field added there fails here instead of quietly going missing. And Gemini
+  emits properties in `propertyOrdering` order, so `thinking` is ordered before
+  `response`: the prompt asks the model to reason before it answers, and a
+  schema that emitted the answer first would delete the chain of thought — a
+  quality regression no assertion about JSON shape would catch. Only `thinking`
+  and `response` are required; requiring a plan update would push the model into
+  inventing edits nobody asked for. The schema is Gemini's dialect, which the
+  API only validates at request time, so a test parses it through
+  `types.Schema` — building a `GenerateContentConfig` proves nothing, it keeps a
+  raw dict as-is. `OpenAIProvider` accepts the argument and ignores it rather
+  than failing a call the athlete's own settings routed there.
+
+  `coach_replies_total{contract="json"|"prose"}` counts what actually comes
+  back, with a Grafana panel. A prose reply is no longer an error but is still a
+  degraded turn — it carries no `planUpdates`, so the coach silently cannot
+  change the plan — and without a number, "should the coach run on Flash rather
+  than Flash-Lite" stays a matter of opinion. In-process rather than read from a
+  table, unlike the cost metrics: the question is a rate over time, which
+  `increase()` answers correctly across the restarts a deploy causes. (#558)
+
 - **The coach prompt reports what it is made of** (`services/prompts.py`,
   `services/ai_service.py`, `services/token_accounting.py`) — where the
   prompt's bulk sits has been guessed at twice and gone stale both times: #510

@@ -19,7 +19,8 @@ from pydantic import ValidationError
 
 import schemas
 
-from . import token_accounting
+from . import metrics, token_accounting
+from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
     LTHR_RATIO,
@@ -372,9 +373,10 @@ async def _chat_history(
     messages: list[dict[str, str]],
     json_mode: bool = False,
     task: str = TASK_COACH,
+    response_schema: dict | None = None,
 ) -> str:
     return await get_provider(provider, task=task).chat_history(
-        system_prompt, messages, json_mode=json_mode
+        system_prompt, messages, json_mode=json_mode, response_schema=response_schema
     )
 
 
@@ -838,7 +840,12 @@ async def ask_trainer(
     # rate-limit errors are not retried here and propagate to the caller.
     for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
         raw = await _chat_history(
-            provider, system_prompt, messages, json_mode=True, task=TASK_COACH
+            provider,
+            system_prompt,
+            messages,
+            json_mode=True,
+            task=TASK_COACH,
+            response_schema=COACH_REPLY_SCHEMA,
         )
         # A reply that will not parse must not escape as a JSONDecodeError: the
         # router has no handler for it, so it 500s with a traceback and the
@@ -858,6 +865,7 @@ async def ask_trainer(
                     len(raw),
                     "```" in raw,
                 )
+                metrics.record_coach_reply(contract="prose")
                 return _coach_result({}, prose)
             parsed = {}
 
@@ -865,6 +873,7 @@ async def ask_trainer(
         parsed.pop("thinking", None)
         response = parsed.get("response")
         if isinstance(response, str) and response.strip():
+            metrics.record_coach_reply(contract="json")
             return _coach_result(parsed, response.strip())
 
         if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
