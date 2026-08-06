@@ -140,8 +140,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, job) (rate(scheduler_job_duration_seconds_bucket[6h])))",
-          "legendFormat": "{{job}}"
+          "expr": "histogram_quantile(0.95, sum by (le, scheduler_job) (rate(scheduler_job_duration_seconds_bucket[6h])))",
+          "legendFormat": "{{scheduler_job}}"
         }
       ]
     },
@@ -154,8 +154,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (job, status) (increase(scheduler_job_runs_total[1h]))",
-          "legendFormat": "{{job}} {{status}}"
+          "expr": "sum by (scheduler_job, status) (increase(scheduler_job_runs_total[1h]))",
+          "legendFormat": "{{scheduler_job}} {{status}}"
         }
       ]
     },

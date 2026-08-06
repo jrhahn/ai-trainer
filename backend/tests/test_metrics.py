@@ -164,36 +164,59 @@ async def test_an_unmatched_path_does_not_mint_a_series_per_probe(client):
     assert "nor-does-this-99" not in body
 
 
+def _runs(job: str, status: str):
+    return metrics_service.SCHEDULER_RUNS.labels(
+        **{metrics_service.SCHEDULER_JOB_LABEL: job, "status": status}
+    )
+
+
+def _duration(job: str):
+    return metrics_service.SCHEDULER_DURATION.labels(
+        **{metrics_service.SCHEDULER_JOB_LABEL: job}
+    )
+
+
 def test_scheduler_runs_are_recorded():
     metrics_service.record_scheduler_run(
         job="metrics-test-job", status="success", duration_ms=1500
     )
 
-    assert (
-        metrics_service.SCHEDULER_RUNS.labels(
-            job="metrics-test-job", status="success"
-        )._value.get()
-        >= 1
-    )
+    assert _runs("metrics-test-job", "success")._value.get() >= 1
 
 
 def test_a_skipped_run_is_counted_but_not_timed():
     """Timing a run that did no work would drag the histogram towards zero."""
-    before = metrics_service.SCHEDULER_DURATION.labels(
-        job="metrics-skip-job"
-    )._sum.get()
+    before = _duration("metrics-skip-job")._sum.get()
 
     metrics_service.record_scheduler_run(
         job="metrics-skip-job", status="skipped", duration_ms=0
     )
 
-    assert (
-        metrics_service.SCHEDULER_RUNS.labels(
-            job="metrics-skip-job", status="skipped"
-        )._value.get()
-        >= 1
+    assert _runs("metrics-skip-job", "skipped")._value.get() >= 1
+    assert _duration("metrics-skip-job")._sum.get() == before
+
+
+@pytest.mark.asyncio
+async def test_the_scheduler_label_is_not_called_job():
+    """Prometheus owns ``job``, and quietly takes it (#549).
+
+    The scrape config writes its own ``job`` label, and with the default
+    ``honor_labels: false`` an exposed one is renamed to ``exported_job``.
+    Production showed `scheduler_job_runs_total{job="ai-trainer-backend",
+    exported_job="activity-sync"}` — so a panel grouping by ``job`` drew one
+    line for the whole scrape target instead of one per scheduler job.
+    """
+    metrics_service.record_scheduler_run(
+        job="label-check-job", status="success", duration_ms=1000
     )
-    assert (
-        metrics_service.SCHEDULER_DURATION.labels(job="metrics-skip-job")._sum.get()
-        == before
+
+    body = await _render()
+    line = next(
+        ln
+        for ln in body.splitlines()
+        if ln.startswith("scheduler_job_runs_total") and "label-check-job" in ln
     )
+    assert 'scheduler_job="label-check-job"' in line
+    # Checked at the label boundary: 'job="' is a substring of
+    # 'scheduler_job="', so the naive assertion passes either way.
+    assert '{job="' not in line and ',job="' not in line

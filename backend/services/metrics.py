@@ -64,17 +64,24 @@ HTTP_DURATION = Histogram(
     registry=REGISTRY,
 )
 
+# Not "job": Prometheus writes its own ``job`` label from the scrape config and,
+# with the default honor_labels=false, an exposed one is renamed out of the way
+# to ``exported_job``. Grouping by ``job`` then yields one line per *scrape
+# target* — i.e. one — instead of one per scheduler job. Seen in production
+# before anyone tried to read the panel.
+SCHEDULER_JOB_LABEL = "scheduler_job"
+
 SCHEDULER_RUNS = Counter(
     "scheduler_job_runs_total",
     "Scheduler job executions, by job and outcome.",
-    ["job", "status"],
+    [SCHEDULER_JOB_LABEL, "status"],
     registry=REGISTRY,
 )
 
 SCHEDULER_DURATION = Histogram(
     "scheduler_job_duration_seconds",
     "Wall time of a scheduler job run.",
-    ["job"],
+    [SCHEDULER_JOB_LABEL],
     buckets=(0.5, 1, 5, 15, 30, 60, 120, 300, 600, 1800),
     registry=REGISTRY,
 )
@@ -99,11 +106,13 @@ def record_http_request(
 
 
 def record_scheduler_run(*, job: str, status: str, duration_ms: int) -> None:
-    SCHEDULER_RUNS.labels(job=job, status=status).inc()
+    SCHEDULER_RUNS.labels(**{SCHEDULER_JOB_LABEL: job, "status": status}).inc()
     # A skipped run did not do the work, so timing it would drag the histogram
     # towards zero and hide how long the job actually takes.
     if status != "skipped":
-        SCHEDULER_DURATION.labels(job=job).observe(duration_ms / 1000.0)
+        SCHEDULER_DURATION.labels(**{SCHEDULER_JOB_LABEL: job}).observe(
+            duration_ms / 1000.0
+        )
 
 
 def _refresh_pool_gauges(engine: Any) -> None:
