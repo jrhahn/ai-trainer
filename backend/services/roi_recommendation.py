@@ -226,9 +226,47 @@ def _fallback(reason: str) -> dict[str, Any]:
     }
 
 
+# The modalities a cycling stimulus can be delivered in. Gym is deliberately
+# absent: every system here is an on-the-bike adaptation, and offering a
+# strength session as a way to raise VO2max would be a scoring artefact rather
+# than a recommendation.
+_UTILITY_MODALITIES = ("road", "mtb", "gravel", "indoor")
+
+
+def _utility_block(
+    gain_map: dict[str, str],
+    motivation: dict[str, Any] | None,
+    upcoming_races: int,
+) -> dict[str, Any] | None:
+    """Rank (system, modality) options by expected athlete utility (#564).
+
+    Returns ``None`` when there is no motivation model to rank with, which is
+    what keeps this module's existing output byte-for-byte unchanged for every
+    caller that has not opted in.
+    """
+    if not motivation:
+        return None
+
+    # Imported here rather than at module scope: training_utility reads this
+    # module's gain and system constants, and a top-level import would close the
+    # cycle.
+    from services.training_utility import rank_options
+
+    options = [
+        (system, modality, gain)
+        for system, gain in gain_map.items()
+        for modality in _UTILITY_MODALITIES
+    ]
+    return rank_options(
+        options, motivation=motivation, upcoming_races=upcoming_races
+    )
+
+
 def recommend_training_roi(
     attributes: dict[str, dict] | None,
     limiters: list[dict] | None,
+    motivation: dict[str, Any] | None = None,
+    upcoming_races: int = 0,
 ) -> dict[str, Any]:
     """Map the performance model + detected limiter to an ROI recommendation.
 
@@ -241,6 +279,12 @@ def recommend_training_roi(
     ``confidence`` and a ``sufficient`` flag. When the model has no confident
     limiter, ``sufficient`` is ``False`` and the caller should keep its existing
     periodization.
+
+    ``motivation`` is the athlete's motivation model (#562). When supplied, the
+    result carries an extra ``utility`` block ranking (system, modality) options
+    by expected athlete utility (#564) — physiology remains the ``expected_gain``
+    map above, unchanged, so a caller can always see how far the two diverge.
+    Without it the output is exactly what it has always been.
     """
     attrs = attributes or {}
     limiter = top_limiter(limiters or [])
@@ -267,7 +311,7 @@ def recommend_training_roi(
     weekly_emphasis = [_emphasis(s, n) for s, n in _EMPHASIS_BY_LIMITER[limiter]]
     hypothesis, rationale = _RATIONALE_BY_LIMITER[limiter](attrs)
 
-    return {
+    result = {
         "sufficient": True,
         "limiter": limiter,
         "confidence": round(confidence, 2),
@@ -276,3 +320,7 @@ def recommend_training_roi(
         "expected_gain": expected_gain,
         "weekly_emphasis": weekly_emphasis,
     }
+    utility = _utility_block(gain_map, motivation, upcoming_races)
+    if utility is not None:
+        result["utility"] = utility
+    return result

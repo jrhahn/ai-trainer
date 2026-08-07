@@ -45,6 +45,7 @@ import crud
 import models
 from services import motivation_model as mm
 from services.dates import app_today_iso
+from services.training_utility import modality_for_sport
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ class MotivationSignal:
     """
 
     weight_nudges: dict[str, float] = field(default_factory=dict)
+    modality_nudges: dict[str, float] = field(default_factory=dict)
     objective: str | None = None
     constraint: str | None = None
 
@@ -158,6 +160,7 @@ _STATEMENT_PATTERNS: tuple[tuple[str, MotivationSignal], ...] = (
         r"\b(?:i\s+)?want\s+(?:more|extra)\s+(?:trail|singletrack)\s+(?:time|riding)\b",
         MotivationSignal(
             weight_nudges={"enjoyment": 0.05},
+            modality_nudges={"mtb": 0.04},
             objective="Maximize time on technical trails",
         ),
     ),
@@ -165,6 +168,7 @@ _STATEMENT_PATTERNS: tuple[tuple[str, MotivationSignal], ...] = (
         r"\b(?:i\s+)?want\s+to\s+ride\s+more\s+(?:trails|singletrack|technical\s+\w+)\b",
         MotivationSignal(
             weight_nudges={"enjoyment": 0.05},
+            modality_nudges={"mtb": 0.04},
             objective="Maximize time on technical trails",
         ),
     ),
@@ -172,12 +176,16 @@ _STATEMENT_PATTERNS: tuple[tuple[str, MotivationSignal], ...] = (
         r"\bich\s+(?:will|m(?:ö|oe)chte)\s+mehr\s+(?:trails|trail\s*zeit|singletrail)\b",
         MotivationSignal(
             weight_nudges={"enjoyment": 0.05},
+            modality_nudges={"mtb": 0.04},
             objective="Maximize time on technical trails",
         ),
     ),
     (
-        r"\b(?:i'?d\s+|i\s+would\s+)?rather\s+ride\s+(?:the\s+)?(?:mtb|mountain\s*bike|trails|gravel)\b",
-        MotivationSignal(weight_nudges={"enjoyment": 0.04}),
+        r"\b(?:i'?d\s+|i\s+would\s+)?rather\s+ride\s+(?:the\s+)?(?:mtb|mountain\s*bike|trails)\b",
+        MotivationSignal(
+            weight_nudges={"enjoyment": 0.04},
+            modality_nudges={"mtb": 0.05, "road": -0.03},
+        ),
     ),
     # --- not chasing numbers ----------------------------------------------
     (
@@ -269,6 +277,7 @@ def extract_motivation_statements(text: str) -> list[MotivationSignal]:
             signal.objective,
             signal.constraint,
             tuple(sorted(signal.weight_nudges.items())),
+            tuple(sorted(signal.modality_nudges.items())),
         )
         if key in seen:
             continue
@@ -276,6 +285,7 @@ def extract_motivation_statements(text: str) -> list[MotivationSignal]:
         signals.append(
             MotivationSignal(
                 weight_nudges=dict(signal.weight_nudges),
+                modality_nudges=dict(signal.modality_nudges),
                 objective=signal.objective,
                 constraint=signal.constraint,
             )
@@ -326,6 +336,7 @@ async def capture_motivation_from_message(
     objectives: list[dict[str, Any]] = []
     constraints: list[dict[str, Any]] = []
     nudges: dict[str, float] = {}
+    modality_nudges: dict[str, float] = {}
 
     for signal in signals:
         if signal.objective:
@@ -346,6 +357,8 @@ async def capture_motivation_from_message(
             )
         for component, delta in signal.weight_nudges.items():
             nudges[component] = nudges.get(component, 0.0) + delta
+        for modality, delta in signal.modality_nudges.items():
+            modality_nudges[modality] = modality_nudges.get(modality, 0.0) + delta
 
     existing = await crud.get_athlete_motivation_model(db, user_id)
     current = crud.motivation_model_as_dict(existing)
@@ -360,6 +373,10 @@ async def capture_motivation_from_message(
             current["utility_weights"],
             nudges,
             pinned=current["pinned_weights"],
+        )
+    if modality_nudges:
+        updates["modality_affinity"] = mm.apply_modality_evidence(
+            current["modality_affinity"], modality_nudges
         )
 
     if not updates:
@@ -390,6 +407,9 @@ class BehaviourEvidence:
     modality_swaps: int = 0
     matched_rides: int = 0
     upcoming_races: int = 0
+    # How many of the rides landed in each modality. Revealed preference: the
+    # one currency an athlete cannot talk up (#564).
+    modality_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def has_signal(self) -> bool:
@@ -424,6 +444,11 @@ def summarize_behaviour(
     for ride in rides:
         planned = _planned_sport(ride)
         actual = _sport(ride.sport_type)
+        modality = modality_for_sport(ride.sport_type)
+        if modality is not None:
+            evidence.modality_counts[modality] = (
+                evidence.modality_counts.get(modality, 0) + 1
+            )
         if ride.plan_match_status == "matched" and planned:
             evidence.matched_rides += 1
             # Rode, but rode something else: the plan said road, the athlete took
@@ -476,6 +501,42 @@ def score_behaviour(evidence: BehaviourEvidence) -> dict[str, float]:
     if evidence.upcoming_races:
         nudges["race_performance"] = 0.02 * min(2, evidence.upcoming_races)
 
+    return nudges
+
+
+# The modalities ride data can speak to. Gym affinity is not observable from a
+# cycling feed, so the behavioural pass leaves it alone rather than inferring a
+# dislike from silence.
+_RIDEABLE_MODALITIES = (
+    mm.MODALITY_ROAD,
+    mm.MODALITY_MTB,
+    mm.MODALITY_GRAVEL,
+    mm.MODALITY_INDOOR,
+)
+_EXPECTED_SHARE = 1.0 / len(_RIDEABLE_MODALITIES)
+
+
+def score_modality_affinity(evidence: BehaviourEvidence) -> dict[str, float]:
+    """Turn what the athlete actually rode into affinity nudges (#564).
+
+    Revealed preference, mapped linearly from observed share: a modality the
+    athlete rides more than an even split argues up, one they never touch argues
+    down, and an even spread argues nothing. Bounded again by
+    :func:`motivation_model.apply_modality_evidence`, so a single block of MTB
+    weeks cannot declare the athlete a mountain biker.
+    """
+    if not evidence.has_signal:
+        return {}
+
+    ridden = sum(evidence.modality_counts.get(m, 0) for m in _RIDEABLE_MODALITIES)
+    if not ridden:
+        return {}
+
+    nudges: dict[str, float] = {}
+    for modality in _RIDEABLE_MODALITIES:
+        share = evidence.modality_counts.get(modality, 0) / ridden
+        direction = (share - _EXPECTED_SHARE) / _EXPECTED_SHARE
+        nudges[modality] = mm.MAX_AFFINITY_NUDGE * max(-1.0, min(1.0, direction))
     return nudges
 
 
@@ -542,9 +603,16 @@ async def refresh_motivation_from_behaviour(
         await crud.get_athlete_motivation_model(db, user.id)
     )
     nudges = score_behaviour(evidence)
+    affinity_nudges = score_modality_affinity(evidence)
     contradicted = detect_behaviour_contradictions(current, evidence)
 
     updates: dict[str, Any] = {}
+    if affinity_nudges:
+        affinity = mm.apply_modality_evidence(
+            current["modality_affinity"], affinity_nudges
+        )
+        if affinity != current["modality_affinity"]:
+            updates["modality_affinity"] = affinity
     if nudges:
         moved = mm.apply_weight_evidence(
             current["utility_weights"], nudges, pinned=current["pinned_weights"]
@@ -575,13 +643,14 @@ async def refresh_motivation_from_behaviour(
     )
     logger.info(
         "motivation.behaviour user_id=%s rides=%d swaps=%d off_plan=%d races=%d "
-        "nudges=%s contradicted=%d",
+        "nudges=%s affinity=%s contradicted=%d",
         user.id,
         evidence.rides,
         evidence.modality_swaps,
         evidence.off_plan_rides,
         evidence.upcoming_races,
         {k: round(v, 4) for k, v in nudges.items()},
+        {k: round(v, 4) for k, v in affinity_nudges.items()},
         len(contradicted),
     )
     return 1

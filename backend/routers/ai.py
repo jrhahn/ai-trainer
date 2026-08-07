@@ -183,6 +183,18 @@ async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
     ]
 
 
+async def _upcoming_race_count(db: AsyncSession, user_id: str, timezone_name: str | None) -> int:
+    """How many races the athlete still has ahead of them (#564).
+
+    Race specificity is worth nothing with an empty calendar, so the utility
+    scorer needs this to stop weighting race-ready options for an athlete who
+    has stopped racing.
+    """
+    today = app_today_iso(timezone_name=timezone_name)
+    events = await crud.get_race_events(db, user_id)
+    return sum(1 for event in events if (event.date or "") >= today)
+
+
 async def _active_availability_constraints_for_prompt(
     db: AsyncSession, user_id: str, timezone_name: str | None
 ) -> list[dict]:
@@ -1007,7 +1019,12 @@ async def ask_trainer(
                 perf_model_row, from_attributes=True
             ).model_dump(by_alias=False, mode="json")
             performance_recommendation = roi_recommendation.recommend_training_roi(
-                perf_model_row.attributes, perf_model_row.limiters
+                perf_model_row.attributes,
+                perf_model_row.limiters,
+                motivation=motivation_model,
+                upcoming_races=await _upcoming_race_count(
+                    db, current_user.id, timezone_name
+                ),
             )
         # Capped, not the full list (#512) — see get_prompt_athlete_hypotheses.
         hypothesis_rows = await crud.get_prompt_athlete_hypotheses(
@@ -2017,7 +2034,12 @@ async def next_ride_recommendation(
     perf_model_row = await crud.get_athlete_performance_model(db, current_user.id)
     if perf_model_row is not None:
         performance_recommendation = roi_recommendation.recommend_training_roi(
-            perf_model_row.attributes, perf_model_row.limiters
+            perf_model_row.attributes,
+            perf_model_row.limiters,
+            motivation=motivation_model,
+            upcoming_races=await _upcoming_race_count(
+                db, current_user.id, timezone_name
+            ),
         )
 
     # --- Resolve the ride(s) to use for the recommendation ---

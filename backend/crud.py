@@ -703,6 +703,7 @@ def motivation_model_as_dict(
             "constraints": row.constraints,
             "utility_weights": row.utility_weights,
             "pinned_weights": row.pinned_weights,
+            "modality_affinity": row.modality_affinity,
         }
     )
 

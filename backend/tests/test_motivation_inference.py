@@ -360,6 +360,78 @@ async def test_an_athlete_with_no_rides_is_left_alone(db, user):
     assert await crud.get_athlete_motivation_model(db, user.id) is None
 
 
+def test_what_the_athlete_actually_rides_moves_modality_affinity():
+    """Revealed preference — the one currency that cannot be talked up (#564)."""
+    rides = [
+        _ride(date="2026-08-%02d" % (i + 1), sport="MountainBikeRide", planned="Ride")
+        for i in range(10)
+    ]
+
+    nudges = mi.score_modality_affinity(mi.summarize_behaviour(rides))
+
+    assert nudges["mtb"] > 0
+    assert nudges["road"] < 0
+
+
+def test_a_balanced_spread_argues_for_nothing():
+    rides = [
+        _ride(date="2026-08-%02d" % (i + 1), sport=sport, planned=sport)
+        for i, sport in enumerate(
+            ["Ride", "MountainBikeRide", "GravelRide", "VirtualRide"] * 2
+        )
+    ]
+
+    nudges = mi.score_modality_affinity(mi.summarize_behaviour(rides))
+
+    assert all(abs(value) < 1e-9 for value in nudges.values())
+
+
+def test_gym_affinity_is_not_inferred_from_a_cycling_feed():
+    """Silence in the ride data is not evidence of dislike."""
+    rides = [
+        _ride(date="2026-08-%02d" % (i + 1), sport="Ride", planned="Ride")
+        for i in range(10)
+    ]
+
+    assert "gym" not in mi.score_modality_affinity(mi.summarize_behaviour(rides))
+
+
+async def test_behaviour_persists_the_modality_affinity(db, user):
+    for day in range(10):
+        db.add(
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=900 + day,
+                activity_date=(NOW - timedelta(days=day)).date().isoformat(),
+                sport_type="MountainBikeRide",
+                plan_match_status="matched",
+                matched_plan_snapshot={"sportType": "Ride"},
+            )
+        )
+    await db.flush()
+
+    await mi.refresh_motivation_from_behaviour(db, user, now=NOW)
+
+    stored = crud.motivation_model_as_dict(
+        await crud.get_athlete_motivation_model(db, user.id)
+    )
+    assert stored["modality_affinity"]["mtb"] > mm.NEUTRAL_AFFINITY
+    assert stored["modality_affinity"]["road"] < mm.NEUTRAL_AFFINITY
+    # Independent scores, not a distribution.
+    assert sum(stored["modality_affinity"].values()) != pytest.approx(1.0)
+
+
+async def test_saying_you_prefer_the_mtb_moves_the_affinity(db, user):
+    await mi.capture_motivation_from_message(
+        db, user.id, "I'd rather ride the MTB than the road bike.", now=NOW
+    )
+
+    stored = crud.motivation_model_as_dict(
+        await crud.get_athlete_motivation_model(db, user.id)
+    )
+    assert stored["modality_affinity"]["mtb"] > mm.NEUTRAL_AFFINITY
+
+
 # ---------------------------------------------------------------------------
 # Contradictions: raised, not resolved
 # ---------------------------------------------------------------------------
