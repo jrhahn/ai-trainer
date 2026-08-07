@@ -377,6 +377,44 @@ export async function updateMotivationModel(
   })
 }
 
+/** One rule that fired during a learning run, as recorded in the trail (#566). */
+export interface MotivationWeightRule {
+  rule: string
+  /** What the athlete did, phrased for the athlete. */
+  signal: string
+  observed: number
+  strength: number
+  effects: Record<string, number>
+}
+
+/**
+ * One recorded change to the weight balance (#566).
+ *
+ * `rules` and `evidence` are null for the athlete's own edit — nothing was
+ * inferred, so there is nothing to justify.
+ */
+export interface MotivationWeightEvent {
+  id: string
+  source: MotivationSource
+  weightsBefore: Record<string, number>
+  weightsAfter: Record<string, number>
+  /** Only the components that moved, signed. */
+  deltas: Record<string, number>
+  rules: MotivationWeightRule[] | null
+  evidence: Record<string, unknown> | null
+  pinned: string[]
+  recordedAt: string | null
+}
+
+export async function fetchMotivationWeightHistory(
+  token: string
+): Promise<MotivationWeightEvent[]> {
+  return apiFetch<MotivationWeightEvent[]>(
+    '/users/me/motivation-model/weight-history',
+    { token }
+  )
+}
+
 
 export interface AthleteMemoryFact {
   id: string

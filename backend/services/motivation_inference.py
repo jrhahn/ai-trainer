@@ -29,6 +29,40 @@ evidence inherits them:
 
 And underneath all of it, the ``user_set`` override from #562: none of this can
 overwrite an objective the athlete stated by hand.
+
+The weight-learning rule (#566)
+-------------------------------
+
+The weights decide which option the planner recommends, so how they move is not
+an implementation detail. The whole rule is :data:`WEIGHT_RULES` — declared as
+data so it can be reviewed at once rather than discovered one branch at a time —
+plus these four properties:
+
+* **Cold start.** A new athlete gets ``motivation_model.DEFAULT_WEIGHTS``, which
+  is deliberately *not* the example vector from #561: that is one athlete's, and
+  starting everyone there would change the advice every existing athlete gets.
+  No rule fires at all below :data:`BEHAVIOUR_MIN_RIDES` rides in the trailing
+  :data:`BEHAVIOUR_WINDOW_DAYS` — until there is a pattern there are only rides.
+* **Bounded.** A rule argues at most what its ``effects`` say, and the gate
+  clamps the total to ``MAX_WEIGHT_NUDGE`` per component per run. From the
+  default, the strongest signal this system can observe still needs several runs
+  to move a weight meaningfully — so a fortnight of bad weather cannot redefine
+  what the athlete trains for, and a genuine change of direction still lands
+  inside a season.
+* **Normalized at the gate.** ``apply_weight_evidence`` renormalizes, so the
+  sum-to-one invariant holds by construction and a rule author never has to
+  think about it.
+* **Pinned components are not learned.** What the athlete fixed by hand is
+  excluded by the same gate, not by each rule remembering to check.
+
+Every effective change is recorded (``AthleteMotivationWeightEvent``) with the
+rules that fired and the counts they read, because a weight that moves on its own
+and cannot say why is worse than one that never moves.
+
+Two candidate signals from #566 are deliberately not wired: workout ratings and
+per-ride feel. Both are available, and neither has an honest mapping onto a
+weight yet — "felt heavy" argues for rest, not for valuing health more, and
+guessing at the difference is how a learned model quietly becomes wrong.
 """
 
 from __future__ import annotations
@@ -415,6 +449,22 @@ class BehaviourEvidence:
     def has_signal(self) -> bool:
         return self.rides >= BEHAVIOUR_MIN_RIDES
 
+    def as_record(self) -> dict[str, Any]:
+        """The counts as stored in the weight audit trail (#566).
+
+        Kept alongside the rules that read them so a surprising entry can be
+        checked against the rides it came from, months later.
+        """
+        return {
+            "rides": self.rides,
+            "off_plan_rides": self.off_plan_rides,
+            "modality_swaps": self.modality_swaps,
+            "matched_rides": self.matched_rides,
+            "upcoming_races": self.upcoming_races,
+            "modality_counts": dict(self.modality_counts),
+            "window_days": BEHAVIOUR_WINDOW_DAYS,
+        }
+
 
 def _sport(value: str | None) -> str:
     return (value or "").strip().casefold().replace(" ", "").replace("_", "")
@@ -462,45 +512,148 @@ def summarize_behaviour(
     return evidence
 
 
+@dataclass(frozen=True, slots=True)
+class WeightRule:
+    """One written-down argument from behaviour to a weight (#566).
+
+    The rules used to be an if-chain inside the scorer, which meant the answer to
+    "why did my weights move?" lived only in the reader's head. Declaring them as
+    data makes the whole learning rule inspectable in one place, and lets a firing
+    be recorded in the audit trail by name instead of being reconstructed.
+
+    A rule reads one observed rate, is silent below ``threshold``, and argues at
+    full strength from ``full_at`` upwards; in between it argues proportionally.
+    ``effects`` is what it asks for at full strength — an *argument*, not a
+    change: :func:`motivation_model.apply_weight_evidence` clamps the sum and
+    renormalizes, so a single run can never do what a rule asks for twice over.
+    """
+
+    name: str
+    # What the athlete did, in words an athlete would recognise. This is what the
+    # settings UI shows next to the change.
+    signal: str
+    threshold: float
+    full_at: float
+    effects: dict[str, float]
+
+    def strength(self, observed: float) -> float:
+        """0.0 below the threshold, 1.0 at ``full_at``, linear in between."""
+        if observed < self.threshold:
+            return 0.0
+        if self.full_at <= self.threshold:
+            return 1.0
+        return min(1.0, (observed - self.threshold) / (self.full_at - self.threshold))
+
+
+@dataclass(frozen=True, slots=True)
+class RuleActivation:
+    """A rule that fired, with what it saw and what it argued for."""
+
+    rule: WeightRule
+    observed: float
+    strength: float
+
+    @property
+    def effects(self) -> dict[str, float]:
+        return {c: v * self.strength for c, v in self.rule.effects.items()}
+
+    def as_record(self) -> dict[str, Any]:
+        """The shape stored in the audit trail and shown to the athlete."""
+        return {
+            "rule": self.rule.name,
+            "signal": self.rule.signal,
+            "observed": round(self.observed, 4),
+            "strength": round(self.strength, 4),
+            "effects": {c: round(v, 4) for c, v in self.effects.items()},
+        }
+
+
+# The learning rule, in full. Every argument from behaviour to a utility weight
+# is here and nowhere else, so it can be reviewed as a whole rather than
+# discovered one branch at a time.
+WEIGHT_RULES: tuple[WeightRule, ...] = (
+    # Choosing a different discipline than the one prescribed, repeatedly, is the
+    # clearest behavioural statement that the ride itself is the point. It argues
+    # furthest because it is the hardest to explain away: the athlete rode, and
+    # rode something else.
+    WeightRule(
+        name="modality_swap",
+        signal="rode a different discipline than the one prescribed",
+        threshold=0.2,
+        full_at=0.4,
+        effects={"enjoyment": 0.03, "adaptation": -0.02},
+    ),
+    # Riding, but not what was planned, says something similar more weakly — it
+    # can equally be a busy month, so it argues less far.
+    WeightRule(
+        name="off_plan_riding",
+        signal="rode off the plan rather than what it asked for",
+        threshold=0.4,
+        full_at=0.8,
+        effects={"enjoyment": 0.02, "consistency": -0.01},
+    ),
+    # An athlete who does the session that was written down values the structure.
+    WeightRule(
+        name="plan_adherence",
+        signal="did the sessions the plan asked for",
+        threshold=0.6,
+        full_at=0.9,
+        effects={"consistency": 0.02, "adaptation": 0.02},
+    ),
+    # Putting a race on the calendar is a commitment, not a mood. Observed as a
+    # count rather than a rate: two races say about as much as five.
+    WeightRule(
+        name="race_on_calendar",
+        signal="has a race coming up",
+        threshold=1.0,
+        full_at=2.0,
+        effects={"race_performance": 0.04},
+    ),
+)
+
+
+def evaluate_rules(evidence: BehaviourEvidence) -> list[RuleActivation]:
+    """Every rule that fires for this evidence, with its strength (#566).
+
+    Below :data:`BEHAVIOUR_MIN_RIDES` nothing fires at all: that is the cold
+    start. A brand-new athlete keeps ``DEFAULT_WEIGHTS`` until there is enough
+    history to argue from, rather than being characterised by their first week.
+    """
+    if not evidence.has_signal:
+        return []
+
+    total = float(evidence.rides)
+    observed = {
+        "modality_swap": evidence.modality_swaps / total,
+        "off_plan_riding": evidence.off_plan_rides / total,
+        "plan_adherence": evidence.matched_rides / total,
+        "race_on_calendar": float(evidence.upcoming_races),
+    }
+
+    activations = []
+    for rule in WEIGHT_RULES:
+        value = observed.get(rule.name, 0.0)
+        strength = rule.strength(value)
+        if strength > 0:
+            activations.append(
+                RuleActivation(rule=rule, observed=value, strength=strength)
+            )
+    return activations
+
+
 def score_behaviour(evidence: BehaviourEvidence) -> dict[str, float]:
     """Turn the behavioural summary into weight nudges.
 
-    Deliberately small numbers. Each is bounded again by
+    Deliberately small numbers, summed over whichever of :data:`WEIGHT_RULES`
+    fired. Each is bounded again by
     :func:`motivation_model.apply_weight_evidence`, so what this returns is an
     *argument* about direction, and the gate decides how far one run may act on
     it. Several weeks of the same argument is what actually moves the vector.
     """
-    if not evidence.has_signal:
-        return {}
-
     nudges: dict[str, float] = {}
-    total = float(evidence.rides)
-
-    swap_rate = evidence.modality_swaps / total
-    off_plan_rate = evidence.off_plan_rides / total
-    adherence = evidence.matched_rides / total
-
-    # Choosing a different discipline than the one prescribed, repeatedly, is the
-    # clearest behavioural statement that the ride itself is the point.
-    if swap_rate >= 0.2:
-        nudges["enjoyment"] = 0.03 * min(1.0, swap_rate / 0.4)
-        nudges["adaptation"] = -0.02 * min(1.0, swap_rate / 0.4)
-
-    # Riding, but not what was planned, says the same thing more weakly — it can
-    # equally be a busy month, so it argues less far.
-    if off_plan_rate >= 0.4:
-        nudges["enjoyment"] = nudges.get("enjoyment", 0.0) + 0.02
-        nudges["consistency"] = nudges.get("consistency", 0.0) - 0.01
-
-    # An athlete who does the session that was written down values the structure.
-    if adherence >= 0.6:
-        nudges["consistency"] = nudges.get("consistency", 0.0) + 0.02
-        nudges["adaptation"] = nudges.get("adaptation", 0.0) + 0.02
-
-    # Putting a race on the calendar is a commitment, not a mood.
-    if evidence.upcoming_races:
-        nudges["race_performance"] = 0.02 * min(2, evidence.upcoming_races)
-
+    for activation in evaluate_rules(evidence):
+        for component, value in activation.effects.items():
+            nudges[component] = nudges.get(component, 0.0) + value
     return nudges
 
 
@@ -602,6 +755,7 @@ async def refresh_motivation_from_behaviour(
     current = crud.motivation_model_as_dict(
         await crud.get_athlete_motivation_model(db, user.id)
     )
+    activations = evaluate_rules(evidence)
     nudges = score_behaviour(evidence)
     affinity_nudges = score_modality_affinity(evidence)
     contradicted = detect_behaviour_contradictions(current, evidence)
@@ -632,10 +786,14 @@ async def refresh_motivation_from_behaviour(
 
     # A contradiction is a correction, not a re-observation, so this write does
     # not accrue: flagging an objective must not also strengthen it.
+    # The rules and the counts they read travel with the write, so the audit row
+    # the gate creates can say which evidence moved which weight (#566).
     await crud.upsert_athlete_motivation_model(
         db,
         user.id,
         updates=updates,
+        rules=[activation.as_record() for activation in activations],
+        evidence=evidence.as_record(),
         source=mm.SOURCE_INFERRED,
         accrue=False,
         promote=True,

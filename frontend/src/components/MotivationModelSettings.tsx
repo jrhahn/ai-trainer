@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import MotivationWeightHistory from './MotivationWeightHistory'
 import {
   fetchMotivationModel,
   updateMotivationModel,
@@ -410,6 +411,10 @@ export default function MotivationModelSettings() {
           })}
         </div>
       </div>
+
+      {/* The balance moves on its own, so it owes the athlete an account of
+          itself — right underneath the numbers it explains (#566). */}
+      <MotivationWeightHistory componentLabels={COMPONENT_LABELS} />
 
       {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
         <div className="border-t border-gray-100 pt-4">

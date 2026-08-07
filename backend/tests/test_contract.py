@@ -749,6 +749,19 @@ async def test_motivation_model_contract(client):
     assert len(patched["secondaryObjectives"]) == 2
     assert patched["utilityWeights"]["enjoyment"] == pytest.approx(0.45)
 
+    # Every weight change is on record, including the athlete's own (#566).
+    history = (
+        await client.get(
+            "/api/v1/users/me/motivation-model/weight-history", headers=headers
+        )
+    ).json()
+    assert len(history) == 1
+    assert history[0]["source"] == "user_set"
+    assert history[0]["deltas"]["enjoyment"] > 0
+    assert history[0]["weightsAfter"]["enjoyment"] == pytest.approx(0.45)
+    # The partial edit above touched no weight, so it left no row behind.
+    assert history[0]["rules"] is None
+
 
 # ---------------------------------------------------------------------------
 # 10. Athlete memory facts contract

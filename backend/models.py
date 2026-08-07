@@ -505,6 +505,54 @@ class AthleteMotivationModel(Base):
     user: Mapped["User"] = relationship(back_populates="motivation_model")
 
 
+class AthleteMotivationWeightEvent(Base):
+    """Append-only log of every change to the utility weight vector (#566).
+
+    The weights decide which training option wins (#564) and are visible to the
+    athlete (#567), so "why does this look different from last week?" has to have
+    an answer. Without this table the only trace was a log line: not queryable,
+    not per-athlete, and gone by the time anyone asked.
+
+    One row per *effective* change, written at the same gate the weights are
+    written at (``crud.upsert_athlete_motivation_model``), so a weight cannot move
+    without leaving a trace — including when the athlete moves it themselves.
+    ``rules`` and ``evidence`` are null for an athlete edit: nothing was inferred,
+    the athlete simply said so.
+
+    Never read on the hot path. The coach does not reason from this; it exists to
+    be inspected.
+    """
+
+    __tablename__ = "athlete_motivation_weight_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # Which writer moved them: ``inferred`` (a behavioural learning run) or
+    # ``user_set`` (the athlete editing them in settings). Same vocabulary as
+    # ``motivation_model.SOURCE_*``, so the two halves of the story read alike.
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    weights_before: Mapped[Any] = mapped_column(JSON, nullable=False)
+    weights_after: Mapped[Any] = mapped_column(JSON, nullable=False)
+    # component -> signed change actually stored. Not the same as the nudge that
+    # was argued: the gate clamps it and renormalization spreads the remainder,
+    # so this is what happened rather than what was asked for.
+    deltas: Mapped[Any] = mapped_column(JSON, nullable=False)
+    # Which rules fired, at what strength, and what each argued for. This is the
+    # "which evidence moved which weight" half of the trail.
+    rules: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The behavioural counts those rules were computed from, so a surprising
+    # entry can be checked against the rides it came from.
+    evidence: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # Components that were excluded from the change because the athlete pinned
+    # them — the reason a rule can fire and still move nothing.
+    pinned: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False, index=True
+    )
+
+
 class AthleteModel(Base):
     """The long-term, structured model of an athlete's durable capabilities (#384).
 

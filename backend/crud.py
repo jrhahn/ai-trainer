@@ -708,6 +708,60 @@ def motivation_model_as_dict(
     )
 
 
+def _record_weight_event(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    before: dict[str, float],
+    after: dict[str, float],
+    source: str,
+    rules: list[dict[str, Any]] | None,
+    evidence: dict[str, Any] | None,
+    pinned: list[str],
+    now: datetime,
+) -> None:
+    """Log a utility weight change, if there was one (#566).
+
+    Silent when the vector did not move, which is the common case: most writes to
+    the motivation model touch an objective or a constraint and leave the weights
+    alone, and a trail full of "nothing changed" is a trail nobody reads. Weights
+    are stored rounded to four decimals, so equality here is exact rather than
+    approximate.
+    """
+    if before == after:
+        return
+    db.add(
+        models.AthleteMotivationWeightEvent(
+            user_id=user_id,
+            source=source,
+            weights_before=dict(before),
+            weights_after=dict(after),
+            deltas={
+                component: round(after[component] - before.get(component, 0.0), 4)
+                for component in after
+                if round(after[component] - before.get(component, 0.0), 4)
+            },
+            rules=rules or None,
+            evidence=evidence or None,
+            pinned=list(pinned),
+            recorded_at=now,
+        )
+    )
+
+
+async def get_motivation_weight_history(
+    db: AsyncSession, user_id: str, *, limit: int = 20
+) -> list[models.AthleteMotivationWeightEvent]:
+    """The athlete's weight changes, newest first (#566)."""
+    result = await db.execute(
+        select(models.AthleteMotivationWeightEvent)
+        .where(models.AthleteMotivationWeightEvent.user_id == user_id)
+        .order_by(models.AthleteMotivationWeightEvent.recorded_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def upsert_athlete_motivation_model(
     db: AsyncSession,
     user_id: str,
@@ -717,6 +771,8 @@ async def upsert_athlete_motivation_model(
     accrue: bool = False,
     promote: bool = False,
     now: datetime | None = None,
+    rules: list[dict[str, Any]] | None = None,
+    evidence: dict[str, Any] | None = None,
 ) -> models.AthleteMotivationModel:
     """Merge an update into the athlete's motivation model and flush (#562).
 
@@ -731,9 +787,16 @@ async def upsert_athlete_motivation_model(
     evidence strengthens an entry rather than replacing it, and an entry that has
     earned enough confidence may become the primary objective. A direct athlete
     edit uses neither — it is a statement, not evidence.
+
+    ``rules`` and ``evidence`` are the learning run's account of itself (#566).
+    Recording the weight change *here* rather than at the caller is what makes the
+    audit trail complete: every writer goes through this function, so no weight
+    can move without a row explaining it — including the athlete's own edit, which
+    records no rules because nothing was inferred.
     """
     timestamp = now or datetime.now(timezone.utc)
     existing = await get_athlete_motivation_model(db, user_id)
+    before = motivation_model_as_dict(existing)
     merged = motivation_model.merge_model(
         motivation_model_as_dict(existing) if existing is not None else None,
         updates,
@@ -744,6 +807,17 @@ async def upsert_athlete_motivation_model(
     if promote:
         merged = motivation_model.promote_primary_objective(merged, now=timestamp)
     merged["updated_at"] = timestamp
+    _record_weight_event(
+        db,
+        user_id,
+        before=before["utility_weights"],
+        after=merged["utility_weights"],
+        source=source,
+        rules=rules,
+        evidence=evidence,
+        pinned=merged["pinned_weights"],
+        now=timestamp,
+    )
 
     if existing is None:
         existing = models.AthleteMotivationModel(user_id=user_id, **merged)
