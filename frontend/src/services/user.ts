@@ -311,6 +311,73 @@ export type AthleteMemoryFactStatus =
 // A stable fact (FTP, max HR, weight) vs an observation of repeated behaviour (#386).
 export type AthleteMemoryFactKind = 'fact' | 'observation'
 
+// ---------------------------------------------------------------------------
+// Athlete motivation model (#562) — what the athlete trains FOR
+// ---------------------------------------------------------------------------
+
+export type MotivationSource = 'inferred' | 'user_set'
+export type MotivationEntryStatus = 'active' | 'contradicted' | 'retired'
+export type MotivationComponent =
+  | 'enjoyment'
+  | 'adaptation'
+  | 'consistency'
+  | 'health'
+  | 'race_performance'
+
+export interface MotivationEntry {
+  text: string
+  confidence: number
+  source: MotivationSource
+  sourceSnippet: string
+  status: MotivationEntryStatus
+  contradictionNote: string | null
+  firstObservedAt: string | null
+  lastConfirmedAt: string | null
+  observationCount?: number
+}
+
+export interface AthleteMotivationModel {
+  primaryObjective: string
+  primaryObjectiveSource: MotivationSource
+  primaryObjectiveConfidence: number
+  primaryObjectiveSnippet: string
+  secondaryObjectives: MotivationEntry[]
+  constraints: MotivationEntry[]
+  // Spans exactly MotivationComponent and sums to 1 — guaranteed by the backend
+  // persist gate, so the UI renders it rather than re-checking it.
+  utilityWeights: Record<string, number>
+  pinnedWeights: MotivationComponent[]
+  modalityAffinity: Record<string, number>
+  updatedAt: string | null
+}
+
+/** A partial edit: omitted fields are left alone, they are not blanked. */
+export interface AthleteMotivationModelEdit {
+  primaryObjective?: string
+  secondaryObjectives?: Array<Partial<MotivationEntry> & { text: string }>
+  constraints?: Array<Partial<MotivationEntry> & { text: string }>
+  utilityWeights?: Record<string, number>
+  pinnedWeights?: MotivationComponent[]
+}
+
+export async function fetchMotivationModel(
+  token: string
+): Promise<AthleteMotivationModel> {
+  return apiFetch<AthleteMotivationModel>('/users/me/motivation-model', { token })
+}
+
+export async function updateMotivationModel(
+  token: string,
+  changes: AthleteMotivationModelEdit
+): Promise<AthleteMotivationModel> {
+  return apiFetch<AthleteMotivationModel>('/users/me/motivation-model', {
+    token,
+    method: 'PUT',
+    body: changes,
+  })
+}
+
+
 export interface AthleteMemoryFact {
   id: string
   fact: string

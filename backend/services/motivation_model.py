@@ -334,12 +334,23 @@ def normalize_entries(
         seen.add(key)
         out.append(entry)
 
-    # A hand-stated objective outranks an inferred one, then confidence. The cap
-    # must drop the weakest evidence, not whatever happened to arrive last.
-    out.sort(
+    if len(out) <= limit:
+        return out
+
+    # Over the cap: a hand-stated objective outranks an inferred one, then
+    # confidence, so the cap drops the weakest evidence rather than whatever
+    # happened to arrive last.
+    #
+    # The ranking decides *what* to drop and nothing else. The surviving entries
+    # come back in the order they arrived, because for a ``user_set`` write that
+    # order is the athlete's own — they put their objectives in the sequence they
+    # meant (#567), and sorting the output would silently undo it.
+    ranked = sorted(
+        out,
         key=lambda e: (e["source"] != SOURCE_USER_SET, -float(e["confidence"])),
     )
-    return out[:limit]
+    keep = {entry["text"].casefold() for entry in ranked[:limit]}
+    return [entry for entry in out if entry["text"].casefold() in keep]
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +419,36 @@ def normalize_model(
     }
 
 
+def _attribute_unmarked_entries(incoming: Mapping[str, Any] | None) -> Any:
+    """In a ``user_set`` write, an entry with no stated source is the athlete's.
+
+    The settings UI (#567) keeps an untouched inferred entry marked ``inferred``
+    on purpose, so the athlete can still see it was a guess and what backed it.
+    Everything else in a list they typed and saved is theirs — and had this
+    defaulted to ``inferred``, the very next inference pass would have been free
+    to overwrite what they just wrote, which is exactly the promise the settings
+    screen makes. Correctness here must not depend on the client remembering to
+    send the field.
+    """
+    if not isinstance(incoming, Mapping):
+        return incoming
+
+    patched = dict(incoming)
+    for field in ("secondary_objectives", "constraints"):
+        entries = patched.get(field)
+        if not isinstance(entries, Sequence) or isinstance(entries, (str, bytes)):
+            continue
+        patched[field] = [
+            {"source": SOURCE_USER_SET, **entry}
+            if isinstance(entry, Mapping) and not entry.get("source")
+            else ({"text": entry, "source": SOURCE_USER_SET}
+                  if isinstance(entry, str)
+                  else entry)
+            for entry in entries
+        ]
+    return patched
+
+
 def merge_model(
     existing: Mapping[str, Any] | None,
     incoming: Mapping[str, Any] | None,
@@ -433,9 +474,12 @@ def merge_model(
     (#563), as opposed to something one sentence can assert.
     """
     moment = now or _utcnow()
-    current = normalize_model(existing, now=moment)
-    update = normalize_model(incoming, now=moment)
     writing_as_user = _normalize_source(source) == SOURCE_USER_SET
+    current = normalize_model(existing, now=moment)
+    update = normalize_model(
+        _attribute_unmarked_entries(incoming) if writing_as_user else incoming,
+        now=moment,
+    )
 
     # A field the caller did not send is a field it has nothing to say about —
     # distinct from an empty one, which for a ``user_set`` write means "remove

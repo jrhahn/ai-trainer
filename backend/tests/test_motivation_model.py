@@ -147,12 +147,60 @@ def test_the_cap_drops_the_weakest_evidence_not_the_newest():
     assert "weak" not in {e["text"] for e in entries}
 
 
-def test_user_set_entries_outrank_inferred_ones_when_capping():
+def test_user_set_entries_survive_the_cap_ahead_of_inferred_ones():
+    """The cap drops guesses before it drops anything the athlete said."""
     raw = [{"text": f"guess {i}", "confidence": 0.99} for i in range(mm.MAX_CONSTRAINTS)]
     raw.append({"text": "stated by the athlete", "source": "user_set"})
     entries = mm.normalize_entries(raw, limit=mm.MAX_CONSTRAINTS, now=NOW)
 
-    assert entries[0]["text"] == "stated by the athlete"
+    assert "stated by the athlete" in {e["text"] for e in entries}
+    assert len(entries) == mm.MAX_CONSTRAINTS
+
+
+def test_the_order_the_entries_arrive_in_is_the_order_they_keep():
+    """For a user_set write that order is the athlete's own (#567).
+
+    Ranking decides what the cap drops and nothing else; sorting the output
+    would silently undo the sequence the athlete put their objectives in.
+    """
+    entries = mm.normalize_entries(
+        [
+            {"text": "inferred one", "confidence": 0.4},
+            {"text": "stated", "source": "user_set"},
+            {"text": "inferred two", "confidence": 0.9},
+        ],
+        limit=mm.MAX_SECONDARY_OBJECTIVES,
+        now=NOW,
+    )
+
+    assert [e["text"] for e in entries] == ["inferred one", "stated", "inferred two"]
+
+
+def test_an_athlete_reordering_their_objectives_is_stored_in_that_order():
+    stored = mm.normalize_model(
+        {
+            "secondary_objectives": [
+                {"text": "climb faster", "source": "user_set"},
+                {"text": "ride the Trans-Alp", "source": "user_set"},
+            ]
+        }
+    )
+
+    merged = mm.merge_model(
+        stored,
+        {
+            "secondary_objectives": [
+                {"text": "ride the Trans-Alp", "source": "user_set"},
+                {"text": "climb faster", "source": "user_set"},
+            ]
+        },
+        source=mm.SOURCE_USER_SET,
+    )
+
+    assert [e["text"] for e in merged["secondary_objectives"]] == [
+        "ride the Trans-Alp",
+        "climb faster",
+    ]
 
 
 def test_retired_entries_are_dropped():
@@ -333,6 +381,40 @@ def test_reobserving_an_inferred_entry_keeps_its_first_sighting():
     entry = merged["secondary_objectives"][0]
     assert entry["first_observed_at"] == earlier
     assert entry["confidence"] == pytest.approx(0.7)
+
+
+def test_an_entry_the_athlete_writes_is_attributed_to_them():
+    """Correctness must not depend on the client sending the field (#567).
+
+    Had this defaulted to ``inferred``, the next inference pass would have been
+    free to overwrite what the athlete just typed — exactly the promise the
+    settings screen makes.
+    """
+    merged = mm.merge_model(
+        mm.default_model(),
+        {"constraints": [{"text": "No racing, ever"}, "Stay healthy"]},
+        source=mm.SOURCE_USER_SET,
+    )
+
+    assert all(e["source"] == mm.SOURCE_USER_SET for e in merged["constraints"])
+
+
+def test_an_untouched_inferred_entry_keeps_its_provenance_through_a_user_write():
+    """The UI shows it was a guess and what backed it; saving something else
+    must not quietly promote it to fact."""
+    merged = mm.merge_model(
+        mm.default_model(),
+        {
+            "secondary_objectives": [
+                {"text": "ride more trails", "source": "inferred", "confidence": 0.4}
+            ]
+        },
+        source=mm.SOURCE_USER_SET,
+    )
+
+    entry = merged["secondary_objectives"][0]
+    assert entry["source"] == mm.SOURCE_INFERRED
+    assert entry["confidence"] == pytest.approx(0.4)
 
 
 def test_a_user_set_edit_replaces_the_list_including_by_omission():

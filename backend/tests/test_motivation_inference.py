@@ -497,3 +497,62 @@ async def test_restating_a_contradicted_objective_clears_the_flag(db, user):
         entry["status"] == mm.STATUS_CONTRADICTED
         for entry in stored["secondary_objectives"]
     )
+
+
+# ---------------------------------------------------------------------------
+# The acceptance criterion from #567
+# ---------------------------------------------------------------------------
+
+
+async def test_an_athlete_edit_survives_the_next_inference_run(db, user):
+    """Edit persists, is marked user-set, and no inference pass undoes it.
+
+    The whole promise the settings UI makes ("the coach never overwrites what
+    you set here") reduces to this: a hand-set objective, a pinned weight and a
+    hand-written constraint, put through both inference paths at once.
+    """
+    await crud.upsert_athlete_motivation_model(
+        db,
+        user.id,
+        updates={
+            "primary_objective": "Ride every trail in the Black Forest",
+            "constraints": [{"text": "No racing, ever"}],
+            "utility_weights": {"race_performance": 0.3},
+            "pinned_weights": ["race_performance"],
+        },
+        source=mm.SOURCE_USER_SET,
+    )
+    edited = crud.motivation_model_as_dict(
+        await crud.get_athlete_motivation_model(db, user.id)
+    )
+    assert edited["primary_objective_source"] == mm.SOURCE_USER_SET
+    assert edited["constraints"][0]["source"] == mm.SOURCE_USER_SET
+
+    # Behaviour that argues hard for something else entirely.
+    for day in range(12):
+        db.add(
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=2000 + day,
+                activity_date=(NOW - timedelta(days=day)).date().isoformat(),
+                sport_type="Ride",
+                plan_match_status="matched",
+                matched_plan_snapshot={"sportType": "Ride"},
+            )
+        )
+    await db.flush()
+    await mi.refresh_motivation_from_behaviour(db, user, now=NOW)
+    await mi.capture_motivation_from_message(
+        db, user.id, "I want to win my A-race this year.", now=NOW
+    )
+
+    after = crud.motivation_model_as_dict(
+        await crud.get_athlete_motivation_model(db, user.id)
+    )
+
+    assert after["primary_objective"] == "Ride every trail in the Black Forest"
+    assert after["primary_objective_source"] == mm.SOURCE_USER_SET
+    assert [e["text"] for e in after["constraints"]] == ["No racing, ever"]
+    assert after["utility_weights"]["race_performance"] == pytest.approx(
+        edited["utility_weights"]["race_performance"]
+    )
