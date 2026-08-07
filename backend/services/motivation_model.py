@@ -74,6 +74,23 @@ _STATUSES = (STATUS_ACTIVE, STATUS_CONTRADICTED, STATUS_RETIRED)
 PRIMARY_OBJECTIVE_MAX_LEN = 280
 ENTRY_TEXT_MAX_LEN = 200
 SNIPPET_MAX_LEN = 500
+
+# Confidence lifecycle for an inferred entry, mirroring the AthleteMemoryFact
+# curve in :mod:`crud` so motivation accrues trust the same way every other piece
+# of inferred athlete knowledge does. An objective is a big claim: a single
+# sentence gets it on the board, and only recurrence gets it believed (#563).
+CONFIDENCE_STEP = 0.2
+INITIAL_CONFIDENCE_CAP = 0.35
+# What a secondary objective must reach before it can be promoted to *the*
+# primary objective. Two independent observations plus the step, so one
+# offhand remark cannot redefine what the athlete trains for.
+PROMOTION_MIN_CONFIDENCE = 0.55
+PROMOTION_MIN_OBSERVATIONS = 2
+
+# The most any single evidence batch may move one weight. Behaviour is a slow
+# signal by nature: a month of MTB rides in place of prescribed road sessions is
+# signal, one swapped Tuesday is noise (#563; the full learning rule is #566).
+MAX_WEIGHT_NUDGE = 0.05
 # Enough for a real athlete, few enough that the section stays cheap in a prompt
 # that is already ~16k tokens (#510/#556).
 MAX_SECONDARY_OBJECTIVES = 6
@@ -230,6 +247,10 @@ def normalize_entry(raw: Any, *, now: datetime | None = None) -> dict[str, Any] 
     default_confidence = 1.0 if source == SOURCE_USER_SET else 0.35
     contradiction = _clean_text(raw.get("contradiction_note"), SNIPPET_MAX_LEN)
 
+    observations = raw.get("observation_count")
+    if isinstance(observations, bool) or not isinstance(observations, int):
+        observations = 1
+
     return {
         "text": text,
         "confidence": _clamp_unit(raw.get("confidence"), default_confidence),
@@ -237,6 +258,7 @@ def normalize_entry(raw: Any, *, now: datetime | None = None) -> dict[str, Any] 
         "source_snippet": _clean_text(raw.get("source_snippet"), SNIPPET_MAX_LEN),
         "status": _normalize_status(raw.get("status")),
         "contradiction_note": contradiction or None,
+        "observation_count": max(1, observations),
         "first_observed_at": _iso(raw.get("first_observed_at"), fallback=moment),
         "last_confirmed_at": _iso(raw.get("last_confirmed_at"), fallback=moment),
     }
@@ -345,6 +367,7 @@ def merge_model(
     incoming: Mapping[str, Any] | None,
     *,
     source: str = SOURCE_INFERRED,
+    accrue: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Fold an update into the stored model, honouring the user-set override.
@@ -356,6 +379,12 @@ def merge_model(
 
     This is why inference callers do not need their own guard: they cannot
     clobber an athlete's stated objective even if they try.
+
+    ``accrue`` switches entry merging from *replace* to *observe*: a repeated
+    inferred entry gains :data:`CONFIDENCE_STEP` and an observation instead of
+    taking the incoming confidence outright. That is what makes an objective
+    something the athlete has to keep demonstrating before the coach acts on it
+    (#563), as opposed to something one sentence can assert.
     """
     moment = now or _utcnow()
     current = normalize_model(existing, now=moment)
@@ -403,6 +432,7 @@ def merge_model(
             update[field],
             limit=limit,
             writing_as_user=writing_as_user,
+            accrue=accrue,
             now=moment,
         )
 
@@ -433,13 +463,14 @@ def _merge_entries(
     *,
     limit: int,
     writing_as_user: bool,
+    accrue: bool,
     now: datetime,
 ) -> list[dict[str, Any]]:
     """Entry-wise merge, keyed on text.
 
     A user-set entry survives an inferred write; a repeated observation keeps its
-    original ``first_observed_at`` so #566 can tell a long-standing objective
-    from one stated once.
+    original ``first_observed_at`` so a long-standing objective can be told from
+    one stated once.
     """
     if writing_as_user:
         # The athlete is restating the whole list — including by omission.
@@ -450,14 +481,162 @@ def _merge_entries(
         key = entry["text"].casefold()
         previous = by_key.get(key)
         if previous is None:
-            by_key[key] = dict(entry)
+            new_entry = dict(entry)
+            if accrue:
+                # A first sighting is a candidate, not knowledge: it enters below
+                # the bar its own recurrence has to carry it over.
+                new_entry["confidence"] = min(
+                    new_entry["confidence"], INITIAL_CONFIDENCE_CAP
+                )
+            by_key[key] = new_entry
             continue
         if previous["source"] == SOURCE_USER_SET:
             # Re-observing what the athlete already told us is confirmation, not
             # a correction: refresh recency, keep their wording and authority.
             previous["last_confirmed_at"] = entry["last_confirmed_at"]
+            previous["observation_count"] = previous.get("observation_count", 1) + 1
             continue
+
         first_seen = previous.get("first_observed_at") or entry["first_observed_at"]
+        observations = previous.get("observation_count", 1)
+        held = previous["confidence"]
+        contradiction = previous.get("contradiction_note")
         previous.update(entry)
         previous["first_observed_at"] = min(first_seen, entry["first_observed_at"])
+
+        if accrue:
+            previous["observation_count"] = observations + 1
+            previous["confidence"] = min(
+                1.0, max(held, min(entry["confidence"], INITIAL_CONFIDENCE_CAP))
+                + CONFIDENCE_STEP,
+            )
+            # Fresh evidence re-confirms the entry, so a pending contradiction is
+            # answered and the validation prompt clears — the same resolution
+            # AthleteMemoryFact applies when a contradicted fact recurs.
+            previous["status"] = STATUS_ACTIVE
+            previous["contradiction_note"] = None
+        else:
+            previous["observation_count"] = max(
+                observations, previous.get("observation_count", 1)
+            )
+            previous["contradiction_note"] = (
+                previous.get("contradiction_note") or contradiction
+            )
     return normalize_entries(list(by_key.values()), limit=limit, now=now)
+
+
+# ---------------------------------------------------------------------------
+# Evidence: promotion, contradiction, bounded weight movement
+# ---------------------------------------------------------------------------
+
+
+def promote_primary_objective(
+    model: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Raise the best-evidenced secondary objective to primary, if one qualifies.
+
+    An athlete's primary objective is the single thing every planning decision is
+    scored against, so it is not something a passing remark gets to set. A
+    candidate has to clear both bars — :data:`PROMOTION_MIN_CONFIDENCE` and
+    :data:`PROMOTION_MIN_OBSERVATIONS` — which under the accrual curve means the
+    athlete said or demonstrated it more than once.
+
+    A ``user_set`` primary objective is never replaced: the athlete already
+    answered this question.
+    """
+    moment = now or _utcnow()
+    current = normalize_model(model, now=moment)
+
+    if current["primary_objective"] and (
+        current["primary_objective_source"] == SOURCE_USER_SET
+    ):
+        return current
+
+    qualified = [
+        entry
+        for entry in current["secondary_objectives"]
+        if entry["status"] == STATUS_ACTIVE
+        and entry["confidence"] >= PROMOTION_MIN_CONFIDENCE
+        and entry["observation_count"] >= PROMOTION_MIN_OBSERVATIONS
+    ]
+    if not qualified:
+        return current
+
+    best = max(
+        qualified,
+        key=lambda e: (e["confidence"], e["observation_count"]),
+    )
+    if best["confidence"] <= current["primary_objective_confidence"]:
+        return current
+
+    promoted = dict(current)
+    promoted["primary_objective"] = best["text"][:PRIMARY_OBJECTIVE_MAX_LEN]
+    promoted["primary_objective_source"] = best["source"]
+    promoted["primary_objective_confidence"] = best["confidence"]
+    promoted["primary_objective_snippet"] = best["source_snippet"]
+    # The promoted objective stops being one of the also-rans; a demoted former
+    # primary is not re-added, because it was never evidence in its own right.
+    promoted["secondary_objectives"] = [
+        entry
+        for entry in current["secondary_objectives"]
+        if entry["text"].casefold() != best["text"].casefold()
+    ]
+    return promoted
+
+
+def contradict_entry(
+    entry: Mapping[str, Any],
+    *,
+    note: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Flag an entry that fresh evidence argues against.
+
+    Deliberately not a deletion. "I don't care about races" alongside three
+    registered races is a question for the athlete, not a fact the coach gets to
+    overrule on its own — so the entry keeps its text, loses confidence, and
+    carries the reason into the UI where the athlete can confirm or correct it
+    (#567). This is the resolution path :class:`AthleteMemoryFact` already uses.
+    """
+    flagged = normalize_entry(entry, now=now)
+    if flagged is None:
+        return {}
+    flagged["status"] = STATUS_CONTRADICTED
+    flagged["contradiction_note"] = _clean_text(note, SNIPPET_MAX_LEN) or None
+    flagged["confidence"] = _clamp_unit(flagged["confidence"] - CONFIDENCE_STEP)
+    return flagged
+
+
+def apply_weight_evidence(
+    weights: Mapping[str, Any] | None,
+    nudges: Mapping[str, float] | None,
+    *,
+    pinned: Iterable[str] | None = None,
+    cap: float = MAX_WEIGHT_NUDGE,
+) -> dict[str, float]:
+    """Move the weight vector by a bounded amount of evidence.
+
+    Each nudge is clamped to ±``cap`` before it is applied, so no single batch of
+    evidence can rewrite what the athlete values — it takes a signal that repeats
+    across runs to move the vector meaningfully. Pinned components ignore their
+    nudge entirely, and the result is renormalized through
+    :func:`normalize_weights`, so the sum-to-one invariant holds by construction
+    rather than by the caller remembering.
+    """
+    pinned_set = set(normalize_pinned(pinned))
+    current = normalize_weights(weights, pinned=pinned)
+    if not nudges:
+        return current
+
+    moved = dict(current)
+    for component, delta in nudges.items():
+        if component not in MOTIVATION_COMPONENTS or component in pinned_set:
+            continue
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)):
+            continue
+        bounded = max(-cap, min(cap, float(delta)))
+        moved[component] = _clamp_unit(moved[component] + bounded)
+
+    return normalize_weights(moved, pinned=pinned)

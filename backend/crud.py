@@ -713,6 +713,8 @@ async def upsert_athlete_motivation_model(
     *,
     updates: dict[str, Any],
     source: str = motivation_model.SOURCE_INFERRED,
+    accrue: bool = False,
+    promote: bool = False,
     now: datetime | None = None,
 ) -> models.AthleteMotivationModel:
     """Merge an update into the athlete's motivation model and flush (#562).
@@ -723,6 +725,11 @@ async def upsert_athlete_motivation_model(
     a hand-stated objective (#342/#345/#346) — happens in that module, so this
     function stays the persistence half and every writer gets the same guard
     whether or not it remembered to ask for one.
+
+    ``accrue`` and ``promote`` are what an inference pass (#563) sets: repeated
+    evidence strengthens an entry rather than replacing it, and an entry that has
+    earned enough confidence may become the primary objective. A direct athlete
+    edit uses neither — it is a statement, not evidence.
     """
     timestamp = now or datetime.now(timezone.utc)
     existing = await get_athlete_motivation_model(db, user_id)
@@ -730,8 +737,11 @@ async def upsert_athlete_motivation_model(
         motivation_model_as_dict(existing) if existing is not None else None,
         updates,
         source=source,
+        accrue=accrue,
         now=timestamp,
     )
+    if promote:
+        merged = motivation_model.promote_primary_objective(merged, now=timestamp)
     merged["updated_at"] = timestamp
 
     if existing is None:

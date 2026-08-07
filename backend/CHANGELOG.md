@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach learns what the athlete trains for, from what they say and do**
+  (`services/motivation_inference.py`, `services/motivation_model.py`,
+  `services/learning_pipeline.py`, `routers/ai.py`) — the second piece of #561,
+  filling the model #562 created. Two sources, both deterministic:
+
+  *What the athlete says.* "I don't care about races", "I want more trail
+  time", "I don't chase FTP" are captured on every coach turn, in the same
+  idiom as the weather-preference and home-location captures (#495) and for the
+  same reasons: no tokens, testable, bilingual, and every update carries the
+  athlete's own sentence as its `source_snippet` — which is what makes an
+  inferred objective correctable rather than mysterious (#567).
+
+  *What the athlete does.* A continuous-learning step reads the stored rides:
+  riding the MTB when the plan said road, riding off-plan, following the
+  structure that was written down, and whether races are on the calendar.
+
+  The hard part is not extraction, it is **restraint** — an objective is what
+  every planning decision will be scored against (#564), so a single sentence
+  must not be able to redefine it. Three rules enforce that, and all three live
+  in the `motivation_model` gate rather than in the inference module, so a
+  future third source of evidence inherits them: a statement enters as a
+  *secondary* objective capped at `INITIAL_CONFIDENCE_CAP` and only recurrence
+  promotes it to primary; behaviour moves a weight by at most
+  `MAX_WEIGHT_NUDGE` per run, so it takes weeks of a consistent signal to change
+  what the athlete values; and evidence that argues against a stored objective
+  marks it `contradicted` for the athlete to settle rather than flipping it —
+  the resolution path `AthleteMemoryFact` already uses (#386/#387).
+
+  Underneath all of it, the `user_set` override from #562: none of this can
+  overwrite an objective the athlete stated by hand, or move a weight they
+  pinned. That is exercised through the real inference path, not just the gate.
+
 - **The athlete's objective is now data** (`models.AthleteMotivationModel`,
   `services/motivation_model.py`, `crud.upsert_athlete_motivation_model`,
   `GET`/`PUT /users/me/motivation-model`, migration
