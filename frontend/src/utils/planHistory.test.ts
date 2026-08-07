@@ -12,6 +12,9 @@ describe('sourceLabel', () => {
     expect(sourceLabel('coach_chat')).toBe('Coach chat')
     expect(sourceLabel('ride_review')).toBe('Post-ride adaptation')
     expect(sourceLabel('activity_import')).toBe('Activity synced')
+    // Resolving an ambiguous match ticks the session; the history has to say it
+    // was the athlete's own answer, not another automatic sync (#574).
+    expect(sourceLabel('manual_match')).toBe('Match you confirmed')
   })
 
   it('title-cases unknown keys as a fallback', () => {

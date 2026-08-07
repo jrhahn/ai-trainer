@@ -645,6 +645,41 @@ async def test_a_manual_resolve_still_displaces_a_rival_for_the_same_session():
 
 
 @pytest.mark.asyncio
+async def test_a_manually_resolved_session_is_marked_completed():
+    """A manual match is evidence of a ridden session, and the strongest kind (#574).
+
+    ``mark_matched_days_completed`` only counted ``MATCH_AUTO``, so answering
+    "that was the evening intervals" left the session untouched: no calendar tick,
+    and none of the completed-day protection that keeps an automated regenerate
+    from dropping a day the athlete actually rode.
+    """
+    date = "2026-08-24"
+    plan = [
+        _session(date, "endurance", slot=0, duration=90),
+        _session(date, "intervals", slot=1, duration=60),
+    ]
+    user_id = await _create_user("resolve-completes@example.com", plan)
+    await _add_ride(user_id, 9921, date, sport_type="Ride",
+                    duration_seconds=60 * 60, start=f"{date}T18:00:00Z")
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        ride = await ride_matching.resolve_manual_match(
+            db, user_id, planned_date=date, strava_activity_id=9921,
+            plan=plan, planned_slot=1,
+        )
+        await ride_matching.mark_matched_days_completed(
+            db, user, plan, [ride], source="manual_match"
+        )
+        await db.commit()
+
+    saved = {schemas.day_slot(d): d for d in await _get_plan(user_id)}
+    assert saved[1].get("completed") is True
+    # The morning session is not what the athlete named, and stays open.
+    assert not saved[0].get("completed")
+
+
+@pytest.mark.asyncio
 async def test_without_start_times_the_rides_are_never_summed():
     """Adjacency is a claim about a timeline; there is none here, so no sum."""
     date = "2026-08-19"

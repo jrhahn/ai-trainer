@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
+import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
@@ -169,7 +170,7 @@ export default function WorkoutPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay, setTrainingPlan } = useAppStore(
+  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay, setTrainingPlan, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       trainingPlan: s.trainingPlan,
@@ -177,7 +178,13 @@ export default function WorkoutPage() {
       userProfile: s.userProfile,
       updateTrainingDay: s.updateTrainingDay,
       setTrainingPlan: s.setTrainingPlan,
+      rideMetricsHistory: s.rideMetricsHistory,
     }))
+  )
+  // Rides on this date the matcher would not attribute. The calendar's amber dot
+  // leads here, so this is where that dot has to become answerable (#574).
+  const ambiguousRides = rideMetricsHistory.filter(
+    (ride) => ride.activityDate === date && ride.planMatchStatus === 'ambiguous'
   )
   // Every session on this date, AM→PM. The `?slot=` query param picks which one
   // is open; without it the day's first session is shown, which is what a
@@ -508,6 +515,26 @@ export default function WorkoutPage() {
           </button>
         )}
       </div>
+
+      {ambiguousRides.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-800">
+            {ambiguousRides.length > 1 ? 'Unattributed rides' : 'Unattributed ride'} on this day
+          </h2>
+          {ambiguousRides.map((ride) => (
+            <div key={ride.stravaActivityId}>
+              <p className="text-xs text-gray-600 font-medium truncate">
+                {ride.activityName ?? 'Activity'}
+                <span className="text-gray-400 font-normal">
+                  {' · '}
+                  {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                </span>
+              </p>
+              <AmbiguousMatchResolver ride={ride} />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Change history — "why did this workout change?" (#357) */}
       <ChangeHistorySection

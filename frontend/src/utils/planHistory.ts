@@ -16,6 +16,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   nightly_maintenance: 'Nightly tune-up',
   ride_review: 'Post-ride adaptation',
   activity_import: 'Activity synced',
+  manual_match: 'Match you confirmed',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */

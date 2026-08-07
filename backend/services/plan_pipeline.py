@@ -126,6 +126,11 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # Activity sync marking an auto-matched day completed. Respects pins like any
     # automated trigger, so it never touches a user-owned day.
     "activity_import": ("activity_import", True),
+    # The athlete resolving an ambiguous ride↔session match, which marks the session
+    # they named completed (#574). Athlete-initiated, but it only ever sets that one
+    # flag — so it respects pins rather than claiming the day, and reads back in the
+    # change history as itself instead of hiding behind "activity_import".
+    "manual_match": ("manual_match", True),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
