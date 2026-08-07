@@ -1335,6 +1335,61 @@ def coach_explainability_rule() -> str:
     )
 
 
+def objective_framing_rule() -> str:
+    """Explain recommendations in the athlete's own objective, not in physiology (#565).
+
+    The coach knows *why* a session works — that is what the performance model and
+    the ROI recommendation are for. What it has been missing is what the session
+    is **for**. "Threshold training increases FTP" is true and, for most athletes,
+    beside the point: they do not want a bigger number, they want to still enjoy
+    the last descent after four hours. Same prescription, and the difference
+    between a coach that sounds like a spreadsheet and one that sounds like it
+    knows them.
+
+    Three things this rule has to get right, and each is a way it could go wrong:
+
+    * **Chain, don't substitute.** The physiology stays; it becomes the middle of
+      the sentence rather than the end of it.
+    * **Never invent an objective.** An athlete with none inferred yet, or one
+      held at low confidence, must not be told what they want. Falling back to
+      plain physiology is the correct behaviour, not a failure.
+    * **Stay honest about why an option won.** #564 can rank a lower-physiology
+      option first because it fits the athlete better. Saying that plainly is
+      the point; dressing it up as the physiologically optimal choice would make
+      the whole feature a way of lying more fluently.
+    """
+    return (
+        "\n\nExplain in the athlete's own objective (not in physiology):\n"
+        "- The athlete's objective — what they actually train FOR — is given to "
+        "you in the objective section when it is known. Physiology is the "
+        "MECHANISM; their objective is the PAYOFF. End the chain on the payoff.\n"
+        "- Concretely: instead of 'threshold training increases your FTP', say "
+        "what the FTP buys them — e.g. 'this threshold session lets you climb "
+        "faster with less fatigue, so you can still enjoy the final technical "
+        "descent after four hours'. The prescription is identical; the reason "
+        "you give for it is theirs, not the textbook's.\n"
+        "- Restate goals in their terms too. A goal of 'increase FTP' is a means; "
+        "the goal is what the FTP is for — 'climb faster between descents so one "
+        "more trail fits into the ride'. When you name a target, name what it "
+        "unlocks.\n"
+        "- NEVER invent an objective. If no objective is given, or it is marked "
+        "inferred with low confidence, explain in plain physiological terms and "
+        "— at most occasionally — ask what they are training for. Telling an "
+        "athlete what they want is worse than not knowing.\n"
+        "- An inferred objective is held loosely: phrase it as your read of them "
+        "('as I understand it, you ride mainly to…'), so they can correct it.\n"
+        "- When the ranked options show a choice that won on the athlete's "
+        "objective rather than on physiology, say so plainly — 'the MTB session "
+        "is the slightly smaller training stimulus, but it is the one you will "
+        "actually enjoy and finish'. Never present a preference-driven pick as "
+        "the physiologically optimal one.\n"
+        '- Record the objective link in the JSON field "objectiveRationale": one '
+        "short phrase naming what this advice buys them in terms of their own "
+        "objective. Leave it an empty string when no objective is known — do not "
+        "fill it with a physiological restatement."
+    )
+
+
 def reveal_uncertainty_rule() -> str:
     """Make the coach own its uncertainty instead of arguing a single truth (#490).
 
@@ -1681,6 +1736,7 @@ def coach_static_prefix() -> str:
 
     recommendation_layers_instructions = recommendation_reasoning_layers_rule()
     explainability_instructions = coach_explainability_rule()
+    objective_instructions = objective_framing_rule()
     uncertainty_instructions = reveal_uncertainty_rule()
     model_before_plan_instructions = update_model_before_plan_rule()
     rest_instructions = rest_recommendation_rules()
@@ -1757,6 +1813,7 @@ def coach_static_prefix() -> str:
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{explainability_instructions}"
+        f"{objective_instructions}"
         f"{uncertainty_instructions}"
         f"{model_before_plan_instructions}"
         f"{rest_instructions}"
@@ -1984,6 +2041,9 @@ def ask_trainer_system_sections(
         "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
         "suggests — a personal observation (use \"\" when not applicable)\n"
+        '- "objectiveRationale": one short phrase naming what this buys the athlete in terms '
+        "of the objective THEY train for — the payoff, not the mechanism "
+        '(use "" when no objective is known)\n'
         '- "sources": an array of source titles you referenced from the science research section '
         "(omit or use [] if no research was cited)\n"
         '- "ride_note_update": optional object — only include when the athlete is describing a specific ride\n'

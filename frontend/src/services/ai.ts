@@ -54,6 +54,7 @@ export interface AskTrainerResult {
   rideLabelUpdates?: RideLabelUpdate[]
   physiologyRationale?: string
   contextRationale?: string
+  objectiveRationale?: string
 }
 
 interface BackendAskTrainerResult {
@@ -69,6 +70,8 @@ interface BackendAskTrainerResult {
   physiology_rationale?: string
   contextRationale?: string
   context_rationale?: string
+  objectiveRationale?: string
+  objective_rationale?: string
 }
 
 export const MAX_CONVERSATION_HISTORY = 20
@@ -126,6 +129,7 @@ export async function askTrainer(
     rideLabelUpdates: result.rideLabelUpdates ?? result.ride_label_updates,
     physiologyRationale: result.physiologyRationale ?? result.physiology_rationale,
     contextRationale: result.contextRationale ?? result.context_rationale,
+    objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
   }
 }
 

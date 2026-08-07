@@ -160,6 +160,7 @@ def _coach_result(parsed: dict, response: str) -> dict:
         "ride_label_update": parsed.get("ride_label_update"),
         "physiology_rationale": _clean_rationale(parsed.get("physiologyRationale")),
         "context_rationale": _clean_rationale(parsed.get("contextRationale")),
+        "objective_rationale": _clean_rationale(parsed.get("objectiveRationale")),
     }
 
 

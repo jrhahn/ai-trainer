@@ -245,6 +245,50 @@ describe('AIChat', () => {
     expect(screen.getByText('Personal observation')).toBeInTheDocument()
   })
 
+  it('shows what the advice buys the athlete in their own objective', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'Threshold work on Thursday.',
+      physiologyRationale: 'threshold is the current limiter',
+      objectiveRationale: 'you can still enjoy the last descent after four hours',
+    })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'What should I do Thursday?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('you can still enjoy the last descent after four hours'),
+    ).toBeInTheDocument()
+    // Deliberately not a fourth knowledge-source badge (#377): the other labels
+    // say where a claim came from, this one says what it is for (#565).
+    expect(screen.getByText('What this buys you')).toBeInTheDocument()
+  })
+
+  it('opens the disclosure for an objective link even with no other rationale', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'Ride the trails Saturday.',
+      objectiveRationale: 'more time on the singletrack you came for',
+    })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'Saturday?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('more time on the singletrack you came for'),
+    ).toBeInTheDocument()
+  })
+
   it('omits the rationale disclosure when no rationale is returned', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Easy spin today.' })
     setupStore()
