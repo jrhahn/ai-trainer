@@ -491,6 +491,13 @@ class AthleteMotivationModel(Base):
     utility_weights: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
     # Components the athlete fixed by hand; excluded from learning (#566/#567).
     pinned_weights: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    # modality -> affinity in [0, 1] over MOTIVATION modalities (road, mtb,
+    # gravel, indoor, gym). What the weights cannot express: *how* the athlete
+    # wants the training delivered. Independent scores, not a distribution —
+    # liking the MTB does not require disliking the road. Fed by the revealed
+    # preference in the behavioural pass (#563) and consumed by the utility
+    # scorer (#564).
+    modality_affinity: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )

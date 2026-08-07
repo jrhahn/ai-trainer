@@ -1110,6 +1110,9 @@ def athlete_performance_roi_section(recommendation: dict | None) -> str:
     rationale = recommendation.get("rationale")
     if rationale:
         lines.append(f"- Why: {rationale}")
+
+    lines.extend(_utility_lines(recommendation.get("utility")))
+
     lines.append(
         "Use this as the physiology basis for which stimulus has the highest return "
         "now; explain the WHY in the athlete's terms rather than prescribing generic "
@@ -1117,6 +1120,57 @@ def athlete_performance_roi_section(recommendation: dict | None) -> str:
         "today is the day for that stimulus."
     )
     return "\n".join(lines)
+
+
+# How many ranked options reach the prompt. Enough to show that a trade-off was
+# made and what lost, few enough to stay cheap in a ~16k-token prompt (#510/#556).
+_UTILITY_OPTIONS_SHOWN = 4
+
+
+def _utility_lines(utility: dict | None) -> list[str]:
+    """The motivation-weighted ranking, rendered beside the physiology (#564).
+
+    Both sub-scores are shown per option on purpose. The coach must be able to
+    tell the athlete that the MTB session won on preference rather than on
+    physiology — presenting a motivation-driven pick as the physiologically
+    optimal one would be a lie the numbers right here contradict.
+    """
+    if not utility or not utility.get("options"):
+        return []
+
+    options = utility["options"][:_UTILITY_OPTIONS_SHOWN]
+    ranked = "; ".join(
+        f"{o.get('system')} @ {o.get('modality')} "
+        f"(utility {o.get('utility')}, physiology {o.get('physiological_score')}, "
+        f"motivation {o.get('motivation_score')})"
+        for o in options
+    )
+
+    weights = utility.get("weights") or {}
+    weight_text = ", ".join(f"{k} {v:.2f}" for k, v in weights.items() if v)
+
+    lines = [
+        "- Ranked by this athlete's own objective (utility = weighted physiology "
+        f"+ motivation): {ranked}",
+    ]
+    if weight_text:
+        lines.append(f"- Weights used: {weight_text}")
+
+    excluded = utility.get("excluded") or []
+    if excluded:
+        removed = "; ".join(
+            f"{o.get('system')} @ {o.get('modality')}" for o in excluded
+        )
+        lines.append(
+            f"- Ruled out by the athlete's own constraints, not by physiology: {removed}"
+        )
+
+    lines.append(
+        "When the top option by utility is not the top one by physiology, say so "
+        "plainly — it won because it fits what this athlete trains for, and "
+        "presenting it as the physiologically optimal choice would be dishonest."
+    )
+    return lines
 
 
 def _attribute_summary(name: str, attr: dict) -> str | None:

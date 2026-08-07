@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The planner scores training options by expected athlete utility, not
+  physiological return alone** (`services/training_utility.py`,
+  `services/roi_recommendation.py`, `services/prompts.py`, migration
+  `20260812_000001`) — the third piece of #561, and the one where the model
+  starts changing recommendations.
+
+      utility = Σ wᵢ · scoreᵢ(option)
+
+  The weights are the athlete's own, from #562, learned from what they say and
+  do in #563. Nothing here hardcodes what matters; it hardcodes only how to
+  *measure* each axis once the athlete has said how much each one counts.
+
+  An option is a **(system, modality)** pair, and that pairing is the point:
+  the physiological prescription can be identical while the answer changes —
+  `threshold @ road` (physiology 5.0, motivation 3.2) loses to
+  `threshold @ mtb` (physiology 4.0, motivation 8.5) for a trail rider. Same
+  threshold work, different bike, and the second one is the one that happens.
+
+  Modality is new data. `AthleteMotivationModel` gained `modality_affinity`,
+  because the weight vector says *what* an athlete values and cannot say in what
+  form — two athletes can both weight enjoyment at 0.45 and mean completely
+  different rides by it. Affinities are independent scores in [0, 1], not a
+  distribution: liking the MTB does not require disliking the road. They are fed
+  by revealed preference in the behavioural pass, which was already counting
+  modality swaps and discarding them.
+
+  Three properties the module is built around: **both sub-scores survive into
+  the output**, so the coach can say the MTB won on preference rather than
+  physiology — presenting a motivation-driven pick as the physiologically
+  optimal one would be a lie the numbers contradict, and the prompt says so
+  explicitly. **Constraints filter rather than discount** — "avoid unnecessary
+  crash risk" is not worth 0.1 utility, it removes options — but a filter that
+  empties the board has malfunctioned, so it never leaves nothing to recommend.
+  And **a default motivation model changes no recommendation**: an athlete
+  nobody has learned anything about yet keeps exactly today's physiology-first
+  ordering, and a race-focused athlete is not pushed off the road bike. Both
+  halves of that guard are tests, not intentions.
+
 - **The coach learns what the athlete trains for, from what they say and do**
   (`services/motivation_inference.py`, `services/motivation_model.py`,
   `services/learning_pipeline.py`, `routers/ai.py`) — the second piece of #561,

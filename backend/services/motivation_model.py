@@ -91,6 +91,31 @@ PROMOTION_MIN_OBSERVATIONS = 2
 # signal by nature: a month of MTB rides in place of prescribed road sessions is
 # signal, one swapped Tuesday is noise (#563; the full learning rule is #566).
 MAX_WEIGHT_NUDGE = 0.05
+
+# How the athlete gets the training done. A weight vector says *what* matters;
+# this says *in what form* — and the two are independent questions. Two athletes
+# can both weight enjoyment at 0.45 and mean completely different rides by it
+# (#564).
+MODALITY_ROAD = "road"
+MODALITY_MTB = "mtb"
+MODALITY_GRAVEL = "gravel"
+MODALITY_INDOOR = "indoor"
+MODALITY_GYM = "gym"
+MODALITIES: tuple[str, ...] = (
+    MODALITY_ROAD,
+    MODALITY_MTB,
+    MODALITY_GRAVEL,
+    MODALITY_INDOOR,
+    MODALITY_GYM,
+)
+
+# Affinities are *independent* scores in [0, 1], not a distribution: liking the
+# MTB does not require disliking the road, and an athlete may happily ride
+# everything. This is the one place the sum-to-one instinct from the weight
+# vector must not be applied. 0.5 is "no evidence either way".
+NEUTRAL_AFFINITY = 0.5
+DEFAULT_MODALITY_AFFINITY: dict[str, float] = {m: NEUTRAL_AFFINITY for m in MODALITIES}
+MAX_AFFINITY_NUDGE = 0.05
 # Enough for a real athlete, few enough that the section stays cheap in a prompt
 # that is already ~16k tokens (#510/#556).
 MAX_SECONDARY_OBJECTIVES = 6
@@ -207,6 +232,24 @@ def _round_to_one(values: Mapping[str, float]) -> dict[str, float]:
         largest = max(MOTIVATION_COMPONENTS, key=lambda c: rounded[c])
         rounded[largest] = round(max(0.0, rounded[largest] + drift), 4)
     return rounded
+
+
+def normalize_modality_affinity(raw: Mapping[str, Any] | None) -> dict[str, float]:
+    """Per-modality affinity over exactly :data:`MODALITIES`, each in [0, 1].
+
+    Deliberately *not* renormalized to sum to one. These are independent
+    judgements — an athlete who loves both the MTB and the gravel bike is a
+    coherent athlete, and forcing the scores to compete would invent a dislike
+    the evidence never showed.
+    """
+    source = raw if isinstance(raw, Mapping) else {}
+    return {
+        modality: round(
+            _clamp_unit(source.get(modality), NEUTRAL_AFFINITY),
+            4,
+        )
+        for modality in MODALITIES
+    }
 
 
 def normalize_pinned(pinned: Iterable[str] | None) -> list[str]:
@@ -359,6 +402,9 @@ def normalize_model(
             source.get("utility_weights"), pinned=pinned
         ),
         "pinned_weights": pinned,
+        "modality_affinity": normalize_modality_affinity(
+            source.get("modality_affinity")
+        ),
     }
 
 
@@ -453,6 +499,10 @@ def merge_model(
 
     merged["utility_weights"] = normalize_weights(candidate, pinned=pinned)
     merged["pinned_weights"] = pinned
+
+    # --- modality affinity ---------------------------------------------------
+    if "modality_affinity" in provided:
+        merged["modality_affinity"] = update["modality_affinity"]
 
     return merged
 
@@ -607,6 +657,35 @@ def contradict_entry(
     flagged["contradiction_note"] = _clean_text(note, SNIPPET_MAX_LEN) or None
     flagged["confidence"] = _clamp_unit(flagged["confidence"] - CONFIDENCE_STEP)
     return flagged
+
+
+def apply_modality_evidence(
+    affinity: Mapping[str, Any] | None,
+    nudges: Mapping[str, float] | None,
+    *,
+    cap: float = MAX_AFFINITY_NUDGE,
+) -> dict[str, float]:
+    """Move per-modality affinity by a bounded amount of evidence (#564).
+
+    Same restraint as :func:`apply_weight_evidence` and for the same reason: one
+    MTB ride in a road block is a Tuesday, not a preference. No renormalization
+    afterwards — see :func:`normalize_modality_affinity` for why affinities are
+    independent rather than a distribution.
+    """
+    current = normalize_modality_affinity(affinity)
+    if not nudges:
+        return current
+
+    moved = dict(current)
+    for modality, delta in nudges.items():
+        if modality not in MODALITIES:
+            continue
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)):
+            continue
+        bounded = max(-cap, min(cap, float(delta)))
+        moved[modality] = _clamp_unit(moved[modality] + bounded)
+
+    return normalize_modality_affinity(moved)
 
 
 def apply_weight_evidence(

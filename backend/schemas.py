@@ -465,6 +465,9 @@ class AthleteMotivationModelSchema(CamelModel):
     # persist gate in services.motivation_model, not re-checked by readers.
     utility_weights: dict[str, float] = Field(default_factory=dict)
     pinned_weights: list[MotivationComponent] = Field(default_factory=list)
+    # modality -> affinity in [0, 1]. Independent scores, not a distribution —
+    # what the weights cannot express: how the athlete wants it delivered (#564).
+    modality_affinity: dict[str, float] = Field(default_factory=dict)
     updated_at: datetime | None = None
 
     model_config = ConfigDict(
@@ -486,6 +489,7 @@ class AthleteMotivationModelRequest(CamelModel):
     constraints: list[MotivationEntrySchema] | None = None
     utility_weights: dict[str, float] | None = None
     pinned_weights: list[MotivationComponent] | None = None
+    modality_affinity: dict[str, float] | None = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
@@ -624,6 +628,51 @@ class TrainingRoiEmphasisSchema(CamelModel):
     )
 
 
+class TrainingUtilityOptionSchema(CamelModel):
+    """One (system, modality) option, scored by expected athlete utility (#564).
+
+    Both sub-scores are carried, not just the total: a recommendation that cannot
+    say how much of itself was physiology and how much was preference is not
+    reviewable — by the athlete, by the coach explaining it (#565), or by whoever
+    has to debug why it changed.
+    """
+
+    system: str
+    modality: str
+    gain: str = ""
+    physiological_score: float = 0.0
+    motivation_score: float = 0.0
+    utility: float = 0.0
+    components: dict[str, float] = Field(default_factory=dict)
+    excluded_by: Optional[str] = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
+class TrainingUtilitySchema(CamelModel):
+    """The utility ranking behind a recommendation (#564).
+
+    ``weights`` is recorded rather than recomputed on read: a recommendation
+    whose weights are not stored cannot be audited when the ranking changes next
+    month.
+    """
+
+    options: list[TrainingUtilityOptionSchema] = Field(default_factory=list)
+    excluded: list[TrainingUtilityOptionSchema] = Field(default_factory=list)
+    weights: dict[str, float] = Field(default_factory=dict)
+    modality_affinity: dict[str, float] = Field(default_factory=dict)
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 class TrainingRoiRecommendationSchema(CamelModel):
     """ROI-based recommendation derived from the model + limiter (#478).
 
@@ -640,6 +689,9 @@ class TrainingRoiRecommendationSchema(CamelModel):
     rationale: str = ""
     expected_gain: list[TrainingRoiSystemGainSchema] = Field(default_factory=list)
     weekly_emphasis: list[TrainingRoiEmphasisSchema] = Field(default_factory=list)
+    # Present only when a motivation model was supplied (#564); absent means the
+    # recommendation is physiology-only, exactly as it was before.
+    utility: Optional[TrainingUtilitySchema] = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
