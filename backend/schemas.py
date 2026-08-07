@@ -498,6 +498,33 @@ class AthleteMotivationModelRequest(CamelModel):
     )
 
 
+class MotivationWeightEventSchema(CamelModel):
+    """One recorded change to the utility weight vector (#566).
+
+    The weights are visible to the athlete and decide what the planner
+    recommends, so a change they did not make has to be able to account for
+    itself. ``rules`` and ``evidence`` are absent for an athlete's own edit:
+    nothing was inferred, so there is nothing to justify.
+    """
+
+    id: str
+    source: MotivationSource
+    weights_before: dict[str, float] = Field(default_factory=dict)
+    weights_after: dict[str, float] = Field(default_factory=dict)
+    # Only the components that actually moved, signed.
+    deltas: dict[str, float] = Field(default_factory=dict)
+    rules: list[dict[str, Any]] | None = None
+    evidence: dict[str, Any] | None = None
+    pinned: list[str] = Field(default_factory=list)
+    recorded_at: datetime | None = None
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 class AthleteModelSchema(CamelModel):
     """The long-term structured athlete model (#384).
 

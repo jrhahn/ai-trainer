@@ -669,6 +669,29 @@ async def save_motivation_model(
     return schemas.AthleteMotivationModelSchema.model_validate(payload)
 
 
+@router.get(
+    "/motivation-model/weight-history",
+    response_model=list[schemas.MotivationWeightEventSchema],
+)
+async def get_motivation_weight_history(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> list[schemas.MotivationWeightEventSchema]:
+    """Why the athlete's weight balance looks the way it does (#566).
+
+    Newest first. An athlete who can see their weights (#567) but not what moved
+    them is being asked to trust a number that changes on its own.
+    """
+    events = await crud.get_motivation_weight_history(
+        db, current_user.id, limit=max(1, min(limit, 100))
+    )
+    return [
+        schemas.MotivationWeightEventSchema.model_validate(event, from_attributes=True)
+        for event in events
+    ]
+
+
 @router.get("/athlete-model", response_model=schemas.AthleteModelSchema)
 async def get_athlete_model(
     db: AsyncSession = Depends(get_db),
