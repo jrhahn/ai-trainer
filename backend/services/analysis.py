@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import math
 
+from services.activity_identity import non_cycling_classification
+
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
 # 87% is a well-established estimate for trained cyclists.
 LTHR_RATIO = 0.87
@@ -2237,6 +2239,7 @@ def build_ride_metrics_chain(
         tss: float | None = None
         ride_purpose: str | None = None
         intervals: list[dict] = []
+        non_cycling: tuple[str, str, str] | None = None
 
         if watts and time_data and len(watts) == len(time_data):
             avg_power = round(sum(watts) / len(watts))
@@ -2250,9 +2253,19 @@ def build_ride_metrics_chain(
             if ftp > 0:
                 intervals = detect_intervals(watts, time_data, ftp)
         else:
-            # Missing or mismatched streams are not enough evidence for a
-            # training-purpose label.
-            ride_purpose = "unknown"
+            # No usable power stream. Before calling this an unclassifiable
+            # ride, ask what sport it was: a gym session, a hike or a yoga
+            # class is not an unsure classification, it is a different sport
+            # that power cannot describe (#578). Anything the power classifier
+            # can still answer for keeps its own path above, so nothing that
+            # classifies today changes.
+            non_cycling = non_cycling_classification(ride.get("sport_type"))
+            if non_cycling is not None:
+                ride_purpose = non_cycling[0]
+            else:
+                # Missing or mismatched streams are not enough evidence for a
+                # training-purpose label.
+                ride_purpose = "unknown"
 
         # Provider-interval fallback: when the raw stream gives us no shape
         # (missing/unusable, so ``unknown``), fall back to the provider's own
@@ -2317,13 +2330,18 @@ def build_ride_metrics_chain(
         )
 
         # --- Classification confidence and reason ---
-        classification_confidence, classification_reason = (
-            classify_ride_confidence_and_reason(
-                ride_purpose or "unknown",
-                duration_s,
-                intervals,
+        if non_cycling is not None:
+            # The provider stated the sport; there is nothing here we inferred
+            # and could be wrong about.
+            _, classification_confidence, classification_reason = non_cycling
+        else:
+            classification_confidence, classification_reason = (
+                classify_ride_confidence_and_reason(
+                    ride_purpose or "unknown",
+                    duration_s,
+                    intervals,
+                )
             )
-        )
 
         result.append(
             {

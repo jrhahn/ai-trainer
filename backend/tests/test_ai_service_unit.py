@@ -4780,6 +4780,96 @@ def test_login_summary_user_flags_unknown_or_low_confidence_ride():
     assert "could not be reliably auto-classified" not in msg_high
 
 
+def test_login_summary_user_does_not_interrogate_a_non_cycling_activity():
+    """A strength session is not an unsure ride: the summary must describe it as
+    what it was rather than ask it what its intervals were (#578)."""
+    from services.prompts import refresh_login_summary_user
+
+    msg = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="strength",
+        latest_ride_confidence="high",
+        latest_ride_reason=(
+            "Recorded as weighttraining — a strength session, not a power-based "
+            "bike ride, so no ride classification applies."
+        ),
+        latest_ride_sport_type="WeightTraining",
+    )
+    assert "not a bike ride" in msg
+    assert "never ask about intervals" in msg
+    assert "could not be reliably auto-classified" not in msg
+
+    # Even if such a row were still stored as unknown/low — the state every
+    # pre-backfill row is in — the sport decides, not the stale confidence.
+    stale = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="unknown",
+        latest_ride_confidence="low",
+        latest_ride_reason="Insufficient stream data to classify ride reliably.",
+        latest_ride_sport_type="WeightTraining",
+    )
+    assert "could not be reliably auto-classified" not in stale
+    assert "not a bike ride" in stale
+
+
+def test_login_summary_user_never_presents_absent_figures_as_logged():
+    """The prompt used to close with "objective numbers (average power, TSS,
+    duration) are fine to cite", and the coach duly reported that a session with
+    NULL power and NULL TSS had "logged an average power and TSS" (#578)."""
+    from services.prompts import refresh_login_summary_user
+
+    msg = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="strength",
+        latest_ride_confidence="high",
+        latest_ride_sport_type="WeightTraining",
+        latest_ride_avg_power_w=None,
+        latest_ride_tss=None,
+    )
+    assert "No average power and no TSS were recorded" in msg
+    assert "absent is not zero" in msg
+    assert "are fine to cite" not in msg
+
+    # Figures that do exist are named, so the model has something concrete to
+    # cite instead of a category of number declared safe.
+    with_figures = refresh_login_summary_user(
+        ride_insights="some narrative",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=320,
+        training_plan=None,
+        latest_ride_purpose="endurance",
+        latest_ride_confidence="high",
+        latest_ride_sport_type="Ride",
+        latest_ride_avg_power_w=212,
+        latest_ride_tss=61.4,
+    )
+    assert "average power 212 W" in with_figures
+    assert "TSS 61" in with_figures
+    assert "No average power and no TSS were recorded" not in with_figures
+
+
+def test_login_summary_system_prompt_separates_sport_from_uncertainty():
+    from services.prompts import refresh_login_summary_system
+
+    prompt = refresh_login_summary_system()
+    assert "Not every activity is a bike ride" in prompt
+    assert "never ask about intervals, power targets or training zones" in prompt
+    assert "absent is not zero" in prompt
+
+
 @pytest.mark.asyncio
 async def test_generate_login_summary_anchors_next_session_to_today(monkeypatch):
     """Regression: the login summary called the next session "today" even when it

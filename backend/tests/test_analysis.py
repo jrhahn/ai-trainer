@@ -166,6 +166,76 @@ def test_build_ride_metrics_chain_unknown_without_stream_or_intervals():
     assert metrics[0]["ride_purpose"] == "unknown"
 
 
+def _activity_without_power(sport_type: str, activity_id: int = 10) -> dict:
+    return {
+        "strava_activity_id": activity_id,
+        "activity_date": "2026-08-06",
+        "sport_type": sport_type,
+        "duration_seconds": 3483,
+        "streams": {},
+    }
+
+
+@pytest.mark.parametrize(
+    ("sport_type", "expected_purpose"),
+    [
+        ("WeightTraining", "strength"),
+        ("Yoga", "yoga"),
+        ("Hike", "hike"),
+        ("Run", "running"),
+    ],
+)
+def test_non_cycling_activity_is_named_not_called_unknown(sport_type, expected_purpose):
+    """A gym session is not an unsure ride classification — it is a different
+    sport, and the coach must not be told it could not be worked out (#578)."""
+    metrics = analysis.build_ride_metrics_chain(
+        [_activity_without_power(sport_type)], ftp=320.0
+    )
+    assert metrics[0]["ride_purpose"] == expected_purpose
+    assert metrics[0]["classification_confidence"] == "high"
+    assert "Insufficient stream data" not in metrics[0]["classification_reason"]
+    assert "not a power-based bike ride" in metrics[0]["classification_reason"]
+
+
+def test_unclassifiable_ride_still_reports_low_confidence():
+    """The narrowing must not swallow the genuine case: a bike ride we could not
+    classify is still an open question worth asking the athlete about."""
+    metrics = analysis.build_ride_metrics_chain(
+        [_activity_without_power("MountainBikeRide")], ftp=320.0
+    )
+    assert metrics[0]["ride_purpose"] == "unknown"
+    assert metrics[0]["classification_confidence"] == "low"
+    assert "Insufficient stream data" in metrics[0]["classification_reason"]
+
+
+def test_missing_sport_type_stays_unknown():
+    """An unreadable sport type is a real unknown; claiming otherwise would just
+    move the invention from the workout type to the sport."""
+    ride = _activity_without_power("")
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert metrics[0]["ride_purpose"] == "unknown"
+
+
+def test_power_classification_wins_over_sport_label():
+    """An activity with a usable power stream keeps the power-based path, whatever
+    the provider calls the sport — nothing that classifies today changes."""
+    watts = [300.0] * 600 + [120.0] * 600
+    time_stream = [float(i) for i in range(1200)]
+    ride = {
+        "strava_activity_id": 11,
+        "activity_date": "2026-08-06",
+        "sport_type": "Workout",
+        "duration_seconds": 1200,
+        "streams": {
+            "watts": {"data": watts},
+            "time": {"data": time_stream},
+        },
+    }
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=320.0)
+    assert metrics[0]["ride_purpose"] != "workout"
+    assert metrics[0]["avg_power_w"] is not None
+
+
 def test_compute_hr_drift():
     assert analysis.compute_hr_drift([0, 1, 2]) is None or True  # n<=2 guard below
     assert analysis.compute_hr_drift([1.0, 2.0]) is None

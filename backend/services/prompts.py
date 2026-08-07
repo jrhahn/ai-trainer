@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from . import plan_compliance
+from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
 from .analysis import power_zone_boundaries
 from .dates import (
     annotate_plan_days,
@@ -3125,8 +3126,14 @@ def refresh_login_summary_system() -> str:
         "workout type as UNCONFIRMED: do not state or imply a specific session type, training "
         "zone, or intensity for it as fact (e.g. do not call it a 'tempo ride' or 'Zone 3 "
         "effort'). Say the automatic detection was unsure and ask the athlete what they actually "
-        "did — for example whether it was an interval/VO2max session and what the intervals were. "
-        "You may still reference objective numbers (average power, TSS, duration)."
+        "did — for example whether it was an interval/VO2max session and what the intervals were.\n"
+        "Not every activity is a bike ride. When the input names the activity's sport as a "
+        "strength, running, yoga, hiking or other non-cycling session, that is a fact and not an "
+        "unsure classification: describe it as what it was, never call it a ride, and never ask "
+        "about intervals, power targets or training zones for it.\n"
+        "Cite only figures the input actually gives you for an activity. A figure that is not "
+        "listed was not measured — absent is not zero, and never say or imply that an average "
+        "power or TSS was logged when none is given."
     )
 
 
@@ -3141,6 +3148,9 @@ def refresh_login_summary_user(
     latest_ride_purpose: str | None = None,
     latest_ride_confidence: str | None = None,
     latest_ride_reason: str | None = None,
+    latest_ride_sport_type: str | None = None,
+    latest_ride_avg_power_w: int | None = None,
+    latest_ride_tss: float | None = None,
 ) -> str:
     """Build the user message for login summary generation from existing assessment data."""
     parts: list[str] = []
@@ -3149,12 +3159,30 @@ def refresh_login_summary_user(
     if estimated_ftp:
         parts.append(f"Current estimated FTP: {estimated_ftp} W")
 
-    # Deterministic guardrail: when the most recent ride could not be reliably
-    # auto-classified, tell the model outright not to assert a workout type for
-    # it — otherwise it invents one from the average power (e.g. NP ≈ 76 % FTP
-    # narrated as a "tempo/Zone 3" ride).
+    # Two different states used to share one instruction. "We could not work out
+    # what this ride was" is an open question worth putting to the athlete; "this
+    # was never a bike ride" is not — and asking the second as if it were the
+    # first is how a strength session got asked what its intervals were (#578).
     _conf = (latest_ride_confidence or "").lower()
-    if latest_ride_purpose == "unknown" or _conf in ("low", "medium"):
+    _family = activity_family(latest_ride_sport_type)
+    _is_non_cycling = bool(latest_ride_sport_type) and _family not in (
+        CYCLING_FAMILY,
+        UNREADABLE_FAMILY,
+    )
+
+    if _is_non_cycling:
+        parts.append(
+            f"The most recent activity was a {_family} session (sport type: "
+            f"{latest_ride_sport_type}), not a bike ride. That is what the provider "
+            "recorded, so it is a fact and not an unsure classification. Describe it "
+            "as what it was; never call it a ride, and never ask about intervals, "
+            "training zones, power targets or pacing for it."
+        )
+    elif latest_ride_purpose == "unknown" or _conf in ("low", "medium"):
+        # Deterministic guardrail: when the most recent ride could not be
+        # reliably auto-classified, tell the model outright not to assert a
+        # workout type for it — otherwise it invents one from the average power
+        # (e.g. NP ≈ 76 % FTP narrated as a "tempo/Zone 3" ride).
         note = (
             "IMPORTANT — the most recent activity could not be reliably auto-classified "
             f"(detected type: {latest_ride_purpose or 'unknown'}, confidence: "
@@ -3166,10 +3194,33 @@ def refresh_login_summary_user(
             " Do NOT state or imply a specific session type, training zone, or intensity "
             "for it as fact. Note that the automatic detection was unsure and ask the "
             "athlete what they actually did (for example, whether it was an interval/VO2max "
-            "session and what the intervals were). Objective numbers (average power, TSS, "
-            "duration) are fine to cite."
+            "session and what the intervals were)."
         )
         parts.append(note)
+
+    # The instruction above used to close with "objective numbers (average power,
+    # TSS, duration) are fine to cite", which invited the model to cite figures
+    # that were never recorded — the gym session was narrated as having "logged
+    # an average power and TSS" while both columns were NULL. State which figures
+    # exist instead of naming a category of number as safe.
+    if latest_ride_sport_type or latest_ride_purpose:
+        recorded: list[str] = []
+        if latest_ride_avg_power_w is not None:
+            recorded.append(f"average power {round(latest_ride_avg_power_w)} W")
+        if latest_ride_tss is not None:
+            recorded.append(f"TSS {round(float(latest_ride_tss))}")
+        if recorded:
+            parts.append(
+                "Figures recorded for the most recent activity: "
+                + ", ".join(recorded)
+                + ". Cite no other measured figure for it."
+            )
+        else:
+            parts.append(
+                "No average power and no TSS were recorded for the most recent "
+                "activity. Do not state or imply that either was logged — absent "
+                "is not zero."
+            )
     if notes:
         parts.append(f"Overall assessment notes:\n{notes}")
     if feel_legs:
