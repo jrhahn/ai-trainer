@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
+import MotivationModelSettings from '../components/MotivationModelSettings'
 import AthleteModelSettings from '../components/AthleteModelSettings'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import ConversationImportSettings from '../components/ConversationImportSettings'
@@ -825,6 +826,11 @@ export default function SettingsPage() {
 
       {/* Import historical coach conversations */}
       <ConversationImportSettings />
+
+      {/* What the athlete trains FOR (#562/#567). Ahead of the learned traits
+          on purpose: everything below describes the athlete, this decides what
+          all of it is in service of. */}
+      <MotivationModelSettings />
 
       {/* Learned athlete traits */}
       <AthleteTraitsSettings />

@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The athlete can see and correct what the coach thinks they train for**
+  (`frontend/src/components/MotivationModelSettings.tsx`,
+  `services/motivation_model.py`) — the last piece of #561 before weight
+  learning. The motivation model has been driving planning decisions (#564) and
+  the coach's explanations (#565) while being invisible; an inferred objective
+  the athlete cannot see or fix is a silent misconfiguration of the entire
+  coaching strategy.
+
+  The settings card sits *above* the learned traits on purpose: everything below
+  it describes the athlete, this decides what all of it is in service of. It
+  shows the primary objective, secondary objectives, constraints, the weight
+  balance and the learned modality affinity — each inferred item with its
+  confidence and the athlete's own words that produced it, so a guess never
+  reads as a fact. Objectives can be rewritten, reordered, added and removed;
+  weights can be pinned so learning leaves them alone; a contradicted entry
+  surfaces its question rather than being silently dropped.
+
+  Two backend defects surfaced while building against it, both of which broke
+  promises this screen makes:
+
+  * **The athlete's ordering was discarded.** `normalize_entries` sorted its
+    output by source and confidence — a ranking meant for deciding what the cap
+    drops, which also silently undid the sequence the athlete put their
+    objectives in. The ranking now decides only what is dropped; survivors come
+    back in the order they arrived.
+  * **An entry the athlete typed was stored as `inferred`.** A `user_set` write
+    kept whatever source each entry carried, defaulting to `inferred` when the
+    client sent none — which left the very next inference pass free to overwrite
+    what the athlete had just written. Entries in a `user_set` write with no
+    stated source are now attributed to the athlete, while an untouched inferred
+    entry keeps its provenance so the UI can still show it was a guess.
+
 - **The coach explains its recommendations in the athlete's own objective**
   (`services/prompts.py`, `services/coach_schema.py`, `services/ai_service.py`,
   `frontend/src/components/AIChat.tsx`) — the fourth piece of #561, and the one
