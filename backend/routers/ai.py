@@ -64,6 +64,7 @@ from services.rag import (
 )
 from services.ride_matching import (
     apply_ride_plan_matches,
+    mark_matched_days_completed,
     resolve_manual_match,
     review_matched_ride_and_adapt,
 )
@@ -1652,6 +1653,23 @@ async def resolve_ride_match(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No ambiguous ride match found for that planned date",
         )
+
+    # The athlete just said they rode this session, so tick it — otherwise resolving
+    # the ambiguity left the day looking untouched and an automated regenerate could
+    # still drop it (#574). Best-effort, like the import path: naming the session must
+    # not fail because the completion write did.
+    try:
+        await mark_matched_days_completed(
+            db, current_user, plan, [ride], source="manual_match"
+        )
+    except Exception:
+        logger.warning("Failed to mark resolved plan day completed", exc_info=True)
+    # Re-read afterwards: the review below commits against this list, and handing it
+    # the pre-completion snapshot would make its own write look like a concurrent
+    # user edit (stale-snapshot clobber, #452).
+    refreshed_plan = await crud.get_training_plan(db, current_user.id)
+    if refreshed_plan is not None:
+        plan = refreshed_plan.plan
 
     streams = None
     if current_user.strava_token is not None:

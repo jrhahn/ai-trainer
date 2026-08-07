@@ -11,6 +11,7 @@ import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
+import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
@@ -1026,6 +1027,10 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
+                  {/* The matcher refused to guess which session this was; this is
+                      where the athlete answers it (#574). Renders nothing for the
+                      normal, unambiguous ride. */}
+                  <AmbiguousMatchResolver ride={ride} />
                 </div>
               )
             })}

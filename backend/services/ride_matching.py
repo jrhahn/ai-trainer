@@ -730,15 +730,23 @@ async def mark_matched_days_completed(
     user: models.User,
     plan: list[dict] | None,
     rides: list[models.RideMetric],
+    *,
+    source: str = "activity_import",
 ) -> None:
-    """Mark each ride's auto-matched plan *session* completed via the plan pipeline.
+    """Mark each ride's matched plan *session* completed via the plan pipeline.
 
     A synced activity is proof the athlete did that session, but nothing else sets
     the plan-day ``completed`` flag — it is otherwise only set when the athlete ticks
     a workout by hand. Setting it here makes completed-day protection and the
-    dashboard's completed state work for auto-matched rides without a manual tick.
+    dashboard's completed state work for matched rides without a manual tick.
     Idempotent: already-completed sessions (and sessions the pipeline's pin guard
     owns) are left untouched.
+
+    Manual matches count for the same reason auto matches do, and more strongly:
+    the athlete answering "that ride was the evening intervals" is the best evidence
+    a session was ridden that this system will ever get. Leaving them out meant a
+    resolved ambiguity never marked its session done, so the calendar kept showing
+    an untouched day and an automated regenerate could still drop it (#574).
 
     Completion is per session (#496): the morning gym ride marks the AM session done
     and leaves the evening endurance session pending, instead of ticking the date.
@@ -754,7 +762,8 @@ async def mark_matched_days_completed(
         {
             (ride.matched_plan_date, _matched_slot(ride))
             for ride in rides
-            if ride.matched_plan_date and ride.plan_match_status == MATCH_AUTO
+            if ride.matched_plan_date
+            and ride.plan_match_status in {MATCH_AUTO, MATCH_MANUAL}
         }
     )
     updates = [
@@ -766,7 +775,7 @@ async def mark_matched_days_completed(
     if not updates:
         return
     await plan_pipeline.commit_plan_updates(
-        db, user, updates, base_plan=plan, source="activity_import"
+        db, user, updates, base_plan=plan, source=source
     )
 
 

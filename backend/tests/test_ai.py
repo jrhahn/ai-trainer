@@ -2075,6 +2075,70 @@ async def test_resolve_ride_match_honours_the_requested_session(
 
 
 @pytest.mark.asyncio
+async def test_resolve_ride_match_marks_only_the_named_session_completed(
+    client, auth_headers, mock_ai_service
+):
+    """The athlete answering "that was the evening one" is a completion (#574).
+
+    ``mark_matched_days_completed`` only ever counted auto matches, so resolving an
+    ambiguity left the day looking untouched: no calendar tick, and no protection
+    against an automated regenerate dropping a session that was actually ridden.
+    The morning session must stay open — it was not what the athlete named.
+    """
+    import crud
+    import schemas
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    date = "2026-05-08"
+    plan = [
+        {
+            "date": date,
+            "slot": 0,
+            "workoutType": "endurance",
+            "title": "Morning Endurance",
+            "durationMinutes": 90,
+        },
+        {
+            "date": date,
+            "slot": 1,
+            "workoutType": "intervals",
+            "title": "Evening Intervals",
+            "durationMinutes": 60,
+        },
+    ]
+
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=64101, activity_date=date
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/resolve-ride-match",
+        headers=auth_headers,
+        json={
+            "plannedDate": date,
+            "stravaActivityId": 64101,
+            "plannedSlot": 1,
+        },
+    )
+    assert response.status_code == 200
+
+    async with TestSessionLocal() as db:
+        stored = await crud.get_training_plan(db, user_id)
+    # Slot 0 is never serialized (#496), so the slot has to come from the helper.
+    sessions = {
+        schemas.day_slot(day): day for day in stored.plan if day["date"] == date
+    }
+    assert sessions[1].get("completed") is True
+    assert not sessions[0].get("completed")
+
+
+@pytest.mark.asyncio
 async def test_analyse_activities_without_plan_leaves_ride_unmatched(
     client, auth_headers, mock_ai_service
 ):
