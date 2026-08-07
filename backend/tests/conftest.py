@@ -87,7 +87,7 @@ os.environ.setdefault("BACKEND_URL", "http://localhost:8000")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
-from database import Base, get_db  # noqa: E402
+from database import Base, get_db, make_session_dependency  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
 import routers.intervals as intervals_router  # noqa: E402
@@ -98,15 +98,10 @@ test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
 
 
-async def override_get_db():
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
+# The real dependency against the test database, not a copy of it: the deferred
+# LLM-usage flush lives in that function's ``finally`` (#560), and a hand-rolled
+# override would silently not have it.
+override_get_db = make_session_dependency(TestSessionLocal)
 
 app.dependency_overrides[get_db] = override_get_db
 # Redirect the background task's direct session factory to the test database

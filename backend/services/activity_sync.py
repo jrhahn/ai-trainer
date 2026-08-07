@@ -38,7 +38,7 @@ from services.intervals_service import (
     apply_summary_fallback,
 )
 from services.learning_pipeline import learn_from_completed_workouts
-from services.token_accounting import track_llm_usage
+from services.token_accounting import flush_deferred_usage, track_llm_usage
 from services.ride_matching import (
     apply_ride_plan_matches,
     mark_matched_days_completed,
@@ -640,6 +640,27 @@ async def sync_intervals_for_user(
     return result
 
 
+async def _sync_one_source(
+    db: AsyncSession,
+    user_id: str,
+    source: str,
+    usage_source: str,
+    sync_fn,
+) -> SourceSyncResult:
+    """One provider's sync for one user, inside its own usage scope."""
+    user = await crud.get_user_by_id(db, user_id)
+    if user is None:
+        return SourceSyncResult(source=source, checked=1, skipped=1)
+    # Wrapped here rather than inside each helper because a synced ride triggers
+    # coach work — the per-ride review in review_matched_ride_and_adapt is two
+    # LLM calls — that ran outside every collection scope and was therefore
+    # billed to nobody (#516). Steps that open their own scope (the learning
+    # chain) still report under their own source; nesting means their tokens are
+    # persisted once, by the inner scope.
+    async with track_llm_usage(db, user, source=usage_source):
+        return await sync_fn(db, user)
+
+
 async def run_activity_sync(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ActivitySyncResult:
@@ -661,24 +682,21 @@ async def run_activity_sync(
         ):
             try:
                 async with session_factory() as db:
-                    user = await crud.get_user_by_id(db, user_ref.id)
-                    if user is None:
-                        source_result = SourceSyncResult(
-                            source=source, checked=1, skipped=1
+                    # Same shape as the request session dependency: whatever this
+                    # sync spent is written once the transaction has resolved,
+                    # because a sync that raises rolls back the rows recording
+                    # its spend along with everything else (#560).
+                    try:
+                        source_result = await _sync_one_source(
+                            db, user_ref.id, source, usage_source, sync_fn
                         )
-                    else:
-                        # Wrapped here rather than inside each helper because a
-                        # synced ride triggers coach work — the per-ride review
-                        # in review_matched_ride_and_adapt is two LLM calls —
-                        # that ran outside every collection scope and was
-                        # therefore billed to nobody (#516). Steps that open
-                        # their own scope (the learning chain) still report
-                        # under their own source; nesting means their tokens are
-                        # persisted once, by the inner scope.
-                        async with track_llm_usage(db, user, source=usage_source):
-                            source_result = await sync_fn(db, user)
-                    result.add(source_result)
-                    await db.commit()
+                        result.add(source_result)
+                        await db.commit()
+                    except Exception:
+                        await db.rollback()
+                        raise
+                    finally:
+                        await flush_deferred_usage(db)
             except Exception:
                 result.failed += 1
                 logger.warning(

@@ -352,6 +352,64 @@ async def _persist_usage(
     )
 
 
+# Key under which usage from a raising block waits on the session until its
+# transaction is over. ``Session.info`` is per-session scratch space, which is
+# exactly the lifetime this needs: the deferral belongs to the unit of work that
+# failed, not to the process.
+_DEFERRED_USAGE_KEY = "deferred_llm_usage"
+
+
+def _defer_usage(
+    db: AsyncSession, user_id: str, source: str, collected: Collection
+) -> None:
+    """Hold usage until the failed transaction it belongs to has been resolved.
+
+    Writing it now would put the rows inside a transaction that is on its way to
+    a rollback. Writing it from a *second* connection would be worse: the
+    ``users`` row update would wait for this transaction to end, and this
+    transaction ends only after the ``finally`` that is doing the waiting — a
+    request that hangs instead of a row that is missing.
+    """
+    if not (collected.records or collected.usage.total):
+        return
+    db.info.setdefault(_DEFERRED_USAGE_KEY, []).append((user_id, source, collected))
+
+
+async def flush_deferred_usage(db: AsyncSession) -> None:
+    """Write usage collected by a block that raised, and commit it (#560).
+
+    Called once the session's transaction has been committed or rolled back, so
+    the write starts a fresh one that nothing is about to discard. Best-effort in
+    both directions: it must not mask the error that caused the deferral, and it
+    must not turn a successful request into a failed one.
+
+    A model that has started rejecting every request is exactly what a cost table
+    has to be able to show, and it is the one case that used to be invisible.
+    """
+    pending = db.info.pop(_DEFERRED_USAGE_KEY, None)
+    if not pending:
+        return
+    try:
+        for user_id, source, collected in pending:
+            user = await db.get(models.User, user_id)
+            if user is None:
+                logger.warning(
+                    "Cannot bill %d tokens from source=%s: user %s is gone",
+                    collected.usage.total,
+                    source,
+                    user_id,
+                )
+                continue
+            await _persist_usage(db, user, source, collected)
+        await db.commit()
+    except Exception:  # noqa: BLE001 — never mask the error that caused this
+        logger.warning("Failed to persist deferred token usage", exc_info=True)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not roll back after a failed usage flush")
+
+
 @asynccontextmanager
 async def track_llm_usage(
     db: AsyncSession, user: models.User, *, source: str
@@ -367,16 +425,31 @@ async def track_llm_usage(
 
     *source* names what spent the money: ``api:<endpoint>`` for a request,
     ``job:<scheduler-job>`` for background work.
+
+    When the block raises, the usage is **deferred** rather than written here:
+    the rows would go into a transaction that is about to be rolled back, which
+    is why three failed coach requests billed ~52k tokens and left no trace in
+    ``llm_calls`` at all (#560). :func:`flush_deferred_usage` writes them once
+    the session's transaction has ended, one way or the other.
     """
     token = begin_collection(source)
+    failed = False
     try:
         yield
+    except BaseException:
+        failed = True
+        raise
     finally:
         collected = finish_collection(token)
-        try:
-            await _persist_usage(db, user, source, collected)
-        except Exception:  # noqa: BLE001 — never mask the enclosed block's error
-            logger.warning("Failed to persist collected token usage", exc_info=True)
+        if failed:
+            _defer_usage(db, user.id, source, collected)
+        else:
+            try:
+                await _persist_usage(db, user, source, collected)
+            except Exception:  # noqa: BLE001 — never mask the enclosed block's error
+                logger.warning(
+                    "Failed to persist collected token usage", exc_info=True
+                )
 
 
 @asynccontextmanager

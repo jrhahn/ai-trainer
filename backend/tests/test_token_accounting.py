@@ -205,8 +205,15 @@ async def test_a_nested_scope_bills_its_calls_once():
 
 
 @pytest.mark.asyncio
-async def test_usage_is_persisted_even_when_the_block_raises():
-    """A rate limit becoming an HTTPException must not lose what was spent (#449)."""
+async def test_usage_from_a_raising_block_survives_the_rollback():
+    """A rate limit becoming an HTTPException must not lose what was spent.
+
+    The spend cannot be written where it was collected: that transaction is
+    about to be rolled back and would take the rows with it, which is why three
+    failed coach requests billed ~52k tokens and left no row at all (#560). It
+    is deferred onto the session and written once the transaction is resolved —
+    here, after the rollback that stands in for the failed request.
+    """
     user_id = await _create_user("accounting-raises@example.com")
 
     async with TestSessionLocal() as db:
@@ -217,11 +224,124 @@ async def test_usage_is_persisted_even_when_the_block_raises():
                     input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99
                 )
                 raise RuntimeError("boom")
+        # What the failed request's own teardown does.
+        await db.rollback()
+        await token_accounting.flush_deferred_usage(db)
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        calls = (
+            await db.execute(
+                select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+            )
+        ).scalars().all()
+
+    assert user.consumed_tokens == 99
+    assert [call.source for call in calls] == ["api:x"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_request_still_records_what_it_spent(
+    client, auth_headers, mock_ai_service
+):
+    """The whole point of #560, end to end rather than at ``_persist_usage``.
+
+    Three coach failures logged their spend and wrote nothing: the endpoint
+    raised, the request transaction rolled back, and it took the ``llm_calls``
+    rows with it. A model that has started rejecting every request is exactly
+    what a cost table has to be able to show, and it was the one case invisible
+    in it.
+    """
+    from auth import decode_token
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+    async def spend_then_fail(*args, **kwargs):
+        # The provider answered — and billed — before the failure.
+        _call(task="coach", input_tokens=17_243, output_tokens=188, total_tokens=17_431)
+        raise RuntimeError("model is rejecting everything")
+
+    mock_ai_service["ask_trainer"].side_effect = spend_then_fail
+
+    # The test transport re-raises rather than rendering the 500 the athlete
+    # sees; either way the request ends in a rollback, which is what matters.
+    with pytest.raises(RuntimeError, match="rejecting everything"):
+        await client.post(
+            "/api/v1/ai/ask-trainer",
+            headers=auth_headers,
+            json={"question": "Can I ride today?"},
+        )
+
+    async with TestSessionLocal() as db:
+        calls = (
+            await db.execute(
+                select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+            )
+        ).scalars().all()
+        user = await db.get(models.User, user_id)
+
+    assert [call.source for call in calls] == ["api:ask-trainer"]
+    assert calls[0].input_tokens == 17_243
+    assert user.consumed_tokens == 17_431
+    assert user.consumed_input_tokens == 17_243
+
+
+@pytest.mark.asyncio
+async def test_a_scope_that_succeeds_defers_nothing():
+    """The normal path still writes inline, inside the caller's transaction."""
+    user_id = await _create_user("accounting-no-defer@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        async with token_accounting.track_llm_usage(db, user, source="api:x"):
+            _call(input_tokens=10, output_tokens=1, cached_tokens=0, total_tokens=11)
+        assert token_accounting._DEFERRED_USAGE_KEY not in db.info
         await db.commit()
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
+    assert user.consumed_tokens == 11
+
+
+@pytest.mark.asyncio
+async def test_flushing_twice_bills_once():
+    """The flush is what a ``finally`` calls, so it has to be safe to call."""
+    user_id = await _create_user("accounting-flush-twice@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        with pytest.raises(RuntimeError):
+            async with token_accounting.track_llm_usage(db, user, source="api:x"):
+                _call(input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99)
+                raise RuntimeError("boom")
+        await db.rollback()
+        await token_accounting.flush_deferred_usage(db)
+        await token_accounting.flush_deferred_usage(db)
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
     assert user.consumed_tokens == 99
+
+
+@pytest.mark.asyncio
+async def test_a_failing_flush_never_masks_the_error_that_caused_it(monkeypatch):
+    """The flush runs in a ``finally`` while an exception is in flight."""
+    user_id = await _create_user("accounting-flush-fails@example.com")
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        with pytest.raises(RuntimeError, match="boom"):
+            async with token_accounting.track_llm_usage(db, user, source="api:x"):
+                _call(input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99)
+                raise RuntimeError("boom")
+        await db.rollback()
+
+        async def explode(*args, **kwargs):
+            raise RuntimeError("db is down")
+
+        monkeypatch.setattr(crud, "record_llm_calls", explode)
+        # Swallowed, not raised: the caller is already handling a real failure.
+        await token_accounting.flush_deferred_usage(db)
 
 
 @pytest.mark.asyncio
