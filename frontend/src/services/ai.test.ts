@@ -196,26 +196,30 @@ describe('askTrainer', () => {
     mockApiFetch.mockResolvedValue({
       response: 'On the numbers a ride is fine, but knowing you I would rest.',
       physiologyRationale: 'fresh enough for an easy ride',
+      objectiveRationale: 'keeps the last descent enjoyable',
       contextRationale: 'history of overreaching favours rest',
     })
 
     const result = await askTrainer('Can I ride today?', 'token-123')
 
     expect(result.physiologyRationale).toBe('fresh enough for an easy ride')
+    expect(result.objectiveRationale).toBe('keeps the last descent enjoyable')
     expect(result.contextRationale).toBe('history of overreaching favours rest')
   })
 
-  it('maps physiology and context rationale from snake_case', async () => {
+  it('maps every rationale layer from snake_case', async () => {
     mockApiFetch.mockResolvedValue({
       response: 'Rest today.',
       physiology_rationale: 'tolerable on the numbers',
       context_rationale: 'rest fits you better',
+      objective_rationale: 'protects the weekend trail ride',
     })
 
     const result = await askTrainer('Can I ride today?', 'token-123')
 
     expect(result.physiologyRationale).toBe('tolerable on the numbers')
     expect(result.contextRationale).toBe('rest fits you better')
+    expect(result.objectiveRationale).toBe('protects the weekend trail ride')
   })
 })
 

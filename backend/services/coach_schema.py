@@ -125,6 +125,10 @@ COACH_REPLY_SCHEMA: dict = {
         "response": {"type": "STRING", "description": "the answer to the athlete"},
         "physiologyRationale": {"type": "STRING"},
         "contextRationale": {"type": "STRING"},
+        # What the advice buys the athlete in terms of what THEY train for
+        # (#565). Distinct from the two above: those say where a claim came
+        # from, this says what it is for.
+        "objectiveRationale": {"type": "STRING"},
         "sources": {"type": "ARRAY", "items": {"type": "STRING"}},
         "ride_note_update": _RIDE_NOTE_UPDATE,
         "ride_label_update": _RIDE_LABEL_UPDATE,
@@ -136,6 +140,7 @@ COACH_REPLY_SCHEMA: dict = {
         "response",
         "physiologyRationale",
         "contextRationale",
+        "objectiveRationale",
         "sources",
         "ride_note_update",
         "ride_label_update",

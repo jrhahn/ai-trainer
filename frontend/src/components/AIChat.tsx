@@ -449,7 +449,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
             </ul>
           </div>
         )}
-        {msg.role === 'assistant' && (msg.physiologyRationale || msg.contextRationale) && (
+        {msg.role === 'assistant' &&
+          (msg.physiologyRationale || msg.contextRationale || msg.objectiveRationale) && (
           <details className="mt-2 border-t border-gray-200 pt-2">
             <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
               <Scale size={11} />
@@ -459,7 +460,22 @@ export default function AIChat({ contextWorkout, className }: Props) {
               {/* Rationale layers map onto the shared knowledge sources (#377):
                   the physiology read is a coach inference, the personal-context
                   read is a personal observation. Cited science, when any, shows
-                  in the Sources block above as the scientific-evidence source. */}
+                  in the Sources block above as the scientific-evidence source.
+
+                  The objective link (#565) is deliberately NOT a fourth source
+                  badge: the three above say where a claim came from, this says
+                  what it is for. It leads the list because it is the part the
+                  athlete came for — the rest explains how it was arrived at. */}
+              {msg.objectiveRationale && (
+                <div className="text-xs text-gray-600">
+                  <dt className="inline">
+                    <span className={`mr-1.5 ${REASONING_BADGE_CLASS} bg-amber-50 text-amber-700 border border-amber-100`}>
+                      What this buys you
+                    </span>
+                  </dt>
+                  <dd className="inline">{msg.objectiveRationale}</dd>
+                </div>
+              )}
               {msg.physiologyRationale && (
                 <div className="text-xs text-gray-500">
                   <dt className="inline">
@@ -587,6 +603,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         sources: result.sources?.length ? result.sources : undefined,
         physiologyRationale: result.physiologyRationale || undefined,
         contextRationale: result.contextRationale || undefined,
+        objectiveRationale: result.objectiveRationale || undefined,
       })
       setLastFailedMessage(null)
 

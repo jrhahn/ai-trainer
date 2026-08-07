@@ -1482,6 +1482,7 @@ class AskTrainerResponse(CamelModel):
     ride_label_updates: Optional[list[RideLabelUpdateSchema]] = None
     physiology_rationale: Optional[str] = None
     context_rationale: Optional[str] = None
+    objective_rationale: Optional[str] = None
 
 
 class RateWorkoutRequest(CamelModel):

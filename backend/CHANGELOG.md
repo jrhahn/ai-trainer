@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach explains its recommendations in the athlete's own objective**
+  (`services/prompts.py`, `services/coach_schema.py`, `services/ai_service.py`,
+  `frontend/src/components/AIChat.tsx`) — the fourth piece of #561, and the one
+  the athlete actually sees.
+
+  The coach already knew *why* a session works; that is what the performance
+  model and the ROI recommendation are for. What it lacked was what the session
+  is **for**. "Threshold training increases your FTP" is true and, for most
+  athletes, beside the point — they do not want a bigger number, they want to
+  still enjoy the last descent after four hours. Same prescription, and the
+  difference between a coach that sounds like a spreadsheet and one that sounds
+  like it knows them.
+
+  `objective_framing_rule()` makes physiology the *mechanism* and the athlete's
+  objective the *payoff*, and asks for the chain to end on the payoff. Goals get
+  restated the same way: "increase FTP" is a means, and the rule asks what the
+  FTP is for. The reply contract gains `objectiveRationale` — one phrase naming
+  what the advice buys them — carried through the response schema (with the
+  `propertyOrdering` invariant from #558) to a third line in the chat's "Why
+  this advice?" disclosure.
+
+  It is deliberately **not** a fourth knowledge-source badge. The three from
+  #377 say where a claim came from; this says what it is for, so it gets its own
+  treatment and leads the list — it is the part the athlete came for.
+
+  Three rules exist because of specific ways this could go wrong rather than
+  fail, and each has a test: it must **never invent an objective** (an athlete
+  with none inferred, or one held at low confidence, gets plain physiological
+  framing — that is correct behaviour, not a gap); an inferred objective is
+  **held loosely** and phrased so the athlete can correct it; and when #564's
+  ranking puts a lower-physiology option first, the coach must **say so
+  plainly** — dressing a preference-driven pick up as the physiologically
+  optimal one would make the whole feature a way of lying more fluently.
+
+  The rule costs ~371 tokens and sits inside the byte-identical cacheable prefix
+  (#514/#538), so it is paid for once rather than per turn — a test holds it to
+  a budget and holds it in the prefix.
+
 - **The planner scores training options by expected athlete utility, not
   physiological return alone** (`services/training_utility.py`,
   `services/roi_recommendation.py`, `services/prompts.py`, migration

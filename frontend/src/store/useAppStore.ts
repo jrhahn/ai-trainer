@@ -182,6 +182,7 @@ export interface ChatMessage {
   failedUserMessage?: string
   physiologyRationale?: string
   contextRationale?: string
+  objectiveRationale?: string
 }
 
 export interface StravaConnection {
