@@ -784,11 +784,17 @@ async def test_extract_then_accept_persists_fact_available_to_coach(
 async def test_ask_trainer_endpoint_surfaces_physiology_and_context_rationale(
     client, auth_headers, mock_ai_service
 ):
-    """Rationale layers flow through the endpoint as camelCase response fields."""
+    """Rationale layers flow through the endpoint as camelCase response fields.
+
+    All three, including the objective link (#565): the coach can write it and
+    the chat can render it, and the athlete still sees nothing if the response
+    model drops it in between.
+    """
     mock_ai_service["ask_trainer"].return_value = {
         "response": "On the numbers a ride is fine, but knowing you I'd rest.",
         "physiology_rationale": "fresh enough for an easy ride",
         "context_rationale": "history of overreaching favours rest",
+        "objective_rationale": "keeps you fresh for Saturday's trail day",
     }
 
     response = await client.post(
@@ -801,6 +807,7 @@ async def test_ask_trainer_endpoint_surfaces_physiology_and_context_rationale(
     body = response.json()
     assert body["physiologyRationale"] == "fresh enough for an easy ride"
     assert body["contextRationale"] == "history of overreaching favours rest"
+    assert body["objectiveRationale"] == "keeps you fresh for Saturday's trail day"
 
 
 @pytest.mark.asyncio
