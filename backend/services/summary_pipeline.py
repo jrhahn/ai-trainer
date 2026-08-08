@@ -74,6 +74,15 @@ async def regenerate(
         latest_ride_reason=(
             latest_ride.classification_reason if latest_ride is not None else None
         ),
+        # The sport, and which figures actually exist. Without them the summary
+        # treated every activity as a ride and cited numbers that were NULL (#578).
+        latest_ride_sport_type=(
+            latest_ride.sport_type if latest_ride is not None else None
+        ),
+        latest_ride_avg_power_w=(
+            latest_ride.avg_power_w if latest_ride is not None else None
+        ),
+        latest_ride_tss=(latest_ride.tss if latest_ride is not None else None),
     )
     if login_summary:
         await crud.upsert_rider_assessment(

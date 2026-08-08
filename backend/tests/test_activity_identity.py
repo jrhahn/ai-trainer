@@ -8,9 +8,12 @@ overlap almost entirely, parts of a split session follow one another.
 
 from __future__ import annotations
 
+import pytest
+
 from services.activity_identity import (
     SPLIT_SESSION_MAX_GAP_SECONDS,
     activities_form_one_session,
+    non_cycling_classification,
 )
 
 DATE = "2026-08-13"
@@ -93,3 +96,43 @@ def test_overlapping_recordings_are_not_rejected_for_overlapping():
     assert activities_form_one_session(
         [_activity("09:00", 60), _activity("09:30", 60)]
     )
+
+
+# --- Is this a bike ride at all? (#578) -----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("sport_type", "expected_family"),
+    [
+        ("WeightTraining", "strength"),
+        ("Weight Training", "strength"),
+        ("Yoga", "yoga"),
+        ("Hike", "hike"),
+        ("RockClimbing", "rockclimbing"),
+        ("Run", "running"),
+    ],
+)
+def test_a_non_cycling_sport_is_named_with_high_confidence(sport_type, expected_family):
+    """The provider stated the sport, so nothing here is inferred. What a gym
+    session leaves open is its intensity, not its identity."""
+    classification = non_cycling_classification(sport_type)
+    assert classification is not None
+    purpose, confidence, reason = classification
+    assert purpose == expected_family
+    assert confidence == "high"
+    assert "not a power-based bike ride" in reason
+
+
+@pytest.mark.parametrize(
+    "sport_type",
+    ["Ride", "VirtualRide", "MountainBikeRide", "cycling", "Gravel Bike"],
+)
+def test_a_bike_ride_is_left_to_the_power_classifier(sport_type):
+    assert non_cycling_classification(sport_type) is None
+
+
+@pytest.mark.parametrize("sport_type", [None, "", "   "])
+def test_an_unreadable_sport_type_is_a_real_unknown(sport_type):
+    """Without a sport there is nothing to assert; inventing one here would only
+    move the invention from the workout type to the sport."""
+    assert non_cycling_classification(sport_type) is None

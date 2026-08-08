@@ -1865,6 +1865,9 @@ async def generate_login_summary(
     latest_ride_purpose: str | None = None,
     latest_ride_confidence: str | None = None,
     latest_ride_reason: str | None = None,
+    latest_ride_sport_type: str | None = None,
+    latest_ride_avg_power_w: int | None = None,
+    latest_ride_tss: float | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -1893,6 +1896,9 @@ async def generate_login_summary(
         latest_ride_purpose=latest_ride_purpose,
         latest_ride_confidence=latest_ride_confidence,
         latest_ride_reason=latest_ride_reason,
+        latest_ride_sport_type=latest_ride_sport_type,
+        latest_ride_avg_power_w=latest_ride_avg_power_w,
+        latest_ride_tss=latest_ride_tss,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

@@ -30,6 +30,39 @@ def activity_family(sport_type: str | None) -> str:
     return normalized or "activity"
 
 
+# Families that the power-based ride classifier is entitled to answer for.
+# ``activity_family`` returns ``"activity"`` when the sport type is missing or
+# unreadable — that is a genuine unknown, not a statement that it was not a ride.
+CYCLING_FAMILY = "cycling"
+UNREADABLE_FAMILY = "activity"
+
+
+def non_cycling_classification(sport_type: str | None) -> tuple[str, str, str] | None:
+    """Return ``(ride_purpose, confidence, reason)`` for a non-cycling activity.
+
+    ``None`` when the activity is a bike ride, or when the sport type is missing
+    or unreadable — those still belong to the power-based classifier, which is
+    entitled to answer ``unknown``.
+
+    The confidence is ``high`` because nothing here is inferred: the provider
+    stated the sport. What a gym session leaves unknown is its intensity, not
+    its identity — and calling that ``unknown`` conflates "the data was not good
+    enough to work this out" with "this was never a bike ride". Only the first
+    is a question worth putting to the athlete; the second made the coach ask a
+    58-minute strength session what its intervals were (#578).
+    """
+    family = activity_family(sport_type)
+    if family in (CYCLING_FAMILY, UNREADABLE_FAMILY):
+        return None
+    label = normalize_activity_text(sport_type) or family
+    return (
+        family,
+        "high",
+        f"Recorded as {label} — a {family} session, not a power-based bike ride, "
+        "so no ride classification applies.",
+    )
+
+
 def rounded_duration_minutes(seconds: int | float | None) -> int | None:
     if seconds is None:
         return None
