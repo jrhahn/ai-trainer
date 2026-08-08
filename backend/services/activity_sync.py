@@ -476,6 +476,9 @@ async def _reclassify_unknown_intervals_rides(
             float(row.normalized_power_w) if row.normalized_power_w else None,
             row.tss,
             work,
+            # Without the provenance this path reprints an estimated load as a
+            # measured "TSS n", which is exactly what #579 set out to stop.
+            tss_source=row.tss_source,
         )
         await crud.update_ride_metric_classification(
             row,

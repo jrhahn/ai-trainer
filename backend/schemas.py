@@ -15,10 +15,13 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    computed_field,
     field_validator,
     model_serializer,
     model_validator,
 )
+
+from services import ride_purpose_question
 
 if TYPE_CHECKING:
     import models
@@ -1704,6 +1707,24 @@ class RideMetricSchema(CamelModel):
     ride_purpose: Optional[str] = None
     classification_confidence: Optional[str] = None
     classification_reason: Optional[str] = None
+    # NULL while the "what was this session?" question is still open (#580).
+    purpose_question_status: Optional[str] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def purpose_question_open(self) -> bool:
+        """Should this activity still be asking the athlete what it was? (#580)
+
+        Derived here rather than in the browser on purpose: whether a session
+        counts as unresolved is a rule about classification confidence, and a
+        copy of it in TypeScript would drift from the one the prompts and the
+        persistence gate use.
+        """
+        return ride_purpose_question.question_is_open(
+            ride_purpose=self.ride_purpose,
+            classification_confidence=self.classification_confidence,
+            purpose_question_status=self.purpose_question_status,
+        )
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
@@ -1808,6 +1829,41 @@ class RideFeedbackRequest(CamelModel):
 
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""
+
+    strava_activity_id: int
+    ride: Optional[RideMetricSchema] = None
+
+
+class RidePurposeAnswerRequest(CamelModel):
+    """The athlete's answer to "what was this session?" (#580).
+
+    ``purpose`` must be one of the classifier's own labels — an answer nothing
+    downstream can read would leave the question as consequence-free as the
+    prose version it replaces. ``None`` records a skip: the athlete does not
+    want to say, and the question stops rather than being asked forever.
+    """
+
+    purpose: Optional[
+        Literal[
+            "recovery",
+            "endurance",
+            "tempo",
+            "interval_sweetspot",
+            "interval_threshold",
+            "interval_vo2max",
+            "interval_sprints",
+            "mixed",
+        ]
+    ] = None
+    """What the session actually was, or ``None`` to skip the question."""
+
+    external_activity_id: Optional[str] = None
+    """Precision-safe provider id for non-Strava rides; see
+    :class:`RideFeedbackRequest`."""
+
+
+class RidePurposeAnswerResponse(CamelModel):
+    """The updated ride, so the card can re-render from the stored truth."""
 
     strava_activity_id: int
     ride: Optional[RideMetricSchema] = None

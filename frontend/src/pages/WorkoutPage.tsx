@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
+import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
@@ -181,10 +182,14 @@ export default function WorkoutPage() {
       rideMetricsHistory: s.rideMetricsHistory,
     }))
   )
-  // Rides on this date the matcher would not attribute. The calendar's amber dot
-  // leads here, so this is where that dot has to become answerable (#574).
-  const ambiguousRides = rideMetricsHistory.filter(
-    (ride) => ride.activityDate === date && ride.planMatchStatus === 'ambiguous'
+  // Rides on this date the coach has an open question about: which session it
+  // was (#574, the calendar's amber dot leads here), or what it was at all when
+  // the data could not say (#580). One list rather than two, because a ride can
+  // carry both questions and listing it twice would read as two rides.
+  const ridesNeedingAnswers = rideMetricsHistory.filter(
+    (ride) =>
+      ride.activityDate === date &&
+      (ride.planMatchStatus === 'ambiguous' || ride.purposeQuestionOpen)
   )
   // Every session on this date, AM→PM. The `?slot=` query param picks which one
   // is open; without it the day's first session is shown, which is what a
@@ -516,12 +521,15 @@ export default function WorkoutPage() {
         )}
       </div>
 
-      {ambiguousRides.length > 0 && (
+      {ridesNeedingAnswers.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-3">
           <h2 className="text-sm font-semibold text-gray-800">
-            {ambiguousRides.length > 1 ? 'Unattributed rides' : 'Unattributed ride'} on this day
+            {ridesNeedingAnswers.length > 1
+              ? 'Rides your coach has a question about'
+              : 'A ride your coach has a question about'}{' '}
+            on this day
           </h2>
-          {ambiguousRides.map((ride) => (
+          {ridesNeedingAnswers.map((ride) => (
             <div key={ride.stravaActivityId}>
               <p className="text-xs text-gray-600 font-medium truncate">
                 {ride.activityName ?? 'Activity'}
@@ -531,6 +539,7 @@ export default function WorkoutPage() {
                 </span>
               </p>
               <AmbiguousMatchResolver ride={ride} />
+              <SessionPurposeQuestion ride={ride} />
             </div>
           ))}
         </div>
