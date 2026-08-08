@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 
 from services.activity_identity import non_cycling_classification
+from services.training_load import format_load, resolve_training_load
 
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
 # 87% is a well-established estimate for trained cyclists.
@@ -2135,13 +2136,19 @@ def build_rule_based_summary(
     normalized_power: float | None,
     tss: float | None,
     intervals: list[dict],
+    *,
+    tss_source: str | None = None,
 ) -> str:
     """Build a short deterministic 1-line ride summary — no LLM required.
 
     Examples:
     - "Threshold intervals: 3×10 min @ 275 W · TSS 94 · 1h20m"
     - "Endurance: NP 198 W · TSS 61 · 2h05m"
+    - "Strength · load ~34 (estimated from HR) · 58m"
     - "Recovery: 45 min"
+
+    ``tss_source`` decides whether the load is printed as a measured figure or
+    as the estimate it is; see :func:`services.training_load.format_load`.
     """
     h = int(duration_seconds // 3600)
     m = int((duration_seconds % 3600) // 60)
@@ -2173,8 +2180,9 @@ def build_rule_based_summary(
     elif normalized_power:
         parts.append(f"NP {round(normalized_power)} W")
 
-    if tss is not None:
-        parts.append(f"TSS {round(tss)}")
+    load_text = format_load(tss, tss_source)
+    if load_text is not None:
+        parts.append(load_text)
 
     parts.append(duration_str)
     return " · ".join(parts)
@@ -2185,6 +2193,9 @@ def build_ride_metrics_chain(
     ftp: float,
     initial_ctl: float = 0.0,
     initial_atl: float = 0.0,
+    *,
+    max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
 ) -> list[dict]:
     """Compute per-ride metrics and the rolling CTL/ATL/TSB chain.
 
@@ -2200,6 +2211,10 @@ def build_ride_metrics_chain(
         ftp: Current FTP in watts. Used for all rides (single snapshot).
         initial_ctl: Starting CTL value (0.0 for full historical rebuild).
         initial_atl: Starting ATL value (0.0 for full historical rebuild).
+        max_heart_rate: The athlete's maximum HR, when known. Without it the
+            load ladder cannot use heart rate and drops to the duration rung.
+        resting_heart_rate: The athlete's resting HR, when known. Optional —
+            it only sharpens the hrTSS estimate (see ``services.training_load``).
 
     Returns:
         List of metric dicts (same order as input) ready for DB upsert.
@@ -2298,10 +2313,31 @@ def build_ride_metrics_chain(
             np_value = int(round(summary_np))
             if ftp > 0:
                 intensity_factor = round(np_value / ftp, 3)
-        if summary_tss is not None:
-            tss = float(summary_tss)
-        elif summary_np is not None and ftp > 0:
-            tss = compute_ride_tss(ride.get("duration_seconds") or 0, float(np_value), ftp)
+                tss = compute_ride_tss(
+                    ride.get("duration_seconds") or 0, float(np_value), ftp
+                )
+
+        # --- What load did this session carry, and where does the number come from? ---
+        # Everything above this point is power. When power said nothing, ``tss``
+        # used to stay NULL and enter the chain below as 0.0 — which is not a
+        # gap, it is the claim that the athlete rested, and it made an hour of
+        # strength training *raise* TSB (#579). The ladder falls back to heart
+        # rate and then to time on task, and records which rung answered so a
+        # derived load can never be mistaken for a measured one.
+        load = resolve_training_load(
+            provider_tss=summary_tss,
+            power_tss=tss,
+            duration_seconds=ride.get("duration_seconds"),
+            sport_type=ride.get("sport_type"),
+            avg_hr_bpm=(
+                ride.get("_summary_avg_hr_bpm")
+                or (perf_signals or {}).get("avg_hr_bpm")
+            ),
+            max_heart_rate=max_heart_rate,
+            resting_heart_rate=resting_heart_rate,
+        )
+        tss = load.tss if load is not None else None
+        tss_source = load.source if load is not None else None
 
         # --- CTL/ATL decay and update ---
         activity_date_str = ride["activity_date"]
@@ -2327,6 +2363,7 @@ def build_ride_metrics_chain(
             float(np_value) if np_value else None,
             tss,
             intervals,
+            tss_source=tss_source,
         )
 
         # --- Classification confidence and reason ---
@@ -2370,6 +2407,7 @@ def build_ride_metrics_chain(
                 "normalized_power_w": np_value,
                 "intensity_factor": intensity_factor,
                 "tss": tss,
+                "tss_source": tss_source,
                 "ftp_used": round(ftp) if ftp > 0 else None,
                 "ctl_after": round(ctl, 2),
                 "atl_after": round(atl, 2),

@@ -54,6 +54,7 @@ class FakeRideMetric:
         self.ride_purpose = kwargs.get("ride_purpose", None)
         self.duration_seconds = kwargs.get("duration_seconds", 3600)
         self.tss = kwargs.get("tss", 80.0)
+        self.tss_source = kwargs.get("tss_source", "power")
         self.normalized_power_w = kwargs.get("normalized_power_w", 240)
         self.ctl_after = kwargs.get("ctl_after", 55.0)
         self.atl_after = kwargs.get("atl_after", 68.0)

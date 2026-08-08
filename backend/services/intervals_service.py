@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from services.activity_imports import ImportedActivity
+from services.training_load import LOAD_SOURCE_PROVIDER
 
 INTERVALS_API_BASE = "https://intervals.icu/api/v1"
 INTERVALS_STREAM_TYPES = (
@@ -327,6 +328,12 @@ def map_activity_to_imported_activity(
             source, "icu_weighted_avg_watts", "weighted_average_watts"
         ),
         summary_tss=_first_float(source, "icu_training_load", "training_load"),
+        # Already requested in ``fetch_recent_activities`` and until now dropped
+        # on the floor. It is the only intensity signal a strength session or a
+        # hike ships (#579).
+        summary_avg_hr_bpm=_first_int(
+            source, "average_heartrate", "icu_average_hr", "average_hr"
+        ),
         provider_intervals=normalize_provider_intervals(source),
         metadata={"intervals_activity_id": str(raw_id)},
         legacy_activity_id=intervals_activity_id(raw_id),
@@ -356,6 +363,9 @@ def apply_summary_fallback(metric: dict[str, Any], ride: dict[str, Any]) -> None
         metric["normalized_power_w"] = ride["_summary_np_w"]
     if metric.get("tss") is None and ride.get("_summary_tss") is not None:
         metric["tss"] = ride["_summary_tss"]
+        # A load and its provenance travel together, or the coach cannot tell a
+        # measured figure from an estimated one (#579).
+        metric["tss_source"] = LOAD_SOURCE_PROVIDER
 
 
 def _first_str(

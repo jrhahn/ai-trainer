@@ -45,6 +45,13 @@ logger = logging.getLogger(__name__)
 _import_progress: dict[int, dict] = {}
 
 
+def _optional_int(value: object) -> int | None:
+    """Round a provider number to an int, or ``None`` if it is not one."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return round(value)
+
+
 def _sanitize_streams(streams: object) -> dict:
     """Return a safe Strava-streams mapping for analysis functions.
 
@@ -81,7 +88,11 @@ def _sanitize_streams(streams: object) -> dict:
 
 
 def _build_metrics_chain_resilient(
-    rides: list[dict], ftp: float
+    rides: list[dict],
+    ftp: float,
+    *,
+    max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
 ) -> tuple[list[dict], int]:
     """Build metrics while tolerating failures on individual rides.
 
@@ -98,7 +109,12 @@ def _build_metrics_chain_resilient(
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
             chunk = build_ride_metrics_chain(
-                [ride], ftp, initial_ctl=ctl, initial_atl=atl
+                [ride],
+                ftp,
+                initial_ctl=ctl,
+                initial_atl=atl,
+                max_heart_rate=max_heart_rate,
+                resting_heart_rate=resting_heart_rate,
             )
         except Exception:  # noqa: BLE001
             failed += 1
@@ -438,12 +454,23 @@ async def _run_import_background(
                     streams=streams,
                     weather=weather_fields,
                     metadata={"strava_activity_id": activity_id},
+                    # Strava reports an average HR for activities that carry no
+                    # stream at all — the gym/hike case, where it is the only
+                    # intensity signal there is (#579).
+                    summary_avg_hr_bpm=_optional_int(
+                        activity.get("average_heartrate")
+                    ),
                 )
                 rides.append(imported_activity.to_ride_input())
                 _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---
-        metrics_chain, failed_metrics = _build_metrics_chain_resilient(rides, ftp)
+        metrics_chain, failed_metrics = _build_metrics_chain_resilient(
+            rides,
+            ftp,
+            max_heart_rate=max_heart_rate,
+            resting_heart_rate=resting_heart_rate,
+        )
         skipped += failed_metrics
         _import_progress[user_id]["skipped"] = skipped
         BATCH = 50

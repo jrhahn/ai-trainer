@@ -231,7 +231,14 @@ def test_apply_summary_fallback():
     metric = {"avg_power_w": None, "normalized_power_w": None, "tss": None}
     ride = {"_summary_avg_power_w": 200, "_summary_np_w": 210, "_summary_tss": 80}
     isvc.apply_summary_fallback(metric, ride)
-    assert metric == {"avg_power_w": 200, "normalized_power_w": 210, "tss": 80}
+    # A load filled in from the provider's summary says so, so nothing
+    # downstream can mistake it for one we derived ourselves (#579).
+    assert metric == {
+        "avg_power_w": 200,
+        "normalized_power_w": 210,
+        "tss": 80,
+        "tss_source": "provider",
+    }
     # existing values are not overwritten
     metric2 = {"avg_power_w": 1, "normalized_power_w": 2, "tss": 3}
     isvc.apply_summary_fallback(metric2, ride)

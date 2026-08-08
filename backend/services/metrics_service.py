@@ -16,6 +16,7 @@ import crud
 import models
 from services import assessment_pipeline, plan_compliance
 from services.analysis import apply_ctl_atl_decay, compute_ride_tss
+from services.training_load import LOAD_SOURCE_POWER
 
 logger = logging.getLogger(__name__)
 
@@ -179,10 +180,20 @@ def _recalculate_metric_chain(
         duration_s = metric.duration_seconds or 0
         new_tss: float | None = None
         new_if: float | None = None
+        new_source: str | None = metric.tss_source
 
         if np_w and duration_s > 0:
-            new_tss = compute_ride_tss(float(duration_s), float(np_w), ftp_float)
             new_if = round(float(np_w) / ftp_float, 3)
+
+        # A new FTP moves power-derived load and nothing else. Recomputing every
+        # row from power alone would silently delete the loads the ladder
+        # established for sessions that never had a power meter, and put those
+        # activities back to entering the chain as rest days (#579).
+        if metric.tss_source in (None, LOAD_SOURCE_POWER) and np_w and duration_s > 0:
+            new_tss = compute_ride_tss(float(duration_s), float(np_w), ftp_float)
+            new_source = LOAD_SOURCE_POWER if new_tss is not None else None
+        else:
+            new_tss = metric.tss
 
         gap_days = 1
         if prev_date_str is not None:
@@ -199,6 +210,7 @@ def _recalculate_metric_chain(
         prev_date_str = metric.activity_date
 
         metric.tss = round(new_tss, 1) if new_tss is not None else None
+        metric.tss_source = new_source if new_tss is not None else None
         metric.intensity_factor = new_if
         metric.ftp_used = ftp_value
         metric.ctl_after = round(ctl, 2)

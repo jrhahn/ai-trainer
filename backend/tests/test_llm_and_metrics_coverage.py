@@ -401,6 +401,7 @@ def test_recalculate_metric_chain_single_ride():
     metric.duration_seconds = 3600
     metric.activity_date = "2026-04-15"
     metric.tss = None
+    metric.tss_source = None
     metric.intensity_factor = None
     metric.ftp_used = None
     metric.ctl_after = None
@@ -419,19 +420,64 @@ def test_recalculate_metric_chain_single_ride():
 
 
 def test_recalculate_metric_chain_no_power():
-    """Rides without normalized power get null TSS but still update CTL/ATL."""
+    """An FTP change cannot conjure a load for a row that has none."""
     from services.metrics_service import _recalculate_metric_chain
 
     metric = MagicMock()
     metric.normalized_power_w = None
     metric.duration_seconds = 3600
     metric.activity_date = "2026-04-16"
+    metric.tss = None
+    metric.tss_source = None
 
     _recalculate_metric_chain([metric], ftp_value=250)
 
     assert metric.tss is None
     assert metric.ctl_after == 0.0  # TSS=0 ride keeps CTL at zero from zero seed
     assert metric.atl_after == 0.0
+
+
+def test_recalculate_metric_chain_keeps_a_derived_load():
+    """A new FTP moves power-derived load and nothing else.
+
+    Recomputing every row from power alone deleted the load the ladder had
+    established for a session that never had a power meter, which put that
+    activity straight back to entering the chain as a rest day (#579).
+    """
+    from services.metrics_service import _recalculate_metric_chain
+
+    gym = MagicMock()
+    gym.normalized_power_w = None
+    gym.duration_seconds = 58 * 60
+    gym.activity_date = "2026-08-06"
+    gym.tss = 34.0
+    gym.tss_source = "heart_rate"
+
+    _recalculate_metric_chain([gym], ftp_value=280)
+
+    assert gym.tss == 34.0
+    assert gym.tss_source == "heart_rate"
+    assert gym.atl_after > 0.0
+
+
+def test_recalculate_metric_chain_does_not_overwrite_a_provider_load():
+    """The provider computed that figure from data we never had (#579)."""
+    from services.metrics_service import _recalculate_metric_chain
+
+    ride = MagicMock()
+    ride.normalized_power_w = 250.0
+    ride.duration_seconds = 3600
+    ride.activity_date = "2026-08-06"
+    ride.tss = 88.0
+    ride.tss_source = "provider"
+
+    _recalculate_metric_chain([ride], ftp_value=200)
+
+    assert ride.tss == 88.0
+    assert ride.tss_source == "provider"
+    # The intensity factor is still restated against the new FTP: it describes
+    # power against threshold, which is exactly what changed.
+    assert ride.intensity_factor == 1.25
 
 
 def test_recalculate_metric_chain_gap_between_rides():
@@ -442,11 +488,13 @@ def test_recalculate_metric_chain_gap_between_rides():
     metric1.normalized_power_w = 250.0
     metric1.duration_seconds = 3600
     metric1.activity_date = "2026-04-01"
+    metric1.tss_source = None
 
     metric2 = MagicMock()
     metric2.normalized_power_w = 250.0
     metric2.duration_seconds = 3600
     metric2.activity_date = "2026-04-08"  # 7-day gap
+    metric2.tss_source = None
 
     updated = _recalculate_metric_chain([metric1, metric2], ftp_value=250)
     assert updated == 2

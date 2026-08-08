@@ -250,6 +250,10 @@ export interface RideMetricPoint {
   activityDate: string
   sportType: string
   tss?: number
+  // Where `tss` came from: 'provider' | 'power' | 'heart_rate' | 'duration'.
+  // Sessions without a power meter carry an estimated load rather than a zero,
+  // and an estimate shown as a measured TSS is the same mistake one layer up (#579).
+  tssSource?: string | null
   ctlAfter?: number
   atlAfter?: number
   tsbAfter?: number

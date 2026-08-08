@@ -10,6 +10,7 @@ import json
 
 from . import plan_compliance
 from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
+from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .dates import (
     annotate_plan_days,
@@ -32,6 +33,20 @@ BADGE_GROUNDING_RULE = (
     "own badge, score and grading basis. Never contradict a badge, never restate a "
     "'plan linkage:' value as if it were a verdict on execution, and never explain a "
     "badge using another activity's numbers."
+)
+
+# Shown only when an estimated load actually appears in the history above.
+# Before #579 these sessions carried no load at all and entered the fitness
+# chain as rest days, so an hour of strength training read as recovery. They now
+# carry an estimate — which is worth far more than a zero and far less than a
+# measurement, and the coach has to be told which it is holding.
+ESTIMATED_LOAD_RULE = (
+    "A load written as 'load ~N' was estimated, not measured: that session had no "
+    "power meter, so the figure comes from heart rate or from time on task. Count "
+    "it as real fatigue — it is why CTL/ATL/TSB move — but do not quote it as a "
+    "precise number, do not compare it against a power-based TSS as if the two "
+    "were the same measurement, and never describe cycling form or power progress "
+    "on the strength of a non-cycling session's estimated load."
 )
 
 # Shared instruction reused by every prompt that names when a planned session
@@ -3429,6 +3444,7 @@ def ride_metrics_context_section(
 
     lines: list[str] = ["Recent activity history (newest first):"]
     any_badge = False
+    any_estimated_load = False
     for index, m in enumerate(metrics):
         prose = prose_window is None or index < prose_window
         parts: list[str] = []
@@ -3449,10 +3465,16 @@ def ride_metrics_context_section(
         if confidence:
             parts.append(f"conf:{confidence}")
 
-        # TSS
-        tss = getattr(m, "tss", None)
-        if tss is not None:
-            parts.append(f"TSS {round(tss)}")
+        # Training load, never without where it came from: a session with no
+        # power meter now carries a derived load rather than a silent zero, and
+        # a coach that cannot tell the two apart will report rising cycling
+        # form on the back of gym work (#579).
+        load_source = getattr(m, "tss_source", None)
+        load_text = format_load(getattr(m, "tss", None), load_source)
+        if load_text is not None:
+            parts.append(load_text)
+            if load_source is not None and load_source not in MEASURED_LOAD_SOURCES:
+                any_estimated_load = True
 
         duration_seconds = getattr(m, "duration_seconds", None)
         if duration_seconds:
@@ -3547,6 +3569,10 @@ def ride_metrics_context_section(
     # Only worth its tokens once there is a badge on screen to be asked about.
     if any_badge:
         lines.append(BADGE_GROUNDING_RULE)
+    # Likewise: only spend the legend when an estimated load is actually on the
+    # page. An athlete whose rides all carry power never sees these lines.
+    if any_estimated_load:
+        lines.append(ESTIMATED_LOAD_RULE)
     return "\n".join(lines)
 
 
@@ -3607,9 +3633,11 @@ def batch_review_user(
         duration = getattr(m, "duration_seconds", None)
         if duration:
             parts.append(f"Duration: {round(duration / 60)} min")
-        tss = getattr(m, "tss", None)
-        if tss is not None:
-            parts.append(f"TSS: {round(tss)}")
+        load_text = format_load_field(
+            getattr(m, "tss", None), getattr(m, "tss_source", None)
+        )
+        if load_text is not None:
+            parts.append(load_text)
         np_val = getattr(m, "normalized_power_w", None)
         if np_val is not None:
             parts.append(f"NP: {np_val}W")
@@ -3801,9 +3829,11 @@ def next_ride_recommendation_user(
             duration = getattr(m, "duration_seconds", None)
             if duration:
                 ride_parts.append(f"Duration: {round(duration / 60)} min")
-            tss = getattr(m, "tss", None)
-            if tss is not None:
-                ride_parts.append(f"TSS: {round(tss)}")
+            load_text = format_load_field(
+                getattr(m, "tss", None), getattr(m, "tss_source", None)
+            )
+            if load_text is not None:
+                ride_parts.append(load_text)
             np_val = getattr(m, "normalized_power_w", None)
             if np_val is not None:
                 ride_parts.append(f"NP: {np_val}W")
@@ -3960,9 +3990,11 @@ def process_pending_feedbacks_user(
             duration = getattr(m, "duration_seconds", None)
             if duration:
                 ride_parts.append(f"Duration: {round(duration / 60)} min")
-            tss = getattr(m, "tss", None)
-            if tss is not None:
-                ride_parts.append(f"TSS: {round(tss)}")
+            load_text = format_load_field(
+                getattr(m, "tss", None), getattr(m, "tss_source", None)
+            )
+            if load_text is not None:
+                ride_parts.append(load_text)
             np_val = getattr(m, "normalized_power_w", None)
             if np_val is not None:
                 ride_parts.append(f"NP: {np_val}W")

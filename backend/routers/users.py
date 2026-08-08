@@ -1986,7 +1986,12 @@ async def _store_fit_import(
     ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
     ride_input = imported_activity.to_ride_input()
     metrics_chain = build_ride_metrics_chain(
-        [ride_input], ftp_for_chain, seed_ctl, seed_atl
+        [ride_input],
+        ftp_for_chain,
+        seed_ctl,
+        seed_atl,
+        max_heart_rate=current_user.max_heart_rate,
+        resting_heart_rate=current_user.resting_heart_rate,
     )
     if metrics_chain:
         metric = metrics_chain[0]

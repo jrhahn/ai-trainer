@@ -461,8 +461,12 @@ async def run_intervals_import(
             _intervals_import_progress[user_id]["processed"] = idx + 1
 
         latest_metric = None
+        chain_user = None
         async with async_session_maker() as db:
             latest_metric = await crud.get_latest_ride_metric(db, user_id)
+            # The load ladder needs the athlete's HR bounds to estimate a load
+            # for the stream-less activities this import is full of (#579).
+            chain_user = await crud.get_user_by_id(db, user_id)
         seed_ctl = (
             latest_metric.ctl_after
             if latest_metric and latest_metric.ctl_after
@@ -473,7 +477,14 @@ async def run_intervals_import(
             if latest_metric and latest_metric.atl_after
             else 0.0
         )
-        metrics_chain = build_ride_metrics_chain(rides, ftp, seed_ctl, seed_atl)
+        metrics_chain = build_ride_metrics_chain(
+            rides,
+            ftp,
+            seed_ctl,
+            seed_atl,
+            max_heart_rate=getattr(chain_user, "max_heart_rate", None),
+            resting_heart_rate=getattr(chain_user, "resting_heart_rate", None),
+        )
         logger.info(
             "Intervals.icu history import mapped user=%s rides=%s metrics=%s failed=%s metric_ids=%s",
             user_id,

@@ -233,7 +233,14 @@ async def _persist_and_adapt(
     ):
         ftp = float(user.rider_assessment.estimated_ftp)
 
-    metrics_chain = build_ride_metrics_chain(rides, ftp, seed_ctl, seed_atl)
+    metrics_chain = build_ride_metrics_chain(
+        rides,
+        ftp,
+        seed_ctl,
+        seed_atl,
+        max_heart_rate=user.max_heart_rate,
+        resting_heart_rate=user.resting_heart_rate,
+    )
     rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
     for metric in metrics_chain:
         ride = rides_by_id.get(metric["strava_activity_id"])
