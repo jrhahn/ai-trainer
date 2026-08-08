@@ -236,6 +236,113 @@ def test_power_classification_wins_over_sport_label():
     assert metrics[0]["avg_power_w"] is not None
 
 
+# --- What did the session cost? (#579) -------------------------------------
+
+
+def _powered_ride(activity_date: str, activity_id: int, watts: float = 220.0) -> dict:
+    seconds = 60 * 76
+    return {
+        "strava_activity_id": activity_id,
+        "activity_date": activity_date,
+        "sport_type": "MountainBikeRide",
+        "duration_seconds": seconds,
+        "streams": {
+            "watts": {"data": [watts] * seconds},
+            "time": {"data": [float(i) for i in range(seconds)]},
+        },
+    }
+
+
+def test_an_hour_of_strength_training_does_not_make_the_athlete_fresher():
+    """The prod sequence that opened #579, reproduced.
+
+    2026-08-05 MTB 76 min → TSB 1,88; 2026-08-06 strength 58 min → TSB 7,73.
+    The gym session entered the chain as a rest day, so the app reported the
+    athlete 5,85 points *fresher* for having trained. Not a gap — a sign error.
+    """
+    gym = _activity_without_power("WeightTraining", activity_id=21)
+    gym["activity_date"] = "2026-08-06"
+
+    metrics = analysis.build_ride_metrics_chain(
+        [_powered_ride("2026-08-05", 20), gym],
+        ftp=250.0,
+        max_heart_rate=185,
+        resting_heart_rate=50,
+    )
+    ride_day, gym_day = metrics
+
+    assert gym_day["tss"] is not None and gym_day["tss"] > 0
+    assert gym_day["tsb_after"] <= ride_day["tsb_after"]
+
+
+def test_a_session_without_power_carries_a_load_and_says_where_it_came_from():
+    gym = _activity_without_power("WeightTraining")
+    metrics = analysis.build_ride_metrics_chain(
+        [gym], ftp=250.0, max_heart_rate=185, resting_heart_rate=50
+    )
+    # No stream, no provider average → the duration rung, honestly labelled.
+    assert metrics[0]["tss"] > 0
+    assert metrics[0]["tss_source"] == "duration"
+
+
+def test_a_provider_average_heart_rate_is_enough_without_any_stream():
+    """The gym rows ship no stream at all, but the provider summary carries an
+    average HR — which is the only intensity signal they have (#579)."""
+    gym = _activity_without_power("WeightTraining")
+    gym["_summary_avg_hr_bpm"] = 128
+
+    metrics = analysis.build_ride_metrics_chain(
+        [gym], ftp=250.0, max_heart_rate=185, resting_heart_rate=50
+    )
+    assert metrics[0]["tss_source"] == "heart_rate"
+    assert metrics[0]["tss"] > 0
+
+
+def test_without_a_maximum_heart_rate_the_ladder_drops_to_duration():
+    """An athlete who never set a max HR still must not have rest days invented
+    for them — the estimate just gets weaker, and says so."""
+    gym = _activity_without_power("WeightTraining")
+    gym["_summary_avg_hr_bpm"] = 128
+
+    metrics = analysis.build_ride_metrics_chain([gym], ftp=250.0)
+    assert metrics[0]["tss_source"] == "duration"
+    assert metrics[0]["tss"] > 0
+
+
+def test_a_powered_ride_still_reports_a_measured_load():
+    """Nothing that already had a load changes: the ladder is only consulted
+    where power had nothing to say."""
+    metrics = analysis.build_ride_metrics_chain(
+        [_powered_ride("2026-08-05", 20)],
+        ftp=250.0,
+        max_heart_rate=185,
+    )
+    assert metrics[0]["tss_source"] == "power"
+    assert metrics[0]["tss"] > 0
+
+
+def test_the_provider_load_is_not_replaced_by_anything_we_derive():
+    ride = _activity_without_power("MountainBikeRide")
+    ride["_summary_tss"] = 63.0
+    ride["_summary_avg_hr_bpm"] = 150
+
+    metrics = analysis.build_ride_metrics_chain(
+        [ride], ftp=250.0, max_heart_rate=185, resting_heart_rate=50
+    )
+    assert metrics[0]["tss"] == 63.0
+    assert metrics[0]["tss_source"] == "provider"
+
+
+def test_an_estimated_load_is_not_printed_as_a_measured_tss():
+    """The one-line summary is read by the athlete and quoted by the coach."""
+    metrics = analysis.build_ride_metrics_chain(
+        [_activity_without_power("Yoga")], ftp=250.0
+    )
+    summary = metrics[0]["summary"]
+    assert "TSS" not in summary
+    assert "load ~" in summary
+
+
 def test_compute_hr_drift():
     assert analysis.compute_hr_drift([0, 1, 2]) is None or True  # n<=2 guard below
     assert analysis.compute_hr_drift([1.0, 2.0]) is None

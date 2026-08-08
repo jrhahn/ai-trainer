@@ -1694,6 +1694,9 @@ class RideMetricSchema(CamelModel):
     normalized_power_w: Optional[int] = None
     intensity_factor: Optional[float] = None
     tss: Optional[float] = None
+    # "provider" / "power" / "heart_rate" / "duration" — the browser needs it to
+    # avoid labelling an estimated load as a measured TSS (#579).
+    tss_source: Optional[str] = None
     ftp_used: Optional[int] = None
     ctl_after: Optional[float] = None
     atl_after: Optional[float] = None

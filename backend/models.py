@@ -1297,6 +1297,13 @@ class RideMetric(Base):
     normalized_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     intensity_factor: Mapped[float | None] = mapped_column(nullable=True)
     tss: Mapped[float | None] = mapped_column(nullable=True)
+    # Where ``tss`` came from: "provider", "power", "heart_rate" or "duration"
+    # (``services.training_load``). A session without a power meter used to enter
+    # the fitness chain as a rest day; it now carries a derived load instead, and
+    # a derived load that does not say so cannot be reasoned about later — the
+    # coach must not report rising cycling form on the back of gym work (#579).
+    # NULL alongside a NULL ``tss`` means no load could be established at all.
+    tss_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ftp_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ctl_after: Mapped[float | None] = mapped_column(nullable=True)
     atl_after: Mapped[float | None] = mapped_column(nullable=True)

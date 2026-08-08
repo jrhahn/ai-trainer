@@ -2334,6 +2334,7 @@ class _FakeRide:
         classification_reason: str | None = None,
         duration_seconds: int = 3600,
         tss: float = 80.0,
+        tss_source: str | None = "power",
         normalized_power_w: int | None = 200,
         avg_power_w: int | None = None,
         ctl_after: float | None = 55.0,
@@ -2348,6 +2349,7 @@ class _FakeRide:
         self.classification_reason = classification_reason
         self.duration_seconds = duration_seconds
         self.tss = tss
+        self.tss_source = tss_source
         self.normalized_power_w = normalized_power_w
         self.avg_power_w = avg_power_w
         self.ctl_after = ctl_after

@@ -100,6 +100,13 @@ router = APIRouter(prefix="/ai", tags=["ai"], dependencies=[Depends(_set_ai_key)
 
 logger = logging.getLogger(__name__)
 
+
+def _optional_int(value: object) -> int | None:
+    """Round a provider number to an int, or ``None`` if it is not one."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return round(value)
+
 _RATE_LIMIT_DETAIL = (
     "The AI service is temporarily unavailable due to rate limiting. "
     "Please try again in a few minutes."
@@ -760,13 +767,23 @@ async def analyse_activities(
                 weather=weather_by_id.get(activity.id, {}),
                 summary_avg_power_w=a_dict.get("average_watts"),
                 summary_normalized_power_w=a_dict.get("weighted_average_watts"),
+                # The only intensity figure a stream-less activity carries (#579).
+                summary_avg_hr_bpm=_optional_int(
+                    a_dict.get("average_heartrate")
+                    or a_dict.get("averageHeartrate")
+                ),
                 metadata={f"{body.source}_activity_id": external_key},
                 legacy_activity_id=legacy_activity_id,
             )
             rides_input.append(imported_activity.to_ride_input())
         if rides_input:
             metrics_chain = build_ride_metrics_chain(
-                rides_input, ftp_for_chain, seed_ctl, seed_atl
+                rides_input,
+                ftp_for_chain,
+                seed_ctl,
+                seed_atl,
+                max_heart_rate=current_user.max_heart_rate,
+                resting_heart_rate=current_user.resting_heart_rate,
             )
             ride_meta_by_id = {r["strava_activity_id"]: r for r in rides_input}
             for metric in metrics_chain:

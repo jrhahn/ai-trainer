@@ -62,6 +62,10 @@ class ImportedActivity:
     summary_avg_power_w: int | None = None
     summary_normalized_power_w: int | None = None
     summary_tss: float | None = None
+    # The provider's own average heart rate. Present on activities that shipped
+    # no stream at all — which is exactly the gym/hike case where heart rate is
+    # the only thing left to estimate a load from (#579).
+    summary_avg_hr_bpm: int | None = None
     # Provider-computed interval/lap breakdown (normalised to
     # ``{"duration_secs", "avg_power", "type"}``). Used to classify the ride when
     # the raw power stream is missing or unusable.
@@ -109,6 +113,7 @@ class ImportedActivity:
             "_summary_avg_power_w": self.summary_avg_power_w,
             "_summary_np_w": self.summary_normalized_power_w,
             "_summary_tss": self.summary_tss,
+            "_summary_avg_hr_bpm": self.summary_avg_hr_bpm,
             "_provider_intervals": self.provider_intervals,
             **self.weather,
         }

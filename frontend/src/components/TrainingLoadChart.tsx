@@ -52,6 +52,12 @@ export default function TrainingLoadChart() {
       }
     })
 
+  // Sessions without a power meter contribute an estimated load rather than a
+  // zero (#579). The series is only honest if it says so when it holds one.
+  const hasEstimatedLoad = rides.some(
+    (r) => r.tss != null && r.tssSource != null && r.tssSource !== 'provider' && r.tssSource !== 'power',
+  )
+
   const hasCtl = ctlData.some((v) => v > 0)
   const hasAtl = atlData.some((v) => v > 0)
   const hasTsb = tsbData.some((v) => v !== 0)
@@ -171,14 +177,24 @@ export default function TrainingLoadChart() {
       {/* TSS chart */}
       {hasTss && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ Daily TSS (Training Stress Score per activity)</p>
+          <p className="text-xs font-semibold text-gray-600 mb-1">
+            {hasEstimatedLoad
+              ? '⚡ Training load per activity (some estimated)'
+              : '⚡ Daily TSS (Training Stress Score per activity)'}
+          </p>
           <LineChart
             data={tssData}
             labels={tssLabels}
             color="#8b5cf6"
             height={72}
-            yLabel="TSS per activity"
+            yLabel={hasEstimatedLoad ? 'Load per activity' : 'TSS per activity'}
           />
+          {hasEstimatedLoad && (
+            <p className="text-xs text-gray-400 mt-1">
+              Sessions without a power meter show an estimated load from heart rate or duration —
+              real fatigue, but not a measured TSS.
+            </p>
+          )}
         </div>
       )}
 

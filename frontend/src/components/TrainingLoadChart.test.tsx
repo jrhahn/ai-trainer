@@ -63,3 +63,38 @@ describe('TrainingLoadChart', () => {
     expect(screen.getByText('+12.5')).toBeInTheDocument()
   })
 })
+
+describe('estimated load (#579)', () => {
+  it('calls the series TSS while every load was measured', () => {
+    renderChart([
+      ride({ activityDate: '2024-05-01', tss: 70, tssSource: 'power' }),
+      ride({ stravaActivityId: 2, activityDate: '2024-05-03', tss: 95, tssSource: 'provider' }),
+    ])
+    expect(screen.getByText(/Daily TSS/)).toBeInTheDocument()
+    expect(screen.queryByText(/estimated load/i)).not.toBeInTheDocument()
+  })
+
+  it('stops calling it TSS once an estimate is in the series', () => {
+    renderChart([
+      ride({ activityDate: '2024-05-01', tss: 70, tssSource: 'power' }),
+      ride({
+        stravaActivityId: 2,
+        activityDate: '2024-05-03',
+        sportType: 'WeightTraining',
+        tss: 34,
+        tssSource: 'heart_rate',
+      }),
+    ])
+    expect(screen.queryByText(/Daily TSS/)).not.toBeInTheDocument()
+    expect(screen.getByText(/some estimated/i)).toBeInTheDocument()
+    expect(screen.getByText(/not a measured TSS/i)).toBeInTheDocument()
+  })
+
+  it('leaves a legacy row without a recorded source alone', () => {
+    renderChart([
+      ride({ activityDate: '2024-05-01', tss: 70 }),
+      ride({ stravaActivityId: 2, activityDate: '2024-05-03', tss: 95 }),
+    ])
+    expect(screen.getByText(/Daily TSS/)).toBeInTheDocument()
+  })
+})
