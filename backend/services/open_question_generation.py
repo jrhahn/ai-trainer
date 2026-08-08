@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import ai_service, uncertainty_lifecycle
+from services import ai_service, uncertainty_lifecycle, uncertainty_value
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
@@ -107,8 +107,22 @@ async def generate_user_open_questions(
             provider=resolve_user_provider(user),
         )
 
+    # An open question costs a line the athlete may read, so it sits above a
+    # hypothesis and below anything that asks them to act (#582).
+    weights = await crud.athlete_utility_weights(db, user.id)
+
     recorded = 0
     for candidate in candidates:
+        decision = uncertainty_value.evaluate(
+            channel=uncertainty_value.CHANNEL_OPEN_QUESTION,
+            text=f"{candidate['question']} {candidate.get('needs', '')}",
+            weights=weights,
+        )
+        await crud.record_value_decision(
+            db, user.id, decision, statement=candidate["question"], now=now
+        )
+        if not decision.should_raise:
+            continue
         row = await crud.record_athlete_open_question(
             db,
             user.id,

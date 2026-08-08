@@ -363,6 +363,105 @@ async def test_candidates_declined_mid_run_are_not_counted(monkeypatch):
     assert result.generated == 1
     assert len(await _hypotheses(user_id)) == ceiling
 
+    # Both candidates cleared the value gate (#582) and were logged as raised;
+    # the second then met the ceiling.
     async with TestSessionLocal() as db:
         events = await crud.list_uncertainty_events(db, user_id)
-    assert [e.event for e in events] == [uncertainty_lifecycle.EVENT_DECLINED]
+    assert uncertainty_lifecycle.EVENT_DECLINED in {e.event for e in events}
+
+
+# ---------------------------------------------------------------------------
+# The value gate: is this worth what it costs? (#582)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_candidate_that_moves_nothing_this_athlete_cares_about_is_dropped(
+    monkeypatch,
+):
+    """The athlete's own utility weights decide. Someone who does not race gets
+    no hypotheses about peaking for one."""
+    from services import motivation_model, uncertainty_lifecycle
+
+    user_id = await _create_user_with_history(
+        email="novalue@example.com", activity_count=10
+    )
+    async with TestSessionLocal() as db:
+        await crud.upsert_athlete_motivation_model(
+            db,
+            user_id,
+            updates={
+                "weights": {
+                    **motivation_model.DEFAULT_WEIGHTS,
+                    "race_performance": 0.0,
+                    "adaptation": 0.4,
+                }
+            },
+            source=motivation_model.SOURCE_USER_SET,
+        )
+        await db.commit()
+
+    async def fake_generate(*args, **kwargs):
+        return [
+            {
+                "statement": "Will they peak in time for the target race?",
+                "category": "goals_motivation",
+                "confidence": 0.4,
+                "rationale": "Their target event is in eight weeks.",
+            }
+        ]
+
+    monkeypatch.setattr(
+        hypothesis_generation.ai_service,
+        "generate_athlete_hypotheses",
+        fake_generate,
+    )
+
+    result = await hypothesis_generation.run_hypothesis_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 5, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    assert result.generated == 0
+    assert await _hypotheses(user_id) == []
+
+    # "We decided not to raise this" is legible, which it never was before.
+    async with TestSessionLocal() as db:
+        events = await crud.list_uncertainty_events(db, user_id)
+    assert [e.event for e in events] == [
+        uncertainty_lifecycle.EVENT_DECLINED_LOW_VALUE
+    ]
+    assert "Not worth it" in events[0].reason
+    assert "moves_race_preparation" in events[0].reason
+
+
+@pytest.mark.asyncio
+async def test_a_raised_candidate_is_recorded_too(monkeypatch):
+    """The raise is what a later expiry or resolution gets paired against — the
+    baseline #581 asks to be measured from."""
+    from services import uncertainty_lifecycle
+
+    user_id = await _create_user_with_history(
+        email="raised@example.com", activity_count=10
+    )
+
+    async def fake_generate(*args, **kwargs):
+        return _SAMPLE_CANDIDATES[:1]
+
+    monkeypatch.setattr(
+        hypothesis_generation.ai_service,
+        "generate_athlete_hypotheses",
+        fake_generate,
+    )
+
+    await hypothesis_generation.run_hypothesis_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 5, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    async with TestSessionLocal() as db:
+        events = await crud.list_uncertainty_events(db, user_id)
+    assert [e.event for e in events] == [uncertainty_lifecycle.EVENT_RAISED]
+    assert "Worth it" in events[0].reason

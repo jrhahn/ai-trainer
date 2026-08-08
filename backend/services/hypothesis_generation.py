@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import ai_service, uncertainty_lifecycle
+from services import ai_service, uncertainty_lifecycle, uncertainty_value
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
@@ -108,8 +108,24 @@ async def generate_user_hypotheses(
             provider=resolve_user_provider(user),
         )
 
+    # One gate, four channels: is reducing this uncertainty worth what reducing
+    # it costs on *this* channel? A hypothesis is the cheapest of the four, so
+    # the bar is low — but an idea the next few weeks of riding answer for free
+    # is not worth prompt budget either (#582).
+    weights = await crud.athlete_utility_weights(db, user.id)
+
     proposed = 0
     for candidate in candidates:
+        decision = uncertainty_value.evaluate(
+            channel=uncertainty_value.CHANNEL_HYPOTHESIS,
+            text=f"{candidate['statement']} {candidate.get('rationale', '')}",
+            weights=weights,
+        )
+        await crud.record_value_decision(
+            db, user.id, decision, statement=candidate["statement"], now=now
+        )
+        if not decision.should_raise:
+            continue
         row = await crud.propose_athlete_hypothesis(
             db,
             user.id,
