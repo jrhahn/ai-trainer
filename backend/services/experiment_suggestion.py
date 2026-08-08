@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import ai_service
+from services import ai_service, uncertainty_lifecycle
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.scheduler import ScheduledJob
@@ -65,6 +65,19 @@ async def generate_user_experiments(
     if not user.is_onboarded:
         return 0
 
+    # An experiment asks the athlete to do something; a full list means the
+    # coach should wait for one to be run rather than pile on (#581).
+    policy = uncertainty_lifecycle.EXPERIMENT_POLICY
+    open_count = await crud.count_open_athlete_experiments(db, user.id)
+    if uncertainty_lifecycle.capacity_for(open_count=open_count, policy=policy) <= 0:
+        logger.info(
+            "Experiment suggestion skipped: channel full user_id=%s open=%s ceiling=%s",
+            user.id,
+            open_count,
+            policy.ceiling,
+        )
+        return 0
+
     hypotheses = await crud.list_athlete_hypotheses(db, user.id)
     if not hypotheses:
         return 0
@@ -85,7 +98,7 @@ async def generate_user_experiments(
     suggested = 0
     for candidate in candidates:
         matched = hypothesis_by_statement.get(candidate["question"].casefold())
-        await crud.suggest_athlete_experiment(
+        row = await crud.suggest_athlete_experiment(
             db,
             user.id,
             question=candidate["question"],
@@ -94,7 +107,11 @@ async def generate_user_experiments(
             category=candidate["category"],
             hypothesis_id=matched.id if matched is not None else None,
             observed_at=now,
+            max_open=policy.ceiling,
         )
+        # Declined at the ceiling; the gate recorded why.
+        if row is None:
+            continue
         suggested += 1
     return suggested
 

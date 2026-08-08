@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -163,3 +163,68 @@ async def test_learn_from_completed_workouts_enabled_runs(monkeypatch):
 
     assert result is not None
     assert result.observations == 2
+
+
+# ---------------------------------------------------------------------------
+# The expiry sweep runs, and runs first (#581)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_pipeline_expires_stale_uncertainties_before_proposing():
+    """A ceiling only drains a pile if the pile can also empty. Sweeping after
+    generation would leave a channel that filled up in July shut forever."""
+    import crud
+    from services import uncertainty_lifecycle
+
+    user_id = await _create_user(email="sweeper@example.com")
+    long_ago = _NOW - timedelta(days=200)
+    async with TestSessionLocal() as db:
+        await crud.propose_athlete_hypothesis(
+            db,
+            user_id,
+            statement="An idea nothing ever came back to",
+            observed_at=long_ago,
+        )
+        await db.commit()
+
+    order: list[str] = []
+    original_expire = crud.expire_stale_uncertainties
+    original_generate = hypothesis_generation.generate_user_hypotheses
+
+    async def tracked_expire(db, uid, *, now=None):
+        order.append("expire")
+        return await original_expire(db, uid, now=now)
+
+    async def tracked_generate(db, user, *, now=None, timezone_name=None):
+        order.append("generate")
+        return await original_generate(db, user, now=now, timezone_name=timezone_name)
+
+    crud.expire_stale_uncertainties = tracked_expire
+    hypothesis_generation.generate_user_hypotheses = tracked_generate
+    try:
+        async with TestSessionLocal() as db:
+            user = await db.get(models.User, user_id)
+            result = await learning_pipeline.run_learning_step(
+                db, user, now=_NOW, timezone_name="UTC"
+            )
+            await db.commit()
+    finally:
+        crud.expire_stale_uncertainties = original_expire
+        hypothesis_generation.generate_user_hypotheses = original_generate
+
+    assert result.expiries == 1
+    assert order.index("expire") < order.index("generate")
+
+    async with TestSessionLocal() as db:
+        assert await crud.list_athlete_hypotheses(db, user_id) == []
+        events = await crud.list_uncertainty_events(db, user_id)
+    assert [e.event for e in events] == [uncertainty_lifecycle.EVENT_EXPIRED]
+
+
+@pytest.mark.asyncio
+async def test_draining_stale_rows_does_not_count_as_learning(monkeypatch):
+    """Housekeeping is not something the coach learned; counting it would make
+    every sync look productive."""
+    result = learning_pipeline.LearningStepResult(expiries=5)
+    assert result.changed is False

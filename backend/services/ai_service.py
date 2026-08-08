@@ -104,6 +104,7 @@ from .prompts import (
     process_pending_feedbacks_system,
     process_pending_feedbacks_user,
 )
+from services import uncertainty_lifecycle
 
 MAX_CONVERSATION_HISTORY = 10
 MAX_PLAN_DAYS_PAST = 7
@@ -1196,6 +1197,18 @@ def _normalise_hypothesis_candidate(raw: object) -> dict | None:
         return None
     statement = raw.get("statement")
     if not isinstance(statement, str) or not statement.strip():
+        return None
+    # A compound, narrowly conditioned claim cannot recur, and a claim that
+    # cannot recur can never be confirmed or refuted — which is how 96 % of
+    # stored hypotheses ended up stuck at one observation. The prompt asks for
+    # one condition and one outcome; this is where that is actually enforced,
+    # because an instruction the pipeline does not check is a suggestion (#581).
+    if not uncertainty_lifecycle.is_falsifiable_statement(statement):
+        logger.info(
+            "Hypothesis candidate dropped as unfalsifiable (%s chars): %s",
+            len(" ".join(statement.split())),
+            statement[:120],
+        )
         return None
     category = raw.get("category")
     category = (
