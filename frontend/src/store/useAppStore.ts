@@ -273,6 +273,16 @@ export interface RideMetricPoint {
   userNote?: string | null
   feelLegs?: 'fresh' | 'normal' | 'heavy' | null
   labelOverride?: string | null
+  ridePurpose?: string | null
+  classificationConfidence?: string | null
+  /**
+   * The "what was this session?" question the coach puts on the activity (#580).
+   * `purposeQuestionOpen` is decided on the backend so the rule for what counts
+   * as unresolved lives in one place; `purposeQuestionStatus` records how it was
+   * closed once it has been.
+   */
+  purposeQuestionOpen?: boolean
+  purposeQuestionStatus?: 'answered' | 'skipped' | null
   /**
    * The compliance badge scored on the backend against the matched plan day.
    * Authoritative when present — the same value the coach sees, so the card and

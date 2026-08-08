@@ -1076,6 +1076,46 @@ export async function setRideLegs(
   )
 }
 
+/** What the athlete may answer when asked what an unclassified session was.
+ *
+ * Mirrors `ATHLETE_PURPOSE_CHOICES` in `services/ride_purpose_question.py`, the
+ * way `setRideLegs` mirrors the leg-feel values. The backend schema is the
+ * enforcement point — an unknown value comes back 422.
+ */
+export type RidePurposeAnswer =
+  | 'recovery'
+  | 'endurance'
+  | 'tempo'
+  | 'interval_sweetspot'
+  | 'interval_threshold'
+  | 'interval_vo2max'
+  | 'interval_sprints'
+  | 'mixed'
+
+/**
+ * Answer the coach's "what was this session?" question, or skip it (#580).
+ *
+ * The coach used to ask this in prose inside the login summary, where there was
+ * no answer field and nowhere for the answer to go. `purpose: null` records a
+ * skip: the question stops without anything being claimed about the session.
+ */
+export async function answerRidePurpose(
+  token: string,
+  stravaActivityId: number,
+  purpose: RidePurposeAnswer | null,
+  externalActivityId?: string | null,
+): Promise<{ stravaActivityId: number; ride?: RideMetricPoint | null }> {
+  // Same float64 identity problem as `setRideLegs` (#441).
+  return apiFetch<{ stravaActivityId: number; ride?: RideMetricPoint | null }>(
+    `/users/me/ride-purpose/${stravaActivityId}`,
+    {
+      token,
+      method: 'PATCH',
+      body: { purpose, externalActivityId: externalActivityId ?? null },
+    },
+  )
+}
+
 export async function recalculateMetrics(
   token: string,
   ftpOverride?: number,

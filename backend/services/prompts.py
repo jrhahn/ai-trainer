@@ -10,6 +10,7 @@ import json
 
 from . import plan_compliance
 from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
+from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .dates import (
@@ -3140,8 +3141,10 @@ def refresh_login_summary_system() -> str:
         "input flags a ride's classification as unknown or low/medium confidence, treat its "
         "workout type as UNCONFIRMED: do not state or imply a specific session type, training "
         "zone, or intensity for it as fact (e.g. do not call it a 'tempo ride' or 'Zone 3 "
-        "effort'). Say the automatic detection was unsure and ask the athlete what they actually "
-        "did — for example whether it was an interval/VO2max session and what the intervals were.\n"
+        "effort'). Say the automatic detection was unsure, and stop there. Do NOT ask the "
+        "athlete what they did in this summary — the question is put to them on the activity "
+        "itself, where they can answer it, and repeating it here only asks again in a place "
+        "where there is nothing to answer with.\n"
         "Not every activity is a bike ride. When the input names the activity's sport as a "
         "strength, running, yoga, hiking or other non-cycling session, that is a fact and not an "
         "unsure classification: describe it as what it was, never call it a ride, and never ask "
@@ -3193,6 +3196,17 @@ def refresh_login_summary_user(
             "as what it was; never call it a ride, and never ask about intervals, "
             "training zones, power targets or pacing for it."
         )
+    elif _conf == ATHLETE_STATED_CONFIDENCE:
+        # The athlete answered the question on the activity card. That is not a
+        # confident inference, it is not an inference at all — and a summary that
+        # hedges about a session its own athlete just named reads as not
+        # listening (#580).
+        parts.append(
+            f"The athlete stated what the most recent activity was: "
+            f"{(latest_ride_purpose or 'unknown').replace('_', ' ')}. That is their "
+            "own account of the session, so treat it as fact, use it, and never "
+            "describe the type as uncertain or ask about it again."
+        )
     elif latest_ride_purpose == "unknown" or _conf in ("low", "medium"):
         # Deterministic guardrail: when the most recent ride could not be
         # reliably auto-classified, tell the model outright not to assert a
@@ -3207,9 +3221,10 @@ def refresh_login_summary_user(
             note += f" {latest_ride_reason}"
         note += (
             " Do NOT state or imply a specific session type, training zone, or intensity "
-            "for it as fact. Note that the automatic detection was unsure and ask the "
-            "athlete what they actually did (for example, whether it was an interval/VO2max "
-            "session and what the intervals were)."
+            "for it as fact. Note that the automatic detection was unsure, and leave it "
+            "there. The athlete is being asked what this session was on the activity "
+            "itself, where they can actually answer; asking again here would only put the "
+            "question somewhere it cannot be answered (#580)."
         )
         parts.append(note)
 

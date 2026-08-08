@@ -4747,7 +4747,11 @@ def test_login_summary_system_prompt_warns_on_unconfirmed_classification():
     prompt = refresh_login_summary_system()
     assert "UNCONFIRMED" in prompt
     assert "unknown or low/medium confidence" in prompt
-    assert "ask the athlete what they actually did" in prompt
+    # The summary used to close this instruction by asking the athlete what they
+    # did — in a card with no answer field. The question moved to the activity
+    # itself, where it can be answered (#580); see
+    # ``test_login_summary_stops_asking.py``.
+    assert "Do NOT ask the athlete what they did in this summary" in prompt
 
 
 def test_login_summary_user_flags_unknown_or_low_confidence_ride():

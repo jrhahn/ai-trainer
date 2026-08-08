@@ -1548,6 +1548,50 @@ async def save_ride_feedback(
     )
 
 
+@router.patch(
+    "/ride-purpose/{strava_activity_id}",
+    response_model=schemas.RidePurposeAnswerResponse,
+)
+async def answer_ride_purpose(
+    strava_activity_id: int,
+    body: schemas.RidePurposeAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.RidePurposeAnswerResponse:
+    """Record what the athlete says an unclassified session actually was (#580).
+
+    The coach used to ask this in prose inside the login summary, where there
+    was nothing to answer with and nowhere for the answer to go. It writes the
+    classification itself — so every prompt that already reads ``ride_purpose``
+    sees the answer — with a confidence that names the athlete as its source and
+    protects it from the next re-import.
+
+    A ``purpose`` of ``None`` is a skip: the question stops without anything
+    being asserted about the session.
+    """
+    row = await crud.answer_ride_purpose_question(
+        db,
+        current_user.id,
+        strava_activity_id,
+        body.purpose,
+        external_activity_id=body.external_activity_id,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found",
+        )
+
+    # The classification feeds the login summary, so mark it stale to regenerate
+    # — otherwise the card keeps describing a session the athlete just named.
+    await assessment_pipeline.notify_changed(db, current_user)
+
+    return schemas.RidePurposeAnswerResponse(
+        strava_activity_id=strava_activity_id,
+        ride=schemas.RideMetricSchema.model_validate(row, from_attributes=True),
+    )
+
+
 @router.post("/recalculate-metrics", response_model=schemas.RecalculateMetricsResponse)
 async def recalculate_metrics(
     body: schemas.RecalculateMetricsRequest,

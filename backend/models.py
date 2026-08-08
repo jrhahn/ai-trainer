@@ -1318,10 +1318,21 @@ class RideMetric(Base):
     provider_unfetchable_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # "high" / "medium" / "low" grade an inference we made. "athlete" (#580)
+    # sits outside that scale: the athlete stated what the session was, so there
+    # is nothing here we inferred — and it is the marker that stops a re-import
+    # or a re-classification overwriting their answer.
     classification_confidence: Mapped[str | None] = mapped_column(
         String(10), nullable=True
     )
     classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Lifecycle of the "what was this session?" question the coach puts on the
+    # activity card. NULL means still open; "answered" / "skipped" both stop it
+    # being asked again, so waving it away is respected the way skipping an
+    # AthleteInquiry is (#580).
+    purpose_question_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
     # Compact per-ride physiological signals (power-duration envelope, HR drift,
     # first/second-half power & HR) derived from the stream at analysis time and
     # persisted so the cross-workout inference engine (#476) can aggregate them

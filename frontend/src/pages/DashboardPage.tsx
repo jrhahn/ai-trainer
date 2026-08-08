@@ -12,6 +12,7 @@ import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
+import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
@@ -1031,6 +1032,10 @@ export default function DashboardPage() {
                       where the athlete answers it (#574). Renders nothing for the
                       normal, unambiguous ride. */}
                   <AmbiguousMatchResolver ride={ride} />
+                  {/* And the other question the coach cannot answer on its own:
+                      what this session was, when the data could not say (#580).
+                      Also renders nothing for a ride that classified cleanly. */}
+                  <SessionPurposeQuestion ride={ride} />
                 </div>
               )
             })}

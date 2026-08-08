@@ -9,14 +9,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 
-from sqlalchemy import String, cast, delete, func, or_, select, update
+from sqlalchemy import String, case, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
-from services import motivation_model, plan_compliance
+from services import motivation_model, plan_compliance, ride_purpose_question
 from services.activity_identity import are_near_duplicate_activities
+from services.analysis import build_rule_based_summary
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
 ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
@@ -3032,6 +3033,56 @@ async def delete_all_ride_metrics(db: AsyncSession, user_id: str) -> None:
     await db.flush()
 
 
+# What a re-import must not overwrite once the athlete has said what the session
+# was. The classification is theirs, and ``summary`` restates it in prose — a
+# recomputed "Unknown ride · 58m" beside ``ride_purpose = interval_threshold``
+# is a contradiction the coach reads out loud (#580).
+_ATHLETE_OWNED_RIDE_METRIC_FIELDS = (
+    "ride_purpose",
+    "classification_confidence",
+    "classification_reason",
+    "summary",
+)
+
+
+def _assign_ride_metric_values(row: models.RideMetric, values: dict) -> None:
+    """Write *values* onto *row*, leaving the athlete's own answer intact.
+
+    Import re-runs on every sync and rebuilds the classification from scratch.
+    Without this gate the athlete answers "that was 4×8 at threshold", the next
+    sync silently puts it back to ``unknown``/``low``, and the question they
+    already answered reappears — the stale-snapshot clobber shape again, so the
+    fix is again a persistent marker rather than a request-time snapshot.
+    """
+    protected = (
+        row.classification_confidence == ride_purpose_question.ATHLETE_STATED_CONFIDENCE
+    )
+    for attr, val in values.items():
+        if protected and attr in _ATHLETE_OWNED_RIDE_METRIC_FIELDS:
+            continue
+        setattr(row, attr, val)
+
+
+def _guarded_conflict_value(column: str, value: object):
+    """The same protection as :func:`_assign_ride_metric_values`, in SQL.
+
+    This path only runs when a row appeared between the SELECT above and the
+    INSERT, so it is the narrow race rather than the normal re-import. Stating
+    the rule here too means the invariant holds always instead of usually.
+    """
+    if column not in _ATHLETE_OWNED_RIDE_METRIC_FIELDS:
+        return value
+    existing = getattr(models.RideMetric, column)
+    return case(
+        (
+            models.RideMetric.classification_confidence
+            == ride_purpose_question.ATHLETE_STATED_CONFIDENCE,
+            existing,
+        ),
+        else_=value,
+    )
+
+
 async def upsert_ride_metric(
     db: AsyncSession,
     user_id: str,
@@ -3124,8 +3175,7 @@ async def upsert_ride_metric(
         else await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
     )
     if exact_existing is not None:
-        for attr, val in values.items():
-            setattr(exact_existing, attr, val)
+        _assign_ride_metric_values(exact_existing, values)
         await db.flush()
         return exact_existing
 
@@ -3147,8 +3197,7 @@ async def upsert_ride_metric(
             duration_seconds,
         ):
             return near_duplicate
-        for attr, val in values.items():
-            setattr(near_duplicate, attr, val)
+        _assign_ride_metric_values(near_duplicate, values)
         await db.flush()
         return near_duplicate
 
@@ -3165,7 +3214,7 @@ async def upsert_ride_metric(
             .on_conflict_do_update(
                 index_elements=conflict_keys,
                 set_={
-                    k: v
+                    k: _guarded_conflict_value(k, v)
                     for k, v in values.items()
                     if k not in conflict_keys
                 },
@@ -3200,8 +3249,7 @@ async def upsert_ride_metric(
             )
         )
     if existing is not None:
-        for attr, val in values.items():
-            setattr(existing, attr, val)
+        _assign_ride_metric_values(existing, values)
         await db.flush()
         return existing
 
@@ -3527,7 +3575,16 @@ async def update_ride_metric_classification(
     Leaves power/TSS/CTL/ATL and every athlete-edited field (label_override,
     coach_note, feel_legs, plan match, …) untouched, so a reclassification never
     clobbers user edits.
+
+    The classification itself is now one of those edits when the athlete has
+    stated what the session was (#580), so this returns early rather than
+    replacing their account of it with an inference.
     """
+    if (
+        row.classification_confidence
+        == ride_purpose_question.ATHLETE_STATED_CONFIDENCE
+    ):
+        return
     row.ride_purpose = ride_purpose
     row.classification_confidence = classification_confidence
     row.classification_reason = classification_reason
@@ -3572,6 +3629,61 @@ async def set_ride_feel_legs(
     if row is None:
         return None
     row.feel_legs = legs
+    return row
+
+
+async def answer_ride_purpose_question(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+    purpose: str | None,
+    *,
+    external_activity_id: str | None = None,
+) -> models.RideMetric | None:
+    """Record what the athlete said this session was, or that they skipped (#580).
+
+    ``purpose`` is one of :data:`ride_purpose_question.ATHLETE_PURPOSE_CHOICES`;
+    ``None`` records a skip, which stops the question without asserting anything
+    about the session. Both are terminal — a question the athlete has waved away
+    must not come back, which is the same restraint ``ATHLETE_INQUIRY_MAX_ASKS``
+    exists to enforce for the coach's other questions.
+
+    An answer writes the classification itself, not a note beside it, so every
+    prompt and every badge that reads ``ride_purpose`` sees the athlete's answer
+    without knowing this feature exists. The confidence records who said so and
+    is what keeps the next sync from overwriting it
+    (:func:`_assign_ride_metric_values`).
+
+    ``external_activity_id`` is the precision-safe string identity carried for
+    non-Strava rides; their synthesized 63-bit ``strava_activity_id`` is
+    float64-corrupted through the browser (#441).
+    """
+    row = None
+    if external_activity_id:
+        row = await get_ride_metric_by_external_id(db, user_id, external_activity_id)
+    if row is None:
+        row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    if row is None:
+        return None
+
+    if purpose is None:
+        row.purpose_question_status = ride_purpose_question.QUESTION_SKIPPED
+        return row
+
+    row.ride_purpose = purpose
+    row.classification_confidence = ride_purpose_question.ATHLETE_STATED_CONFIDENCE
+    row.classification_reason = ride_purpose_question.athlete_answer_reason(purpose)
+    row.purpose_question_status = ride_purpose_question.QUESTION_ANSWERED
+    # The stored one-line summary restates the classification, so leaving it
+    # would put "Unknown ride" next to the athlete's own answer.
+    row.summary = build_rule_based_summary(
+        purpose,
+        float(row.duration_seconds or 0),
+        float(row.normalized_power_w) if row.normalized_power_w else None,
+        float(row.tss) if row.tss is not None else None,
+        [],
+        tss_source=row.tss_source,
+    )
     return row
 
 
