@@ -20,6 +20,7 @@ from services import (
     plan_compliance,
     ride_purpose_question,
     uncertainty_lifecycle,
+    uncertainty_value,
 )
 from services.activity_identity import are_near_duplicate_activities
 from services.analysis import build_rule_based_summary
@@ -1420,6 +1421,52 @@ async def record_uncertainty_event(
     db.add(row)
     await db.flush()
     return row
+
+
+async def athlete_utility_weights(db: AsyncSession, user_id: str) -> dict:
+    """The athlete's utility weights, for the value gate (#582).
+
+    Empty when no motivation model has been built yet, which the gate reads as
+    the cold-start vector — a brand-new athlete must not be gated by a model
+    nobody has inferred for them.
+    """
+    row = await get_athlete_motivation_model(db, user_id)
+    return getattr(row, "weights", None) or {}
+
+
+async def record_value_decision(
+    db: AsyncSession,
+    user_id: str,
+    decision: "uncertainty_value.ValueDecision",
+    *,
+    statement: str,
+    now: datetime | None = None,
+) -> models.AthleteUncertaintyEvent:
+    """Log one verdict from the value gate, kept or dropped (#582).
+
+    Both outcomes are recorded. A decline is the one that was invisible before —
+    "we decided not to ask this" had nowhere to be legible — and the raise is
+    what a later expiry or resolution has to be paired against to answer "what
+    share of raised uncertainties actually resolve?".
+
+    The rules that fired go into ``reason`` by name, the same way a weight change
+    carries its rule activations (#566).
+    """
+    record = decision.as_record()
+    rules = ", ".join(firing["rule"] for firing in record["rules"]) or "none"
+    return await record_uncertainty_event(
+        db,
+        user_id,
+        channel=decision.channel,
+        event=(
+            uncertainty_lifecycle.EVENT_RAISED
+            if decision.should_raise
+            else uncertainty_lifecycle.EVENT_DECLINED_LOW_VALUE
+        ),
+        statement=statement,
+        reason=f"{decision.reason} Rules: {rules}.",
+        now=now,
+    )
 
 
 async def list_uncertainty_events(

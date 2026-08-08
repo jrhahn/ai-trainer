@@ -40,10 +40,20 @@ STATUS_EXPIRED = "expired"
 # way to tell "the coach had nothing to say" from "the coach was not allowed to".
 EVENT_EXPIRED = "expired"
 EVENT_DECLINED = "declined_at_capacity"
+# The value gate (#582): every candidate that reached it, kept or dropped. Both
+# are recorded, because "share of raised uncertainties that actually resolve"
+# needs the raise to pair the later expiry or resolution against.
+EVENT_RAISED = "raised"
+EVENT_DECLINED_LOW_VALUE = "declined_low_value"
 
 CHANNEL_HYPOTHESIS = "hypothesis"
 CHANNEL_OPEN_QUESTION = "open_question"
 CHANNEL_EXPERIMENT = "experiment"
+# Channels the value gate (#582) covers but this module's ceilings do not:
+# inquiries already had their own capacity and lifecycle, and the unconfirmed
+# session question (#580) belongs to a ride rather than to a pile.
+CHANNEL_INQUIRY = "inquiry"
+CHANNEL_SESSION_QUESTION = "session_question"
 
 
 @dataclass(frozen=True)

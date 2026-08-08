@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service
+from services import ai_service, uncertainty_value
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
 from services.token_accounting import track_llm_usage
@@ -99,8 +99,25 @@ async def generate_user_inquiries(
             provider=resolve_user_provider(user),
         )
 
+    # The channel this gate's reasoning was lifted from (#582). The prompt still
+    # does the inferability step — a model reasoning about its own data stream is
+    # the part no keyword rule can replace — and this is the deterministic
+    # backstop: attention is the most expensive thing the coach can spend, so the
+    # bar here is the highest of the four.
+    weights = await crud.athlete_utility_weights(db, user.id)
+
     recorded = 0
     for candidate in candidates:
+        decision = uncertainty_value.evaluate(
+            channel=uncertainty_value.CHANNEL_INQUIRY,
+            text=f"{candidate['question']} {candidate.get('why_asking', '')}",
+            weights=weights,
+        )
+        await crud.record_value_decision(
+            db, user.id, decision, statement=candidate["question"], now=now
+        )
+        if not decision.should_raise:
+            continue
         inquiry = await crud.record_athlete_inquiry(
             db,
             user.id,
