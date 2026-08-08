@@ -846,6 +846,51 @@ describe('setRideLegs', () => {
   })
 })
 
+describe('answerRidePurpose', () => {
+  it("patches the ride with the athlete's answer", async () => {
+    mockApiFetch.mockResolvedValue({
+      stravaActivityId: 9101,
+      ride: { stravaActivityId: 9101, ridePurpose: 'interval_threshold' },
+    })
+
+    const { answerRidePurpose } = await import('./user')
+    const result = await answerRidePurpose('tok-abc', 9101, 'interval_threshold')
+
+    expect(result.ride?.ridePurpose).toBe('interval_threshold')
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-purpose/9101', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { purpose: 'interval_threshold', externalActivityId: null },
+    })
+  })
+
+  it('sends null as the skip, so nothing is claimed about the session', async () => {
+    mockApiFetch.mockResolvedValue({ stravaActivityId: 9102, ride: null })
+
+    const { answerRidePurpose } = await import('./user')
+    await answerRidePurpose('tok-abc', 9102, null)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-purpose/9102', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { purpose: null, externalActivityId: null },
+    })
+  })
+
+  it('sends the precision-safe external id for intervals rides (#441)', async () => {
+    mockApiFetch.mockResolvedValue({ stravaActivityId: 9103, ride: null })
+
+    const { answerRidePurpose } = await import('./user')
+    await answerRidePurpose('tok-abc', 9103, 'endurance', 'i84213307')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/ride-purpose/9103', {
+      token: 'tok-abc',
+      method: 'PATCH',
+      body: { purpose: 'endurance', externalActivityId: 'i84213307' },
+    })
+  })
+})
+
 describe('saveChatMessage', () => {
   it('POSTs the chat message', async () => {
     const msg = { role: 'user' as const, content: 'hi', timestamp: '2024-05-01T00:00:00Z' }

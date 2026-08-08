@@ -7,12 +7,14 @@ import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 
-const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory } = vi.hoisted(() => ({
+const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory, mockAnswerRidePurpose, mockFetchRideMetricsHistory } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
   mockSaveTrainingPlan: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
   mockFetchPlanHistory: vi.fn(),
+  mockAnswerRidePurpose: vi.fn(),
+  mockFetchRideMetricsHistory: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({ rateCompletedWorkout: mockRateCompletedWorkout }))
@@ -21,6 +23,9 @@ vi.mock('../services/user', () => ({
   saveTrainingPlan: mockSaveTrainingPlan,
   saveWorkoutLog: mockSaveWorkoutLog,
   fetchPlanHistory: mockFetchPlanHistory,
+  // Reached through the embedded SessionPurposeQuestion (#580).
+  answerRidePurpose: mockAnswerRidePurpose,
+  fetchRideMetricsHistory: mockFetchRideMetricsHistory,
 }))
 
 // AIChat is heavy - stub it out
@@ -435,5 +440,67 @@ describe('WorkoutPage', () => {
 
       expect(screen.queryAllByRole('tab')).toHaveLength(0)
     })
+  })
+})
+
+describe('questions the coach has about a ride on this day', () => {
+  const unclassified = {
+    stravaActivityId: 8801,
+    activityDate: TODAY,
+    activityName: 'Evening ride',
+    sportType: 'Ride',
+    ridePurpose: 'unknown',
+    classificationConfidence: 'low',
+    purposeQuestionOpen: true,
+  }
+
+  it('asks what an unclassified session was, where the session is', async () => {
+    // The calendar leads here, so a question the athlete is meant to answer has
+    // to be answerable on this page too — not only on the dashboard (#580).
+    useAppStore.setState({
+      authToken: 'tok',
+      trainingPlan: [mockDay],
+      rideMetricsHistory: [unclassified],
+    })
+    renderWorkoutPage(TODAY)
+
+    expect(
+      await screen.findByText('A ride your coach has a question about on this day')
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('session-purpose-question')).toBeInTheDocument()
+  })
+
+  it('records the answer for that ride', async () => {
+    const user = userEvent.setup()
+    mockAnswerRidePurpose.mockResolvedValue({
+      stravaActivityId: 8801,
+      ride: { ...unclassified, ridePurpose: 'tempo', purposeQuestionOpen: false },
+    })
+    useAppStore.setState({
+      authToken: 'tok',
+      trainingPlan: [mockDay],
+      rideMetricsHistory: [unclassified],
+    })
+    renderWorkoutPage(TODAY)
+
+    await user.click(await screen.findByText('Tempo'))
+
+    await waitFor(() =>
+      expect(mockAnswerRidePurpose).toHaveBeenCalledWith('tok', 8801, 'tempo', undefined)
+    )
+  })
+
+  it('says nothing about a day whose rides all classified cleanly', async () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      trainingPlan: [mockDay],
+      rideMetricsHistory: [
+        { ...unclassified, ridePurpose: 'endurance', purposeQuestionOpen: false },
+      ],
+    })
+    renderWorkoutPage(TODAY)
+
+    await screen.findByText('VO2max Intervals')
+    expect(screen.queryByText(/has a question about/)).not.toBeInTheDocument()
   })
 })

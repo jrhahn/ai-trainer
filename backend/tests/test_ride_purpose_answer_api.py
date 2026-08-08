@@ -225,3 +225,68 @@ async def test_a_reclassification_leaves_the_answer_alone(
         )
         assert row.ride_purpose == "interval_sprints"
         assert row.classification_confidence == ATHLETE_STATED_CONFIDENCE
+
+
+@pytest.mark.asyncio
+async def test_an_intervals_ride_is_found_by_its_precision_safe_id(
+    client, auth_headers, mock_ai_service
+):
+    """Non-Strava rides carry a synthesized 63-bit ``strava_activity_id`` that
+    loses precision as a JS float64, so the path param cannot locate the row.
+    The browser sends the provider's own string id alongside it (#441)."""
+    await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "source": "intervals",
+            "activities": [
+                {
+                    "id": 9007199254740993,
+                    "externalId": "i166933341",
+                    "name": "Evening Ride",
+                    "type": "Ride",
+                    "distance": 40000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 300,
+                    "startDate": "2026-04-24T18:00:00Z",
+                }
+            ],
+        },
+    )
+
+    response = await client.patch(
+        # Deliberately a *wrong* numeric id: only the external id can find it.
+        "/api/v1/users/me/ride-purpose/1",
+        headers=auth_headers,
+        json={"purpose": "tempo", "externalActivityId": "i166933341"},
+    )
+    assert response.status_code == 200
+    ride = response.json()["ride"]
+    assert ride["externalActivityId"] == "i166933341"
+    assert ride["ridePurpose"] == "tempo"
+    assert ride["classificationConfidence"] == ATHLETE_STATED_CONFIDENCE
+
+
+def test_the_postgres_conflict_path_states_the_same_guard():
+    """``upsert_ride_metric`` resolves an existing row in Python, so the ON
+    CONFLICT branch only runs when a row appeared between the SELECT and the
+    INSERT. Tests run on SQLite and never reach it — but an invariant that holds
+    only on the path we happen to exercise is not an invariant, so the SQL is
+    checked directly."""
+    from sqlalchemy.dialects import postgresql
+
+    # An ordinary column is written straight through.
+    assert crud._guarded_conflict_value("avg_power_w", 250) == 250
+
+    guarded = crud._guarded_conflict_value("ride_purpose", "unknown")
+    rendered = str(
+        guarded.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "CASE WHEN" in rendered
+    assert ATHLETE_STATED_CONFIDENCE in rendered
+    # The athlete's stored purpose wins; the incoming one is only the fallback.
+    assert "ride_metrics.ride_purpose" in rendered

@@ -128,6 +128,13 @@ describe('SessionPurposeQuestion', () => {
     expect(screen.getByLabelText('Skip the question about “Evening ride”')).toBeInTheDocument()
   })
 
+  it('still labels the choices when the activity has no name', () => {
+    // Provider imports without a title are ordinary, and an aria-label reading
+    // "“” was Endurance" is worse than a generic noun.
+    renderQuestion(makeRide({ activityName: null }))
+    expect(screen.getByLabelText('“this activity” was Endurance')).toBeInTheDocument()
+  })
+
   it('keeps the question open when saving fails', async () => {
     const user = userEvent.setup()
     mockAnswer.mockRejectedValue(new Error('nope'))
