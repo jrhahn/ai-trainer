@@ -280,3 +280,89 @@ def test_seconds_until_next_weekly_run_uses_monday_05():
         hour=hypothesis_generation.HYPOTHESIS_GENERATION_HOUR,
     )
     assert seconds == 4 * 60 * 60
+
+
+# ---------------------------------------------------------------------------
+# Capacity: the coach stops proposing once the channel is full (#581)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_full_channel_skips_the_request_entirely(monkeypatch):
+    """Not just the writes — the LLM call. Asking for candidates that will all be
+    declined costs a request and answers nothing."""
+    from services import uncertainty_lifecycle
+
+    user_id = await _create_user_with_history(
+        email="full@example.com", activity_count=10
+    )
+    ceiling = uncertainty_lifecycle.HYPOTHESIS_POLICY.ceiling
+    async with TestSessionLocal() as db:
+        for index in range(ceiling):
+            await crud.propose_athlete_hypothesis(
+                db, user_id, statement=f"Recurring pattern {index}"
+            )
+        await db.commit()
+
+    called = False
+
+    async def fake_generate(*args, **kwargs):
+        nonlocal called
+        called = True
+        return _SAMPLE_CANDIDATES
+
+    monkeypatch.setattr(
+        hypothesis_generation.ai_service,
+        "generate_athlete_hypotheses",
+        fake_generate,
+    )
+
+    result = await hypothesis_generation.run_hypothesis_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 5, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    assert not called
+    assert result.generated == 0
+    assert len(await _hypotheses(user_id)) == ceiling
+
+
+@pytest.mark.asyncio
+async def test_candidates_declined_mid_run_are_not_counted(monkeypatch):
+    """One slot left, two candidates: the second is declined at the gate and the
+    run reports what it actually stored."""
+    from services import uncertainty_lifecycle
+
+    user_id = await _create_user_with_history(
+        email="nearlyfull@example.com", activity_count=10
+    )
+    ceiling = uncertainty_lifecycle.HYPOTHESIS_POLICY.ceiling
+    async with TestSessionLocal() as db:
+        for index in range(ceiling - 1):
+            await crud.propose_athlete_hypothesis(
+                db, user_id, statement=f"Recurring pattern {index}"
+            )
+        await db.commit()
+
+    async def fake_generate(*args, **kwargs):
+        return _SAMPLE_CANDIDATES
+
+    monkeypatch.setattr(
+        hypothesis_generation.ai_service,
+        "generate_athlete_hypotheses",
+        fake_generate,
+    )
+
+    result = await hypothesis_generation.run_hypothesis_generation(
+        TestSessionLocal,
+        now=datetime(2026, 6, 8, 5, 5, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    assert result.generated == 1
+    assert len(await _hypotheses(user_id)) == ceiling
+
+    async with TestSessionLocal() as db:
+        events = await crud.list_uncertainty_events(db, user_id)
+    assert [e.event for e in events] == [uncertainty_lifecycle.EVENT_DECLINED]

@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import ai_service
+from services import ai_service, uncertainty_lifecycle
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
@@ -69,6 +69,19 @@ async def generate_user_open_questions(
     if not user.is_onboarded:
         return 0
 
+    # Stop before the LLM call when the list is already full (#581).
+    policy = uncertainty_lifecycle.OPEN_QUESTION_POLICY
+    open_count = await crud.count_open_athlete_open_questions(db, user.id)
+    if uncertainty_lifecycle.capacity_for(open_count=open_count, policy=policy) <= 0:
+        logger.info(
+            "Open-question generation skipped: channel full user_id=%s open=%s "
+            "ceiling=%s",
+            user.id,
+            open_count,
+            policy.ceiling,
+        )
+        return 0
+
     metrics = await crud.get_ride_metrics_history(
         db, user.id, limit=OPEN_QUESTION_HISTORY_LIMIT
     )
@@ -96,7 +109,7 @@ async def generate_user_open_questions(
 
     recorded = 0
     for candidate in candidates:
-        await crud.record_athlete_open_question(
+        row = await crud.record_athlete_open_question(
             db,
             user.id,
             question=candidate["question"],
@@ -106,7 +119,11 @@ async def generate_user_open_questions(
             resolved=candidate["resolved"],
             resolution=candidate["resolution"],
             observed_at=now,
+            max_open=policy.ceiling,
         )
+        # Declined at the ceiling; the gate recorded why.
+        if row is None:
+            continue
         recorded += 1
     return recorded
 

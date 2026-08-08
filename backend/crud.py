@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
-from services import motivation_model, plan_compliance, ride_purpose_question
+from services import (
+    motivation_model,
+    plan_compliance,
+    ride_purpose_question,
+    uncertainty_lifecycle,
+)
 from services.activity_identity import are_near_duplicate_activities
 from services.analysis import build_rule_based_summary
 
@@ -1378,6 +1383,224 @@ async def clear_athlete_memory(db: AsyncSession, user_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Uncertainty lifecycle (#581)
+# ---------------------------------------------------------------------------
+
+
+async def record_uncertainty_event(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    channel: str,
+    event: str,
+    statement: str,
+    record_id: str | None = None,
+    reason: str = "",
+    evidence_count: int | None = None,
+    age_days: int | None = None,
+    now: datetime | None = None,
+) -> models.AthleteUncertaintyEvent:
+    """Write one line of the uncertainty audit trail.
+
+    A record that leaves the set should leave a trace (#581, same reasoning as
+    the weight events in #566). ``statement`` is stored verbatim because the
+    trace has to outlive the row it describes.
+    """
+    row = models.AthleteUncertaintyEvent(
+        user_id=user_id,
+        channel=channel,
+        event=event,
+        record_id=record_id,
+        statement=statement[:2000],
+        reason=reason[:2000],
+        evidence_count=evidence_count,
+        age_days=age_days,
+        recorded_at=now or datetime.now(timezone.utc),
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def list_uncertainty_events(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    channel: str | None = None,
+    limit: int = 100,
+) -> list[models.AthleteUncertaintyEvent]:
+    """Newest audit entries first. Never read on the hot path — for inspection."""
+    stmt = select(models.AthleteUncertaintyEvent).where(
+        models.AthleteUncertaintyEvent.user_id == user_id
+    )
+    if channel is not None:
+        stmt = stmt.where(models.AthleteUncertaintyEvent.channel == channel)
+    result = await db.scalars(
+        stmt.order_by(
+            models.AthleteUncertaintyEvent.recorded_at.desc(),
+            models.AthleteUncertaintyEvent.id.desc(),
+        ).limit(limit)
+    )
+    return list(result)
+
+
+async def count_open_hypotheses(db: AsyncSession, user_id: str) -> int:
+    """Open hypotheses the lifecycle governs — the free-form, LLM-formed ones.
+
+    The deterministic writers are excluded on purpose; see
+    :data:`services.uncertainty_lifecycle.DETERMINISTIC_HYPOTHESIS_CATEGORIES`.
+    """
+    result = await db.scalar(
+        select(func.count())
+        .select_from(models.AthleteHypothesis)
+        .where(
+            models.AthleteHypothesis.user_id == user_id,
+            models.AthleteHypothesis.status.in_(_ATHLETE_HYPOTHESIS_OPEN_STATUSES),
+            models.AthleteHypothesis.category.notin_(
+                tuple(uncertainty_lifecycle.DETERMINISTIC_HYPOTHESIS_CATEGORIES)
+            ),
+        )
+    )
+    return int(result or 0)
+
+
+async def count_open_athlete_open_questions(db: AsyncSession, user_id: str) -> int:
+    result = await db.scalar(
+        select(func.count())
+        .select_from(models.AthleteOpenQuestion)
+        .where(
+            models.AthleteOpenQuestion.user_id == user_id,
+            models.AthleteOpenQuestion.status.in_(
+                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
+            ),
+        )
+    )
+    return int(result or 0)
+
+
+async def count_open_athlete_experiments(db: AsyncSession, user_id: str) -> int:
+    result = await db.scalar(
+        select(func.count())
+        .select_from(models.AthleteExperiment)
+        .where(
+            models.AthleteExperiment.user_id == user_id,
+            models.AthleteExperiment.status.in_(_ATHLETE_EXPERIMENT_OPEN_STATUSES),
+        )
+    )
+    return int(result or 0)
+
+
+async def expire_stale_uncertainties(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Retire uncertainty records nothing ever came back to (#581).
+
+    Returns ``{channel: expired_count}``. Records are moved to
+    ``uncertainty_lifecycle.STATUS_EXPIRED`` rather than deleted: they drop out
+    of every list and prompt because those filter on the open statuses, while the
+    row itself stays available for the "which uncertainties actually resolved?"
+    question a value gate would need. Every expiry writes an audit line.
+
+    Only records the athlete never ruled on are touched — a ``confirmed``,
+    ``refuted``, ``answered``, ``completed`` or ``dismissed`` record is a verdict
+    someone reached, and verdicts do not expire.
+    """
+    reference = now or datetime.now(timezone.utc)
+    expired: dict[str, int] = {}
+
+    async def _sweep(rows, *, channel, policy, text_of, evidence_of) -> None:
+        count = 0
+        for row in rows:
+            evidence = evidence_of(row)
+            if not uncertainty_lifecycle.has_expired(
+                last_seen=row.updated_at,
+                evidence_count=evidence,
+                policy=policy,
+                now=reference,
+            ):
+                continue
+            reason = uncertainty_lifecycle.expiry_reason(
+                last_seen=row.updated_at,
+                evidence_count=evidence,
+                policy=policy,
+                now=reference,
+            )
+            age_days = uncertainty_lifecycle.age_in_days(row.updated_at, reference)
+            row.status = uncertainty_lifecycle.STATUS_EXPIRED
+            row.updated_at = reference
+            await record_uncertainty_event(
+                db,
+                user_id,
+                channel=channel,
+                event=uncertainty_lifecycle.EVENT_EXPIRED,
+                statement=text_of(row),
+                record_id=row.id,
+                reason=reason,
+                evidence_count=evidence,
+                age_days=age_days,
+                now=reference,
+            )
+            count += 1
+        if count:
+            expired[channel] = count
+
+    hypotheses = await db.scalars(
+        select(models.AthleteHypothesis).where(
+            models.AthleteHypothesis.user_id == user_id,
+            models.AthleteHypothesis.status.in_(_ATHLETE_HYPOTHESIS_OPEN_STATUSES),
+            models.AthleteHypothesis.category.notin_(
+                tuple(uncertainty_lifecycle.DETERMINISTIC_HYPOTHESIS_CATEGORIES)
+            ),
+        )
+    )
+    await _sweep(
+        list(hypotheses),
+        channel=uncertainty_lifecycle.CHANNEL_HYPOTHESIS,
+        policy=uncertainty_lifecycle.HYPOTHESIS_POLICY,
+        text_of=lambda row: row.statement,
+        evidence_of=lambda row: row.evidence_count,
+    )
+
+    questions = await db.scalars(
+        select(models.AthleteOpenQuestion).where(
+            models.AthleteOpenQuestion.user_id == user_id,
+            models.AthleteOpenQuestion.status.in_(
+                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
+            ),
+        )
+    )
+    await _sweep(
+        list(questions),
+        channel=uncertainty_lifecycle.CHANNEL_OPEN_QUESTION,
+        policy=uncertainty_lifecycle.OPEN_QUESTION_POLICY,
+        text_of=lambda row: row.question,
+        evidence_of=lambda row: row.evidence_count,
+    )
+
+    experiments = await db.scalars(
+        select(models.AthleteExperiment).where(
+            models.AthleteExperiment.user_id == user_id,
+            models.AthleteExperiment.status.in_(_ATHLETE_EXPERIMENT_OPEN_STATUSES),
+        )
+    )
+    # An experiment has no evidence count — it was either run or it was not — so
+    # it is always measured against the unsupported window.
+    await _sweep(
+        list(experiments),
+        channel=uncertainty_lifecycle.CHANNEL_EXPERIMENT,
+        policy=uncertainty_lifecycle.EXPERIMENT_POLICY,
+        text_of=lambda row: row.protocol,
+        evidence_of=lambda _row: 1,
+    )
+
+    await db.flush()
+    return expired
+
+
+# ---------------------------------------------------------------------------
 # AthleteHypothesis
 # ---------------------------------------------------------------------------
 
@@ -1498,7 +1721,8 @@ async def propose_athlete_hypothesis(
     evidence: list[str] | None = None,
     alternative_explanations: list[str] | None = None,
     observed_at: datetime | None = None,
-) -> models.AthleteHypothesis:
+    max_open: int | None = None,
+) -> models.AthleteHypothesis | None:
     """Create a hypothesis or strengthen an existing one with fresh evidence.
 
     A new statement is stored as ``proposed`` with one unit of evidence. When the
@@ -1511,6 +1735,13 @@ async def propose_athlete_hypothesis(
     supporting observations and the competing explanations still to be ruled out;
     when supplied they replace the stored lists so a recurring hypothesis carries
     the latest evidence rather than a stale snapshot.
+
+    ``max_open`` is the channel ceiling (#581). When the channel is full a *new*
+    statement is declined and ``None`` returned, with an audit line saying the
+    coach had something to add and was not allowed to. Strengthening an existing
+    hypothesis is never declined: making evidence accrue on what is already there
+    is the behaviour the ceiling exists to encourage. Deterministic writers pass
+    no ceiling — they re-derive and retire their own set.
     """
     cleaned = statement.strip()
     if not cleaned:
@@ -1527,6 +1758,17 @@ async def propose_athlete_hypothesis(
         )
     )
     if existing is None:
+        if max_open is not None and await count_open_hypotheses(db, user_id) >= max_open:
+            await record_uncertainty_event(
+                db,
+                user_id,
+                channel=uncertainty_lifecycle.CHANNEL_HYPOTHESIS,
+                event=uncertainty_lifecycle.EVENT_DECLINED,
+                statement=cleaned,
+                reason=f"Channel already holds {max_open} open hypotheses.",
+                now=now,
+            )
+            return None
         existing = models.AthleteHypothesis(
             user_id=user_id,
             statement=cleaned,
@@ -1553,7 +1795,10 @@ async def propose_athlete_hypothesis(
             existing.evidence = list(evidence)
         if alternative_explanations:
             existing.alternative_explanations = list(alternative_explanations)
-        if existing.status == "refuted":
+        if existing.status in ("refuted", uncertainty_lifecycle.STATUS_EXPIRED):
+            # Fresh evidence reopens the question — and a claim that recurred
+            # after expiring is precisely the kind the ceiling exists to make
+            # room for.
             existing.status = "proposed"
         base_confidence = max(existing.confidence, _clamp_confidence(confidence))
         existing.confidence = min(
@@ -1776,7 +2021,8 @@ async def record_athlete_open_question(
     resolved: bool = False,
     resolution: str = "",
     observed_at: datetime | None = None,
-) -> models.AthleteOpenQuestion:
+    max_open: int | None = None,
+) -> models.AthleteOpenQuestion | None:
     """Create an open question or accrue evidence on an existing one, then flush.
 
     A new question is stored ``open`` with one unit of evidence. When the same
@@ -1786,6 +2032,11 @@ async def record_athlete_open_question(
     record now answers it via ``resolved`` — the question auto-closes to
     ``answered`` with a short ``resolution``, matching the issue's requirement
     that questions close once sufficient evidence exists.
+
+    ``max_open`` is the channel ceiling (#581): a *new* question is declined and
+    ``None`` returned once the list is full, with an audit line. Accruing
+    evidence on an existing question is never declined — that is how a question
+    reaches an answer.
     """
     cleaned = question.strip()
     if not cleaned:
@@ -1802,6 +2053,20 @@ async def record_athlete_open_question(
         )
     )
     if existing is None:
+        if (
+            max_open is not None
+            and await count_open_athlete_open_questions(db, user_id) >= max_open
+        ):
+            await record_uncertainty_event(
+                db,
+                user_id,
+                channel=uncertainty_lifecycle.CHANNEL_OPEN_QUESTION,
+                event=uncertainty_lifecycle.EVENT_DECLINED,
+                statement=cleaned,
+                reason=f"Channel already holds {max_open} open questions.",
+                now=now,
+            )
+            return None
         existing = models.AthleteOpenQuestion(
             user_id=user_id,
             question=cleaned,
@@ -1822,8 +2087,9 @@ async def record_athlete_open_question(
             existing.evidence = evidence.strip()
         if needs:
             existing.needs = needs.strip()
-        # Fresh evidence reopens a question the athlete had dismissed.
-        if existing.status == "dismissed":
+        # Fresh evidence reopens a question the athlete had dismissed, or one
+        # that expired unanswered — recurring is the signal that it mattered.
+        if existing.status in ("dismissed", uncertainty_lifecycle.STATUS_EXPIRED):
             existing.status = "open"
             existing.resolution = None
 
@@ -2177,7 +2443,8 @@ async def suggest_athlete_experiment(
     category: str = "general",
     hypothesis_id: str | None = None,
     observed_at: datetime | None = None,
-) -> models.AthleteExperiment:
+    max_open: int | None = None,
+) -> models.AthleteExperiment | None:
     """Create a validation experiment or refresh an existing one.
 
     Experiments are keyed on their normalised ``protocol`` so re-proposing the
@@ -2185,6 +2452,11 @@ async def suggest_athlete_experiment(
     while its question/rationale are refreshed, and one the athlete had
     ``dismissed`` is revived to ``suggested`` so a recurring uncertainty resurfaces.
     A ``completed`` experiment is left untouched — the athlete has already run it.
+
+    ``max_open`` is the channel ceiling (#581). An experiment asks the athlete to
+    *do* something; more than a few outstanding is not a plan, it is homework,
+    and 20 suggested with 0 run is what that looked like. A new protocol is
+    declined once the list is full, with an audit line.
     """
     cleaned_protocol = protocol.strip()
     if not cleaned_protocol:
@@ -2203,6 +2475,20 @@ async def suggest_athlete_experiment(
         )
     )
     if existing is None:
+        if (
+            max_open is not None
+            and await count_open_athlete_experiments(db, user_id) >= max_open
+        ):
+            await record_uncertainty_event(
+                db,
+                user_id,
+                channel=uncertainty_lifecycle.CHANNEL_EXPERIMENT,
+                event=uncertainty_lifecycle.EVENT_DECLINED,
+                statement=cleaned_protocol,
+                reason=f"Channel already holds {max_open} suggested experiments.",
+                now=now,
+            )
+            return None
         existing = models.AthleteExperiment(
             user_id=user_id,
             hypothesis_id=hypothesis_id,
@@ -2222,7 +2508,7 @@ async def suggest_athlete_experiment(
             existing.rationale = rationale.strip()
         if hypothesis_id is not None:
             existing.hypothesis_id = hypothesis_id
-        if existing.status == "dismissed":
+        if existing.status in ("dismissed", uncertainty_lifecycle.STATUS_EXPIRED):
             existing.status = "suggested"
         existing.updated_at = now
     await db.flush()

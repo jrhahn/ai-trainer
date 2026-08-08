@@ -55,6 +55,7 @@ from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import crud
 import models
 from config import settings
 from services import (
@@ -83,6 +84,10 @@ class LearningStepResult:
 
     observations: int = 0
     contradictions: int = 0
+    # Uncertainty records retired this pass (#581). Deliberately not part of
+    # ``changed``: draining stale rows is housekeeping, not something new the
+    # coach learned, and counting it would make every sync look productive.
+    expiries: int = 0
     hypotheses: int = 0
     performance_hypotheses: int = 0
     open_questions: int = 0
@@ -107,6 +112,23 @@ class LearningStepResult:
             or self.weather_preferences
             or self.motivation
         )
+
+
+async def _expire_stale_uncertainties_step(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> int:
+    """Retire uncertainty records nothing ever came back to (#581).
+
+    Runs *first*, before anything proposes: the ceilings the generation steps
+    check are only meaningful if the stale rows have already left, or a channel
+    that filled up months ago would stay shut forever.
+    """
+    expired = await crud.expire_stale_uncertainties(db, user.id, now=now)
+    return sum(expired.values())
 
 
 async def _refresh_performance_model_step(
@@ -209,6 +231,18 @@ async def run_learning_step(
     if not user.is_onboarded:
         return result
 
+    # Before anything is proposed: a ceiling only drains a pile if the pile can
+    # also empty, and a channel full of records from July would otherwise block
+    # every new one indefinitely (#581).
+    result.expiries = await _run_step(
+        "expiries",
+        _expire_stale_uncertainties_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
     result.observations = await _run_step(
         "insights",
         insight_generation.generate_user_insights,
@@ -307,7 +341,7 @@ async def run_learning_step(
         "Continuous learning step user_id=%s observations=%s contradictions=%s "
         "hypotheses=%s performance_hypotheses=%s open_questions=%s inquiries=%s "
         "performance_model=%s home_location=%s weather_preferences=%s motivation=%s "
-        "failed=%s",
+        "expired=%s failed=%s",
         user.id,
         result.observations,
         result.contradictions,
@@ -319,6 +353,7 @@ async def run_learning_step(
         result.home_location,
         result.weather_preferences,
         result.motivation,
+        result.expiries,
         ",".join(result.failed_steps) or "none",
     )
     return result

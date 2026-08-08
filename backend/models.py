@@ -659,6 +659,61 @@ class AthleteMemoryFact(Base):
     user: Mapped["User"] = relationship(back_populates="athlete_memory_facts")
 
 
+class AthleteUncertaintyEvent(Base):
+    """Append-only log of uncertainty records leaving, or never entering (#581).
+
+    Three of the coach's four uncertainty channels only ever grew: 74 hypotheses
+    proposed and none resolved, 23 open questions still open, 20 experiments
+    never run. They now have a ceiling and an expiry — and a record that leaves
+    the set should leave a trace, the same reasoning as the weight-event audit
+    trail (#566). Without this table the pile would drain for reasons nobody
+    could reconstruct.
+
+    Two events are logged. ``expired``: nothing came back to this record inside
+    its window, and here is the ``evidence_count`` it died at — which is also the
+    metric that says whether the falsifiability rules worked, since 96 % of
+    hypotheses expired at 1. ``declined_at_capacity``: the channel was full and
+    the coach wanted to add anyway, so a ceiling is visible rather than silently
+    swallowing candidates.
+
+    ``statement`` is denormalised on purpose: the trace has to outlive the row it
+    describes. Never read on the hot path; it exists to be inspected.
+    """
+
+    __tablename__ = "athlete_uncertainty_events"
+    __table_args__ = (
+        Index(
+            "ix_athlete_uncertainty_events_user_channel",
+            "user_id",
+            "channel",
+            "recorded_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    # ``uncertainty_lifecycle.CHANNEL_*``.
+    channel: Mapped[str] = mapped_column(String(30), nullable=False)
+    # ``uncertainty_lifecycle.EVENT_*``.
+    event: Mapped[str] = mapped_column(String(30), nullable=False)
+    # The record this is about. NULL for a declined candidate — it never got one.
+    record_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The claim/question/protocol in the coach's own words, kept so the trace
+    # still means something once the row is gone.
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # How much support the record had when it left. NULL for a declined
+    # candidate. This is the column that makes "did falsifiability improve?"
+    # a query rather than an opinion.
+    evidence_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False, index=True
+    )
+
+
 class AthleteHypothesis(Base):
     """A speculative, testable claim the coach forms about an athlete.
 

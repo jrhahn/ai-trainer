@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import ai_service
+from services import ai_service, uncertainty_lifecycle
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
@@ -69,6 +69,20 @@ async def generate_user_hypotheses(
     if not user.is_onboarded:
         return 0
 
+    # A full channel stops before the LLM call, not after it: asking for
+    # candidates that will all be declined costs a request and answers nothing
+    # (#581).
+    policy = uncertainty_lifecycle.HYPOTHESIS_POLICY
+    open_count = await crud.count_open_hypotheses(db, user.id)
+    if uncertainty_lifecycle.capacity_for(open_count=open_count, policy=policy) <= 0:
+        logger.info(
+            "Hypothesis generation skipped: channel full user_id=%s open=%s ceiling=%s",
+            user.id,
+            open_count,
+            policy.ceiling,
+        )
+        return 0
+
     metrics = await crud.get_ride_metrics_history(
         db, user.id, limit=HYPOTHESIS_HISTORY_LIMIT
     )
@@ -96,7 +110,7 @@ async def generate_user_hypotheses(
 
     proposed = 0
     for candidate in candidates:
-        await crud.propose_athlete_hypothesis(
+        row = await crud.propose_athlete_hypothesis(
             db,
             user.id,
             statement=candidate["statement"],
@@ -104,7 +118,12 @@ async def generate_user_hypotheses(
             rationale=candidate["rationale"],
             confidence=candidate["confidence"],
             observed_at=now,
+            max_open=policy.ceiling,
         )
+        # ``None`` means the channel filled up mid-run. The gate has already
+        # recorded why, so there is nothing to report here beyond not counting it.
+        if row is None:
+            continue
         proposed += 1
     return proposed
 
