@@ -49,7 +49,8 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
         authToken,
         ride.activityDate,
         ride.stravaActivityId,
-        sessionSlot(session)
+        sessionSlot(session),
+        ride.externalActivityId
       )
       updateRideMetric(result.ride)
       setCoachNote(result.coachNote ?? null)

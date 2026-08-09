@@ -346,7 +346,7 @@ describe('resolveRideMatch', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
       token: 'token-123',
       method: 'POST',
-      body: { plannedDate: '2026-05-06', stravaActivityId: 7001 },
+      body: { plannedDate: '2026-05-06', stravaActivityId: 7001, externalActivityId: null },
     })
   })
 
@@ -358,7 +358,12 @@ describe('resolveRideMatch', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
       token: 'token-123',
       method: 'POST',
-      body: { plannedDate: '2026-05-06', stravaActivityId: 7002, plannedSlot: 1 },
+      body: {
+        plannedDate: '2026-05-06',
+        stravaActivityId: 7002,
+        externalActivityId: null,
+        plannedSlot: 1,
+      },
     })
   })
 
@@ -371,7 +376,12 @@ describe('resolveRideMatch', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
       token: 'token-123',
       method: 'POST',
-      body: { plannedDate: '2026-05-06', stravaActivityId: 7003, plannedSlot: 0 },
+      body: {
+        plannedDate: '2026-05-06',
+        stravaActivityId: 7003,
+        externalActivityId: null,
+        plannedSlot: 0,
+      },
     })
   })
 })
@@ -589,5 +599,44 @@ describe('processPendingFeedbacks', () => {
   it('returns an empty string when no summary is returned', async () => {
     mockApiFetch.mockResolvedValue({})
     expect(await processPendingFeedbacks('tok-123', [1])).toBe('')
+  })
+})
+
+describe('resolveRideMatch', () => {
+  it('sends the precision-safe external id alongside the numeric one (#441)', async () => {
+    mockApiFetch.mockResolvedValue({ ride: { stravaActivityId: 1 } })
+
+    const { resolveRideMatch } = await import('./ai')
+    await resolveRideMatch('tok', '2026-08-09', 7846148097020609552, 0, 'i174087702')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
+      token: 'tok',
+      method: 'POST',
+      body: {
+        plannedDate: '2026-08-09',
+        // Already rounded by the time it is a JS number — which is the whole
+        // reason the string id has to travel with it.
+        stravaActivityId: 7846148097020609552,
+        externalActivityId: 'i174087702',
+        plannedSlot: 0,
+      },
+    })
+  })
+
+  it('sends a null external id for a Strava ride rather than omitting it', async () => {
+    mockApiFetch.mockResolvedValue({ ride: { stravaActivityId: 1 } })
+
+    const { resolveRideMatch } = await import('./ai')
+    await resolveRideMatch('tok', '2026-05-20', 64002)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
+      token: 'tok',
+      method: 'POST',
+      body: {
+        plannedDate: '2026-05-20',
+        stravaActivityId: 64002,
+        externalActivityId: null,
+      },
+    })
   })
 })

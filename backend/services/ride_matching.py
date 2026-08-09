@@ -803,6 +803,36 @@ async def refresh_matches_for_dates(
     return await apply_ride_plan_matches(db, user_id, plan, activity_ids)
 
 
+def _select_ride(
+    rides: list[models.RideMetric],
+    strava_activity_id: int,
+    external_activity_id: str | None,
+) -> models.RideMetric | None:
+    """Find the ride the athlete pointed at, precision-safely.
+
+    Non-Strava activities carry a synthesized 63-bit ``strava_activity_id``.
+    JavaScript numbers are float64, so anything above 2^53 is rounded on the way
+    through the browser: ``7846148097020609552`` comes back as
+    ``...609536`` and matches no row (#441). Every other write path from an
+    activity card already sends the provider's own string id for exactly this
+    reason; this one did not, so resolving an ambiguous intervals.icu ride always
+    404'd and the card said "Could not save that".
+
+    The numeric id stays the fallback: Strava's own ids are well inside float64
+    and older clients do not send the string.
+    """
+    if external_activity_id:
+        match = next(
+            (r for r in rides if r.external_activity_id == external_activity_id),
+            None,
+        )
+        if match is not None:
+            return match
+    return next(
+        (r for r in rides if r.strava_activity_id == strava_activity_id), None
+    )
+
+
 async def resolve_manual_match(
     db: AsyncSession,
     user_id: str,
@@ -811,12 +841,16 @@ async def resolve_manual_match(
     strava_activity_id: int,
     plan: list[dict] | None,
     planned_slot: int | None = None,
+    external_activity_id: str | None = None,
 ) -> models.RideMetric | None:
     """Resolve an ambiguous date by marking one ride as the planned workout.
 
     ``planned_slot`` picks which session on ``planned_date`` the athlete meant when
     the day holds more than one (#496); omitting it selects the day's first session,
     which is the only one a single-session day has.
+
+    ``external_activity_id`` is the precision-safe identity; see
+    :func:`_select_ride`.
     """
     day_sessions = _group_sessions_by_date(plan, training_only=True).get(
         planned_date, []
@@ -826,13 +860,16 @@ async def resolve_manual_match(
         return None
 
     rides = await crud.get_ride_metrics_by_date(db, user_id, planned_date)
-    selected = next((r for r in rides if r.strava_activity_id == strava_activity_id), None)
+    selected = _select_ride(rides, strava_activity_id, external_activity_id)
     if selected is None:
         return None
 
     target_slot = schemas.day_slot(plan_day)
     for ride in rides:
-        if ride.strava_activity_id == strava_activity_id:
+        # Compared by row identity rather than by the id that came off the wire:
+        # once the ride is resolved, the corrupted number must not decide which
+        # row gets written.
+        if ride.id == selected.id:
             await crud.update_ride_match(
                 db,
                 ride,

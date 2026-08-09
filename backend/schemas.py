@@ -1991,6 +1991,13 @@ class ResolveRideMatchRequest(CamelModel):
     # day's first session (#547). Omitted means "the only one there is", which
     # is what every single-session day sends.
     planned_slot: Optional[int] = None
+    external_activity_id: Optional[str] = None
+    """Precision-safe provider id for non-Strava rides (e.g. intervals.icu).
+
+    Their synthesized 63-bit ``strava_activity_id`` is float64-corrupted through
+    the browser, so the numeric id above cannot be trusted to find the row
+    (#441). When supplied, the backend keys the lookup off this string instead.
+    """
 
 
 class ResolveRideMatchResponse(CamelModel):
