@@ -621,8 +621,38 @@ async def apply_ride_plan_matches(
                 )
             continue
 
-        if len(date_rides) == 1:
-            ride = date_rides[0]
+        # Which of the day's activities could plausibly be *this* session at
+        # all. The guard already existed and is what the two-a-day path uses
+        # (#496); the single-session path never asked, so one yoga class on a
+        # cycling day made `_is_duration_focused_ride_plan` false for the whole
+        # day — `all(_is_cycling_ride(...))` over a list containing it — and
+        # dropped every activity into `ambiguous`. On 2026-08-09 that left two
+        # road rides and a yoga session all asking the athlete which one was the
+        # planned recovery spin.
+        candidates = [ride for ride in date_rides if _session_accepts_ride(plan_day, ride)]
+        other_sports = [
+            ride
+            for ride in date_rides
+            if not any(ride.id == candidate.id for candidate in candidates)
+        ]
+        for ride in other_sports:
+            # Extra, not late and not excessive. It was never a candidate for
+            # this session, so it is not linked to it and carries no label about
+            # it — a yoga class must not read as a failed bike ride.
+            await crud.update_ride_match(
+                db,
+                ride,
+                status=MATCH_UNMATCHED,
+                matched_plan_date=None,
+                matched_plan_snapshot=None,
+                matched_at=None,
+                label_override=_resolve_label(ride, None),
+            )
+        if not candidates:
+            continue
+
+        if len(candidates) == 1:
+            ride = candidates[0]
             plan_duration_min = _plan_duration_minutes(plan_day)
             label_override = _duration_mismatch_label(
                 _ride_duration_minutes(ride),
@@ -643,23 +673,23 @@ async def apply_ride_plan_matches(
         else:
             plan_duration_min = _plan_duration_minutes(plan_day)
             if (
-                _is_duration_focused_ride_plan(plan_day, date_rides)
+                _is_duration_focused_ride_plan(plan_day, candidates)
                 and plan_duration_min
             ):
-                best_match = _best_matching_ride(date_rides, plan_duration_min)
+                best_match = _best_matching_ride(candidates, plan_duration_min)
                 # Both conditions, in this order: the durations may only be
                 # added up once the recordings have been shown to be parts of
                 # one session. A sum that happens to fit the plan is not
                 # evidence of anything on its own — a commute plus an evening
                 # ride reached exactly that sum and completed the day (#543).
                 combined_matches = _rides_are_one_split_session(
-                    date_rides
+                    candidates
                 ) and _combined_duration_matches_plan(
-                    date_rides,
+                    candidates,
                     plan_duration_min,
                 )
 
-                for ride in date_rides:
+                for ride in candidates:
                     if combined_matches:
                         await crud.update_ride_match(
                             db,
@@ -711,7 +741,7 @@ async def apply_ride_plan_matches(
                 # review still sees the whole session (#545).
                 auto_matched.append(best_match)
             else:
-                for ride in date_rides:
+                for ride in candidates:
                     await crud.update_ride_match(
                         db,
                         ride,
