@@ -407,16 +407,23 @@ export async function resolveRideMatch(
   // Which session of that date, when it holds more than one. Omitted means the
   // only session there is, which is what a single-session day sends (#547).
   plannedSlot?: number,
+  // The provider's own string id. A non-Strava ride's synthesized 63-bit
+  // stravaActivityId is float64-corrupted the moment it becomes a JS number
+  // (7846148097020609552 -> ...609536), so on its own it matches no row and the
+  // resolve 404s with "Could not save that" (#441).
+  externalActivityId?: string | null,
 ): Promise<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }> {
   return apiFetch<{ ride: RideMetricPoint; coachNote?: string | null; planUpdates?: PlanDayUpdate[] }>(
     '/ai/resolve-ride-match',
     {
       token: authToken,
       method: 'POST',
-      body:
-        plannedSlot === undefined
-          ? { plannedDate, stravaActivityId }
-          : { plannedDate, stravaActivityId, plannedSlot },
+      body: {
+        plannedDate,
+        stravaActivityId,
+        externalActivityId: externalActivityId ?? null,
+        ...(plannedSlot === undefined ? {} : { plannedSlot }),
+      },
     },
   )
 }

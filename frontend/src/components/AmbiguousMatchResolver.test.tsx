@@ -127,7 +127,7 @@ describe('AmbiguousMatchResolver', () => {
 
     // Slot 1, not the day's first session — the whole point of #547's other half.
     await waitFor(() => {
-      expect(mockResolve).toHaveBeenCalledWith('test-token', DATE, 7001, 1)
+      expect(mockResolve).toHaveBeenCalledWith('test-token', DATE, 7001, 1, undefined)
     })
   })
 
@@ -138,7 +138,7 @@ describe('AmbiguousMatchResolver', () => {
     await userEvent.click(screen.getByRole('button'))
 
     await waitFor(() => {
-      expect(mockResolve).toHaveBeenCalledWith('test-token', DATE, 7001, 0)
+      expect(mockResolve).toHaveBeenCalledWith('test-token', DATE, 7001, 0, undefined)
     })
   })
 
@@ -196,5 +196,27 @@ describe('AmbiguousMatchResolver', () => {
     })
     // And keeps the choice on screen so it can be retried.
     expect(screen.getByText('Which session was this?')).toBeInTheDocument()
+  })
+
+  it("sends the ride's provider id so a non-Strava ride can be found (#441)", async () => {
+    // The production failure: a synthesized 63-bit id is rounded on its way
+    // through JS, the backend finds no row, and the card says "Could not save
+    // that". The string id is what actually identifies the ride.
+    useAppStore.setState({ trainingPlan: [makeSession({ title: 'Recovery' })] })
+    renderResolver(
+      makeRide({ stravaActivityId: 7846148097020609552, externalActivityId: 'i174087702' })
+    )
+
+    await userEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => {
+      expect(mockResolve).toHaveBeenCalledWith(
+        'test-token',
+        DATE,
+        7846148097020609552,
+        0,
+        'i174087702'
+      )
+    })
   })
 })

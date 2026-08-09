@@ -2593,3 +2593,119 @@ async def test_analyse_activities_persists_updates_without_clobbering_protected_
     assert by_date["2026-04-10"]["title"] == "VO2 Max Intervals"
     # Open day was adapted and persisted server-side (no client PUT needed).
     assert by_date["2026-04-12"]["workoutType"] == "recovery"
+
+
+@pytest.mark.asyncio
+async def test_resolve_ride_match_finds_an_intervals_ride_by_its_string_id(
+    client, auth_headers, mock_ai_service
+):
+    """The numeric id cannot survive the browser, so it cannot be the lookup key.
+
+    Reproduced from production: three intervals.icu activities on 2026-08-09,
+    every resolve answering 404 "No ambiguous ride match found" and the card
+    saying "Could not save that". A synthesized 63-bit id is rounded the moment
+    it becomes a JS number, so what arrives matches no row (#441).
+    """
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+    from services.ride_matching import apply_ride_plan_matches
+
+    plan = [
+        {
+            "date": "2026-08-09",
+            "workoutType": "endurance",
+            "title": "Short Heat-Friendly Recovery Spin",
+            "description": "Gentle recovery riding",
+            "durationMinutes": 75,
+        }
+    ]
+    # The real production ids, and what they become as float64.
+    stored_id = 7846148097020609552
+    corrupted_id = int(float(stored_id))
+    assert corrupted_id != stored_id, "the premise: this id does not survive JS"
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=stored_id,
+            activity_source="intervals",
+            external_activity_id="i174087702",
+            activity_date="2026-08-09",
+            duration_seconds=32 * 60,
+        )
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=1267888305910446691,
+            activity_source="intervals",
+            external_activity_id="i174034432",
+            activity_date="2026-08-09",
+            duration_seconds=34 * 60,
+        )
+        await db.commit()
+        await apply_ride_plan_matches(
+            db, user_id, plan, [stored_id, 1267888305910446691]
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/resolve-ride-match",
+        headers=auth_headers,
+        json={
+            "plannedDate": "2026-08-09",
+            # Exactly what the browser sends: the rounded number…
+            "stravaActivityId": corrupted_id,
+            # …and the id that actually identifies the row.
+            "externalActivityId": "i174087702",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ride"]["externalActivityId"] == "i174087702"
+    assert response.json()["ride"]["planMatchStatus"] == "manual_matched"
+
+
+@pytest.mark.asyncio
+async def test_resolve_ride_match_still_works_without_a_string_id(
+    client, auth_headers, mock_ai_service
+):
+    """Strava's own ids are well inside float64, and an older client sends no
+    string id at all — the numeric lookup stays the fallback."""
+    import crud
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+    from services.ride_matching import apply_ride_plan_matches
+
+    plan = [
+        {
+            "date": "2026-05-20",
+            "workoutType": "endurance",
+            "title": "Endurance",
+            "description": "Steady",
+            "durationMinutes": 90,
+        }
+    ]
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    user_id = decode_token(token)
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, plan)
+        for activity_id in (64001, 64002):
+            await crud.upsert_ride_metric(
+                db, user_id, strava_activity_id=activity_id, activity_date="2026-05-20"
+            )
+        await db.commit()
+        await apply_ride_plan_matches(db, user_id, plan, [64001, 64002])
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/resolve-ride-match",
+        headers=auth_headers,
+        json={"plannedDate": "2026-05-20", "stravaActivityId": 64002},
+    )
+    assert response.status_code == 200
+    assert response.json()["ride"]["planMatchStatus"] == "manual_matched"
