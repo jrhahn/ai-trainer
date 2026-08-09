@@ -40,6 +40,53 @@ AUTO_LABELS = frozenset({LABEL_ADDITIONAL, LABEL_OK, LABEL_TOO_MUCH, LABEL_MISMA
 
 COMBINED_DURATION_MIN_RATIO = 0.8
 COMBINED_DURATION_MAX_RATIO = 1.25
+# An easy session is judged on whether the movement happened, not on hitting a
+# duration. Two thirds of a planned recovery spin is still a recovery spin.
+EASY_COMBINED_DURATION_MIN_RATIO = 0.6
+EASY_COMBINED_DURATION_MAX_RATIO = 1.5
+
+# How far apart two recordings may sit and still read as one interrupted
+# session. Deliberately not one number, because "one session" means different
+# things depending on what the session was *for*.
+#
+# For an easy or recovery session, continuity is not the stimulus. Blood flow,
+# metabolite clearance and low-load movement do not care whether the hour came
+# in one piece — and the evidence that active recovery beats plain rest at all
+# is thin and mixed. Being pedantic about how a low-stakes intervention was
+# delivered is precision the underlying effect does not support, so the window
+# is effectively the whole day.
+#
+# For an endurance session, continuity *is* the stimulus. A long ride
+# progressively depletes glycogen — itself a signal for mitochondrial
+# adaptation — shifts substrate use toward fat, and trains durability: holding
+# power after accumulated work, which is a distinct quality that a fresh-state
+# FTP does not predict. Two fresh hours never put the athlete in the state the
+# adaptation comes from. So this window is *tighter* than the old global 90
+# minutes, not looser: what it exists to forgive is a café stop or a battery
+# swap, and a real café stop is half an hour. Ninety minutes is long enough to
+# eat, shower and start again, which is a second outing rather than an
+# interrupted ride.
+#
+# Structured hard sessions never get here — ``_is_duration_focused_ride_plan``
+# excludes them, because whether 4x8 at threshold happened is not a question any
+# duration sum can answer.
+EASY_SPLIT_SESSION_MAX_GAP_SECONDS = 8 * 60 * 60
+ENDURANCE_SPLIT_SESSION_MAX_GAP_SECONDS = 45 * 60
+
+# What marks a planned session as one where continuity does not matter.
+#
+# Bare "easy" is deliberately absent. Plenty of endurance plans describe
+# themselves as easy aerobic riding, and treating those as recovery would hand a
+# long ride the whole-day window — the exact false positive this distinction
+# exists to avoid. The markers here name the *purpose*, not the effort.
+_EASY_PLAN_MARKERS = (
+    "recovery",
+    "regeneration",
+    "shakeout",
+    "yoga",
+    "mobility",
+    "stretch",
+)
 HARD_EXTRA_INTENSITY_FACTOR = 0.82
 HARD_EXTRA_TSS = 85.0
 
@@ -266,6 +313,35 @@ def _resolve_label(ride: models.RideMetric, auto_label: str | None) -> str | Non
     return auto_label
 
 
+def _is_easy_plan(day: dict) -> bool:
+    """Is this a session whose point is movement rather than accumulated work?
+
+    Read from the plan rather than from what the athlete actually did: the
+    question is what the session was *for*, and only the plan says that. The
+    production case that prompted this read ``workoutType: "endurance"`` with the
+    title "Short Heat-Friendly Recovery Spin", so the text has to be searched and
+    not just the type.
+    """
+    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
+    title = str(day.get("title") or "").lower()
+    description = str(day.get("description") or "").lower()
+    text = " ".join([workout_type, title, description])
+    return any(marker in text for marker in _EASY_PLAN_MARKERS)
+
+
+def _split_session_max_gap(day: dict) -> int:
+    """The gap two recordings may span and still count as one planned session."""
+    if _is_easy_plan(day):
+        return EASY_SPLIT_SESSION_MAX_GAP_SECONDS
+    return ENDURANCE_SPLIT_SESSION_MAX_GAP_SECONDS
+
+
+def _combined_duration_ratios(day: dict) -> tuple[float, float]:
+    if _is_easy_plan(day):
+        return EASY_COMBINED_DURATION_MIN_RATIO, EASY_COMBINED_DURATION_MAX_RATIO
+    return COMBINED_DURATION_MIN_RATIO, COMBINED_DURATION_MAX_RATIO
+
+
 def _is_structured_hard_plan(day: dict) -> bool:
     workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
     title = str(day.get("title") or "").lower()
@@ -294,32 +370,45 @@ def _is_cycling_ride(ride: models.RideMetric) -> bool:
     return "ride" in sport_type or "cycling" in sport_type or "bike" in sport_type
 
 
-def _rides_are_one_split_session(rides: list[models.RideMetric]) -> bool:
+def _rides_are_one_split_session(
+    rides: list[models.RideMetric],
+    *,
+    # Required, not defaulted: there is no longer one right window, so a caller
+    # that has not decided which session this is has not decided the question.
+    max_gap_seconds: int,
+) -> bool:
     """Do these recordings look like one session that was saved in parts?
 
     Adding two rides' durations together only says something about a planned
     session if they were one ride to begin with. Same sport and no meaningful
     gap between them is what makes that plausible; a morning commute and an
     evening ride fail it despite both being cycling (#543).
+
+    What counts as "no meaningful gap" depends on the session — see
+    :func:`_split_session_max_gap`.
     """
     return activities_form_one_session(
         [
             (ride.sport_type, ride.activity_start_datetime, ride.duration_seconds)
             for ride in rides
-        ]
+        ],
+        max_gap_seconds=max_gap_seconds,
     )
 
 
 def _combined_duration_matches_plan(
     rides: list[models.RideMetric],
     plan_duration_min: int,
+    *,
+    min_ratio: float = COMBINED_DURATION_MIN_RATIO,
+    max_ratio: float = COMBINED_DURATION_MAX_RATIO,
 ) -> bool:
     durations = [_ride_duration_minutes(ride) for ride in rides]
     if any(duration is None for duration in durations):
         return False
     total_min = sum(duration or 0 for duration in durations)
     ratio = total_min / plan_duration_min
-    return COMBINED_DURATION_MIN_RATIO <= ratio <= COMBINED_DURATION_MAX_RATIO
+    return min_ratio <= ratio <= max_ratio
 
 
 def _best_matching_ride(
@@ -682,11 +771,15 @@ async def apply_ride_plan_matches(
                 # one session. A sum that happens to fit the plan is not
                 # evidence of anything on its own — a commute plus an evening
                 # ride reached exactly that sum and completed the day (#543).
+                min_ratio, max_ratio = _combined_duration_ratios(plan_day)
                 combined_matches = _rides_are_one_split_session(
-                    candidates
+                    candidates,
+                    max_gap_seconds=_split_session_max_gap(plan_day),
                 ) and _combined_duration_matches_plan(
                     candidates,
                     plan_duration_min,
+                    min_ratio=min_ratio,
+                    max_ratio=max_ratio,
                 )
 
                 for ride in candidates:
