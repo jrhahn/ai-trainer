@@ -49,21 +49,37 @@ LTHR_FRACTION_OF_MAX = 0.87
 MAX_HR_INTENSITY_FACTOR = 1.15
 
 # The weakest rung: assumed load per hour when neither power nor heart rate said
-# anything. These are deliberately conservative — the purpose is to stop a
-# session reading as a rest day, not to pretend we measured it. Anything derived
-# this way is labelled ``duration`` so the coach can discount it.
+# anything. Read as "an hour of this costs about as much as this many TSS of
+# cycling would". Anything derived this way is labelled ``duration`` so the coach
+# can discount it.
+#
+# The first pass at these (#579) was too timid, and production said so. A 58 min
+# strength session came out at 34 against an ATL of 60, so TSB still *rose* 2,63
+# points across it — less than the 5,85 it rose when the session counted as zero,
+# but the same sign. The original numbers were chosen to be safe rather than
+# right, and "safe" in this direction means under-reporting fatigue, which is the
+# error that gets someone hurt.
+#
+# A real gym session is roughly a tempo hour in systemic cost, so strength is now
+# 55 rather than 35: the same prod day then reads as flat, which is what an hour
+# of hard training should look like on the freshness curve. Cycling and hiking
+# move up for the same reason — an aerobic hour is not 45 TSS.
+#
+# These remain assumptions. The ladder above prefers a provider figure, then
+# power, then heart rate, and only reaches this when all three said nothing; the
+# ``duration`` label is what tells the coach it is holding an estimate.
 DEFAULT_LOAD_PER_HOUR = {
-    "cycling": 45.0,
+    "cycling": 50.0,
     "running": 65.0,
-    "strength": 35.0,
-    "hike": 30.0,
+    "strength": 55.0,
+    "hike": 35.0,
     "walk": 20.0,
     "yoga": 20.0,
     "swim": 50.0,
     "swimming": 50.0,
     "rowing": 55.0,
 }
-FALLBACK_LOAD_PER_HOUR = 30.0
+FALLBACK_LOAD_PER_HOUR = 35.0
 
 
 @dataclass(frozen=True)
