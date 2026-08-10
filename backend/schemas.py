@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -1516,6 +1516,18 @@ class AskTrainerResponse(CamelModel):
 
 
 class RateWorkoutRequest(CamelModel):
+    """Rate a completed workout against its planned day.
+
+    Deliberately *not* a :class:`RideIdentityRequest`. ``strava_activity_id``
+    here is handed straight to Strava's own stream endpoint rather than used to
+    look up one of our stored rides, and it only runs when the athlete has a
+    Strava token. Strava's ids are well inside float64, so nothing rounds. The
+    opt-out is explicit so the identity guardrail records the decision instead of
+    having a hole in it.
+    """
+
+    identifies_stored_ride: ClassVar[bool] = False
+
     day: TrainingDaySchema
     strava_activity_id: Optional[int] = None
 
@@ -1806,7 +1818,29 @@ class WeatherForecastResponse(CamelModel):
 # ---------------------------------------------------------------------------
 
 
-class RideFeedbackRequest(CamelModel):
+class RideIdentityRequest(CamelModel):
+    """Base for any request that names one of the athlete's activities.
+
+    Inherited rather than repeated, because repeating it is what went wrong. A
+    non-Strava activity carries a synthesized 63-bit ``strava_activity_id``, and
+    JavaScript numbers are float64: anything above 2^53 is rounded on the way
+    through the browser, so the number that arrives matches no row. The
+    provider's own string id is the identity that survives the trip.
+
+    Three endpoints learned this separately, and the third learned it two weeks
+    late — every resolve of an ambiguous intervals ride 404'd with "Could not
+    save that" (#441, PR#588). A new endpoint that names a ride now gets the
+    field by inheriting, and ``test_ride_identity_gate.py`` fails if one does
+    not.
+
+    The backend resolves it through :func:`crud.get_ride_metric_by_identity`,
+    which prefers this string and keeps the numeric id as the fallback.
+    """
+
+    external_activity_id: Optional[str] = None
+
+
+class RideFeedbackRequest(RideIdentityRequest):
     """Quick post-ride "how the legs felt" signal set from the dashboard.
 
     This is the only structured field captured by tapping an activity.  Richer
@@ -1818,13 +1852,6 @@ class RideFeedbackRequest(CamelModel):
     legs: Optional[Literal["fresh", "normal", "heavy"]] = None
     """Subjective leg-freshness rating, or ``None`` to clear it."""
 
-    external_activity_id: Optional[str] = None
-    """Precision-safe provider id for non-Strava rides (e.g. intervals.icu).
-
-    Their synthesized 63-bit ``strava_activity_id`` is float64-corrupted through
-    the browser, so the path param cannot be trusted to find the row (#441).
-    When supplied, the backend keys the lookup off this string instead.
-    """
 
 
 class RideFeedbackResponse(CamelModel):
@@ -1834,7 +1861,7 @@ class RideFeedbackResponse(CamelModel):
     ride: Optional[RideMetricSchema] = None
 
 
-class RidePurposeAnswerRequest(CamelModel):
+class RidePurposeAnswerRequest(RideIdentityRequest):
     """The athlete's answer to "what was this session?" (#580).
 
     ``purpose`` must be one of the classifier's own labels — an answer nothing
@@ -1857,9 +1884,6 @@ class RidePurposeAnswerRequest(CamelModel):
     ] = None
     """What the session actually was, or ``None`` to skip the question."""
 
-    external_activity_id: Optional[str] = None
-    """Precision-safe provider id for non-Strava rides; see
-    :class:`RideFeedbackRequest`."""
 
 
 class RidePurposeAnswerResponse(CamelModel):
@@ -1981,7 +2005,7 @@ class BatchReviewRidesResponse(CamelModel):
     """Number of rides included in this review."""
 
 
-class ResolveRideMatchRequest(CamelModel):
+class ResolveRideMatchRequest(RideIdentityRequest):
     """Request body for POST /ai/resolve-ride-match."""
 
     planned_date: str
@@ -1991,13 +2015,6 @@ class ResolveRideMatchRequest(CamelModel):
     # day's first session (#547). Omitted means "the only one there is", which
     # is what every single-session day sends.
     planned_slot: Optional[int] = None
-    external_activity_id: Optional[str] = None
-    """Precision-safe provider id for non-Strava rides (e.g. intervals.icu).
-
-    Their synthesized 63-bit ``strava_activity_id`` is float64-corrupted through
-    the browser, so the numeric id above cannot be trusted to find the row
-    (#441). When supplied, the backend keys the lookup off this string instead.
-    """
 
 
 class ResolveRideMatchResponse(CamelModel):
@@ -2013,13 +2030,20 @@ class ResolveRideMatchResponse(CamelModel):
 # ---------------------------------------------------------------------------
 
 
-class NextRideRecommendationRequest(CamelModel):
+class NextRideRecommendationRequest(RideIdentityRequest):
     """Request body for POST /ai/next-ride-recommendation."""
 
     strava_activity_id: Optional[int] = None
-    """Strava activity ID of the ride just reviewed.  When provided the
-    recommendation is based on that specific ride; when omitted the most
-    recently imported ride metric is used."""
+    """Activity ID of the ride just reviewed.  When provided the recommendation
+    is based on that specific ride; when omitted the most recently imported ride
+    metric is used.
+
+    Unlike :class:`RateWorkoutRequest`, this id *does* look one of our own rows
+    up, so it is subject to the float64 identity problem: a rounded intervals id
+    matches nothing and the endpoint falls through to "no ride at all" and
+    recommends from thin air — quietly, which is worse in kind than the 404 the
+    resolve path gave. No UI calls this today, so that is latent rather than
+    observed; the inherited ``externalActivityId`` closes it before it is (#441)."""
 
 
 class NextRideRecommendationResponse(CamelModel):
