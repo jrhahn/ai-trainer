@@ -926,36 +926,6 @@ async def refresh_matches_for_dates(
     return await apply_ride_plan_matches(db, user_id, plan, activity_ids)
 
 
-def _select_ride(
-    rides: list[models.RideMetric],
-    strava_activity_id: int,
-    external_activity_id: str | None,
-) -> models.RideMetric | None:
-    """Find the ride the athlete pointed at, precision-safely.
-
-    Non-Strava activities carry a synthesized 63-bit ``strava_activity_id``.
-    JavaScript numbers are float64, so anything above 2^53 is rounded on the way
-    through the browser: ``7846148097020609552`` comes back as
-    ``...609536`` and matches no row (#441). Every other write path from an
-    activity card already sends the provider's own string id for exactly this
-    reason; this one did not, so resolving an ambiguous intervals.icu ride always
-    404'd and the card said "Could not save that".
-
-    The numeric id stays the fallback: Strava's own ids are well inside float64
-    and older clients do not send the string.
-    """
-    if external_activity_id:
-        match = next(
-            (r for r in rides if r.external_activity_id == external_activity_id),
-            None,
-        )
-        if match is not None:
-            return match
-    return next(
-        (r for r in rides if r.strava_activity_id == strava_activity_id), None
-    )
-
-
 async def resolve_manual_match(
     db: AsyncSession,
     user_id: str,
@@ -982,10 +952,17 @@ async def resolve_manual_match(
     if plan_day is None:
         return None
 
-    rides = await crud.get_ride_metrics_by_date(db, user_id, planned_date)
-    selected = _select_ride(rides, strava_activity_id, external_activity_id)
-    if selected is None:
+    # One gate for "which ride does this client mean" — see
+    # ``crud.get_ride_metric_by_identity``. Resolved against the whole history
+    # and then checked against the date, rather than scanned out of the day's
+    # list, so this path cannot drift from the other two.
+    selected = await crud.get_ride_metric_by_identity(
+        db, user_id, strava_activity_id, external_activity_id
+    )
+    if selected is None or selected.activity_date != planned_date:
         return None
+
+    rides = await crud.get_ride_metrics_by_date(db, user_id, planned_date)
 
     target_slot = schemas.day_slot(plan_day)
     for ride in rides:

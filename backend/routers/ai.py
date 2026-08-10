@@ -2080,8 +2080,11 @@ async def next_ride_recommendation(
 
     # --- Resolve the ride(s) to use for the recommendation ---
     if body.strava_activity_id is not None:
-        target_ride = await crud.get_ride_metric_by_strava_id(
-            db, current_user.id, body.strava_activity_id
+        target_ride = await crud.get_ride_metric_by_identity(
+            db,
+            current_user.id,
+            body.strava_activity_id,
+            body.external_activity_id,
         )
         rides = [target_ride] if target_ride is not None else []
     else:

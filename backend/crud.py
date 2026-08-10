@@ -3954,11 +3954,9 @@ async def set_ride_feel_legs(
     ``strava_activity_id`` is float64-corrupted through the browser, so an exact
     int lookup misses (#441); prefer the string id when the frontend supplies it.
     """
-    row = None
-    if external_activity_id:
-        row = await get_ride_metric_by_external_id(db, user_id, external_activity_id)
-    if row is None:
-        row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    row = await get_ride_metric_by_identity(
+        db, user_id, strava_activity_id, external_activity_id
+    )
     if row is None:
         return None
     row.feel_legs = legs
@@ -3991,11 +3989,9 @@ async def answer_ride_purpose_question(
     non-Strava rides; their synthesized 63-bit ``strava_activity_id`` is
     float64-corrupted through the browser (#441).
     """
-    row = None
-    if external_activity_id:
-        row = await get_ride_metric_by_external_id(db, user_id, external_activity_id)
-    if row is None:
-        row = await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
+    row = await get_ride_metric_by_identity(
+        db, user_id, strava_activity_id, external_activity_id
+    )
     if row is None:
         return None
 
@@ -4018,6 +4014,35 @@ async def answer_ride_purpose_question(
         tss_source=row.tss_source,
     )
     return row
+
+
+async def get_ride_metric_by_identity(
+    db: AsyncSession,
+    user_id: str,
+    strava_activity_id: int,
+    external_activity_id: str | None = None,
+) -> models.RideMetric | None:
+    """Find the ride a client is pointing at. The one gate for that question.
+
+    Non-Strava activities carry a synthesized 63-bit ``strava_activity_id``.
+    JavaScript numbers are float64, so anything above 2^53 is rounded on the way
+    through the browser — ``7846148097020609552`` comes back as ``...609536`` and
+    matches no row. The provider's own string id is the identity that survives.
+
+    The numeric id stays the fallback: Strava's own ids are well inside float64,
+    and a client that sends no string still has to work.
+
+    This exists because the same three lines were written out at every write path
+    that names a ride, and the fourth one to be added forgot them — every resolve
+    of an ambiguous intervals ride 404'd for two weeks (#441, #574, PR#588). A
+    rule that has to be remembered at each new endpoint is a rule that will be
+    forgotten at one of them; this is the version that cannot be.
+    """
+    if external_activity_id:
+        row = await get_ride_metric_by_external_id(db, user_id, external_activity_id)
+        if row is not None:
+            return row
+    return await get_ride_metric_by_strava_id(db, user_id, strava_activity_id)
 
 
 async def get_ride_metric_by_external_id(

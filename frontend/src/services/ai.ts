@@ -384,12 +384,18 @@ interface BackendNextRideRecommendationResult {
 export async function fetchNextRideRecommendation(
   authToken: string,
   stravaActivityId?: number,
+  // The provider's own string id. A non-Strava ride's synthesized 63-bit
+  // stravaActivityId is rounded the moment it becomes a JS number, and this
+  // endpoint looks our own row up with it — without the string it would find
+  // nothing and quietly recommend from no ride at all (#441).
+  externalActivityId?: string | null,
 ): Promise<NextRideRecommendationResult> {
   const raw = await apiFetch<BackendNextRideRecommendationResult>('/ai/next-ride-recommendation', {
     token: authToken,
     method: 'POST',
     body: {
       ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
+      ...(externalActivityId ? { externalActivityId } : {}),
     },
   })
   return {
