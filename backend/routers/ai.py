@@ -25,6 +25,7 @@ from services import plan_pipeline
 from services import roi_recommendation
 from services import status_pipeline
 from services import summary_pipeline
+from services import workout_curiosity
 from services.activity_imports import ImportedActivity
 from services.activity_identity import are_near_duplicate_activities
 from services.ai_service import (
@@ -986,6 +987,21 @@ async def ask_trainer(
         if (athlete_model_row is not None and memory_enabled)
         else None
     )
+    # What is worth being curious about in what the athlete just said (#593).
+    # Deterministic and best-effort, like the captures above it, and gated on
+    # memory for the same reason the motivation model is: it both reads and
+    # writes durable beliefs about the athlete.
+    workout_curiosity_context: dict | None = None
+    if memory_enabled:
+        try:
+            workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                db,
+                current_user.id,
+                body.question,
+                weights=(motivation_model or {}).get("weights"),
+            )
+        except Exception:
+            logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
         await crud.get_prompt_athlete_memory_facts(db, current_user.id)
         if memory_enabled
@@ -1129,6 +1145,7 @@ async def ask_trainer(
                 weather_context_section=weather_section,
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
+                workout_curiosity=workout_curiosity_context,
             )
         except AIRateLimitError:
             raise HTTPException(

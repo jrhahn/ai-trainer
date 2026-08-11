@@ -1210,6 +1210,39 @@ async def observe_athlete_memory_fact(
     return existing
 
 
+async def athlete_memory_observation_counts(
+    db: AsyncSession,
+    user_id: str,
+    facts: Sequence[str],
+    *,
+    category: str,
+) -> dict[str, int]:
+    """How often each of these observations has already been recorded (#593).
+
+    Keyed through the same normalisation the write uses, so a caller asking "have
+    we seen this before?" cannot drift away from what ``observe_athlete_memory_fact``
+    actually stored. Counts every row, including the decayed and archived ones:
+    the question is what has been observed, not what the coach currently believes.
+    """
+    wanted = {_normalise_athlete_memory_fact_key(fact): fact for fact in facts if fact}
+    if not wanted:
+        return {}
+    normalized_category = _normalise_athlete_memory_category(category)
+    rows = await db.scalars(
+        select(models.AthleteMemoryFact).where(
+            models.AthleteMemoryFact.user_id == user_id,
+            models.AthleteMemoryFact.category == normalized_category,
+            models.AthleteMemoryFact.fact_key.in_(wanted),
+        )
+    )
+    counts = {fact: 0 for fact in wanted.values()}
+    for row in rows:
+        original = wanted.get(row.fact_key)
+        if original is not None:
+            counts[original] = row.observation_count
+    return counts
+
+
 async def record_athlete_memory_fact_contradiction(
     db: AsyncSession,
     fact: models.AthleteMemoryFact,

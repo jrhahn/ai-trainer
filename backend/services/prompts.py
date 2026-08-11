@@ -1446,6 +1446,94 @@ def reveal_uncertainty_rule() -> str:
     )
 
 
+def curiosity_rule() -> str:
+    """Be interested in the ride, not only in the numbers from it (#593).
+
+    The old shape was validate → advise conservatively → ask how the legs feel.
+    Correct, and worth almost nothing: it spent the one follow-up question a
+    reply is allowed on the least informative thing available, while the rider
+    the athlete chased, the pacing they chose and the week they spent ill went
+    unremarked.
+
+    Static, so it belongs to the cacheable prefix and names the section it
+    depends on rather than pointing at a position (#514). Which signal is
+    interesting is decided in Python — :mod:`services.workout_curiosity` — and
+    arrives in that section. This is only the shape and the prohibition.
+    """
+    return (
+        "\n\nCuriosity rules (post-workout messages):\n"
+        "- These three questions are banned: 'how do your legs feel', 'how is your "
+        "recovery', 'how are you feeling now'. Ask one only when you genuinely "
+        "cannot advise without the answer, and then say why you need it. Once the "
+        "athlete has told you a story, asking one of these says you read the watt "
+        "numbers and skipped the sentence.\n"
+        "- When the 'Worth being curious about' section names a signal, that signal "
+        "is your follow-up question. Ask it in your own words, about this specific "
+        "session — never a stored phrasing, never a generic version of it.\n"
+        "- With that section present, shape the response in four short parts, "
+        "unlabelled and written as prose: (1) what the numbers say, briefly; "
+        "(2) what is unusual or interesting about them; (3) what that suggests "
+        "about them as a rider, offered as a reading they can correct and not as a "
+        "verdict; (4) the one curious question.\n"
+        "- Part (3) is a hypothesis about a person, so hedge it honestly ('this "
+        "reads more like…', 'if that holds, then…') and drop it entirely when the "
+        "evidence is one session.\n"
+        "- Insight, not entertainment. Do not become chatty, jokey or effusive to "
+        "seem interested — a real coach leaning forward asks a sharper question, "
+        "they do not talk more.\n"
+        "- Without that section, do not manufacture curiosity. A message with "
+        "numbers and no story is answered as what it is."
+    )
+
+
+def workout_curiosity_section(curiosity: dict | None) -> str:
+    """What the deterministic pass found worth noticing in this message (#593).
+
+    Volatile by construction — it is about the sentence the athlete just typed —
+    so it sits with the athlete data rather than in the cached prefix.
+
+    It carries a topic and never a question. A stored question would be read out
+    verbatim and every athlete would get the same sentence, which is the failure
+    this issue is about repeating itself one level up.
+    """
+    if not curiosity:
+        return ""
+
+    noticed = curiosity.get("noticed") or []
+    compact = [
+        f"{item.get('kind')}: {item.get('signal')}"
+        for item in noticed
+        if item.get("signal")
+    ]
+    if not compact:
+        return ""
+
+    lines = [
+        "\n\nWorth being curious about (read from this athlete's own message):",
+        "What stood out:",
+        *(f"- {entry}" for entry in compact),
+    ]
+    curious_about = curiosity.get("curiousAbout") or curiosity.get("curious_about")
+    if curious_about:
+        lines.append(f"Ask about: {curious_about}")
+    why = curiosity.get("whyItMatters") or curiosity.get("why_it_matters")
+    if why:
+        lines.append(f"Why it is worth a question: {why}")
+    reading = curiosity.get("readingToOffer") or curiosity.get("reading_to_offer")
+    if reading:
+        lines.append(
+            f"A reading you may offer, hedged and correctable: {reading}"
+        )
+    words = curiosity.get("theirWords") or curiosity.get("their_words")
+    if words:
+        lines.append(f"Their words: \"{words}\"")
+    lines.append(
+        "Use the physiological items above for the analysis, not for the question — "
+        "the training data already answers those. Ask about the one named."
+    )
+    return "\n".join(lines)
+
+
 def weather_scheduling_rule() -> str:
     """Let the forecast move sessions — but only as far as this athlete warrants (#495).
 
@@ -1778,6 +1866,8 @@ def coach_static_prefix() -> str:
         "- Reply in the same language the athlete used unless they ask otherwise."
     )
 
+    curiosity_instructions = curiosity_rule()
+
     # Outlook instructions: guide the coach when the athlete asks for a session preview
     outlook_instructions = (
         "\n\nOutlook rules:\n"
@@ -1836,6 +1926,7 @@ def coach_static_prefix() -> str:
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
+        f"{curiosity_instructions}"
         f"{constraint_instructions}"
         f"{outlook_instructions}\n\n"
         "Always take today's date into account when answering — for example when calculating "
@@ -1880,8 +1971,6 @@ def coach_static_prefix() -> str:
         "- Give one clear next action or coaching recommendation so the athlete always knows what "
         "to do with your answer.\n"
         "- Ask at most one follow-up question per response — never stack multiple questions.\n"
-        "- For important high-signal activity details, prefer a specific follow-up question over a generic "
-        "'how did it feel?' question.\n"
         "- When an athlete asks for an outlook, give a warm narrative of their next 3-5 sessions: "
         "what each involves, why they are ordered that way, and how the block fits their current "
         "fatigue — then stop; do not modify the plan unless explicitly asked.\n\n"
@@ -1921,6 +2010,7 @@ def ask_trainer_system_sections(
     weather_context_section: str = "",
     training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     date_context: str = "",
+    workout_curiosity: dict | None = None,
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2029,6 +2119,7 @@ def ask_trainer_system_sections(
         "pinned-inquiries": pinned_inquiries_section,
         "coach-memory": memory_section,
         "workout": workout_section,
+        "curiosity": workout_curiosity_section(workout_curiosity),
         "classification": classification_section,
         "science": science_section,
     }
