@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-08-11
+
+> Folds in what `package.json` had already been calling `0.33.0`. That bump was
+> made inside the #501 pull request and never got a heading here, so the version
+> in the manifest documented nothing; rather than back-date a release that was
+> never cut, its contents are the later half of this one.
+
+### Added
+
+- **The athlete can resolve an ambiguous ride match**
+  (`components/AmbiguousMatchResolver.tsx`, `pages/DashboardPage.tsx`,
+  `pages/WorkoutPage.tsx`, `utils/planHistory.ts`) — when two activities on one
+  day could both be the planned session, the card now asks which one it was
+  instead of the backend guessing and being silently wrong. This is the control
+  that was still missing when `resolveRideMatch` gained its session slot —
+  further down in this same release. (#574)
+
+- **The athlete can answer what an unclassified session was**
+  (`components/SessionPurposeQuestion.tsx`, `pages/DashboardPage.tsx`,
+  `pages/WorkoutPage.tsx`, `services/user.ts`, `store/useAppStore.ts`) — the
+  coach used to ask this in chat prose, so the answer went into the reply box
+  where nothing was listening. It is now a question with options attached to the
+  activity, and the answer is what the classifier is told. (#580)
+
+- **The weight balance says what moved it**
+  (`components/MotivationWeightHistory.tsx`,
+  `components/MotivationModelSettings.tsx`, `services/user.ts`) — a collapsible
+  "What moved this" section under the balance, fetched only when opened. It
+  calls out the case that would otherwise read as a bug: a rule fired, and the
+  weight it argued for did not move because the athlete pinned it. (#566)
+
+### Changed
+
+- **The training-load chart no longer treats a session without power as a rest
+  day** (`components/TrainingLoadChart.tsx`, `store/useAppStore.ts`) — it
+  renders the load the backend now resolves down its ladder, so an hour of
+  strength training stops appearing as a day off. (#579)
+
+### Fixed
+
+- **The ride the athlete pointed at could not be found**
+  (`services/ai.ts`, `components/AmbiguousMatchResolver.tsx`) — resolving an
+  ambiguous intervals ride answered 404 and the card said "Could not save that.
+  Try again in a moment", where retrying could never work. The synthesized
+  63-bit id is rounded by a JavaScript number, so the provider's string id now
+  travels with the request — here and on `fetchNextRideRecommendation`, which
+  had the same latent hole. Third recurrence of #441. (#588, #592)
+
 ### Changed
 
 - **`resolveRideMatch` takes an optional session slot** (`services/ai.ts`) —
