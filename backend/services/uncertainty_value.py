@@ -58,6 +58,7 @@ CHANNEL_OPEN_QUESTION = "open_question"
 CHANNEL_EXPERIMENT = "experiment"
 CHANNEL_INQUIRY = "inquiry"
 CHANNEL_SESSION_QUESTION = "session_question"
+CHANNEL_CURIOSITY = "curiosity"
 
 ASPECT_REDUCIBILITY = "reducibility"
 ASPECT_RELEVANCE = "relevance"
@@ -141,6 +142,14 @@ REDUCIBILITY_RULES: tuple[ValueRule, ...] = (
             r"sleep", r"stress", r"motivat", r"enjoy", r"dread", r"\bwant",
             r"\bgoal", r"schedule", r"calendar", r"\bwork\b", r"family",
             r"travel",
+            # Two gaps #593 found by asking whether every rule it wrote could
+            # ever clear this gate. Both are unambiguous: a power file records
+            # what the athlete did, never whether they meant to, and it records
+            # nothing at all about what went into them. Without these the gate
+            # read "pacing intent" as answerable because it contains "pacing",
+            # and read a fuelling question as answerable because it does not.
+            r"deliberat", r"on purpose", r"\bintent", r"\bchose\b", r"\bdecid",
+            r"fuel", r"\bate\b", r"\beat\b", r"\bdrink|\bdrank\b", r"\bgels?\b",
         ),
         reducibility=-0.6,
     ),
@@ -201,10 +210,17 @@ VALUE_RULES: tuple[ValueRule, ...] = REDUCIBILITY_RULES + RELEVANCE_RULES
 # question costs a line the athlete may read. A hypothesis costs prompt budget
 # and a little of the coach's coherence, which is why it is cheapest and also why
 # 74 of them accumulated before anyone noticed.
+#
+# A curiosity (#593) rides along in a reply the coach is already sending: no
+# pinned card, no training slot, no separate notification. What it does spend is
+# the one follow-up question a reply is allowed, which is why it is not free —
+# and it sits just below the session question, which additionally asks the
+# athlete to operate a control.
 CHANNEL_COST: dict[str, float] = {
     CHANNEL_INQUIRY: 0.45,
     CHANNEL_EXPERIMENT: 0.35,
     CHANNEL_SESSION_QUESTION: 0.30,
+    CHANNEL_CURIOSITY: 0.28,
     CHANNEL_OPEN_QUESTION: 0.25,
     CHANNEL_HYPOTHESIS: 0.15,
 }
@@ -216,9 +232,14 @@ CHANNEL_COST: dict[str, float] = {
 # producing the data, so it pays most of the discount: if plain riding settles
 # it, do not spend a training slot. Asking the athlete pays it in full, which is
 # the rule the inquiry prompt states in prose.
+# A curiosity pays it in full for the same reason an inquiry does, and #593 is
+# the clearest case for the rule there is: the rising power profile the coach
+# used to talk about *is* what the data shows anyway, so asking about it buys
+# nothing, while the rider up the road is in no file anywhere.
 CHANNEL_DATA_DISCOUNT: dict[str, float] = {
     CHANNEL_INQUIRY: 1.0,
     CHANNEL_SESSION_QUESTION: 1.0,
+    CHANNEL_CURIOSITY: 1.0,
     CHANNEL_EXPERIMENT: 0.8,
     CHANNEL_OPEN_QUESTION: 0.0,
     CHANNEL_HYPOTHESIS: 0.0,
@@ -335,6 +356,7 @@ def evaluate(
 
     # --- Reducibility: will more riding settle this without anyone asking? ---
     data_share = 0.0
+    exclusive_share = 0.0
     only_the_athlete = False
     for rule in REDUCIBILITY_RULES:
         if not rule.matches(haystack):
@@ -346,7 +368,15 @@ def evaluate(
             data_share = max(data_share, rule.reducibility)
         else:
             only_the_athlete = True
-    data_share = max(0.0, min(1.0, data_share))
+            exclusive_share = max(exclusive_share, -rule.reducibility)
+    # A negative rule subtracts, as this file has always said it does — and until
+    # #593 it did not, because the flag was the only thing being set. The two
+    # kinds of claim are about different things: a positive rule says the *topic*
+    # is visible in the data, a negative one says the specific residual is not.
+    # "Pacing is recorded" and "why they paced that way is not" are both true of
+    # one question, and letting the first win outright made it unaskable — a
+    # question about intent declined because the word "pacing" was in it.
+    data_share = max(0.0, min(1.0, data_share - exclusive_share))
 
     # --- Relevance: what would a different answer actually move? ---
     moved: set[str] = set()
