@@ -7,6 +7,159 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-08-11
+
+### Added
+
+- **One gate deciding whether an uncertainty is worth resolving**
+  (`services/uncertainty_value.py`, `services/athlete_inquiry.py`,
+  `services/hypothesis_generation.py`, `services/open_question_generation.py`,
+  `services/experiment_suggestion.py`, `crud.py`) —
+  four modules raise uncertainties independently (hypotheses, open questions,
+  validation experiments, questions put to the athlete) and each had its own
+  entry rule. None of them asked the question that matters: is reducing this
+  worth what reducing it costs?
+
+  `value = decision_relevance × (1 − data_share × how much this channel cares)`,
+  raised when the value clears the channel's cost. The rules are `VALUE_RULES`,
+  declared as data in the idiom of #566, and every verdict is recorded by name —
+  including the declines, which had nowhere to be legible before. Relevance is
+  scored against the athlete's own utility weights (#564/#566), so "worth
+  resolving" means worth resolving *for this athlete*.
+
+  The third part is where a single gate earns its keep: reducibility is not a
+  universal penalty. An open question and a hypothesis are *how the coach waits*
+  for data, so being answerable by data is why they exist; only channels that
+  spend someone's effort pay for it. That distinction was previously English
+  inside one prompt, applying to one channel of four. (#582)
+
+- **The uncertainty records have a ceiling and an end**
+  (`services/uncertainty_lifecycle.py`, `services/learning_pipeline.py`,
+  `crud.py`, `models.py`, migration `20260817_000001`) —
+  74 hypotheses had been raised and none had ever been resolved, expired or
+  counted. Each channel now has a capacity, a staleness horizon and a written
+  expiry reason, and every raise, resolution and expiry is an
+  `AthleteUncertaintyEvent`. A record that accumulates without a lifecycle is
+  not a memory, it is a leak. (#581)
+
+- **The athlete can answer what an unclassified session was**
+  (`services/ride_purpose_question.py`, `schemas.py`, `crud.py`,
+  `routers/users.py`) — the coach's question about a session it could not
+  classify was prose in a chat message, so the answer went into the reply box
+  where nothing was listening. It is now a question with options attached to the
+  ride, and the answer writes `classification_confidence = "athlete"` — a
+  persistent marker rather than a request-time snapshot, so the next automated
+  classification pass cannot quietly overwrite what the athlete said (the #342
+  bug class). (#580)
+
+- **Sessions without a power meter stop counting as rest days**
+  (`services/training_load.py`, `services/activity_imports.py`,
+  `services/analysis.py`, `crud.py`, `models.py`, migration
+  `20260815_000001`) — an hour of strength training contributed zero load, so
+  TSB *rose* on a day the athlete had trained. Load now resolves down a ladder —
+  provider value, power, hrTSS, then duration × an assumed intensity — and
+  records which rung answered in `ride_metrics.tss_source`, so a load can always
+  say where it came from and a later recalibration knows exactly which rows it
+  may touch. (#579)
+
+- **The utility weights are learned by a rule you can read, with a trail you can
+  query** (`services/motivation_inference.py`, `models.py`, `crud.py`,
+  `routers/users.py`, migration `20260813_000001`) — the weights already moved
+  from behaviour; what was missing was the two things that make a learned model
+  usable. The rule is `WEIGHT_RULES`, declared as data rather than an if-chain,
+  with four properties stated once and holding across all of them: cold start,
+  boundedness, normalization at the gate, and pinned components excluded by the
+  gate rather than by each rule remembering to check. The trail is
+  `AthleteMotivationWeightEvent`, written at the same gate the weights are, so a
+  weight cannot move without a row explaining it — including when the athlete
+  moves it themselves. Workout ratings and per-ride feel stay unwired on purpose:
+  neither has an honest mapping onto a weight yet. (#566)
+
+- **The athlete can answer an ambiguous ride match**
+  (`services/ride_matching.py`, `services/plan_pipeline.py`, `routers/ai.py`) — when two
+  activities could both be the planned session, the matcher had no way to ask.
+  It now surfaces the ambiguity and takes the athlete's answer, rather than
+  guessing and being wrong silently. (#574)
+
+### Changed
+
+- **One gate for "which ride does this client mean"** (`crud.py`, `schemas.py`,
+  `services/ride_matching.py`, `routers/ai.py`) — the rule that a ride is
+  identified by its provider string id, never by the numeric one a browser
+  rounds, had been written down since #441 and forgotten at three more
+  endpoints. `crud.get_ride_metric_by_identity` is now the only lookup, every
+  request model that names a ride inherits `RideIdentityRequest`, and
+  `tests/test_ride_identity_gate.py` sweeps both shapes so a new endpoint cannot
+  quietly miss it.
+
+  Writing that guardrail found two paths nobody knew were in this class.
+  `/ai/next-ride-recommendation` would fall through to "no ride at all" and
+  recommend from thin air — silently, which is worse in kind than the 404 the
+  athlete at least saw; it is latent, since no UI calls it yet.
+  `/ai/rate-workout` passes its id straight to Strava's own endpoint and is
+  genuinely exempt, recorded as `identifies_stored_ride = False` with a
+  docstring the guardrail requires, because an opt-out should be an argument on
+  the record rather than a switch someone flipped. (#592)
+
+- **The split-session window depends on what the session was for**
+  (`services/ride_matching.py`) — one global 90-minute gap decided whether two
+  recordings were one interrupted session, for every kind of session. They are
+  not the same question. For a recovery spin continuity is not the stimulus, so
+  two half-hours three hours apart are the session; for an endurance ride
+  continuity *is* the stimulus — progressive glycogen depletion, the shift
+  toward fat oxidation, durability — so two fresh hours never produce the state
+  the adaptation comes from. The endurance window is therefore *tighter* than
+  the old global one (45 minutes, the length of a real café stop) and the easy
+  window is far looser (8 hours). (#590)
+
+### Fixed
+
+- **The duration-rung assumptions were too timid**
+  (`services/training_load.py`, migration `20260818_000001`) — #579 stopped a
+  gym session reading as a rest day but only halved the error: an hour of
+  strength still lifted TSB by 2.6 points. Strength goes 35 → 55 load/hour,
+  cycling 45 → 50, hiking 30 → 35, and the migration reprices the stored rows
+  that used the duration rung — only those, which is what `tss_source` was added
+  for — then replays CTL/ATL/TSB per athlete. Deliberately not forced to exactly
+  zero: a session below the seven-day average genuinely does lower acute
+  fatigue, and pinning it flat would be fitting the model to one day. (#591)
+
+- **One yoga class dragged the whole day's rides into ambiguous**
+  (`services/ride_matching.py`) — `_is_duration_focused_ride_plan` ended in
+  `all(_is_cycling_ride(ride) for ride in rides)` over *every* activity of the
+  day, so a yoga session made it false, the duration-matching path was skipped
+  entirely, and two road rides plus the yoga all came back ambiguous — including
+  asking the yoga which bike ride it had been. The guard that answers "could
+  this activity be this session at all?" already existed and was wired only into
+  the two-a-day path (#496); the single-session path now asks it too, and an
+  activity that was never a candidate carries no verdict about one. (#589)
+
+- **The ride the athlete pointed at could not be found**
+  (`services/ride_matching.py`, `schemas.py`) — resolving an ambiguous
+  intervals ride answered 404 for two weeks and the card said "Could not save
+  that. Try again in a moment", where retrying could never work. #574 added an
+  endpoint that identified the ride by the synthesized 63-bit numeric id, which
+  a browser rounds; the provider's string id now travels with the request. Third
+  recurrence of #441. (#588)
+
+- **Every non-cycling activity classified as unknown/low**
+  (`services/activity_identity.py`, `services/analysis.py`,
+  `services/summary_pipeline.py`, migration `20260814_000001`) — so the coach asked a
+  gym session what its intervals had been. Activities whose sport type already
+  says what they are are classified from that with high confidence rather than
+  from a power stream they never had. (#578)
+
+- **A failed coach request lost the `llm_calls` rows it had paid for**
+  (`services/token_accounting.py`, `database.py`, `services/activity_sync.py`) — `track_llm_usage`
+  persisted through the request-scoped session, so an endpoint that raised took
+  the usage rows with it on rollback, along with `users.consumed_tokens`. The
+  log line and the table disagreed by ~52k input tokens, and the one case a cost
+  table most needs to show — a model that has started rejecting every request —
+  was the one case invisible in it. Usage from a raising block is now deferred
+  onto the session and flushed once the transaction has resolved, on both paths;
+  the session dependency is built by a factory the test suite shares, because a
+  harness that skips the `finally` cannot see a bug that lives in it. (#560)
+
 ### Added
 
 - **The athlete can see and correct what the coach thinks they train for**
