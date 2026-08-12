@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 
 from services.training_load import (
+    DEFAULT_LOAD_PER_HOUR,
+    FALLBACK_LOAD_PER_HOUR,
     LOAD_SOURCE_DURATION,
     LOAD_SOURCE_HEART_RATE,
     LOAD_SOURCE_POWER,
@@ -193,10 +195,24 @@ def test_sport_decides_the_assumed_intensity():
     assert running > yoga
 
 
-def test_an_unknown_sport_still_gets_a_load():
-    """Not knowing the sport is a reason to be conservative, not to claim rest."""
-    load = duration_training_load(duration_seconds=3600, sport_type="Kitesurfing")
-    assert load is not None and load > 0
+def test_an_unknown_sport_costs_no_less_than_the_cheapest_known_one():
+    """Not knowing the sport is a reason to be conservative, not to claim rest —
+    and "conservative" needs a floor or it is only a smaller number.
+
+    This assertion used to be ``load > 0``, which still held with the fallback
+    moved to 1 load/hour. `scripts/check_policy_guards.py` found that (#600).
+    Under that value an unrecognised sport would be the cheapest thing an
+    athlete can do, so importing one would make load quietly disappear — #579's
+    bug arriving by a different route.
+    """
+    hour = 3600
+    load = duration_training_load(duration_seconds=hour, sport_type="Kitesurfing")
+
+    assert load is not None
+    assert min(DEFAULT_LOAD_PER_HOUR.values()) <= load <= max(
+        DEFAULT_LOAD_PER_HOUR.values()
+    )
+    assert load == pytest.approx(FALLBACK_LOAD_PER_HOUR, abs=0.1)
 
 
 # --- Presentation ----------------------------------------------------------

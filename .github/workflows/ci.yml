@@ -83,6 +83,41 @@ jobs:
           flags: backend
           fail_ci_if_error: false
 
+  policy-guards:
+    name: Policy Constant Guards
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Deliberately its own job rather than part of the pytest run: it costs
+    # about a suite run of its own, and a green suite is not evidence that the
+    # numbers the suite ran against are load-bearing (#600).
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
+      JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 10080
+      STRAVA_CLIENT_ID: ci-strava-client
+      STRAVA_CLIENT_SECRET: ci-strava-secret
+      FRONTEND_URL: http://localhost:5173
+      BACKEND_URL: http://localhost:8000
+      OPENAI_API_KEY: ci-openai-key
+      GEMINI_API_KEY: ci-gemini-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --group dev
+
+      - name: Check that the numbers we decide with are load-bearing
+        run: uv run python scripts/check_policy_guards.py
+
   integration:
     name: Integration Tests (Frontend ↔ Backend)
     runs-on: ubuntu-latest

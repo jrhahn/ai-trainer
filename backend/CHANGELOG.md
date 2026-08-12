@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A check that the numbers this codebase decides with are load-bearing**
+  (`scripts/check_policy_guards.py`, `tests/policy_guards.py`,
+  `tests/policy_guard_plugin.py`, `.github/workflows/ci.yml`) — "rules as data"
+  is the house style, and the constants beside those tables are the other half
+  of the policy: `CHANNEL_COST` decides which uncertainties are ever put to the
+  athlete, `DEFAULT_LOAD_PER_HOUR` decides whether an hour in the gym raises
+  TSB. Nothing checked that any of them mattered. A passing suite does not
+  answer that question — a test can pass because the behaviour is right, or
+  because it asserts on something that would hold whatever the number said.
+
+  For each of the 17 registered constants: move it a long way, run the tests
+  that own it, require them to fail. The registry is the reviewable artifact and
+  says what each number decides. Perturbation happens on the imported module,
+  never on disk, so a killed run cannot leave the tree modified. Its own CI job,
+  about two minutes.
+
+  It found real gaps on its first run. `test_an_unknown_sport_still_gets_a_load`
+  asserted `load > 0`, which still held with the duration fallback moved to
+  1 load/hour — under which an unrecognised sport would be the cheapest thing an
+  athlete can do, so importing one would make load quietly disappear (#579's bug
+  by a different route). The assertion now pins the fallback between the
+  cheapest and dearest known sport. Three further "gaps" were wrong guesses in
+  the registry about which tests own a constant, which is the other thing this
+  writes down: that ownership was nowhere on record before.
+
+  Not general mutation testing. `mutmut` 3.7 was tried and does not fit: it runs
+  from a copied tree, so the whole backend has to be enumerated in `also_copy`
+  (fifteen entries, each found by a separate failure); stats collection alone is
+  a full suite run, and one 417-line module had not finished after ten minutes.
+  Decisively, it cannot tell policy from prose — the modules worth checking are
+  mostly `ValueRule(...)` and `SignalRule(...)` declarations, so its survivors
+  would be regex and English. (#600)
+
 ## [0.51.0] - 2026-08-11
 
 ### Added
