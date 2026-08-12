@@ -157,6 +157,22 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="99",
         tests=("tests/test_motivation_model.py",),
     ),
+    # --- Who the coach says the athlete is (#597) ---------------------------
+    PolicyGuard(
+        target="services.rider_identity:PATTERN_MIN_CONFIDENCE",
+        decides=(
+            "how much has to be observed before the coach describes someone's "
+            "character back to them"
+        ),
+        moved_to="0.01",
+        tests=("tests/test_identity_framed_recovery.py",),
+    ),
+    PolicyGuard(
+        target="services.rider_identity:STYLE_MIN_CONFIDENCE",
+        decides="when a performance attribute is a reading rather than a placeholder",
+        moved_to="0.0",
+        tests=("tests/test_identity_framed_recovery.py",),
+    ),
     # --- What the coach may rely on believing (#387, #593) ------------------
     PolicyGuard(
         target="crud:ATHLETE_MEMORY_CONFIDENCE_STEP",
