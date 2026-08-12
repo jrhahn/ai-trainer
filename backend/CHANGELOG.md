@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Recovery decisions are explained through the rider, not through what to
+  avoid** (`services/rider_identity.py`, `services/prompts.py`,
+  `routers/ai.py`) — the coach made the right call and gave the wrong reason.
+  Every clause after a downgrade was risk management ("keep your systemic
+  fatigue completely flat"), so the easier choice read as the absence of
+  training — the worst framing for an athlete whose goal is trail quality rather
+  than weekly load. Worse, "protecting an easy day from your competitive streak"
+  turned a behavioural pattern into a character flaw the athlete was being
+  helped to suppress.
+
+  #565 already says explain in the athlete's objective. It lost here, because
+  the rules it competes with (`rest_recommendation_rules`) are physiology end to
+  end and there was nothing in the prompt to explain *this* athlete's easy day
+  with. `PATTERN_RULES` is that missing piece: what each observed pattern means
+  on a session meant to be easy. "Rides harder with a target ahead" is a fact
+  about the athlete; "the easy ride is not at risk in the first twenty minutes,
+  it is at risk the moment someone appears up the road" is the sentence that
+  makes the recommendation theirs. The patterns come from the `rider_identity`
+  observations #593 accumulates, at the confidence where the coach is allowed to
+  rely on them — a second, independent telling, never one remark.
+
+  The riding-style read is deliberately one-directional. Durability is measured
+  against something a ride file contains, so "rides best under sustained
+  pressure" is supportable; the opposite is not, because
+  `_infer_anaerobic_capacity` caps its own confidence at 0.3 and says why —
+  nothing confirms a one-minute effort was maximal. Calling someone a puncher on
+  that would be the coach inventing an identity, which is the failure #565
+  guards against for objectives, so it is never asserted.
+
+  On the banned vocabulary: the issue lists bare words ("don't", "avoid",
+  "protect"). Banning those as words would mangle ordinary English and be
+  rightly ignored, so the rule names the *phrasing* in full — "protect your
+  recovery", "keep systemic load flat", "skipping training" — and gives the
+  replacement for each. Same reason #593 spelled out its three questions instead
+  of saying "avoid generic ones". `rest_recommendation_rules` now says
+  explicitly that it decides whether to rest, not how to say it. (#597)
+
 - **A check that the numbers this codebase decides with are load-bearing**
   (`scripts/check_policy_guards.py`, `tests/policy_guards.py`,
   `tests/policy_guard_plugin.py`, `.github/workflows/ci.yml`) — "rules as data"
@@ -41,6 +78,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Decisively, it cannot tell policy from prose — the modules worth checking are
   mostly `ValueRule(...)` and `SignalRule(...)` declarations, so its survivors
   would be regex and English. (#600)
+
+### Changed
+
+- **A memory observation crosses the trust threshold on its second sighting,
+  not its third** — no code change; three docstrings and a test comment said
+  three. The accrual is 0.35 on a first sighting and +0.2 after, and
+  `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
 ## [0.51.0] - 2026-08-11
 

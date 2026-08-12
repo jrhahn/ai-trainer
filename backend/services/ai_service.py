@@ -772,6 +772,7 @@ async def ask_trainer(
     training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     timezone_name: str | None = None,
     workout_curiosity: dict | None = None,
+    rider_identity: dict | None = None,
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
@@ -833,6 +834,7 @@ async def ask_trainer(
         training_status_badge=training_status_badge,
         date_context=date_context,
         workout_curiosity=workout_curiosity,
+        rider_identity=rider_identity,
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real

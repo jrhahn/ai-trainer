@@ -1446,6 +1446,100 @@ def reveal_uncertainty_rule() -> str:
     )
 
 
+def recovery_framing_rule() -> str:
+    """Explain a downgrade through who they are, not through what to avoid (#597).
+
+    The coach's recovery reasoning is entirely risk management — keep fatigue
+    low, protect the adaptation, stay fresh. Every clause is true and the whole
+    thing reads as the absence of training, which is the wrong answer for an
+    athlete whose goal is not a bigger number.
+
+    #565 already says explain in the athlete's objective. It loses here, because
+    the rules it competes with (:func:`rest_recommendation_rules`) are physiology
+    end to end and there was nothing in the prompt to explain *this* athlete's
+    easy day with. :mod:`services.rider_identity` supplies that; this says what
+    to do with it.
+
+    On the banned vocabulary: the issue lists bare words — "don't", "avoid",
+    "protect". Banning those as words would mangle ordinary English and the model
+    would rightly ignore it, so what is named here is the *phrasing*, literally
+    and in full. That is the #593 lesson: "avoid generic framing" is advice a
+    model agrees with and then does not follow; a list of sentences is not.
+    """
+    return (
+        "\n\nFraming a recommendation to do less:\n"
+        "- This applies whenever you recommend LESS than the athlete could "
+        "physically do — a rest day, a recovery spin, yoga or mobility instead of "
+        "a ride, a shorter or easier version of what was planned.\n"
+        "- Chain the reason: what you know about them as a rider → the pattern "
+        "that makes this the right call for them → what it buys their own "
+        "objective. Physiology stays, as the middle of that chain and never as "
+        "the end of it. The 'Who this athlete is as a rider' section gives you "
+        "the first two when they are known.\n"
+        "- Name the pattern as a fact about how they ride, never as a failing. "
+        "'The danger is the moment a target appears and the ride becomes a "
+        "pursuit — that is a behavioural pattern, not a discipline problem' is "
+        "the register. Never imply weak willpower, and never congratulate them "
+        "for resisting themselves.\n"
+        "- Say what the easier choice BUYS, not what it prevents. These framings "
+        "are banned: 'protect your recovery', 'keep your fatigue low', 'keep "
+        "systemic load flat', 'avoid digging into your reserves', 'don't overdo "
+        "it', and calling it 'skipping training' or 'a day off'. Use instead: it "
+        "invests in how the next key ride feels, it preserves the quality of the "
+        "riding they care about, it means arriving fresher for the day that "
+        "matters, it improves how the body feels on the trail.\n"
+        "- NEVER invent an identity. With no rider section given, or a pattern "
+        "held below the confidence stated there, explain in plain terms and do "
+        "not attribute a character to them. Telling an athlete who they are is "
+        "worse than not knowing — the same rule as for their objective.\n"
+        "- One or two sentences of this, woven into the answer. It is a reason, "
+        "not a section: never label it, never list the steps, and do not repeat "
+        "the pattern back at them every time it applies."
+    )
+
+
+def rider_identity_section(identity: dict | None) -> str:
+    """Who this athlete is as a rider, when enough has been observed (#597).
+
+    Volatile — it is a picture that grows — so it sits with the athlete data
+    rather than in the cached prefix. Absent for a new athlete: a pattern has to
+    be seen twice, in separate messages, before the coach may build a sentence
+    about someone's character on it.
+    """
+    if not identity:
+        return ""
+
+    lines = ["\n\nWho this athlete is as a rider (observed, not assumed):"]
+    style = identity.get("style")
+    if isinstance(style, dict) and style.get("reading"):
+        lines.append(
+            f"- Style: {style['reading']} — read from {style.get('basis', '')} "
+            f"(confidence {float(style.get('confidence') or 0):.2f})"
+        )
+
+    patterns = identity.get("patterns") or []
+    for entry in patterns:
+        if not isinstance(entry, dict) or not entry.get("pattern"):
+            continue
+        lines.append(
+            f"- Pattern: {entry['pattern']} "
+            f"(confidence {float(entry.get('confidence') or 0):.2f}). "
+            f"On a session meant to be easy, {entry.get('onAnEasyDay', '')}"
+        )
+        words = entry.get("theirWords")
+        if words:
+            lines.append(f"  Their words: \"{words}\"")
+
+    if len(lines) == 1:
+        return ""
+    lines.append(
+        "Use this to explain a recommendation to do less, not to label them. "
+        "State a pattern as how they ride, never as something to overcome, and "
+        "hold it at the confidence given — these are readings they can correct."
+    )
+    return "\n".join(lines)
+
+
 def curiosity_rule() -> str:
     """Be interested in the ride, not only in the numbers from it (#593).
 
@@ -1812,7 +1906,11 @@ def rest_recommendation_rules() -> str:
         "unless it is tied to concrete evidence.\n"
         "- If allowing easy endurance before an upcoming intensity day, set clear limits "
         "(duration, Z2/recovery intensity, no surges) and make the next hard session conditional "
-        "on morning freshness."
+        "on morning freshness.\n"
+        "- These rules decide WHETHER to recommend rest. They do not decide how to "
+        "say it: once you have made the call, the framing rules for recommending "
+        "less than the athlete could do apply, and they outrank the risk-management "
+        "vocabulary here."
     )
 
 
@@ -1867,6 +1965,7 @@ def coach_static_prefix() -> str:
     )
 
     curiosity_instructions = curiosity_rule()
+    recovery_framing_instructions = recovery_framing_rule()
 
     # Outlook instructions: guide the coach when the athlete asks for a session preview
     outlook_instructions = (
@@ -1927,6 +2026,7 @@ def coach_static_prefix() -> str:
         f"{hard_spacing_instructions}"
         f"{attentive_coach_instructions}"
         f"{curiosity_instructions}"
+        f"{recovery_framing_instructions}"
         f"{constraint_instructions}"
         f"{outlook_instructions}\n\n"
         "Always take today's date into account when answering — for example when calculating "
@@ -2011,6 +2111,7 @@ def ask_trainer_system_sections(
     training_status_badge: tuple[str | None, str | None, str | None] | None = None,
     date_context: str = "",
     workout_curiosity: dict | None = None,
+    rider_identity: dict | None = None,
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2110,6 +2211,9 @@ def ask_trainer_system_sections(
         "training-load": training_load_section,
         "athlete-context": durable_context_section,
         "motivation-model": durable_motivation_section,
+        # Next to the objective on purpose: the framing rule chains identity →
+        # pattern → objective, and the two halves of that chain read together.
+        "rider-identity": rider_identity_section(rider_identity),
         "athlete-model": durable_model_section,
         "performance-model": perf_model_section,
         "roi": roi_section,

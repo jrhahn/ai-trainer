@@ -24,6 +24,7 @@ from services import coach_summary
 from services import plan_pipeline
 from services import roi_recommendation
 from services import status_pipeline
+from services import rider_identity
 from services import summary_pipeline
 from services import workout_curiosity
 from services.activity_imports import ImportedActivity
@@ -1070,6 +1071,18 @@ async def ask_trainer(
             ).model_dump(by_alias=False, mode="json")
             for hypothesis in hypothesis_rows
         ]
+    # Who this athlete is as a rider (#597) — read after the performance model,
+    # since the style half comes off it. Gated on memory like everything durable,
+    # and best-effort: it explains a recommendation, it never makes one.
+    rider_identity_context: dict | None = None
+    if memory_enabled:
+        try:
+            rider_identity_context = await rider_identity.identity_for_prompt(
+                db, current_user.id, performance_model=performance_model
+            )
+        except Exception:
+            logger.warning("Rider-identity read failed", exc_info=True)
+
     chat_messages = await crud.get_chat_messages(db, current_user.id)
     conversation_history = [
         {"role": msg.role, "content": msg.content}
@@ -1146,6 +1159,7 @@ async def ask_trainer(
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
                 workout_curiosity=workout_curiosity_context,
+                rider_identity=rider_identity_context,
             )
         except AIRateLimitError:
             raise HTTPException(

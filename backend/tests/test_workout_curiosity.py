@@ -334,7 +334,7 @@ async def test_telling_it_again_builds_the_belief(client, auth_headers):
     """
     user_id = await _user_id(client, auth_headers)
 
-    for _ in range(3):
+    for _ in range(2):
         async with TestSessionLocal() as db:
             await wc.curiosity_for_message(db, user_id, THE_MESSAGE)
             await db.commit()
@@ -346,9 +346,9 @@ async def test_telling_it_again_builds_the_belief(client, auth_headers):
             if fact.category == wc.MEMORY_CATEGORY
         ]
     chase = next(fact for fact in facts if "target ahead" in fact.fact)
-    assert chase.observation_count == 3
-    # Three sightings is what it takes to become something the coach may rely
-    # on in a prompt, rather than a candidate it is still weighing (#387).
+    assert chase.observation_count == 2
+    # A second, independent sighting is what turns a candidate into something the
+    # coach may rely on in a prompt: 0.35 on the first, +0.2 on each after (#387).
     assert chase.confidence >= 0.5
 
 
