@@ -45,8 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   What each signal argues for is written to `athlete_memory_facts` as an
   observation carrying the athlete's own sentence, so the rider-identity picture
-  accumulates through the existing confidence-accrual machinery — three
-  sightings to cross the trust threshold — and each telling costs the topic its
+  accumulates through the existing confidence-accrual machinery — a second,
+  independent sighting to cross the trust threshold — and each telling costs the topic its
   novelty, so the coach moves on to what it does not know yet.
 
   Two defects in the shared value gate surfaced, both found by a guardrail
