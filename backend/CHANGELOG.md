@@ -46,6 +46,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach notices the interesting part of a workout message**
+  (`services/workout_curiosity.py`, `services/prompts.py`,
+  `services/uncertainty_value.py`, `routers/ai.py`, `crud.py`) — after a session
+  the coach reliably validated the execution, advised conservatively and asked
+  how the legs felt. Nothing in that is wrong and it is worth almost nothing: it
+  spends the one follow-up question a reply is allowed on the least informative
+  thing available, while the rider the athlete chased down, the week they spent
+  ill and the sentence where they said what they love about cycling go
+  unremarked.
+
+  `SIGNAL_RULES` reads the four narrative families deterministically — social,
+  emotion, behaviour, health — with German patterns alongside English, since a
+  capture that only reads English quietly stops working for half the messages.
+  Physiology is the fifth and is read *off the numbers* rather than by keyword,
+  because "power rose across all three intervals" is a fact about a sequence. The
+  rules name a **topic** and never a question: a stored question string would be
+  read out verbatim and every athlete would get the same sentence, which is this
+  issue's own failure one level up.
+
+  Whether to ask at all goes through the #582 gate on its own `curiosity`
+  channel rather than a second bar with its own opinions, and that reuse does
+  the central work for free. The gate declines uncertainties the training stream
+  settles by itself, so "is their threshold power rising?" scores 0.08 and is
+  refused while "is a target up the road what lifts their effort?" scores 1.00
+  and is asked. Restraint comes from the same place: a message with numbers and
+  no story fires nothing at all.
+
+  Ranking keeps three judgements apart — the gate (worth asking at all), novelty
+  (which still has something to reveal, an ordering and never a veto) and
+  whether the signal could *explain* what the numbers did, which is what breaks
+  the ties the gate genuinely cannot.
+
+  What each signal argues for is written to `athlete_memory_facts` as an
+  observation carrying the athlete's own sentence, so the rider-identity picture
+  accumulates through the existing confidence-accrual machinery — a second,
+  independent sighting to cross the trust threshold — and each telling costs the topic its
+  novelty, so the coach moves on to what it does not know yet.
+
+  Two defects in the shared value gate surfaced, both found by a guardrail
+  asking whether every rule could ever clear its own gate, and both fixed there
+  rather than worked around:
+
+  * **Two of the twelve rules were dead.** A question about pacing *intent* was
+    declined for containing the word "pacing", and a fuelling question for
+    containing "fitness". A power file records what the athlete did, never
+    whether they meant to, and nothing at all about what went into them, so
+    `lives_in_the_athlete` gained those patterns.
+  * **A negative reducibility rule did not subtract**, although the module has
+    always said it does; it only set a flag. When "pacing is recorded" and "why
+    they paced that way is not" both fire on one question, letting the first win
+    outright made it unaskable. (#593)
+
 - **One gate deciding whether an uncertainty is worth resolving**
   (`services/uncertainty_value.py`, `services/athlete_inquiry.py`,
   `services/hypothesis_generation.py`, `services/open_question_generation.py`,
