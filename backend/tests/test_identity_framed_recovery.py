@@ -136,14 +136,27 @@ async def test_a_new_athlete_gets_no_identity_section(client, auth_headers):
         assert await ri.identity_for_prompt(db, user_id) is None
 
 
-def test_one_remark_is_not_enough_to_describe_someone():
-    """#593 caps a first sighting below the trust threshold on purpose, and this
-    is the consumer that has to honour it. 0.35 is what one telling scores; 0.55
-    is what a second, independent one does."""
+def test_the_bar_is_where_it_says_it_is():
+    """This function is about the threshold, not about how a fact got there —
+    so it is stated as the threshold, either side of it. What one and two
+    tellings actually score is the accrual's business, and is asserted against
+    the real write path in the integration tests below.
+    """
     chase = _rule("chased_someone_down")
+    bar = ri.PATTERN_MIN_CONFIDENCE
 
-    assert ri.patterns_from_facts([_Fact(chase.observation, 0.35)]) == []
-    assert ri.patterns_from_facts([_Fact(chase.observation, 0.55)]) != []
+    assert ri.patterns_from_facts([_Fact(chase.observation, bar - 0.01)]) == []
+    assert ri.patterns_from_facts([_Fact(chase.observation, bar)]) != []
+
+
+def test_one_telling_lands_below_that_bar_and_two_land_above_it():
+    """The claim the prompt section makes, tied to the constants that decide it
+    rather than to two numbers copied out of them. Change the accrual and this
+    fails here, loudly, instead of at a distance."""
+    first = crud.ATHLETE_MEMORY_DEFAULT_CONFIDENCE
+    second = first + crud.ATHLETE_MEMORY_CONFIDENCE_STEP
+
+    assert first < ri.PATTERN_MIN_CONFIDENCE <= second
 
 
 def test_the_athletes_own_confirmation_outranks_the_confidence_bar():
