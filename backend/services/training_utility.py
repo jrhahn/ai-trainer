@@ -91,6 +91,13 @@ _MODALITY_RISK = {
 # to crash is not asking to stop cycling.
 RISK_FILTER_THRESHOLD = 0.6
 
+# Off-the-bike strength work. Not an ROI system — :mod:`services.roi_recommendation`
+# deliberately refuses to offer a gym session as a way to raise VO₂max — but a day
+# in an athlete's week can be one, which is what
+# :mod:`services.freshness_allocation` needs to score (#602). Kept as a plain
+# string here rather than imported from there, so the dependency stays one-way.
+SYSTEM_STRENGTH = "strength"
+
 # How well each system transfers to race day. Threshold and VO₂max are what race
 # results are made of; gym work supports them at one remove.
 _SYSTEM_RACE_SPECIFICITY = {
@@ -98,6 +105,9 @@ _SYSTEM_RACE_SPECIFICITY = {
     SYSTEM_VO2MAX: 0.85,
     SYSTEM_ANAEROBIC: 0.6,
     SYSTEM_ENDURANCE: 0.5,
+    # Real, and at two removes from a result: it holds a position and keeps the
+    # athlete uninjured, it does not make them faster on the day.
+    SYSTEM_STRENGTH: 0.25,
 }
 # Structured work is easier to execute precisely indoors; a technical trail ride
 # is a poor place to hold 300 W for 20 minutes.
@@ -174,11 +184,17 @@ def score_components(
     gain: str,
     affinity: Mapping[str, float],
     upcoming_races: int = 0,
+    race_specificity: float | None = None,
 ) -> dict[str, float]:
     """Score one option on every motivation axis, each 0–10.
 
     Pure: the same option and the same athlete always produce the same numbers,
     which is what lets a recommendation be re-derived when someone asks why.
+
+    ``race_specificity`` overrides the per-system default for callers scoring
+    something the system table does not describe on its own. A rest day and a
+    long endurance ride are both ``endurance``; only one of them transfers to a
+    result, and #602's day board needs to say which.
     """
     like = float(affinity.get(modality, mm.NEUTRAL_AFFINITY))
     reliability = _MODALITY_RELIABILITY.get(modality, 0.7)
@@ -200,7 +216,11 @@ def score_components(
         # who has stopped racing.
         "race_performance": (
             _scale(
-                _SYSTEM_RACE_SPECIFICITY.get(system, 0.5)
+                (
+                    race_specificity
+                    if race_specificity is not None
+                    else _SYSTEM_RACE_SPECIFICITY.get(system, 0.5)
+                )
                 * _MODALITY_STRUCTURE.get(modality, 0.7)
             )
             if upcoming_races

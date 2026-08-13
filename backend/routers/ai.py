@@ -19,6 +19,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services import athlete_model_inference
+from services import freshness_allocation
 from services import motivation_inference
 from services import coach_summary
 from services import plan_pipeline
@@ -897,6 +898,13 @@ async def generate_plan(
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
+    # Who this athlete is and what their freshness is for (#602) — the same block
+    # the nightly regen builds, so the two triggers plan for the same person.
+    athlete_model_section = (
+        await freshness_allocation.athlete_model_section_for_user(
+            db, current_user, timezone_name=timezone_name
+        )
+    )
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:
             plan = await ai_service.generate_training_plan(
@@ -907,6 +915,7 @@ async def generate_plan(
                 weather_context_section=weather_section,
                 race_events=race_events,
                 timezone_name=timezone_name,
+                athlete_model_section=athlete_model_section,
             )
         except AIRateLimitError:
             raise HTTPException(

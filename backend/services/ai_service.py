@@ -568,6 +568,7 @@ async def generate_training_plan(
     weather_context_section: str = "",
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
+    athlete_model_section: str = "",
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
@@ -583,6 +584,7 @@ async def generate_training_plan(
         metrics_history_section=metrics_history_section,
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
+        athlete_model_section=athlete_model_section,
     )
     return await _generate_plan_days(provider, system_prompt, user_msg)
 
@@ -648,6 +650,7 @@ async def adapt_training_plan(
     weather_context_section: str = "",
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
+    athlete_model_section: str = "",
 ) -> list[dict]:
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
@@ -681,6 +684,7 @@ async def adapt_training_plan(
         metrics_history_section=metrics_history_section,
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
+        athlete_model_section=athlete_model_section,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

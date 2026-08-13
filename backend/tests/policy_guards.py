@@ -157,6 +157,40 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="99",
         tests=("tests/test_motivation_model.py",),
     ),
+    # --- What the athlete's freshness is spent on (#602) ---------------------
+    PolicyGuard(
+        target="services.freshness_allocation:HEAT_PENALTY",
+        decides="whether 34 °C changes what a day should be at all",
+        moved_to="0.0",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
+    PolicyGuard(
+        target="services.freshness_allocation:HEAT_TOLERANCE_SCALE[tolerant]",
+        decides=(
+            "whether an athlete who demonstrably rides fine in the heat still "
+            "gets talked off their hot day"
+        ),
+        moved_to="1.0",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
+    PolicyGuard(
+        target="services.freshness_allocation:FRESHNESS_PENALTY_SCALE",
+        decides="whether a hard session is charged for the weekend it costs",
+        moved_to="0.0",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
+    PolicyGuard(
+        target="services.freshness_allocation:VALUE_GAIN",
+        decides="how much of a weight vector it takes to call a demand important",
+        moved_to="0.1",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
+    PolicyGuard(
+        target="services.freshness_allocation:BAND_HIGH",
+        decides="what the planner is told counts as high-value freshness",
+        moved_to="0.99",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
     # --- Who the coach says the athlete is (#597) ---------------------------
     PolicyGuard(
         target="services.rider_identity:PATTERN_MIN_CONFIDENCE",
