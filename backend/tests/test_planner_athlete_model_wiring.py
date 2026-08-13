@@ -97,6 +97,117 @@ async def test_memory_off_means_the_objective_stays_out_of_the_plan(db, user):
     assert await fa.athlete_model_section_for_user(db, user) == ""
 
 
+async def test_the_identity_and_the_roi_chain_reach_the_planner_too(db, user):
+    """The rest of the athlete model, not just the objective.
+
+    #597 built the rider identity for the *chat*. The point of this issue is
+    that the planner never saw it, so a read that quietly returns the objective
+    alone would look like it works and still be the bug.
+    """
+    await _give_them_an_objective(db, user)
+    await crud.upsert_athlete_performance_model(
+        db,
+        user.id,
+        attributes={
+            "ftp": {"estimate": 260, "score": "moderate", "confidence": 0.8},
+            "map": {"estimate": 330, "score": "high", "confidence": 0.8},
+            "fatigue_resistance": {"score": "high", "confidence": 0.6},
+            "aerobic_endurance": {"score": "above_average", "confidence": 0.5},
+        },
+        limiters=[{"limiter": "threshold", "confidence": 0.8}],
+    )
+    await db.flush()
+
+    section = await fa.athlete_model_section_for_user(db, user)
+
+    # The identity half: the diesel read #597 derives from the same model.
+    assert "rides best under sustained pressure" in section
+    # The ROI half: a threshold limiter makes the key session worth more, so the
+    # board is not scoring physiology off a flat default.
+    board = fa.allocate_day(
+        crud.motivation_model_as_dict(
+            await crud.get_athlete_motivation_model(db, user.id)
+        ),
+        gain_map={"threshold": "large"},
+    )
+    flat = fa.allocate_day(
+        crud.motivation_model_as_dict(
+            await crud.get_athlete_motivation_model(db, user.id)
+        )
+    )
+    key = next(o for o in board["options"] if o["key"] == "key_session")
+    key_flat = next(o for o in flat["options"] if o["key"] == "key_session")
+    assert key["components"]["adaptation"] > key_flat["components"]["adaptation"]
+
+
+async def test_a_hot_horizon_puts_the_heat_on_the_board(db, user, monkeypatch):
+    """Heat is read from the forecast the plan actually covers.
+
+    Scoring every plan against 34 °C in February would be the same mistake as
+    ignoring it in August, so this is the branch that decides which.
+    """
+    from services import weather_service
+
+    await _give_them_an_objective(db, user)
+
+    async def hot_forecast(db_, user_id, days):
+        return None, [{"date": "2026-08-14", "temperature_max_c": 34.0}]
+
+    async def mild_forecast(db_, user_id, days):
+        return None, [{"date": "2026-02-14", "temperature_max_c": 6.0}]
+
+    monkeypatch.setattr(weather_service, "daily_forecast_for_user", hot_forecast)
+    hot_section = await fa.athlete_model_section_for_user(db, user)
+
+    monkeypatch.setattr(weather_service, "daily_forecast_for_user", mild_forecast)
+    mild_section = await fa.athlete_model_section_for_user(db, user)
+
+    assert "at or above 29 °C" in hot_section
+    assert "at or above 29 °C" not in mild_section
+
+
+async def test_a_hot_horizon_reads_the_learned_heat_tolerance(db, user, monkeypatch):
+    """The other half of the guard: the scoring is only as good as this lookup."""
+    from services import weather_preference, weather_service
+
+    await _give_them_an_objective(db, user)
+    await crud.propose_athlete_hypothesis(
+        db,
+        user.id,
+        statement=weather_preference.preference_statement(
+            weather_preference.DIMENSION_HEAT, weather_preference.DIRECTION_TOLERANT
+        ),
+        category=weather_preference.CATEGORY,
+        confidence=0.7,
+    )
+    await db.flush()
+
+    async def hot_forecast(db_, user_id, days):
+        return None, [{"date": "2026-08-14", "temperature_max_c": 34.0}]
+
+    monkeypatch.setattr(weather_service, "daily_forecast_for_user", hot_forecast)
+    section = await fa.athlete_model_section_for_user(db, user)
+
+    assert "heat-tolerant" in section
+    assert "a second time" in section
+
+
+async def test_a_forecast_outage_costs_the_heat_and_never_the_board(db, user, monkeypatch):
+    """Weather is additive context — it must never be why a plan has no priorities."""
+    from services import weather_service
+
+    await _give_them_an_objective(db, user)
+
+    async def boom(db_, user_id, days):
+        raise RuntimeError("forecast upstream is down")
+
+    monkeypatch.setattr(weather_service, "daily_forecast_for_user", boom)
+    section = await fa.athlete_model_section_for_user(db, user)
+
+    assert "freshness is worth spending on" in section
+    assert "at or above 29 °C" not in section
+
+
 async def test_a_failed_read_costs_the_context_and_never_the_plan(db, user, monkeypatch):
     """Best-effort by construction: a plan is the product."""
     await _give_them_an_objective(db, user)
