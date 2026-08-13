@@ -565,6 +565,155 @@ def analyse_activities_computed_section(
 # ---------------------------------------------------------------------------
 
 
+def plan_allocation_rule() -> str:
+    """Plan for what the athlete trains for, not only for progression (#602).
+
+    The conversation layer has been athlete-model-first since #562/#565/#597 and
+    the planner never was. It asked whether the athlete could physiologically
+    take another threshold session and, being right about that, put one in the
+    week — 48 h after the last one, in 34 °C, two days before the long off-road
+    day the athlete actually trains for. The coach then talked them out of it in
+    chat, which is the mismatch in one sentence: the plan and the conversation
+    were optimizing different things.
+
+    So this rule changes the question. Not *can they handle it* but *is this the
+    best use of the freshness they have* — and the answer comes from the board in
+    the athlete's own section, not from here. Three things it has to hold:
+
+    * **This is not an instruction to train less.** Reallocating freshness is the
+      whole point; a planner that read this as "go easier" would be a worse
+      planner and a more annoying one.
+    * **Off-bike work is a real option.** A strength day was never on any board
+      the planner could see, which is why the only way to not schedule intervals
+      was to schedule nothing.
+    * **The reason given to the athlete has to be theirs.** "Avoid unnecessary
+      fatigue" is a true sentence about a stranger. The same decision explained
+      as protecting the next long day is the same plan and a different coach —
+      the #565 chain, applied to ``workoutPurpose``.
+    """
+    return (
+        "\n\nAllocating the athlete's freshness (read with their objective section):\n"
+        "- The question for every day is NOT 'can this athlete physiologically "
+        "handle a hard session?' — it is 'is a hard session the highest-value use "
+        "of the freshness they have?'. Those differ exactly when the athlete "
+        "trains for something other than a bigger number.\n"
+        "- When a ranked day board is given, treat it as the priority order for "
+        "what a day should BE. It already accounts for this athlete's own "
+        "weights, the heat, and what their freshness is being saved for. Deviate "
+        "from it when the calendar, availability or hard-session spacing demand "
+        "it — those still win — but not merely to accumulate load.\n"
+        "- Off-bike strength and mobility work is a full option, not a filler. It "
+        "is real training that costs almost nothing in riding freshness, which "
+        "makes it the right answer on a hot day 48 h after a hard session and "
+        "ahead of a long weekend ride. Schedule it as \"strength\" with a concrete "
+        "session, not as a vague note.\n"
+        "- This is not an instruction to train less. Total load is not the thing "
+        "being reduced — it is being spent somewhere else. If you take intensity "
+        "out of one day, the plan still has to add up over the fortnight.\n"
+        "- Explain the choice in the athlete's terms in \"workoutPurpose\". Do NOT "
+        "write 'avoid unnecessary fatigue', 'keep systemic load low' or 'protect "
+        "the adaptation' — those describe the mechanism and say nothing about "
+        "them. Write what the day buys them: keeping the next long off-road day "
+        "sharp rather than merely survivable, arriving at the event able to "
+        "race it, still enjoying the last descent after four hours. When no "
+        "objective is given, fall back to plain physiology — never invent one."
+    )
+
+
+def planner_athlete_model_section(
+    motivation: dict | None = None,
+    identity: dict | None = None,
+    allocation: dict | None = None,
+) -> str:
+    """Everything the planner needs to know about *who it is planning for* (#602).
+
+    One composed block rather than three parameters threaded through every plan
+    entry point, because these are never useful apart: an objective with no board
+    is a preference the planner cannot act on, and a board with no objective is
+    five numbers with no reason attached.
+    """
+    parts = [
+        motivation_model_section(motivation).strip(),
+        rider_identity_section(identity).strip(),
+        freshness_allocation_section(allocation).strip(),
+    ]
+    body = "\n\n".join(part for part in parts if part)
+    return f"\n\n{body}" if body else ""
+
+
+# How many day options reach the plan prompt. All five is barely more expensive
+# than three and the ones at the bottom carry the trade-off: a board that stops
+# after the winners does not show what was given up.
+_ALLOCATION_OPTIONS_SHOWN = 5
+
+
+def freshness_allocation_section(allocation: dict | None) -> str:
+    """The day board, with every deduction named (#602).
+
+    Both the base score and the two deductions are shown per option on purpose,
+    for the reason #564 shows its two sub-scores: a day that lost to the weather
+    and a day that lost to the weekend lost for different reasons, and a coach
+    that cannot tell the athlete which one is not explaining anything.
+    """
+    if not allocation or not allocation.get("options"):
+        return ""
+
+    # Imported here rather than at module scope: this module is imported by
+    # nearly everything, and the allocation service reaches the learning stack.
+    from services.freshness_allocation import band, demand_label
+
+    values = allocation.get("recovery_value") or {}
+    worth = "; ".join(
+        f"{demand_label(demand)}: {band(float(value))}"
+        for demand, value in sorted(values.items(), key=lambda kv: -kv[1])
+    )
+
+    lines = [
+        "\n\nWhat this athlete's freshness is worth spending on "
+        "(derived from their own objective and weights, not from physiology):",
+    ]
+    if worth:
+        lines.append(f"- Freshness is worth most for — {worth}")
+
+    lines.append(
+        "Ranked kinds of day for this athlete right now"
+        + (
+            " on a day at or above 29 °C"
+            if allocation.get("hot")
+            else ""
+        )
+        + " (score = their own weighted value, minus heat, minus the freshness a "
+        "higher-valued demand wanted):"
+    )
+    for option in allocation["options"][:_ALLOCATION_OPTIONS_SHOWN]:
+        detail = f"score {option.get('score')} (value {option.get('base')}"
+        if option.get("heat_cost"):
+            detail += f", −{option['heat_cost']} heat"
+        if option.get("freshness_cost"):
+            detail += (
+                f", −{option['freshness_cost']} freshness owed to "
+                f"{demand_label(str(option.get('competes_with') or ''))}"
+            )
+        detail += ")"
+        lines.append(
+            f"- {option.get('label')} [{option.get('prescription')}, "
+            f"{option.get('modality')}]: {detail}"
+        )
+
+    tolerance = allocation.get("heat_tolerance")
+    if tolerance:
+        lines.append(
+            f"- The heat deduction above is already scaled for this athlete being "
+            f"heat-{tolerance}; do not discount hot days a second time."
+        )
+    lines.append(
+        "This ranks what a day is best spent ON. It does not know the calendar, "
+        "so you still place the sessions — availability, race dates and "
+        "hard-session spacing override it."
+    )
+    return "\n".join(lines)
+
+
 def generate_plan_system() -> str:
     return (
         f"{COACH_PERSONA} Generate a 14-day training plan as JSON.\n"
@@ -597,6 +746,7 @@ def generate_plan_system() -> str:
         '"intervals" (array of objects with "duration" (integer seconds), '
         '"power" (integer watts), "rest" (integer seconds)).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
+        f"{plan_allocation_rule()}\n"
         "Workout type guidance:\n"
         "- If there is an upcoming race in the athlete profile or race calendar, include race-specific workouts and a taper week\n"
         "- If there is no upcoming race, build a balanced general-fitness plan with endurance, strength, consistency, and recovery\n"
@@ -656,6 +806,7 @@ def generate_plan_user(
     metrics_history_section: str = "",
     weather_context_section: str = "",
     race_events_section: str = "",
+    athlete_model_section: str = "",
 ) -> str:
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
@@ -664,7 +815,7 @@ def generate_plan_user(
     events_section = f"\n{race_events_section}" if race_events_section else ""
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}\n"
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
         "Generate a 14-day training plan starting from today that reflects the athlete's "
         "actual fitness level from recent rides and any upcoming race context."
     )
@@ -701,8 +852,11 @@ def adapt_plan_system() -> str:
         "placed here in the adapted plan), "
         '"keyFocusPoints" (array of 3-5 coaching-cue strings, each starting with an action verb).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
+        f"{plan_allocation_rule()}\n"
         "Use TSB to guide adaptation: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
-        "TSB > +10 before a key workout suggests freshness, intensity can be increased."
+        "TSB > +10 before a key workout suggests freshness, intensity can be increased. "
+        "A positive TSB says freshness is available; it does not say what to spend it on — "
+        "the freshness-allocation rules above decide that."
     )
 
 
@@ -717,6 +871,7 @@ def adapt_plan_user(
     metrics_history_section: str = "",
     weather_context_section: str = "",
     race_events_section: str = "",
+    athlete_model_section: str = "",
 ) -> str:
     assessment_section = (
         f"\nRider assessment: {json.dumps(rider_assessment)}"
@@ -754,7 +909,7 @@ def adapt_plan_user(
     )
     return (
         f"Today's date: {today}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{taper_section}\n"
+        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(incomplete_days)}\n"
         + stale_note

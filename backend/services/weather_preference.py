@@ -621,6 +621,39 @@ async def refresh_weather_preferences(
     return len(beliefs)
 
 
+async def heat_tolerance_for_user(
+    db: AsyncSession,
+    user_id: str,
+) -> str | None:
+    """This athlete's learned heat tolerance as a direction, or ``None``.
+
+    Read by the freshness allocator (#602), which deducts utility from outdoor
+    work on hot days and must not deduct it from an athlete who demonstrably
+    rides fine in the heat — the failure this module exists to prevent, applied
+    one layer up.
+
+    Matched on the canonical statement text rather than a parsed field because
+    that text *is* the merge key here: both ride evidence and what the athlete
+    said themselves reinforce the same row through it.
+    """
+    by_statement = {
+        _STATEMENTS[(DIMENSION_HEAT, direction)]: direction
+        for direction in (DIRECTION_TOLERANT, DIRECTION_SENSITIVE)
+    }
+    rows = await crud.list_athlete_hypotheses(db, user_id)
+    best: tuple[float, str] | None = None
+    for row in rows:
+        if row.category != CATEGORY:
+            continue
+        direction = by_statement.get(row.statement)
+        if direction is None:
+            continue
+        confidence = float(row.confidence or 0.0)
+        if best is None or confidence > best[0]:
+            best = (confidence, direction)
+    return best[1] if best is not None else None
+
+
 async def weather_preference_context_for_user(
     db: AsyncSession,
     user_id: str,

@@ -14,6 +14,7 @@ import schemas
 from config import settings
 from services import ai_service
 from services import coach_summary
+from services import freshness_allocation
 from services.dates import app_today_iso, app_timezone
 from services.llm import resolve_user_provider
 from services import plan_pipeline
@@ -107,6 +108,13 @@ async def maintain_user_training_plan(
     if constraints:
         profile = {**profile, "availabilityConstraints": constraints}
 
+    # Who this athlete is and what their freshness is for (#602). The nightly run
+    # rewrites the week without anyone watching, so it is the trigger that most
+    # needs to be planning for the actual athlete rather than a generic one.
+    athlete_model_section = await freshness_allocation.athlete_model_section_for_user(
+        db, user, timezone_name=timezone_name
+    )
+
     async with track_llm_usage(db, user, source="step:plan-maintenance"):
         updated_plan = await ai_service.adapt_training_plan(
             plan,
@@ -118,6 +126,7 @@ async def maintain_user_training_plan(
             weather_context_section=weather_section,
             race_events=_race_events_for_prompt(race_events),
             timezone_name=timezone_name,
+            athlete_model_section=athlete_model_section,
         )
 
     # Hard-constraint enforcement, concurrent-edit protection and persistence

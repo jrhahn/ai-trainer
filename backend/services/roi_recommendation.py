@@ -41,7 +41,9 @@ GAIN_MODERATE = "moderate"
 GAIN_SMALL = "small"
 GAIN_MAINTENANCE = "maintenance"
 
-_GAIN_RANK = {GAIN_LARGE: 3, GAIN_MODERATE: 2, GAIN_SMALL: 1, GAIN_MAINTENANCE: 0}
+# Public: #602's day board ranks the same buckets when a kind of day could be
+# delivered as either of two systems.
+GAIN_RANK = {GAIN_LARGE: 3, GAIN_MODERATE: 2, GAIN_SMALL: 1, GAIN_MAINTENANCE: 0}
 
 _SYSTEM_LABEL = {
     SYSTEM_THRESHOLD: "Threshold",
@@ -305,7 +307,7 @@ def recommend_training_roi(
     expected_gain = [
         _system_gain(system, gain, _GAIN_REASON[gain])
         for system, gain in sorted(
-            gain_map.items(), key=lambda kv: _GAIN_RANK[kv[1]], reverse=True
+            gain_map.items(), key=lambda kv: GAIN_RANK[kv[1]], reverse=True
         )
     ]
     weekly_emphasis = [_emphasis(s, n) for s, n in _EMPHASIS_BY_LIMITER[limiter]]

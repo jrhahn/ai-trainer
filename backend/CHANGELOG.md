@@ -9,6 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The planner plans for the athlete the conversation already learned**
+  (`services/freshness_allocation.py`, `services/prompts.py`,
+  `services/ai_service.py`, `routers/ai.py`, `services/plan_maintenance.py`) —
+  the coach and the planner had stopped agreeing. Since #562/#565/#597 the
+  conversation layer knows what kind of rider it is talking to; the planner knew
+  none of it and got the whole athlete-model stack passed to it nowhere. So it
+  asked the only question it could — *can this athlete physiologically handle
+  another threshold session?* — was right about the answer, and put one in the
+  week 48 h after the last one, in 34 °C, two days before the long off-road day
+  the athlete actually trains for. The coach then talked them out of it in chat.
+  Both halves were internally consistent; only one was working for the athlete.
+
+  The missing term is not physiological. `recovery_value()` asks what freshness
+  is *worth* to this athlete per thing it can be spent on — the long off-road
+  days, the next key session, an event — read off the motivation model's own
+  weights and the race calendar. It is derived on every call and never stored:
+  the moment it becomes a column it is a third source of truth for what the
+  athlete wants, drifting against the motivation and performance models. Race
+  freshness is worth zero with an empty calendar, the same rule #564 already
+  applies to race specificity.
+
+  `allocate_day()` then ranks five kinds of day on the axes the athlete's weight
+  vector already spans (no new axis — the weights are learned at one gate in
+  #566 or nowhere), minus two named deductions: heat, and the freshness a
+  higher-valued demand wanted. A hard session is charged for the weekend it
+  costs and never for the freshness it *is* the point of. The adaptation credit
+  comes from the existing ROI chain (#478) rather than a constant of its own, so
+  there stays one answer to "what pays off". Both deductions survive into the
+  output, for the reason #564 keeps its two sub-scores: a day that lost to the
+  weather and a day that lost to the weekend lost for different reasons, and a
+  coach that cannot say which is not explaining anything.
+
+  The option that makes this issue real is the strength day. It was on no board
+  the planner could see, which meant the only way to not schedule intervals was
+  to schedule nothing — and a gym hour is real training that costs almost
+  nothing in *riding* freshness. On a hot day, 48 h after a hard session, ahead
+  of a long weekend ride, it now wins on the athlete's own numbers instead of
+  having to be argued for in chat afterwards.
+
+  Two guards decide whether this shipped as an improvement or as a regression
+  for everyone. A default athlete's board still ranks the key session first —
+  nobody's week is quietly reordered on deploy. And a learned heat tolerance is
+  evidence and acts like it: an athlete who demonstrably rides fine in the heat
+  keeps their hot-day riding, rather than being nagged off it a second time on
+  top of the deduction already applied. Heat only enters the board at all when
+  the forecast horizon actually contains a hot day.
+
+  Both plan triggers call one helper, so the "generate a plan" button and the
+  nightly regen cannot plan for different people — the same reason plan *writes*
+  all go through one pipeline. The block is gated on the memory switch like the
+  rest of the durable profile, and is best-effort throughout: a failure to read
+  the objective costs the context and degrades to yesterday's physiology-first
+  plan, never to no plan. A new athlete gets today's prompt unchanged.
+
+  The planner is also told how to say it. `plan_allocation_rule()` bans "avoid
+  unnecessary fatigue", "keep systemic load low" and "protect the adaptation" in
+  `workoutPurpose` — true sentences about a stranger — and asks for what the day
+  buys *them*, which is the #565 chain applied to the plan rather than to the
+  chat. It says in as many words that this is not an instruction to train less:
+  the load is not being reduced, it is being spent somewhere else. (#602)
+
 - **Recovery decisions are explained through the rider, not through what to
   avoid** (`services/rider_identity.py`, `services/prompts.py`,
   `routers/ai.py`) — the coach made the right call and gave the wrong reason.
