@@ -1357,12 +1357,21 @@ def _attribute_summary(name: str, attr: dict) -> str | None:
     unit = attr.get("unit")
     label = name.replace("_", " ")
     rendered = f"{value}{f' {unit}' if unit else ''}"
+    low = attr.get("estimate_low") or attr.get("estimateLow")
+    high = attr.get("estimate_high") or attr.get("estimateHigh")
+    if isinstance(low, (int, float)) and isinstance(high, (int, float)) and high > low:
+        rendered += f" (plausible range {low:g}-{high:g}{f' {unit}' if unit else ''})"
     confidence = attr.get("confidence")
     conf_txt = f", confidence {float(confidence):.0%}" if isinstance(confidence, (int, float)) else ""
     line = f"- {label}: {rendered}{conf_txt}"
     missing = attr.get("missing_information") or attr.get("missingInformation")
     if missing:
         line += f" (still missing: {'; '.join(str(m) for m in missing)[:200]})"
+    protocol = attr.get("validation_protocol") or attr.get("validationProtocol")
+    if protocol:
+        # An uncertain estimate ships with the test that would settle it, so the
+        # coach can propose the test instead of asserting the number (#604).
+        line += f"\n  - test that would settle it: {protocol}"
     return line
 
 
@@ -1427,6 +1436,12 @@ def performance_model_section(performance_model: dict | None) -> str:
         "to the limiter/attribute to this concrete evidence, and always state the "
         "confidence and what is still missing rather than asserting it as fact."
     )
+    if any("test that would settle it" in line for line in attr_lines):
+        parts.append(
+            "An attribute that carries a range and a test is genuinely unsettled: "
+            "give the range rather than the single number, say plainly that a hard "
+            "interval proves a floor and not a threshold, and offer the test."
+        )
     return "\n".join(parts)
 
 

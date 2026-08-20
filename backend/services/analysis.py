@@ -9,6 +9,7 @@ and provider wiring.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, field
 
 from services.activity_identity import non_cycling_classification
 from services.training_load import format_load, resolve_training_load
@@ -25,6 +26,27 @@ FTP_POWER_DURATION_FACTORS: tuple[tuple[float, float], ...] = (
     (20.0, 0.95),
     (30.0, 0.97),
     (40.0, 0.985),
+    (60.0, 1.00),
+)
+
+# The hard physiological ceiling: the largest fraction of FTP a trained cyclist
+# can hold for that duration.  Deliberately looser than the inverse of
+# FTP_POWER_DURATION_FACTORS above — those convert a *maximal* effort into a
+# best-guess FTP, while these only answer "is this pairing possible at all?".  A
+# recorded effort above its ceiling does not mean the athlete is exceptional; it
+# means the FTP it is being compared against is wrong.
+FTP_SUSTAINABLE_CEILINGS: tuple[tuple[float, float], ...] = (
+    # 5 min is MAP, not threshold, so this bound is wide: it only rules out an
+    # FTP under ~59 % of maximal aerobic power, which no cyclist with aerobic
+    # training sits at.  Strong-engine riders genuinely reach 0.60-0.65, so the
+    # advisory FTP_MAP_RATIO_MIN above stays the place to flag a suspicious — as
+    # opposed to impossible — pairing.
+    (5.0, 1.70),
+    (10.0, 1.18),
+    (12.0, 1.15),
+    (20.0, 1.10),
+    (30.0, 1.05),
+    (40.0, 1.02),
     (60.0, 1.00),
 )
 
@@ -344,6 +366,83 @@ def check_ftp_against_map(ftp: int | None, map_5min: int | None) -> str | None:
             f"({map_5min} W). That gap is unusually large — your FTP may be out "
             f"of date, or that 5-minute effort may not have been a steady one."
         )
+    return None
+
+
+@dataclass(frozen=True)
+class FtpCurveConflict:
+    """An FTP estimate contradicted by the athlete's own power-duration curve.
+
+    ``minimum_consistent_ftp`` is the smallest FTP under which every recorded
+    effort becomes physiologically possible again — a floor, not a new estimate:
+    it is derived by dividing each effort by its ceiling, which is why correcting
+    to it can never set FTP equal to the raw interval power.
+    """
+
+    minimum_consistent_ftp: int
+    conflicts: list[str] = field(default_factory=list)
+
+
+def check_ftp_against_power_curve(
+    ftp: int | None,
+    power_curve: dict | None,
+) -> FtpCurveConflict | None:
+    """Return the conflict when an FTP is impossible against recorded efforts.
+
+    ``power_curve`` maps a duration in minutes (int, float or str key, as stored
+    on ``RideMetric.perf_signals``) to the best mean power held for it. For every
+    duration with a known ceiling this computes ``power / ftp`` and compares it
+    against :data:`FTP_SUSTAINABLE_CEILINGS`.
+
+    The typical trip is an FTP inferred from a *rolling* 20-minute window in an
+    interval session, where the window straddles work and recovery: the resulting
+    FTP implies the athlete held ~130 % of threshold for 12 minutes, which no
+    trained cyclist does as ordinary training (#604).
+
+    Returns ``None`` when the FTP is consistent with the curve, or either input
+    is missing.
+    """
+    if not ftp or ftp <= 0 or not power_curve:
+        return None
+
+    conflicts = [
+        f"{round(watts)} W held for {minutes:g} min is {watts / ftp:.0%} of an "
+        f"FTP of {ftp} W — above the ~{ceiling:.0%} that is sustainable for that "
+        f"duration"
+        for minutes, ceiling in FTP_SUSTAINABLE_CEILINGS
+        if (watts := _curve_power(power_curve, minutes)) and watts / ftp > ceiling
+    ]
+    floor = minimum_consistent_ftp(power_curve)
+    if not conflicts or floor is None:
+        return None
+    return FtpCurveConflict(minimum_consistent_ftp=floor, conflicts=conflicts)
+
+
+def minimum_consistent_ftp(power_curve: dict | None) -> int | None:
+    """Lowest FTP under which every recorded effort stays physiologically possible.
+
+    A hard floor read straight off the athlete's own power-duration curve: below
+    it, rides they have actually completed would have been impossible. It is not
+    an FTP estimate — it makes no claim that any effort was maximal — which is
+    what makes it safe to use both as a correction target and as the lower bound
+    of a reported estimate range. Returns ``None`` for an empty curve.
+    """
+    if not power_curve:
+        return None
+    floors = [
+        watts / ceiling
+        for minutes, ceiling in FTP_SUSTAINABLE_CEILINGS
+        if (watts := _curve_power(power_curve, minutes))
+    ]
+    return round(max(floors)) if floors else None
+
+
+def _curve_power(power_curve: dict, minutes: float) -> float | None:
+    """Read one duration off a power curve tolerating int/float/str keys."""
+    for key in (minutes, int(minutes), str(int(minutes)), str(minutes)):
+        watts = power_curve.get(key)
+        if isinstance(watts, (int, float)) and watts > 0:
+            return float(watts)
     return None
 
 
@@ -1826,7 +1925,11 @@ def compute_ftp_from_streams(
 # Durations (minutes) captured in the per-ride power-duration envelope. Spans
 # anaerobic (1 min) through MAP/VO2max (3-6 min) to threshold/endurance (20-60
 # min) so the cross-workout inference engine (#476) can read every system.
-PERF_SIGNAL_DURATIONS_MIN: tuple[float, ...] = (1, 3, 4, 5, 8, 10, 20, 30, 60)
+# Every duration in FTP_POWER_DURATION_FACTORS is included, so FTP inference can
+# read the whole threshold band rather than the 20-min point alone (#604) — the
+# classic 3 × 12 min set lives at 12, and a rolling 20-min window over it is
+# diluted by the recoveries between the intervals.
+PERF_SIGNAL_DURATIONS_MIN: tuple[float, ...] = (1, 3, 4, 5, 8, 10, 12, 20, 30, 40, 60)
 
 
 def compute_ride_performance_signals(

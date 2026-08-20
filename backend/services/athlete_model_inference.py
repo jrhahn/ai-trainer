@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import limiter_detection
+from services import analysis, limiter_detection
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,28 @@ logger = logging.getLogger(__name__)
 PERF_WINDOW_RIDES = 60
 PERF_WINDOW_DAYS = 120
 
-# FTP is ~95% of a maximal 20-minute effort (the standard field-test factor).
-_FTP_FROM_20MIN = 0.95
+# FTP inference reads the whole threshold band of the power-duration envelope
+# (10-60 min) through the shared duration factors in services.analysis, not the
+# 20-min point alone: in an interval session the rolling 20-min window straddles
+# work and recovery, so 3 x 12 min at 340 W reads as ~275 W there and the
+# resulting FTP implies the athlete held 130 % of threshold for 12 min (#604).
+_FTP_BAND_MIN = 10.0
+# An effort shorter than this cannot be a threshold *test*. Repeated intervals
+# prove a floor — we never know they were maximal — so they may raise the
+# estimate but not carry test-grade confidence.
+_SUSTAINED_TEST_MIN = 20.0
+# Athletes ride a repeated interval set below what they could hold once. Used
+# only to widen the upper bound of the reported range, never the point estimate.
+_REPEATED_EFFORT_SUBMAXIMAL = 0.95
+# Confidence ceilings: a sustained test earns the historical cap, interval-only
+# evidence much less, and an estimate the plausibility check had to correct
+# least of all — the model just contradicted itself.
+_SUSTAINED_CONFIDENCE_CAP = 0.85
+_INTERVAL_ONLY_CONFIDENCE_CAP = 0.6
+_CORRECTED_CONFIDENCE_CAP = 0.5
+# A range wider than this (high/low) means the candidates disagree materially.
+_WIDE_RANGE_RATIO = 1.05
+_WIDE_RANGE_PENALTY = 0.1
 # MAP (maximal aerobic power) is best approximated by a maximal 4-6 min effort.
 _MAP_DURATION_KEYS = ("5", "4", "6")
 # VO2max (ml/kg/min) from MAP in W/kg — a common linear field estimate.
@@ -59,9 +79,19 @@ def _attr(
     unit: str | None = None,
     evidence: list[str] | None = None,
     missing_information: list[str] | None = None,
+    estimate_low: float | None = None,
+    estimate_high: float | None = None,
+    validation_protocol: str | None = None,
 ) -> dict[str, Any]:
-    """Build one attribute dict in the persisted/schema shape."""
-    return {
+    """Build one attribute dict in the persisted/schema shape.
+
+    ``estimate_low``/``estimate_high`` bound a quantitative estimate when the
+    evidence supports a range rather than a point, and ``validation_protocol``
+    carries the test that would settle it. All three are omitted (rather than
+    stored as ``None``) when they do not apply, so an attribute that is simply
+    known keeps the compact shape it has always had.
+    """
+    attr: dict[str, Any] = {
         "estimate": estimate,
         "score": score,
         "confidence": round(max(0.0, min(1.0, confidence)), 2),
@@ -69,6 +99,13 @@ def _attr(
         "evidence": evidence or [],
         "missing_information": missing_information or [],
     }
+    if estimate_low is not None:
+        attr["estimate_low"] = estimate_low
+    if estimate_high is not None:
+        attr["estimate_high"] = estimate_high
+    if validation_protocol:
+        attr["validation_protocol"] = validation_protocol
+    return attr
 
 
 def _confidence(base: float, count: int, recent_days: int | None, cap: float) -> float:
@@ -131,41 +168,159 @@ def _decoupling_pct(sig: dict) -> float | None:
     return (first_ratio - second_ratio) / first_ratio * 100.0
 
 
+def _power_curve(envelope: dict) -> dict[str, int]:
+    """Flatten the envelope to ``{duration_key: best_watts}`` for the sanity check."""
+    return {key: point[0] for key, point in envelope.items() if point[0] > 0}
+
+
+def _ftp_candidates(envelope: dict) -> list[tuple[float, int, int, int]]:
+    """FTP candidates from every threshold-band point of the envelope.
+
+    Returns ``(minutes, watts, ride_count, ftp_estimate)`` per duration, using the
+    duration factors shared with the ride-level estimator. Each factor is < 1, so
+    no candidate can ever equal the raw power of the effort behind it.
+    """
+    candidates: list[tuple[float, int, int, int]] = []
+    for minutes, factor in analysis.FTP_POWER_DURATION_FACTORS:
+        if minutes < _FTP_BAND_MIN:
+            continue
+        point = envelope.get(str(int(minutes)))
+        if not point or point[0] <= 0:
+            continue
+        watts, count, _ = point
+        candidates.append((minutes, watts, count, round(watts * factor)))
+    return candidates
+
+
+def _ftp_validation_protocol(estimate: int) -> str:
+    """The structured test that would settle an uncertain FTP estimate.
+
+    Carries the power the current estimate predicts for the test, so the athlete
+    runs a falsifiable experiment rather than an open-ended effort.
+    """
+    factor = dict(analysis.FTP_POWER_DURATION_FACTORS)[_SUSTAINED_TEST_MIN]
+    return (
+        "20-minute threshold test: two easy days first, then 15 min warm-up, one "
+        "5-min hard opener, 10 min easy, then 20 min all-out at an even pace on a "
+        f"steady climb or the trainer. FTP is ~{factor:.0%} of the 20-min average "
+        f"power. The current estimate predicts about {round(estimate / factor)} W "
+        "for that 20 min — holding clearly more means FTP is higher than modelled."
+    )
+
+
+def _finalise_ftp(
+    *,
+    estimate: int,
+    curve: dict,
+    confidence: float,
+    cap: float,
+    evidence: list[str],
+    missing: list[str],
+    sustained: bool,
+) -> tuple[dict, int]:
+    """Sanity-check an FTP estimate against the curve it came from, then bound it.
+
+    Shared by both estimating branches so a carried-forward FTP is checked exactly
+    as hard as an inferred one. Three things happen here, in order:
+
+    1. The estimate is compared against every recorded effort. If any effort would
+       require a fraction of FTP nobody sustains for that duration, the estimate is
+       raised to the *lowest* FTP that makes the athlete's own rides possible —
+       never to the raw interval power — and confidence is cut, because the model
+       having contradicted itself is not a reason to be more sure.
+    2. The estimate is bounded: the low end is that same physiological floor, the
+       high end allows for interval evidence being sub-maximal.
+    3. When the result stays uncertain, a validation protocol is attached instead
+       of the number being asserted.
+    """
+    conflict = analysis.check_ftp_against_power_curve(estimate, curve)
+    if conflict and conflict.minimum_consistent_ftp > estimate:
+        evidence = [
+            *evidence,
+            "Raised to the lowest FTP consistent with recent efforts: "
+            + "; ".join(conflict.conflicts),
+        ]
+        missing = [
+            *missing,
+            "The estimate was corrected by the plausibility check rather than "
+            "measured — the efforts behind it were not a threshold test, so the "
+            "true FTP may be higher still",
+        ]
+        estimate = conflict.minimum_consistent_ftp
+        cap = min(cap, _CORRECTED_CONFIDENCE_CAP)
+        sustained = False
+
+    low = min(analysis.minimum_consistent_ftp(curve) or estimate, estimate)
+    high = estimate if sustained else round(estimate / _REPEATED_EFFORT_SUBMAXIMAL)
+    if not sustained:
+        missing = [
+            *missing,
+            "No maximal 20-min-or-longer effort in the window — repeated intervals "
+            "establish a floor for FTP, not FTP itself",
+        ]
+
+    # The spread penalty is applied after the cap so it always bites: an estimate
+    # whose own bounds disagree is less certain than one that does not, whatever
+    # the quantity of evidence behind it.
+    confidence = min(cap, confidence)
+    if low > 0 and high / low > _WIDE_RANGE_RATIO:
+        confidence -= _WIDE_RANGE_PENALTY
+    confidence = max(0.05, confidence)
+
+    return (
+        _attr(
+            estimate=estimate,
+            confidence=confidence,
+            unit="W",
+            evidence=evidence,
+            missing_information=missing,
+            estimate_low=low,
+            estimate_high=high,
+            # No threshold test in the window (or an estimate the check had to
+            # correct) is precisely the uncertainty a test would remove.
+            validation_protocol=(
+                None if sustained else _ftp_validation_protocol(estimate)
+            ),
+        ),
+        estimate,
+    )
+
+
 def _infer_ftp(
     envelope: dict, ftp_used: int | None, recent_days: int | None
 ) -> tuple[dict, int | None]:
-    best20 = envelope.get("20")
-    if best20 and best20[0] > 0:
-        watts, count, _ = best20
-        estimate = round(watts * _FTP_FROM_20MIN)
-        conf = _confidence(0.45, count, recent_days, cap=0.85)
-        return (
-            _attr(
-                estimate=estimate,
-                confidence=conf,
-                unit="W",
-                evidence=[
-                    f"Best 20-min power {watts} W across {count} ride(s) "
-                    f"(FTP ≈ 95% of a maximal 20-min effort)"
-                ],
-                missing_information=[]
-                if count >= 2
-                else ["Only one sustained 20-min effort in the window"],
-            ),
-            estimate,
+    curve = _power_curve(envelope)
+    candidates = _ftp_candidates(envelope)
+    if candidates:
+        # The strongest candidate wins: FTP is a capability, and a rolling window
+        # diluted by recovery understates it while a hard interval does not.
+        minutes, watts, count, estimate = max(candidates, key=lambda c: c[3])
+        return _finalise_ftp(
+            estimate=estimate,
+            curve=curve,
+            confidence=_confidence(0.45, count, recent_days, cap=1.0),
+            cap=_SUSTAINED_CONFIDENCE_CAP
+            if minutes >= _SUSTAINED_TEST_MIN
+            else _INTERVAL_ONLY_CONFIDENCE_CAP,
+            evidence=[
+                f"Best {minutes:g}-min power {watts} W across {count} ride(s) "
+                f"(FTP ≈ {dict(analysis.FTP_POWER_DURATION_FACTORS)[minutes]:.0%} "
+                f"of a maximal {minutes:g}-min effort)"
+            ],
+            missing=[]
+            if count >= 2
+            else [f"Only one {minutes:g}-min effort of this level in the window"],
+            sustained=minutes >= _SUSTAINED_TEST_MIN,
         )
     if ftp_used:
-        return (
-            _attr(
-                estimate=ftp_used,
-                confidence=0.3,
-                unit="W",
-                evidence=["Carried from the FTP last used for load calculations"],
-                missing_information=[
-                    "No maximal ~20-min effort in the window to confirm FTP"
-                ],
-            ),
-            ftp_used,
+        return _finalise_ftp(
+            estimate=ftp_used,
+            curve=curve,
+            confidence=0.3,
+            cap=0.3,
+            evidence=["Carried from the FTP last used for load calculations"],
+            missing=["No sustained effort in the window to confirm FTP"],
+            sustained=False,
         )
     return (
         _attr(

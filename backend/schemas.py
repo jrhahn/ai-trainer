@@ -589,14 +589,23 @@ class AthletePerformanceAttributeSchema(CamelModel):
     quantitative attributes carry an ``estimate`` (+ ``unit``); qualitative ones
     carry a ``score`` (e.g. ``high``/``above_average``/``unknown``). ``evidence``
     lists the signals behind it and ``missing_information`` what would sharpen it.
+
+    ``estimate_low``/``estimate_high`` bound the estimate when the evidence
+    supports a range rather than a point, and ``validation_protocol`` carries the
+    concrete test that would settle it — offered instead of asserting a number the
+    data does not pin down (#604). All three are absent on attributes that are
+    qualitative or simply known.
     """
 
     estimate: Optional[float] = None
+    estimate_low: Optional[float] = None
+    estimate_high: Optional[float] = None
     score: Optional[str] = None
     confidence: float
     unit: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
+    validation_protocol: Optional[str] = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

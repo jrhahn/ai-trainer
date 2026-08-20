@@ -120,6 +120,34 @@ describe('AthletePerformanceModelCard', () => {
     expect(screen.getByText(/a recent maximal 20-min effort/)).toBeInTheDocument()
   })
 
+  it('shows the range and the validating test for an unsettled estimate', async () => {
+    // #604: hard intervals prove a floor, not a threshold, so the estimate is
+    // offered as a range with the test that would settle it.
+    const model = makeModel()
+    model.attributes.ftp = {
+      ...model.attributes.ftp,
+      estimate: 316,
+      estimateLow: 299,
+      estimateHigh: 333,
+      validationProtocol: '20-minute threshold test after two easy days.',
+    }
+    mockFetchModel.mockResolvedValue(model)
+    renderCard()
+
+    expect(await screen.findByText('316 W')).toBeInTheDocument()
+    expect(screen.getByText(/299–333 W/)).toBeInTheDocument()
+    expect(screen.getByText(/20-minute threshold test after two easy days/)).toBeInTheDocument()
+  })
+
+  it('omits the range and test for a settled estimate', async () => {
+    mockFetchModel.mockResolvedValue(makeModel())
+    renderCard()
+
+    expect(await screen.findByText('250 W')).toBeInTheDocument()
+    expect(screen.queryByText(/Plausible range/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Test that would settle it/)).not.toBeInTheDocument()
+  })
+
   it('highlights the likely limiter as an inference with evidence and counter-evidence', async () => {
     mockFetchModel.mockResolvedValue(makeModel())
     renderCard()

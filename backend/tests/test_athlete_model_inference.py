@@ -50,6 +50,27 @@ def _ride(signals, *, ftp_used=280, activity_date="2026-07-25"):
     )
 
 
+def _interval_stream(efforts, *, work_s=720, rest_s=300, rest_w=120, step=5):
+    """An interval session: warm-up, N efforts at the given watts, cool-down.
+
+    Models the shape that broke FTP inference in #604 — a rolling 20-minute window
+    over this stream necessarily straddles work and recovery, so the 20-min point
+    of the envelope lands far below any single interval.
+    """
+    watts: list[float] = [140] * (900 // step)  # 15 min warm-up
+    for i, power in enumerate(efforts):
+        if i:
+            watts += [rest_w] * (rest_s // step)
+        watts += [power] * (work_s // step)
+    watts += [130] * (600 // step)  # 10 min cool-down
+    hr = [round(110 + (w - 140) * 0.14) for w in watts]
+    return {
+        "time": {"data": [i * step for i in range(len(watts))]},
+        "watts": {"data": watts},
+        "heartrate": {"data": hr},
+    }
+
+
 # --- compute_ride_performance_signals ---------------------------------------
 
 
@@ -131,7 +152,10 @@ def test_canonical_strong_engine_relatively_low_ftp():
     populated fractional utilization the limiter stage (#477) can act on."""
     long1 = _ride(compute_ride_performance_signals(_stream(14400, 215, 212, 130, 133)))
     long2 = _ride(compute_ride_performance_signals(_stream(12600, 210, 208, 128, 131)))
-    vo2 = _ride(compute_ride_performance_signals(_stream(1500, 355, 350, 176, 180)))
+    # A ~5-min VO2max effort: long enough to be MAP evidence, short enough not to
+    # be threshold evidence, which is what "relatively low FTP" needs here (#604 —
+    # FTP inference now reads the whole 10-60 min band, not the 20-min point).
+    vo2 = _ride(compute_ride_performance_signals(_stream(300, 355, 350, 176, 180)))
     attrs = ami.infer_performance_attributes(
         [vo2, long1, long2], weight_kg=72, max_hr=190, now=NOW
     )
@@ -163,6 +187,93 @@ def test_recency_penalises_stale_data():
     assert fresh["ftp"]["confidence"] > stale["ftp"]["confidence"]
 
 
+# --- FTP estimation and validation (#604) ------------------------------------
+
+
+def _reported_workout():
+    """The session from #604: 3 x ~12 min at 337/343/345 W."""
+    return _ride(
+        compute_ride_performance_signals(_interval_stream([337, 343, 345])),
+        activity_date="2026-07-27",
+    )
+
+
+def test_interval_session_does_not_underestimate_ftp():
+    """The #604 regression: 3 x 12 min at ~340 W must not read as FTP 261 W.
+
+    The 20-min point of this ride is diluted by the recoveries between the
+    intervals; reading FTP off it alone implied the athlete held ~130 % of
+    threshold for twelve minutes, three times over.
+    """
+    attrs = ami.infer_performance_attributes([_reported_workout()], now=NOW)
+    ftp = attrs["ftp"]
+
+    # Every completed interval is now a plausible fraction of the estimate.
+    for interval_power in (337, 343, 345):
+        assert interval_power / ftp["estimate"] < 1.15
+
+    # ... but the estimate is not simply the best interval either.
+    assert ftp["estimate"] < 337
+    assert ftp["estimate"] > 300
+
+
+def test_uncertain_ftp_carries_a_range_and_a_validation_test():
+    attrs = ami.infer_performance_attributes([_reported_workout()], now=NOW)
+    ftp = attrs["ftp"]
+
+    assert ftp["estimate_low"] < ftp["estimate"] <= ftp["estimate_high"]
+    # Hard intervals are a floor, not a threshold test: confidence stays modest
+    # and the estimate ships with the test that would settle it.
+    assert ftp["confidence"] <= ami._INTERVAL_ONLY_CONFIDENCE_CAP
+    assert "20-minute threshold test" in ftp["validation_protocol"]
+    assert any("floor" in m for m in ftp["missing_information"])
+
+
+def test_sustained_test_beats_intervals_on_confidence():
+    """A maximal 20-min effort is threshold evidence; repeated intervals are not."""
+    signals = compute_ride_performance_signals(_stream(1500, 320, 318, 172, 176))
+    tested = ami.infer_performance_attributes(
+        [_ride(signals, activity_date="2026-07-27")], now=NOW
+    )["ftp"]
+    intervals = ami.infer_performance_attributes([_reported_workout()], now=NOW)["ftp"]
+
+    assert tested["confidence"] > intervals["confidence"]
+    # A real 20-min test still estimates the way it always has, and is asserted
+    # without a test attached.
+    assert tested["estimate"] == round(signals["power_curve"]["20"] * 0.95)
+    assert "validation_protocol" not in tested
+
+
+def test_sanity_check_corrects_an_implausible_carried_ftp():
+    """The plausibility check also guards the carried-``ftp_used`` branch.
+
+    A ride with no threshold-band point cannot produce a candidate, so the stale
+    FTP is carried forward — but a 5-min effort far above it still contradicts it.
+    """
+    short = _ride(
+        compute_ride_performance_signals(_stream(540, 340, 338, 178, 182)),
+        ftp_used=180,
+        activity_date="2026-07-27",
+    )
+    ftp = ami.infer_performance_attributes([short], now=NOW)["ftp"]
+    assert ftp["estimate"] > 180
+    assert ftp["confidence"] <= ami._CORRECTED_CONFIDENCE_CAP
+    assert any("Raised to the lowest FTP" in e for e in ftp["evidence"])
+
+
+def test_correction_never_reaches_the_raw_effort_power():
+    ftp = ami.infer_performance_attributes(
+        [
+            _ride(
+                compute_ride_performance_signals(_interval_stream([345, 345, 345])),
+                ftp_used=200,
+            )
+        ],
+        now=NOW,
+    )["ftp"]
+    assert ftp["estimate"] < 345
+
+
 # --- refresh_performance_model (DB, end-to-end incl. limiter #477) -----------
 
 
@@ -183,13 +294,13 @@ async def test_refresh_persists_model_and_threshold_limiter(db: AsyncSession) ->
                 _stream(dur, 215 - i, 212 - i, 130, 133)
             ),
         )
-    # ... plus a short maximal ~5-10 min effort giving a high MAP well above FTP
-    # (kept short so it contributes a MAP point, not a 20-min FTP point).
+    # ... plus a short maximal ~5 min effort giving a high MAP well above FTP
+    # (kept below 10 min so it contributes a MAP point, not an FTP candidate).
     await crud.upsert_ride_metric(
         db, user.id,
         strava_activity_id=1002,
         activity_date="2026-07-27",
-        perf_signals=compute_ride_performance_signals(_stream(600, 355, 350, 176, 180)),
+        perf_signals=compute_ride_performance_signals(_stream(300, 355, 350, 176, 180)),
     )
 
     row = await ami.refresh_performance_model(db, user, now=NOW)

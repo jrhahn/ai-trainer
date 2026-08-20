@@ -618,6 +618,56 @@ def test_check_ftp_against_map_needs_both_values():
     assert analysis.check_ftp_against_map(280, 0) is None
 
 
+# --- FTP against the power-duration curve (#604) ------------------------------
+
+# The session from #604: 3 x ~12 min at 337/343/345 W, whose rolling 20-min
+# window is diluted by the recoveries between the intervals.
+_INTERVAL_CURVE = {"5": 345, "10": 345, "12": 344, "20": 289, "60": 258}
+
+
+def test_check_ftp_against_power_curve_flags_an_impossible_estimate():
+    conflict = analysis.check_ftp_against_power_curve(261, _INTERVAL_CURVE)
+    assert conflict is not None
+    # 344 W for 12 min at FTP 261 W is 132 % of threshold — not a workout.
+    assert any("12 min" in c and "132%" in c for c in conflict.conflicts)
+    # The correction is a floor, never the interval power itself.
+    assert 261 < conflict.minimum_consistent_ftp < 344
+
+
+def test_check_ftp_against_power_curve_accepts_a_consistent_estimate():
+    assert analysis.check_ftp_against_power_curve(316, _INTERVAL_CURVE) is None
+
+
+def test_check_ftp_against_power_curve_needs_both_values():
+    assert analysis.check_ftp_against_power_curve(None, _INTERVAL_CURVE) is None
+    assert analysis.check_ftp_against_power_curve(0, _INTERVAL_CURVE) is None
+    assert analysis.check_ftp_against_power_curve(280, {}) is None
+    assert analysis.check_ftp_against_power_curve(280, None) is None
+
+
+def test_check_ftp_against_power_curve_reads_numeric_and_string_keys():
+    numeric = analysis.check_ftp_against_power_curve(261, {12: 344})
+    assert numeric is not None
+    assert numeric == analysis.check_ftp_against_power_curve(261, {"12": 344})
+
+
+def test_minimum_consistent_ftp_is_the_binding_duration():
+    # Each duration implies a floor; the highest of them binds.
+    floor = analysis.minimum_consistent_ftp(_INTERVAL_CURVE)
+    assert floor == round(344 / dict(analysis.FTP_SUSTAINABLE_CEILINGS)[12.0])
+    assert analysis.minimum_consistent_ftp({}) is None
+    assert analysis.minimum_consistent_ftp(None) is None
+
+
+def test_minimum_consistent_ftp_leaves_a_strong_engine_alone():
+    """A high-MAP, relatively-low-FTP rider is a real type, not an error.
+
+    FTP at ~61 % of 5-min power must not be corrected upwards — only the
+    genuinely impossible is, which is why the 5-min ceiling is deliberately wide.
+    """
+    assert analysis.minimum_consistent_ftp({"5": 355, "60": 215}) <= 215
+
+
 def test_estimate_ftp_over_time_empty_and_invalid():
     assert analysis.estimate_ftp_over_time([]) == []
     assert analysis.estimate_ftp_over_time([{"activity_date": ""}]) == []
