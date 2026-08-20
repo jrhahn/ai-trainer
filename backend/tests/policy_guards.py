@@ -220,4 +220,30 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="1.0",
         tests=("tests/test_workout_curiosity.py", "tests/test_crud.py"),
     ),
+    # --- What the coach may claim the athlete's FTP is (#604) ---------------
+    PolicyGuard(
+        target="services.analysis:FTP_SUSTAINABLE_CEILINGS",
+        decides=(
+            "which FTP estimates the athlete's own rides rule out — the check "
+            "that would have caught 130 % of threshold held for twelve minutes"
+        ),
+        # Moved wide enough that nothing is impossible any more.
+        moved_to="((5.0, 9.9), (10.0, 9.9), (12.0, 9.9), (20.0, 9.9), (30.0, 9.9), (40.0, 9.9), (60.0, 9.9))",
+        tests=("tests/test_analysis.py",),
+    ),
+    PolicyGuard(
+        target="services.athlete_model_inference:_INTERVAL_ONLY_CONFIDENCE_CAP",
+        decides="whether a hard interval set can pass for a threshold test",
+        moved_to="0.99",
+        tests=("tests/test_athlete_model_inference.py",),
+    ),
+    PolicyGuard(
+        target="services.athlete_model_inference:_CORRECTED_CONFIDENCE_CAP",
+        decides=(
+            "how sure the coach may be about a number it had to correct against "
+            "the athlete's own efforts"
+        ),
+        moved_to="0.99",
+        tests=("tests/test_athlete_model_inference.py",),
+    ),
 )

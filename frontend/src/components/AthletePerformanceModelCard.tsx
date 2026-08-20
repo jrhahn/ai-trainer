@@ -79,8 +79,16 @@ function attributeValue(attr: AthletePerformanceAttribute): string {
   return 'Unknown'
 }
 
+/** The bounds of an estimate the data does not pin down to a point (#604). */
+function attributeRange(attr: AthletePerformanceAttribute): string | null {
+  const { estimateLow: low, estimateHigh: high } = attr
+  if (low == null || high == null || high <= low) return null
+  return `${low}–${high}${attr.unit ? ` ${attr.unit}` : ''}`
+}
+
 function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAttribute }) {
   const label = ATTRIBUTE_LABELS[name] ?? humanize(name)
+  const range = attributeRange(attr)
   return (
     <div className="py-2 border-b border-gray-50 last:border-0">
       <div className="flex items-center justify-between gap-3">
@@ -92,6 +100,12 @@ function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAt
           <ConfidenceBar confidence={attr.confidence} />
         </div>
       </div>
+      {range && (
+        <p className="text-xs text-gray-500 mt-1 tabular-nums">
+          <span className="text-gray-400">Plausible range: </span>
+          {range}
+        </p>
+      )}
       {attr.evidence.length > 0 && (
         <p className="text-xs text-gray-500 mt-1">
           <span className="text-gray-400">Evidence: </span>
@@ -102,6 +116,12 @@ function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAt
         <p className="text-xs text-amber-600 mt-0.5">
           <span className="text-amber-400">Still missing: </span>
           {attr.missingInformation.join('; ')}
+        </p>
+      )}
+      {attr.validationProtocol && (
+        <p className="text-xs text-indigo-600 mt-0.5">
+          <span className="text-indigo-400">Test that would settle it: </span>
+          {attr.validationProtocol}
         </p>
       )}
     </div>

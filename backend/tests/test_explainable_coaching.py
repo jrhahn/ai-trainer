@@ -88,6 +88,34 @@ def test_performance_model_section_exposes_evidence_and_confidence():
     assert "vo2max" not in section.lower()
 
 
+def test_performance_model_section_offers_the_test_for_an_unsettled_estimate():
+    """An uncertain FTP reaches the coach as a range plus the test that settles it.
+
+    The coach must be able to say "somewhere in here, and here is how we find
+    out" instead of asserting a number the athlete's intervals contradict (#604).
+    """
+    model = _perf_model()
+    model["attributes"]["ftp"].update(
+        {
+            "estimate": 316,
+            "estimate_low": 299,
+            "estimate_high": 333,
+            "validation_protocol": "20-minute threshold test: two easy days first.",
+        }
+    )
+    section = performance_model_section(model)
+
+    assert "plausible range 299-333 W" in section
+    assert "test that would settle it: 20-minute threshold test" in section
+    assert "give the range rather than the single number" in section
+
+
+def test_performance_model_section_omits_range_for_a_settled_estimate():
+    section = performance_model_section(_perf_model())
+    assert "plausible range" not in section
+    assert "test that would settle it" not in section
+
+
 def test_performance_model_section_empty_when_no_model():
     assert performance_model_section(None) == ""
     assert performance_model_section({"attributes": {}, "limiters": []}) == ""

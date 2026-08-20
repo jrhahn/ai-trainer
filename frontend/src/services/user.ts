@@ -549,6 +549,11 @@ export interface AthletePerformanceAttribute {
   unit: string | null
   evidence: string[]
   missingInformation: string[]
+  // #604: bounds and the test that would settle an estimate the data does not
+  // pin down. Absent on qualitative or already-settled attributes.
+  estimateLow?: number | null
+  estimateHigh?: number | null
+  validationProtocol?: string | null
 }
 
 export interface AthletePerformanceLimiter {
