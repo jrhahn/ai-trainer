@@ -222,9 +222,10 @@ def test_uncertain_ftp_carries_a_range_and_a_validation_test():
     ftp = attrs["ftp"]
 
     assert ftp["estimate_low"] < ftp["estimate"] <= ftp["estimate_high"]
-    # Hard intervals are a floor, not a threshold test: confidence stays modest
-    # and the estimate ships with the test that would settle it.
-    assert ftp["confidence"] <= ami._INTERVAL_ONLY_CONFIDENCE_CAP
+    # Hard intervals are a floor, not a threshold test: capped as interval-only
+    # evidence and docked again for bounds that disagree, well under the 85 % the
+    # 20-min-only model used to report for this very session.
+    assert ftp["confidence"] == 0.5
     assert "20-minute threshold test" in ftp["validation_protocol"]
     assert any("floor" in m for m in ftp["missing_information"])
 
@@ -257,8 +258,26 @@ def test_sanity_check_corrects_an_implausible_carried_ftp():
     )
     ftp = ami.infer_performance_attributes([short], now=NOW)["ftp"]
     assert ftp["estimate"] > 180
-    assert ftp["confidence"] <= ami._CORRECTED_CONFIDENCE_CAP
+    assert ftp["confidence"] == 0.2
     assert any("Raised to the lowest FTP" in e for e in ftp["evidence"])
+
+
+def test_a_big_short_effort_corrects_a_weak_threshold_estimate():
+    """A 420 W 5-min effort makes an FTP of 225 W impossible, so it is corrected.
+
+    The candidate path can contradict itself too: the threshold band is weak here
+    because nothing in the window sustained anything, while the short effort says
+    plainly that this rider is not a 225 W athlete.
+    """
+    signals = {"duration_s": 3600, "power_curve": {"5": 420, "10": 250}}
+    ftp = ami.infer_performance_attributes(
+        [_ride(signals, ftp_used=None, activity_date="2026-07-27")], now=NOW
+    )["ftp"]
+
+    assert 225 < ftp["estimate"] < 420
+    # Contradicting itself is the opposite of a reason to be confident.
+    assert ftp["confidence"] == 0.4
+    assert ftp["validation_protocol"]
 
 
 def test_correction_never_reaches_the_raw_effort_power():
