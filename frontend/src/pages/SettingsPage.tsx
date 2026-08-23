@@ -12,6 +12,8 @@ import ConversationImportSettings from '../components/ConversationImportSettings
 import FitFileUpload from '../components/FitFileUpload'
 import HomeLocationSettings from '../components/HomeLocationSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
+import SetupGuideLink from '../components/SetupGuideLink'
+import { SETUP_GUIDE_SECTIONS } from '../utils/links'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
@@ -654,9 +656,15 @@ export default function SettingsPage() {
       {/* Data Sources */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-xs text-gray-500 mb-2">
           Choose how AI Trainer imports your training history. Automatic sources are convenient,
           while FIT files keep the original workout data directly in your hands.
+        </p>
+        <p className="mb-4">
+          <SetupGuideLink
+            href={SETUP_GUIDE_SECTIONS.intervals}
+            label="How to connect Strava via intervals.icu"
+          />
         </p>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
