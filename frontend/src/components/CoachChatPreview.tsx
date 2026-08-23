@@ -3,15 +3,15 @@ import { Bike, Sparkles } from 'lucide-react'
 const exchange = [
   {
     from: 'athlete' as const,
-    text: "Rough week at work and I've only got 45 minutes tomorrow. Still worth doing the intervals?",
+    text: 'Only 45 min tomorrow and the legs are still wrecked from Sunday. Skip the intervals?',
   },
   {
     from: 'coach' as const,
-    text: "You're nine days out from the gran fondo and Sunday's tempo already covered this week's hard work. Ride 45 minutes easy tomorrow — I moved the intervals to Thursday, when you told me you have time.",
+    text: "Skip them. You're nine days out and Sunday already banked the hard work for this week. 45 easy tomorrow, threshold moves to Thursday.",
   },
 ]
 
-const chips = ['Goal: gran fondo, Sept 6', 'Legs: still recovering', 'Plan updated']
+const chips = ['Target: Ötztaler, 6 Sep', 'Last hard day: Sunday', 'Plan updated']
 
 export default function CoachChatPreview() {
   return (

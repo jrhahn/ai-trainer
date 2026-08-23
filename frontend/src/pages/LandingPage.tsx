@@ -14,40 +14,52 @@ function GithubMark({ size = 16 }: { size?: number }) {
 const pillars = [
   {
     icon: Target,
-    title: 'It learns who you are',
-    body: 'Tell it about the race you circled on the calendar, the 5 a.m. starts, the knee that complains on long climbs. It remembers, and every session it writes is built around that.',
+    title: 'Knows your season',
+    body: 'Set the target event once. From then on your coach builds towards that date and remembers the constraints you gave it — the hours you have, the days you cannot ride, the injury you are managing.',
   },
   {
     icon: MessageCircle,
-    title: 'Ask it anything',
-    body: 'Why does my heart rate drift? Should I eat before an early ride? Is this saddle pain normal? It answers training and nutrition questions in plain language, using your own rides as context.',
+    title: 'Answers on the spot',
+    body: 'What to eat before a four-hour ride. Why your heart rate drifted on Sunday. Whether a niggle is worth a rest day. Ask in normal language and get an answer that accounts for your last four weeks.',
   },
   {
     icon: RefreshCw,
-    title: 'It changes its mind with you',
-    body: 'Short on time, sore, travelling, or suddenly full of energy? Say so, and tomorrow’s session changes. No rigid twelve-week block you quietly abandon in week three.',
+    title: 'Reworks the week',
+    body: 'Missed Tuesday. Legs flat. Work trip. Say so and the plan moves, including everything downstream of it. No rebuilding a block by hand.',
   },
 ]
 
 const steps = [
   {
-    title: 'Connect your rides',
-    body: 'Link intervals.icu once and your Strava rides flow in automatically. No Strava? Drop in a FIT file and it works the same.',
+    title: 'Connect once',
+    body: 'intervals.icu pulls your rides straight from Strava, and we read them from there. Prefer to stay off both? Upload a FIT file instead.',
   },
   {
-    title: 'Tell the coach about you',
-    body: 'A short conversation about your goal, your week, and what you actually enjoy riding. That is the whole setup.',
+    title: 'Set the target',
+    body: 'One conversation: the event, the date, the hours you can realistically train.',
   },
   {
-    title: 'Ride what it gives you',
-    body: 'Every morning there is one session waiting that fits your form, your calendar, and the weather outside your door.',
+    title: 'Ride',
+    body: 'Tomorrow morning the session is waiting. Tell your coach how it went and the next one gets sharper.',
   },
 ]
 
 const openSourceFacts = [
-  { icon: KeyRound, title: 'Your own Gemini key', body: 'Bring a free Google Gemini API key. No subscription, no per-month fee, no upsell.' },
-  { icon: GithubMark, title: 'Open source, AGPL-3.0', body: 'Read every line, host it yourself, change what you disagree with. Nothing is hidden behind a paywall.' },
-  { icon: HeartPulse, title: 'Your data stays yours', body: 'Run it on your own machine or server. Your rides and conversations live where you put them.' },
+  {
+    icon: KeyRound,
+    title: 'Your key, your account',
+    body: 'A Google Gemini key takes two minutes to create and costs nothing to start. Requests run on your account, not ours.',
+  },
+  {
+    icon: GithubMark,
+    title: 'AGPL-3.0, all of it',
+    body: 'Every line is public. Audit the training logic, fork it, run the whole stack on your own hardware.',
+  },
+  {
+    icon: HeartPulse,
+    title: 'No lock-in',
+    body: 'Self-host it, export it, or walk away. Your ride history was never ours to hold.',
+  },
 ]
 
 export default function LandingPage() {
@@ -87,32 +99,32 @@ export default function LandingPage() {
         <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] lg:items-center lg:pt-20">
           <div>
             <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-amber-300">
-              Free forever · Open source
+              Open source · Free to run
             </p>
             <h1 className="max-w-[15ch] text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.5rem]">
-              A cycling coach that actually knows you.
+              Coaching that keeps up with your week.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-              Not a spreadsheet of numbers. A coach you talk to — one that learns your goals, your week, and
-              how your body answers back, and puts the right session in front of you every single day.
+              Talk to your coach the way you would talk to a person. It knows your history, your target event
+              and how last week actually went, then plans tomorrow around it.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 to="/register"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-6 py-3.5 text-base font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
               >
-                Start training free
+                Create a free account
                 <ArrowRight size={18} aria-hidden="true" />
               </Link>
               <Link
                 to="/login"
                 className="inline-flex items-center justify-center rounded-lg border border-white/15 px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/10"
               >
-                I already have an account
+                Sign in
               </Link>
             </div>
             <p className="mt-5 text-sm text-slate-400">
-              All you need is a free Google Gemini key. No subscription, no credit card.
+              You bring a Google Gemini key. No subscription, no card, no trial period.
             </p>
           </div>
 
@@ -122,8 +134,8 @@ export default function LandingPage() {
 
       <section className="border-t border-white/5 bg-[#12141b]">
         <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
-          <h2 className="max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
-            Most training apps hand you a plan. This one asks about your day.
+          <h2 className="max-w-2xl text-balance text-3xl font-black tracking-tight sm:text-4xl">
+            Built around your season, not a template.
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {pillars.map(({ icon: Icon, title, body }) => (
@@ -143,14 +155,14 @@ export default function LandingPage() {
         <div className="grid gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Getting started</p>
-            <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Three steps, then just ride.</h2>
+            <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Ten minutes to set up.</h2>
             <p className="mt-5 max-w-md text-[15px] leading-7 text-slate-300">
-              Your rides sync themselves in the background, so the coach always knows what you actually did —
-              not what you meant to do.
+              Rides sync in the background from then on, so your coach works from what you rode rather than
+              what the plan said.
             </p>
             <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-slate-300">
               <Apple size={15} aria-hidden="true" className="text-amber-300" />
-              Training and nutrition questions welcome, any hour
+              Nutrition questions count too
             </span>
             <p className="mt-6 text-sm text-slate-400">
               <a
@@ -159,9 +171,9 @@ export default function LandingPage() {
                 rel="noreferrer"
                 className="font-semibold text-amber-300 underline-offset-4 hover:underline"
               >
-                Read the 10-minute setup guide
+                Setup guide
               </a>{' '}
-              — Strava, intervals.icu, and your Gemini key, step by step.
+              — Strava, intervals.icu and your Gemini key, step by step.
             </p>
           </div>
 
@@ -184,7 +196,7 @@ export default function LandingPage() {
       <section className="border-y border-white/5 bg-[#12141b]">
         <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
           <h2 className="max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
-            Free, and it stays that way.
+            What it costs: nothing.
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {openSourceFacts.map(({ icon: Icon, title, body }) => (
@@ -202,16 +214,16 @@ export default function LandingPage() {
 
       <section className="mx-auto w-full max-w-6xl px-5 py-20 text-center sm:px-8">
         <h2 className="mx-auto max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
-          Tell it what you are training for.
+          Put a date on the calendar.
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-[15px] leading-7 text-slate-300">
-          Two minutes to sign up, one conversation to get going, and a session waiting for you tomorrow morning.
+          Sign up, tell your coach what you are chasing, ride tomorrow's session.
         </p>
         <Link
           to="/register"
           className="mt-8 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-7 py-3.5 text-base font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
         >
-          Start training free
+          Create a free account
           <ArrowRight size={18} aria-hidden="true" />
         </Link>
       </section>

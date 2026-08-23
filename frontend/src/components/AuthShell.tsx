@@ -11,9 +11,9 @@ type AuthShellProps = {
 }
 
 const highlights = [
-  { label: 'A coach that remembers your goals', icon: MessageCircle },
-  { label: 'Rides sync themselves from Strava', icon: RefreshCw },
-  { label: 'Free — bring your own Gemini key', icon: KeyRound },
+  { label: 'Coaching built on your season', icon: MessageCircle },
+  { label: 'Rides sync from Strava', icon: RefreshCw },
+  { label: 'Your Gemini key, no subscription', icon: KeyRound },
 ]
 
 export default function AuthShell({ children, eyebrow, title, subtitle }: AuthShellProps) {
