@@ -97,13 +97,13 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow="Free — you only need a Gemini key"
-      title="Start with a conversation, not a spreadsheet"
-      subtitle="Tell your coach what you are training for and how your weeks really look. It takes it from there, and gets sharper with every ride you do."
+      eyebrow="Free · You bring a Gemini key"
+      title="Set the target. Let the coach handle the rest."
+      subtitle="Tell it what you are training for and how your weeks really look. Every session from there is built on your data and gets sharper as you ride."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h2>
-        <p className="text-sm text-gray-500 mb-5">Register once and keep your training synced on the backend.</p>
+        <p className="text-sm text-gray-500 mb-5">One account, and your training stays in sync on every device.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

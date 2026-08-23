@@ -33,13 +33,13 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="Your coach, always in reach"
-      title="Welcome back. Your coach kept up."
-      subtitle="Your rides synced while you were away. Ask it anything about training, nutrition, or tomorrow's session — it already knows where you stand."
+      eyebrow="Welcome back"
+      title="Your coach kept up while you were out."
+      subtitle="Rides synced, plan adjusted. Pick up the conversation wherever you left it."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h2>
-        <p className="text-sm text-gray-500 mb-5">Jump back into your coach chat, training plan, and next workout.</p>
+        <p className="text-sm text-gray-500 mb-5">Back to your coach, your plan and tomorrow's session.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
