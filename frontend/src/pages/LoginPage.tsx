@@ -34,8 +34,8 @@ export default function LoginPage() {
   return (
     <AuthShell
       eyebrow="Your coach, always in reach"
-      title="Training advice that knows your history"
-      subtitle="Talk to your coach anytime. It uses your rides, workouts, feedback, and what it learns about you over time to give sharper guidance."
+      title="Welcome back. Your coach kept up."
+      subtitle="Your rides synced while you were away. Ask it anything about training, nutrition, or tomorrow's session — it already knows where you stand."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h2>
