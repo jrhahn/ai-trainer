@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Key, Trash2, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import SetupGuideLink from './SetupGuideLink'
+import { SETUP_GUIDE_SECTIONS } from '../utils/links'
 import {
   fetchAIKeyStatus,
   saveAIKey,
@@ -90,9 +92,12 @@ export default function AIKeySettings() {
         <Key size={16} className="text-amber-500" />
         Your AI Provider Key
       </h2>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="text-xs text-gray-500 mb-2">
         Supply your own API key so your AI requests are billed to your account.
         The key is encrypted at rest and never returned in API responses.
+      </p>
+      <p className="mb-4">
+        <SetupGuideLink href={SETUP_GUIDE_SECTIONS.geminiKey} label="How to create a Google Gemini key" />
       </p>
 
       {/* Provider selector */}
