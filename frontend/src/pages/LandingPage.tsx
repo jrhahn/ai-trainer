@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Apple, ArrowRight, Bike, HeartPulse, KeyRound, MessageCircle, RefreshCw, Target } from 'lucide-react'
 import CoachChatPreview from '../components/CoachChatPreview'
-
-const GITHUB_URL = 'https://github.com/jrhahn/ai-trainer'
+import { GITHUB_URL, SETUP_GUIDE_URL } from '../utils/links'
 
 function GithubMark({ size = 16 }: { size?: number }) {
   return (
@@ -153,6 +152,17 @@ export default function LandingPage() {
               <Apple size={15} aria-hidden="true" className="text-amber-300" />
               Training and nutrition questions welcome, any hour
             </span>
+            <p className="mt-6 text-sm text-slate-400">
+              <a
+                href={SETUP_GUIDE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-amber-300 underline-offset-4 hover:underline"
+              >
+                Read the 10-minute setup guide
+              </a>{' '}
+              — Strava, intervals.icu, and your Gemini key, step by step.
+            </p>
           </div>
 
           <ol className="space-y-4">
@@ -210,10 +220,18 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:px-8">
           <span>Train Like a Pro — open-source cycling coaching, AGPL-3.0.</span>
           <a
+            href={SETUP_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-slate-300 hover:text-white sm:ml-auto"
+          >
+            Setup guide
+          </a>
+          <a
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 font-medium text-slate-300 hover:text-white sm:ml-auto"
+            className="inline-flex items-center gap-2 font-medium text-slate-300 hover:text-white"
           >
             <GithubMark />
             Source on GitHub

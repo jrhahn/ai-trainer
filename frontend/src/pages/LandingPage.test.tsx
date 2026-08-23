@@ -32,6 +32,14 @@ describe('LandingPage', () => {
     expect(screen.getByText(/intervals\.icu once and your strava rides flow in/i)).toBeInTheDocument()
   })
 
+  it('points new users at the setup guide', () => {
+    setup()
+    const guideLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.includes('docs/getting-started.md'))
+    expect(guideLinks.length).toBeGreaterThan(0)
+  })
+
   it('promises nutrition questions too', () => {
     setup()
     expect(screen.getByText(/training and nutrition questions welcome/i)).toBeInTheDocument()

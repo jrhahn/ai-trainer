@@ -5,6 +5,10 @@
 
 A smart cycling training app powered by AI (OpenAI or Google Gemini) with Strava integration.
 
+**New here?** [Getting started](docs/getting-started.md) walks you through Strava → intervals.icu →
+Train Like a Pro and your Google Gemini key in about 10 minutes.
+([Deutsche Fassung](docs/erste-schritte.md))
+
 ## Repository structure
 
 ```
