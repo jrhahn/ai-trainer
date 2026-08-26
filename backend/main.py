@@ -16,6 +16,7 @@ from routers import ai, admin, auth_router, intervals, strava, users
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
+from services.dates import TIMEZONE_HEADER as _TIMEZONE_HEADER
 from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
@@ -33,6 +34,19 @@ ALLOWED_ORIGINS = settings.allowed_origins
 FRONTEND_URL = settings.primary_frontend_url
 
 _REQUEST_ID_HEADER = "X-Request-ID"
+
+# Every custom header the frontend puts on a request has to be listed for the
+# CORS preflight, or the browser blocks the call before it is sent.  Production
+# never notices a gap because Traefik serves app and API from one origin, so the
+# only place it shows up is a cross-origin setup — which is exactly how the
+# README tells people to run this locally.  Imported rather than repeated so the
+# name cannot drift away from the reader in services/dates.py.
+_CORS_ALLOWED_HEADERS = [
+    "Content-Type",
+    "Authorization",
+    _REQUEST_ID_HEADER,
+    _TIMEZONE_HEADER,
+]
 
 
 async def _create_dev_schema() -> None:
@@ -82,7 +96,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", _REQUEST_ID_HEADER],
+    allow_headers=_CORS_ALLOWED_HEADERS,
     expose_headers=[_REQUEST_ID_HEADER],
 )
 
