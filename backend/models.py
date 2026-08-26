@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 from database import Base
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -68,8 +71,16 @@ class EncryptedString(TypeDecorator):
             return value
         try:
             return f.decrypt(value.encode()).decode()
-        except (InvalidToken, Exception):
-            # Graceful fallback for plaintext values stored before encryption was enabled.
+        except InvalidToken:
+            # Rows written before encryption was switched on are still plaintext
+            # and must keep working.  Anything else — a rotated or wrong key —
+            # lands here too, and used to pass unnoticed because the except
+            # clause swallowed every exception (#612).  Say so.
+            logger.warning(
+                "Could not decrypt a stored secret; returning the raw value. "
+                "Either it predates STRAVA_ENCRYPTION_KEY, or the key changed "
+                "and previously stored secrets are now unreadable."
+            )
             return value
 
 

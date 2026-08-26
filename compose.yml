@@ -75,6 +75,15 @@ services:
       # Must agree with the postgres service above; see the note there on why
       # this password has no default.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aitrainer}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set - copy .env.example to .env}@postgres:5432/${POSTGRES_DB:-aitrainer}
+      # Anything other than development/test makes the backend refuse to boot
+      # without STRAVA_ENCRYPTION_KEY. Deployments render APP_ENV=production
+      # into .env (deploy/ansible/templates/app.env.j2); local Compose stays on
+      # the development default so a fresh checkout still comes up.
+      APP_ENV: ${APP_ENV:-development}
+      # Fernet key encrypting user API keys and OAuth tokens at rest. Without a
+      # line here the value never reaches the container even when it is set in
+      # .env, and EncryptedString silently falls back to storing plaintext.
+      STRAVA_ENCRYPTION_KEY: ${STRAVA_ENCRYPTION_KEY:-}
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
