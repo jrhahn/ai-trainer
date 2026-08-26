@@ -37,7 +37,7 @@ def _uuid() -> str:
 class EncryptedString(TypeDecorator):
     """Transparently encrypts/decrypts string values using Fernet symmetric encryption.
 
-    When ``STRAVA_ENCRYPTION_KEY`` is not set the value is stored as plaintext,
+    When ``SECRETS_ENCRYPTION_KEY`` is not set the value is stored as plaintext,
     allowing dev/test environments to operate without a key while production
     always stores ciphertext.
     """
@@ -49,7 +49,7 @@ class EncryptedString(TypeDecorator):
         # Local import avoids circular dependency at module load.
         from config import settings
 
-        key = settings.strava_encryption_key
+        key = settings.encryption_key
         if not key:
             return None
         raw = key.encode() if isinstance(key, str) else key
@@ -78,7 +78,7 @@ class EncryptedString(TypeDecorator):
             # clause swallowed every exception (#612).  Say so.
             logger.warning(
                 "Could not decrypt a stored secret; returning the raw value. "
-                "Either it predates STRAVA_ENCRYPTION_KEY, or the key changed "
+                "Either it predates SECRETS_ENCRYPTION_KEY, or the key changed "
                 "and previously stored secrets are now unreadable."
             )
             return value
