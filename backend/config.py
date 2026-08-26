@@ -7,10 +7,13 @@ import the module-level ``settings`` singleton instead of calling
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 # Canonical set of environment names treated as non-production ("dev"). Used to
 # relax production-only requirements (strong JWT secret, at-rest encryption key).
@@ -93,8 +96,16 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     strava_client_id: str = ""
     strava_client_secret: str = ""
-    strava_encryption_key: str = ""
-    """Fernet key for encrypting OAuth tokens and user API keys at rest.
+
+    # ------------------------------------------------------------------
+    # Encryption at rest
+    # ------------------------------------------------------------------
+    secrets_encryption_key: str = ""
+    """Fernet key encrypting every secret this app stores on a user's behalf.
+
+    Covers Strava OAuth tokens, intervals.icu API keys and user-supplied AI
+    provider keys.  Read it through :attr:`encryption_key`, never directly, so
+    the deprecated name below keeps working.
 
     Generate with:
         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -103,6 +114,29 @@ class Settings(BaseSettings):
     omitted, in which case secrets are stored as plaintext.
     """
 
+    strava_encryption_key: str = ""
+    """Deprecated name for :attr:`secrets_encryption_key` (#613).
+
+    It predates the key covering anything but Strava.  Still honoured so an
+    existing deployment does not fall back to plaintext on upgrade — dropping it
+    outright would silently disable encryption, which is the failure mode #612
+    was about.
+    """
+
+    @property
+    def encryption_key(self) -> str:
+        """The active Fernet key, preferring the current name over the old one."""
+        if self.secrets_encryption_key:
+            return self.secrets_encryption_key
+        if self.strava_encryption_key:
+            logger.warning(
+                "STRAVA_ENCRYPTION_KEY is deprecated and will be removed; "
+                "rename it to SECRETS_ENCRYPTION_KEY. It encrypts intervals.icu "
+                "and AI provider keys too, not only Strava tokens."
+            )
+            return self.strava_encryption_key
+        return ""
+
     @property
     def is_dev_environment(self) -> bool:
         """Whether APP_ENV names a non-production (dev/test) environment."""
@@ -110,9 +144,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _require_encryption_key_in_production(self) -> "Settings":
-        if not self.is_dev_environment and not self.strava_encryption_key:
+        if not self.is_dev_environment and not self.encryption_key:
             raise ValueError(
-                "STRAVA_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
+                "SECRETS_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
                 "Generate one with: "
                 "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             )

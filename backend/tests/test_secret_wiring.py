@@ -18,7 +18,7 @@ ANSIBLE_ENV_TEMPLATE = REPO_ROOT / "deploy" / "ansible" / "templates" / "app.env
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 
 # Settings the backend cannot be trusted to run without once it leaves dev.
-SECURITY_CRITICAL_VARS = ("STRAVA_ENCRYPTION_KEY", "APP_ENV")
+SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
 
 
 def _backend_environment_block() -> str:
@@ -57,13 +57,18 @@ def test_env_example_documents_the_variable(var: str) -> None:
 def test_deployed_env_has_no_default_for_the_encryption_key() -> None:
     """Ansible must fail loudly rather than deploy without an encryption key."""
     for line in ANSIBLE_ENV_TEMPLATE.read_text().splitlines():
-        if line.startswith("STRAVA_ENCRYPTION_KEY="):
-            assert "default(" not in line, (
+        if line.startswith("SECRETS_ENCRYPTION_KEY="):
+            # The one accepted default is the pre-#613 variable name, which is
+            # itself undefined unless the vault carries it — so a deploy holding
+            # neither still aborts.
+            assert "default(" not in line.replace(
+                "default(strava_encryption_key)", ""
+            ), (
                 "A default here means a deploy that forgot the secret silently "
                 "stores plaintext instead of aborting."
             )
             return
-    pytest.fail("STRAVA_ENCRYPTION_KEY is not rendered by app.env.j2")
+    pytest.fail("SECRETS_ENCRYPTION_KEY is not rendered by app.env.j2")
 
 
 def test_production_app_env_reaches_the_boot_guard() -> None:
@@ -87,7 +92,7 @@ class TestEncryptedString:
         from config import settings
 
         key = Fernet.generate_key().decode()
-        monkeypatch.setattr(settings, "strava_encryption_key", key)
+        monkeypatch.setattr(settings, "secrets_encryption_key", key)
         column = self._column()
 
         stored = column.process_bind_param("AIzaSy-not-a-real-key", None)
@@ -100,6 +105,7 @@ class TestEncryptedString:
         """Documents the dev-only behaviour that made #612 possible."""
         from config import settings
 
+        monkeypatch.setattr(settings, "secrets_encryption_key", "")
         monkeypatch.setattr(settings, "strava_encryption_key", "")
 
         assert self._column().process_bind_param("secret", None) == "secret"
@@ -110,7 +116,7 @@ class TestEncryptedString:
         from config import settings
 
         monkeypatch.setattr(
-            settings, "strava_encryption_key", Fernet.generate_key().decode()
+            settings, "secrets_encryption_key", Fernet.generate_key().decode()
         )
 
         with caplog.at_level("WARNING"):
@@ -126,18 +132,83 @@ class TestProductionBootGuard:
     def test_refuses_to_boot_in_production_without_a_key(self) -> None:
         from config import Settings
 
-        with pytest.raises(ValueError, match="STRAVA_ENCRYPTION_KEY"):
-            Settings(app_env="production", strava_encryption_key="")
+        with pytest.raises(ValueError, match="SECRETS_ENCRYPTION_KEY"):
+            Settings(
+                app_env="production", secrets_encryption_key="", strava_encryption_key=""
+            )
 
     def test_allows_development_without_a_key(self) -> None:
         from config import Settings
 
-        assert Settings(app_env="development", strava_encryption_key="").app_env
+        assert Settings(app_env="development", secrets_encryption_key="").app_env
 
     def test_accepts_production_with_a_key(self) -> None:
         from config import Settings
 
         settings = Settings(
-            app_env="production", strava_encryption_key=Fernet.generate_key().decode()
+            app_env="production", secrets_encryption_key=Fernet.generate_key().decode()
         )
         assert settings.is_dev_environment is False
+
+
+class TestDeprecatedKeyName:
+    """#613: dropping the old name outright would silently disable encryption."""
+
+    def test_legacy_name_still_satisfies_the_production_guard(self) -> None:
+        from config import Settings
+
+        settings = Settings(
+            app_env="production",
+            secrets_encryption_key="",
+            strava_encryption_key=Fernet.generate_key().decode(),
+        )
+
+        assert settings.encryption_key == settings.strava_encryption_key
+
+    def test_legacy_name_still_encrypts(self, monkeypatch) -> None:
+        from config import settings
+        from models import EncryptedString
+
+        monkeypatch.setattr(settings, "secrets_encryption_key", "")
+        monkeypatch.setattr(
+            settings, "strava_encryption_key", Fernet.generate_key().decode()
+        )
+
+        assert EncryptedString().process_bind_param("secret", None).startswith("gAAAAA")
+
+    def test_using_the_legacy_name_is_reported(self, caplog) -> None:
+        from config import Settings
+
+        settings = Settings(
+            app_env="production",
+            secrets_encryption_key="",
+            strava_encryption_key=Fernet.generate_key().decode(),
+        )
+
+        with caplog.at_level("WARNING"):
+            settings.encryption_key
+
+        assert "STRAVA_ENCRYPTION_KEY is deprecated" in caplog.text
+
+    def test_current_name_wins_when_both_are_set(self) -> None:
+        from config import Settings
+
+        current = Fernet.generate_key().decode()
+        settings = Settings(
+            app_env="production",
+            secrets_encryption_key=current,
+            strava_encryption_key=Fernet.generate_key().decode(),
+        )
+
+        assert settings.encryption_key == current
+
+    def test_compose_still_forwards_the_legacy_name(self) -> None:
+        """An existing .env must not lose encryption on upgrade."""
+        assert "STRAVA_ENCRYPTION_KEY:" in _backend_environment_block()
+
+    def test_deployment_accepts_a_vault_that_kept_the_old_var(self) -> None:
+        for line in ANSIBLE_ENV_TEMPLATE.read_text().splitlines():
+            if line.startswith("SECRETS_ENCRYPTION_KEY="):
+                assert "strava_encryption_key" in line
+                return
+        pytest.fail("SECRETS_ENCRYPTION_KEY is not rendered by app.env.j2")
