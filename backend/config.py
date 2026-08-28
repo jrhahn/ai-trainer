@@ -10,8 +10,16 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Quoted in both key errors below: an operator who hits one should not have to go
+# looking for how to produce a correct value.
+_FERNET_KEYGEN = (
+    'python -c "from cryptography.fernet import Fernet; '
+    'print(Fernet.generate_key().decode())"'
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,9 +155,30 @@ class Settings(BaseSettings):
         if not self.is_dev_environment and not self.encryption_key:
             raise ValueError(
                 "SECRETS_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
-                "Generate one with: "
-                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                "Generate one with: " + _FERNET_KEYGEN
             )
+        return self
+
+    @model_validator(mode="after")
+    def _require_a_usable_encryption_key(self) -> "Settings":
+        """A key that is set must be one Fernet can actually use.
+
+        Generate it with ``Fernet.generate_key()`` (see :data:`_FERNET_KEYGEN`) —
+        44 characters, url-safe base64, 32 bytes decoded. ``token_urlsafe`` and
+        ``openssl rand`` produce the wrong length and are rejected here rather
+        than on the first request that touches an encrypted column.
+        """
+        key = self.encryption_key
+        if not key:
+            return self
+        try:
+            Fernet(key.encode())
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"SECRETS_ENCRYPTION_KEY is set but is not a valid Fernet key ({exc}). "
+                "It must be 32 bytes, url-safe base64-encoded — 44 characters. "
+                "Generate one with: " + _FERNET_KEYGEN
+            ) from exc
         return self
 
     # ------------------------------------------------------------------
