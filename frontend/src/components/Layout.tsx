@@ -23,7 +23,9 @@ function Brand({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => 
       <div className={`bg-amber-500 rounded-lg ${compact ? 'p-1' : 'p-1.5'}`}>
         <Bike size={compact ? 18 : 20} className="text-white" />
       </div>
-      <span className={`font-bold tracking-tight ${compact ? 'text-base' : 'text-lg'}`}>Train Like a Pro!</span>
+      <span className={`whitespace-nowrap font-bold tracking-tight ${compact ? 'text-base' : 'text-base'}`}>
+        Train Like a Pro
+      </span>
     </NavLink>
   )
 }
@@ -174,8 +176,8 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 bg-[#1a1a2e] text-white px-3 py-6 fixed inset-y-0 left-0 z-30">
-        <div className="px-4 mb-2">
+      <aside className="hidden md:flex flex-col w-56 bg-[#0f1116] text-white px-3 py-5 fixed inset-y-0 left-0 z-30">
+        <div className="px-2 mb-2">
           <Brand />
         </div>
         <NavLinks />
@@ -186,7 +188,7 @@ export default function Layout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#1a1a2e] text-white flex items-center justify-between px-4 h-14">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#0f1116] text-white flex items-center justify-between px-4 h-14">
         <Brand compact onNavigate={() => setMobileOpen(false)} />
         <div className="flex items-center gap-1">
           <button
@@ -219,7 +221,7 @@ export default function Layout() {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"
-            className="absolute top-14 left-0 bottom-0 w-56 bg-[#1a1a2e] text-white px-3 py-4 flex flex-col"
+            className="absolute top-14 left-0 bottom-0 w-56 bg-[#0f1116] text-white px-3 py-4 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <NavLinks onClick={() => setMobileOpen(false)} />

@@ -47,7 +47,7 @@ beforeEach(() => {
 describe('Layout', () => {
   it('renders the brand, navigation and routed content', () => {
     renderLayout()
-    expect(screen.getAllByText('Train Like a Pro!').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Train Like a Pro').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Coach').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0)
     expect(screen.getByText('Dashboard content')).toBeInTheDocument()
@@ -102,7 +102,7 @@ describe('Layout', () => {
 
     // Re-open and close by tapping the (mobile) brand/home link.
     await userEvent.click(screen.getByRole('button', { name: 'Toggle menu' }))
-    const brandLinks = screen.getAllByRole('link', { name: /Train Like a Pro!/ })
+    const brandLinks = screen.getAllByRole('link', { name: /Train Like a Pro/ })
     await userEvent.click(brandLinks[brandLinks.length - 1])
     expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument()
   })

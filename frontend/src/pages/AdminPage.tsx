@@ -214,7 +214,7 @@ export default function AdminPage() {
 
   if (!adminToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#0f1116] flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
           <div className="flex items-center gap-2 mb-6">
             <div className="bg-blue-600 rounded-lg p-1.5">

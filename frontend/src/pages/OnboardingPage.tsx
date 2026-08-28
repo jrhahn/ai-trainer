@@ -296,7 +296,7 @@ export default function OnboardingPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0f1116] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         {/* Header */}
         <div className="px-8 pt-8 pb-4">

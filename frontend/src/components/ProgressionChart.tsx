@@ -102,8 +102,8 @@ export default function ProgressionChart() {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-            <TrendingUp size={16} className="text-purple-600" />
+          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+            <TrendingUp size={16} className="text-amber-600" />
           </div>
           <h3 className="text-sm font-bold text-gray-800">Athlete Progression</h3>
         </div>
@@ -114,7 +114,7 @@ export default function ProgressionChart() {
           <button
             onClick={handleRecalculate}
             disabled={isRecalcBusy}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-[#0f1116] font-semibold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw size={12} className={isRecalcBusy ? 'animate-spin' : ''} />
             {recalcLabel()}
@@ -177,8 +177,8 @@ export default function ProgressionChart() {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-          <TrendingUp size={16} className="text-purple-600" />
+        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+          <TrendingUp size={16} className="text-amber-600" />
         </div>
         <h3 className="text-sm font-bold text-gray-800">Athlete Progression</h3>
         <span className="ml-auto text-xs text-gray-400">
@@ -189,9 +189,9 @@ export default function ProgressionChart() {
       {/* Summary badges */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {latestFTP != null && (
-          <div className="bg-purple-50 rounded-lg px-3 py-2 text-center">
-            <p className="text-xs text-purple-500 font-medium">FTP</p>
-            <p className="text-base font-bold text-purple-800">{latestFTP}<span className="text-xs font-normal">W</span></p>
+          <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
+            <p className="text-xs text-amber-600 font-medium">FTP</p>
+            <p className="text-base font-bold text-amber-800">{latestFTP}<span className="text-xs font-normal">W</span></p>
           </div>
         )}
         {latestCTL != null && (
@@ -298,7 +298,7 @@ export default function ProgressionChart() {
         <button
           onClick={handleRecalculate}
           disabled={isRecalcBusy}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-[#0f1116] font-semibold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw size={12} className={isRecalcBusy ? 'animate-spin' : ''} />
           {recalcLabel()}
