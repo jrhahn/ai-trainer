@@ -55,6 +55,7 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
+          SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
           SERVER_URL: ${{ vars.SERVER_URL }}
           SERVER_URL_2: ${{ vars.SERVER_URL_2 }}
         run: |
@@ -65,6 +66,11 @@ jobs:
           test -n "$JWT_SECRET"
           test -n "$POSTGRES_PASSWORD"
           test -n "$ADMIN_PASS_HASH"
+          # Deliberately checked here rather than only in the template: the
+          # playbook renders .env after it has already rsynced the repo, so a
+          # missing key aborts mid-deploy. app.env.j2 has no fallback for it on
+          # purpose (#612), which makes this the last point where failing is free.
+          test -n "$SECRETS_ENCRYPTION_KEY"
 
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -101,6 +107,7 @@ jobs:
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           AUTHELIA_PROXY_SHARED_SECRET: ${{ secrets.AUTHELIA_PROXY_SHARED_SECRET }}
+          SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
         run: |
           python - <<'PY'
           import json
@@ -120,6 +127,10 @@ jobs:
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
               "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
               "authelia_proxy_shared_secret": os.environ.get("AUTHELIA_PROXY_SHARED_SECRET", ""),
+              # Required, so read it the way the other required values are read:
+              # a KeyError here is a clearer failure than an undefined variable
+              # surfacing from inside a Jinja template later on.
+              "secrets_encryption_key": os.environ["SECRETS_ENCRYPTION_KEY"],
           }
 
           with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:

@@ -7,6 +7,7 @@ into the container, and nothing rendered it into the deployed ``.env``.  Python
 tests could not see that, so these assertions read the deployment files.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = REPO_ROOT / "compose.yml"
 ANSIBLE_ENV_TEMPLATE = REPO_ROOT / "deploy" / "ansible" / "templates" / "app.env.j2"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
+DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 
 # Settings the backend cannot be trusted to run without once it leaves dev.
 SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
@@ -58,17 +60,71 @@ def test_deployed_env_has_no_default_for_the_encryption_key() -> None:
     """Ansible must fail loudly rather than deploy without an encryption key."""
     for line in ANSIBLE_ENV_TEMPLATE.read_text().splitlines():
         if line.startswith("SECRETS_ENCRYPTION_KEY="):
-            # The one accepted default is the pre-#613 variable name, which is
-            # itself undefined unless the vault carries it — so a deploy holding
-            # neither still aborts.
-            assert "default(" not in line.replace(
-                "default(strava_encryption_key)", ""
-            ), (
-                "A default here means a deploy that forgot the secret silently "
-                "stores plaintext instead of aborting."
+            # Fallbacks onto other *variables* are fine (the pre-#613 name, and
+            # undef() to end the chain with a usable message). A fallback onto a
+            # literal is not: that is a value, and a deploy holding no key would
+            # take it and store plaintext instead of aborting.
+            assert not re.search(r"default\(\s*['\"]", line), (
+                "A literal default here means a deploy that forgot the secret "
+                "silently stores plaintext instead of aborting."
             )
             return
     pytest.fail("SECRETS_ENCRYPTION_KEY is not rendered by app.env.j2")
+
+
+def _required_template_vars() -> set[str]:
+    """Ansible vars ``app.env.j2`` cannot render without.
+
+    A ``| default(...)`` only makes a variable optional when the fallback is a
+    literal. When the fallback is another variable the requirement *moves* to it,
+    which is why ``secrets_encryption_key | default(strava_encryption_key)`` read
+    as optional to everyone who looked at it and was not (#617).
+    """
+    template = re.sub(r"\{#.*?#\}", "", ANSIBLE_ENV_TEMPLATE.read_text(), flags=re.S)
+
+    def names(expression: str) -> set[str]:
+        head = re.match(r"([a-z_][a-z0-9_]*)\s*(.*)", expression.strip(), re.S)
+        if not head:
+            return set()  # a literal, or something we do not model
+        name, rest = head.group(1), head.group(2)
+        if rest.startswith("("):
+            return set()  # a call such as undef(), not a variable reference
+        fallback = re.match(r"\|\s*default\((.*)\)\s*$", rest, re.S)
+        if not fallback:
+            return {name}
+        argument = fallback.group(1).strip()
+        if argument.startswith(("'", '"')):
+            return set()
+        return names(argument)
+
+    required: set[str] = set()
+    for expression in re.findall(r"\{\{(.*?)\}\}", template, re.S):
+        required |= names(expression)
+    return required
+
+
+def test_deploy_workflow_passes_every_variable_the_template_requires() -> None:
+    """The link nothing checked: GitHub secret -> extra-var -> template.
+
+    #612 wired the encryption key from the template all the way into the
+    container and these tests confirmed every hop of it, but no hop above the
+    template. The workflow never passed the variable, so the first deploy after
+    the rename aborted while rendering .env — on a host it had already rsynced.
+    """
+    supplied = set(re.findall(r'"([a-z_][a-z0-9_]*)":\s*os\.environ', DEPLOY_WORKFLOW.read_text()))
+    missing = _required_template_vars() - supplied
+    assert not missing, (
+        f"app.env.j2 cannot render without {sorted(missing)}, and the deploy "
+        "workflow does not pass them as extra-vars. The deploy will fail after "
+        "the host has been synced."
+    )
+
+
+def test_the_encryption_key_is_required_rather_than_merely_forwarded() -> None:
+    """Reading it with .get(..., '') would deploy an empty key as if it were one."""
+    assert '"secrets_encryption_key": os.environ["SECRETS_ENCRYPTION_KEY"]' in (
+        DEPLOY_WORKFLOW.read_text()
+    )
 
 
 def test_production_app_env_reaches_the_boot_guard() -> None:
