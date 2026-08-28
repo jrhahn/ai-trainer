@@ -193,6 +193,45 @@ class TestProductionBootGuard:
                 app_env="production", secrets_encryption_key="", strava_encryption_key=""
             )
 
+    # 40 characters, decoding to 30 bytes: what `token_urlsafe(30)` and
+    # `openssl rand -base64 30` produce. Plausible, and not a Fernet key.
+    NOT_A_FERNET_KEY = "x" * 40
+
+    def test_refuses_to_boot_on_a_key_fernet_cannot_use(self) -> None:
+        from config import Settings
+
+        with pytest.raises(ValueError, match="not a valid Fernet key"):
+            Settings(app_env="production", secrets_encryption_key=self.NOT_A_FERNET_KEY)
+
+    def test_a_broken_key_is_rejected_in_development_too(self) -> None:
+        """Dev gets the same error: a key that cannot encrypt is never intended."""
+        from config import Settings
+
+        with pytest.raises(ValueError, match="not a valid Fernet key"):
+            Settings(app_env="development", secrets_encryption_key=self.NOT_A_FERNET_KEY)
+
+    def test_the_error_says_how_to_generate_a_correct_key(self) -> None:
+        from config import Settings
+
+        with pytest.raises(ValueError, match="Fernet.generate_key"):
+            Settings(app_env="production", secrets_encryption_key=self.NOT_A_FERNET_KEY)
+
+    def test_the_deprecated_name_is_validated_as_well(self) -> None:
+        from config import Settings
+
+        with pytest.raises(ValueError, match="not a valid Fernet key"):
+            Settings(
+                app_env="production",
+                secrets_encryption_key="",
+                strava_encryption_key=self.NOT_A_FERNET_KEY,
+            )
+
+    def test_a_real_fernet_key_still_boots(self) -> None:
+        from config import Settings
+
+        key = Fernet.generate_key().decode()
+        assert Settings(app_env="production", secrets_encryption_key=key).encryption_key == key
+
     def test_allows_development_without_a_key(self) -> None:
         from config import Settings
 
