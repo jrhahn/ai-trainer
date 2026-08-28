@@ -98,8 +98,8 @@ export default function RegisterPage() {
   return (
     <AuthShell
       eyebrow="Free · You bring a Gemini key"
-      title="Set the target. Let the coach handle the rest."
-      subtitle="Tell it what you are training for and how your weeks really look. Every session from there is built on your data and gets sharper as you ride."
+      title="Start with the date you are training for."
+      subtitle="Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later."
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h2>

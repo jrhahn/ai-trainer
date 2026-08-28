@@ -11,32 +11,34 @@ function GithubMark({ size = 16 }: { size?: number }) {
   )
 }
 
-const pillars = [
+// Exported for the copy-voice guard in LandingPage.test.tsx: the rule of three is
+// what made the first draft read as generated, and it survived one rewrite (#610).
+export const pillars = [
   {
     icon: Target,
     title: 'Knows your season',
-    body: 'Set the target event once. From then on your coach builds towards that date and remembers the constraints you gave it — the hours you have, the days you cannot ride, the injury you are managing.',
+    body: 'Set the target event once. Everything after that is built backwards from the date. Tell it Thursdays are gone until March and the week rearranges itself instead of quietly falling behind.',
   },
   {
     icon: MessageCircle,
     title: 'Answers on the spot',
-    body: 'What to eat before a four-hour ride. Why your heart rate drifted on Sunday. Whether a niggle is worth a rest day. Ask in normal language and get an answer that accounts for your last four weeks.',
+    body: 'Ask why your heart rate sat ten beats high on Sunday and the answer comes from your last four weeks rather than a textbook. Normal language. No dropdowns.',
   },
   {
     icon: RefreshCw,
     title: 'Reworks the week',
-    body: 'Missed Tuesday. Legs flat. Work trip. Say so and the plan moves, including everything downstream of it. No rebuilding a block by hand.',
+    body: 'You missed Tuesday and the legs are still flat. Say so. The plan moves and so does everything downstream of it, which is the part you would otherwise rebuild by hand.',
   },
 ]
 
-const steps = [
+export const steps = [
   {
     title: 'Connect once',
     body: 'intervals.icu pulls your rides straight from Strava, and we read them from there. Prefer to stay off both? Upload a FIT file instead.',
   },
   {
     title: 'Set the target',
-    body: 'One conversation: the event, the date, the hours you can realistically train.',
+    body: 'One conversation. The event and its date, and how many hours a week you can honestly give it.',
   },
   {
     title: 'Ride',
@@ -44,21 +46,21 @@ const steps = [
   },
 ]
 
-const openSourceFacts = [
+export const openSourceFacts = [
   {
     icon: KeyRound,
     title: 'Your key, your account',
-    body: 'A Google Gemini key takes two minutes to create and costs nothing to start. Requests run on your account, not ours.',
+    body: 'A Google Gemini key takes two minutes to create and costs nothing to start. The requests run on your account, so any bill you ever see comes from Google.',
   },
   {
     icon: GithubMark,
     title: 'AGPL-3.0, all of it',
-    body: 'Every line is public. Audit the training logic, fork it, run the whole stack on your own hardware.',
+    body: 'Every line is public. If you disagree with how the coach decided your rest day, go and read the function that decided it.',
   },
   {
     icon: HeartPulse,
     title: 'No lock-in',
-    body: 'Self-host it, export it, or walk away. Your ride history was never ours to hold.',
+    body: 'Run the whole stack on your own hardware whenever you feel like it. Your ride history sits in intervals.icu either way, which is where it was before you got here.',
   },
 ]
 
@@ -89,7 +91,7 @@ export default function LandingPage() {
             to="/register"
             className="whitespace-nowrap rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
           >
-            Get started
+            Create account
           </Link>
         </nav>
       </header>
@@ -105,8 +107,8 @@ export default function LandingPage() {
               Coaching that keeps up with your week.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-              Talk to your coach the way you would talk to a person. It knows your history, your target event
-              and how last week actually went, then plans tomorrow around it.
+              Talk to it the way you would talk to a person. It has read every ride you have done and it
+              plans tomorrow around how last week actually went, not around what the plan said in January.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
@@ -124,7 +126,7 @@ export default function LandingPage() {
               </Link>
             </div>
             <p className="mt-5 text-sm text-slate-400">
-              You bring a Google Gemini key. No subscription, no card, no trial period.
+              You bring a Google Gemini key. There is no subscription and no card to enter.
             </p>
           </div>
 
@@ -135,7 +137,7 @@ export default function LandingPage() {
       <section className="border-t border-white/5 bg-[#12141b]">
         <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
           <h2 className="max-w-2xl text-balance text-3xl font-black tracking-tight sm:text-4xl">
-            Built around your season, not a template.
+            Built around one date and the weeks in front of it.
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {pillars.map(({ icon: Icon, title, body }) => (
@@ -157,8 +159,8 @@ export default function LandingPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Getting started</p>
             <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Ten minutes to set up.</h2>
             <p className="mt-5 max-w-md text-[15px] leading-7 text-slate-300">
-              Rides sync in the background from then on, so your coach works from what you rode rather than
-              what the plan said.
+              Rides sync in the background from then on. By Monday morning the coach is working from
+              Sunday's actual numbers.
             </p>
             <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-slate-300">
               <Apple size={15} aria-hidden="true" className="text-amber-300" />
@@ -217,7 +219,7 @@ export default function LandingPage() {
           Put a date on the calendar.
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-[15px] leading-7 text-slate-300">
-          Sign up, tell your coach what you are chasing, ride tomorrow's session.
+          Sign up and say what you are training for. There is a session waiting tomorrow morning.
         </p>
         <Link
           to="/register"
