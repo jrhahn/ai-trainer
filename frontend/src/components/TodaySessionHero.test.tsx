@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TodaySessionHero from './TodaySessionHero'
 import type { TrainingDay } from '../store/useAppStore'
@@ -36,20 +37,33 @@ describe('TodaySessionHero', () => {
     expect(screen.getByText('1h 15m')).toBeInTheDocument()
   })
 
-  it('links to the session', () => {
+  it('opens the instructions over the dashboard instead of navigating away', async () => {
+    renderHero({ day: day({ keyFocusPoints: ['Keep cadence smooth and high'] }) })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /show details/i }))
+
+    const dialog = screen.getByRole('dialog', { name: '4 x 8 min threshold' })
+    expect(within(dialog).getByText('Keep cadence smooth and high')).toBeInTheDocument()
+  })
+
+  it('still reaches the full page, where logging and history live', async () => {
     renderHero({ day: day() })
 
-    expect(screen.getByRole('link', { name: /open the session/i })).toHaveAttribute(
+    await userEvent.click(screen.getByRole('button', { name: /show details/i }))
+
+    expect(screen.getByRole('link', { name: /open the full session page/i })).toHaveAttribute(
       'href',
       '/workout/2026-08-26'
     )
   })
 
-  it('counts a ride logged today as done even when the plan day was never ticked', () => {
+  it('counts a ride logged today as done even when the plan day was never ticked', async () => {
     renderHero({ day: day({ completed: false }), loggedToday: true })
 
     expect(screen.getByText('Done')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /review the session/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /show details/i }))
+    expect(screen.getByRole('link', { name: /review and log this session/i })).toBeInTheDocument()
   })
 
   it('drops the duration on a rest day rather than showing 0m', () => {
@@ -57,7 +71,7 @@ describe('TodaySessionHero', () => {
 
     expect(screen.getByRole('heading', { name: 'Rest day' })).toBeInTheDocument()
     expect(screen.queryByText('0m')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /see the day/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show details/i })).toBeInTheDocument()
   })
 
   it('says so when the plan has nothing for today', () => {

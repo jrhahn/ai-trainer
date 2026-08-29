@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, Clock, Heart, Zap } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -5,7 +6,9 @@ import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionTypeStyleOnDark } from '../utils/sessionType'
+import Modal from './Modal'
 import WeatherBadge from './WeatherBadge'
+import WorkoutDetails from './WorkoutDetails'
 
 /** Today's session, given the weight it actually has.
  *
@@ -24,6 +27,7 @@ export default function TodaySessionHero({
   loggedToday?: boolean
 }) {
   const forecast = useAppStore(useShallow((s) => (day ? s.weatherForecast[day.date] : undefined)))
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   if (!day) {
     return (
@@ -100,14 +104,31 @@ export default function TodaySessionHero({
           <WeatherBadge forecast={forecast} className="text-slate-300" />
         </div>
 
-        <Link
-          to={`/workout/${day.date}`}
+        {/* The instructions open over the dashboard rather than replacing it,
+            the way the calendar does — reading what today asks for is not a
+            reason to lose your place (#623). */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
           className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
         >
-          {isDone ? 'Review the session' : isRest ? 'See the day' : 'Open the session'}
+          Show details
           <ArrowRight size={16} aria-hidden="true" />
-        </Link>
+        </button>
       </div>
+
+      <Modal open={detailsOpen} onClose={() => setDetailsOpen(false)} title={day.title}>
+        <WorkoutDetails day={day} />
+        {/* Logging, coach feedback and the change history live on the page
+            itself; the overlay is the read, not the whole session. */}
+        <Link
+          to={`/workout/${day.date}`}
+          className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-600 hover:text-amber-700"
+        >
+          {isDone ? 'Review and log this session' : 'Open the full session page'}
+          <ArrowRight size={15} aria-hidden="true" />
+        </Link>
+      </Modal>
     </section>
   )
 }

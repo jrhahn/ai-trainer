@@ -286,4 +286,6 @@ def fallback_status(facts: dict) -> tuple[str, str, str]:
         return "On track", "positive", detail
     if adherence >= 0.5:
         return "Slightly behind", "caution", detail
-    return "Behind plan", "caution", detail
+    # Under half the due work done is a different conversation from slipping a
+    # session, and the dashboard now has a colour that says so (#623).
+    return "Behind plan", "alert", detail

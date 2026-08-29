@@ -187,7 +187,7 @@ describe('WorkoutPage', () => {
     useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithPurpose] })
     renderWorkoutPage(TODAY)
 
-    expect(screen.getByText('Why this workout')).toBeInTheDocument()
+    expect(screen.getByText('Goal of this workout')).toBeInTheDocument()
     expect(screen.getByText('Raises VO2max by stressing the cardiovascular system.')).toBeInTheDocument()
   })
 
@@ -195,7 +195,7 @@ describe('WorkoutPage', () => {
     useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
     renderWorkoutPage(TODAY)
 
-    expect(screen.queryByText('Why this workout')).not.toBeInTheDocument()
+    expect(screen.queryByText('Goal of this workout')).not.toBeInTheDocument()
   })
 
   it('renders keyFocusPoints section when the field is present', () => {

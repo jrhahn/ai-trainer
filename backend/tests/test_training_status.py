@@ -324,7 +324,23 @@ def test_fallback_flags_a_genuine_shortfall():
     label, tone, _ = ts.fallback_status(facts)
 
     assert facts["plannedDue"] == 4
-    assert (label, tone) == ("Behind plan", "caution")
+    # Nothing done at all is the loudest tone, not the middle one (#623).
+    assert (label, tone) == ("Behind plan", "alert")
+
+
+def test_fallback_separates_slipping_a_session_from_losing_the_block():
+    """Half the work done is a nudge; a fifth of it is a different conversation."""
+    plan = [_day(f"2026-07-2{d}", "intervals") for d in (6, 7, 8, 9)]
+    two_done = [
+        _matched("2026-07-26", "Tuesday intervals", 60),
+        _matched("2026-07-27", "Wednesday intervals", 60),
+    ]
+
+    slipping = ts.fallback_status(ts.build_status_facts(plan, two_done, TODAY))
+    lost = ts.fallback_status(ts.build_status_facts(plan, two_done[:1], TODAY))
+
+    assert slipping[1] == "caution"
+    assert lost[1] == "alert"
 
 
 # ---------------------------------------------------------------------------

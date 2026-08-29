@@ -335,7 +335,9 @@ export interface RiderAssessment {
   /** Coach-authored dashboard status badge (#499) — written by the backend
    * status pipeline, never computed here, so the coach can explain it. */
   trainingStatusLabel?: string
-  trainingStatusTone?: 'positive' | 'steady' | 'caution'
+  /** Mirrors `TRAINING_STATUS_TONES` in backend/services/prompts.py — the
+   *  dashboard colours the whole training summary from it (#623). */
+  trainingStatusTone?: 'positive' | 'steady' | 'caution' | 'alert'
   trainingStatusRationale?: string
 }
 

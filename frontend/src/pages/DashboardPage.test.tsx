@@ -1383,7 +1383,11 @@ describe("DashboardPage — Today's status strip", () => {
     renderDashboard()
     expect(await screen.findByRole('heading', { name: 'VO2 Efforts' })).toBeInTheDocument()
     expect(screen.getByText('Done')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /review the session/i })).toBeInTheDocument()
+
+    // The overlay's way through to the page is phrased for a session already
+    // ridden, so the "done" state has to reach that far (#623).
+    await userEvent.click(screen.getByRole('button', { name: /show details/i }))
+    expect(screen.getByRole('link', { name: /review and log this session/i })).toBeInTheDocument()
   })
 
   it('shows the rest of the week as its own days', async () => {
@@ -1409,7 +1413,13 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByText('Ahead of plan')).toBeInTheDocument()
   })
 
-  it('colours the badge from the coach-chosen tone', async () => {
+  // The verdict is the summary card's colour now (#623), so these read the card
+  // rather than a pill. `summaryCard()` walks up from the section heading to the
+  // bordered block that carries the tone.
+  const summaryCard = () =>
+    screen.getByText('Your recent training summary').closest('div.rounded-xl')!
+
+  it('colours the whole summary from the coach-chosen tone', async () => {
     setupStore({
       riderAssessment: assessmentWithStatus({
         trainingStatusLabel: 'Missed two',
@@ -1417,12 +1427,25 @@ describe("DashboardPage — Today's status strip", () => {
       }),
     })
     renderDashboard()
-    expect(await screen.findByText('Missed two')).toHaveClass('bg-amber-50', 'text-amber-700')
+    await screen.findByText('Your recent training summary')
+
+    expect(summaryCard()).toHaveClass('bg-amber-50', 'border-amber-200')
   })
 
-  // One coach-authored word does not earn a card of its own; it heads the
-  // summary written by the same coach about the same weeks (#621).
-  it('puts the badge inside the recent-training summary, not in its own widget', async () => {
+  it('reserves red for a block that stopped happening, not a missed session', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Behind plan',
+        trainingStatusTone: 'alert',
+      }),
+    })
+    renderDashboard()
+    await screen.findByText('Your recent training summary')
+
+    expect(summaryCard()).toHaveClass('bg-red-50', 'border-red-200')
+  })
+
+  it('goes green when the athlete is meeting the plan', async () => {
     setupStore({
       riderAssessment: assessmentWithStatus({
         trainingStatusLabel: 'On track',
@@ -1430,12 +1453,12 @@ describe("DashboardPage — Today's status strip", () => {
       }),
     })
     renderDashboard()
+    await screen.findByText('Your recent training summary')
 
-    const heading = await screen.findByText('Your recent training summary')
-    expect(within(heading.parentElement!).getByText('On track')).toBeInTheDocument()
+    expect(summaryCard()).toHaveClass('bg-emerald-50', 'border-emerald-200')
   })
 
-  it('falls back to a neutral colour when the stored tone is unusable', async () => {
+  it('falls back to a neutral card when the stored tone is unusable', async () => {
     // `training_status_tone` is a free-text column, so a legacy or malformed
     // value must still render — just without claiming a verdict it cannot back.
     setupStore({
@@ -1445,12 +1468,28 @@ describe("DashboardPage — Today's status strip", () => {
       }),
     })
     renderDashboard()
-    expect(await screen.findByText('Easing off')).toHaveClass('text-gray-600')
+    await screen.findByText('Your recent training summary')
+
+    expect(summaryCard()).toHaveClass('bg-white', 'border-gray-100')
   })
 
-  it("exposes the coach's reason as the badge's tooltip", async () => {
-    // The athlete asks "why?" of the badge itself; the same rationale also goes
-    // into the coach's prompt, so both answers come from one source (#499).
+  // Colour alone reaches nobody who cannot see it, so the coach's word stays in
+  // the DOM even though it is no longer drawn.
+  it('keeps the verdict readable to a screen reader', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'Missed two',
+        trainingStatusTone: 'caution',
+      }),
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('Missed two')).toHaveClass('sr-only')
+  })
+
+  it("exposes the coach's reason as the summary's tooltip", async () => {
+    // The athlete asks "why?" of the colour; the same rationale also goes into
+    // the coach's prompt, so both answers come from one source (#499).
     setupStore({
       riderAssessment: assessmentWithStatus({
         trainingStatusLabel: 'On track',
@@ -1458,7 +1497,9 @@ describe("DashboardPage — Today's status strip", () => {
       }),
     })
     renderDashboard()
-    expect(await screen.findByText('On track')).toHaveAttribute(
+    await screen.findByText('Your recent training summary')
+
+    expect(summaryCard()).toHaveAttribute(
       'title',
       'You completed both hard sessions this week.'
     )

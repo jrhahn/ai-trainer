@@ -728,10 +728,13 @@ def generate_plan_system() -> str:
         "your 260 W FTP). Keep HR under 148 bpm. The goal is fat oxidation and aerobic base building "
         "— you should be able to hold a conversation throughout.'), "
         '"durationMinutes" (integer), '
-        '"workoutPurpose" (1-2 sentences describing the physiological goal of this session and why '
-        "it is placed here in the plan — e.g. 'This tempo block raises your lactate threshold by "
-        "training your body to clear lactate more efficiently. It follows yesterday's recovery ride "
-        "to take advantage of residual fatigue adaptation.'), "
+        '"workoutPurpose" (1-2 sentences on what this session earns the athlete, written '
+        "forwards: the capability they will have afterwards that they do not have now. "
+        "State the adaptation, then what it lets them do. Do NOT justify the session's "
+        "placement in the plan or recap the days around it — the athlete is about to ride "
+        "it, not audit the schedule. E.g. 'This tempo block trains your body to clear "
+        "lactate faster, so the same climbing pace costs you less. Over a few weeks it is "
+        "what lets you hold your threshold effort to the top instead of fading.'), "
         '"keyFocusPoints" (array of 3-5 short coaching-cue strings, each beginning with an action '
         'verb — e.g. ["Keep cadence between 88-95 rpm throughout", "HR must stay below 158 bpm '
         '(Zone 3); back off if it creeps higher", "Breathe rhythmically — aim for a 3-in/2-out '
@@ -848,8 +851,9 @@ def adapt_plan_system() -> str:
         "Each updated day must also include: "
         '"description" (a 2-4 sentence summary using the athlete\'s actual FTP and threshold HR to '
         "state exact power/HR targets — always translate percentages to absolute numbers), "
-        '"workoutPurpose" (1-2 sentences on the physiological goal of the session and why it is '
-        "placed here in the adapted plan), "
+        '"workoutPurpose" (1-2 sentences on what the session earns the athlete, written '
+        "forwards — the capability they will have afterwards, not a justification of where "
+        "it sits in the adapted plan), "
         '"keyFocusPoints" (array of 3-5 coaching-cue strings, each starting with an action verb).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
         f"{plan_allocation_rule()}\n"
@@ -3666,7 +3670,11 @@ def refresh_login_summary_user(
 # is a hard product constraint rather than a stylistic preference.
 TRAINING_STATUS_LABEL_MAX_CHARS = 22
 
-TRAINING_STATUS_TONES = ("positive", "steady", "caution")
+# The dashboard colours the athlete's whole training summary from this, so the
+# vocabulary has to separate "you have slipped a session" from "the block is not
+# happening" — one is a nudge, the other is the coach asking to talk. Before
+# #623 both were "caution" and the summary could only ever look mildly amber.
+TRAINING_STATUS_TONES = ("positive", "steady", "caution", "alert")
 
 
 def training_status_system() -> str:
@@ -3685,8 +3693,11 @@ def training_status_system() -> str:
         "It must be readable on its own at a glance.\n"
         f'- "tone": exactly one of {", ".join(TRAINING_STATUS_TONES)} — "positive" when they '
         'are meeting or beating the plan, "steady" when things are simply proceeding or '
-        'there is no meaningful signal, "caution" only when real planned work was missed. '
-        "The badge is coloured from this, so it must agree with the label.\n"
+        'there is no meaningful signal, "caution" when real planned work was missed but '
+        'the block is still recognisable, "alert" only when most of the planned work went '
+        "undone and the plan needs revisiting rather than chasing. "
+        "The athlete's whole training summary is coloured from this, so it must agree "
+        'with the label — do not reach for "alert" to add urgency to a good week.\n'
         '- "rationale": two or three sentences, addressed to the athlete, explaining '
         "exactly why the badge says what it says. This is the answer they get when they "
         "ask the coach 'why?', so it must cite the concrete sessions behind it.\n"
@@ -3696,7 +3707,8 @@ def training_status_system() -> str:
         "- Unplanned training still counts as work done. An athlete who did more than "
         "the plan asked is not behind, whatever the completion ratio says.\n"
         "- A session still ahead of them today has not been missed. Do not judge it.\n"
-        "- Only genuinely missed, non-optional past sessions justify a 'caution' tone.\n"
+        "- Only genuinely missed, non-optional past sessions justify a 'caution' tone, "
+        "and only a majority of them justifies 'alert'.\n"
         "- Adherence is about executing the plan, never about the athlete's fitness or "
         "physiological capability. Never imply their fitness is lacking, and never cite "
         "model confidence or missing test data as a reason for the badge."
