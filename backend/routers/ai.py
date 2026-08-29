@@ -60,6 +60,7 @@ from services.plan_constraints import (
 )
 from services.intervals_service import apply_summary_fallback, intervals_activity_id
 from services.embeddings import embedding_provider_is_configured
+from services.knowledge_topics import topics_for_limiter
 from services.rag import (
     knowledge_corpus_is_populated,
     reset_corpus_cache,
@@ -1140,7 +1141,17 @@ async def ask_trainer(
             science_context = ""
             rag_sources: list = []
             if classification.get("needs_science_rag", False):
-                science_context, rag_sources = await retrieve_cycling_context(db, body.question)
+                # Retrieve for *this* athlete, not for the question in the
+                # abstract (#627): the performance model above already named the
+                # limiter, so the corpus can be ranked by it. Empty whenever no
+                # limiter is believed, which leaves retrieval exactly as it was.
+                science_context, rag_sources = await retrieve_cycling_context(
+                    db,
+                    body.question,
+                    focus_topics=topics_for_limiter(
+                        (performance_model or {}).get("likely_limiter")
+                    ),
+                )
 
             result = await ai_service.ask_trainer(
                 body.question,

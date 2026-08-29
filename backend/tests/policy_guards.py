@@ -246,4 +246,37 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="0.99",
         tests=("tests/test_athlete_model_inference.py",),
     ),
+    # --- Whether the athlete's limiter can reach the corpus (#627) ----------
+    PolicyGuard(
+        target="services.knowledge_topics:MIN_TOPIC_OCCURRENCES",
+        decides=(
+            "whether one passing mention of FTP is enough to file a chunk under "
+            "threshold — at 1 it tagged half the corpus, and a tag half the "
+            "corpus carries cannot steer anything"
+        ),
+        moved_to="1",
+        tests=("tests/test_knowledge_topics.py",),
+    ),
+    PolicyGuard(
+        target="services.knowledge_topics:TOPIC_DOMINANCE_RATIO",
+        decides=(
+            "whether a topic mentioned in passing is tagged alongside the one "
+            "the chunk is actually about"
+        ),
+        # 0.0 leaves only the occurrence floor, so every aside that clears it
+        # becomes a topic the chunk gets promoted for.
+        moved_to="0.0",
+        tests=("tests/test_knowledge_topics.py",),
+    ),
+    PolicyGuard(
+        target="services.rag:FOCUS_CANDIDATE_MULTIPLIER",
+        decides=(
+            "whether the athlete's diagnosed limiter can change which science "
+            "the coach is shown, or only reorder what similarity already picked"
+        ),
+        # 1 is the value that looks harmless and silently reverts #627: the pool
+        # is exactly the top-k similarity chose, so no ranking can add anything.
+        moved_to="1",
+        tests=("tests/test_rag.py",),
+    ),
 )
