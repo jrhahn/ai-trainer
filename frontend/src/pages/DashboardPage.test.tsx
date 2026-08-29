@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import {
@@ -746,13 +747,15 @@ describe('DashboardPage — Activities section layout', () => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — ProgressionChart', () => {
-  // Promoted out of expert mode: form over time is what a rider expects from a
-  // training app, and hiding it behind a toggle left the default view with
-  // nothing but a chat log.
-  it('renders ProgressionChart in normal mode', async () => {
+  // A diagnostic, not a daily read.  #619 promoted it onto the front page and
+  // #621 put it back: the default view answers what is on, how it has gone and
+  // how to reach the coach, and form curves are none of those.
+  it('does not render ProgressionChart in normal mode', async () => {
     setupStore({ isExpertMode: false })
     renderDashboard()
-    expect(await screen.findByTestId('progression-chart')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByTestId('progression-chart')).not.toBeInTheDocument()
+    })
   })
 
   it('renders ProgressionChart when expert mode is on', async () => {
@@ -778,17 +781,45 @@ describe('DashboardPage — PlanChangesPanel', () => {
   })
 })
 
+// The calendar reaches the page through the week strip's "Show more" and
+// nowhere else (#621) — it used to also sit inline further down, which showed
+// the same month twice.
 describe('DashboardPage — TrainingCalendar', () => {
-  it('renders the training calendar in normal mode', async () => {
-    setupStore({ isExpertMode: false })
+  const planned: TrainingDay = {
+    date: today,
+    workoutType: 'endurance',
+    title: 'Zone 2',
+    description: 'Steady',
+    durationMinutes: 90,
+  }
+
+  it('keeps the calendar off the page until it is asked for', async () => {
+    setupStore({ isExpertMode: true, trainingPlan: [planned] })
     renderDashboard()
-    expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
+    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
   })
 
-  it('renders the training calendar when expert mode is on', async () => {
-    setupStore({ isExpertMode: true })
+  it('opens the calendar as a dialog from the week strip', async () => {
+    setupStore({ trainingPlan: [planned] })
     renderDashboard()
-    expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Training calendar' })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByTestId('training-calendar')).toBeInTheDocument()
+  })
+
+  it('closes the calendar again on Escape', async () => {
+    setupStore({ trainingPlan: [planned] })
+    renderDashboard()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }))
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog', { name: 'Training calendar' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
   })
 })
 
@@ -1386,7 +1417,22 @@ describe("DashboardPage — Today's status strip", () => {
       }),
     })
     renderDashboard()
-    expect(await screen.findByText('Missed two')).toHaveClass('text-amber-600')
+    expect(await screen.findByText('Missed two')).toHaveClass('bg-amber-50', 'text-amber-700')
+  })
+
+  // One coach-authored word does not earn a card of its own; it heads the
+  // summary written by the same coach about the same weeks (#621).
+  it('puts the badge inside the recent-training summary, not in its own widget', async () => {
+    setupStore({
+      riderAssessment: assessmentWithStatus({
+        trainingStatusLabel: 'On track',
+        trainingStatusTone: 'positive',
+      }),
+    })
+    renderDashboard()
+
+    const heading = await screen.findByText('Your recent training summary')
+    expect(within(heading.parentElement!).getByText('On track')).toBeInTheDocument()
   })
 
   it('falls back to a neutral colour when the stored tone is unusable', async () => {

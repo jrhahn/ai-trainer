@@ -3,6 +3,7 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
+import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 import { AUTHELIA_URL } from '../services/api'
@@ -130,48 +131,9 @@ export default function Layout() {
     prevStatusRef.current = importProgress.status
   }, [importProgress.status, importProgress.imported, importProgress.skipped])
 
-  // Accessible mobile drawer: lock body scroll, trap focus, close on Escape, and
-  // restore focus to whatever was focused before it opened (usually the menu button).
-  useEffect(() => {
-    if (!mobileOpen) return
-    const previouslyFocused = document.activeElement as HTMLElement | null
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    const focusables = () =>
-      Array.from(
-        drawerRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        ) ?? []
-      )
-    focusables()[0]?.focus()
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMobileOpen(false)
-        return
-      }
-      if (e.key === 'Tab') {
-        const items = focusables()
-        if (items.length === 0) return
-        const first = items[0]
-        const last = items[items.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = prevOverflow
-      previouslyFocused?.focus?.()
-    }
-  }, [mobileOpen])
+  // Body-scroll lock, focus trap, Escape and focus restore — shared with the
+  // dashboard's calendar overlay so both behave the same way (#621).
+  useOverlayDismiss(mobileOpen, () => setMobileOpen(false), drawerRef)
 
   return (
     <div className="flex min-h-screen bg-gray-100">

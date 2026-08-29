@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { addDays, startOfWeek } from 'date-fns'
 import WeekStrip from './WeekStrip'
@@ -18,10 +19,10 @@ const plan = (date: string, overrides: Partial<TrainingDay> = {}): TrainingDay =
   ...overrides,
 })
 
-function renderStrip(days: TrainingDay[]) {
+function renderStrip(days: TrainingDay[], onShowMore?: () => void) {
   render(
     <MemoryRouter>
-      <WeekStrip plan={days} />
+      <WeekStrip plan={days} onShowMore={onShowMore} />
     </MemoryRouter>
   )
 }
@@ -53,5 +54,20 @@ describe('WeekStrip', () => {
     renderStrip([plan(today)])
 
     expect(screen.getByRole('link')).toHaveAttribute('aria-current', 'date')
+  })
+
+  it('offers the month behind "Show more"', async () => {
+    const onShowMore = vi.fn()
+    renderStrip([plan(dayOfWeek(0))], onShowMore)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }))
+
+    expect(onShowMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the header bare where there is nothing more to show', () => {
+    renderStrip([plan(dayOfWeek(0))])
+
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
   })
 })

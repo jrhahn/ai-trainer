@@ -12,7 +12,15 @@ import { sessionTypeStyle } from '../utils/sessionType'
  * whole, and seeing it whole is the point: where the hard days sit, what is
  * already done, what is coming.
  */
-export default function WeekStrip({ plan }: { plan: TrainingDay[] }) {
+export default function WeekStrip({
+  plan,
+  onShowMore,
+}: {
+  plan: TrainingDay[]
+  /** Opens the month calendar.  The week is the daily read; the block beyond it
+   *  is a question the athlete asks occasionally, so it lives behind this. */
+  onShowMore?: () => void
+}) {
   const today = formatLocalDate(new Date())
   const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
   const byDate = new Map(plan.map((day) => [day.date, day]))
@@ -24,9 +32,18 @@ export default function WeekStrip({ plan }: { plan: TrainingDay[] }) {
 
   return (
     <section>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-        This week
-      </h2>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">This week</h2>
+        {onShowMore && (
+          <button
+            type="button"
+            onClick={onShowMore}
+            className="text-xs font-semibold text-amber-600 transition-colors hover:text-amber-700"
+          >
+            Show more
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {week.map(({ date, day }) => {
           const isToday = date === today
