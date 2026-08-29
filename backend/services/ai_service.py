@@ -585,6 +585,7 @@ async def generate_training_plan(
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
         athlete_model_section=athlete_model_section,
+        timezone_name=timezone_name,
     )
     return await _generate_plan_days(provider, system_prompt, user_msg)
 
@@ -685,6 +686,7 @@ async def adapt_training_plan(
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
         athlete_model_section=athlete_model_section,
+        timezone_name=timezone_name,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

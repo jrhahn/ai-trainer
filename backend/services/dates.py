@@ -115,6 +115,29 @@ def plan_day_date_labels(raw_date: object, today: date | None = None) -> dict:
     return labels
 
 
+def plan_window_calendar(start: date, days: int) -> str:
+    """List the dates a planner may fill, each already carrying its weekday.
+
+    :func:`plan_day_date_labels` anchors a plan the model is *reading*. A model
+    being asked to *write* one has no plan to annotate yet — it invents the
+    dates — so it was left deriving weekdays from a bare "Today's date" line and
+    counting forward. That is the #462 arithmetic, and it produced a "long
+    weekend ride" on a Monday (#625).
+
+    Weekends are called out rather than left implicit: "Saturday" only rules out
+    a weekday session if the model reliably knows Saturday is the weekend, and
+    the whole point here is not to rely on it knowing.
+    """
+    lines = []
+    for offset in range(max(days, 0)):
+        current = start + timedelta(days=offset)
+        weekday = current.strftime("%A")
+        suffix = ", weekend" if current.weekday() >= 5 else ""
+        lines.append(f"- {current.isoformat()} ({weekday}{suffix})")
+    return "The dates you are planning, with the weekday of each — use these and " \
+        "never derive a weekday yourself:\n" + "\n".join(lines)
+
+
 def plan_session_labels(session_index: int, session_count: int, time_of_day) -> dict:
     """Return sessionOrder/sessionCount/sessionLabel anchors for one session (#496).
 

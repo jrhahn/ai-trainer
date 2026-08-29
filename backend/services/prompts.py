@@ -7,6 +7,7 @@ No LLM client logic, algorithmic computation, or I/O here.
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from . import plan_compliance
 from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
@@ -19,6 +20,7 @@ from .dates import (
     app_today,
     app_today_iso,
     plan_day_date_labels,
+    plan_window_calendar,
 )
 
 # Shared instruction reused wherever the coach may be asked about a compliance
@@ -714,11 +716,43 @@ def freshness_allocation_section(allocation: dict | None) -> str:
     return "\n".join(lines)
 
 
+# How far ahead a generated plan reaches. Named because the prompt text, the
+# calendar handed to the model and the guardrail test all have to agree on it.
+PLAN_HORIZON_DAYS = 14
+
+# The rule the planner broke in #625: it titled a Monday "long weekend ride".
+# Stated separately from the calendar because the calendar only makes the
+# weekday *available* — this says what the model owes it.
+WEEKDAY_HONESTY_RULE = (
+    "Every date you write is listed above with its weekday. Never describe a "
+    "session as belonging to a part of the week it does not fall in: a Monday "
+    "is not a 'weekend ride', and an 'easy Sunday spin' has to land on a "
+    "Sunday. The same goes for the description and the title of every day — if "
+    "you name a day, it must be the day the date actually is.\n"
+)
+
+
+def _parse_today(today: str) -> date | None:
+    """``today`` reaches these builders preformatted; a bad one must not raise."""
+    try:
+        return date.fromisoformat(today)
+    except (TypeError, ValueError):
+        return None
+
+
+def _plan_window_section(today: str, days: int) -> str:
+    """The dated calendar for a planning window, or nothing if today is unusable."""
+    start = _parse_today(today)
+    # A malformed date should cost the calendar, not the whole plan request.
+    return plan_window_calendar(start, days) if start else ""
+
+
 def generate_plan_system() -> str:
     return (
-        f"{COACH_PERSONA} Generate a 14-day training plan as JSON.\n"
+        f"{COACH_PERSONA} Generate a {PLAN_HORIZON_DAYS}-day training plan as JSON.\n"
         'Return ONLY a valid JSON object with a "plan" array of training days. '
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units.\n"
+        f"{WEEKDAY_HONESTY_RULE}"
         'Each day must have: "date" (ISO date string starting from today), '
         '"workoutType" (one of: "rest","endurance","intervals","tempo","race",'
         '"recovery","strength"), "title" (string), '
@@ -810,6 +844,7 @@ def generate_plan_user(
     weather_context_section: str = "",
     race_events_section: str = "",
     athlete_model_section: str = "",
+    timezone_name: str | None = None,
 ) -> str:
     race_profile_section = race_profile_context_section(profile)
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
@@ -817,10 +852,11 @@ def generate_plan_user(
     weather_section = f"\n{weather_context_section}" if weather_context_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
     return (
-        f"Today's date: {today}\n"
+        f"{app_date_context(timezone_name=timezone_name)}\n"
+        f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
         f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
-        "Generate a 14-day training plan starting from today that reflects the athlete's "
-        "actual fitness level from recent rides and any upcoming race context."
+        f"Generate a {PLAN_HORIZON_DAYS}-day training plan starting from today that reflects "
+        "the athlete's actual fitness level from recent rides and any upcoming race context."
     )
 
 
@@ -837,6 +873,7 @@ def adapt_plan_system() -> str:
         "For future days keep the same date fields. "
         "For any past incomplete days (date before today), reschedule them to upcoming dates "
         "starting from today, distributing the sessions sensibly without overloading consecutive days.\n"
+        f"{WEEKDAY_HONESTY_RULE}"
         "Hard athlete constraints are non-negotiable: if the profile, coach memory, "
         "athlete context, or recent conversation says the athlete is unavailable on a "
         "specific date or weekday, do not schedule training there even when it would be "
@@ -876,6 +913,7 @@ def adapt_plan_user(
     weather_context_section: str = "",
     race_events_section: str = "",
     athlete_model_section: str = "",
+    timezone_name: str | None = None,
 ) -> str:
     assessment_section = (
         f"\nRider assessment: {json.dumps(rider_assessment)}"
@@ -911,11 +949,16 @@ def adapt_plan_user(
         if past_incomplete_count > 0
         else ""
     )
+    # The days the model rewrites are annotated, and the window it may move them
+    # into is spelled out — rescheduling a past session is precisely where an
+    # unanchored prompt has to invent a weekday (#625).
+    annotated_days = annotate_plan_days(incomplete_days, _parse_today(today))
     return (
-        f"Today's date: {today}\n"
+        f"{app_date_context(timezone_name=timezone_name)}\n"
+        f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
         f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
-        f"Remaining plan days: {json.dumps(incomplete_days)}\n"
+        f"Remaining plan days: {json.dumps(annotated_days)}\n"
         + stale_note
         + "Adapt the remaining days based on the feedback. Return the full updated days array."
     )
