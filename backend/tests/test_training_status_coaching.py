@@ -106,6 +106,44 @@ def test_status_prompt_states_the_judgement_rules():
     assert str(TRAINING_STATUS_LABEL_MAX_CHARS) in system
 
 
+def test_status_prompt_offers_every_tone_the_dashboard_can_paint():
+    """A tone the prompt never names is a colour the athlete never sees.
+
+    The dashboard colours the whole training summary from this value (#623), so
+    a vocabulary that drifts out of the prompt silently retires a state.
+    """
+    system = prompts.training_status_system()
+
+    for tone in prompts.TRAINING_STATUS_TONES:
+        assert f'"{tone}"' in system, f"{tone} is a valid tone the prompt never offers"
+
+
+def test_status_prompt_separates_a_missed_session_from_a_lost_block():
+    """Red has to be earned, or it stops meaning anything."""
+    system = prompts.training_status_system().lower()
+
+    assert "alert" in system
+    assert "majority" in system
+
+
+@pytest.mark.asyncio
+async def test_the_loudest_tone_survives_the_guardrails(monkeypatch):
+    """`alert` is newer than the validator; it must not be scrubbed to steady."""
+    monkeypatch.setattr(
+        ai_service,
+        "_chat",
+        _fake_chat(
+            '{"label": "Behind plan", "tone": "alert",'
+            ' "rationale": "You rode one of the five sessions that fell due."}'
+        ),
+    )
+
+    result = await ai_service.generate_training_status(FACTS)
+
+    assert result is not None
+    assert result[1] == "alert"
+
+
 def test_status_user_message_anchors_every_audited_session_to_a_weekday():
     """Sessions carry weekday anchors so the coach never derives one from an
     ISO date in its head (the #462 class of bug)."""

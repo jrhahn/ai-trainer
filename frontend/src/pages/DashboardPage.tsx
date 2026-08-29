@@ -729,16 +729,20 @@ export default function DashboardPage() {
   //
   // The backend status pipeline now owns the verdict and the wording, and feeds
   // the very same text into the coach's prompt. Rendering it here is a plain read.
+  // The verdict is the colour of the summary block, not a word beside it (#623).
+  // One label repeating what the colour already says is noise, so the tone tints
+  // the whole card and the label survives only for assistive tech.
   const statusTone: Record<string, string> = {
-    positive: 'bg-emerald-50 text-emerald-700',
-    steady: 'bg-gray-100 text-gray-600',
-    caution: 'bg-amber-50 text-amber-700',
+    positive: 'bg-emerald-50 border-emerald-200',
+    steady: 'bg-white border-gray-100',
+    caution: 'bg-amber-50 border-amber-200',
+    alert: 'bg-red-50 border-red-200',
   }
   const trainingStatus = riderAssessment?.trainingStatusLabel
     ? {
         label: riderAssessment.trainingStatusLabel,
         // The tone is a free-text column server-side, so an unknown or absent
-        // value falls back to neutral rather than leaving the badge unstyled.
+        // value falls back to neutral rather than leaving the card unstyled.
         className: statusTone[riderAssessment.trainingStatusTone ?? ''] ?? statusTone.steady,
         title: riderAssessment.trainingStatusRationale,
       }
@@ -885,28 +889,24 @@ export default function DashboardPage() {
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
 
         {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
-          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
+          <div
+            className={`border rounded-xl shadow-sm px-4 py-3 mb-3 ${
+              trainingStatus?.className ?? 'bg-white border-gray-100'
+            }`}
+            title={trainingStatus?.title}
+          >
             <div className="flex items-start gap-2.5">
               <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
                 <Bot size={14} className="text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
-                {/* The coach's verdict had a card to itself, which is more page
-                    than one word earns. It belongs to this summary — same
-                    author, same subject — highlighted at its head (#621). */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Your recent training summary
-                  </p>
-                  {trainingStatus && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trainingStatus.className}`}
-                      title={trainingStatus.title}
-                    >
-                      {trainingStatus.label}
-                    </span>
-                  )}
-                </div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Your recent training summary
+                </p>
+                {/* The verdict is the card's colour now (#623).  It stays in the
+                    DOM unstyled so a screen reader still gets the word — colour
+                    on its own carries nothing to anyone who cannot see it. */}
+                {trainingStatus && <span className="sr-only">{trainingStatus.label}</span>}
                 {summaryLoading ? (
                   <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
                 ) : !riderAssessment?.loginSummary ? (

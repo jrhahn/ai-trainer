@@ -1823,6 +1823,32 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
 
 
 # ---------------------------------------------------------------------------
+# workoutPurpose points forwards (#623)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("builder", ["generate_plan_system", "adapt_plan_system"])
+def test_workout_purpose_is_specified_as_what_the_session_earns(builder):
+    """The athlete reads this heading before riding, not while auditing the plan.
+
+    It used to be specified as "the physiological goal of this session and why it
+    is placed here in the plan", with an example that recapped the day before —
+    which put a justification of the planner under a heading the athlete opens
+    to find out what the next hour buys them.  ``plan_allocation_rule`` already
+    argued the opposite ("write what the day buys them"), so the two specs
+    disagreed with each other.
+    """
+    from services import prompts
+
+    text = getattr(prompts, builder)()
+    purpose = text[text.index('"workoutPurpose"') :][:600].lower()
+
+    assert "earns the athlete" in purpose
+    assert "forwards" in purpose
+    assert "why it is placed here" not in purpose
+
+
+# ---------------------------------------------------------------------------
 # COACH_PERSONA / RUNNING_COACH_PERSONA — balanced coach voice
 # ---------------------------------------------------------------------------
 

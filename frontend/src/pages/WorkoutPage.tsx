@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Clock, Zap, Heart, CheckCircle, BarChart2, Bot, Loader2, Target, ListChecks, RefreshCw, History, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Bot, Loader2, History, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
@@ -8,11 +8,11 @@ import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
+import WorkoutDetails from '../components/WorkoutDetails'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
-import { formatPlanDuration } from '../utils/planDuration'
 import { describeEntry, sourceLabel } from '../utils/planHistory'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
@@ -352,112 +352,7 @@ export default function WorkoutPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-4 mb-4">
-          <div className="flex items-center gap-1.5 text-sm text-gray-600">
-            <Clock size={16} className="text-amber-500" />
-            {formatPlanDuration(day)}
-          </div>
-          {day.targetPower && (
-            <div className="flex items-center gap-1.5 text-sm text-gray-600">
-              <Zap size={16} className="text-amber-500" />
-              {day.targetPower.low}–{day.targetPower.high}W
-            </div>
-          )}
-          {day.targetHeartRate && (
-            <div className="flex items-center gap-1.5 text-sm text-gray-600">
-              <Heart size={16} className="text-red-400" />
-              {day.targetHeartRate.low}–{day.targetHeartRate.high} bpm
-            </div>
-          )}
-        </div>
-
-        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{day.description}</p>
-
-        {/* Workout Purpose */}
-        {day.workoutPurpose && (
-          <div className="mt-4 bg-amber-50 rounded-xl p-4">
-            <h3 className="font-semibold text-sm text-amber-800 mb-1.5 flex items-center gap-1.5">
-              <Target size={14} />
-              Why this workout
-            </h3>
-            <p className="text-sm text-amber-900 leading-relaxed">{day.workoutPurpose}</p>
-          </div>
-        )}
-
-        {/* Key Focus Points */}
-        {day.keyFocusPoints && day.keyFocusPoints.length > 0 && (
-          <div className="mt-3 bg-blue-50 rounded-xl p-4">
-            <h3 className="font-semibold text-sm text-blue-800 mb-1.5 flex items-center gap-1.5">
-              <ListChecks size={14} />
-              Key Focus Points
-            </h3>
-            <ul className="space-y-1">
-              {day.keyFocusPoints.map((point, i) => (
-                <li key={i} className="text-sm text-blue-900 flex items-start gap-2">
-                  <span className="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400" />
-                  {point}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Nudge to regenerate if coaching details are missing */}
-        {!day.workoutPurpose && day.workoutType !== 'rest' && (
-          <div className="mt-4 flex items-start gap-3 bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <RefreshCw size={16} className="text-gray-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-gray-500 leading-relaxed">
-              This workout was created before detailed coaching cues were added.{' '}
-              <button
-                onClick={() => navigate('/')}
-                className="text-amber-600 hover:underline font-medium"
-              >
-                Regenerate your plan
-              </button>{' '}
-              to unlock purpose explanations and focus points.
-            </p>
-          </div>
-        )}
-
-        {/* Intervals */}
-        {day.intervals && day.intervals.length > 0 && (
-          <div className="mt-4">
-            <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-1.5">
-              <BarChart2 size={15} />
-              Interval Breakdown
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-1.5 text-gray-500 font-medium">#</th>
-                    <th className="text-left py-1.5 text-gray-500 font-medium">Duration</th>
-                    <th className="text-left py-1.5 text-gray-500 font-medium">Power</th>
-                    <th className="text-left py-1.5 text-gray-500 font-medium">Rest</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {day.intervals.map((iv, i) => (
-                    <tr key={i} className="border-b last:border-0">
-                      <td className="py-1.5 text-gray-400">{i + 1}</td>
-                      <td className="py-1.5 text-gray-900 font-medium">
-                        {iv.duration >= 60
-                          ? `${Math.floor(iv.duration / 60)}:${String(iv.duration % 60).padStart(2, '0')}`
-                          : `${iv.duration}s`}
-                      </td>
-                      <td className="py-1.5 text-gray-900 font-medium">{iv.power}W</td>
-                      <td className="py-1.5 text-gray-500">
-                        {iv.rest >= 60
-                          ? `${Math.floor(iv.rest / 60)}:${String(iv.rest % 60).padStart(2, '0')}`
-                          : `${iv.rest}s`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <WorkoutDetails day={day} />
 
         {/* Feedback summary */}
         {day.completed && day.feedback && (
