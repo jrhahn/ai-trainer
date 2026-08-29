@@ -680,7 +680,10 @@ describe('DashboardPage — Activities section layout', () => {
     expect(screen.queryByText(/"intro"/)).not.toBeInTheDocument()
   })
 
-  it('shows "Upcoming" sub-label when both recent rides and plan days exist', async () => {
+  // The upcoming-plan preview that used to live under "Activities" is gone —
+  // WeekStrip shows the same days without truncating their names, and this
+  // section is now only rides that actually happened.
+  it('shows upcoming plan days in the week strip, not in the rides list', async () => {
     const planDay: TrainingDay = {
       date: tomorrow,
       workoutType: 'endurance',
@@ -693,10 +696,14 @@ describe('DashboardPage — Activities section layout', () => {
       trainingPlan: [planDay],
     })
     renderDashboard()
-    expect(await screen.findByText('Upcoming')).toBeInTheDocument()
+    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
   })
 
-  it('does not show "Upcoming" sub-label when there are no recent rides', async () => {
+  // The plan used to reach the dashboard only through the rides list, so an
+  // athlete who had ridden nothing yet saw no plan either.  The two are now
+  // independent: the week is shown because a plan exists, not because a ride does.
+  it('shows the week even when no ride has been logged yet', async () => {
     const planDay: TrainingDay = {
       date: tomorrow,
       workoutType: 'endurance',
@@ -709,25 +716,28 @@ describe('DashboardPage — Activities section layout', () => {
       trainingPlan: [planDay],
     })
     renderDashboard()
-    await waitFor(() => {
-      expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
-    })
+    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
+    ).toBe(true)
+    // ...and no empty "Recent rides" shell above it.
+    expect(screen.queryByText('Recent rides')).not.toBeInTheDocument()
   })
 
   it('renders nothing when there are no rides and no plan', async () => {
     setupStore({ rideMetricsHistory: [], trainingPlan: [] })
     renderDashboard()
     await waitFor(() => {
-      expect(screen.queryByText('Activities')).not.toBeInTheDocument()
+      expect(screen.queryByText('Recent rides')).not.toBeInTheDocument()
     })
   })
 
-  it('shows the Activities section header when rides exist', async () => {
+  it('shows the recent-rides header when rides exist', async () => {
     setupStore({
       rideMetricsHistory: [makeRide({ activityDate: yesterday })],
     })
     renderDashboard()
-    expect(await screen.findByText('Activities')).toBeInTheDocument()
+    expect(await screen.findByText('Recent rides')).toBeInTheDocument()
   })
 })
 
@@ -736,12 +746,13 @@ describe('DashboardPage — Activities section layout', () => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — ProgressionChart', () => {
-  it('does not render ProgressionChart in normal mode', async () => {
+  // Promoted out of expert mode: form over time is what a rider expects from a
+  // training app, and hiding it behind a toggle left the default view with
+  // nothing but a chat log.
+  it('renders ProgressionChart in normal mode', async () => {
     setupStore({ isExpertMode: false })
     renderDashboard()
-    await waitFor(() => {
-      expect(screen.queryByTestId('progression-chart')).not.toBeInTheDocument()
-    })
+    expect(await screen.findByTestId('progression-chart')).toBeInTheDocument()
   })
 
   it('renders ProgressionChart when expert mode is on', async () => {
@@ -768,12 +779,10 @@ describe('DashboardPage — PlanChangesPanel', () => {
 })
 
 describe('DashboardPage — TrainingCalendar', () => {
-  it('does not render the training calendar in normal mode', async () => {
+  it('renders the training calendar in normal mode', async () => {
     setupStore({ isExpertMode: false })
     renderDashboard()
-    await waitFor(() => {
-      expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
-    })
+    expect(await screen.findByTestId('training-calendar')).toBeInTheDocument()
   })
 
   it('renders the training calendar when expert mode is on', async () => {
@@ -969,7 +978,7 @@ describe('DashboardPage — plan comparison row', () => {
     expect(screen.queryByText(/Complete Rest Day/)).not.toBeInTheDocument()
   })
 
-  it('removes today from Upcoming when an activity already exists today', async () => {
+  it('shows the logged ride and the plan it matched, without a duplicate upcoming list', async () => {
     const todaysRide = makeRide({
       activityDate: today,
       activityName: 'Today Ride',
@@ -1018,15 +1027,16 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Today Ride')).toBeInTheDocument()
-    // Today's session is removed from the Upcoming list (activity already logged today).
-    // It still appears twice overall: once on the matched ride card and once in the
-    // "Today's status" strip as "… completed".
+    // Today's plan appears on the matched ride card and as the hero heading.
     expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(2)
-    expect(screen.getByText('Upcoming')).toBeInTheDocument()
-    // Tomorrow's session shows in both the status strip and the Upcoming list.
-    expect(screen.getAllByText(/Tomorrow VO2 Max Intervals/)).toHaveLength(2)
-    expect(screen.getByText(/Rest Day/)).toBeInTheDocument()
-    expect(screen.getByText(/Endurance Ride/)).toBeInTheDocument()
+    // The upcoming preview is gone; the week strip carries those days instead,
+    // so each future session is named once rather than in two competing lists.
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Tomorrow VO2 Max Intervals/)).not.toBeInTheDocument()
+    expect(screen.getByText('This week')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
+    ).toBe(true)
   })
 
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {
@@ -1316,37 +1326,44 @@ describe("DashboardPage — Today's status strip", () => {
     ...overrides,
   })
 
+  // Today and tomorrow moved out of this grey line: today into the hero card,
+  // the rest of the week into WeekStrip. The assertions follow them.
   it("shows today's planned session when nothing is logged yet", async () => {
     setupStore({
       trainingPlan: [planDay({ date: today, workoutType: 'tempo', title: 'Sweet Spot' })],
     })
     renderDashboard()
-    expect(await screen.findByText('Today: Sweet Spot')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sweet Spot' })).toBeInTheDocument()
   })
 
-  it('shows "Rest day" when today is a rest day', async () => {
+  it('shows the rest day as the session for today', async () => {
     setupStore({
       trainingPlan: [planDay({ date: today, workoutType: 'rest', title: 'Rest Day' })],
     })
     renderDashboard()
-    expect(await screen.findByText('Rest day')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rest Day' })).toBeInTheDocument()
   })
 
-  it("marks today's session completed once an activity is logged", async () => {
+  it("marks today's session done once an activity is logged, even unticked", async () => {
     setupStore({
       trainingPlan: [planDay({ date: today, workoutType: 'intervals', title: 'VO2 Efforts' })],
       rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Morning Intervals' })],
     })
     renderDashboard()
-    expect(await screen.findByText('VO2 Efforts completed')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'VO2 Efforts' })).toBeInTheDocument()
+    expect(screen.getByText('Done')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /review the session/i })).toBeInTheDocument()
   })
 
-  it("shows tomorrow's session", async () => {
+  it('shows the rest of the week as its own days', async () => {
     setupStore({
       trainingPlan: [planDay({ date: tomorrow, workoutType: 'rest', title: 'Rest Day' })],
     })
     renderDashboard()
-    expect(await screen.findByText('Tomorrow: Rest')).toBeInTheDocument()
+    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
+    ).toBe(true)
   })
 
   it('renders the coach-authored status badge verbatim', async () => {
@@ -1450,7 +1467,7 @@ describe("DashboardPage — Today's status strip", () => {
       ],
     })
     renderDashboard()
-    expect(await screen.findByText('Today: Base Ride')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Base Ride' })).toBeInTheDocument()
     expect(screen.queryByText('On track')).not.toBeInTheDocument()
     expect(screen.queryByText('Slightly behind')).not.toBeInTheDocument()
     expect(screen.queryByText('Behind plan')).not.toBeInTheDocument()

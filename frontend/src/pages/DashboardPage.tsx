@@ -1,17 +1,19 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { format } from 'date-fns'
-import { Bot, CheckCircle2, Clock } from 'lucide-react'
+import { Bot, Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
-import WorkoutCard from '../components/WorkoutCard'
 import AIChat from '../components/AIChat'
 import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
+import TodaySessionHero from '../components/TodaySessionHero'
+import SeasonCountdown from '../components/SeasonCountdown'
+import WeekStrip from '../components/WeekStrip'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
@@ -715,40 +717,10 @@ export default function DashboardPage() {
       return b.stravaActivityId - a.stravaActivityId
     }))
 
-  const hasTodayActivity = recentRides.some((r) => r.activityDate === today)
-
-  // Always show the next 3 upcoming days, but do not repeat today once an activity
-  // has already been logged for today.
-  const next3Days = trainingPlan
-    .filter((d) => d.date >= today && !(hasTodayActivity && d.date === today))
-    .slice(0, 3)
-
-  // "Today's status" glance strip (#417): today / tomorrow / an honest, signal-backed
-  // training-status indicator. Each part is omitted when we have no real data for it —
-  // the status line in particular is derived from actual plan adherence, never faked.
-  const tomorrow = formatLocalDate(new Date(parseLocalDate(today).getTime() + 24 * 60 * 60 * 1000))
-  const todayPlan = trainingPlan.find((d) => d.date === today)
-  const tomorrowPlan = trainingPlan.find((d) => d.date === tomorrow)
-
-  const sessionLabel = (d: TrainingDay | undefined): string | null => {
-    if (!d) return null
-    if (d.workoutType === 'rest') return 'Rest'
-    return d.title?.trim() || d.workoutType.charAt(0).toUpperCase() + d.workoutType.slice(1)
-  }
-
-  let todayStatusText: string | null = null
-  if (hasTodayActivity) {
-    todayStatusText =
-      todayPlan && todayPlan.workoutType !== 'rest'
-        ? `${sessionLabel(todayPlan)} completed`
-        : 'Session logged'
-  } else if (todayPlan) {
-    todayStatusText =
-      todayPlan.workoutType === 'rest' ? 'Rest day' : `Today: ${sessionLabel(todayPlan)}`
-  }
-
-  const tomorrowStatusLabel = sessionLabel(tomorrowPlan)
-
+  // The glance strip (#417) used to spell out today and tomorrow here as well.
+  // TodaySessionHero states today in full and WeekStrip shows the week, so those
+  // two segments were removed rather than repeated in a third place.
+  //
   // Training status is written by the coach, not by this component (#499).
   //
   // It used to be a local `done / due` ratio over the trailing week, which the
@@ -775,24 +747,11 @@ export default function DashboardPage() {
       }
     : null
 
+  // Today and tomorrow used to be spelled out here as well.  TodaySessionHero
+  // now says what today is, in full, and WeekStrip shows the rest of the week,
+  // so repeating both in a grey line only competed with them.  The coach's
+  // verdict is the one thing neither of those carries, and it stays.
   const statusSegments: Array<{ key: string; node: ReactNode }> = []
-  if (todayStatusText) {
-    statusSegments.push({
-      key: 'today',
-      node: (
-        <span className="flex items-center gap-1.5 font-medium text-gray-800">
-          {hasTodayActivity && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}
-          {todayStatusText}
-        </span>
-      ),
-    })
-  }
-  if (tomorrowStatusLabel) {
-    statusSegments.push({
-      key: 'tomorrow',
-      node: <span className="text-gray-500">Tomorrow: {tomorrowStatusLabel}</span>,
-    })
-  }
   if (trainingStatus) {
     statusSegments.push({
       key: 'status',
@@ -899,6 +858,14 @@ export default function DashboardPage() {
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
 
+      {/* What the athlete came for, before anything else on the page. */}
+      <TodaySessionHero
+        day={trainingPlan.find((d) => d.date === today)}
+        loggedToday={recentRides.some((r) => r.activityDate === today)}
+      />
+
+      <SeasonCountdown />
+
       {/* Today's status — compact at-a-glance strip (#417) */}
       {statusSegments.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm text-sm">
@@ -911,6 +878,8 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {trainingPlan.length > 0 && <WeekStrip plan={trainingPlan} />}
+
       {isExpertMode && (
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -922,10 +891,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Activities: recent rides from last 3 (or up to 7) days + upcoming plan */}
-      {(recentRides.length > 0 || next3Days.length > 0) && (
+      {/* Rides that actually happened.  The upcoming-plan preview that used to
+          share this block is gone: WeekStrip shows the same days without
+          truncating their names. */}
+      {recentRides.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Activities</h2>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent rides</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
               const plan = planForRide(ride, trainingPlan)
@@ -1039,14 +1010,6 @@ export default function DashboardPage() {
                 </div>
               )
             })}
-            {recentRides.length > 0 && next3Days.length > 0 && (
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2 pb-0.5 pl-1">
-                Upcoming
-              </p>
-            )}
-            {next3Days.map((day) => (
-              <WorkoutCard key={day.date} day={day} compact />
-            ))}
           </div>
         </div>
       )}
@@ -1118,24 +1081,24 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Plan-vs-logged month calendar (#369).  Was expert-only, which left the
+          default view with no way to see the shape of the block — the thing every
+          rider expects from a training app. */}
+      <div>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          Training calendar
+        </h2>
+        <TrainingCalendar showLoggedActivities />
+      </div>
+
+      {/* Form and fitness over time — likewise promoted out of expert mode. */}
+      <ProgressionChart />
+
       {/* Coach's model of the athlete + its confidences — expert mode only */}
       {isExpertMode && <AthletePerformanceModelCard />}
 
-      {/* Plan-vs-logged month calendar — expert mode only (#369) */}
-      {isExpertMode && (
-        <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Training calendar
-          </h2>
-          <TrainingCalendar showLoggedActivities />
-        </div>
-      )}
-
       {/* Recent plan changes / override analytics — expert mode only (#357) */}
       {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
-
-      {/* Athlete progression charts — expert mode only */}
-      {isExpertMode && <ProgressionChart />}
     </div>
   )
 }

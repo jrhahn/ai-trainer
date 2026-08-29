@@ -128,7 +128,7 @@ export default function App() {
         </div>
       )}
       {showOverlay && (
-        <div className="fixed inset-0 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-[#0f1116] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 text-center w-72">
             <p className="text-sm font-semibold text-gray-900">{loadingTitle}</p>
             <p className="text-xs text-gray-500 mt-1">{loadingSubtitle}</p>

@@ -30,7 +30,7 @@ export default function AuthCallbackPage() {
   }, [loadUserData, navigate, setAuthToken])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0f1116] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 text-center w-full max-w-sm">
         {error ? (
           <>
