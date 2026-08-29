@@ -1,5 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Bot, Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -14,6 +13,7 @@ import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import TodaySessionHero from '../components/TodaySessionHero'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
+import Modal from '../components/Modal'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
@@ -644,6 +644,7 @@ export default function DashboardPage() {
   const summaryTriggeredRef = useRef(false)
   const statusTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
 
@@ -717,10 +718,6 @@ export default function DashboardPage() {
       return b.stravaActivityId - a.stravaActivityId
     }))
 
-  // The glance strip (#417) used to spell out today and tomorrow here as well.
-  // TodaySessionHero states today in full and WeekStrip shows the week, so those
-  // two segments were removed rather than repeated in a third place.
-  //
   // Training status is written by the coach, not by this component (#499).
   //
   // It used to be a local `done / due` ratio over the trailing week, which the
@@ -733,9 +730,9 @@ export default function DashboardPage() {
   // The backend status pipeline now owns the verdict and the wording, and feeds
   // the very same text into the coach's prompt. Rendering it here is a plain read.
   const statusTone: Record<string, string> = {
-    positive: 'text-green-600',
-    steady: 'text-gray-600',
-    caution: 'text-amber-600',
+    positive: 'bg-emerald-50 text-emerald-700',
+    steady: 'bg-gray-100 text-gray-600',
+    caution: 'bg-amber-50 text-amber-700',
   }
   const trainingStatus = riderAssessment?.trainingStatusLabel
     ? {
@@ -746,22 +743,6 @@ export default function DashboardPage() {
         title: riderAssessment.trainingStatusRationale,
       }
     : null
-
-  // Today and tomorrow used to be spelled out here as well.  TodaySessionHero
-  // now says what today is, in full, and WeekStrip shows the rest of the week,
-  // so repeating both in a grey line only competed with them.  The coach's
-  // verdict is the one thing neither of those carries, and it stays.
-  const statusSegments: Array<{ key: string; node: ReactNode }> = []
-  if (trainingStatus) {
-    statusSegments.push({
-      key: 'status',
-      node: (
-        <span className={`font-medium ${trainingStatus.className}`} title={trainingStatus.title}>
-          {trainingStatus.label}
-        </span>
-      ),
-    })
-  }
 
   const isNew = (r: RideMetricPoint): boolean => {
     if (!prevLoginDate) return false
@@ -866,30 +847,101 @@ export default function DashboardPage() {
 
       <SeasonCountdown />
 
-      {/* Today's status — compact at-a-glance strip (#417) */}
-      {statusSegments.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm text-sm">
-          {statusSegments.map((seg, i) => (
-            <Fragment key={seg.key}>
-              {i > 0 && <span className="text-gray-300" aria-hidden="true">·</span>}
-              {seg.node}
-            </Fragment>
-          ))}
+      {/* The week is the daily read; the month is a question asked occasionally,
+          so it opens over the page instead of sitting under it (#621). */}
+      {trainingPlan.length > 0 && (
+        <WeekStrip plan={trainingPlan} onShowMore={() => setCalendarOpen(true)} />
+      )}
+
+      <Modal open={calendarOpen} onClose={() => setCalendarOpen(false)} title="Training calendar">
+        <TrainingCalendar showLoggedActivities />
+      </Modal>
+
+      {/* Strava history analysis progress */}
+      {hasActivityProgress && (
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
+            Strava Activity Analysis
+          </p>
+          <div className="w-full bg-amber-100 rounded-full h-2.5">
+            <div
+              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className="text-sm text-amber-900 mt-2">
+            {analyzedActivities} / {importProgress.total} activities analyzed
+          </p>
+          {importProgress.status === 'error' && importProgress.error && (
+            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
+          )}
         </div>
       )}
 
-      {trainingPlan.length > 0 && <WeekStrip plan={trainingPlan} />}
+      {/* Coach Timeline — the recent-training summary opens the conversation as a
+          pinned coach entry, then plan updates, recommendations and chat interleave
+          in the feed below (#418). Takes up the majority of the remaining space. */}
+      <div className="flex flex-col">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
 
-      {isExpertMode && (
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-            Consumed tokens
-          </p>
-          <p className="text-2xl font-bold text-gray-900">
-            {consumedTokens.toLocaleString()}
-          </p>
-        </div>
-      )}
+        {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Bot size={14} className="text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                {/* The coach's verdict had a card to itself, which is more page
+                    than one word earns. It belongs to this summary — same
+                    author, same subject — highlighted at its head (#621). */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Your recent training summary
+                  </p>
+                  {trainingStatus && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trainingStatus.className}`}
+                      title={trainingStatus.title}
+                    >
+                      {trainingStatus.label}
+                    </span>
+                  )}
+                </div>
+                {summaryLoading ? (
+                  <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
+                ) : !riderAssessment?.loginSummary ? (
+                  // The card can now be opened by the status alone, before the
+                  // first summary has been written.
+                  <p className="text-sm text-gray-500">
+                    Your first summary lands once a ride has been analysed.
+                  </p>
+                ) : (
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+                    {loginSummary?.bullets.length ? (
+                      <ul className="mt-2 space-y-1 list-disc pl-5">
+                        {loginSummary.bullets.map((bullet, index) => (
+                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
+                            {bullet.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AIChat
+          contextWorkout={trainingPlan.find((d) => d.date === today)}
+          className="h-[60vh] min-h-[24rem] shadow-sm"
+        />
+      </div>
 
       {/* Rides that actually happened.  The upcoming-plan preview that used to
           share this block is gone: WeekStrip shows the same days without
@@ -1014,85 +1066,22 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Strava history analysis progress */}
-      {hasActivityProgress && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            Strava Activity Analysis
+      {/* Everything below here is expert mode, gathered in one place so turning
+          it on adds a block at the bottom rather than pushing the coach down. */}
+      {isExpertMode && (
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+            Consumed tokens
           </p>
-          <div className="w-full bg-amber-100 rounded-full h-2.5">
-            <div
-              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <p className="text-sm text-amber-900 mt-2">
-            {analyzedActivities} / {importProgress.total} activities analyzed
+          <p className="text-2xl font-bold text-gray-900">
+            {consumedTokens.toLocaleString()}
           </p>
-          {importProgress.status === 'error' && importProgress.error && (
-            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
-          )}
         </div>
       )}
 
-      {/* Coach Timeline — the recent-training summary opens the conversation as a
-          pinned coach entry, then plan updates, recommendations and chat interleave
-          in the feed below (#418). Takes up the majority of the remaining space. */}
-      <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
-
-        {(riderAssessment?.loginSummary || summaryLoading) && (
-          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 mb-3">
-            <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Bot size={14} className="text-amber-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Your recent training summary
-                </p>
-                {summaryLoading ? (
-                  <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
-                ) : (
-                  <div className="text-sm text-gray-700 leading-relaxed">
-                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-                    {loginSummary?.bullets.length ? (
-                      <ul className="mt-2 space-y-1 list-disc pl-5">
-                        {loginSummary.bullets.map((bullet, index) => (
-                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                            {bullet.text}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <AIChat
-          contextWorkout={trainingPlan.find((d) => d.date === today)}
-          className="h-[60vh] min-h-[24rem] shadow-sm"
-        />
-      </div>
-
-      {/* Plan-vs-logged month calendar (#369).  Was expert-only, which left the
-          default view with no way to see the shape of the block — the thing every
-          rider expects from a training app. */}
-      <div>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-          Training calendar
-        </h2>
-        <TrainingCalendar showLoggedActivities />
-      </div>
-
-      {/* Form and fitness over time — likewise promoted out of expert mode. */}
-      <ProgressionChart />
+      {/* Form and fitness over time: a diagnostic, not a daily read.  #619
+          promoted it onto the front page; it belongs behind expert mode. */}
+      {isExpertMode && <ProgressionChart />}
 
       {/* Coach's model of the athlete + its confidences — expert mode only */}
       {isExpertMode && <AthletePerformanceModelCard />}
