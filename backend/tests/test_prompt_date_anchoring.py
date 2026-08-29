@@ -16,7 +16,11 @@ from types import SimpleNamespace
 import pytest
 
 from services import prompts
-from services.dates import annotate_plan_days, plan_day_date_labels
+from services.dates import (
+    annotate_plan_days,
+    plan_day_date_labels,
+    plan_window_calendar,
+)
 
 TZ = "Europe/Berlin"
 # 2026-07-25 is a Saturday; anchored one day after the fixed "today" below.
@@ -118,6 +122,99 @@ def test_plan_builders_inject_date_context(name, _fixed_today):
     assert "tomorrow" in msg
 
 
+# ---------------------------------------------------------------------------
+# Prompts that WRITE a plan (#625)
+#
+# The builders above are handed a plan to read, so annotating it anchors them.
+# These two invent the dates, so there is nothing to annotate — they were left
+# deriving weekdays from a bare "Today's date" line, and the coach put a "long
+# weekend ride" on a Monday.
+# ---------------------------------------------------------------------------
+
+# 2026-08-31 is a Monday, so a 14-day window from it spans two full weekends.
+MONDAY = "2026-08-31"
+
+
+def _plan_producer_messages() -> dict[str, str]:
+    return {
+        "generate_plan_user": prompts.generate_plan_user(
+            {"name": "Jonas"}, MONDAY, "", timezone_name=TZ
+        ),
+        "adapt_plan_user": prompts.adapt_plan_user(
+            {"name": "Jonas"},
+            MONDAY,
+            recent_feedback=[],
+            incomplete_days=[dict(PLAN[0], date="2026-09-05")],
+            timezone_name=TZ,
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", ["generate_plan_user", "adapt_plan_user"])
+def test_plan_producers_are_given_the_weekday_of_every_date_they_may_fill(name):
+    msg = _plan_producer_messages()[name]
+
+    assert "Current local date context" in msg
+    for iso, weekday in [
+        ("2026-08-31", "Monday"),
+        ("2026-09-03", "Thursday"),
+        ("2026-09-13", "Sunday"),
+    ]:
+        assert f"{iso} ({weekday}" in msg, f"{iso} reaches the model without its weekday"
+
+
+@pytest.mark.parametrize("name", ["generate_plan_user", "adapt_plan_user"])
+def test_plan_producers_are_told_which_days_are_the_weekend(name):
+    """"Saturday" only rules out a weekday ride if the model knows it is the weekend."""
+    msg = _plan_producer_messages()[name]
+
+    assert "2026-09-05 (Saturday, weekend)" in msg
+    assert "2026-09-06 (Sunday, weekend)" in msg
+    assert "2026-09-04 (Friday)" in msg
+    assert "2026-09-04 (Friday, weekend)" not in msg
+
+
+@pytest.mark.parametrize("builder", ["generate_plan_system", "adapt_plan_system"])
+def test_plan_producers_are_forbidden_from_misnaming_the_week(builder):
+    system = getattr(prompts, builder)().lower()
+
+    assert "weekend ride" in system, "the rule does not name the mistake it prevents"
+    assert "part of the week it does not fall in" in system
+
+
+def test_the_adapt_prompt_annotates_the_days_it_rewrites():
+    """Rescheduling a stale session is where a weekday gets invented."""
+    msg = prompts.adapt_plan_user(
+        {"name": "Jonas"},
+        MONDAY,
+        recent_feedback=[],
+        # A Saturday session that was never done, to be moved somewhere.
+        incomplete_days=[dict(PLAN[0], date="2026-08-29")],
+        timezone_name=TZ,
+    )
+
+    assert '"weekday": "Saturday"' in msg
+
+
+def test_a_malformed_today_costs_the_calendar_not_the_plan():
+    """The date arrives preformatted; a bad one must not take the request down."""
+    msg = prompts.generate_plan_user({"name": "Jonas"}, "not-a-date", "", timezone_name=TZ)
+
+    assert "The dates you are planning" not in msg
+    assert "Generate a 14-day training plan" in msg
+
+
+def test_the_horizon_is_stated_once():
+    """The prompt text, the calendar and the ask must not drift apart."""
+    system = prompts.generate_plan_system()
+    msg = prompts.generate_plan_user({"name": "Jonas"}, MONDAY, "", timezone_name=TZ)
+
+    assert f"{prompts.PLAN_HORIZON_DAYS}-day training plan" in system
+    assert f"{prompts.PLAN_HORIZON_DAYS}-day training plan" in msg
+    # One line per day in the window, and no more.
+    assert msg.count("\n- 2026-") == prompts.PLAN_HORIZON_DAYS
+
+
 def test_plan_day_date_labels_relative_days():
     today = FIXED_TODAY
     assert plan_day_date_labels("2026-07-24", today)["relativeDay"] == "today"
@@ -130,6 +227,21 @@ def test_plan_day_date_labels_relative_days():
     assert "relativeDay" not in labels
     # Days far from today carry no relativeDay tag.
     assert "relativeDay" not in plan_day_date_labels("2026-08-01", today)
+
+
+def test_plan_window_calendar_covers_the_window_exactly():
+    calendar = plan_window_calendar(datetime.date(2026, 8, 31), 3)
+
+    assert calendar.splitlines()[1:] == [
+        "- 2026-08-31 (Monday)",
+        "- 2026-09-01 (Tuesday)",
+        "- 2026-09-02 (Wednesday)",
+    ]
+
+
+def test_plan_window_calendar_survives_a_zero_or_negative_window():
+    assert plan_window_calendar(datetime.date(2026, 8, 31), 0).count("- 2026") == 0
+    assert plan_window_calendar(datetime.date(2026, 8, 31), -3).count("- 2026") == 0
 
 
 def test_plan_day_date_labels_handles_missing_and_bad_dates():
