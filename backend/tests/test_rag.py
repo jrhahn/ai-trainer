@@ -53,10 +53,10 @@ async def test_retrieve_cycling_context_formats_results():
     mock_db.bind.dialect = MagicMock()
     mock_db.bind.dialect.name = "postgresql"
 
-    # Simulate two rows: (title, content, source_type, doi, url, similarity)
+    # Simulate two rows: (title, content, source_type, doi, url, similarity, topics)
     mock_rows = [
-        ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.9),
-        ("Lactate Threshold Study", "FTP is 95% of 20-min power.", "paper", "10.1/test", "https://example.com", 0.85),
+        ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.9, None),
+        ("Lactate Threshold Study", "FTP is 95% of 20-min power.", "paper", "10.1/test", "https://example.com", 0.85, ["threshold"]),
     ]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
@@ -91,8 +91,8 @@ async def test_chunks_below_the_similarity_floor_are_dropped():
     mock_db.bind.dialect.name = "postgresql"
 
     mock_rows = [
-        ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.78),
-        ("Strength Training", "Heavy lifting improves economy.", "seed", None, None, 0.61),
+        ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.78, None),
+        ("Strength Training", "Heavy lifting improves economy.", "seed", None, None, 0.61, None),
     ]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
@@ -116,9 +116,9 @@ async def test_an_all_weak_result_set_returns_nothing_at_all():
 
     # The measured off-topic band: "Move my Monday ride to Tuesday" scored these.
     mock_rows = [
-        ("Strength Training", "Heavy lifting.", "seed", None, None, 0.617),
-        ("Periodization", "Build then peak.", "seed", None, None, 0.596),
-        ("Hrv Guided Training", "RMSSD trends.", "seed", None, None, 0.589),
+        ("Strength Training", "Heavy lifting.", "seed", None, None, 0.617, None),
+        ("Periodization", "Build then peak.", "seed", None, None, 0.596, None),
+        ("Hrv Guided Training", "RMSSD trends.", "seed", None, None, 0.589, None),
     ]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
@@ -140,7 +140,7 @@ async def test_the_floor_can_be_overridden_per_call():
     mock_db.bind.dialect = MagicMock()
     mock_db.bind.dialect.name = "postgresql"
 
-    mock_rows = [("Recovery", "Sleep matters.", "seed", None, None, 0.61)]
+    mock_rows = [("Recovery", "Sleep matters.", "seed", None, None, 0.61, None)]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
     mock_db.execute = AsyncMock(return_value=mock_result)
@@ -176,6 +176,159 @@ async def test_retrieve_cycling_context_returns_empty_when_no_rows():
 
     assert context == ""
     assert sources == []
+
+
+# ---------------------------------------------------------------------------
+# Limiter-aware ranking (#627)
+#
+# Similarity answers "which passage resembles this question?". These tests cover
+# the half it cannot answer: "which passage bears on *this* athlete's problem?"
+# ---------------------------------------------------------------------------
+
+
+def _rag_db(rows: list[tuple]) -> MagicMock:
+    """A PostgreSQL session whose vector search returns *rows*, similarity-ordered."""
+    db = MagicMock()
+    db.bind = MagicMock()
+    db.bind.dialect = MagicMock()
+    db.bind.dialect.name = "postgresql"
+    result = MagicMock()
+    result.fetchall = MagicMock(return_value=rows)
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+# The same question ("should I do more intervals?") against the same corpus. The
+# VO2max chunk simply reads less like the question, so similarity ranks it last.
+_MIXED_ROWS = [
+    ("Interval Basics", "Intervals are hard.", "seed", None, None, 0.86, None),
+    ("Sweet Spot", "Sustainable power work.", "seed", None, None, 0.82, ["threshold"]),
+    ("VO2max Development", "4x4s raise MAP.", "paper", None, None, 0.74, ["vo2max"]),
+]
+
+
+@pytest.mark.asyncio
+async def test_the_athletes_limiter_outranks_a_closer_but_generic_chunk():
+    db = _rag_db(_MIXED_ROWS)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        _, sources = await rag.retrieve_cycling_context(
+            db, "Should I do more intervals?", focus_topics=["vo2max"]
+        )
+
+    # 0.74 came last on similarity alone; it leads because it is this athlete's
+    # limiter. The rest keep their similarity order behind it.
+    assert [s["title"] for s in sources] == [
+        "VO2max Development",
+        "Interval Basics",
+        "Sweet Spot",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_different_limiter_reorders_the_identical_result_set():
+    """Two athletes, one question, one corpus — different evidence."""
+    db = _rag_db(_MIXED_ROWS)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        _, sources = await rag.retrieve_cycling_context(
+            db, "Should I do more intervals?", focus_topics=["threshold"]
+        )
+
+    assert [s["title"] for s in sources][0] == "Sweet Spot"
+
+
+@pytest.mark.asyncio
+async def test_without_a_limiter_the_ranking_is_untouched():
+    """An athlete with no confident diagnosis must get the pre-#627 behaviour."""
+    db = _rag_db(_MIXED_ROWS)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        _, sources = await rag.retrieve_cycling_context(
+            db, "Should I do more intervals?", focus_topics=[]
+        )
+
+    assert [s["title"] for s in sources] == [
+        "Interval Basics",
+        "Sweet Spot",
+        "VO2max Development",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_topic_match_cannot_lift_a_chunk_past_the_similarity_floor():
+    """The #528 gate stays absolute: relevance to the limiter is not relevance."""
+    db = _rag_db(
+        [
+            ("Power Zones", "Zone 2.", "seed", None, None, 0.78, None),
+            ("Off-topic VO2max", "Unrelated.", "seed", None, None, 0.42, ["vo2max"]),
+        ]
+    )
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        context, sources = await rag.retrieve_cycling_context(
+            db, "power zones", focus_topics=["vo2max"]
+        )
+
+    assert [s["title"] for s in sources] == ["Power Zones"]
+    assert "Off-topic VO2max" not in context
+
+
+@pytest.mark.asyncio
+async def test_ranking_never_enlarges_the_prompt():
+    """Steering changes which chunks reach the coach, never how many."""
+    rows = [
+        (f"Chunk {i}", "Body.", "seed", None, None, 0.9 - i * 0.01, None)
+        for i in range(12)
+    ] + [("Durability", "Late fade.", "paper", None, None, 0.72, ["endurance_durability"])]
+    db = _rag_db(rows)
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        _, sources = await rag.retrieve_cycling_context(
+            db, "why do I fade?", k=5, focus_topics=["endurance_durability"]
+        )
+
+    assert len(sources) == 5
+    assert sources[0]["title"] == "Durability"
+
+
+@pytest.mark.asyncio
+async def test_the_pool_is_only_widened_when_there_is_a_limiter_to_rank_by():
+    """A wider LIMIT that nothing reorders is pure waste."""
+    db = _rag_db([])
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        await rag.retrieve_cycling_context(db, "q", k=5)
+        await rag.retrieve_cycling_context(db, "q", k=5, focus_topics=["vo2max"])
+
+    plain_limit, focused_limit = (
+        call.args[1]["k"] for call in db.execute.await_args_list
+    )
+
+    assert plain_limit == 5, "an unfocused search must not pay for a wider pool"
+    # Not `== k * MULTIPLIER`, which would pass at a multiplier of 1 — the value
+    # that quietly turns limiter-aware retrieval back into plain similarity.
+    assert focused_limit > plain_limit, (
+        "ranking can only promote a chunk the search actually returned"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rows_ingested_before_tagging_are_ranked_not_discarded():
+    """The column is nullable; a corpus that predates it must still answer."""
+    db = _rag_db(
+        [
+            ("Old Chunk A", "Body.", "seed", None, None, 0.81, None),
+            ("Old Chunk B", "Body.", "seed", None, None, 0.79, None),
+        ]
+    )
+
+    with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
+        _, sources = await rag.retrieve_cycling_context(
+            db, "threshold work", focus_topics=["threshold"]
+        )
+
+    assert [s["title"] for s in sources] == ["Old Chunk A", "Old Chunk B"]
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,9 @@ Maintenance rules:
   are also ingested.
 - When citing a new paper in any knowledge file, add it to
   backend/knowledge/sources.md under the appropriate topic group.
+- Every chunk is tagged with ``services.knowledge_topics.topics_for_text`` so
+  retrieval can rank by the athlete's limiter (#627). Changing that vocabulary
+  means re-running this script: the tags live in the table, not in the query.
 """
 
 from __future__ import annotations
@@ -45,7 +48,8 @@ from typing import Any
 import sys
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import Text, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Allow ``python scripts/ingest_cycling_science.py`` from backend/ to import the
@@ -59,6 +63,7 @@ from services.embeddings import (  # noqa: E402
     get_embedder,
     to_pgvector_literal,
 )
+from services.knowledge_topics import topics_for_text  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -245,10 +250,11 @@ async def _upsert_chunks(
             sql = text(
                 """
                 INSERT INTO knowledge_chunks
-                    (source_id, chunk_index, title, content, source_type, doi, url, embedding)
+                    (source_id, chunk_index, title, content, source_type, doi, url,
+                     topics, embedding)
                 VALUES
                     (:source_id, :chunk_index, :title, :content,
-                     :source_type, :doi, :url, :embedding ::vector)
+                     :source_type, :doi, :url, :topics, :embedding ::vector)
                 ON CONFLICT (source_id, chunk_index)
                 DO UPDATE SET
                     title       = EXCLUDED.title,
@@ -256,9 +262,12 @@ async def _upsert_chunks(
                     source_type = EXCLUDED.source_type,
                     doi         = EXCLUDED.doi,
                     url         = EXCLUDED.url,
+                    topics      = EXCLUDED.topics,
                     embedding   = EXCLUDED.embedding
                 """
-            )
+            # The driver cannot infer text[] from a bare Python list, and an
+            # untyped bind silently lands as a string the GIN index never matches.
+            ).bindparams(bindparam("topics", type_=ARRAY(Text())))
             await session.execute(
                 sql,
                 {
@@ -269,6 +278,7 @@ async def _upsert_chunks(
                     "source_type": chunk["source_type"],
                     "doi": chunk.get("doi"),
                     "url": chunk.get("url"),
+                    "topics": chunk.get("topics") or [],
                     "embedding": vec_literal,
                 },
             )
@@ -314,6 +324,9 @@ async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
                     "source_type": "seed",
                     "doi": None,
                     "url": None,
+                    # Title included: a chunk from the middle of a durability
+                    # article need not repeat the word to be about it (#627).
+                    "topics": topics_for_text(title, chunk_text),
                     "embedding": embedding,
                 }
             )
@@ -410,6 +423,7 @@ async def ingest_semantic_scholar(session_maker: async_sessionmaker) -> int:
                     "source_type": "paper",
                     "doi": doi,
                     "url": url,
+                    "topics": topics_for_text(title, chunk_text),
                     "embedding": embedding,
                 }
             )

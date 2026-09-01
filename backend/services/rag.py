@@ -44,6 +44,13 @@ logger = logging.getLogger(__name__)
 # are the baseline.
 MIN_SIMILARITY = 0.70
 
+# How much wider than *k* to search when the athlete has a diagnosed limiter
+# (#627). Ranking can only promote a chunk it can see, and the plain top-k is by
+# definition the set similarity alone already preferred — so without a wider pool
+# the limiter could never change the answer. The floor below still applies to
+# every extra row, so widening costs one larger LIMIT and nothing in the prompt.
+FOCUS_CANDIDATE_MULTIPLIER = 3
+
 # Cached per process: the corpus is loaded by an ingestion run, not by request
 # traffic, so this flips at most once in a process's lifetime. ``None`` means
 # "not checked yet".
@@ -99,11 +106,19 @@ async def knowledge_corpus_is_populated(db: AsyncSession) -> bool:
     return _corpus_populated
 
 
+def _addresses_focus(topics: Any, focus: set[str]) -> bool:
+    """True when a chunk's tags overlap the topics the athlete is limited by."""
+    if not focus or not topics:
+        return False
+    return bool(focus.intersection(topics))
+
+
 async def retrieve_cycling_context(
     db: AsyncSession,
     query: str,
     k: int = 5,
     min_similarity: float | None = None,
+    focus_topics: list[str] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Embed *query*, search knowledge_chunks by cosine similarity, and return
     a (context_string, sources_list) tuple.
@@ -112,9 +127,23 @@ async def retrieve_cycling_context(
     so a question the corpus has nothing to say about yields an empty context
     instead of the five least-bad rows.
 
+    *focus_topics* are the topics the athlete's diagnosed limiter bears on (see
+    :mod:`services.knowledge_topics`). Given them, retrieval searches a wider
+    pool and ranks chunks tagged with one of those topics above chunks that only
+    resemble the question, before truncating back to *k*. Two athletes asking the
+    same question then get evidence about their own limiter rather than the same
+    generic passage.
+
+    The reordering is bounded on both sides. It cannot lift a chunk past the
+    similarity floor — that gate stays absolute, so an off-topic question still
+    returns nothing (#528) — and it cannot enlarge the prompt, because the result
+    is still at most *k* chunks. With no focus topics, or against a corpus whose
+    rows predate tagging, the result is byte-for-byte the pre-#627 behaviour.
+
     Returns ("", []) on any error so callers do not need special-case handling.
     """
     floor = MIN_SIMILARITY if min_similarity is None else min_similarity
+    focus = {topic for topic in (focus_topics or []) if topic}
     try:
         # Only works with PostgreSQL + pgvector.
         dialect = db.bind.dialect.name if db.bind else ""
@@ -132,28 +161,36 @@ async def retrieve_cycling_context(
                 source_type,
                 doi,
                 url,
-                1 - (embedding <=> :embedding ::vector) AS similarity
+                1 - (embedding <=> :embedding ::vector) AS similarity,
+                topics
             FROM knowledge_chunks
             ORDER BY embedding <=> :embedding ::vector
             LIMIT :k
             """
         )
-        result = await db.execute(sql, {"embedding": vec_literal, "k": k})
+        # Only pay for the wider pool when there is something to rank it by.
+        limit = k * FOCUS_CANDIDATE_MULTIPLIER if focus else k
+        result = await db.execute(sql, {"embedding": vec_literal, "k": limit})
         rows = result.fetchall()
 
         if not rows:
             return "", []
 
+        # Filtered here rather than in SQL: a WHERE clause on the computed
+        # distance would stop the HNSW index being used for the ORDER BY, and
+        # this discards at most *limit* rows.
+        kept = [row for row in rows if float(row[5]) >= floor]
+        if focus:
+            # Stable, so similarity order survives inside each group: the best
+            # on-limiter chunk first, then the rest exactly as ranked before.
+            kept.sort(key=lambda row: 0 if _addresses_focus(row[6], focus) else 1)
+            kept = kept[:k]
+
         context_parts: list[str] = []
         sources: list[dict[str, Any]] = []
 
-        for row in rows:
-            title, content, source_type, doi, url, similarity = row
-            # Filtered here rather than in SQL: a WHERE clause on the computed
-            # distance would stop the HNSW index being used for the ORDER BY,
-            # and this discards at most *k* rows.
-            if float(similarity) < floor:
-                continue
+        for row in kept:
+            title, content, source_type, doi, url, similarity, _topics = row
             context_parts.append(
                 f"[Source: {title}]\n{content}"
             )
