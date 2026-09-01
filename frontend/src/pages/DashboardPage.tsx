@@ -10,7 +10,7 @@ import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
-import TodaySessionHero from '../components/TodaySessionHero'
+import SessionHero from '../components/SessionHero'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
@@ -645,6 +645,10 @@ export default function DashboardPage() {
   const statusTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  // Which day the hero is showing.  Owned here rather than in the strip because
+  // the hero is the thing that renders it, and the two are siblings (#634).
+  // Lazy, not `today`: that is declared further down this component.
+  const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()))
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
 
@@ -843,10 +847,12 @@ export default function DashboardPage() {
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
 
-      {/* What the athlete came for, before anything else on the page. */}
-      <TodaySessionHero
-        day={trainingPlan.find((d) => d.date === today)}
-        loggedToday={recentRides.some((r) => r.activityDate === today)}
+      {/* What the athlete came for, before anything else on the page.  Also
+          where the week strip below reports: it selects, this re-renders (#634). */}
+      <SessionHero
+        day={trainingPlan.find((d) => d.date === selectedDate)}
+        date={selectedDate}
+        logged={recentRides.some((r) => r.activityDate === selectedDate)}
       />
 
       <SeasonCountdown />
@@ -854,7 +860,12 @@ export default function DashboardPage() {
       {/* The week is the daily read; the month is a question asked occasionally,
           so it opens over the page instead of sitting under it (#621). */}
       {trainingPlan.length > 0 && (
-        <WeekStrip plan={trainingPlan} onShowMore={() => setCalendarOpen(true)} />
+        <WeekStrip
+          plan={trainingPlan}
+          selectedDate={selectedDate}
+          onSelect={setSelectedDate}
+          onShowMore={() => setCalendarOpen(true)}
+        />
       )}
 
       <Modal open={calendarOpen} onClose={() => setCalendarOpen(false)} title="Training calendar">

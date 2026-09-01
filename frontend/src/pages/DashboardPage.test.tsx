@@ -94,6 +94,12 @@ const threeDaysFromNow = formatLocalDate(new Date(Date.now() + 3 * 24 * 60 * 60 
 const fourDaysAgo = formatLocalDate(new Date(Date.now() - 4 * 24 * 60 * 60 * 1000))
 const sixDaysAgo = formatLocalDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000))
 
+/** The week strip's accessible name for a day, e.g. "Tuesday — Rest" (#634).
+ *  Derived rather than hard-coded, since which weekday `tomorrow` lands on
+ *  depends on when the suite runs. */
+const weekdayOf = (date: string, label: string) =>
+  `${new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} — ${label}`
+
 let rideIdCounter = 1
 function makeRide(overrides: Partial<RideMetricPoint> & { activityDate: string }): RideMetricPoint {
   return {
@@ -718,9 +724,10 @@ describe('DashboardPage — Activities section layout', () => {
     })
     renderDashboard()
     expect(await screen.findByText('This week')).toBeInTheDocument()
-    expect(
-      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
-    ).toBe(true)
+    // Selecting tomorrow surfaces it in the hero, which is a stronger claim than
+    // the old link check: the plan reached the dashboard *and* is readable there.
+    await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Endurance') }))
+    expect(await screen.findByRole('heading', { name: 'Easy Z2' })).toBeInTheDocument()
     // ...and no empty "Recent rides" shell above it.
     expect(screen.queryByText('Recent rides')).not.toBeInTheDocument()
   })
@@ -1065,9 +1072,11 @@ describe('DashboardPage — plan comparison row', () => {
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
     expect(screen.queryByText(/Tomorrow VO2 Max Intervals/)).not.toBeInTheDocument()
     expect(screen.getByText('This week')).toBeInTheDocument()
+    // Not listed a second time, but one click away in the hero (#634).
+    await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Intervals') }))
     expect(
-      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
-    ).toBe(true)
+      await screen.findByRole('heading', { name: 'Tomorrow VO2 Max Intervals' })
+    ).toBeInTheDocument()
   })
 
   it('clicking the score badge sets pendingCoachMessage in the store', async () => {
@@ -1384,9 +1393,8 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByRole('heading', { name: 'VO2 Efforts' })).toBeInTheDocument()
     expect(screen.getByText('Done')).toBeInTheDocument()
 
-    // The overlay's way through to the page is phrased for a session already
+    // The hero's way through to the page is phrased for a session already
     // ridden, so the "done" state has to reach that far (#623).
-    await userEvent.click(screen.getByRole('button', { name: /show details/i }))
     expect(screen.getByRole('link', { name: /review and log this session/i })).toBeInTheDocument()
   })
 
@@ -1396,9 +1404,29 @@ describe("DashboardPage — Today's status strip", () => {
     })
     renderDashboard()
     expect(await screen.findByText('This week')).toBeInTheDocument()
-    expect(
-      screen.getAllByRole('link').some((link) => link.getAttribute('href') === `/workout/${tomorrow}`)
-    ).toBe(true)
+
+    await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Rest') }))
+
+    expect(await screen.findByRole('heading', { name: 'Rest Day' })).toBeInTheDocument()
+  })
+
+  it('leaves the dashboard alone when a day is picked', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: today, workoutType: 'intervals', title: 'VO2 Efforts' }),
+        planDay({ date: tomorrow, workoutType: 'rest', title: 'Rest Day' }),
+      ],
+    })
+    renderDashboard()
+    expect(await screen.findByRole('heading', { name: 'VO2 Efforts' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Rest') }))
+
+    // The hero swapped; the page around it did not go anywhere (#634).
+    expect(await screen.findByRole('heading', { name: 'Rest Day' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'VO2 Efforts' })).not.toBeInTheDocument()
+    expect(screen.getByText('This week')).toBeInTheDocument()
+    expect(screen.getByTestId('ai-chat')).toBeInTheDocument()
   })
 
   it('renders the coach-authored status badge verbatim', async () => {
