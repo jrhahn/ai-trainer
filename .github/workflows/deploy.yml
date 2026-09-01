@@ -103,6 +103,7 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
@@ -123,6 +124,7 @@ jobs:
               "strava_client_secret": os.environ.get("STRAVA_CLIENT_SECRET", ""),
               "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
               "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
+              "semantic_scholar_api_key": os.environ.get("SEMANTIC_SCHOLAR_API_KEY", ""),
               "acme_email": os.environ.get("ACME_EMAIL", ""),
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
               "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
