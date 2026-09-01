@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, Clock, Heart, Zap } from 'lucide-react'
+import { CheckCircle2, Clock, Heart, Zap } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
@@ -121,20 +120,12 @@ export default function SessionHero({
             sat behind a "Show details" button until #634 — one more click for
             the only content on the card they need on the road.  The summary row
             is suppressed because the block above already is one. */}
+        {/* No way out at the bottom: the card is the session, and an athlete
+            reading it is not looking for somewhere else to go.  The workout page
+            is still reached from the calendar behind "Show more". */}
         <div className="mt-5">
           <WorkoutDetails day={day} variant="dark" showSummary={false} />
         </div>
-
-        {/* Logging, coach feedback and the change history live on the page
-            itself.  The week strip no longer navigates, so this is the only way
-            in — quiet, though: it is a way out, not the point of the card. */}
-        <Link
-          to={`/workout/${day.date}`}
-          className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-300 transition-colors hover:text-amber-200"
-        >
-          {isDone ? 'Review and log this session' : 'Open the full session page'}
-          <ArrowRight size={15} aria-hidden="true" />
-        </Link>
       </div>
     </section>
   )

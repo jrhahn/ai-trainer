@@ -71,20 +71,20 @@ describe('SessionHero', () => {
     expect(screen.getAllByText('1h 15m')).toHaveLength(1)
   })
 
-  it('still reaches the full page, where logging and history live', () => {
+  it('offers no way off the card', () => {
+    // The card is the session; the workout page is reached from the calendar
+    // behind "Show more" instead.
     renderHero({ day: day({ date: '2026-08-26' }), date: '2026-08-26' })
 
-    expect(screen.getByRole('link', { name: /open the full session page/i })).toHaveAttribute(
-      'href',
-      '/workout/2026-08-26'
-    )
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(screen.queryByText(/open the full session page/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/review and log this session/i)).not.toBeInTheDocument()
   })
 
   it('counts a logged ride as done even when the plan day was never ticked', () => {
     renderHero({ day: day({ completed: false }), logged: true })
 
     expect(screen.getByText('Done')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /review and log this session/i })).toBeInTheDocument()
   })
 
   it('says which day it is showing', () => {
