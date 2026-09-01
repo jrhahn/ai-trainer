@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import { addDays, startOfWeek } from 'date-fns'
 import type { TrainingDay } from '../store/useAppStore'
@@ -11,12 +10,23 @@ import { sessionTypeStyle } from '../utils/sessionType'
  * session name — on mobile "4 x 8 min thresh…". A week is small enough to show
  * whole, and seeing it whole is the point: where the hard days sit, what is
  * already done, what is coming.
+ *
+ * The chips used to link to `/workout/:date`, which answered "what is Wednesday?"
+ * by throwing away the dashboard. Since #634 they select instead, and the hero
+ * above re-renders — the page you are on is already the right shape for the
+ * answer.
  */
 export default function WeekStrip({
   plan,
+  selectedDate,
+  onSelect,
   onShowMore,
 }: {
   plan: TrainingDay[]
+  /** The day the hero is showing.  Distinct from today: today stays the week's
+   *  reference point even while you are reading Friday. */
+  selectedDate: string
+  onSelect: (date: string) => void
   /** Opens the month calendar.  The week is the daily read; the block beyond it
    *  is a question the athlete asks occasionally, so it lives behind this. */
   onShowMore?: () => void
@@ -47,11 +57,33 @@ export default function WeekStrip({
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {week.map(({ date, day }) => {
           const isToday = date === today
+          const isSelected = date === selectedDate
           const style = sessionTypeStyle(day?.workoutType)
           const weekday = parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short' })
+          // The chip reads "Tu" over a coloured dot over "Rest", which is thin
+          // to listen to.  Spell out what the eye gets from the layout.
+          const label = `${parseLocalDate(date).toLocaleDateString(undefined, {
+            weekday: 'long',
+          })} — ${day ? style.label : 'nothing planned'}`
 
-          const content = (
-            <>
+          // Selection is the loud state; today is a quiet one that survives
+          // underneath it, so the week keeps its reference point either way.
+          const chrome = isSelected
+            ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200'
+            : isToday
+              ? 'border-amber-300 bg-amber-50/40 hover:border-amber-400'
+              : 'border-slate-200 bg-white hover:border-slate-300'
+
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => onSelect(date)}
+              aria-label={label}
+              aria-pressed={isSelected}
+              aria-current={isToday ? 'date' : undefined}
+              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-1 py-2 text-center transition-colors ${chrome}`}
+            >
               <span
                 className={`text-[11px] font-semibold uppercase ${
                   isToday ? 'text-amber-600' : 'text-gray-400'
@@ -68,23 +100,7 @@ export default function WeekStrip({
               {day?.completed && (
                 <Check size={12} className="mt-1 text-emerald-500" aria-hidden="true" />
               )}
-            </>
-          )
-
-          const className = `flex min-h-[5.5rem] flex-col items-center rounded-xl border px-1 py-2 text-center transition-colors ${
-            isToday
-              ? 'border-amber-400 bg-amber-50/60'
-              : 'border-slate-200 bg-white hover:border-slate-300'
-          }`
-
-          return day ? (
-            <Link key={date} to={`/workout/${date}`} className={className} aria-current={isToday ? 'date' : undefined}>
-              {content}
-            </Link>
-          ) : (
-            <div key={date} className={className}>
-              {content}
-            </div>
+            </button>
           )
         })}
       </div>

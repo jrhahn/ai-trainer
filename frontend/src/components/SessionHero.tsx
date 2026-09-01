@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, Clock, Heart, Zap } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -6,42 +5,56 @@ import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionTypeStyleOnDark } from '../utils/sessionType'
-import Modal from './Modal'
+import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import WeatherBadge from './WeatherBadge'
 import WorkoutDetails from './WorkoutDetails'
 
-/** Today's session, given the weight it actually has.
+/** The session the athlete is looking at, given the weight it actually has.
  *
  * It used to be half of one grey line ("Today: Zone 2 endurance · Tomorrow:
  * Rest") above a chat log that filled the screen — the one thing the athlete
  * opens the app for, rendered smaller than everything around it.
+ *
+ * Since #634 it is also where the week strip reports: picking a day re-renders
+ * this card instead of navigating away, and the session is shown whole rather
+ * than behind a "Show details" button.  Was `TodaySessionHero` until then, which
+ * stopped being true the moment it could show Friday.
  */
-export default function TodaySessionHero({
+export default function SessionHero({
   day,
-  loggedToday = false,
+  date,
+  logged = false,
 }: {
   day: TrainingDay | undefined
-  /** A ride exists for today even if the plan day was never hand-ticked.  The
-   *  old status strip derived "completed" from the ride data, and dropping that
-   *  would have quietly regressed two-a-days and unticked-but-ridden days. */
-  loggedToday?: boolean
+  /** The selected day, needed even when the plan has nothing for it — an empty
+   *  Thursday still has to say which day it is empty for. */
+  date: string
+  /** A ride exists for this date even if the plan day was never hand-ticked.
+   *  The old status strip derived "completed" from the ride data, and dropping
+   *  that would have quietly regressed two-a-days and unticked-but-ridden days. */
+  logged?: boolean
 }) {
-  const forecast = useAppStore(useShallow((s) => (day ? s.weatherForecast[day.date] : undefined)))
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const forecast = useAppStore(useShallow((s) => s.weatherForecast[date]))
+  const isToday = date === formatLocalDate(new Date())
+  // "Today" while it is, the weekday otherwise.  A bare date would make the
+  // athlete do the conversion the strip they just clicked already did for them.
+  const when = isToday
+    ? 'Today'
+    : parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'long' })
 
   if (!day) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center">
-        <p className="text-sm font-semibold text-gray-900">No session planned for today</p>
-        <p className="mt-1 text-sm text-gray-500">
-          Ask your coach below and it will put one in.
+        <p className="text-sm font-semibold text-gray-900">
+          No session planned for {isToday ? 'today' : when}
         </p>
+        <p className="mt-1 text-sm text-gray-500">Ask your coach below and it will put one in.</p>
       </section>
     )
   }
 
   const isRest = day.workoutType === 'rest'
-  const isDone = day.completed || loggedToday
+  const isDone = day.completed || logged
 
   return (
     <section className="relative overflow-hidden rounded-2xl bg-[#0f1116] text-white shadow-lg">
@@ -55,7 +68,7 @@ export default function TodaySessionHero({
       <div className="relative px-5 py-5 sm:px-7 sm:py-6">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">
-            Today
+            {when}
           </span>
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${sessionTypeStyleOnDark(
@@ -104,31 +117,25 @@ export default function TodaySessionHero({
           <WeatherBadge forecast={forecast} className="text-slate-300" />
         </div>
 
-        {/* The instructions open over the dashboard rather than replacing it,
-            the way the calendar does — reading what today asks for is not a
-            reason to lose your place (#623). */}
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(true)}
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
-        >
-          Show details
-          <ArrowRight size={16} aria-hidden="true" />
-        </button>
-      </div>
+        {/* What the athlete rides, in the card they are already looking at.  It
+            sat behind a "Show details" button until #634 — one more click for
+            the only content on the card they need on the road.  The summary row
+            is suppressed because the block above already is one. */}
+        <div className="mt-5">
+          <WorkoutDetails day={day} variant="dark" showSummary={false} />
+        </div>
 
-      <Modal open={detailsOpen} onClose={() => setDetailsOpen(false)} title={day.title}>
-        <WorkoutDetails day={day} />
         {/* Logging, coach feedback and the change history live on the page
-            itself; the overlay is the read, not the whole session. */}
+            itself.  The week strip no longer navigates, so this is the only way
+            in — quiet, though: it is a way out, not the point of the card. */}
         <Link
           to={`/workout/${day.date}`}
-          className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-600 hover:text-amber-700"
+          className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-300 transition-colors hover:text-amber-200"
         >
           {isDone ? 'Review and log this session' : 'Open the full session page'}
           <ArrowRight size={15} aria-hidden="true" />
         </Link>
-      </Modal>
+      </div>
     </section>
   )
 }
