@@ -60,6 +60,15 @@ TOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
         "sweet spot",
         "sweetspot",
         "critical power",
+        # The power-duration literature's own name for the domain above critical
+        # power. Without it the corpus tagged "critical power" once and stopped:
+        # `SEARCH_QUERIES` deliberately fetches W′ papers, and the clearest one —
+        # "W′ expenditure and reconstitution during severe intensity constant
+        # power exercise" — said "severe intensity" six times and "critical
+        # power" once, scoring 1 against a floor of 2. Measured over the
+        # production corpus it occurs 26 times across 9 chunks and moves
+        # threshold from 14% to 18% of them.
+        "severe intensity",
     ),
     TOPIC_VO2MAX: (
         "vo2max",
@@ -113,6 +122,13 @@ LIMITER_TOPICS: dict[str, tuple[str, ...]] = {
 # The same measurement puts that at ~21-29% of chunks per topic with 9%
 # multi-tagged — selective, while a chunk that genuinely weighs FTP against MAP
 # still earns both. Re-measure when the corpus or the vocabulary changes.
+#
+# Those figures are the *seed* corpus. Measured afterwards against production,
+# the paper half tags far more sparsely (12-18% per topic, 59% untagged) — not
+# because the rule fails there but because the ~50 Semantic Scholar queries pull
+# in sleep, heat, hydration and team-sport work that no limiter should promote.
+# Judge a vocabulary change on both halves; the seed corpus alone will not show
+# you a term the papers use and the coaching prose never does.
 MIN_TOPIC_OCCURRENCES = 2
 TOPIC_DOMINANCE_RATIO = 0.5
 

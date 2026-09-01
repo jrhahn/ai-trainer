@@ -103,6 +103,24 @@ def test_the_dominant_topic_beats_a_topic_that_is_only_mentioned():
     assert kt.topics_for_text(text) == [kt.TOPIC_THRESHOLD]
 
 
+def test_the_power_duration_literature_speaks_its_own_dialect():
+    """We fetch W′ papers on purpose, then have to recognise how they write.
+
+    Modelled on the production chunk that exposed the gap: "W′ expenditure and
+    reconstitution during severe intensity constant power exercise" named
+    critical power once and the severe-intensity domain six times, so it scored
+    1 against a floor of 2 and went untagged.
+    """
+    abstract = (
+        "W′ expenditure and reconstitution during severe intensity constant "
+        "power exercise. Six participants completed severe intensity trials "
+        "above critical power. Recovery below the severe intensity boundary "
+        "restored W′ faster, and severe intensity tolerance scaled with it."
+    )
+
+    assert kt.topics_for_text(abstract) == [kt.TOPIC_THRESHOLD]
+
+
 def test_a_real_but_secondary_topic_loses_to_a_dominant_one():
     """Two mentions clear the floor on their own; against six they are an aside.
 
