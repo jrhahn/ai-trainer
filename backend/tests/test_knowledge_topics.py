@@ -166,6 +166,89 @@ def test_empty_and_missing_parts_are_tolerated():
 
 
 # ---------------------------------------------------------------------------
+# stale_chunk_tags — making a vocabulary change reach the corpus (#632)
+#
+# A plain re-ingest writes only the rows whose source it fetched, and the paper
+# half is whatever Semantic Scholar returns that minute. #631 shipped a keyword
+# and the very paper it was written for stayed untagged in production.
+# ---------------------------------------------------------------------------
+
+
+def test_a_row_whose_tags_are_already_right_is_left_alone():
+    """Re-running must write nothing, or the operation is not safe to repeat."""
+    rows = [(1, "Threshold", THRESHOLD_CHUNK, [kt.TOPIC_THRESHOLD])]
+
+    assert kt.stale_chunk_tags(rows) == []
+
+
+def test_a_row_the_vocabulary_has_since_learned_about_is_rewritten():
+    rows = [(7, "Threshold", THRESHOLD_CHUNK, [])]
+
+    assert kt.stale_chunk_tags(rows) == [(7, [kt.TOPIC_THRESHOLD])]
+
+
+def test_a_never_tagged_row_is_rewritten_even_when_it_earns_nothing():
+    """NULL and "checked, no tags" must stop being the same thing.
+
+    39 production rows sat at NULL and would earn no tag anyway. Leaving them
+    NULL keeps them indistinguishable from rows no run has ever reached, which
+    is the ambiguity that hid #632 in the first place.
+    """
+    rows = [(3, "Sleep", "Sleep extension improved reaction time.", None)]
+
+    assert kt.stale_chunk_tags(rows) == [(3, [])]
+
+
+def test_a_row_that_should_lose_a_tag_is_rewritten():
+    """Narrowing the vocabulary has to propagate as readily as widening it."""
+    rows = [(9, "Sleep", "Sleep extension improved reaction time.", ["vo2max"])]
+
+    assert kt.stale_chunk_tags(rows) == [(9, [])]
+
+
+def test_stored_order_does_not_count_as_a_difference():
+    """Otherwise every run would rewrite every multi-tagged row forever."""
+    both = sorted([kt.TOPIC_THRESHOLD, kt.TOPIC_VO2MAX])
+    text = (
+        "Threshold power as a fraction of maximal aerobic power tells you whether "
+        "to chase FTP or the ceiling: a low ratio means lactate threshold has "
+        "room, a high one means maximal aerobic power is what caps you."
+    )
+
+    assert kt.topics_for_text(text) == both
+    assert kt.stale_chunk_tags([(1, "", text, list(reversed(both)))]) == []
+
+
+def test_only_the_rows_that_changed_come_back():
+    rows = [
+        (1, "Threshold", THRESHOLD_CHUNK, [kt.TOPIC_THRESHOLD]),  # fine
+        (2, "VO2max", VO2MAX_CHUNK, None),                        # never tagged
+        (3, "Durability", DURABILITY_CHUNK, []),                  # missed
+    ]
+
+    assert kt.stale_chunk_tags(rows) == [
+        (2, [kt.TOPIC_VO2MAX]),
+        (3, [kt.TOPIC_DURABILITY]),
+    ]
+
+
+def test_the_severe_intensity_regression_would_have_been_caught():
+    """The concrete production row: shipped keyword, stale tag, no way to notice."""
+    w_prime = (
+        "W′ expenditure and reconstitution during severe intensity constant "
+        "power exercise. Six participants completed severe intensity trials "
+        "above critical power. Recovery below the severe intensity boundary "
+        "restored W′ faster, and severe intensity tolerance scaled with it."
+    )
+
+    assert kt.stale_chunk_tags([(42, "", w_prime, [])]) == [(42, [kt.TOPIC_THRESHOLD])]
+
+
+def test_an_empty_corpus_is_not_an_error():
+    assert kt.stale_chunk_tags([]) == []
+
+
+# ---------------------------------------------------------------------------
 # topics_for_limiter — steering retrieval
 # ---------------------------------------------------------------------------
 

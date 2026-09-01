@@ -9,6 +9,11 @@ Ingests two sources into the knowledge_chunks table:
 Usage:
     cd backend
     python scripts/ingest_cycling_science.py
+    python scripts/ingest_cycling_science.py --retag-only
+
+``--retag-only`` skips both sources and just brings every stored chunk's topics
+up to date with the current vocabulary. It touches no provider, so it needs
+neither an embedding key nor the Semantic Scholar API.
 
 Environment variables:
     DATABASE_URL            — required (PostgreSQL with pgvector)
@@ -33,6 +38,10 @@ Maintenance rules:
 - Every chunk is tagged with ``services.knowledge_topics.topics_for_text`` so
   retrieval can rank by the athlete's limiter (#627). Changing that vocabulary
   means re-running this script: the tags live in the table, not in the query.
+  A plain re-ingest is *not* enough on its own — the upsert only writes rows
+  whose source it fetched, and the paper half is whatever Semantic Scholar
+  returns that minute. That is what the re-tagging step at the end is for, and
+  why it runs unconditionally (#632).
 """
 
 from __future__ import annotations
@@ -63,7 +72,10 @@ from services.embeddings import (  # noqa: E402
     get_embedder,
     to_pgvector_literal,
 )
-from services.knowledge_topics import topics_for_text  # noqa: E402
+from services.knowledge_topics import (  # noqa: E402
+    stale_chunk_tags,
+    topics_for_text,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -434,12 +446,49 @@ async def ingest_semantic_scholar(session_maker: async_sessionmaker) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Re-tagging (#632)
+# ---------------------------------------------------------------------------
+
+
+async def retag_all_chunks(session_maker: async_sessionmaker) -> tuple[int, int]:
+    """Bring every stored chunk's topics up to date with the current vocabulary.
+
+    Returns ``(examined, rewritten)``. Costs no API calls at all — tagging reads
+    only ``title`` and ``content``, which are already in the table — so this is
+    safe to run on its own whenever the vocabulary changes.
+
+    It has to exist because the upsert above cannot do it: that writes only rows
+    whose source this run fetched, and the paper half is whatever Semantic
+    Scholar returns that minute. Without this, a keyword added today reaches an
+    arbitrary subset of the corpus and rows ingested before tagging existed stay
+    ``NULL`` forever (#632).
+    """
+    async with session_maker() as session:
+        rows = (
+            await session.execute(
+                text("SELECT id, title, content, topics FROM knowledge_chunks")
+            )
+        ).fetchall()
+
+        stale = stale_chunk_tags((r[0], r[1], r[2], r[3]) for r in rows)
+        update = text(
+            "UPDATE knowledge_chunks SET topics = :topics WHERE id = :id"
+        ).bindparams(bindparam("topics", type_=ARRAY(Text())))
+        for chunk_id, topics in stale:
+            await session.execute(update, {"id": chunk_id, "topics": topics})
+        await session.commit()
+
+    return len(rows), len(stale)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 
-async def main() -> None:
-    if not embedding_provider_is_configured():
+async def main(retag_only: bool = False) -> None:
+    # Re-tagging touches no provider, so it must not demand a provider key.
+    if not retag_only and not embedding_provider_is_configured():
         raise RuntimeError(
             "No embedding provider configured; set GEMINI_API_KEY or OPENAI_API_KEY"
         )
@@ -447,23 +496,33 @@ async def main() -> None:
     engine = create_async_engine(DATABASE_URL, echo=False)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
-    logger.info("=== Cycling Science Ingestion ===")
-    logger.info(
-        "Embedding with %s (%d dimensions)", get_embedder().model, EMBEDDING_DIM
-    )
+    if retag_only:
+        logger.info("=== Re-tagging only (no fetching, no embedding) ===")
+    else:
+        logger.info("=== Cycling Science Ingestion ===")
+        logger.info(
+            "Embedding with %s (%d dimensions)", get_embedder().model, EMBEDDING_DIM
+        )
 
-    logger.info("Step 1: Seed corpus (knowledge/ markdown files)")
-    seed_count = await ingest_seed_corpus(session_maker)
-    logger.info("  → %d seed chunks upserted", seed_count)
+        logger.info("Step 1: Seed corpus (knowledge/ markdown files)")
+        seed_count = await ingest_seed_corpus(session_maker)
+        logger.info("  → %d seed chunks upserted", seed_count)
 
-    logger.info("Step 2: Semantic Scholar papers")
-    paper_count = await ingest_semantic_scholar(session_maker)
-    logger.info("  → %d paper chunks upserted", paper_count)
+        logger.info("Step 2: Semantic Scholar papers")
+        paper_count = await ingest_semantic_scholar(session_maker)
+        logger.info("  → %d paper chunks upserted", paper_count)
 
-    logger.info("Total chunks upserted: %d", seed_count + paper_count)
+        logger.info("Total chunks upserted: %d", seed_count + paper_count)
+
+    # Always, and last: the upserts above only reached the sources this run
+    # actually fetched, so this is the step that makes a vocabulary change
+    # reach the whole corpus rather than a random subset of it.
+    logger.info("Step 3: Re-tagging the whole corpus")
+    examined, rewritten = await retag_all_chunks(session_maker)
+    logger.info("  → %d chunks examined, %d re-tagged", examined, rewritten)
 
     await engine.dispose()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(retag_only="--retag-only" in sys.argv[1:]))
