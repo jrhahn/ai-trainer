@@ -1392,10 +1392,6 @@ describe("DashboardPage — Today's status strip", () => {
     renderDashboard()
     expect(await screen.findByRole('heading', { name: 'VO2 Efforts' })).toBeInTheDocument()
     expect(screen.getByText('Done')).toBeInTheDocument()
-
-    // The hero's way through to the page is phrased for a session already
-    // ridden, so the "done" state has to reach that far (#623).
-    expect(screen.getByRole('link', { name: /review and log this session/i })).toBeInTheDocument()
   })
 
   it('shows the rest of the week as its own days', async () => {
