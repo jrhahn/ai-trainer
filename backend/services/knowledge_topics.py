@@ -28,6 +28,7 @@ one is a deliberate act: add the keywords here, map a limiter to it, and re-run
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from services.limiter_detection import (
     LIMITER_DURABILITY,
@@ -176,6 +177,37 @@ def topics_for_text(*parts: str | None) -> list[str]:
         return []
     cutoff = max(MIN_TOPIC_OCCURRENCES, best * TOPIC_DOMINANCE_RATIO)
     return sorted(topic for topic, score in scores.items() if score >= cutoff)
+
+
+def stale_chunk_tags(
+    rows: Iterable[tuple[int, str | None, str | None, list[str] | None]],
+) -> list[tuple[int, list[str]]]:
+    """Which stored chunks disagree with what the vocabulary now produces (#632).
+
+    *rows* are ``(id, title, content, stored_topics)`` straight out of
+    ``knowledge_chunks``. Returns ``(id, topics)`` for the rows that need writing
+    back, so a caller can update only those and re-running writes nothing.
+
+    Exists because a plain re-ingest cannot re-tag the corpus: it writes only the
+    rows whose source it fetched, and the paper half is whatever Semantic Scholar
+    returns that minute (rate-limited, partial, different every run). A
+    vocabulary change would otherwise reach an arbitrary subset — the fix in #631
+    was live for a day while the very paper it was written for stayed untagged.
+
+    ``NULL`` always counts as stale, even when the row earns no tags and the
+    write is ``[]``. Leaving it ``NULL`` keeps "never processed" and "processed,
+    nothing to tag" indistinguishable, and that ambiguity is what let this hide.
+
+    Pure by necessity as much as by taste: the test suite builds its schema from
+    ``Base.metadata``, and ``knowledge_chunks`` has no ORM model, so it does not
+    exist there to test against.
+    """
+    stale: list[tuple[int, list[str]]] = []
+    for chunk_id, title, content, stored in rows:
+        current = topics_for_text(title, content)
+        if stored is None or sorted(stored) != current:
+            stale.append((chunk_id, current))
+    return stale
 
 
 def topics_for_limiter(limiter: str | None) -> list[str]:
