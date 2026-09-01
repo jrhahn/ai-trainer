@@ -11,9 +11,11 @@ Usage:
     python scripts/ingest_cycling_science.py
     python scripts/ingest_cycling_science.py --retag-only
 
-``--retag-only`` skips both sources and just brings every stored chunk's topics
-up to date with the current vocabulary. It touches no provider, so it needs
-neither an embedding key nor the Semantic Scholar API.
+``--retag-only`` skips both sources and just reconciles the stored corpus with
+what the code and the knowledge/ files now say: it prunes seed chunks whose file
+is gone or excluded, and brings every chunk's topics up to date with the current
+vocabulary. It touches no provider, so it needs neither an embedding key nor the
+Semantic Scholar API.
 
 Environment variables:
     DATABASE_URL            — required (PostgreSQL with pgvector)
@@ -34,7 +36,9 @@ Maintenance rules:
   SEARCH_QUERIES entries below so that Semantic Scholar papers for that topic
   are also ingested.
 - When citing a new paper in any knowledge file, add it to
-  backend/knowledge/sources.md under the appropriate topic group.
+  backend/knowledge/sources.md under the appropriate topic group. That file is
+  bookkeeping, not corpus: it carries ``rag: false`` front matter and is not
+  ingested (#630). Anything else in knowledge/ is corpus by default.
 - Every chunk is tagged with ``services.knowledge_topics.topics_for_text`` so
   retrieval can rank by the athlete's limiter (#627). Changing that vocabulary
   means re-running this script: the tags live in the table, not in the query.
@@ -72,6 +76,7 @@ from services.embeddings import (  # noqa: E402
     get_embedder,
     to_pgvector_literal,
 )
+from services.knowledge_corpus import is_corpus_document, parse_front_matter  # noqa: E402
 from services.knowledge_topics import (  # noqa: E402
     stale_chunk_tags,
     topics_for_text,
@@ -304,6 +309,49 @@ async def _upsert_chunks(
 # ---------------------------------------------------------------------------
 
 
+def seed_source_ids() -> set[str]:
+    """The ``seed:`` ids the current knowledge/ files would produce.
+
+    Reads the directory and nothing else — no embedding, no network — so the
+    corpus can be reconciled with the files on a ``--retag-only`` run.
+    """
+    if not KNOWLEDGE_DIR.exists():
+        return set()
+    return {
+        f"seed:{md_path.stem}"
+        for md_path in sorted(KNOWLEDGE_DIR.glob("*.md"))
+        if is_corpus_document(parse_front_matter(md_path.read_text(encoding="utf-8"))[0])
+    }
+
+
+async def prune_orphaned_seed_chunks(
+    session_maker: async_sessionmaker, keep: set[str]
+) -> int:
+    """Delete ``seed:`` rows no longer produced by any knowledge file (#630).
+
+    Only ever seed rows. The set of local markdown files is fully known on every
+    run, so anything else under ``seed:`` is genuinely orphaned — a file that was
+    renamed, deleted, or marked ``rag: false``. Papers must never be pruned this
+    way: Semantic Scholar returns a partial, different subset each run, so
+    "not fetched" says nothing about "no longer wanted" (#632).
+    """
+    async with session_maker() as session:
+        rows = (
+            await session.execute(
+                text("SELECT DISTINCT source_id FROM knowledge_chunks WHERE source_id LIKE 'seed:%'")
+            )
+        ).fetchall()
+        orphaned = [row[0] for row in rows if row[0] not in keep]
+        for source_id in orphaned:
+            await session.execute(
+                text("DELETE FROM knowledge_chunks WHERE source_id = :source_id"),
+                {"source_id": source_id},
+            )
+            logger.info("  pruned %s (no longer part of the corpus)", source_id)
+        await session.commit()
+    return len(orphaned)
+
+
 async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
     """Ingest the hand-written markdown files from backend/knowledge/."""
     if not KNOWLEDGE_DIR.exists():
@@ -318,7 +366,12 @@ async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
     total_inserted = 0
     for md_path in md_files:
         title = md_path.stem.replace("_", " ").title()
-        content = md_path.read_text(encoding="utf-8")
+        front_matter, content = parse_front_matter(md_path.read_text(encoding="utf-8"))
+        # Some files in knowledge/ document the corpus rather than belonging to
+        # it — see services.knowledge_corpus (#630).
+        if not is_corpus_document(front_matter):
+            logger.info("  %s → skipped (marked rag: false)", md_path.name)
+            continue
         source_id = f"seed:{md_path.stem}"
         text_chunks = _chunk_text(content)
 
@@ -514,10 +567,26 @@ async def main(retag_only: bool = False) -> None:
 
         logger.info("Total chunks upserted: %d", seed_count + paper_count)
 
-    # Always, and last: the upserts above only reached the sources this run
-    # actually fetched, so this is the step that makes a vocabulary change
-    # reach the whole corpus rather than a random subset of it.
-    logger.info("Step 3: Re-tagging the whole corpus")
+    # Both of the steps below reconcile the stored corpus with what the code and
+    # the files now say, and neither costs a provider call — so they run on a
+    # --retag-only pass too, where the upserts above are skipped entirely.
+
+    # The upsert cannot remove: a file renamed, deleted, or newly marked
+    # `rag: false` would otherwise stay retrievable forever (#630).  Guarded on
+    # a non-empty set: an unreadable knowledge/ must not read as "delete the
+    # whole seed corpus".
+    keep = seed_source_ids()
+    if keep:
+        logger.info("Step 3: Pruning seed chunks no longer in knowledge/")
+        pruned = await prune_orphaned_seed_chunks(session_maker, keep)
+        logger.info("  → %d orphaned seed source(s) pruned", pruned)
+    else:
+        logger.warning("No readable knowledge/ files; skipping the prune")
+
+    # The upserts only reached the sources this run actually fetched, so this is
+    # the step that makes a vocabulary change reach the whole corpus rather than
+    # a random subset of it (#632).
+    logger.info("Step 4: Re-tagging the whole corpus")
     examined, rewritten = await retag_all_chunks(session_maker)
     logger.info("  → %d chunks examined, %d re-tagged", examined, rewritten)
 

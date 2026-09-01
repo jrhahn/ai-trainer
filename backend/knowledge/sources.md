@@ -1,3 +1,10 @@
+---
+# Bookkeeping, not corpus: this is a citation list, and retrieval handing the
+# coach a bibliography under "relevant research" spends a slot on something that
+# cannot answer anything (#630).
+rag: false
+---
+
 # RAG Knowledge Source List
 
 This file lists every peer-reviewed paper, book, and position statement that is
