@@ -21,8 +21,9 @@ Environment variables:
     DATABASE_URL            — required (PostgreSQL with pgvector)
     GEMINI_API_KEY          — required unless embeddings are set to OpenAI
     OPENAI_API_KEY          — alternative embedding provider
-    SEMANTIC_SCHOLAR_API_KEY — optional; raises the API rate limit from
-                               1 req/s (unauthenticated) to 10 req/s
+    SEMANTIC_SCHOLAR_API_KEY — optional, and worth having: see
+                               S2_REQUEST_INTERVAL_SECONDS below for what it
+                               actually buys (it is not more throughput)
 
 Embeddings go through ``services.embeddings``, which follows the configured
 provider — the corpus must be embedded by the same model that embeds queries at
@@ -93,6 +94,20 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+asyncpg://aitrainer:aitrainer@localhost/aitrainer"
 )
 S2_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+
+# Semantic Scholar's introductory allowance is one request per second *whether or
+# not* a key is set. A key does not raise the ceiling — it moves you off the
+# allowance every anonymous caller in the world draws from and onto your own.
+# That distinction is the whole story behind the run that returned 429 for ~12 of
+# the 50 queries and found 28 sources instead of 77: the pacing was already
+# correct, the shared pool was simply exhausted.
+#
+# This used to drop to 0.2 s once a key was present — five requests a second
+# against a one-per-second allowance, so a key would have made the throttling
+# worse rather than better. Raise this only to a tier your key's issuing email
+# actually grants, and keep a little headroom: the interval is measured on our
+# clock, not theirs.
+S2_REQUEST_INTERVAL_SECONDS = 1.1
 
 # Gemini's embedding endpoint caps a single request; batching keeps each call
 # well inside that and inside the per-chunk input-token limit.
@@ -459,8 +474,7 @@ async def ingest_semantic_scholar(session_maker: async_sessionmaker) -> int:
                 papers_by_id[sid] = paper
 
             # Respect the 1 req/s unauthenticated rate limit.
-            rate_sleep = 0.2 if S2_API_KEY else 1.1
-            await asyncio.sleep(rate_sleep)
+            await asyncio.sleep(S2_REQUEST_INTERVAL_SECONDS)
 
     logger.info("  Found %d unique papers with abstracts", len(papers_by_id))
     if not papers_by_id:
