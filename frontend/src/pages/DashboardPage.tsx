@@ -11,6 +11,8 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionHero from '../components/SessionHero'
+import { sessionsForDate } from '../utils/planSessions'
+import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
@@ -687,6 +689,7 @@ export default function DashboardPage() {
   }
 
   const today = formatLocalDate(new Date())
+
   const analyzedActivities = Math.min(importProgress.processed, importProgress.total)
   const consumedTokens = userProfile?.consumedTokens ?? 0
   const loginSummary = riderAssessment?.loginSummary
@@ -756,6 +759,18 @@ export default function DashboardPage() {
     if (!prevLoginDate) return false
     return r.activityDate >= prevLoginDate
   }
+  // Every session on the selected date, not `plan.find(d => d.date === …)` —
+  // that keeps only one, which is the two-a-day bug #496 fixed and the redesign
+  // reintroduced (#645).
+  const selectedSessions = sessionsForDate(trainingPlan, selectedDate)
+  const selectedDoneKeys = loggedSessionKeys(selectedSessions, recentRides, selectedDate)
+  // The coach gets the next session still to be ridden, so a two-a-day stops
+  // handing it the morning session all afternoon.
+  const coachContextWorkout = nextUnfinishedSession(
+    sessionsForDate(trainingPlan, today),
+    loggedSessionKeys(sessionsForDate(trainingPlan, today), recentRides, today)
+  )
+
   const latestRecentRide = recentRides[0] ?? null
   const latestRideActivityKey = latestRecentRide ? rideActivityKey(latestRecentRide) : ''
   const latestRideActivityId = latestRecentRide ? rideActivityRefreshId(latestRecentRide) : null
@@ -850,9 +865,9 @@ export default function DashboardPage() {
       {/* What the athlete came for, before anything else on the page.  Also
           where the week strip below reports: it selects, this re-renders (#634). */}
       <SessionHero
-        day={trainingPlan.find((d) => d.date === selectedDate)}
+        sessions={selectedSessions}
         date={selectedDate}
-        logged={recentRides.some((r) => r.activityDate === selectedDate)}
+        doneKeys={selectedDoneKeys}
       />
 
       <SeasonCountdown />
@@ -949,7 +964,7 @@ export default function DashboardPage() {
         )}
 
         <AIChat
-          contextWorkout={trainingPlan.find((d) => d.date === today)}
+          contextWorkout={coachContextWorkout}
           className="h-[60vh] min-h-[24rem] shadow-sm"
         />
       </div>

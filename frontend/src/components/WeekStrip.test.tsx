@@ -96,6 +96,32 @@ describe('WeekStrip', () => {
     expect(current[0].getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('does not swallow the second session of a two-a-day', () => {
+    // A Map keyed by date keeps only the last entry — the same bug as
+    // `plan.find()` in another shape (#645).
+    const date = dayOfWeek(2)
+    const weekday = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
+    renderStrip([
+      plan(date, { slot: 0, workoutType: 'intervals' }),
+      plan(date, { slot: 1, workoutType: 'recovery' }),
+    ])
+
+    expect(
+      screen.getByRole('button', { name: `${weekday} — Intervals, Recovery` })
+    ).toBeInTheDocument()
+    expect(screen.getByText('2 sessions')).toBeInTheDocument()
+  })
+
+  it('only ticks a two-a-day off once both halves are done', () => {
+    const date = dayOfWeek(3)
+    renderStrip([
+      plan(date, { slot: 0, completed: true }),
+      plan(date, { slot: 1, completed: false }),
+    ])
+
+    expect(document.querySelectorAll('svg.text-emerald-500')).toHaveLength(0)
+  })
+
   it('labels a day by its session type', () => {
     renderStrip([plan(dayOfWeek(1), { workoutType: 'recovery' })])
 

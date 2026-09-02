@@ -19,10 +19,19 @@ const day = (overrides: Partial<TrainingDay> = {}): TrainingDay => ({
   ...overrides,
 })
 
-function renderHero(props: Partial<Parameters<typeof SessionHero>[0]> = {}) {
+function renderHero(
+  props: { day?: TrainingDay; sessions?: TrainingDay[]; date?: string; done?: string[] } = {}
+) {
+  // `day: undefined` means "the plan has nothing"; omitting it means "the usual one".
+  const sessions =
+    props.sessions ?? ('day' in props ? (props.day ? [props.day] : []) : [day()])
   render(
     <MemoryRouter>
-      <SessionHero day={day()} date={TODAY} {...props} />
+      <SessionHero
+        sessions={sessions}
+        date={props.date ?? TODAY}
+        doneKeys={new Set(props.done ?? [])}
+      />
     </MemoryRouter>
   )
 }
@@ -82,7 +91,7 @@ describe('SessionHero', () => {
   })
 
   it('counts a logged ride as done even when the plan day was never ticked', () => {
-    renderHero({ day: day({ completed: false }), logged: true })
+    renderHero({ day: day({ completed: false }), done: [`${TODAY}#0`] })
 
     expect(screen.getByText('Done')).toBeInTheDocument()
   })
@@ -123,5 +132,48 @@ describe('SessionHero', () => {
     renderHero({ day: undefined })
 
     expect(screen.getByText(/no session planned for today/i)).toBeInTheDocument()
+  })
+
+  // -------------------------------------------------------------------------
+  // Two-a-days (#645). The redesign took a single TrainingDay, so the caller
+  // picked one with `plan.find()` — the pattern #496 removed — and the second
+  // session vanished from the dashboard.
+  // -------------------------------------------------------------------------
+
+  const morning = day({ slot: 0, title: 'Morning intervals' })
+  const evening = day({ slot: 1, title: 'Evening endurance', workoutType: 'endurance' })
+
+  it('shows both sessions of a two-a-day', () => {
+    renderHero({ sessions: [morning, evening] })
+
+    expect(screen.getByRole('heading', { name: 'Morning intervals' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evening endurance' })).toBeInTheDocument()
+  })
+
+  it('labels each session so they cannot be confused', () => {
+    renderHero({ sessions: [morning, evening] })
+
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByText('2/2')).toBeInTheDocument()
+  })
+
+  it('does not label a single session as one of several', () => {
+    renderHero()
+
+    expect(screen.queryByText('1/1')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^1\/\d$/)).not.toBeInTheDocument()
+  })
+
+  it('names the day once however many sessions it holds', () => {
+    renderHero({ sessions: [morning, evening] })
+
+    expect(screen.getAllByText('Today')).toHaveLength(1)
+  })
+
+  it('marks only the session that was actually ridden', () => {
+    // One ride on a two-a-day must not tick both off.
+    renderHero({ sessions: [morning, evening], done: [`${TODAY}#0`] })
+
+    expect(screen.getAllByText('Done')).toHaveLength(1)
   })
 })
