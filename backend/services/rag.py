@@ -33,16 +33,32 @@ logger = logging.getLogger(__name__)
 # introduced as "relevant cycling science research" — however unrelated it was
 # (#528).
 #
-# Calibrated against the production corpus (140 chunks, gemini-embedding-001 at
-# 768 dimensions) over 12 questions: science questions peaked at 0.744–0.792,
-# off-topic ones at 0.551–0.675. 0.70 sits in that gap. Note the populations
-# only separate on the *best* hit — an off-topic question can beat the weakest
-# kept chunk of a real one — so this drops trailing weak chunks on genuine
-# questions too, which is the intended trade.
+# Calibrated against the production corpus (54 chunks, gemini-embedding-001 at
+# 768 dimensions) over 21 questions — 15 science, 6 off-topic — recording the
+# best hit of each with the floor disabled (#629):
+#
+#     science    min 0.687   median 0.740   max 0.799
+#     off-topic  min 0.484   median 0.594   max 0.617
+#
+# The populations do not overlap; 0.65 is the middle of the empty band, which
+# admits every science question and still excludes every off-topic one with
+# ~0.03 to spare.
+#
+# It was 0.70, calibrated at 140 chunks when the corpus still held Semantic
+# Scholar abstracts. Removing those (#640) moved the science population down,
+# and 0.70 ended up *inside* it — silently returning nothing for "should I be
+# doing more intervals?" (0.687) against a corpus holding four HIIT chunks. A
+# floor tuned to a corpus that no longer exists reads as a missing answer, not
+# as a misconfiguration, which is why the number is written down with the
+# measurement rather than on its own.
+#
+# Note the populations only separate on the *best* hit — an off-topic question
+# can beat the weakest kept chunk of a real one — so this drops trailing weak
+# chunks on genuine questions too, which is the intended trade.
 #
 # Re-measure when the corpus or the embedding model changes; the numbers above
 # are the baseline.
-MIN_SIMILARITY = 0.70
+MIN_SIMILARITY = 0.65
 
 # How much wider than *k* to search when the athlete has a diagnosed limiter
 # (#627). Ranking can only promote a chunk it can see, and the plain top-k is by
