@@ -246,6 +246,22 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="0.99",
         tests=("tests/test_athlete_model_inference.py",),
     ),
+    # --- Whether the coach is shown evidence at all (#528/#629) -------------
+    PolicyGuard(
+        target="services.rag:MIN_SIMILARITY",
+        decides=(
+            "whether a chunk is relevant enough to reach the coach as research "
+            "— too low and 'move my Monday ride to Tuesday' returns five chunks "
+            "under an evidence heading, too high and a real question silently "
+            "returns nothing"
+        ),
+        # Back to the pre-#629 value. It looks harmless — it was the shipped
+        # number for months — and after #640 shrank the corpus it sits inside
+        # the science population, so real questions return nothing at all.
+        moved_to="0.70",
+        tests=("tests/test_rag.py",),
+    ),
+
     # --- Whether the athlete's limiter can reach the corpus (#627) ----------
     PolicyGuard(
         target="services.knowledge_topics:MIN_TOPIC_OCCURRENCES",

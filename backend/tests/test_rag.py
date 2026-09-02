@@ -114,7 +114,9 @@ async def test_an_all_weak_result_set_returns_nothing_at_all():
     mock_db.bind.dialect = MagicMock()
     mock_db.bind.dialect.name = "postgresql"
 
-    # The measured off-topic band: "Move my Monday ride to Tuesday" scored these.
+    # The measured off-topic band, re-taken on the 54-chunk corpus (#629):
+    # 0.617 is what "Move my Monday ride to Tuesday" actually scores, the
+    # highest any off-topic question reached. The floor has to clear it.
     mock_rows = [
         ("Strength Training", "Heavy lifting.", "seed", None, None, 0.617, None),
         ("Periodization", "Build then peak.", "seed", None, None, 0.596, None),
@@ -155,8 +157,14 @@ async def test_the_floor_can_be_overridden_per_call():
 
 
 def test_the_floor_sits_between_the_measured_populations():
-    """Science questions peaked at 0.744+, off-topic ones at 0.675 and below."""
-    assert 0.675 < rag.MIN_SIMILARITY < 0.744
+    """The empty band measured on the 54-chunk corpus (#629).
+
+    Off-topic questions topped out at 0.617, the weakest science question
+    reached 0.687. A floor outside that band either admits "move my Monday ride
+    to Tuesday" as research or drops "should I be doing more intervals?" — which
+    is what 0.70 was doing after #640 shrank the corpus.
+    """
+    assert 0.617 < rag.MIN_SIMILARITY < 0.687
 
 
 @pytest.mark.asyncio
