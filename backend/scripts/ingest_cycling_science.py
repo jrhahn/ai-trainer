@@ -1,29 +1,31 @@
 """Cycling science knowledge ingestion script.
 
-Ingests two sources into the knowledge_chunks table:
+Ingests the hand-written seed corpus — the markdown files in backend/knowledge/ —
+into the knowledge_chunks table.
 
-1. Hand-written seed corpus — markdown files from backend/knowledge/.
-2. Peer-reviewed papers — fetched from the Semantic Scholar API (open-access
-   papers with abstracts for a set of cycling-science topics).
+That is the whole corpus since #640. It used to also sweep abstracts out of the
+Semantic Scholar API, which was dropped for two reasons. The licence permits
+non-commercial research and education only, and this service may not stay
+non-commercial. And the papers were the weaker half regardless: measured over ten
+representative questions they took 23% of retrieved slots against the seed
+corpus's 77%, which per chunk is about one eleventh the odds of ever being shown.
+Peer-reviewed work comes back deliberately and from openly licensed sources
+(#641), not by sweeping fifty broad queries.
 
 Usage:
     cd backend
     python scripts/ingest_cycling_science.py
     python scripts/ingest_cycling_science.py --retag-only
 
-``--retag-only`` skips both sources and just reconciles the stored corpus with
-what the code and the knowledge/ files now say: it prunes seed chunks whose file
-is gone or excluded, and brings every chunk's topics up to date with the current
-vocabulary. It touches no provider, so it needs neither an embedding key nor the
-Semantic Scholar API.
+``--retag-only`` skips the ingest and just reconciles the stored corpus with what
+the code and the knowledge/ files now say: it prunes chunks no file produces any
+more, and brings every chunk's topics up to date with the current vocabulary. It
+touches no provider, so it needs no embedding key.
 
 Environment variables:
-    DATABASE_URL            — required (PostgreSQL with pgvector)
-    GEMINI_API_KEY          — required unless embeddings are set to OpenAI
-    OPENAI_API_KEY          — alternative embedding provider
-    SEMANTIC_SCHOLAR_API_KEY — optional, and worth having: see
-                               S2_REQUEST_INTERVAL_SECONDS below for what it
-                               actually buys (it is not more throughput)
+    DATABASE_URL   — required (PostgreSQL with pgvector)
+    GEMINI_API_KEY — required unless embeddings are set to OpenAI
+    OPENAI_API_KEY — alternative embedding provider
 
 Embeddings go through ``services.embeddings``, which follows the configured
 provider — the corpus must be embedded by the same model that embeds queries at
@@ -33,9 +35,7 @@ The script is fully idempotent — it upserts by (source_id, chunk_index)
 so it is safe to re-run without duplicating data.
 
 Maintenance rules:
-- When adding a new knowledge file to backend/knowledge/, add the corresponding
-  SEARCH_QUERIES entries below so that Semantic Scholar papers for that topic
-  are also ingested.
+- To add knowledge, drop a .md file into backend/knowledge/ and re-run this.
 - When citing a new paper in any knowledge file, add it to
   backend/knowledge/sources.md under the appropriate topic group. That file is
   bookkeeping, not corpus: it carries ``rag: false`` front matter and is not
@@ -43,25 +43,21 @@ Maintenance rules:
 - Every chunk is tagged with ``services.knowledge_topics.topics_for_text`` so
   retrieval can rank by the athlete's limiter (#627). Changing that vocabulary
   means re-running this script: the tags live in the table, not in the query.
-  A plain re-ingest is *not* enough on its own — the upsert only writes rows
-  whose source it fetched, and the paper half is whatever Semantic Scholar
-  returns that minute. That is what the re-tagging step at the end is for, and
-  why it runs unconditionally (#632).
+  The upsert alone cannot do it — it only writes the rows it just built — which
+  is what the re-tagging step at the end is for, and why it runs
+  unconditionally (#632).
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
-import time
 from pathlib import Path
 from typing import Any
 
 import sys
 
-import httpx
 from sqlalchemy import Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -93,34 +89,6 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+asyncpg://aitrainer:aitrainer@localhost/aitrainer"
 )
-S2_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
-
-# Semantic Scholar's introductory allowance is one request per second *whether or
-# not* a key is set. A key does not raise the ceiling — it moves you off the
-# allowance every anonymous caller in the world draws from and onto your own.
-# That distinction is the whole story behind the run that returned 429 for ~12 of
-# the 50 queries and found 28 sources instead of 77: the pacing was already
-# correct, the shared pool was simply exhausted.
-#
-# This used to drop to 0.2 s once a key was present — five requests a second
-# against a one-per-second allowance, so a key would have made the throttling
-# worse rather than better. Raise this only to a tier your key's issuing email
-# actually grants, and keep a little headroom: the interval is measured on our
-# clock, not theirs.
-S2_REQUEST_INTERVAL_SECONDS = 1.1
-
-# Retrying does not create allowance, so these stay small: three attempts waiting
-# 2 s then 4 s. The 429s in #632 arrived as a sustained block of twelve queries,
-# which no backoff this side of a minute would have ridden out — the key is the
-# fix for that. This is for the single refusal that would otherwise delete a
-# topic from the corpus for the run, and it is bounded so fifty throttled queries
-# cannot turn an ingest into an hour of sleeping.
-S2_MAX_ATTEMPTS = 3
-S2_BACKOFF_BASE_SECONDS = 2.0
-# Semantic Scholar's own Retry-After is honoured and can exceed the backoff, but
-# not without limit: an ingest must not park for ten minutes on one query.
-S2_BACKOFF_CAP_SECONDS = 30.0
-
 # Gemini's embedding endpoint caps a single request; batching keeps each call
 # well inside that and inside the per-chunk input-token limit.
 EMBED_BATCH_SIZE = 32
@@ -132,74 +100,6 @@ CHUNK_SIZE_TOKENS = 500
 CHUNK_OVERLAP_TOKENS = 50
 
 KNOWLEDGE_DIR = Path(__file__).parent.parent / "knowledge"
-
-SEARCH_QUERIES = [
-    "cycling FTP lactate threshold power",
-    "polarized training endurance cycling",
-    "VO2max interval training cycling",
-    "training load recovery athlete",
-    "heart rate variability endurance athlete",
-    "sweet spot training cycling threshold",
-    "periodization endurance cycling performance",
-    "high intensity interval training VO2max",
-    # Critical power / power-duration model
-    "critical power W-prime cycling Monod Scherrer",
-    "power duration curve cycling anaerobic capacity",
-    "W prime reconstitution severe intensity exercise",
-    # Heat and altitude adaptation
-    "heat acclimatisation cycling performance plasma volume",
-    "altitude training live high train low haemoglobin",
-    "heat stress endurance performance sauna post exercise",
-    # Nutrition timing
-    "carbohydrate intake during cycling performance fuelling",
-    "multiple transportable carbohydrates fructose glucose oxidation",
-    "post exercise nutrition glycogen resynthesis protein synthesis",
-    "caffeine ergogenic aid cycling time trial",
-    # Sleep and recovery
-    "sleep extension athlete performance sprint reaction time",
-    "sleep deprivation endurance performance RPE VO2max",
-    "sleep quality recovery HRV growth hormone athlete",
-    "napping daytime sleep performance endurance sport",
-    "circadian rhythm chronotype athletic performance",
-    # Tapering and peaking
-    "taper training volume reduction endurance performance",
-    "exponential taper cycling running performance meta-analysis",
-    "pre-competition taper glycogen neuromuscular performance",
-    "performance management chart CTL ATL TSB cycling",
-    "carbohydrate loading pre-race glycogen supercompensation",
-    # HRV-guided training
-    "HRV-guided training autonomic nervous system endurance",
-    "RMSSD daily monitoring training readiness athlete",
-    "heart rate variability overreaching illness prediction",
-    "parasympathetic nervous system recovery endurance training",
-    # Strength training for endurance
-    "concurrent strength endurance training interference effect",
-    "heavy resistance training cycling economy running economy",
-    "explosive strength training endurance performance neuromuscular",
-    "resistance training VO2max lactate threshold cyclists",
-    # HIIT and VO2max development
-    "4x4 interval training VO2max endurance Helgerud",
-    "short interval training VO2max development cycling",
-    "sprint interval training aerobic capacity Gibala",
-    "HIIT dose response endurance performance meta-analysis",
-    # Athlete monitoring and load management
-    "training load monitoring overtraining athlete RPE",
-    "session RPE Foster internal training load validity",
-    "acute chronic workload ratio injury risk sport",
-    "athlete wellness questionnaire subjective readiness monitoring",
-    # Masters athletes
-    "masters athlete endurance performance age decline",
-    "aging muscle power VO2max decline training older athlete",
-    "masters cycling performance longevity training adaptations",
-    # Triathlon and multisport
-    "triathlon training periodization swim bike run",
-    "brick training triathlon transition run economy",
-    "multisport training load distribution triathlon performance",
-]
-
-S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
-S2_FIELDS = "paperId,title,abstract,year,authors,externalIds,openAccessPdf"
-PAPERS_PER_QUERY = 10
 
 # ---------------------------------------------------------------------------
 # Tokenisation helper (tiktoken)
@@ -351,22 +251,25 @@ def seed_source_ids() -> set[str]:
     }
 
 
-async def prune_orphaned_seed_chunks(
-    session_maker: async_sessionmaker, keep: set[str]
-) -> int:
-    """Delete ``seed:`` rows no longer produced by any knowledge file (#630).
+async def prune_orphaned_chunks(session_maker: async_sessionmaker, keep: set[str]) -> int:
+    """Delete every stored source no knowledge file produces any more (#630/#640).
 
-    Only ever seed rows. The set of local markdown files is fully known on every
-    run, so anything else under ``seed:`` is genuinely orphaned — a file that was
-    renamed, deleted, or marked ``rag: false``. Papers must never be pruned this
-    way: Semantic Scholar returns a partial, different subset each run, so
-    "not fetched" says nothing about "no longer wanted" (#632).
+    Scoped to ``seed:`` while a second, partially-fetched source existed: Semantic
+    Scholar returned a different subset each run, so "not fetched this time" never
+    meant "no longer wanted" (#632). With that source gone the local markdown
+    files are the *entire* corpus and are fully known on every run, so anything
+    else is orphaned by definition — including the paper rows #640 removes, which
+    nothing will ever refresh again.
+
+    Callers must pass a non-empty *keep*: an unreadable knowledge/ directory must
+    not read as "delete the corpus".
     """
+    if not keep:
+        raise ValueError("refusing to prune against an empty corpus")
+
     async with session_maker() as session:
         rows = (
-            await session.execute(
-                text("SELECT DISTINCT source_id FROM knowledge_chunks WHERE source_id LIKE 'seed:%'")
-            )
+            await session.execute(text("SELECT DISTINCT source_id FROM knowledge_chunks"))
         ).fetchall()
         orphaned = [row[0] for row in rows if row[0] not in keep]
         for source_id in orphaned:
@@ -418,170 +321,6 @@ async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
                     "url": None,
                     # Title included: a chunk from the middle of a durability
                     # article need not repeat the word to be about it (#627).
-                    "topics": topics_for_text(title, chunk_text),
-                    "embedding": embedding,
-                }
-            )
-        n = await _upsert_chunks(session_maker, chunk_rows)
-        total_inserted += n
-
-    return total_inserted
-
-
-# ---------------------------------------------------------------------------
-# Semantic Scholar ingestion
-# ---------------------------------------------------------------------------
-
-
-def _s2_paper_to_id(paper: dict[str, Any]) -> str:
-    """Build a stable source_id for a Semantic Scholar paper."""
-    doi = (paper.get("externalIds") or {}).get("DOI")
-    if doi:
-        return f"doi:{doi}"
-    return f"s2:{paper['paperId']}"
-
-
-def _is_retryable(status_code: int) -> bool:
-    """Whether *status_code* is worth asking again.
-
-    Throttling and server faults pass; every other 4xx is a defect in the request
-    we just sent, and repeating it only spends the allowance we are short of.
-    """
-    return status_code == 429 or 500 <= status_code < 600
-
-
-def _retry_delay(attempt: int, retry_after: str | None) -> float:
-    """Seconds to wait before retry number *attempt* (1-based).
-
-    ``Retry-After`` wins whenever the server sends a usable one: guessing two
-    seconds when it asked for thirty just spends another attempt on a refusal.
-    Both a delay in seconds and an HTTP-date are legal there; only the former is
-    handled, and an unparseable value falls back to the backoff rather than
-    raising — the point is to be polite, not exact.
-    """
-    if retry_after:
-        try:
-            wait = float(retry_after.strip())
-        except ValueError:
-            wait = -1.0
-        if wait >= 0:
-            return min(wait, S2_BACKOFF_CAP_SECONDS)
-    return min(S2_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)), S2_BACKOFF_CAP_SECONDS)
-
-
-async def _fetch_s2_papers(
-    query: str, http_client: httpx.AsyncClient
-) -> list[dict[str, Any]]:
-    """Fetch papers from Semantic Scholar for *query*, retrying a throttled call.
-
-    A 429 used to cost the query outright: one warning, an empty list, and those
-    papers were simply absent from the corpus for that run. That is how a run
-    came back with 28 sources instead of 77 (#632). Retrying does not fix an
-    exhausted allowance — a key does — but it stops one refusal from silently
-    deleting a topic from the corpus.
-    """
-    headers: dict[str, str] = {}
-    if S2_API_KEY:
-        headers["x-api-key"] = S2_API_KEY
-
-    params = {
-        "query": query,
-        "fields": S2_FIELDS,
-        "limit": PAPERS_PER_QUERY,
-        "openAccessPdf": "true",
-    }
-    for attempt in range(1, S2_MAX_ATTEMPTS + 1):
-        last = attempt == S2_MAX_ATTEMPTS
-        try:
-            resp = await http_client.get(
-                f"{S2_BASE_URL}/paper/search",
-                params=params,
-                headers=headers,
-                timeout=30.0,
-            )
-            if resp.status_code == 200:
-                return resp.json().get("data", [])
-            if not _is_retryable(resp.status_code) or last:
-                logger.warning(
-                    "S2 API returned %d for query '%s'%s",
-                    resp.status_code,
-                    query,
-                    f" after {attempt} attempts" if attempt > 1 else "",
-                )
-                return []
-            delay = _retry_delay(attempt, resp.headers.get("Retry-After"))
-            logger.info(
-                "  S2 returned %d for '%s'; retrying in %.1fs (attempt %d/%d)",
-                resp.status_code,
-                query,
-                delay,
-                attempt,
-                S2_MAX_ATTEMPTS,
-            )
-        except Exception as exc:
-            # Transport faults are as transient as a 503, and get the same
-            # treatment — but a bug in our own request would loop here, so the
-            # attempt cap applies to them too.
-            if last:
-                logger.warning("S2 API request failed for query '%s': %s", query, exc)
-                return []
-            delay = _retry_delay(attempt, None)
-            logger.info(
-                "  S2 request for '%s' failed (%s); retrying in %.1fs (attempt %d/%d)",
-                query,
-                exc,
-                delay,
-                attempt,
-                S2_MAX_ATTEMPTS,
-            )
-        await asyncio.sleep(delay)
-    return []
-
-
-async def ingest_semantic_scholar(session_maker: async_sessionmaker) -> int:
-    """Query Semantic Scholar and ingest paper abstracts."""
-    # Deduplicate papers across queries by source_id
-    papers_by_id: dict[str, dict[str, Any]] = {}
-
-    async with httpx.AsyncClient() as http_client:
-        for query in SEARCH_QUERIES:
-            logger.info("  Querying S2: %s", query)
-            papers = await _fetch_s2_papers(query, http_client)
-            for paper in papers:
-                if not paper.get("abstract"):
-                    continue
-                sid = _s2_paper_to_id(paper)
-                papers_by_id[sid] = paper
-
-            # Respect the 1 req/s unauthenticated rate limit.
-            await asyncio.sleep(S2_REQUEST_INTERVAL_SECONDS)
-
-    logger.info("  Found %d unique papers with abstracts", len(papers_by_id))
-    if not papers_by_id:
-        return 0
-
-    total_inserted = 0
-    for source_id, paper in papers_by_id.items():
-        abstract = paper["abstract"]
-        title = paper.get("title", "Unknown")
-        doi = (paper.get("externalIds") or {}).get("DOI")
-        pdf_info = paper.get("openAccessPdf") or {}
-        url = pdf_info.get("url")
-
-        text_chunks = _chunk_text(abstract)
-        embeddings = await _embed_batch(text_chunks)
-
-        chunk_rows: list[dict[str, Any]] = []
-        for idx, (chunk_text, embedding) in enumerate(zip(text_chunks, embeddings)):
-            chunk_rows.append(
-                {
-                    "source_id": source_id,
-                    "chunk_index": idx,
-                    "title": title,
-                    "content": chunk_text,
-                    "source_type": "paper",
-                    "doi": doi,
-                    "url": url,
                     "topics": topics_for_text(title, chunk_text),
                     "embedding": embedding,
                 }
@@ -653,34 +392,28 @@ async def main(retag_only: bool = False) -> None:
 
         logger.info("Step 1: Seed corpus (knowledge/ markdown files)")
         seed_count = await ingest_seed_corpus(session_maker)
-        logger.info("  → %d seed chunks upserted", seed_count)
-
-        logger.info("Step 2: Semantic Scholar papers")
-        paper_count = await ingest_semantic_scholar(session_maker)
-        logger.info("  → %d paper chunks upserted", paper_count)
-
-        logger.info("Total chunks upserted: %d", seed_count + paper_count)
+        logger.info("  → %d chunks upserted", seed_count)
 
     # Both of the steps below reconcile the stored corpus with what the code and
     # the files now say, and neither costs a provider call — so they run on a
-    # --retag-only pass too, where the upserts above are skipped entirely.
+    # --retag-only pass too, where the upsert above is skipped entirely.
 
     # The upsert cannot remove: a file renamed, deleted, or newly marked
-    # `rag: false` would otherwise stay retrievable forever (#630).  Guarded on
-    # a non-empty set: an unreadable knowledge/ must not read as "delete the
-    # whole seed corpus".
+    # `rag: false` would otherwise stay retrievable forever (#630), and so would
+    # every Semantic Scholar row now that nothing fetches them (#640). Skipped
+    # rather than run against an empty set: an unreadable knowledge/ must not
+    # read as "delete the corpus".
     keep = seed_source_ids()
     if keep:
-        logger.info("Step 3: Pruning seed chunks no longer in knowledge/")
-        pruned = await prune_orphaned_seed_chunks(session_maker, keep)
-        logger.info("  → %d orphaned seed source(s) pruned", pruned)
+        logger.info("Step 2: Pruning chunks no longer in knowledge/")
+        pruned = await prune_orphaned_chunks(session_maker, keep)
+        logger.info("  → %d orphaned source(s) pruned", pruned)
     else:
         logger.warning("No readable knowledge/ files; skipping the prune")
 
-    # The upserts only reached the sources this run actually fetched, so this is
-    # the step that makes a vocabulary change reach the whole corpus rather than
-    # a random subset of it (#632).
-    logger.info("Step 4: Re-tagging the whole corpus")
+    # The upsert only writes the rows it just built, so this is the step that
+    # makes a vocabulary change reach the whole corpus (#632).
+    logger.info("Step 3: Re-tagging the whole corpus")
     examined, rewritten = await retag_all_chunks(session_maker)
     logger.info("  → %d chunks examined, %d re-tagged", examined, rewritten)
 

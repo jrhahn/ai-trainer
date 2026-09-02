@@ -5,6 +5,14 @@ correctly by ``EncryptedString``, and still every user API key in production was
 stored as plaintext — because no line in ``compose.yml`` passed the variable
 into the container, and nothing rendered it into the deployed ``.env``.  Python
 tests could not see that, so these assertions read the deployment files.
+
+**Adding an optional credential?** The chain is .env.example -> compose.yml ->
+app.env.j2 -> deploy.yml, and it is only as good as its weakest hop. A *required*
+variable that misses a hop crashes the deploy, which the tests below catch. An
+optional one rendered with a literal ``default('')`` fails silently instead: the
+value is simply empty forever, however carefully the GitHub secret was set.
+``SEMANTIC_SCHOLAR_API_KEY`` sat like that until #638. Assert all four hops for
+it, the way that PR did — there is no boot guard that will do it for you.
 """
 
 import re
@@ -21,18 +29,6 @@ DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 
 # Settings the backend cannot be trusted to run without once it leaves dev.
 SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
-
-# Optional credentials that must still survive the whole chain. An empty value
-# here breaks nothing, which is exactly why the break goes unnoticed:
-# SEMANTIC_SCHOLAR_API_KEY was documented in .env.example and forwarded by
-# compose, and the two hops above that were missing — so setting the GitHub
-# secret would have done nothing at all, and the ingest kept drawing on the
-# shared anonymous allowance and losing queries to 429s.
-#
-# Not folded into the list above: these are *rendered* with a literal
-# `default('')`, so the deploy succeeds without them. The failure is silence,
-# not a crash, and only these assertions can see it.
-FORWARDED_OPTIONAL_VARS = ("SEMANTIC_SCHOLAR_API_KEY",)
 
 
 def _backend_environment_block() -> str:
@@ -82,27 +78,6 @@ def test_deployed_env_has_no_default_for_the_encryption_key() -> None:
             )
             return
     pytest.fail("SECRETS_ENCRYPTION_KEY is not rendered by app.env.j2")
-
-
-@pytest.mark.parametrize("var", FORWARDED_OPTIONAL_VARS)
-def test_optional_credential_survives_every_hop(var: str) -> None:
-    """Documented, forwarded by compose, rendered, and passed by the workflow.
-
-    All four, or the value silently never arrives. The chain is only as good as
-    its weakest hop, and an optional credential has no boot guard to catch it.
-    """
-    assert f"{var}=" in ENV_EXAMPLE.read_text(), f"{var} is undocumented in .env.example"
-    assert f"{var}:" in _backend_environment_block(), (
-        f"{var} is missing from compose.yml, so it never reaches the container"
-    )
-    assert f"{var}=" in ANSIBLE_ENV_TEMPLATE.read_text(), (
-        f"{var} is not rendered into the deployed .env, so compose substitutes its "
-        "empty default"
-    )
-    assert var in DEPLOY_WORKFLOW.read_text(), (
-        f"{var} is never passed to the playbook, so the rendered .env holds the "
-        "template's empty default however carefully the GitHub secret was set"
-    )
 
 
 def _required_template_vars() -> set[str]:
