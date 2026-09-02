@@ -11,7 +11,7 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionHero from '../components/SessionHero'
-import { sessionsForDate } from '../utils/planSessions'
+import { sessionAtSlot, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
@@ -464,18 +464,33 @@ export function planForRide(
   ride: RideMetricPoint,
   trainingPlan: TrainingDay[]
 ): Partial<TrainingDay> | null {
-  const currentPlan = trainingPlan.find((day) => day.date === ride.activityDate)
-  if (currentPlan) return currentPlan
-
   const snapshot = ride.matchedPlanSnapshot ?? null
+  const sessions = sessionsForDate(trainingPlan, ride.activityDate)
+
+  // A matched ride records the session it chose, slot included — so ask for that
+  // session rather than for "the day", which on a two-a-day is the morning one
+  // whatever the athlete actually rode (#648).
+  if (ride.matchedPlanDate === ride.activityDate) {
+    const matched = sessionAtSlot(trainingPlan, ride.activityDate, sessionSlot(snapshot))
+    if (matched) return matched
+  }
+
+  // Unmatched, one session: nothing to confuse it with.
+  if (sessions.length === 1) return sessions[0]
+
   const snapshotDate = typeof snapshot?.date === 'string' ? snapshot.date : null
   const staleMatchedDate = !!ride.matchedPlanDate && ride.matchedPlanDate !== ride.activityDate
   const staleSnapshotDate = !!snapshotDate && snapshotDate !== ride.activityDate
 
+  // Still worth trying before giving up: a snapshot names one specific session,
+  // and it survives the plan day dropping out of the loaded window.
   if (snapshot && !staleMatchedDate && !staleSnapshotDate) {
     return snapshot
   }
 
+  // Two sessions and nothing that says which: we cannot tell, and "planned:
+  // Morning intervals" against what may have been the evening ride is worse
+  // than saying nothing at all.
   return null
 }
 

@@ -1406,6 +1406,22 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByRole('heading', { name: 'Rest Day' })).toBeInTheDocument()
   })
 
+  // The class #648 is about: every view that turns a plan into "the day" has
+  // dropped the second session at least once. This is the integration point.
+  it('shows both sessions of a two-a-day, and marks the week strip', async () => {
+    setupStore({
+      trainingPlan: [
+        planDay({ date: today, slot: 0, workoutType: 'intervals', title: 'Morning intervals' }),
+        planDay({ date: today, slot: 1, workoutType: 'recovery', title: 'Evening spin' }),
+      ],
+    })
+    renderDashboard()
+
+    expect(await screen.findByRole('heading', { name: 'Morning intervals' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evening spin' })).toBeInTheDocument()
+    expect(screen.getByText('2 sessions')).toBeInTheDocument()
+  })
+
   it('leaves the dashboard alone when a day is picked', async () => {
     setupStore({
       trainingPlan: [

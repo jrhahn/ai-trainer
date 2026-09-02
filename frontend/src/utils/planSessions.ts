@@ -17,8 +17,14 @@ export interface PlanSessionFields {
   timeOfDay?: string
 }
 
-/** A session's slot, defaulting to 0 for legacy days and any unusable value. */
-export function sessionSlot(day: PlanSessionFields | null | undefined): number {
+/** A session's slot, defaulting to 0 for legacy days and any unusable value.
+ *
+ * Takes only the field it reads, so a `Partial<TrainingDay>` snapshot — which
+ * carries an optional `date` — can be asked for its slot without a cast (#648).
+ */
+export function sessionSlot(
+  day: { date?: string; slot?: number } | null | undefined
+): number {
   const slot = day?.slot
   if (typeof slot !== 'number' || !Number.isFinite(slot)) return 0
   return Math.max(0, Math.trunc(slot))
