@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import { addDays, startOfWeek } from 'date-fns'
 import type { TrainingDay } from '../store/useAppStore'
+import { sessionsForDate } from '../utils/planSessions'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
 
@@ -33,11 +34,12 @@ export default function WeekStrip({
 }) {
   const today = formatLocalDate(new Date())
   const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
-  const byDate = new Map(plan.map((day) => [day.date, day]))
 
+  // Not a Map keyed by date: that keeps only the last entry per date, which is
+  // the same session-swallowing bug as `plan.find()` in another shape (#645).
   const week = Array.from({ length: 7 }, (_, index) => {
     const date = formatLocalDate(addDays(monday, index))
-    return { date, day: byDate.get(date) }
+    return { date, sessions: sessionsForDate(plan, date) }
   })
 
   return (
@@ -55,16 +57,17 @@ export default function WeekStrip({
         )}
       </div>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-        {week.map(({ date, day }) => {
+        {week.map(({ date, sessions }) => {
           const isToday = date === today
           const isSelected = date === selectedDate
-          const style = sessionTypeStyle(day?.workoutType)
+          const styles = sessions.map((session) => sessionTypeStyle(session.workoutType))
           const weekday = parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short' })
           // The chip reads "Tu" over a coloured dot over "Rest", which is thin
-          // to listen to.  Spell out what the eye gets from the layout.
+          // to listen to.  Spell out what the eye gets from the layout — and on
+          // a two-a-day name both sessions, since the visible text cannot.
           const label = `${parseLocalDate(date).toLocaleDateString(undefined, {
             weekday: 'long',
-          })} — ${day ? style.label : 'nothing planned'}`
+          })} — ${styles.length ? styles.map((s) => s.label).join(', ') : 'nothing planned'}`
 
           // Selection is the loud state; today is a quiet one that survives
           // underneath it, so the week keeps its reference point either way.
@@ -91,13 +94,28 @@ export default function WeekStrip({
               >
                 {weekday.slice(0, 2)}
               </span>
-              <span className={`mt-1.5 h-2 w-2 rounded-full ${day ? style.dot : 'bg-slate-200'}`} />
-              {/* Seven columns leave ~40px on a phone, which "Endurance" overruns
-                  into its neighbour. Clip it there and spell it out from sm up. */}
-              <span className="mt-1.5 w-full truncate px-0.5 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">
-                {day ? style.label : '—'}
+              {/* One dot per session, so a two-a-day is visible at a glance
+                  rather than only in the label below (#645). */}
+              <span className="mt-1.5 flex items-center gap-0.5">
+                {styles.length === 0 ? (
+                  <span className="h-2 w-2 rounded-full bg-slate-200" />
+                ) : (
+                  styles.map((s, i) => (
+                    <span key={i} className={`h-2 w-2 rounded-full ${s.dot}`} />
+                  ))
+                )}
               </span>
-              {day?.completed && (
+              {/* Seven columns leave ~40px on a phone, which "Endurance" overruns
+                  into its neighbour. Clip it there and spell it out from sm up.
+                  Two session names never fit, so say how many instead. */}
+              <span className="mt-1.5 w-full truncate px-0.5 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">
+                {sessions.length === 0
+                  ? '—'
+                  : sessions.length === 1
+                    ? styles[0].label
+                    : `${sessions.length} sessions`}
+              </span>
+              {sessions.length > 0 && sessions.every((s) => s.completed) && (
                 <Check size={12} className="mt-1 text-emerald-500" aria-hidden="true" />
               )}
             </button>
