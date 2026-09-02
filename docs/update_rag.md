@@ -27,108 +27,105 @@ curl -X POST https://<host>/api/v1/ai/refresh-knowledge \
 | Status | Cause |
 |--------|-------|
 | `401`  | Missing or invalid JWT token |
-| `503`  | `OPENAI_API_KEY` is not set on the server |
+| `503`  | No embedding provider configured (`GEMINI_API_KEY` or `OPENAI_API_KEY`) |
 
 ---
 
 ## Option 2 — Run the ingestion script directly
 
-Use this approach in local development or when running one-off data updates.
+Use this in local development or for one-off updates.
 
 **Prerequisites**
 
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string (pgvector must be installed) |
-| `OPENAI_API_KEY` | ✅ | Used to generate `text-embedding-3-small` embeddings |
-| `SEMANTIC_SCHOLAR_API_KEY` | ❌ | Optional — raises the rate limit from 1 req/s to 10 req/s |
-
-**Run**
+| `GEMINI_API_KEY` | ✅ | Unless embeddings are configured to use OpenAI |
+| `OPENAI_API_KEY` | — | Alternative embedding provider |
 
 ```bash
 cd backend
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost/aitrainer \
-OPENAI_API_KEY=sk-... \
+GEMINI_API_KEY=... \
 python scripts/ingest_cycling_science.py
 ```
 
-The script is fully **idempotent** — rows are upserted by `(source_id, chunk_index)`,
-so re-running it will update existing chunks without creating duplicates.
+The script is **idempotent** — rows are upserted by `(source_id, chunk_index)`,
+so re-running updates existing chunks without creating duplicates.
+
+### `--retag-only`
+
+```bash
+python scripts/ingest_cycling_science.py --retag-only
+```
+
+Skips the ingest and only reconciles what is stored with what the code and the
+files now say: prunes chunks no file produces any more, and brings every chunk's
+topics up to date with the current vocabulary.  Costs no provider calls, so it
+needs no embedding key and takes seconds.
+
+Use it after changing `services/knowledge_topics.py`.  A plain re-ingest is not
+enough on its own — the upsert only writes the rows it just built (#632).
 
 ---
 
 ## What gets ingested
 
-### 1. Seed corpus — hand-written markdown files
+Every `*.md` file in `backend/knowledge/` is chunked (≈500-token chunks, 50-token
+overlap) and embedded.  The file stem becomes the `source_id`
+(e.g. `seed:power_zones`).  To add knowledge, drop in a file and re-run.
 
-All `*.md` files in `backend/knowledge/` are chunked (≈ 500-token chunks with
-50-token overlap) and embedded.  Each file's stem becomes its `source_id`
-(e.g. `seed:power_zones`).
+**Excluding a file.** A file that documents the corpus rather than belonging to
+it carries front matter:
 
-Current seed files:
-
-| File | Topics covered |
-|------|---------------|
-| `power_zones.md` | Coggan 7-zone model, FTP |
-| `polarized_training.md` | 80/20 polarized training, Seiler model |
-| `periodization.md` | Macrocycle/mesocycle structure |
-| `recovery.md` | Rest, HRV, overreaching |
-| `sweet_spot_training.md` | Sweet-spot training (88–95% FTP) |
-| `critical_power.md` | Monod-Scherrer CP model, W′, power-duration curve |
-| `heat_altitude_adaptation.md` | Heat acclimatisation, altitude training (LHTH/LHTL) |
-| `nutrition_timing.md` | Peri-workout nutrition, carbohydrate timing, race-day strategy |
-
-To add new seed content, drop a `.md` file into `backend/knowledge/` and
-re-run ingestion.
-
-### 2. Semantic Scholar papers
-
-The script queries the [Semantic Scholar](https://www.semanticscholar.org/) API
-across a set of cycling-science topics and ingests the abstracts of open-access
-papers.
-
-Current queries (defined in `SEARCH_QUERIES` in `backend/scripts/ingest_cycling_science.py`):
-
-```
-cycling FTP lactate threshold power
-polarized training endurance cycling
-VO2max interval training cycling
-training load recovery athlete
-heart rate variability endurance athlete
-sweet spot training cycling threshold
-periodization endurance cycling performance
-high intensity interval training VO2max
-critical power W-prime cycling power duration
-Monod Scherrer critical power anaerobic work capacity
-W prime balance reconstitution cycling exercise
-heat acclimatisation cycling endurance performance
-altitude training live high train low erythropoietin
-hypoxia altitude VO2max cycling acclimatization
-carbohydrate intake cycling performance nutrition timing
-post exercise glycogen resynthesis protein recovery
-multiple transportable carbohydrates cycling endurance
+```markdown
+---
+rag: false
+---
 ```
 
-To add a new topic, append a query string to the `SEARCH_QUERIES` list and
-re-run ingestion:
+`sources.md` — the bibliography — is excluded this way (#630).  A citation list
+cannot answer a question, and it was being retrieved as though it could.
 
-```python
-# backend/scripts/ingest_cycling_science.py
-SEARCH_QUERIES = [
-    ...
-    "altitude training cycling performance",   # new topic
-]
-```
+**Topic tags.** Each chunk is tagged by `services/knowledge_topics.py` with the
+limiter(s) it speaks to (`threshold`, `vo2max`, `endurance_durability`), so
+retrieval can rank by the athlete's diagnosed limiter (#627).  Most of the corpus
+is deliberately untagged: a tag half the corpus carries cannot steer anything.
+
+---
+
+## Why there are no journal papers here
+
+Until #640 the script also swept abstracts out of the Semantic Scholar API.  That
+was removed for two reasons.
+
+**Licence.** The S2 API permits "non-commercial, research and/or educational
+purposes" only, and forbids licensees to commercialize the data.  This service is
+free today and may not stay that way, and the stored abstracts are S2 data
+whether or not an API key was ever issued.
+
+**They were the weaker half.** Measured over ten representative questions, the
+188 paper chunks took 23% of retrieved slots against the hand-written corpus's
+77% — per chunk, about one eleventh the odds of ever being shown.  Of 78 freshly
+ingested paper chunks only 15 earned a topic tag, and the rest included cupping
+therapy, an ACE-polymorphism study and one materials-science paper.
+
+Peer-reviewed work is meant to come back, but deliberately and from openly
+licensed corpora — see #641.
 
 ---
 
 ## How retrieval works
 
-At query time `services/rag.py` embeds the user's question with
-`text-embedding-3-small` and performs a cosine-similarity search against the
-`knowledge_chunks` table using pgvector.  The top-5 chunks are injected into the
-`ask_trainer` system prompt, and their titles / DOIs / URLs are returned as
-`sources` in the response.
+`services/rag.py` embeds the question with the configured provider and runs a
+cosine-similarity search against `knowledge_chunks` using pgvector.  Chunks below
+`MIN_SIMILARITY` are dropped, so a question the corpus has nothing to say about
+yields nothing rather than the five least-bad rows (#528).  Where the athlete has
+a diagnosed limiter, chunks tagged with it are ranked above chunks that merely
+resemble the question (#627).
+
+The surviving top-k chunks are injected into the `ask_trainer` system prompt and
+their titles/DOIs/URLs are returned as `sources`.
 
 On SQLite (used in tests) the RAG layer is skipped gracefully and returns an
 empty context.
