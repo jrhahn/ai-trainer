@@ -109,6 +109,18 @@ S2_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
 # clock, not theirs.
 S2_REQUEST_INTERVAL_SECONDS = 1.1
 
+# Retrying does not create allowance, so these stay small: three attempts waiting
+# 2 s then 4 s. The 429s in #632 arrived as a sustained block of twelve queries,
+# which no backoff this side of a minute would have ridden out — the key is the
+# fix for that. This is for the single refusal that would otherwise delete a
+# topic from the corpus for the run, and it is bounded so fifty throttled queries
+# cannot turn an ingest into an hour of sleeping.
+S2_MAX_ATTEMPTS = 3
+S2_BACKOFF_BASE_SECONDS = 2.0
+# Semantic Scholar's own Retry-After is honoured and can exceed the backoff, but
+# not without limit: an ingest must not park for ten minutes on one query.
+S2_BACKOFF_CAP_SECONDS = 30.0
+
 # Gemini's embedding endpoint caps a single request; batching keeps each call
 # well inside that and inside the per-chunk input-token limit.
 EMBED_BATCH_SIZE = 32
@@ -429,10 +441,45 @@ def _s2_paper_to_id(paper: dict[str, Any]) -> str:
     return f"s2:{paper['paperId']}"
 
 
+def _is_retryable(status_code: int) -> bool:
+    """Whether *status_code* is worth asking again.
+
+    Throttling and server faults pass; every other 4xx is a defect in the request
+    we just sent, and repeating it only spends the allowance we are short of.
+    """
+    return status_code == 429 or 500 <= status_code < 600
+
+
+def _retry_delay(attempt: int, retry_after: str | None) -> float:
+    """Seconds to wait before retry number *attempt* (1-based).
+
+    ``Retry-After`` wins whenever the server sends a usable one: guessing two
+    seconds when it asked for thirty just spends another attempt on a refusal.
+    Both a delay in seconds and an HTTP-date are legal there; only the former is
+    handled, and an unparseable value falls back to the backoff rather than
+    raising — the point is to be polite, not exact.
+    """
+    if retry_after:
+        try:
+            wait = float(retry_after.strip())
+        except ValueError:
+            wait = -1.0
+        if wait >= 0:
+            return min(wait, S2_BACKOFF_CAP_SECONDS)
+    return min(S2_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)), S2_BACKOFF_CAP_SECONDS)
+
+
 async def _fetch_s2_papers(
     query: str, http_client: httpx.AsyncClient
 ) -> list[dict[str, Any]]:
-    """Fetch papers from Semantic Scholar for *query*."""
+    """Fetch papers from Semantic Scholar for *query*, retrying a throttled call.
+
+    A 429 used to cost the query outright: one warning, an empty list, and those
+    papers were simply absent from the corpus for that run. That is how a run
+    came back with 28 sources instead of 77 (#632). Retrying does not fix an
+    exhausted allowance — a key does — but it stops one refusal from silently
+    deleting a topic from the corpus.
+    """
     headers: dict[str, str] = {}
     if S2_API_KEY:
         headers["x-api-key"] = S2_API_KEY
@@ -443,18 +490,51 @@ async def _fetch_s2_papers(
         "limit": PAPERS_PER_QUERY,
         "openAccessPdf": "true",
     }
-    try:
-        resp = await http_client.get(
-            f"{S2_BASE_URL}/paper/search",
-            params=params,
-            headers=headers,
-            timeout=30.0,
-        )
-        if resp.status_code == 200:
-            return resp.json().get("data", [])
-        logger.warning("S2 API returned %d for query '%s'", resp.status_code, query)
-    except Exception as exc:
-        logger.warning("S2 API request failed for query '%s': %s", query, exc)
+    for attempt in range(1, S2_MAX_ATTEMPTS + 1):
+        last = attempt == S2_MAX_ATTEMPTS
+        try:
+            resp = await http_client.get(
+                f"{S2_BASE_URL}/paper/search",
+                params=params,
+                headers=headers,
+                timeout=30.0,
+            )
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            if not _is_retryable(resp.status_code) or last:
+                logger.warning(
+                    "S2 API returned %d for query '%s'%s",
+                    resp.status_code,
+                    query,
+                    f" after {attempt} attempts" if attempt > 1 else "",
+                )
+                return []
+            delay = _retry_delay(attempt, resp.headers.get("Retry-After"))
+            logger.info(
+                "  S2 returned %d for '%s'; retrying in %.1fs (attempt %d/%d)",
+                resp.status_code,
+                query,
+                delay,
+                attempt,
+                S2_MAX_ATTEMPTS,
+            )
+        except Exception as exc:
+            # Transport faults are as transient as a 503, and get the same
+            # treatment — but a bug in our own request would loop here, so the
+            # attempt cap applies to them too.
+            if last:
+                logger.warning("S2 API request failed for query '%s': %s", query, exc)
+                return []
+            delay = _retry_delay(attempt, None)
+            logger.info(
+                "  S2 request for '%s' failed (%s); retrying in %.1fs (attempt %d/%d)",
+                query,
+                exc,
+                delay,
+                attempt,
+                S2_MAX_ATTEMPTS,
+            )
+        await asyncio.sleep(delay)
     return []
 
 
