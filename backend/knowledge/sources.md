@@ -124,3 +124,35 @@ here.** Keep entries sorted by topic group and then alphabetically by first auth
   39(8), 1358–1365.
 - Mujika I, Padilla S (2003). Scientific bases for precompetition tapering
   strategies. *Medicine & Science in Sports & Exercise*, 35(7), 1182–1187.
+
+## Durability and Fatigue Resistance
+
+- Barsumyan A, Soost C, Shyla R, Graw JA, Bliemel C, Burchard R (2025).
+  Durability as an independent parameter of endurance performance in cycling.
+  *BMC Sports Science, Medicine & Rehabilitation*, 17(1), 192.
+  doi:10.1186/s13102-025-01238-8
+- Coyle EF, González-Alonso J (2001). Cardiovascular drift during prolonged
+  exercise: new perspectives. *Exercise and Sport Sciences Reviews*, 29(2),
+  88–92. doi:10.1097/00003677-200104000-00009
+- Maunder E, Seiler S, Mildenhall MJ, Kilding AE, Plews DJ (2021). The
+  Importance of 'Durability' in the Physiological Profiling of Endurance
+  Athletes. *Sports Medicine*, 51(8), 1619–1628. doi:10.1007/s40279-021-01459-0
+- Ørtenblad N, Zachariassen M, Nielsen J, Gejl KD (2024). Substrate utilization
+  and durability during prolonged intermittent exercise in elite road cyclists.
+  *European Journal of Applied Physiology*, 124(7), 2193–2205.
+  doi:10.1007/s00421-024-05437-y
+
+## Threshold Development
+
+- Beneke R (2003). Methodological aspects of maximal lactate steady state —
+  implications for performance testing. *European Journal of Applied
+  Physiology*, 89(1), 95–99. doi:10.1007/s00421-002-0783-1
+- Coyle EF, Coggan AR, Hopper MK, Walters TJ (1988). Determinants of endurance
+  in well-trained cyclists. *Journal of Applied Physiology*, 64(6), 2622–2630.
+  doi:10.1152/jappl.1988.64.6.2622
+- Faude O, Kindermann W, Meyer T (2009). Lactate threshold concepts: how valid
+  are they? *Sports Medicine*, 39(6), 469–490.
+  doi:10.2165/00007256-200939060-00003
+- Jones AM, Burnley M, Black MI, Poole DC, Vanhatalo A (2019). The maximal
+  metabolic steady state: redefining the 'gold standard'. *Physiological
+  Reports*, 7(10), e14098. doi:10.14814/phy2.14098
