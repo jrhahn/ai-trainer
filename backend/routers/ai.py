@@ -48,7 +48,7 @@ from services.analysis import (
     build_ride_metrics_chain,
     build_ride_analysis,
 )
-from services.prompts import ride_metrics_context_section
+from services.prompts import plan_change_history_section, ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import (
     extract_availability_constraints,
@@ -1128,6 +1128,13 @@ async def ask_trainer(
                 timezone_name=timezone_name,
                 prose_window=RIDE_NOTE_PROSE_WINDOW,
             )
+            # How the plan got to its current state. Without it the coach can
+            # only rationalise the end state when asked why a session changed,
+            # and an overnight automated rewrite is invisible to it (#652).
+            plan_changes_section = plan_change_history_section(
+                await crud.list_plan_day_history(db, current_user.id, limit=60),
+                app_today(timezone_name=timezone_name),
+            )
             race_events = await _race_events_for_prompt(db, current_user.id)
             # The upcoming outlook near the athlete's training location plus their
             # learned tolerances — the coach chat is where "should I ride tomorrow?"
@@ -1180,6 +1187,7 @@ async def ask_trainer(
                 timezone_name=timezone_name,
                 workout_curiosity=workout_curiosity_context,
                 rider_identity=rider_identity_context,
+                plan_changes_section=plan_changes_section,
             )
         except AIRateLimitError:
             raise HTTPException(
