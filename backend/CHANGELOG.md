@@ -147,6 +147,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.52.0] - 2026-09-06
+
+### Added
+
+- **The coach can say why the plan changed**
+  (`services/prompts.py`, `services/ai_service.py`, `routers/ai.py`) —
+  `plan_day_history` has recorded every plan write since #343, complete with the
+  trigger and the coach's own stated reason, and the coach chat was never shown
+  a line of it. It held the plan's current state and nothing about how it got
+  there. So when the athlete asked why today had become a recovery spin — hours
+  after the nightly run had shortened it and written down exactly why — the coach
+  did the only thing possible with an end state: it invented a plausible reason,
+  reaching for the wrong ride to justify a change made overnight by a job it
+  could not see.
+
+  `plan_change_history_section` puts that record next to the plan it explains.
+  Only applied, athlete-visible changes near today survive the filter: automated
+  runs reword description prose nightly, and at a line each those rows would bury
+  the one that matters. Blocked proposals are left out on principle — one never
+  reached the athlete's plan, so presenting it as a change would be its own lie.
+  (#652)
+
+### Fixed
+
+- **Pushback on a checkable fact is no longer conceded**
+  (`services/prompts.py`) — `reveal_uncertainty_rule` tells the coach to stop
+  defending itself when the athlete pushes back and to let their judgement
+  decide. That is right for *how hard should today be?* and wrong for *wasn't
+  today a long ride?*, which has an answer in the data. Nothing in the prompt
+  separated the two, so the coach applied the deferral rule to a factual dispute:
+  it agreed twice, invented a Friday session that had never happened, and
+  rewrote the plan on the strength of the disagreement alone.
+
+  `disputed_fact_rule()` draws the line — facts are checked against the record
+  and answered from it, including when the record contradicts the athlete;
+  judgement calls keep the existing deferral. The athlete was factually right
+  that day, which is what hides the defect: the coach agreed *without checking*,
+  and would have agreed just as readily had they been wrong. (#652)
+
 ## [0.51.0] - 2026-08-11
 
 ### Added
