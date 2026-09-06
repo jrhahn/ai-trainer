@@ -30,6 +30,7 @@ import schemas
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
+    day_violates_constraint,
     filter_plan_updates_for_constraints,
     sanitize_plan_for_constraints,
 )
@@ -284,10 +285,23 @@ def _preserve_activity_days(
     not a slot), so every session on a trained date is protected — the athlete may
     have ridden either of a two-a-day's sessions, and neither should be dropped.
     """
+    return _preserve_dated_workouts(plan, current_plan, activity_dates)
+
+
+def _preserve_dated_workouts(
+    plan: list[dict], current_plan: list[dict], dates: set[str]
+) -> list[dict]:
+    """Freeze the workouts on *dates* against an automated rewrite.
+
+    The shared body of :func:`_preserve_activity_days` and
+    :func:`_preserve_today`: restore each protected session's workout from the
+    current plan, re-append it if the proposal dropped it, and let completion
+    markers through (see :func:`_preserve_workout_carry_completion`).
+    """
     protected = {
         _key(d): d
         for d in current_plan
-        if d.get("date") and d["date"] in activity_dates
+        if d.get("date") and d["date"] in dates
     }
     if not protected:
         return plan
@@ -303,6 +317,38 @@ def _preserve_activity_days(
         if key not in seen:
             result.append(day)
     return _sorted_by_session(result)
+
+
+def _preserve_today(
+    plan: list[dict],
+    current_plan: list[dict],
+    today: str,
+    constraints: list[dict],
+) -> list[dict]:
+    """Freeze today's sessions against unattended automated rewrites (#651).
+
+    The existing guards protect days that are pinned, completed, or already
+    ridden. Today at 02:00 is none of those by definition, so it was the one day
+    maximally exposed to the trigger the athlete can least see coming: the
+    nightly job rewrote a Saturday long ride into a 45-minute recovery spin at
+    02:00 that same Saturday, hours after the coach had confirmed the ride and
+    hours before the athlete got up.
+
+    A plan the athlete read last night and shaped their morning around must not
+    change under them while they sleep. Only ``respect_pins`` (automated)
+    triggers are held back — the athlete asking the coach to change today still
+    works, because ``coach_chat`` and ``user_edit`` do not respect pins.
+
+    An active hard constraint still wins: if the athlete is unavailable today,
+    the constraint sanitizer's rest day is the correct outcome and restoring the
+    session would reschedule training they already said they cannot do.
+    """
+    unconstrained = {
+        d["date"]
+        for d in current_plan
+        if d.get("date") == today and not day_violates_constraint(d, constraints)
+    }
+    return _preserve_dated_workouts(plan, current_plan, unconstrained)
 
 
 def _preserve_workout_carry_completion(current: dict, proposed: dict) -> dict:
@@ -546,6 +592,74 @@ def _plan_day_changes(
     return changes
 
 
+def _move_signature(day: dict | None) -> tuple | None:
+    """Identify a workout well enough to recognise it on another date.
+
+    Deliberately narrow — title, type and duration must *all* be present and
+    equal. A looser match (title alone) would start reverting unrelated edits
+    that happen to share a name, and this guard's whole value is that it fires
+    only when a session genuinely relocated.
+    """
+    if not day:
+        return None
+    title = str(day.get("title") or "").strip().lower()
+    workout_type = str(day.get("workoutType") or "").strip().lower()
+    duration = day.get("durationMinutes")
+    if not title or not workout_type or duration is None:
+        return None
+    return (title, workout_type, duration)
+
+
+def _revert_orphaned_moves(
+    merged: list[dict], current_plan: list[dict], proposal: list[dict]
+) -> list[dict]:
+    """Undo the surviving half of a move whose destination was blocked (#651).
+
+    The guards above filter session by session, with no notion that two changes
+    in one batch belong together. So when the nightly job moved a long ride from
+    Saturday to Sunday, the Sunday half hit the athlete's pinned rest day and was
+    correctly reverted — while the Saturday half applied anyway, and the ride
+    existed on neither day. The pin did its job and still produced the worst
+    possible outcome.
+
+    A blocked destination means the move did not happen, so the source keeps its
+    session. Matching is by :func:`_move_signature`, so this only fires when the
+    content the batch wanted to write onto the blocked day is recognisably the
+    same workout it took off another day.
+    """
+    current_by = {_key(d): d for d in current_plan if d.get("date")}
+    merged_by = {_key(d): d for d in merged if d.get("date")}
+    blocked = [
+        day
+        for day in proposal
+        if day.get("date")
+        and _key(day) in current_by
+        and _content_differs(current_by[_key(day)], day)
+        and not _content_differs(current_by[_key(day)], merged_by.get(_key(day)))
+    ]
+    if not blocked:
+        return merged
+    wanted = {sig for sig in map(_move_signature, blocked) if sig is not None}
+    if not wanted:
+        return merged
+    # Sources this batch emptied whose workout is exactly what a blocked day was
+    # meant to receive.
+    orphaned = {
+        key
+        for key, current in current_by.items()
+        if _move_signature(current) in wanted
+        and _content_differs(current, merged_by.get(key))
+    }
+    if not orphaned:
+        return merged
+    restored = [
+        current_by[_key(day)] if _key(day) in orphaned else day for day in merged
+    ]
+    present = {_key(d) for d in restored if d.get("date") is not None}
+    restored.extend(current_by[key] for key in orphaned if key not in present)
+    return _sorted_by_session(restored)
+
+
 def _to_canonical_day(day: dict) -> dict:
     """Validate + normalize one day through the canonical ``PlanDay`` model.
 
@@ -577,6 +691,7 @@ async def _enforce_and_persist(
     base_plan: list[dict],
     constraints: list[dict],
     source: PlanSource,
+    today: str,
 ) -> PlanCommitResult:
     # Give every proposed day coherent, canonical fields before anything reads
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
@@ -601,6 +716,12 @@ async def _enforce_and_persist(
             db, user.id, [d["date"] for d in current_plan if d.get("date")]
         )
         merged = _preserve_activity_days(merged, current_plan, activity_dates)
+        # Today is not pinned, completed or ridden at 02:00, so none of the
+        # guards above covered the day the athlete is about to ride (#651).
+        merged = _preserve_today(merged, current_plan, today, constraints)
+        # A move is one decision across two days; applying only the half that
+        # cleared the guards deletes the session outright (#651).
+        merged = _revert_orphaned_moves(merged, current_plan, proposal)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
@@ -670,7 +791,7 @@ async def commit_plan(
     constraints = await load_active_constraints(db, user.id, today=today)
     return await _enforce_and_persist(
         db, user, _as_dicts(proposed_plan), base_plan=_as_dicts(base_plan),
-        constraints=constraints, source=resolved,
+        constraints=constraints, source=resolved, today=today,
     )
 
 
@@ -700,5 +821,5 @@ async def commit_plan_updates(
         return PlanCommitResult(base_dicts, None, [])
     return await _enforce_and_persist(
         db, user, proposed, base_plan=base_dicts, constraints=constraints,
-        source=resolved,
+        source=resolved, today=today,
     )
