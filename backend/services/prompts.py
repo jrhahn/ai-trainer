@@ -15,6 +15,7 @@ from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .dates import (
+    activity_date_anchor,
     annotate_plan_days,
     app_date_context,
     app_today,
@@ -60,6 +61,19 @@ PLAN_TIMING_GUIDANCE = (
     "context and each plan day's weekday/dateLabel/relativeDay fields (for example "
     '"today", "tomorrow", "this Saturday", or "next Tuesday"). The next session is '
     "often days away — never assume it is today, and never compute a weekday from memory."
+)
+
+# The same rule for the other direction in time. PLAN_TIMING_GUIDANCE only ever
+# covered *planned* sessions, so the coach had an anchor for the future and none
+# for the past: it called a Thursday ride "yesterday's", and when the athlete
+# corrected it, it re-narrated the plan's uncompleted Friday session as a ride
+# that had happened (#650).
+ACTIVITY_TIMING_RULE = (
+    "Each activity above is anchored with its weekday and how many days ago it "
+    "happened — use those words when you refer to it, and never derive the day "
+    "yourself. The most recent activity is often not yesterday. Past plan days "
+    "state only what was *scheduled*: a planned session the athlete did not ride "
+    "has no activity here, so never describe it as something they did."
 )
 
 
@@ -3896,12 +3910,16 @@ def ride_metrics_context_section(
     lines: list[str] = ["Recent activity history (newest first):"]
     any_badge = False
     any_estimated_load = False
+    today = app_today(timezone_name=timezone_name)
     for index, m in enumerate(metrics):
         prose = prose_window is None or index < prose_window
         parts: list[str] = []
 
-        # Date
-        parts.append(str(getattr(m, "activity_date", "??")))
+        # Date, carrying its own weekday and distance from today — a bare ISO
+        # date left the coach to work that out and it guessed "yesterday" (#650).
+        activity_date_str = str(getattr(m, "activity_date", "??"))
+        anchor = activity_date_anchor(activity_date_str, today)
+        parts.append(f"{activity_date_str} ({anchor})" if anchor else activity_date_str)
 
         # Activity type and purpose
         sport = getattr(m, "sport_type", None) or "activity"
@@ -4000,14 +4018,8 @@ def ride_metrics_context_section(
 
         # User note — flag if missing and the ride was recent (last 3 days)
         user_note = getattr(m, "user_note", None)
-        activity_date_str = str(getattr(m, "activity_date", ""))
         try:
-            from datetime import date as _date
-
-            days_ago = (
-                app_today(timezone_name=timezone_name)
-                - _date.fromisoformat(activity_date_str)
-            ).days
+            days_ago = (today - date.fromisoformat(activity_date_str)).days
         except ValueError:
             days_ago = 99
         if user_note:
@@ -4017,6 +4029,7 @@ def ride_metrics_context_section(
                 "    [no athlete feedback — consider asking how this ride felt]"
             )
 
+    lines.append(ACTIVITY_TIMING_RULE)
     # Only worth its tokens once there is a badge on screen to be asked about.
     if any_badge:
         lines.append(BADGE_GROUNDING_RULE)

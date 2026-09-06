@@ -6,6 +6,9 @@ from memory. #463 fixed the login summary; this suite locks in the *generic*
 fix (#464): every builder that shows the athlete's plan must inject the
 authoritative date context AND weekday/dateLabel/relativeDay anchors, so a new
 builder cannot silently reintroduce the bug.
+
+The same rule holds in the other direction: the ride history the coach reads is
+anchored too, so a past activity is never narrated onto the wrong day (#650).
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import pytest
 
 from services import prompts
 from services.dates import (
+    activity_date_anchor,
     annotate_plan_days,
     plan_day_date_labels,
     plan_window_calendar,
@@ -259,3 +263,71 @@ def test_annotate_plan_days_passthrough_and_merge():
     assert annotated[0]["relativeDay"] == "tomorrow"
     # Pure: input plan is not mutated.
     assert "weekday" not in PLAN[0]
+
+
+# ---------------------------------------------------------------------------
+# The other direction in time: what the athlete actually rode (#650)
+#
+# Everything above anchors the *plan*. The ride history was left as bare ISO
+# dates, so on Saturday 2026-09-05 the coach called the athlete's Thursday ride
+# "yesterday's 118-minute effort" — and when corrected, described the Friday
+# recovery session the plan had scheduled but the athlete never rode.
+# ---------------------------------------------------------------------------
+
+SATURDAY = datetime.date(2026, 9, 5)
+
+
+def _history(*dates: str) -> str:
+    """The ride-history block exactly as the coach chat builds it."""
+    return prompts.ride_metrics_context_section(
+        [_ride(activity_date=d, duration_seconds=118 * 60) for d in dates],
+        timezone_name=TZ,
+    )
+
+
+@pytest.fixture()
+def _saturday(monkeypatch):
+    monkeypatch.setattr(prompts, "app_today", lambda timezone_name=None: SATURDAY)
+
+
+def test_the_newest_ride_is_not_assumed_to_be_yesterday(_saturday):
+    """The #650 line: a Thursday ride read on Saturday is two days old."""
+    history = _history("2026-09-03")
+
+    assert "2026-09-03 (Thursday, 2 days ago)" in history
+
+
+def test_every_activity_carries_its_weekday_and_offset(_saturday):
+    history = _history("2026-09-05", "2026-09-04", "2026-09-03", "2026-08-30")
+
+    assert "2026-09-05 (Saturday, today)" in history
+    assert "2026-09-04 (Friday, yesterday)" in history
+    assert "2026-09-03 (Thursday, 2 days ago)" in history
+    assert "2026-08-30 (Sunday, 6 days ago)" in history
+
+
+def test_the_coach_is_told_a_scheduled_day_is_not_a_ride(_saturday):
+    """The second half of #650: the plan's Friday session was never ridden."""
+    rule = prompts.ACTIVITY_TIMING_RULE
+
+    assert rule in _history("2026-09-03")
+    assert "never derive the day yourself" in rule
+    assert "never describe it as something they did" in rule
+
+
+def test_an_unparseable_activity_date_still_renders_its_line(_saturday):
+    history = prompts.ride_metrics_context_section(
+        [_ride(activity_date="not-a-date")], timezone_name=TZ
+    )
+
+    assert "not-a-date" in history
+    assert "(None" not in history
+
+
+def test_activity_date_anchor_handles_missing_and_bad_dates():
+    assert activity_date_anchor(None, SATURDAY) == ""
+    assert activity_date_anchor("", SATURDAY) == ""
+    assert activity_date_anchor("not-a-date", SATURDAY) == ""
+    # Weekday alone without a reference "today", and for a date in the future.
+    assert activity_date_anchor("2026-09-03") == "Thursday"
+    assert activity_date_anchor("2026-09-07", SATURDAY) == "Monday"
