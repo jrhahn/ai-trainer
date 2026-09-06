@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-09-06
+
+### Fixed
+
+- **The dashboard suite no longer goes red every Sunday**
+  (`src/pages/DashboardPage.test.tsx`) — four tests click a day in the week
+  strip to check that picking it swaps the hero, and they picked *tomorrow*.
+  `WeekStrip` renders Monday–Sunday of the current calendar week, so on a Sunday
+  tomorrow is next Monday and is not in the strip at all: the chip could not be
+  found and the file failed on every branch, whatever it had changed. The helper
+  deriving the weekday was already written against the suite running on
+  different days — the gap was that one of those days puts tomorrow outside the
+  window entirely.
+
+  The clock is now pinned to a Wednesday, so `today` through `threeDaysFromNow`
+  all land inside one Monday–Sunday window and every date the file reasons about
+  is the same one year-round. Only `Date` is faked; faking timers wholesale
+  would break the `userEvent` and `waitFor` calls the suite leans on. (#656)
+
 ## [0.34.0] - 2026-08-11
 
 > Folds in what `package.json` had already been calling `0.33.0`. That bump was

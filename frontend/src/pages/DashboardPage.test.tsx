@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -84,6 +84,21 @@ vi.mock('../components/AthletePerformanceModelCard', () => ({
 // ---------------------------------------------------------------------------
 
 const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+
+// The clock is pinned to a Wednesday, and the tests below derive every date
+// from it (#656).
+//
+// `WeekStrip` renders Monday–Sunday of the *current* calendar week, so on a
+// Sunday "tomorrow" is next Monday and is not in the strip at all: the four
+// tests that click tomorrow's chip could not find it, and this file went red
+// every Sunday regardless of what the branch changed. Mid-week, `today`
+// through `threeDaysFromNow` all land inside the same Monday–Sunday window.
+//
+// Only `Date` is faked. Faking timers wholesale would break `userEvent` and
+// `waitFor`, which the suite leans on heavily.
+vi.useFakeTimers({ toFake: ['Date'] })
+vi.setSystemTime(new Date('2026-06-24T09:00:00'))
+afterAll(() => vi.useRealTimers())
 
 const today = formatLocalDate(new Date())
 const yesterday = formatLocalDate(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))
