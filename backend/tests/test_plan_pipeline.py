@@ -983,3 +983,177 @@ async def test_incoherent_stored_day_is_backfilled_on_next_write():
     assert day["durationMinMinutes"] == 45
     assert day["durationMaxMinutes"] == 60
     assert day["durationMinutes"] == round((45 + 60) / 2)  # 52 — now coherent
+
+
+# ---------------------------------------------------------------------------
+# Today, and moves that span two days (#651)
+#
+# The nightly job rewrote a Saturday long ride into a 45-minute recovery spin at
+# 02:00 that same Saturday. It was in fact moving the ride to Sunday; Sunday was
+# the athlete's pinned rest day and was correctly reverted, so the ride survived
+# on neither day.
+# ---------------------------------------------------------------------------
+
+
+def _long_ride(date: str, **overrides) -> dict:
+    day = {
+        "date": date,
+        "workoutType": "endurance",
+        "title": "Long Weekend Endurance Ride",
+        "description": "Steady Zone 2.",
+        "durationMinutes": 180,
+        "completed": False,
+    }
+    day.update(overrides)
+    return day
+
+
+@pytest.mark.asyncio
+async def test_an_automated_trigger_may_not_rewrite_today():
+    """02:00 is not a licence to rewrite the day the athlete is about to ride."""
+    today = app_today().isoformat()
+    user_id = await _create_user("pipe-today@example.com", [_long_ride(today)])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day(today, "recovery", 45)],
+            base_plan=[_long_ride(today)],
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == today)
+    assert day["durationMinutes"] == 180
+    assert day["title"] == "Long Weekend Endurance Ride"
+
+
+@pytest.mark.asyncio
+async def test_the_athlete_may_still_change_today_through_the_coach():
+    """The guard holds back unattended jobs, not the athlete asking for a change."""
+    today = app_today().isoformat()
+    user_id = await _create_user("pipe-today-coach@example.com", [_long_ride(today)])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day(today, "recovery", 45)],
+            base_plan=[_long_ride(today)],
+            source="coach_chat",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == today)
+    assert day["durationMinutes"] == 45
+
+
+@pytest.mark.asyncio
+async def test_activity_import_may_still_complete_today():
+    """Freezing today's workout must not block this morning's ride being marked done."""
+    today = app_today().isoformat()
+    user_id = await _create_user("pipe-today-import@example.com", [_long_ride(today)])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_long_ride(today, completed=True)],
+            base_plan=[_long_ride(today)],
+            source="activity_import",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == today)
+    assert day["completed"] is True
+    assert day["durationMinutes"] == 180  # the workout itself is still frozen
+
+
+@pytest.mark.asyncio
+async def test_a_hard_constraint_still_clears_today():
+    """An athlete who said they are unavailable today does not get a session back."""
+    today = app_today().isoformat()
+    user_id = await _create_user("pipe-today-constraint@example.com", [_long_ride(today)])
+    async with TestSessionLocal() as db:
+        await crud.upsert_availability_constraint(
+            db,
+            user_id,
+            constraint_type="no_training",
+            constraint_date=today,
+            expires_on=today,
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_long_ride(today)],
+            base_plan=[_long_ride(today)],
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    day = next(x for x in merged if x["date"] == today)
+    assert day["workoutType"] == "rest"
+    assert day["durationMinutes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_destination_reverts_the_whole_move():
+    """The #651 scenario: the pin protects Sunday, and Saturday keeps its ride."""
+    saturday = (app_today() + timedelta(days=5)).isoformat()
+    sunday = (app_today() + timedelta(days=6)).isoformat()
+    rest_day = {
+        "date": sunday,
+        "workoutType": "rest",
+        "title": "Complete Rest Day",
+        "description": "Rest.",
+        "durationMinutes": 0,
+        "completed": False,
+        "source": "user",  # the athlete's own pinned rest day
+    }
+    current = [_long_ride(saturday), rest_day]
+    user_id = await _create_user("pipe-move@example.com", current)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            # The job moves the long ride onto Sunday and empties Saturday.
+            [_day(saturday, "recovery", 45), _long_ride(sunday)],
+            base_plan=current,
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    assert next(x for x in merged if x["date"] == sunday)["workoutType"] == "rest"
+    saturday_day = next(x for x in merged if x["date"] == saturday)
+    assert saturday_day["durationMinutes"] == 180, "the long ride vanished from both days"
+    assert saturday_day["title"] == "Long Weekend Endurance Ride"
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_automated_change_still_applies():
+    """The move guard must not freeze unrelated future edits."""
+    later = (app_today() + timedelta(days=4)).isoformat()
+    user_id = await _create_user("pipe-move-noop@example.com", [_long_ride(later)])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        merged = await plan_pipeline.commit_plan(
+            db,
+            user,
+            [_day(later, "recovery", 45)],
+            base_plan=[_long_ride(later)],
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    assert next(x for x in merged if x["date"] == later)["durationMinutes"] == 45

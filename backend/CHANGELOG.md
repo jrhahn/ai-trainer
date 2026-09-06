@@ -147,6 +147,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.51.2] - 2026-09-06
+
+### Fixed
+
+- **An unattended job can no longer rewrite the day the athlete is about to ride**
+  (`services/plan_pipeline.py`) — at 02:00 on a Saturday the nightly maintenance
+  run deleted that same Saturday's long ride, eight hours after the coach had
+  confirmed it in chat and seven before the athlete got up. The pipeline guards
+  days that are user-pinned, completed, or already ridden (#342/#345/#472); at
+  02:00 today is none of those by definition, so the one day the athlete had
+  already read and shaped their morning around was the most exposed to the
+  trigger they can least see coming. `_preserve_today` freezes it for
+  `respect_pins` sources only, so the athlete can still change today through the
+  coach, activity sync can still mark it completed, and an active hard
+  constraint still wins. (#651)
+
+- **A move whose destination is blocked no longer deletes the session**
+  (`services/plan_pipeline.py`) — the same run was not deleting that long ride,
+  it was moving it to Sunday. Sunday was the athlete's pinned rest day and was
+  correctly reverted; Saturday applied anyway, and the ride existed on neither
+  day. The guards filter session by session with no notion that two changes in
+  one batch belong together, so a correctly-working pin produced the worst
+  available outcome. `_revert_orphaned_moves` restores the source when the
+  destination was blocked, matching on title, workout type and duration together
+  so it fires only for a workout that genuinely relocated. The reverted source is
+  then recorded `applied=False`, so the history shows the whole move blocked
+  rather than silently half-applied. (#651)
+
 ## [0.51.1] - 2026-09-06
 
 ### Fixed
