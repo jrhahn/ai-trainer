@@ -1663,6 +1663,46 @@ def reveal_uncertainty_rule() -> str:
     )
 
 
+def disputed_fact_rule() -> str:
+    """Separate a disputed *fact* from a disputed *judgement* (#652).
+
+    :func:`reveal_uncertainty_rule` tells the coach to stop defending a
+    recommendation when the athlete pushes back, and to let their judgement
+    decide — right for "how hard should today be?", wrong for "was today not
+    supposed to be a long ride?". The second has an answer in the data, and with
+    no rule separating the two the coach applied the deferral rule to a factual
+    dispute: it agreed twice, invented a session that never happened, and
+    rewrote the plan on the strength of the athlete's disagreement alone.
+
+    The athlete happened to be right that day. That is not the point — the coach
+    agreed without checking, and would have agreed just as readily had they been
+    wrong.
+    """
+    return (
+        "\n\nDisputed facts are checked, not conceded:\n"
+        "- Separate a disputed FACT from a disputed JUDGEMENT. What was planned, what "
+        "changed and why, when a session happened, how long it was, what the numbers "
+        "say — these have answers in the data you were given. How hard today should "
+        "be, whether to move a session, how much rest is enough — these are judgement "
+        "calls, and the uncertainty rules above govern them.\n"
+        "- On a factual dispute, check the recent plan changes, the plan entries and the "
+        "activity history before you reply, and answer from what the record shows. Do "
+        "not open with agreement you have not verified.\n"
+        "- If the record supports the athlete, say so plainly and explain what happened. "
+        "If it contradicts them, say that just as plainly and kindly — 'the plan has had "
+        "a 45-minute recovery spin on today since last night, when I shortened it because "
+        "…' — and let them correct you if they know something the data does not.\n"
+        "- Never state something as retrieved fact when it came from the athlete's own "
+        "account or from your inference. If your data cannot settle it, say which record "
+        "you checked and what it does not cover.\n"
+        "- Never claim a past plan day was trained because it was scheduled: only the "
+        "activity history shows what actually happened.\n"
+        "- Disagreement alone is not a reason to change the plan. Change it when the "
+        "athlete asks for a change, or when the record shows your plan was wrong — never "
+        "merely to end a disagreement."
+    )
+
+
 def recovery_framing_rule() -> str:
     """Explain a downgrade through who they are, not through what to avoid (#597).
 
@@ -2158,6 +2198,9 @@ def coach_static_prefix() -> str:
     explainability_instructions = coach_explainability_rule()
     objective_instructions = objective_framing_rule()
     uncertainty_instructions = reveal_uncertainty_rule()
+    # Directly after the deferral rules it qualifies: they govern judgement
+    # calls, this one governs claims the data can settle (#652).
+    disputed_fact_instructions = disputed_fact_rule()
     model_before_plan_instructions = update_model_before_plan_rule()
     rest_instructions = rest_recommendation_rules()
     hard_spacing_instructions = hard_session_spacing_rules()
@@ -2238,6 +2281,7 @@ def coach_static_prefix() -> str:
         f"{explainability_instructions}"
         f"{objective_instructions}"
         f"{uncertainty_instructions}"
+        f"{disputed_fact_instructions}"
         f"{model_before_plan_instructions}"
         f"{rest_instructions}"
         f"{hard_spacing_instructions}"
@@ -2329,6 +2373,7 @@ def ask_trainer_system_sections(
     date_context: str = "",
     workout_curiosity: dict | None = None,
     rider_identity: dict | None = None,
+    plan_changes_section: str = "",
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2419,6 +2464,11 @@ def ask_trainer_system_sections(
         "plan-upcoming": (
             f"Upcoming plan (today and future only, next {len(next_n_days)} days): "
             f"{json.dumps(next_n_days)}"
+        ),
+        # Immediately after the plan it explains: the plan is the state, this is
+        # how it got there, and "why did today change?" needs both (#652).
+        "plan-changes": (
+            f"\n\n{plan_changes_section}" if plan_changes_section else ""
         ),
         "assessment": assessment_section,
         "ride-metrics": metrics_section,
@@ -3861,6 +3911,114 @@ def compliance_badge_phrase(metric) -> str | None:
         getattr(metric, "matched_plan_snapshot", None),
     )
 
+
+
+_PLAN_CHANGE_TRIGGER_WORDING = {
+    "nightly_maintenance": "the nightly maintenance run",
+    "auto_adapt": "an automatic adaptation",
+    "adapt": "an automatic adaptation",
+    "generate": "an automatic plan regeneration",
+    "ride_review": "a ride review",
+    "activity_import": "an activity sync",
+    "manual_match": "the athlete linking a ride to a session",
+    "next_ride": "a next-ride recommendation the athlete asked for",
+    "coach_chat": "you, in this chat",
+    "user_edit": "the athlete, editing the plan directly",
+}
+
+
+def _plan_change_shape(day: dict | None) -> str:
+    """One session rendered as the athlete would recognise it on their card."""
+    if not day:
+        return "nothing scheduled"
+    duration = day.get("durationMinutes")
+    workout_type = str(day.get("workoutType") or "session")
+    title = str(day.get("title") or "").strip()
+    minutes = f"{duration} min " if duration is not None else ""
+    return f"{minutes}{workout_type}" + (f' "{title}"' if title else "")
+
+
+def _plan_change_is_visible(row) -> bool:
+    """Whether a change altered anything the athlete could see on the card.
+
+    Automated runs rewrite description prose nightly. Those rows are real
+    history but they are not what "why did my session change?" is about, and at
+    one line each they would bury the changes that matter.
+    """
+    old, new = getattr(row, "old_day", None), getattr(row, "new_day", None)
+    if old is None or new is None:
+        return True
+    return any(
+        (old or {}).get(field) != (new or {}).get(field)
+        for field in ("durationMinutes", "workoutType", "title", "completed")
+    )
+
+
+def _plan_change_in_window(row, today, *, past: int = 7, future: int = 14) -> bool:
+    """Whether the changed day is close enough to be worth the coach's tokens.
+
+    The chat is asked about this week, not about a session three weeks out that
+    an automated run retitled. Without a reference date nothing is filtered.
+    """
+    if today is None:
+        return True
+    try:
+        changed = date.fromisoformat(str(getattr(row, "date", "") or ""))
+    except ValueError:
+        return False
+    return -past <= (changed - today).days <= future
+
+
+def plan_change_history_section(rows: list, today=None, *, limit: int = 12) -> str:
+    """Why the plan looks the way it does, for the coach to answer from (#652).
+
+    The pipeline records every plan write — old, new, trigger and the coach's own
+    stated reason — and the coach chat was never shown any of it. So when the
+    athlete asked why today had become a recovery spin, the coach held the end
+    state and nothing about how it got there, and did the only thing possible
+    with an end state: it invented a plausible reason, reaching for the wrong
+    ride to justify a change made overnight by a job it could not see.
+
+    Only athlete-visible changes are listed (see :func:`_plan_change_is_visible`)
+    and only ones that were actually applied — a blocked proposal never reached
+    the athlete's card, so presenting it as a change would be its own lie.
+    """
+    applied = [
+        row
+        for row in rows or []
+        if getattr(row, "applied", True)
+        and _plan_change_is_visible(row)
+        and _plan_change_in_window(row, today)
+    ][:limit]
+    if not applied:
+        return ""
+    lines = [
+        "Recent plan changes (the authoritative record of what changed and why, "
+        "newest first). The athlete sees the result on their plan, never the reason:"
+    ]
+    for row in applied:
+        date_value = str(getattr(row, "date", "") or "")
+        labels = plan_day_date_labels(date_value, today)
+        weekday = labels.get("weekday")
+        when = f"{date_value} ({weekday})" if weekday else date_value
+        trigger = str(getattr(row, "source", "") or "")
+        by = _PLAN_CHANGE_TRIGGER_WORDING.get(trigger, trigger or "an automated run")
+        recorded = getattr(row, "recorded_at", None)
+        changed_on = f" on {recorded.date().isoformat()}" if recorded is not None else ""
+        line = (
+            f"  {when}: {_plan_change_shape(getattr(row, 'old_day', None))} -> "
+            f"{_plan_change_shape(getattr(row, 'new_day', None))} "
+            f"— changed by {by}{changed_on}"
+        )
+        reason = str(getattr(row, "reason", "") or "").strip()
+        lines.append(line)
+        if reason:
+            lines.append(f"    Reason given at the time: {reason}")
+    lines.append(
+        "When the athlete asks why a session changed, or says it used to be something "
+        "else, answer from this record — including when it shows they are right."
+    )
+    return "\n".join(lines)
 
 
 def ride_metrics_context_section(
