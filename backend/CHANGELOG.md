@@ -186,6 +186,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that day, which is what hides the defect: the coach agreed *without checking*,
   and would have agreed just as readily had they been wrong. (#652)
 
+## [0.51.1] - 2026-09-06
+
+### Fixed
+
+- **The coach no longer guesses which day a ride happened on**
+  (`services/dates.py`, `services/prompts.py`) — the ride history reached the
+  coach as bare ISO dates, so it had to work out for itself how long ago each
+  activity was, and for the newest one it reached for the nearest round answer.
+  On a Saturday it called the athlete's Thursday ride "yesterday's 118-minute
+  effort"; corrected, it fell back on the plan — the only anchored thing in its
+  context — and narrated Friday's scheduled-but-unridden recovery spin as a ride
+  that had happened.
+
+  Plan days have carried weekday and relative-day anchors since #462/#464, and
+  `PLAN_TIMING_GUIDANCE` tells the coach to use them, but that convention only
+  ever faced forward. `activity_date_anchor()` is its past-facing twin and always
+  states both the weekday and the offset — `2026-09-03 (Thursday, 2 days ago)` —
+  because `plan_day_date_labels` labels only ±1 day and "2 days ago" is exactly
+  the distinction that was missing. `ACTIVITY_TIMING_RULE` mirrors
+  `PLAN_TIMING_GUIDANCE` and adds the part the second wrong sentence needed: a
+  past plan day is only what was *scheduled*, never evidence it was ridden.
+  (#650)
+
 ## [0.51.0] - 2026-08-11
 
 ### Added

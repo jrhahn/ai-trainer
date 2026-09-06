@@ -115,6 +115,40 @@ def plan_day_date_labels(raw_date: object, today: date | None = None) -> dict:
     return labels
 
 
+def activity_date_anchor(raw_date: object, today: date | None = None) -> str:
+    """Return "Thursday, 2 days ago" for a completed activity's ISO date.
+
+    The past-facing counterpart of :func:`plan_day_date_labels`. Plan days have
+    carried a weekday and a relative-day anchor since #462, but the ride history
+    never did: every line opened with a bare ISO date, so the coach had to work
+    out for itself how long ago the newest ride was. It defaulted to the nearest
+    round answer and called a Thursday ride "yesterday's 118-minute effort" on a
+    Saturday — then, once corrected, described the *planned* Friday session as if
+    it had happened (#650).
+
+    Both the weekday and the offset are always stated, because the whole point is
+    that the model never derives either. Returns "" for a missing or unparseable
+    date, so callers can append it unconditionally.
+    """
+    if not raw_date:
+        return ""
+    try:
+        parsed = date.fromisoformat(str(raw_date))
+    except ValueError:
+        return ""
+    weekday = parsed.strftime("%A")
+    if today is None:
+        return weekday
+    delta_days = (today - parsed).days
+    if delta_days == 0:
+        return f"{weekday}, today"
+    if delta_days == 1:
+        return f"{weekday}, yesterday"
+    if delta_days > 1:
+        return f"{weekday}, {delta_days} days ago"
+    return weekday
+
+
 def plan_window_calendar(start: date, days: int) -> str:
     """List the dates a planner may fill, each already carrying its weekday.
 
