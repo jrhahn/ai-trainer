@@ -151,6 +151,19 @@ GENERAL_ENDURANCE_COACH_PERSONA = (
     + _COACH_VOICE_TRAITS.format(sport="endurance")
 )
 
+# Every prompt in this file is written in English, and so is every workout title,
+# plan field and section heading the coach is handed. The athlete may well not be.
+# Stating the rule once here means each athlete-facing prompt can carry the same
+# sentence instead of one of them quietly omitting it, which is how the nightly
+# narration went out in English 44 times out of 44 (#658).
+ATHLETE_LANGUAGE_RULE = (
+    "Write everything the athlete reads in the athlete's own language. Their "
+    "language is whichever one they write to you in — infer it from their own "
+    "words, never from the language of these instructions, of workout titles, or "
+    "of any plan or activity data, all of which are always English no matter who "
+    "the athlete is."
+)
+
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
@@ -185,6 +198,26 @@ def hard_session_spacing_rules() -> str:
         "or move the intensity to a later feasible day.\n"
         "- A positive TSB can support endurance or controlled aerobic work, but it does not by "
         "itself justify back-to-back or near-back-to-back VO2max/HIIT sessions."
+    )
+
+
+def athlete_language_section(messages: list[str] | None) -> str:
+    """The athlete's own recent words, quoted purely as a language sample (#658).
+
+    The coach chat can be told to "reply in the same language the athlete used"
+    because an athlete message is right there. The nightly plan narration has no
+    such anchor — nobody asked for it — so that rule has nothing to bind to and
+    every one of those messages went out in English. Handing the narrator a few of
+    the athlete's own lines gives it something to read the language off. Only the
+    language matters here; the content is deliberately not used for anything.
+    """
+    samples = [str(m).strip() for m in (messages or []) if str(m) and str(m).strip()]
+    if not samples:
+        return ""
+    quoted = "\n".join(f"- {s[:200]}" for s in samples[-3:])
+    return (
+        "\nThe athlete's own most recent messages, quoted only so you can tell "
+        f"which language they speak:\n{quoted}\n{ATHLETE_LANGUAGE_RULE}\n"
     )
 
 
@@ -1008,7 +1041,11 @@ def plan_change_summary_system() -> str:
         "a single concise clause explaining that day's change. Use the exact dates "
         "from the diff.\n"
         "Only describe changes present in the diff; never invent changes. If a day "
-        "was merely rescheduled, say so plainly."
+        "was merely rescheduled, say so plainly.\n"
+        # Nobody prompted this message, so there is no athlete turn to mirror.
+        # Without saying it outright the narration defaults to English (#658).
+        f"{ATHLETE_LANGUAGE_RULE} This applies to both the summary and every "
+        "per-day reason; only the JSON keys and the dates stay as specified."
     )
 
 
@@ -1020,6 +1057,7 @@ def plan_change_summary_user(
     rider_assessment: dict | None = None,
     training_load_section: str = "",
     weather_context_section: str = "",
+    language_samples: list[str] | None = None,
 ) -> str:
     """User prompt carrying the per-day old→new diff and athlete context (#439).
 
@@ -1027,6 +1065,9 @@ def plan_change_summary_user(
     itself acted on (#495). Without it the narration cannot tell the athlete that a
     session moved because of a 38 °C day, and a weather-driven change reads as the
     plan churning for no reason.
+
+    ``language_samples`` are the athlete's own recent chat messages, carried for
+    one reason only: so the narrator can see which language to write in (#658).
     """
     diff_lines = "\n".join(
         f"- {c.get('date')}: {_day_brief(c.get('old_day'))} → "
@@ -1053,6 +1094,7 @@ def plan_change_summary_user(
         f"Context: {run_context}\n"
         f"Athlete profile: {json.dumps(profile)}"
         f"{assessment_section}{load_section}{weather_section}\n"
+        f"{athlete_language_section(language_samples)}"
         "Changes you just made (old → new):\n"
         f"{diff_lines}\n"
         f"Write the summary and per-day reasons as instructed.{weather_rule}"
@@ -2529,7 +2571,12 @@ def ask_trainer_system_sections(
         'Put this reasoning in a "thinking" field — it will not be shown to the athlete.\n\n'
         "ALWAYS respond with a valid JSON object containing exactly these fields:\n"
         '- "thinking": your internal reasoning (required, but never shown to the athlete)\n'
-        '- "response": your natural language answer as a string (required)\n'
+        # The cached prefix already asks for the athlete's language, ~20 English
+        # data sections earlier. Recency is exactly why the output contract sits
+        # last, and language is an output property like any other: stated only up
+        # front, 187 of 251 chat replies came back in English anyway (#658).
+        '- "response": your natural language answer as a string (required). '
+        f"{ATHLETE_LANGUAGE_RULE}\n"
         '- "physiologyRationale": one short phrase capturing what the load/freshness/fatigue '
         "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
@@ -2969,7 +3016,9 @@ def generate_inquiries_system(max_candidates: int) -> str:
         f"Return at most {max_candidates}, the most consequential first.\n"
         "ALWAYS respond with a valid JSON object of the form: "
         '{"candidates": [{"question": str, "whyAsking": str, '
-        '"settingsHint": str, "category": str}]}.'
+        '"settingsHint": str, "category": str}]}.\n'
+        f"{ATHLETE_LANGUAGE_RULE} These questions are put to the athlete directly, "
+        'so "question" and "whyAsking" must both be in their language.'
     )
 
 
@@ -3385,7 +3434,9 @@ def rate_workout_system() -> str:
         "is true, or null when not needed\n"
         '- "suggested_feedback_tags": a JSON array of short tag strings (e.g. ["recovery", "commute", '
         '"cut_short", "illness"]) that represent plausible explanations the athlete can confirm; '
-        "use an empty array when not applicable"
+        "use an empty array when not applicable\n"
+        f"{ATHLETE_LANGUAGE_RULE} That covers every field the athlete reads — the "
+        "response, the follow-up question and the feedback tags."
     )
 
 
@@ -3643,7 +3694,9 @@ def refresh_login_summary_system() -> str:
         "about intervals, power targets or training zones for it.\n"
         "Cite only figures the input actually gives you for an activity. A figure that is not "
         "listed was not measured — absent is not zero, and never say or imply that an average "
-        "power or TSS was logged when none is given."
+        "power or TSS was logged when none is given.\n"
+        f"{ATHLETE_LANGUAGE_RULE} The athlete's own notes in the input are the best "
+        "guide to which language that is."
     )
 
 
@@ -4218,7 +4271,8 @@ def batch_review_system() -> str:
         "Keep the response concise and warm: 4-8 sentences or a short structured paragraph. "
         "Do not address the athlete by name in most messages; use it at most once every several exchanges and never as a sentence opener.\n"
         "Return ONLY a valid JSON object with exactly one field:\n"
-        '- "review": your coaching response as a string'
+        '- "review": your coaching response as a string. '
+        f"{ATHLETE_LANGUAGE_RULE}"
     )
 
 
@@ -4363,7 +4417,9 @@ def next_ride_recommendation_system() -> str:
         '- "planUpdates": a JSON array of plan-day updates — include ONLY when the next session '
         "should actually change; omit or use null if keeping as planned. "
         "Each update has: date (YYYY-MM-DD), workoutType, title, description, durationMinutes. "
-        "Only update days that are TODAY or in the future."
+        "Only update days that are TODAY or in the future.\n"
+        f"{ATHLETE_LANGUAGE_RULE} That covers the response and the one-sentence "
+        "recommendation summary."
     )
 
 
@@ -4554,7 +4610,9 @@ def process_pending_feedbacks_system() -> str:
         '"- Fatigue: ..." or "- Next session: ...". Include only the most useful takeaways from '
         "the athlete's notes, ride load, plan alignment, fatigue, or next actions when they genuinely "
         "matter. Omit categories with no meaningful signal. Be specific, warm, and encouraging — "
-        f"reference actual numbers from the data. {PLAN_TIMING_GUIDANCE}"
+        f"reference actual numbers from the data. {PLAN_TIMING_GUIDANCE}\n"
+        f"{ATHLETE_LANGUAGE_RULE} The bullet labels are yours to choose, so translate "
+        "those too — the examples above are English only because these instructions are."
     )
 
 
