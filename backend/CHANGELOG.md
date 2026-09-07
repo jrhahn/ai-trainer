@@ -147,6 +147,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.52.1] - 2026-09-07
+
+### Fixed
+
+- **The coach writes in the athlete's language again** (`services/prompts.py`,
+  `services/ai_service.py`, `services/coach_summary.py`, `crud.py`) — a
+  German-speaking athlete was being answered in English: all 44 of the nightly
+  plan-change narrations sent since July, and 187 of 251 chat replies. Two
+  separate causes. The narration is *unprompted*, so the codebase's only language
+  instruction — "reply in the same language the athlete used" — had no athlete
+  turn to bind to and defaulted to English every single time; it now receives the
+  athlete's own last three messages, quoted solely as a language sample. In chat
+  the rule existed but sat in the cached prefix, ~20 English data sections and a
+  long English output contract away from where the answer is written; the output
+  contract is last precisely because recency decides response format, and
+  language is a response-format property like any other, so it is now stated
+  there too. The prefix copy stays — it is cached and therefore free. Every other
+  athlete-facing prose path was audited and given the same rule: ride batch
+  reviews, workout verdicts and their follow-up questions, the dashboard login
+  brief, the next-ride recommendation, and the inquiry questions put to the
+  athlete directly (#658).
+
 ## [0.52.0] - 2026-09-06
 
 ### Added

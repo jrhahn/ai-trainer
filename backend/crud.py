@@ -534,6 +534,31 @@ async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatM
     return list(result)
 
 
+async def get_recent_athlete_messages(
+    db: AsyncSession, user_id: str, *, limit: int = 3
+) -> list[str]:
+    """Return the athlete's own last ``limit`` chat messages, oldest first (#658).
+
+    Only ``role="user"`` rows — assistant text is what we are trying to fix, so
+    feeding it back as a language sample would just entrench English. Used by the
+    plan narrator, which has no athlete turn of its own to read the language from.
+    """
+    result = await db.scalars(
+        select(models.ChatMessage.content)
+        .where(
+            models.ChatMessage.user_id == user_id,
+            models.ChatMessage.role == "user",
+        )
+        .order_by(
+            models.ChatMessage.timestamp.desc(),
+            models.ChatMessage.created_at.desc(),
+            models.ChatMessage.id.desc(),
+        )
+        .limit(limit)
+    )
+    return [content for content in reversed(list(result)) if content]
+
+
 async def create_chat_message(
     db: AsyncSession,
     user_id: str,

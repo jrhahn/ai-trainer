@@ -706,6 +706,7 @@ async def summarize_plan_changes(
     rider_assessment: dict | None = None,
     training_load_section: str = "",
     weather_context_section: str = "",
+    language_samples: list[str] | None = None,
 ) -> dict:
     """Narrate a coach run's applied plan changes for the athlete (#439).
 
@@ -713,6 +714,9 @@ async def summarize_plan_changes(
     (``{"date", "old_day", "new_day"}`` dicts). Returns a dict with a first-person
     ``summary`` string and a ``days`` list of ``{"date", "reason"}`` — the caller
     (``services/coach_summary.py``) persists them and posts the chat message.
+
+    ``language_samples`` are the athlete's own recent messages, passed so the
+    narration is written in their language rather than in English (#658).
     """
     system_prompt = plan_change_summary_system()
     user_msg = plan_change_summary_user(
@@ -722,6 +726,7 @@ async def summarize_plan_changes(
         rider_assessment=rider_assessment,
         training_load_section=training_load_section,
         weather_context_section=weather_context_section,
+        language_samples=language_samples,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
