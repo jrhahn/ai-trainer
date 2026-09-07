@@ -81,6 +81,10 @@ async def narrate_plan_changes(
                 user.rider_assessment, from_attributes=True
             ).model_dump(by_alias=True)
         provider = resolve_user_provider(user)
+        # Nobody prompted this message, so unlike the coach chat it has no athlete
+        # turn to mirror. These few lines are the only thing telling it which
+        # language the athlete speaks (#658).
+        language_samples = await crud.get_recent_athlete_messages(db, user.id)
         async with track_llm_usage(db, user, source="step:coach-narration"):
             parsed = await ai_service.summarize_plan_changes(
                 applied_changes,
@@ -90,6 +94,7 @@ async def narrate_plan_changes(
                 rider_assessment=rider_assessment,
                 training_load_section=training_load_section,
                 weather_context_section=weather_context_section,
+                language_samples=language_samples,
             )
 
         summary = (parsed.get("summary") or "").strip()
