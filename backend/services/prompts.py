@@ -1196,6 +1196,26 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "uncertain, and issue a ride_label_update reflecting the real session. Defend the stored "
         "classification only when its confidence is high."
     )
+    # A plan change is never local. Moving today's session onto a day that already
+    # holds the same work is invisible when only the edited day is considered, and
+    # that is exactly how the plan ended up with two identical strength days in a
+    # row — the coach had been asked to change one day and did precisely that (#659).
+    _adjacency_rule = (
+        "CRITICAL — check the neighbouring days: a planUpdates entry changes one "
+        "day, but the athlete rides the week. Before returning planUpdates, read "
+        "the day before and the day after every date you are changing in the "
+        "Upcoming plan. If your change leaves the same or near-identical session "
+        "on two consecutive days, leaves two hard days back to back, or removes "
+        "the only recovery between them, fix it in the SAME planUpdates array — "
+        "add the second entry, do not leave it for later and do not merely "
+        "mention it in prose. Say plainly in your response which knock-on day you "
+        "adjusted and why. If the athlete asked for something that genuinely "
+        "requires the clash, keep it and name the trade-off out loud. "
+        "When you are substituting one session for another — e.g. the athlete is "
+        "going to the gym today instead of riding — check whether the session you "
+        "just moved in is already scheduled later that week; if it is, that later "
+        "day is now redundant and needs changing too. "
+    )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
         "athlete profile, structured athlete context, evidence-backed memory facts, coach "
@@ -1219,6 +1239,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
             f"{_constraints_rule}"
+            f"{_adjacency_rule}"
             f"{_rich_description_rule} "
             f"{_intervals_rule} "
             f"{_ride_label_rule}"
@@ -1233,6 +1254,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
         f"{_constraints_rule}"
+        f"{_adjacency_rule}"
         f"{_duration_rule} "
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
@@ -2430,6 +2452,7 @@ def ask_trainer_system_sections(
     workout_curiosity: dict | None = None,
     rider_identity: dict | None = None,
     plan_changes_section: str = "",
+    plan_coherence_warnings: str = "",
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2525,6 +2548,12 @@ def ask_trainer_system_sections(
         # how it got there, and "why did today change?" needs both (#652).
         "plan-changes": (
             f"\n\n{plan_changes_section}" if plan_changes_section else ""
+        ),
+        # Next to the plan it audits. The coach reads the plan accurately and
+        # still endorsed two identical back-to-back days, so the collision is
+        # stated rather than left to be spotted (#659).
+        "plan-coherence": (
+            f"\n\n{plan_coherence_warnings}" if plan_coherence_warnings else ""
         ),
         "assessment": assessment_section,
         "ride-metrics": metrics_section,
@@ -4084,6 +4113,47 @@ def plan_change_history_section(rows: list, today=None, *, limit: int = 12) -> s
     lines.append(
         "When the athlete asks why a session changed, or says it used to be something "
         "else, answer from this record — including when it shows they are right."
+    )
+    return "\n".join(lines)
+
+
+def plan_coherence_section(repeats: list[dict] | None, today=None) -> str:
+    """Collisions the plan already contains, stated as fact rather than left to be noticed (#659).
+
+    The coach had this in front of it once already: after writing today's session
+    it was asked to review the coming days, read Monday and Tuesday holding the
+    identical strength session, described them accurately and endorsed the pair.
+    Reading a plan and auditing it are different tasks, and only one of them
+    happens reliably by accident. ``services/plan_coherence`` does the audit
+    deterministically; this section is how the answer reaches the coach.
+    """
+    if not repeats:
+        return ""
+    # ``find_repeated_sessions`` takes an ISO string and ``plan_day_date_labels``
+    # takes a date. Callers pair the two, so accept either here rather than making
+    # the mismatch their problem.
+    if isinstance(today, str):
+        today = _parse_today(today)
+    lines = [
+        "Plan coherence check (computed from the plan, not inferred — treat as fact):"
+    ]
+    for repeat in repeats:
+        dates = repeat.get("dates") or []
+        when = " and ".join(
+            f"{d} ({plan_day_date_labels(d, today).get('weekday') or '?'})" for d in dates
+        )
+        duration = repeat.get("durationMinutes")
+        length = f", {duration} min" if duration not in (None, "") else ""
+        lines.append(
+            f"  {when} are both scheduled as the SAME session: "
+            f"{repeat.get('workoutType')} — \"{repeat.get('title')}\"{length}."
+        )
+    lines.append(
+        "Back-to-back identical sessions are almost never what the athlete needs. "
+        "Raise this yourself rather than waiting to be asked, say which of the two "
+        "days you would change and to what, and never describe the pair as a "
+        "deliberate progression. Only leave it alone when the athlete has "
+        "explicitly asked for both."
     )
     return "\n".join(lines)
 
