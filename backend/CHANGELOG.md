@@ -147,6 +147,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.52.2] - 2026-09-07
+
+### Fixed
+
+- **Strength now counts as load the plan has to space out** (`services/prompts.py`)
+  — `hard_session_spacing_rules()` was the only rule in the whole coach prompt
+  that reasoned about how sessions follow one another, and every clause in it was
+  scoped to VO2max/HIIT/threshold/sprint. Strength appeared exactly once, and only
+  to deny it counts as a rest day: the rule knew strength adds load while never
+  saying where that load may not sit, so two strength days in a row passed every
+  clause it had. Strength is now treated as a loading day — not two days running,
+  and not immediately before or after a hard interval session, since heavy
+  lower-body work and hard intervals compete for the same legs. Upper-body/core
+  work is called out as the milder case so sessions are not moved for no
+  physiological reason, and the whole thing is a strong default rather than a
+  block: an arrangement the athlete asked for is kept, with the stacking said out
+  loud. The same two clauses were added to `TRAINING_PLAN_PRINCIPLES`, so the
+  nightly planner stops writing the collisions the coach would then have to
+  unpick (#660).
+
 ## [0.52.0] - 2026-09-06
 
 ### Added

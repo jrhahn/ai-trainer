@@ -160,6 +160,8 @@ Training plan scheduling rules (ALWAYS follow these):
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
 - Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
 - Never schedule two hard days back-to-back.
+- Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
+- Never schedule the same session (same type, title and duration) on two consecutive days.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
 - Account for weather when provided: shorten or reduce intensity on hot days, extend warmups and avoid long exposed sessions on freezing/cold days, and move sessions indoors or swap to recovery/strength when weather is unsafe.
 - Weight every weather decision by the athlete's own learned tolerances when they are provided: do not move a session for conditions this athlete demonstrably handles well, and say in the workout description when weather is why a session was placed or shaped that way.
@@ -177,6 +179,20 @@ def hard_session_spacing_rules() -> str:
         "said recovery or rest.\n"
         "- Strength training is not a complete rest day. MTB/recovery rides count as recovery "
         "only when the available intensity evidence supports that they were genuinely easy.\n"
+        # Until #660 this rule said only the sentence above: strength added load but
+        # was never given anywhere it may not sit, so two strength days in a row
+        # passed every clause here.
+        "- Strength is load, not just 'not rest'. Treat a strength session as a "
+        "loading day for spacing purposes: avoid two strength sessions on consecutive "
+        "days, and avoid placing strength on the day immediately before or after a "
+        "VO2max/HIIT/threshold session — heavy lower-body work and hard intervals "
+        "compete for the same legs, so at least one of the two must be genuinely "
+        "easy or moved. Upper-body/core-only work is the mild case: it may sit next "
+        "to a hard ride, but still not on two consecutive days.\n"
+        "- These are strong defaults, not hard blocks. When the athlete has asked "
+        "for the arrangement, or their own schedule forces it, keep it — but say "
+        "out loud that the days are stacked and what you would drop or shorten if "
+        "the legs are heavy.\n"
         "- Do not keep, recommend, or create another VO2max/HIIT/threshold session for tomorrow "
         "or within roughly 48 hours of an actual hard session unless there is a clearly stated "
         "exceptional reason.\n"
