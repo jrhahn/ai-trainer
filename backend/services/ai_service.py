@@ -785,6 +785,7 @@ async def ask_trainer(
     workout_curiosity: dict | None = None,
     rider_identity: dict | None = None,
     plan_changes_section: str = "",
+    plan_coherence_warnings: str = "",
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
@@ -848,6 +849,7 @@ async def ask_trainer(
         workout_curiosity=workout_curiosity,
         rider_identity=rider_identity,
         plan_changes_section=plan_changes_section,
+        plan_coherence_warnings=plan_coherence_warnings,
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real

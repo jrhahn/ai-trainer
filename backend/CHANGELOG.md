@@ -147,7 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
-## [0.52.2] - 2026-09-07
+## [0.53.1] - 2026-09-07
 
 ### Fixed
 
@@ -166,6 +166,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loud. The same two clauses were added to `TRAINING_PLAN_PRINCIPLES`, so the
   nightly planner stops writing the collisions the coach would then have to
   unpick (#660).
+
+## [0.53.0] - 2026-09-07
+
+### Added
+
+- **The plan is checked as a week, not one day at a time**
+  (`services/plan_coherence.py`, `services/prompts.py`, `services/ai_service.py`,
+  `routers/ai.py`) — every guard in the plan pipeline asks whether *this* day may
+  be written; none ever asked what the write did to the days either side. So when
+  the athlete said they were tired and thinking about the gym, the coach moved
+  today onto a 45-minute "Core and Upper Body Strength" session while Tuesday
+  already held that identical session — same type, same title, same duration,
+  two days running. The write was correct in every respect (`source=coach_chat`,
+  `applied=t`); it was the only day anyone looked at. Forty-four seconds later
+  the athlete asked the coach to review the coming days, and it read the
+  duplicate, described it accurately and endorsed it — reading a plan and
+  auditing one are different tasks, and only one of them happens by accident.
+  Consecutive days holding the same session are now found deterministically and
+  handed to the coach as a stated fact, and the planUpdates rule requires the day
+  before and after every edited date to be checked, with the knock-on fix in the
+  same array rather than merely mentioned in prose. Detection only: which of the
+  two days should change is a coaching decision, and a guard that invented one
+  would repeat the #651 mistake (#659).
 
 ## [0.52.1] - 2026-09-07
 
