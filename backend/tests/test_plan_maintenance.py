@@ -61,8 +61,14 @@ async def test_daily_maintenance_updates_stale_incomplete_plan(monkeypatch):
         plan=[_day("2026-06-08"), _day("2026-06-10")],
     )
 
+    # Rescheduling is two entries under the targeted-update contract (#666): the
+    # session on its new date, and the original date cleared so it does not sit
+    # on the calendar twice.
     async def fake_adapt_training_plan(plan, *args, **kwargs):
-        return [{**plan[0], "date": "2026-06-09"}, plan[1]]
+        return [
+            {**plan[0], "date": "2026-06-09"},
+            {**plan[0], "workoutType": "rest", "title": "Rest", "durationMinutes": 0},
+        ]
 
     monkeypatch.setattr(
         plan_maintenance.ai_service,
@@ -88,15 +94,21 @@ async def test_daily_maintenance_updates_stale_incomplete_plan(monkeypatch):
     assert result.checked == 1
     assert result.updated == 1
     assert result.failed == 0
-    updated_plan = await _get_plan(user_id)
-    assert updated_plan[0]["date"] == "2026-06-09"
+    by_date = {d["date"]: d for d in await _get_plan(user_id)}
+    assert by_date["2026-06-09"]["workoutType"] == "endurance"
+    assert by_date["2026-06-08"]["workoutType"] == "rest"
+    # The day the run never mentioned comes back byte-identical — the whole
+    # point of returning updates rather than a rewritten week.
+    assert by_date["2026-06-10"] == _day("2026-06-10")
 
 
 @pytest.mark.asyncio
 async def test_daily_maintenance_is_noop_for_current_plan(monkeypatch):
+    """Nothing missed and a full window ahead — no run, and therefore no message."""
+    full_window = [_day(f"2026-06-{9 + i:02d}") for i in range(12)]
     user_id = await _create_user_with_plan(
         email="current@example.com",
-        plan=[_day("2026-06-09"), _day("2026-06-10")],
+        plan=full_window,
     )
     called = False
 
@@ -120,7 +132,7 @@ async def test_daily_maintenance_is_noop_for_current_plan(monkeypatch):
     assert result.checked == 1
     assert result.skipped == 1
     assert called is False
-    assert await _get_plan(user_id) == [_day("2026-06-09"), _day("2026-06-10")]
+    assert await _get_plan(user_id) == full_window
 
 
 @pytest.mark.asyncio
@@ -185,8 +197,8 @@ async def test_daily_maintenance_uses_timezone_for_today(monkeypatch):
     )
 
     assert result.updated == 1
-    updated_plan = await _get_plan(user_id)
-    assert updated_plan[0]["date"] == "2026-06-09"
+    dates = {d["date"] for d in await _get_plan(user_id)}
+    assert "2026-06-09" in dates
 
 
 @pytest.mark.asyncio
@@ -228,7 +240,7 @@ async def test_daily_maintenance_is_idempotent_for_same_day(monkeypatch):
     assert first.updated == 1
     assert second.updated == 0
     assert second.skipped == 1
-    assert (await _get_plan(user_id))[0]["date"] == "2026-06-09"
+    assert "2026-06-09" in {d["date"] for d in await _get_plan(user_id)}
 
 
 @pytest.mark.asyncio
@@ -271,8 +283,8 @@ async def test_daily_maintenance_isolates_per_user_failures(monkeypatch):
     assert result.checked == 2
     assert result.failed == 1
     assert result.updated == 1
-    assert (await _get_plan(failing_user_id))[0]["date"] == "2026-06-08"
-    assert (await _get_plan(ok_user_id))[0]["date"] == "2026-06-09"
+    assert {d["date"] for d in await _get_plan(failing_user_id)} == {"2026-06-08"}
+    assert "2026-06-09" in {d["date"] for d in await _get_plan(ok_user_id)}
 
 
 @pytest.mark.asyncio
