@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-09-08
+
+### Fixed
+
+- **An activity sync no longer rebuilds the whole training plan when it has
+  nothing to do** (`src/hooks/useStravaSync.ts`) — when an incremental sync came
+  back with no targeted `planUpdates`, meaning the ride required no plan change,
+  the hook fell through to a complete regeneration. The most harmless outcome
+  triggered the largest possible write: 243 day changes in 30 days of
+  production, none of them narrated to the athlete, one of which put strength on
+  the day after the strength day the coach had just agreed with them in chat. A
+  sync may now only *build* a plan that does not exist yet, never rebuild one
+  that does; with a plan already present it re-fetches the authoritative version
+  instead. Regeneration remains for onboarding and for a first-ever analysis
+  with no plan to protect (#664).
+
 ## [0.34.1] - 2026-09-06
 
 ### Fixed

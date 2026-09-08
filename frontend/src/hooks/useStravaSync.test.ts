@@ -244,6 +244,111 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('does not regenerate the plan when an incremental sync yields no plan updates (#664)', async () => {
+    const existingPlan = [
+      {
+        date: '2026-09-09',
+        workoutType: 'strength',
+        title: 'Core and Upper Body Strength',
+        description: 'Keeping lower body load light ahead of Thursday.',
+        durationMinutes: 45,
+      },
+    ]
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockGetNewStravaActivities.mockResolvedValue([
+      {
+        id: 201,
+        name: 'New Ride',
+        type: 'Ride',
+        distance: 20000,
+        moving_time: 3000,
+        start_date: '2025-01-11T08:00:00Z',
+        average_watts: 210,
+      },
+    ])
+    // The ride needs no plan change. That is the *most* harmless outcome and
+    // used to trigger a full regeneration, which rewrote days the coach had
+    // just agreed with the athlete.
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: mockAssessment,
+      planUpdates: [],
+    })
+    mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      lastStravaActivityId: 100,
+      trainingPlan: existingPlan,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
+    })
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+    expect(useAppStore.getState().trainingPlan).toEqual(existingPlan)
+  })
+
+  it('does not regenerate an existing plan during a first-time analysis (#664)', async () => {
+    const existingPlan = [
+      {
+        date: '2026-09-09',
+        workoutType: 'strength',
+        title: 'Core and Upper Body Strength',
+        description: 'Agreed with the athlete in chat.',
+        durationMinutes: 45,
+      },
+    ]
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+      trainingPlan: existingPlan,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockAnalyseStravaActivities).toHaveBeenCalled()
+      expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
+    })
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+  })
+
+  it('still generates a plan on first-time analysis when there is none yet', async () => {
+    const generated = [
+      {
+        date: '2026-09-09',
+        workoutType: 'endurance',
+        title: 'Steady Aerobic Ride',
+        description: 'First plan for this athlete.',
+        durationMinutes: 90,
+      },
+    ]
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    mockGenerateTrainingPlan.mockResolvedValue(generated)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+      trainingPlan: [],
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockGenerateTrainingPlan).toHaveBeenCalledWith('tok')
+      expect(useAppStore.getState().trainingPlan).toEqual(generated)
+    })
+  })
+
   it('sets activities in state after fetching', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({

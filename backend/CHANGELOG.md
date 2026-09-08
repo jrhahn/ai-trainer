@@ -147,6 +147,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.53.2] - 2026-09-08
+
+### Fixed
+
+- **Two browser tabs can no longer generate two different training weeks**
+  (`services/single_flight.py`, `routers/ai.py`) — `useStravaSync`'s in-flight
+  guard is a ref scoped to one hook instance, so a second tab has no idea the
+  first is already syncing. On 2026-09-08 that produced two `generate` batches
+  one second apart, each a full non-deterministic LLM rewrite of the same
+  eleven days, the second undoing the first; the athlete was left with strength
+  on the day after the strength day the coach had agreed with them hours
+  earlier. `POST /ai/generate-plan` now coalesces concurrent calls per athlete:
+  the first runs, the rest wait for its result. Coalescing rather than
+  rejecting, because the caller wants the plan — a 409 during onboarding would
+  leave a new athlete with an empty week. Failures reach every joined caller, so
+  nobody gets a stale success in place of an error, and a caller giving up never
+  cancels the write the others depend on (#664).
+
 ## [0.53.1] - 2026-09-07
 
 ### Fixed
