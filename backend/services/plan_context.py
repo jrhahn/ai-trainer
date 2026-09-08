@@ -24,7 +24,12 @@ from datetime import datetime
 import crud
 from services.dates import app_today
 from services.plan_coherence import find_repeated_sessions
-from services.prompts import plan_change_history_section, plan_coherence_section
+from services.plan_commitments import commitment_to_dict
+from services.prompts import (
+    plan_change_history_section,
+    plan_coherence_section,
+    plan_commitments_section,
+)
 
 # How far back the change log is read. Long enough to cover an overnight run and
 # the conversation around it, short enough that the coach is not re-reading last
@@ -38,6 +43,7 @@ class PlanWriterContext:
 
     change_history: str = ""
     coherence: str = ""
+    commitments: str = ""
 
 
 async def plan_writer_context(
@@ -61,7 +67,13 @@ async def plan_writer_context(
     """
     today = app_today(now, timezone_name)
     history_rows = await crud.list_plan_day_history(db, user_id, limit=history_limit)
+    commitment_rows = await crud.list_active_plan_commitments(
+        db, user_id, today=today.isoformat()
+    )
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
         coherence=plan_coherence_section(find_repeated_sessions(plan, today), today),
+        commitments=plan_commitments_section(
+            [commitment_to_dict(row) for row in commitment_rows], today
+        ),
     )

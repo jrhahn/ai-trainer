@@ -211,6 +211,9 @@ class User(Base):
     availability_constraints: Mapped[list["AthleteAvailabilityConstraint"]] = (
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
+    plan_commitments: Mapped[list["PlanCommitment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     home_location: Mapped["AthleteHomeLocation | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -1072,6 +1075,51 @@ class AthleteAvailabilityConstraint(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="availability_constraints")
+
+
+class PlanCommitment(Base):
+    """A coaching arrangement that spans more days than it changed (#667).
+
+    A pin protects the day the coach wrote. It does not protect the day that
+    day was written *for*. On 2026-09-08 the coach set Wednesday to strength and
+    recorded why in the day itself — "keeping lower body load light ahead of
+    Thursday's interval session" — and an automated write then turned Thursday
+    into a second strength day. Nothing was violated: Wednesday was pinned,
+    Thursday had never been claimed by anyone.
+
+    Same shape as ``AthleteAvailabilityConstraint``, and deliberately so: an
+    athlete-scoped rule with a window, a reason, a source and an ``active``
+    flag, enforced at the pipeline gate for every writer. The difference is what
+    it encodes. A constraint says what the athlete *can* do; a commitment says
+    what the coach and the athlete *decided* — which no structural check can
+    infer, because "Friday is rest because you race on Sunday" looks exactly
+    like any other rest day.
+    """
+
+    __tablename__ = "plan_commitments"
+    __table_args__ = (
+        Index("ix_plan_commitments_user_active", "user_id", "active"),
+        Index("ix_plan_commitments_user_end_date", "user_id", "end_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # Inclusive ISO dates. A single-day commitment has start == end.
+    start_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    end_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The arrangement in the coach's own words, as the athlete would recognise
+    # it. Injected verbatim into every plan-writing prompt, so it has to read as
+    # a sentence rather than as a code.
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(30), default="coach_chat", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="plan_commitments")
 
 
 class AthleteHomeLocation(Base):

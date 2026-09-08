@@ -147,6 +147,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.56.0] - 2026-09-08
+
+### Added
+
+- **The plan knows what was agreed, not just what was edited**
+  (`models.PlanCommitment`, `services/plan_commitments.py`,
+  `services/plan_pipeline.py`, `services/prompts.py`,
+  `services/coach_schema.py`, migration `20260820_000001`) — a pin protects the
+  day the coach wrote; it does not protect the day that day was written *for*.
+  On 2026-09-08 the coach set Wednesday to strength and recorded why in the day
+  itself — *"keeping lower body load light ahead of Thursday's interval
+  session"* — and hours later an automated write turned Thursday into a second
+  strength day. Nothing was violated: Wednesday was pinned, and Thursday had
+  never been claimed by anyone.
+
+  The coach can now attach the window its reasoning spans to a plan change. An
+  active commitment is injected into every plan-writing prompt — chat, nightly,
+  auto-adapt — and enforced at the pipeline gate: an automated write may not
+  change a day inside the window, while `coach_chat` and `user_edit` still can,
+  because the athlete asking for something different is exactly how an
+  arrangement ends. A new commitment supersedes any active one it overlaps,
+  since agreeing something new for the same days is changing your mind, not
+  adding a second contradictory instruction.
+
+  Shaped after `AthleteAvailabilityConstraint` deliberately — same athlete-scoped
+  row with a window, a reason, a source and an `active` flag, enforced in the
+  same place. The difference is what it encodes: a constraint says what the
+  athlete *can* do, a commitment says what they *decided*, and no structural
+  check can infer the second. "Friday is rest because you race Sunday" is
+  indistinguishable from any other rest day.
+
+  Fail-safe throughout: an unparseable window or a missing sentence is dropped
+  rather than stored, a window longer than 21 days is clamped so one bad
+  response cannot freeze a season, a commitment read failure lets the plan write
+  proceed, and a storage failure never costs the plan change it accompanied. A
+  hard availability constraint still outranks a commitment. (#667)
+
 ## [0.55.0] - 2026-09-08
 
 ### Changed

@@ -3035,6 +3035,90 @@ async def deactivate_expired_availability_constraints(
     return int(result.rowcount or 0)
 
 
+async def list_active_plan_commitments(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    today: str,
+) -> list[models.PlanCommitment]:
+    """Active commitments whose window has not passed, oldest first (#667).
+
+    Filtered by ``end_date >= today`` rather than relying on the expiry sweep, so
+    a commitment stops binding on the right day even if nothing has swept yet.
+    """
+    result = await db.scalars(
+        select(models.PlanCommitment)
+        .where(
+            models.PlanCommitment.user_id == user_id,
+            models.PlanCommitment.active.is_(True),
+            models.PlanCommitment.end_date >= today,
+        )
+        .order_by(
+            models.PlanCommitment.start_date.asc(),
+            models.PlanCommitment.created_at.asc(),
+        )
+    )
+    return list(result)
+
+
+async def deactivate_expired_plan_commitments(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    today: str,
+) -> int:
+    """Retire commitments whose window has passed."""
+    result = await db.execute(
+        update(models.PlanCommitment)
+        .where(
+            models.PlanCommitment.user_id == user_id,
+            models.PlanCommitment.active.is_(True),
+            models.PlanCommitment.end_date < today,
+        )
+        .values(active=False)
+    )
+    await db.flush()
+    return int(result.rowcount or 0)
+
+
+async def create_plan_commitment(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    start_date: str,
+    end_date: str,
+    text: str,
+    source: str = "coach_chat",
+) -> models.PlanCommitment:
+    """Record an arrangement, superseding any active one it overlaps (#667).
+
+    Superseding rather than accumulating is the point. The athlete agreeing
+    something new for a window they already had an arrangement for has *changed
+    their mind*, and leaving both rows active would hand every plan writer two
+    contradictory instructions with no way to tell which is current.
+    """
+    await db.execute(
+        update(models.PlanCommitment)
+        .where(
+            models.PlanCommitment.user_id == user_id,
+            models.PlanCommitment.active.is_(True),
+            models.PlanCommitment.start_date <= end_date,
+            models.PlanCommitment.end_date >= start_date,
+        )
+        .values(active=False)
+    )
+    commitment = models.PlanCommitment(
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
+        text=text,
+        source=source,
+    )
+    db.add(commitment)
+    await db.flush()
+    return commitment
+
+
 async def deactivate_availability_constraints_for_dates(
     db: AsyncSession,
     user_id: str,
