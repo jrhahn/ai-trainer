@@ -654,6 +654,7 @@ async def adapt_training_plan(
     athlete_model_section: str = "",
     plan_change_history: str = "",
     plan_coherence_warnings: str = "",
+    plan_commitments: str = "",
 ) -> list[dict]:
     """The days this run wants to change or add — not a whole plan (#666).
 
@@ -701,6 +702,7 @@ async def adapt_training_plan(
         athlete_model_section=athlete_model_section,
         plan_change_history=plan_change_history,
         plan_coherence_warnings=plan_coherence_warnings,
+        plan_commitments=plan_commitments,
         timezone_name=timezone_name,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
@@ -809,6 +811,7 @@ async def ask_trainer(
     rider_identity: dict | None = None,
     plan_changes_section: str = "",
     plan_coherence_warnings: str = "",
+    plan_commitment_notes: str = "",
 ) -> dict:
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
@@ -873,6 +876,7 @@ async def ask_trainer(
         rider_identity=rider_identity,
         plan_changes_section=plan_changes_section,
         plan_coherence_warnings=plan_coherence_warnings,
+        plan_commitment_notes=plan_commitment_notes,
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real

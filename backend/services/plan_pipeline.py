@@ -28,6 +28,7 @@ import crud
 import models
 import schemas
 from services import plan_coherence
+from services import plan_commitments
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
@@ -350,6 +351,41 @@ def _preserve_today(
         if d.get("date") == today and not day_violates_constraint(d, constraints)
     }
     return _preserve_dated_workouts(plan, current_plan, unconstrained)
+
+
+def _preserve_committed_days(
+    plan: list[dict],
+    current_plan: list[dict],
+    commitments: list[dict],
+    constraints: list[dict],
+) -> list[dict]:
+    """Hold automated writes out of a window the athlete agreed to (#667).
+
+    Every guard above protects a day *somebody touched*: pinned, completed,
+    ridden, today. An arrangement covers days nobody touched — the coach set
+    Wednesday to strength precisely so that Thursday could hold the intervals,
+    and Thursday, unclaimed, was rewritten into a second gym day. The pin worked
+    exactly as designed and the athlete still lost the arrangement.
+
+    Only ``respect_pins`` (automated) triggers are held back, like
+    :func:`_preserve_today`: the athlete asking the coach to change a committed
+    day still works, and the coach replaces the commitment when it does.
+
+    An active hard constraint still wins. If the athlete has since said they are
+    unavailable, the sanitizer's rest day is correct and restoring the agreed
+    session would reschedule training they already ruled out.
+    """
+    if not commitments:
+        return plan
+    committed = plan_commitments.committed_dates(commitments)
+    if not committed:
+        return plan
+    protected = {
+        d["date"]
+        for d in current_plan
+        if d.get("date") in committed and not day_violates_constraint(d, constraints)
+    }
+    return _preserve_dated_workouts(plan, current_plan, protected)
 
 
 def _preserve_workout_carry_completion(current: dict, proposed: dict) -> dict:
@@ -752,6 +788,7 @@ async def _enforce_and_persist(
     *,
     base_plan: list[dict],
     constraints: list[dict],
+    commitments: list[dict],
     source: PlanSource,
     today: str,
 ) -> PlanCommitResult:
@@ -781,6 +818,11 @@ async def _enforce_and_persist(
         # Today is not pinned, completed or ridden at 02:00, so none of the
         # guards above covered the day the athlete is about to ride (#651).
         merged = _preserve_today(merged, current_plan, today, constraints)
+        # An arrangement covers days nobody pinned — that is the point of it,
+        # and why every guard above missed it (#667).
+        merged = _preserve_committed_days(
+            merged, current_plan, commitments, constraints
+        )
         # A move is one decision across two days; applying only the half that
         # cleared the guards deletes the session outright (#651).
         merged = _revert_orphaned_moves(merged, current_plan, proposal)
@@ -822,6 +864,24 @@ async def _enforce_and_persist(
     return PlanCommitResult(merged, batch_id, applied_changes)
 
 
+async def _load_active_commitments(
+    db: AsyncSession, user_id: str, *, today: str
+) -> list[dict]:
+    """Active arrangements for this athlete, as the plain dicts the guard wants.
+
+    Failure is non-fatal on purpose: commitments make plan writes *safer*, and a
+    read error here must not be able to block one. The deploy of #667 also runs
+    with the table absent until the migration lands, which this covers.
+    """
+    try:
+        rows = await crud.list_active_plan_commitments(db, user_id, today=today)
+    except Exception:  # noqa: BLE001 — never let this block a plan write
+        logger.warning("could not load plan commitments; proceeding without them",
+                       exc_info=True)
+        return []
+    return [plan_commitments.commitment_to_dict(row) for row in rows]
+
+
 def _as_dicts(items) -> list[dict]:
     """Coerce a list of typed models (PlanDay / PlanDayUpdateSchema) or dicts to
     plain camelCase dicts, so builders may pass either into the commit API."""
@@ -855,9 +915,11 @@ async def commit_plan(
     resolved = _resolve_source(source)
     today = app_today_iso(now, timezone_name)
     constraints = await load_active_constraints(db, user.id, today=today)
+    commitments = await _load_active_commitments(db, user.id, today=today)
     return await _enforce_and_persist(
         db, user, _as_dicts(proposed_plan), base_plan=_as_dicts(base_plan),
-        constraints=constraints, source=resolved, today=today,
+        constraints=constraints, commitments=commitments, source=resolved,
+        today=today,
     )
 
 
@@ -885,7 +947,8 @@ async def commit_plan_updates(
     proposed = apply_plan_updates(base_dicts, filtered)
     if proposed is None:
         return PlanCommitResult(base_dicts, None, [])
+    commitments = await _load_active_commitments(db, user.id, today=today)
     return await _enforce_and_persist(
         db, user, proposed, base_plan=base_dicts, constraints=constraints,
-        source=resolved, today=today,
+        commitments=commitments, source=resolved, today=today,
     )

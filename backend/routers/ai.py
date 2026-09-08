@@ -22,6 +22,7 @@ from services import athlete_model_inference
 from services import freshness_allocation
 from services import motivation_inference
 from services import coach_summary
+from services import plan_commitments
 from services import plan_context
 from services import plan_maintenance
 from services import plan_pipeline
@@ -536,6 +537,44 @@ async def _update_memory_bg(
             logger.warning("Coach memory background update failed", exc_info=True)
 
 
+async def _record_plan_commitment(
+    db: AsyncSession,
+    user: models.User,
+    proposed: object,
+    timezone_name: str | None,
+) -> None:
+    """Persist the arrangement the coach attached to a plan change (#667).
+
+    Fail-safe by construction: an unusable window or a missing sentence is
+    dropped and a storage failure is swallowed. A commitment makes later writes
+    *safer*, so failing to record one must never cost the athlete the plan change
+    it accompanied — that would trade a small loss for a large one.
+    """
+    if not isinstance(proposed, dict):
+        return
+    text = str(proposed.get("text") or "").strip()
+    if not text:
+        return
+    window = plan_commitments.normalize_window(
+        proposed.get("startDate"), proposed.get("endDate")
+    )
+    if window is None:
+        return
+    try:
+        today = app_today_iso(timezone_name=timezone_name)
+        await crud.deactivate_expired_plan_commitments(db, user.id, today=today)
+        await crud.create_plan_commitment(
+            db,
+            user.id,
+            start_date=window[0],
+            end_date=window[1],
+            text=text,
+            source="coach_chat",
+        )
+    except Exception:  # noqa: BLE001 — never let this cost the plan change
+        logger.warning("could not record plan commitment", exc_info=True)
+
+
 async def _auto_adapt_plan(
     db: AsyncSession,
     user: models.User,
@@ -574,6 +613,7 @@ async def _auto_adapt_plan(
             timezone_name=timezone_name,
             plan_change_history=writer_context.change_history,
             plan_coherence_warnings=writer_context.coherence,
+            plan_commitments=writer_context.commitments,
         )
         proposed_plan = plan_maintenance.apply_maintenance_updates(
             plan, plan_updates, app_today_iso(timezone_name=timezone_name)
@@ -1227,6 +1267,7 @@ async def ask_trainer(
                 rider_identity=rider_identity_context,
                 plan_changes_section=plan_changes_section,
                 plan_coherence_warnings=coherence_section,
+                plan_commitment_notes=writer_context.commitments,
             )
         except AIRateLimitError:
             raise HTTPException(
@@ -1379,6 +1420,15 @@ async def ask_trainer(
             result["response"],
             resolve_user_provider(current_user),
         )
+
+    # Record the arrangement *before* the plan write, so the guard protecting a
+    # committed day is already in force for the very write that agreed it — a
+    # coach that reschedules Thursday and commits to it in one turn must not have
+    # its own Thursday edit blocked, and commit_plan_updates does not respect
+    # pins, so it goes through (#667).
+    await _record_plan_commitment(
+        db, current_user, result.get("planCommitment"), timezone_name
+    )
 
     # Apply plan updates if any — through the shared constraint-respecting pipeline.
     if plan_updates:

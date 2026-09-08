@@ -1001,6 +1001,7 @@ def adapt_plan_user(
     athlete_model_section: str = "",
     plan_change_history: str = "",
     plan_coherence_warnings: str = "",
+    plan_commitments: str = "",
     timezone_name: str | None = None,
 ) -> str:
     assessment_section = (
@@ -1049,13 +1050,16 @@ def adapt_plan_user(
     coherence_warnings = (
         f"\n{plan_coherence_warnings}" if plan_coherence_warnings else ""
     )
+    # And what the athlete already decided. This run cannot ask them, so an
+    # arrangement it cannot see is one it will quietly overwrite (#667).
+    commitments_section = f"\n{plan_commitments}" if plan_commitments else ""
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
         f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
         f"Remaining plan days: {json.dumps(annotated_days)}"
-        f"{history_section}{coherence_warnings}\n"
+        f"{history_section}{coherence_warnings}{commitments_section}\n"
         + stale_note
         + "Adapt the remaining days based on the feedback. Return only the days you "
         "are changing, plus any days you are adding to extend the end of the plan."
@@ -1267,6 +1271,21 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "just moved in is already scheduled later that week; if it is, that later "
         "day is now redundant and needs changing too. "
     )
+    # The days a change *edits* are pinned. The days its reasoning *depends on*
+    # are not, which is the whole of #667 — so the coach has to be able to name
+    # the second set, and this is the only place it can.
+    _commitment_rule = (
+        '- "planCommitment": optional object with "startDate", "endDate" and "text". '
+        "Include it when your change only makes sense as part of an arrangement "
+        "spanning more days than you are editing — you are keeping today light so "
+        "Thursday's intervals land well, or keeping Friday free before a Sunday race. "
+        "Give the window it covers and state the arrangement in one sentence, in the "
+        "athlete's own language, as they would recognise it. This is what stops an "
+        "unattended overnight run from undoing it: the days you edit are protected "
+        "already, the days your reasoning rests on are not. Omit it for a change that "
+        "stands on its own — an arrangement nobody agreed to would freeze those days "
+        "against every automatic adjustment for no reason. "
+    )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
         "athlete profile, structured athlete context, evidence-backed memory facts, coach "
@@ -1294,6 +1313,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             f"{_rich_description_rule} "
             f"{_intervals_rule} "
             f"{_ride_label_rule}"
+            f"{_commitment_rule}"
         )
     return (
         '- "planUpdates": an array of training day updates (optional). Only include this '
@@ -1310,6 +1330,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
         f"{_ride_label_rule}"
+        f"{_commitment_rule}"
     )
 
 
@@ -2504,6 +2525,7 @@ def ask_trainer_system_sections(
     rider_identity: dict | None = None,
     plan_changes_section: str = "",
     plan_coherence_warnings: str = "",
+    plan_commitment_notes: str = "",
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2605,6 +2627,11 @@ def ask_trainer_system_sections(
         # stated rather than left to be spotted (#659).
         "plan-coherence": (
             f"\n\n{plan_coherence_warnings}" if plan_coherence_warnings else ""
+        ),
+        # Next to the plan they constrain. What the athlete already decided has
+        # to be visible before the coach reasons about changing any of it (#667).
+        "plan-commitments": (
+            f"\n\n{plan_commitment_notes}" if plan_commitment_notes else ""
         ),
         "assessment": assessment_section,
         "ride-metrics": metrics_section,
@@ -4207,6 +4234,55 @@ def plan_coherence_section(repeats: list[dict] | None, today=None) -> str:
         "explicitly asked for both."
     )
     return "\n".join(lines)
+
+
+def plan_commitments_section(commitments: list[dict] | None, today=None) -> str:
+    """What the athlete and the coach agreed, for every plan writer to honour (#667).
+
+    A pin protects the day the coach wrote. It does not protect the day that day
+    was written *for* — which is how "keeping lower body load light ahead of
+    Thursday's interval session" ended with Thursday turned into a second
+    strength day by a later automated write. Nothing was violated; the
+    arrangement simply existed nowhere a writer could read it.
+
+    Written as the athlete's own decision rather than as a rule, because that is
+    what it is, and because a writer that thinks it is being blocked by policy
+    argues with it.
+    """
+    if not commitments:
+        return ""
+    if isinstance(today, str):
+        today = _parse_today(today)
+    lines = [
+        "Agreed with the athlete (their decision, already made — honour it unless "
+        "they change it):"
+    ]
+    for commitment in commitments:
+        start = commitment.get("startDate")
+        end = commitment.get("endDate")
+        span = _commitment_span_label(start, end, today)
+        text = str(commitment.get("text") or "").strip()
+        if not text:
+            continue
+        lines.append(f"  {span}: {text}")
+    if len(lines) == 1:
+        return ""
+    lines.append(
+        "These are arrangements the athlete agreed to, not suggestions. Do not "
+        "quietly undo one. If what you now think is best conflicts with an "
+        "arrangement, say so to the athlete in plain words and let them decide — "
+        "changing it without telling them is how they lose trust in the plan."
+    )
+    return "\n".join(lines)
+
+
+def _commitment_span_label(start, end, today) -> str:
+    """A commitment window as weekday-anchored dates (#462/#464/#625)."""
+    start_label = plan_day_date_labels(start, today).get("weekday") or "?"
+    if start == end:
+        return f"{start} ({start_label})"
+    end_label = plan_day_date_labels(end, today).get("weekday") or "?"
+    return f"{start} ({start_label}) to {end} ({end_label})"
 
 
 def ride_metrics_context_section(

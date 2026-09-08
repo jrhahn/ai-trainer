@@ -118,6 +118,23 @@ _RIDE_LABEL_UPDATE = {
     "propertyOrdering": ["activity_date", "label"],
 }
 
+# The arrangement a plan change is part of, when it spans more days than it
+# edits (#667). A pin protects the day the coach wrote; this protects the days
+# that day was written *for*.
+_PLAN_COMMITMENT = {
+    "type": "OBJECT",
+    "properties": {
+        "startDate": {"type": "STRING", "description": "YYYY-MM-DD, inclusive"},
+        "endDate": {"type": "STRING", "description": "YYYY-MM-DD, inclusive"},
+        "text": {
+            "type": "STRING",
+            "description": "the arrangement in one sentence, as the athlete would recognise it",
+        },
+    },
+    "required": ["startDate", "endDate", "text"],
+    "propertyOrdering": ["startDate", "endDate", "text"],
+}
+
 COACH_REPLY_SCHEMA: dict = {
     "type": "OBJECT",
     "properties": {
@@ -133,6 +150,7 @@ COACH_REPLY_SCHEMA: dict = {
         "ride_note_update": _RIDE_NOTE_UPDATE,
         "ride_label_update": _RIDE_LABEL_UPDATE,
         "planUpdates": {"type": "ARRAY", "items": _PLAN_UPDATE},
+        "planCommitment": _PLAN_COMMITMENT,
     },
     "required": ["thinking", "response"],
     "propertyOrdering": [
@@ -145,5 +163,6 @@ COACH_REPLY_SCHEMA: dict = {
         "ride_note_update",
         "ride_label_update",
         "planUpdates",
+        "planCommitment",
     ],
 }
