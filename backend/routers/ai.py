@@ -24,6 +24,7 @@ from services import motivation_inference
 from services import coach_summary
 from services import plan_pipeline
 from services import roi_recommendation
+from services import single_flight
 from services import status_pipeline
 from services import rider_identity
 from services import summary_pipeline
@@ -876,14 +877,20 @@ async def analyse_activities(
     )
 
 
-@router.post("/generate-plan")
-async def generate_plan(
-    body: schemas.GeneratePlanRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+# Each browser tab runs its own ``useStravaSync``, whose in-flight guard is a
+# ref scoped to that hook instance — so two tabs (or two devices) can both call
+# this at once. On 2026-09-08 two runs landed one second apart and persisted two
+# entirely different weeks, the second undoing the first. Coalescing them means
+# the LLM call and the plan write happen once and both callers get that one
+# result (#664).
+_generate_plan_inflight: single_flight.InFlight = {}
+
+
+async def _generate_plan_for_user(
+    db: AsyncSession,
+    current_user: models.User,
+    timezone_name: str | None,
 ) -> list[dict]:
-    timezone_name = _request_timezone(request)
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
@@ -939,6 +946,21 @@ async def generate_plan(
         timezone_name=timezone_name,
     )
     return commit.plan
+
+
+@router.post("/generate-plan")
+async def generate_plan(
+    body: schemas.GeneratePlanRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> list[dict]:
+    timezone_name = _request_timezone(request)
+    return await single_flight.run_single_flight(
+        _generate_plan_inflight,
+        current_user.id,
+        lambda: _generate_plan_for_user(db, current_user, timezone_name),
+    )
 
 
 @router.post("/ask-trainer", response_model=schemas.AskTrainerResponse)

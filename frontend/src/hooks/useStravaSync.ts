@@ -109,7 +109,11 @@ export function useStravaSync(): UseStravaSyncResult {
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
-      const { assessment, planUpdates } = await analyseStravaActivities(
+      // planUpdates is deliberately not read: the backend has already persisted
+      // whatever it decided through the shared pipeline, and the hook's only job
+      // afterwards is to reconcile with the server. Branching on it here is what
+      // turned "no plan change needed" into a full regeneration (#664).
+      const { assessment } = await analyseStravaActivities(
         activities,
         authToken,
         userProfile.maxHeartRate,
@@ -150,18 +154,26 @@ export function useStravaSync(): UseStravaSyncResult {
         }
       }
 
-      if (isIncremental && planUpdates && planUpdates.length > 0) {
-        // The backend already persisted these targeted updates through the shared
-        // pin/completed-respecting pipeline (source="ride_review"). Re-fetch the
-        // authoritative plan rather than PUTting our in-memory snapshot back: that
-        // reverted concurrent edits and bypassed pin/completed-day protection,
-        // rewriting pinned/completed days (stale-snapshot clobber, #399).
+      // A sync may only *build* a plan that does not exist yet. It may never
+      // rebuild one that does. Until #664 the absence of targeted planUpdates —
+      // i.e. "this ride needs no plan change" — fell through to a full
+      // regeneration, so the most harmless outcome triggered the largest possible
+      // write: 243 silent day changes in 30 days, none of them narrated to the
+      // athlete, one of which put strength on the day after the strength day the
+      // coach had just agreed with them.
+      const planExists = useAppStore.getState().trainingPlan.length > 0
+      if (isIncremental || planExists) {
+        // Whatever this ride warranted, the backend has already persisted through
+        // the shared pin/completed-respecting pipeline (source="ride_review").
+        // Re-fetch the authoritative plan rather than PUTting our in-memory
+        // snapshot back: that reverted concurrent edits and bypassed
+        // pin/completed-day protection (stale-snapshot clobber, #399).
         const freshPlan = await fetchTrainingPlan(authToken)
         setTrainingPlan(freshPlan)
       } else {
-        // First-time analysis or no targeted updates → regenerate the full plan.
-        // generateTrainingPlan already persists server-side (source="generate"),
-        // so we only mirror the persisted result into local state.
+        // First-ever analysis with no plan to protect. generateTrainingPlan
+        // persists server-side (source="generate"), so we only mirror the
+        // persisted result into local state.
         const updatedPlan = await generateTrainingPlan(authToken)
         setTrainingPlan(updatedPlan)
       }
