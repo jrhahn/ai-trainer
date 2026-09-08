@@ -248,7 +248,7 @@ describe('useStravaSync', () => {
     const existingPlan = [
       {
         date: '2026-09-09',
-        workoutType: 'strength',
+        workoutType: 'strength' as const,
         title: 'Core and Upper Body Strength',
         description: 'Keeping lower body load light ahead of Thursday.',
         durationMinutes: 45,
@@ -296,7 +296,7 @@ describe('useStravaSync', () => {
     const existingPlan = [
       {
         date: '2026-09-09',
-        workoutType: 'strength',
+        workoutType: 'strength' as const,
         title: 'Core and Upper Body Strength',
         description: 'Agreed with the athlete in chat.',
         durationMinutes: 45,
@@ -325,7 +325,7 @@ describe('useStravaSync', () => {
     const generated = [
       {
         date: '2026-09-09',
-        workoutType: 'endurance',
+        workoutType: 'endurance' as const,
         title: 'Steady Aerobic Ride',
         description: 'First plan for this athlete.',
         durationMinutes: 90,

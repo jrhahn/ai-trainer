@@ -109,7 +109,11 @@ export function useStravaSync(): UseStravaSyncResult {
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
-      const { assessment, planUpdates } = await analyseStravaActivities(
+      // planUpdates is deliberately not read: the backend has already persisted
+      // whatever it decided through the shared pipeline, and the hook's only job
+      // afterwards is to reconcile with the server. Branching on it here is what
+      // turned "no plan change needed" into a full regeneration (#664).
+      const { assessment } = await analyseStravaActivities(
         activities,
         authToken,
         userProfile.maxHeartRate,
