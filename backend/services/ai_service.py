@@ -652,7 +652,20 @@ async def adapt_training_plan(
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
     athlete_model_section: str = "",
+    plan_change_history: str = "",
+    plan_coherence_warnings: str = "",
 ) -> list[dict]:
+    """The days this run wants to change or add — not a whole plan (#666).
+
+    It used to return the complete plan, which meant every nightly run handed
+    back ~11 days that were already right, each with freshly generated prose:
+    309 applied day changes in 30 days of production against the coach's 45. The
+    athlete experienced that as their plan quietly moving under them. Callers now
+    merge these days into the stored plan, so a day this run did not name stays
+    byte-identical.
+
+    An empty list is a valid, common and often correct answer.
+    """
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     incomplete_days = [
@@ -686,14 +699,24 @@ async def adapt_training_plan(
         weather_context_section=weather_context_section,
         race_events_section=race_events_context_section(race_events),
         athlete_model_section=athlete_model_section,
+        plan_change_history=plan_change_history,
+        plan_coherence_warnings=plan_coherence_warnings,
         timezone_name=timezone_name,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
-    updated_days = {day["date"]: day for day in parsed.get("updatedDays", [])}
+    # A completed session is history; a run that proposes to rewrite one is
+    # simply wrong about it, so it is dropped here rather than relied on being
+    # caught downstream.
+    completed_dates = {
+        day.get("date") for day in plan if isinstance(day, dict) and day.get("completed")
+    }
     return [
-        day if day.get("completed") else updated_days.get(day["date"], day)
-        for day in plan
+        day
+        for day in parsed.get("updatedDays", [])
+        if isinstance(day, dict)
+        and day.get("date")
+        and day.get("date") not in completed_dates
     ]
 
 

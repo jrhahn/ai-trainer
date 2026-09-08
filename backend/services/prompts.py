@@ -936,6 +936,29 @@ def adapt_plan_system() -> str:
         "For future days keep the same date fields. "
         "For any past incomplete days (date before today), reschedule them to upcoming dates "
         "starting from today, distributing the sessions sensibly without overloading consecutive days.\n"
+        # Returning the whole week meant every night rewrote ~11 days that were
+        # already right, with fresh prose each time: 309 applied day changes in
+        # 30 days against the coach's 45. A day you would leave alone must stay
+        # byte-identical, and the only way to guarantee that is not to send it
+        # back (#666).
+        "CRITICAL — return only what you are actually changing. A day you would leave "
+        "as it is must NOT appear in updatedDays. If the plan already suits the "
+        'athlete, return an empty "updatedDays" array; that is a valid and often '
+        "correct answer. Rewriting a day's wording without changing the session is "
+        "not a change — it is churn the athlete sees as their plan moving under them, "
+        "so do not do it.\n"
+        "You may also add days that are not in the plan yet, to keep the rolling "
+        "window full: give them dates after the last day listed, inside the plan "
+        "window stated below. Add them only to extend the end of the plan, never to "
+        "duplicate a date that already exists.\n"
+        # Each entry is keyed by its own date, so an entry can never move a
+        # session off another date. Rescheduling is two entries or it is a
+        # session silently existing twice.
+        "A day's date identifies which day you are changing — you cannot move a "
+        "session by giving its day a different date. To reschedule a missed session, "
+        "return TWO entries: one for its new date carrying the session, and one for "
+        "the original date setting it to rest so the session does not end up on the "
+        "calendar twice.\n"
         f"{WEEKDAY_HONESTY_RULE}"
         "Hard athlete constraints are non-negotiable: if the profile, coach memory, "
         "athlete context, or recent conversation says the athlete is unavailable on a "
@@ -976,6 +999,8 @@ def adapt_plan_user(
     weather_context_section: str = "",
     race_events_section: str = "",
     athlete_model_section: str = "",
+    plan_change_history: str = "",
+    plan_coherence_warnings: str = "",
     timezone_name: str | None = None,
 ) -> str:
     assessment_section = (
@@ -1016,14 +1041,24 @@ def adapt_plan_user(
     # into is spelled out — rescheduling a past session is precisely where an
     # unanchored prompt has to invent a weekday (#625).
     annotated_days = annotate_plan_days(incomplete_days, _parse_today(today))
+    # What the plan has been through and where it already collides. The chat
+    # coach has had both since #652/#659; this run rewrites the week with nobody
+    # watching, so it is the trigger that most needs to know what the athlete
+    # and the coach agreed a few hours ago (#666).
+    history_section = f"\n{plan_change_history}" if plan_change_history else ""
+    coherence_warnings = (
+        f"\n{plan_coherence_warnings}" if plan_coherence_warnings else ""
+    )
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
         f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {json.dumps(recent_feedback)}\n"
-        f"Remaining plan days: {json.dumps(annotated_days)}\n"
+        f"Remaining plan days: {json.dumps(annotated_days)}"
+        f"{history_section}{coherence_warnings}\n"
         + stale_note
-        + "Adapt the remaining days based on the feedback. Return the full updated days array."
+        + "Adapt the remaining days based on the feedback. Return only the days you "
+        "are changing, plus any days you are adding to extend the end of the plan."
     )
 
 

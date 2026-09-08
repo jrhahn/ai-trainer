@@ -147,6 +147,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.55.0] - 2026-09-08
+
+### Changed
+
+- **The nightly job is a coach turn now, not a second planner**
+  (`services/plan_maintenance.py`, `services/plan_context.py`,
+  `services/ai_service.py`, `services/prompts.py`, `routers/ai.py`) — it asked
+  the model for the whole remaining plan back, so every night about eleven days
+  returned with freshly generated prose whether or not anything about them had
+  changed: **309 applied day changes across 30 batches in 30 days of
+  production**, one batch every single night, against the coach's 45. The
+  athlete experienced that as their week moving under them, and when they asked
+  the coach about it the honest answer was *"the system updated the plan
+  automatically in the background"*.
+
+  Four changes. `adapt_training_plan` now returns only the days it is actually
+  changing or adding, and the caller folds them into the stored plan, so a day
+  the run did not name comes back byte-identical; an empty list is a valid and
+  often correct answer. The run receives the same context the chat coach has had
+  since #652/#659 — the plan change log and the coherence warnings — built by
+  the new shared `plan_context.plan_writer_context` so chat, nightly and
+  auto-adapt cannot drift apart. It can extend the rolling window by appending
+  days, which nothing else does now that #664 took the regeneration off the sync
+  path. And it only runs when there is a reason to: a session missed in the last
+  three days, or a window that has grown short. The old condition was true for
+  the rest of the plan's life once any single day had been missed.
+
+  Two reasons were deliberately left out. A new availability constraint does not
+  need one — constraints are enforced at the pipeline gate on every write, so
+  they take effect without an LLM run. Weather does not get one either:
+  recognising a *relevant* change needs a stored forecast baseline that does not
+  exist, and without it "reacting to weather" would be the old unconditional
+  rewrite wearing a reason. (#666)
+
 ## [0.54.0] - 2026-09-08
 
 ### Added

@@ -22,6 +22,8 @@ from services import athlete_model_inference
 from services import freshness_allocation
 from services import motivation_inference
 from services import coach_summary
+from services import plan_context
+from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
 from services import single_flight
@@ -49,12 +51,7 @@ from services.analysis import (
     build_ride_metrics_chain,
     build_ride_analysis,
 )
-from services.plan_coherence import find_repeated_sessions
-from services.prompts import (
-    plan_change_history_section,
-    plan_coherence_section,
-    ride_metrics_context_section,
-)
+from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import (
     extract_availability_constraints,
@@ -561,7 +558,12 @@ async def _auto_adapt_plan(
         )
         profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
         profile = _profile_with_availability_constraints(profile, availability_constraints)
-        updated_plan = await ai_service.adapt_training_plan(
+        # The same context the chat coach and the nightly run get, so all three
+        # plan for a week they can actually see the history of (#666).
+        writer_context = await plan_context.plan_writer_context(
+            db, user.id, plan, timezone_name=timezone_name
+        )
+        plan_updates = await ai_service.adapt_training_plan(
             plan,
             [feedback_entry],
             profile,
@@ -570,9 +572,16 @@ async def _auto_adapt_plan(
             race_events=race_events,
             weather_context_section=weather_section,
             timezone_name=timezone_name,
+            plan_change_history=writer_context.change_history,
+            plan_coherence_warnings=writer_context.coherence,
         )
+        proposed_plan = plan_maintenance.apply_maintenance_updates(
+            plan, plan_updates, app_today_iso(timezone_name=timezone_name)
+        )
+        if proposed_plan is None:
+            return
         commit = await plan_pipeline.commit_plan(
-            db, user, updated_plan, base_plan=plan, source="auto_adapt",
+            db, user, proposed_plan, base_plan=plan, source="auto_adapt",
             timezone_name=timezone_name,
         )
         await coach_summary.narrate_plan_changes(
@@ -1155,20 +1164,15 @@ async def ask_trainer(
                 timezone_name=timezone_name,
                 prose_window=RIDE_NOTE_PROSE_WINDOW,
             )
-            # How the plan got to its current state. Without it the coach can
-            # only rationalise the end state when asked why a session changed,
-            # and an overnight automated rewrite is invisible to it (#652).
-            plan_changes_section = plan_change_history_section(
-                await crud.list_plan_day_history(db, current_user.id, limit=60),
-                app_today(timezone_name=timezone_name),
+            # How the plan got to its current state (#652), and which adjacent
+            # days already collide (#659). Built by the shared helper so the
+            # nightly run and auto-adapt see exactly what the chat coach sees —
+            # they used to see neither, which is #666.
+            writer_context = await plan_context.plan_writer_context(
+                db, current_user.id, plan, timezone_name=timezone_name
             )
-            # The coach reads the plan accurately and still endorsed two identical
-            # back-to-back strength days, so the collision is computed here and
-            # handed over as a fact rather than left to be noticed (#659).
-            coherence_section = plan_coherence_section(
-                find_repeated_sessions(plan, app_today(timezone_name=timezone_name)),
-                app_today(timezone_name=timezone_name),
-            )
+            plan_changes_section = writer_context.change_history
+            coherence_section = writer_context.coherence
             race_events = await _race_events_for_prompt(db, current_user.id)
             # The upcoming outlook near the athlete's training location plus their
             # learned tolerances — the coach chat is where "should I ride tomorrow?"
