@@ -13,6 +13,23 @@ is checked here and the result is handed to the coach as a fact. Deliberately
 detection only: what the second day should become instead is a coaching decision,
 and a guard that invents one would be the #651 mistake again — a correct-looking
 automated write that costs the athlete a session.
+
+#665 extended this from "the coach is told" to "every writer is checked". Until
+then these functions were called from exactly one place, ``routers/ai.py``'s
+ask-trainer handler, which meant the two triggers responsible for 92 % of all
+plan changes in production — the nightly job and the sync-driven regeneration —
+were blind to it. On 2026-09-08 the coach pinned Wednesday as strength, stating
+in the day itself that it was keeping the legs fresh for Thursday's intervals,
+and three hours later an automated write turned Thursday into a second strength
+day. Every rule the pipeline had was satisfied: the pin protected Wednesday, and
+nobody had ever claimed Thursday.
+
+What the gate enforces is deliberately narrower than what the prompt asks for.
+A guard that reverts a write must fire on facts, not on judgement: an identical
+session twice, or strength twice, is decidable from the plan alone. Whether a
+strength day may sit next to a threshold session depends on whether it loads the
+legs — real coaching, stated in the prompt (#660) where the coach can weigh it,
+and left there.
 """
 
 from __future__ import annotations
@@ -107,3 +124,99 @@ def find_repeated_sessions(
                 }
             )
     return repeats
+
+
+# Strength is a loading day, not "not rest" (#660). Two of them back to back is
+# decidable from the plan without knowing anything about the athlete, which is
+# what makes it safe to enforce rather than merely mention.
+_STRENGTH_TYPES = frozenset({"strength"})
+
+
+def is_strength_day(day: dict) -> bool:
+    if not isinstance(day, dict):
+        return False
+    return str(day.get("workoutType") or "").strip().lower() in _STRENGTH_TYPES
+
+
+def find_stacked_strength(
+    plan: list[dict] | None,
+    today: str | None = None,
+    *,
+    horizon_days: int = DEFAULT_HORIZON_DAYS,
+) -> list[dict]:
+    """Consecutive calendar days that both carry strength work.
+
+    Distinct from :func:`find_repeated_sessions`, which needs the two sessions to
+    be *identical*. The 2026-09-08 collision was two different strength sessions
+    — "Core and Upper Body Strength" and "Core and Upper Body Mobility" — so the
+    repeat detector saw nothing and the athlete still got two gym days running.
+
+    Returns ``{"dates": [earlier, later], "titles": [...]}`` per collision.
+    """
+    start = _parse(today)
+    by_date: dict[date, list[dict]] = {}
+    for day in plan or []:
+        parsed = _parse(day.get("date") if isinstance(day, dict) else None)
+        if parsed is None or (start is not None and parsed < start):
+            continue
+        if start is not None and (parsed - start).days > horizon_days:
+            continue
+        if is_strength_day(day):
+            by_date.setdefault(parsed, []).append(day)
+
+    stacked: list[dict] = []
+    for current in sorted(by_date):
+        following = by_date.get(current + timedelta(days=1))
+        if not following:
+            continue
+        stacked.append(
+            {
+                "dates": [
+                    current.isoformat(),
+                    (current + timedelta(days=1)).isoformat(),
+                ],
+                "titles": [
+                    by_date[current][0].get("title"),
+                    following[0].get("title"),
+                ],
+            }
+        )
+    return stacked
+
+
+def collision_keys(
+    plan: list[dict] | None,
+    today: str | None = None,
+    *,
+    horizon_days: int = DEFAULT_HORIZON_DAYS,
+) -> set[tuple]:
+    """A stable identity per detected incoherence, for before/after comparison.
+
+    The pipeline gate needs to distinguish "this write created a collision" from
+    "the plan already had one" — reverting a day over a duplicate that was
+    already sitting there would undo unrelated edits for a problem the write did
+    not cause. The repeat key carries the session signature, so a pair of days
+    swapping one duplicate for a different duplicate still reads as new.
+    """
+    keys: set[tuple] = set()
+    for repeat in find_repeated_sessions(plan, today, horizon_days=horizon_days):
+        earlier, later = repeat["dates"]
+        keys.add(
+            (
+                "repeat",
+                earlier,
+                later,
+                repeat.get("workoutType"),
+                repeat.get("title"),
+                repeat.get("durationMinutes"),
+            )
+        )
+    for stack in find_stacked_strength(plan, today, horizon_days=horizon_days):
+        earlier, later = stack["dates"]
+        keys.add(("strength-stacked", earlier, later))
+    return keys
+
+
+def collision_dates(key: tuple) -> tuple[str, str]:
+    """The two dates a :func:`collision_keys` entry spans."""
+    return key[1], key[2]

@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from services import plan_coherence
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
@@ -660,6 +661,67 @@ def _revert_orphaned_moves(
     return _sorted_by_session(restored)
 
 
+# Reverting one day can expose a collision with its other neighbour, so the
+# check repeats. Bounded rather than looped to convergence: a plan that still
+# collides after three passes is not one more revert away from being coherent,
+# and grinding through the whole week day by day would be an automated writer
+# quietly deleting a fortnight of training.
+_MAX_COHERENCE_PASSES = 3
+
+
+def _revert_new_incoherences(
+    merged: list[dict], current_plan: list[dict], today: str
+) -> list[dict]:
+    """Undo an automated write that put colliding sessions on adjacent days (#665).
+
+    Every other guard here asks whether *this* day may be written. None asks what
+    the write did to the day next to it, which is how 2026-09-08 ended with
+    strength on Wednesday and Thursday: the coach had pinned Wednesday and said
+    in the day itself that it was protecting Thursday's intervals, then an
+    automated write turned Thursday into a second gym day. The pin worked. Nobody
+    had claimed Thursday, so nothing else looked.
+
+    Only collisions this write *created* are reverted — one already present in
+    ``current_plan`` is pre-existing, and undoing an unrelated edit over it would
+    punish the write for someone else's mess. Of the two days, the later one is
+    given back: the earlier is nearer to being ridden and more likely the one the
+    athlete and coach just agreed on.
+
+    A day with no previous version cannot be restored, so a collision created by
+    *appending* to the plan is left alone and reported by the prompt instead.
+    Deleting it would cost the athlete a session, which is the #651 mistake.
+    """
+    current_by = {_key(d): d for d in current_plan if d.get("date")}
+    if not current_by:
+        return merged
+    before = plan_coherence.collision_keys(current_plan, today)
+    result = merged
+    for _ in range(_MAX_COHERENCE_PASSES):
+        created = plan_coherence.collision_keys(result, today) - before
+        if not created:
+            break
+        result_by = {_key(d): d for d in result if d.get("date")}
+        # Only days this write actually changed can be handed back, and only to
+        # the content that was there before it ran.
+        changed = {
+            key
+            for key, day in result_by.items()
+            if key in current_by and _content_differs(current_by[key], day)
+        }
+        restore: set[tuple] = set()
+        for key in sorted(created):
+            dates = plan_coherence.collision_dates(key)
+            candidates = [k for k in changed if k[0] in dates]
+            if candidates:
+                restore.add(max(candidates))
+        if not restore:
+            break
+        result = [
+            current_by[_key(day)] if _key(day) in restore else day for day in result
+        ]
+    return result
+
+
 def _to_canonical_day(day: dict) -> dict:
     """Validate + normalize one day through the canonical ``PlanDay`` model.
 
@@ -722,6 +784,10 @@ async def _enforce_and_persist(
         # A move is one decision across two days; applying only the half that
         # cleared the guards deletes the session outright (#651).
         merged = _revert_orphaned_moves(merged, current_plan, proposal)
+        # Last, because it reads the finished week: every guard above protects a
+        # day in isolation, and a write can satisfy all of them while still
+        # stacking two gym days back to back (#665).
+        merged = _revert_new_incoherences(merged, current_plan, today)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
