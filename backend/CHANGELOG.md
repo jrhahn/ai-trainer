@@ -147,6 +147,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three. The accrual is 0.35 on a first sighting and +0.2 after, and
   `ATHLETE_MEMORY_MIN_EVIDENCE` is 2, so the correct number was always two.
 
+## [0.54.0] - 2026-09-08
+
+### Added
+
+- **Every plan writer is now checked for coherence, not just the coach chat**
+  (`services/plan_coherence.py`, `services/plan_pipeline.py`) — #659 taught the
+  coach to notice that two adjacent days hold the same session and #660 that
+  strength is a loading day, but both lived in the chat prompt, and
+  `find_repeated_sessions` was called from exactly one place. The two triggers
+  responsible for 92 % of production plan changes saw neither: we had hardened
+  the path that was not causing the problem. On 2026-09-08 the coach pinned
+  Wednesday as strength, saying in the day itself that it was protecting
+  Thursday's intervals, and three hours later an automated write turned Thursday
+  into a second gym day — legal under every rule the pipeline had, since the pin
+  covered Wednesday and nobody had claimed Thursday. The check now runs in
+  `_enforce_and_persist`, the one gate all writers pass, and an automated write
+  that *creates* a collision has the later of the two days handed back to its
+  previous content, recorded as a blocked attempt in `plan_day_history`. The
+  detector also gained `find_stacked_strength`, because the two colliding
+  sessions had different titles and the repeat detector could not see them.
+
+  Three deliberate limits. The gate never invents a replacement — what Thursday
+  should be instead is a coaching decision, and inventing one is the #651
+  mistake. It never blocks `coach_chat` or `user_edit`, where stacking is a
+  choice the athlete made. And it enforces only what is decidable from the plan
+  — an identical session twice, or strength twice; whether strength may sit next
+  to a threshold session depends on which muscles it loads, so that stays in the
+  prompt where the coach can weigh it. (#665)
+
 ## [0.53.2] - 2026-09-08
 
 ### Fixed
