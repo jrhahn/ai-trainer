@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-09-13
+
+### Changed
+
+- **The week strip is now a rolling window centred on today instead of
+  Monday–Sunday** (`src/components/WeekStrip.tsx`, #672) — the strip showed the
+  current calendar week, so how much of the future the athlete could see
+  depended on the weekday: on a Monday, today plus six days ahead and no
+  history; on a Sunday, six days of history and no upcoming session at all,
+  because tomorrow belonged to next week. It now always shows the three days
+  before today, today, and the three after, with today in the middle column.
+  Selection (#634), the month behind "Show more", completion ticks and
+  two-a-day chips are unchanged. The heading reads "Your week" — "This week"
+  would be claiming a calendar week the window no longer is. The dashboard
+  suite's Sunday flake (a chip for "tomorrow" that fell outside the strip) goes
+  away with it.
+
 ## [0.34.2] - 2026-09-08
 
 ### Fixed
