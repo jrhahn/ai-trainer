@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react'
-import { addDays, startOfWeek } from 'date-fns'
+import { addDays } from 'date-fns'
 import type { TrainingDay } from '../store/useAppStore'
 import { sessionsForDate } from '../utils/planSessions'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
@@ -12,11 +12,23 @@ import { sessionTypeStyle } from '../utils/sessionType'
  * whole, and seeing it whole is the point: where the hard days sit, what is
  * already done, what is coming.
  *
+ * The seven days are a *rolling* window centred on today, not Monday–Sunday
+ * (#672). A calendar week answers "what did I just ride, what is next" well
+ * exactly once: on a Sunday the old strip showed six days of history and no
+ * upcoming session at all, because tomorrow belonged to next week. Centring
+ * costs nothing and makes the answer the same on every weekday.
+ *
  * The chips used to link to `/workout/:date`, which answered "what is Wednesday?"
  * by throwing away the dashboard. Since #634 they select instead, and the hero
  * above re-renders — the page you are on is already the right shape for the
  * answer.
  */
+/** How far back and forward the strip reaches.  Three either side keeps today
+ *  in the middle column of a seven-wide grid, which is what makes the window
+ *  legible without a marker. */
+const DAYS_EITHER_SIDE = 3
+const DAYS_SHOWN = DAYS_EITHER_SIDE * 2 + 1
+
 export default function WeekStrip({
   plan,
   selectedDate,
@@ -32,20 +44,22 @@ export default function WeekStrip({
    *  is a question the athlete asks occasionally, so it lives behind this. */
   onShowMore?: () => void
 }) {
-  const today = formatLocalDate(new Date())
-  const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const now = new Date()
+  const today = formatLocalDate(now)
 
   // Not a Map keyed by date: that keeps only the last entry per date, which is
   // the same session-swallowing bug as `plan.find()` in another shape (#645).
-  const week = Array.from({ length: 7 }, (_, index) => {
-    const date = formatLocalDate(addDays(monday, index))
+  const week = Array.from({ length: DAYS_SHOWN }, (_, index) => {
+    const date = formatLocalDate(addDays(now, index - DAYS_EITHER_SIDE))
     return { date, sessions: sessionsForDate(plan, date) }
   })
 
   return (
     <section>
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">This week</h2>
+        {/* Not "This week": the window is Thu–Wed on a Sunday, and a heading
+            that claims the calendar week would be lying about it (#672). */}
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Your week</h2>
         {onShowMore && (
           <button
             type="button"

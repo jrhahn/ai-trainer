@@ -88,11 +88,13 @@ const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 // The clock is pinned to a Wednesday, and the tests below derive every date
 // from it (#656).
 //
-// `WeekStrip` renders Monday–Sunday of the *current* calendar week, so on a
-// Sunday "tomorrow" is next Monday and is not in the strip at all: the four
+// `WeekStrip` used to render Monday–Sunday of the *current* calendar week, so
+// on a Sunday "tomorrow" was next Monday and not in the strip at all: the four
 // tests that click tomorrow's chip could not find it, and this file went red
-// every Sunday regardless of what the branch changed. Mid-week, `today`
-// through `threeDaysFromNow` all land inside the same Monday–Sunday window.
+// every Sunday regardless of what the branch changed. The strip is a rolling
+// window centred on today since #672, so `twoDaysAgo` through
+// `threeDaysFromNow` are in it on every weekday — the pinned clock now only
+// keeps the dates themselves stable.
 //
 // Only `Date` is faked. Faking timers wholesale would break `userEvent` and
 // `waitFor`, which the suite leans on heavily.
@@ -718,7 +720,7 @@ describe('DashboardPage — Activities section layout', () => {
       trainingPlan: [planDay],
     })
     renderDashboard()
-    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(await screen.findByText('Your week')).toBeInTheDocument()
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
   })
 
@@ -738,7 +740,7 @@ describe('DashboardPage — Activities section layout', () => {
       trainingPlan: [planDay],
     })
     renderDashboard()
-    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(await screen.findByText('Your week')).toBeInTheDocument()
     // Selecting tomorrow surfaces it in the hero, which is a stronger claim than
     // the old link check: the plan reached the dashboard *and* is readable there.
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Endurance') }))
@@ -818,7 +820,7 @@ describe('DashboardPage — TrainingCalendar', () => {
   it('keeps the calendar off the page until it is asked for', async () => {
     setupStore({ isExpertMode: true, trainingPlan: [planned] })
     renderDashboard()
-    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(await screen.findByText('Your week')).toBeInTheDocument()
     expect(screen.queryByTestId('training-calendar')).not.toBeInTheDocument()
   })
 
@@ -1086,7 +1088,7 @@ describe('DashboardPage — plan comparison row', () => {
     // so each future session is named once rather than in two competing lists.
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
     expect(screen.queryByText(/Tomorrow VO2 Max Intervals/)).not.toBeInTheDocument()
-    expect(screen.getByText('This week')).toBeInTheDocument()
+    expect(screen.getByText('Your week')).toBeInTheDocument()
     // Not listed a second time, but one click away in the hero (#634).
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Intervals') }))
     expect(
@@ -1414,7 +1416,7 @@ describe("DashboardPage — Today's status strip", () => {
       trainingPlan: [planDay({ date: tomorrow, workoutType: 'rest', title: 'Rest Day' })],
     })
     renderDashboard()
-    expect(await screen.findByText('This week')).toBeInTheDocument()
+    expect(await screen.findByText('Your week')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Rest') }))
 
@@ -1452,7 +1454,7 @@ describe("DashboardPage — Today's status strip", () => {
     // The hero swapped; the page around it did not go anywhere (#634).
     expect(await screen.findByRole('heading', { name: 'Rest Day' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'VO2 Efforts' })).not.toBeInTheDocument()
-    expect(screen.getByText('This week')).toBeInTheDocument()
+    expect(screen.getByText('Your week')).toBeInTheDocument()
     expect(screen.getByTestId('ai-chat')).toBeInTheDocument()
   })
 
