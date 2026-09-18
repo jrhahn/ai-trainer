@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import ReactMarkdown from 'react-markdown'
 
-import { MARKDOWN_COMPONENTS } from './AIChat'
+import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 
 function renderCoachMarkdown(markdown: string) {
   return render(
@@ -88,5 +88,16 @@ describe('nothing disappears silently', () => {
     const { container } = renderCoachMarkdown('# Week overview')
     expect(container.querySelector('h1')).toBeNull()
     expect(container.querySelector('p')?.textContent).toBe('Week overview')
+  })
+
+  it('renders a link node with no href without printing "undefined"', () => {
+    // Exercised directly: markdown always gives an anchor an href, so this
+    // defensive path is unreachable through ReactMarkdown. It still has to be
+    // right — the alternative renders the string "(undefined)" at the athlete.
+    const Anchor = MARKDOWN_COMPONENTS.a as React.ComponentType<{
+      children?: React.ReactNode
+    }>
+    const { container } = render(<Anchor>bare label</Anchor>)
+    expect(container.textContent).toBe('bare label')
   })
 })

