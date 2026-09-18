@@ -47,11 +47,12 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
 
     assert "authoritative basis" in system_prompt
     assert "first bullet must summarize the latest listed activity" in system_prompt
+    # The name is provider-supplied, so it arrives marked as data (#680).
     assert (
         "Latest listed activity (anchor the first summary bullet on this activity): "
-        "Name: Oberursel (Taunus) Mountain Biking"
+        "Name: «Oberursel (Taunus) Mountain Biking»"
     ) in user_prompt
-    assert "Name: Oberursel (Taunus) Mountain Biking" in user_prompt
+    assert "Name: «Oberursel (Taunus) Mountain Biking»" in user_prompt
     assert "Type: MountainBikeRide" in user_prompt
     assert "Mittelberg Hiking" not in user_prompt
     assert "prefer the listed activity data" in system_prompt
@@ -2484,7 +2485,7 @@ def test_ride_metrics_context_section_includes_matched_plan_snapshot():
     # "plan match:manual_matched" as a verdict on execution (#551).
     assert "plan linkage:linked to a planned session by the athlete" in section
     assert "manual_matched" not in section
-    assert "Planned workout: Planned Tempo, 80 min" in section
+    assert "Planned workout: «Planned Tempo», 80 min" in section
 
 
 def test_ride_metrics_context_section_includes_duration_and_display_label():
@@ -2518,7 +2519,10 @@ def test_ride_metrics_context_section_includes_duration_and_display_label():
     # An explicit label is reported as the badge the athlete is looking at, and
     # marked as outranking anything computed from the plan (#551).
     assert 'badge:"Close" (set explicitly, overrides the computed badge)' in section
-    assert "Planned workout: Long Endurance Ride with Climbing Focus, 180 min" in section
+    # The planned title is athlete-editable, so it arrives marked (#680).
+    assert (
+        "Planned workout: «Long Endurance Ride with Climbing Focus», 180 min" in section
+    )
 
 
 def test_batch_review_user_includes_ambiguous_plan_match():
