@@ -35,6 +35,17 @@ just one. See issue #326.
    each have their own progress dict, so a user double-clicking behind a
    round-robin LB could start two concurrent imports.
 
+5. **The AI rate limit is per replica.** `services/rate_limit.SlidingWindowLimiter`
+   keeps its windows in module memory (`routers/ai._ai_limiter`), so with N
+   replicas each user gets N times the configured allowance (#676). This is a
+   weakened guarantee rather than a broken one — the limit exists to stop a
+   script, and N is small and fixed — but a deployment that scales out should
+   divide the configured limits by the replica count, or move the counter to a
+   shared store.
+
+   The **token budget** on the same feature is unaffected: it sums `llm_calls`
+   in Postgres, so it is already correct across replicas.
+
 ## What is already safe across replicas
 
 These use the shared Postgres database, so they are correct regardless of

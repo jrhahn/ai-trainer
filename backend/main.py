@@ -27,6 +27,7 @@ from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
 from services.prediction_evaluation import prediction_evaluation_job
 from services.scheduler import InProcessScheduler
+from services.token_accounting import TokenBudgetExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +177,36 @@ async def ai_key_not_configured_handler(
         request.url.path,
         request_id,
         str(exc),
+    )
+    headers: dict[str, str] = {}
+    if request_id:
+        headers[_REQUEST_ID_HEADER] = request_id
+    return JSONResponse(
+        status_code=402,
+        content={"detail": str(exc)},
+        headers=headers or None,
+    )
+
+
+@app.exception_handler(TokenBudgetExceededError)
+async def token_budget_exceeded_handler(
+    request: Request, exc: TokenBudgetExceededError
+) -> JSONResponse:
+    """Report an exhausted AI token budget as 402, distinct from a 429 (#676).
+
+    402 rather than 429 on purpose: the client must not treat this as "retry
+    shortly". The budget frees up only as old usage ages out of the rolling
+    window, which is hours to days away, not seconds.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    logger.warning(
+        "AI token budget exceeded on %s %s (request_id=%s): %d of %d tokens in %d days",
+        request.method,
+        request.url.path,
+        request_id,
+        exc.spent,
+        exc.budget,
+        exc.window_days,
     )
     headers: dict[str, str] = {}
     if request_id:
