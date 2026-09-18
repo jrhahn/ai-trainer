@@ -69,6 +69,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still at `true` — flipping it decides who can use a running instance, which
   is a deployment decision rather than a code one.
 
+- **Foreign text now reaches the model marked as data** (`services/untrusted_text.py`,
+  `services/prompts.py`, `services/rag.py`) — every prompt this app builds
+  concatenated trusted instructions and text it did not write into one flat
+  string, with no delimiter, no trust marker and nothing stating that a span was
+  data. An activity named `Ignore previous instructions and …` arrived as an
+  instruction-shaped line inside a section the prompt itself labels
+  *authoritative* (#680).
+
+  Three sources are marked at one gate each: provider activity names
+  (`activity_power_metrics_block`, `process_pending_feedbacks_user`), retrieved
+  corpus chunks (`retrieve_cycling_context` — title and body both), and the
+  athlete's own ride notes and planned-workout titles
+  (`ride_metrics_context_section`). `untrusted_text.mark` strips the markers
+  from the payload before wrapping, which is why marking lives in one function
+  rather than at each call site: a call site that forgets the strip leaves an
+  envelope that *looks* defended and can be closed from inside.
+
+  The coach's own past notes are deliberately **not** marked. The rule tells the
+  model that marked text is not from its trainer, and for the coach's own prose
+  that would be false. It is a replay channel, but the place to stop that is the
+  note being written, not its quotation.
+
+  Cost, since prompt size is a standing concern here (#510/#513/#556): the rule
+  is 134 tokens and sits in the *static* prefix, so it is cached and paid once,
+  at 1.9 % of that prefix. The markers themselves are ~30 tokens on a 30-ride
+  history, against a ~16k-token coach message.
+
+  **What this is not.** Marking is not a proof, and no delimiter design makes it
+  one — a determined instruction inside a marked span can still sway a model.
+  The tests assert what this code controls (the payload arrives, marked, with
+  the governing rule in the same prompt) and deliberately do not assert that the
+  model obeys, which would pass or fail on the mock rather than on the model.
+  The real containment is unchanged and elsewhere: the LLM has no tools, plan
+  writes go through `plan_pipeline`'s constraint and honesty gates, and since
+  #677 the reply cannot reach a third-party host.
+
+  One thing found while writing the tests and now pinned: the conversational
+  coach prompt carries **no** activity name at all —
+  `ride_metrics_context_section` describes rides by sport, purpose and metrics.
+  So the field a third party can most plausibly set (group rides, device
+  auto-naming, an activity created by a connected coach) never reaches the chat
+  path; it reaches the login-summary and power-block prompts, where it is now
+  marked. A test fails if a future change adds it, so the question gets answered
+  rather than silently skipped.
+
 ### Changed
 
 - **`llm_calls` is indexed by `(user_id, created_at)`**

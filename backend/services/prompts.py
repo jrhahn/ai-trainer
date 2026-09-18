@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from . import plan_compliance
+from . import plan_compliance, untrusted_text
 from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
@@ -501,7 +501,11 @@ def activity_power_metrics_block(
                 parts.append(f"intensity factor {round(np / user_ftp, 3)}")
         if peak is not None:
             parts.append(f"peak power {round(peak)} W")
-        name = activity.get("name") or activity.get("type") or "activity"
+        # The name comes from the provider, so it is marked as data (#680). The
+        # type and the "activity" fallback are this app's own words and are not.
+        name = untrusted_text.mark(activity.get("name")) or (
+            activity.get("type") or "activity"
+        )
         day = (activity.get("start_date_local") or activity.get("start_date") or "")[
             :10
         ]
@@ -2334,6 +2338,14 @@ def coach_static_prefix() -> str:
     breaks the prefix for the whole request. Volatile athlete data and the
     output contract follow it in :func:`ask_trainer_system`.
     """
+    # Which spans of this prompt are data rather than instruction (#680). It
+    # belongs in the static prefix: it is unconditional, so it costs nothing
+    # after the first request, and a rule about how to read the prompt has to
+    # arrive before the text it governs.
+    data_not_instruction_instructions = (
+        f"\n\n{untrusted_text.DATA_NOT_INSTRUCTION_RULE}"
+    )
+
     # Proactive solicitation and structured feedback extraction instructions
     feedback_instructions = (
         "\n\nActivity feedback rules:\n"
@@ -2426,6 +2438,7 @@ def coach_static_prefix() -> str:
     # closing block below instead.
     static_instructions = (
         f"{COACH_PERSONA} Answer the athlete's question concisely and practically."
+        f"{data_not_instruction_instructions}"
         f"{feedback_instructions}"
         f"{recommendation_layers_instructions}"
         f"{explainability_instructions}"
@@ -4408,13 +4421,19 @@ def ride_metrics_context_section(
             duration = matched_snapshot.get("durationMinutes")
             if title:
                 duration_part = f", {duration} min" if duration else ""
-                lines.append(f"    Planned workout: {title}{duration_part}")
+                lines.append(
+                    f"    Planned workout: {untrusted_text.mark(title)}{duration_part}"
+                )
 
         # Classification reason — only shown when confidence is not high
         if prose and reason and confidence != "high":
             lines.append(f"    [classification: {reason}]")
 
-        # Coach note
+        # Coach note. Deliberately *not* marked as data (#680): this is the
+        # coach's own past prose, and telling the model not to treat it as
+        # coming from the trainer would be false. It is a replay channel — an
+        # instruction that reached a note is re-read on every message — but the
+        # place to stop that is the note being written, not its quotation here.
         coach_note = getattr(m, "coach_note", None)
         if prose and coach_note:
             lines.append(f'    Coach: "{coach_note}"')
@@ -4431,7 +4450,7 @@ def ride_metrics_context_section(
         except ValueError:
             days_ago = 99
         if user_note:
-            lines.append(f'    Athlete: "{user_note}"')
+            lines.append(f"    Athlete: {untrusted_text.mark(user_note)}")
         elif not feel_legs and days_ago <= 3:
             lines.append(
                 "    [no athlete feedback — consider asking how this ride felt]"
@@ -4834,7 +4853,10 @@ def process_pending_feedbacks_user(
 
     if rides:
         latest = rides[-1]
-        latest_name = getattr(latest, "activity_name", None) or "Unnamed activity"
+        # Provider-supplied, so marked as data (#680); the fallback is ours.
+        latest_name = untrusted_text.mark(
+            getattr(latest, "activity_name", None), empty="Unnamed activity"
+        )
         latest_date = getattr(latest, "activity_date", "?")
         latest_type = getattr(latest, "ride_purpose", None) or getattr(
             latest, "sport_type", "activity"
@@ -4856,7 +4878,7 @@ def process_pending_feedbacks_user(
         ]
         for m in rides:
             ride_parts: list[str] = []
-            name = getattr(m, "activity_name", None)
+            name = untrusted_text.mark(getattr(m, "activity_name", None))
             if name:
                 ride_parts.append(f"Name: {name}")
             ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")

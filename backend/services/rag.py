@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services import untrusted_text
 from services.embeddings import embed_query, to_pgvector_literal
 
 logger = logging.getLogger(__name__)
@@ -207,8 +208,14 @@ async def retrieve_cycling_context(
 
         for row in kept:
             title, content, source_type, doi, url, similarity, _topics = row
+            # Corpus text is not written by this app, and a chunk is the worst
+            # shaped injection channel it has: invisible in the UI, retrieved
+            # again on every matching question, and spliced into the coach
+            # prompt with the same standing as the instructions. Marked as data
+            # (#680) — both the title and the body, since both are ingested.
             context_parts.append(
-                f"[Source: {title}]\n{content}"
+                f"[Source: {untrusted_text.mark(title)}]\n"
+                f"{untrusted_text.mark(content)}"
             )
             source: dict[str, Any] = {"title": title, "sourceType": source_type}
             if doi:
