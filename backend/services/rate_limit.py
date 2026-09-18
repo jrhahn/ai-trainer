@@ -113,15 +113,26 @@ class SlidingWindowLimiter:
             self._hits.pop(key, None)
 
     def _prune(self, now: float, longest: float) -> None:
-        """Drop buckets whose newest hit has aged out, then cap the store."""
+        """Drop buckets whose newest hit has aged out, then make room for one.
+
+        Only ever called immediately *before* a new bucket is inserted, so it
+        trims to ``max_buckets - 1``: trimming to ``max_buckets`` would leave
+        the store one over the cap once that insert lands, which is a cap that
+        never quite holds.
+
+        Eviction is oldest-idle-first, so it can only ever hand allowance back
+        to someone who stopped calling — never take it from someone who has
+        spent it recently.
+        """
         for key, hits in list(self._hits.items()):
             if not hits or now - hits[-1] > longest:
                 self._hits.pop(key, None)
 
-        if len(self._hits) > self._max_buckets:
+        room_for_the_new_bucket = max(self._max_buckets - 1, 0)
+        if len(self._hits) > room_for_the_new_bucket:
             by_age = sorted(
                 self._hits.items(),
                 key=lambda item: item[1][-1] if item[1] else 0.0,
             )
-            for key, _ in by_age[: len(self._hits) - self._max_buckets]:
+            for key, _ in by_age[: len(self._hits) - room_for_the_new_bucket]:
                 self._hits.pop(key, None)

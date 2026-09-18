@@ -134,6 +134,43 @@ def test_idle_buckets_are_pruned_so_the_store_stays_bounded():
     assert set(limiter._hits) == {"c"}
 
 
+def test_no_windows_means_no_limit():
+    """Configuring nothing must not become an accidental limit of zero."""
+    limiter = SlidingWindowLimiter()
+    assert limiter.check("u", (), now=0.0) is None
+    assert limiter.check("u", (), now=0.0) is None
+
+
+def test_resetting_one_key_leaves_the_others_alone():
+    limiter = SlidingWindowLimiter()
+    windows = (Window(1, 60),)
+    limiter.check("a", windows, now=0.0)
+    limiter.check("b", windows, now=0.0)
+
+    limiter.reset("a")
+
+    assert limiter.check("a", windows, now=1.0) is None
+    assert limiter.check("b", windows, now=1.0) is not None
+
+
+def test_the_store_is_capped_even_when_every_bucket_is_active():
+    """Age eviction alone cannot bound the store if every user is live.
+
+    The cap is what stops a busy deployment growing one deque per user without
+    limit. Eviction is oldest-idle-first, so it can only ever hand allowance
+    back — never take it away from someone who has not spent it.
+    """
+    limiter = SlidingWindowLimiter(max_buckets=2)
+    windows = (Window(5, 1000),)
+    for index, key in enumerate(("a", "b", "c", "d")):
+        limiter.check(key, windows, now=float(index))
+
+    assert len(limiter._hits) <= 2
+    # The most recent caller survives; the oldest is the one dropped.
+    assert "d" in limiter._hits
+    assert "a" not in limiter._hits
+
+
 def test_a_window_must_have_a_sane_limit():
     with pytest.raises(ValueError):
         Window(0, 60)
@@ -364,6 +401,62 @@ async def test_only_api_sources_are_gated(
     await _record_spend(db, budget_user.id, tokens=50_000)
 
     await enforce_token_budget(db, budget_user, source=source)
+
+
+@pytest.mark.asyncio
+async def test_an_over_budget_request_answers_402_not_429(
+    client: AsyncClient, auth_headers, mock_ai_service, db: AsyncSession, monkeypatch
+):
+    """The refusal the athlete actually receives, over HTTP.
+
+    The unit tests above prove the gate raises; they say nothing about what the
+    client is told, which is the half that matters to the UI. 402 rather than
+    429 is the point of the exception handler: a budget frees up as old usage
+    ages out of a rolling window — hours to days — so a client that treats it
+    as "retry shortly" would hammer a wall.
+    """
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user_id = me.json()["id"]
+
+    monkeypatch.setattr(settings, "ai_token_budget", 1000)
+    monkeypatch.setattr(settings, "ai_token_budget_window_days", 30)
+    await _record_spend(db, user_id, tokens=5000)
+    await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "What should I ride today?"},
+    )
+
+    assert response.status_code == 402, response.text
+    assert "budget" in response.json()["detail"].lower()
+    # Not the rate limit: no Retry-After, because there is nothing to retry into.
+    assert "Retry-After" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_a_request_within_budget_is_not_refused(
+    client: AsyncClient, auth_headers, mock_ai_service, db: AsyncSession, monkeypatch
+):
+    """The other half: the gate must not refuse someone who is under budget.
+
+    Without this, the test above would pass just as well if every request 402'd.
+    """
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user_id = me.json()["id"]
+
+    monkeypatch.setattr(settings, "ai_token_budget", 1_000_000)
+    await _record_spend(db, user_id, tokens=5000)
+    await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "What should I ride today?"},
+    )
+
+    assert response.status_code != 402
 
 
 @pytest.mark.asyncio

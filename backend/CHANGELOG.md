@@ -61,7 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   athlete chatted a lot would be the #472 failure mode, work disappearing that
   nobody asked to lose. Refusals are distinguishable: 429 with `Retry-After`
   for the rate limit, 402 for an exhausted budget, because one is worth
-  retrying in a minute and the other is not.
+  retrying in a minute and the other is not — asserted over HTTP, since what
+  the client is actually told is the half that matters to the UI and the unit
+  tests say nothing about it.
 
   `ALLOW_ADMIN_AI_KEY_FALLBACK` is now stated explicitly in `compose.yml`,
   still at `true` — flipping it decides who can use a running instance, which
