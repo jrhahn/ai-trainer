@@ -91,6 +91,25 @@ services:
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # AI spend controls (#676). Stated here rather than left to the code
+      # defaults, because a var absent from this block never reaches the
+      # backend at all (#612/#617) — so "the default" would be invisible in
+      # the repo and unchangeable without a code edit.
+      #
+      # Registration is public on this deployment (see the backend-public-https
+      # router below), so with the fallback on, every account that signs up
+      # spends the owner's provider key. Set this to false to require BYOK.
+      # Left at true here only because flipping it changes who can use a
+      # running instance, which is a deployment decision, not a code one.
+      ALLOW_ADMIN_AI_KEY_FALLBACK: ${ALLOW_ADMIN_AI_KEY_FALLBACK:-true}
+      AI_RATE_LIMIT_ENABLED: ${AI_RATE_LIMIT_ENABLED:-true}
+      AI_RATE_LIMIT_BURST: ${AI_RATE_LIMIT_BURST:-10}
+      AI_RATE_LIMIT_BURST_SECONDS: ${AI_RATE_LIMIT_BURST_SECONDS:-60}
+      AI_RATE_LIMIT_SUSTAINED: ${AI_RATE_LIMIT_SUSTAINED:-100}
+      AI_RATE_LIMIT_SUSTAINED_SECONDS: ${AI_RATE_LIMIT_SUSTAINED_SECONDS:-3600}
+      # 0 disables the budget. A coach message is ~16k tokens (#510/#556).
+      AI_TOKEN_BUDGET: ${AI_TOKEN_BUDGET:-0}
+      AI_TOKEN_BUDGET_WINDOW_DAYS: ${AI_TOKEN_BUDGET_WINDOW_DAYS:-30}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}

@@ -190,7 +190,44 @@ class Settings(BaseSettings):
     """When True (default), AI requests fall back to the backend owner's keys if
     the user has not configured their own.  Set to False to require every user to
     supply their own key (BYOK-only mode).
+
+    On a deployment with open registration this default means any account that
+    signs up spends the owner's money, which is half of #676.  It is left True
+    so a single-user install keeps working out of the box, but a public
+    deployment should set it explicitly — ``compose.yml`` now does.
     """
+
+    # ------------------------------------------------------------------
+    # AI spend controls (#676)
+    #
+    # Two independent limits, because they stop different things: the rate
+    # limit stops a burst, the budget stops a slow drip that never trips it.
+    # Both are per user and both apply only to ``api:`` sources — work an HTTP
+    # request started.  Scheduler jobs are bounded by their schedule and
+    # background tasks are bounded by the request that spawned them, so gating
+    # the request gates the whole chain.
+    # ------------------------------------------------------------------
+    ai_rate_limit_enabled: bool = True
+    ai_rate_limit_burst: int = 10
+    """Requests per ``ai_rate_limit_burst_seconds`` before a 429."""
+    ai_rate_limit_burst_seconds: int = 60
+    ai_rate_limit_sustained: int = 100
+    """Requests per ``ai_rate_limit_sustained_seconds`` before a 429.
+
+    Generous for a human — an active athlete sends a few dozen coach messages a
+    day — and immediately limiting for a script.
+    """
+    ai_rate_limit_sustained_seconds: int = 3600
+
+    ai_token_budget: int = 0
+    """Provider tokens one user may spend per ``ai_token_budget_window_days``.
+
+    ``0`` disables the budget, which is the default so existing installs are
+    unaffected by the upgrade.  A coach message costs ~16k tokens (#510/#556),
+    so a budget is best set in millions: 5_000_000 is roughly 300 coach
+    messages a month.
+    """
+    ai_token_budget_window_days: int = 30
 
     # ------------------------------------------------------------------
     # AI model selection by task

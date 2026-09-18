@@ -1541,4 +1541,7 @@ class LlmCall(Base):
         # narrowed to one source or model.
         Index("ix_llm_calls_created_at", "created_at"),
         Index("ix_llm_calls_source_created_at", "source", "created_at"),
+        # The token budget (#676) asks the same question narrowed to one user,
+        # on the hot path of every AI request — neither index above serves it.
+        Index("ix_llm_calls_user_id_created_at", "user_id", "created_at"),
     )

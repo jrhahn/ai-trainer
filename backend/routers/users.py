@@ -29,6 +29,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
+from routers.dependencies import enforce_ai_rate_limit
 from services import ai_service, metrics_service
 from services import assessment_pipeline
 from services import athlete_inquiry
@@ -2074,7 +2075,13 @@ def _fit_file_parser_or_503() -> Any:
     return FitFile
 
 
-@router.post("/upload-fit", response_model=schemas.FitUploadResponse)
+@router.post(
+    "/upload-fit",
+    response_model=schemas.FitUploadResponse,
+    # The one LLM-spending route outside the /ai router: it runs
+    # ``api:analyse-fit-import`` per upload, so it needs the same limit (#676).
+    dependencies=[Depends(enforce_ai_rate_limit)],
+)
 async def upload_fit_file(
     file: UploadFile,
     db: AsyncSession = Depends(get_db),

@@ -39,6 +39,7 @@ import re
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -73,6 +74,55 @@ _SOURCE_PATTERN = re.compile(rf"^({'|'.join(SOURCE_KINDS)}):[a-z0-9]+(-[a-z0-9]+
 
 def source_is_well_formed(source: str) -> bool:
     return bool(_SOURCE_PATTERN.match(source))
+
+
+class TokenBudgetExceededError(Exception):
+    """Raised before a provider call when the user is over their token budget.
+
+    Deliberately its own type rather than a generic 500 or a reused
+    ``AIRateLimitError``: "you have spent your allowance" and "the provider is
+    throttling us" need different words in the UI and different reactions from
+    the client — one is worth retrying in a minute, the other is not (#676).
+    """
+
+    def __init__(self, *, spent: int, budget: int, window_days: int) -> None:
+        self.spent = spent
+        self.budget = budget
+        self.window_days = window_days
+        super().__init__(
+            f"AI token budget exhausted: {spent:,} of {budget:,} tokens used in "
+            f"the last {window_days} days. The budget resets as older usage "
+            f"ages out of the window."
+        )
+
+
+async def enforce_token_budget(
+    db: AsyncSession, user: models.User, *, source: str, now: datetime | None = None
+) -> None:
+    """Raise :class:`TokenBudgetExceededError` when *user* is over budget.
+
+    Applies only to ``api:`` sources — see the note on
+    :data:`SOURCE_KINDS`. Scheduler jobs are bounded by their schedule rather
+    than by request rate, and killing a nightly plan-maintenance run because an
+    athlete chatted a lot is the #472 failure mode (silent loss of work the
+    athlete never asked to lose). Background tasks are bounded by the request
+    that spawned them, so gating the request gates the chain.
+
+    Checked *before* the block runs, so an over-budget user costs nothing at
+    all rather than one more prompt.
+    """
+    budget = settings.ai_token_budget
+    if budget <= 0 or not source.startswith("api:"):
+        return
+
+    window_days = settings.ai_token_budget_window_days
+    reference = now or datetime.now(timezone.utc)
+    since = reference - timedelta(days=window_days)
+    spent = await crud.sum_user_tokens_since(db, user.id, since)
+    if spent >= budget:
+        raise TokenBudgetExceededError(
+            spent=spent, budget=budget, window_days=window_days
+        )
 
 
 @dataclass
@@ -431,7 +481,13 @@ async def track_llm_usage(
     is why three failed coach requests billed ~52k tokens and left no trace in
     ``llm_calls`` at all (#560). :func:`flush_deferred_usage` writes them once
     the session's transaction has ended, one way or the other.
+
+    Raises :class:`TokenBudgetExceededError` before the block runs when the user
+    is over their configured budget (#676). Raising here rather than at each
+    call site is the same "one gate" argument that put attribution here:
+    fifteen call sites cannot each be relied on to remember the check.
     """
+    await enforce_token_budget(db, user, source=source)
     token = begin_collection(source)
     failed = False
     try:
