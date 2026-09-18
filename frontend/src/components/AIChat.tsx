@@ -19,7 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
-import type { Components } from 'react-markdown'
+import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
@@ -53,16 +53,6 @@ const EVENT_META: Record<TimelineEventKind, { icon: LucideIcon; iconClass: strin
   'open-question': { icon: HelpCircle, iconClass: 'text-blue-500' },
   hypothesis: { icon: Lightbulb, iconClass: 'text-amber-500' },
   experiment: { icon: FlaskConical, iconClass: 'text-purple-500' },
-}
-
-// Render headings as plain paragraphs so the chat uses a uniform font size
-const MARKDOWN_COMPONENTS: Components = {
-  h1: 'p',
-  h2: 'p',
-  h3: 'p',
-  h4: 'p',
-  h5: 'p',
-  h6: 'p',
 }
 
 interface Props {
