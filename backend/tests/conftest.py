@@ -254,6 +254,24 @@ def mock_ai_service(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def ai_rate_limit_off(monkeypatch):
+    """Disable the AI rate limit for the suite by default (#676).
+
+    The limiter counts requests against the wall clock, and the suite issues
+    far more AI requests per second than any human does. Leaving it on would
+    make unrelated tests fail as 429s once a file grew past the burst limit —
+    a trap that gets sprung by whoever adds the next test, not by whoever
+    caused it.
+
+    ``tests/test_ai_rate_limit.py`` owns this behaviour and turns it back on
+    explicitly.
+    """
+    from config import settings as _settings
+
+    monkeypatch.setattr(_settings, "ai_rate_limit_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def science_corpus_present(monkeypatch):
     """Pretend the cycling-science corpus is populated.
 

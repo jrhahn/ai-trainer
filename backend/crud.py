@@ -198,6 +198,32 @@ async def increment_user_consumed_tokens(
     await db.flush()
 
 
+async def sum_user_tokens_since(
+    db: AsyncSession,
+    user_id: str,
+    since: datetime,
+) -> int:
+    """Total provider tokens billed to *user_id* since *since*.
+
+    Read from ``llm_calls`` rather than from ``users.consumed_tokens`` because
+    the budget this answers is a rolling window and that column is a lifetime
+    running total: windowing it would need either a reset job or a second pair
+    of columns to reset, and both drift away from what was actually spent. The
+    per-call table already carries the timestamp, so the window is free.
+
+    Counts failed calls too — a rejected request still consumed the prompt, and
+    a model that starts 400ing on every call must not become an unmetered way
+    to spend money (#401).
+    """
+    result = await db.execute(
+        select(func.coalesce(func.sum(models.LlmCall.total_tokens), 0)).where(
+            models.LlmCall.user_id == user_id,
+            models.LlmCall.created_at >= since,
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
 async def record_llm_calls(
     db: AsyncSession,
     user_id: str | None,
