@@ -23,6 +23,7 @@ import models
 import schemas
 from config import settings
 from database import get_db
+from routers.dependencies import enforce_admin_login_rate_limit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -96,7 +97,15 @@ def _admin_enabled() -> None:
 async def admin_login(body: AdminLoginRequest) -> schemas.TokenResponse:
     """Validate the admin password and return a short-lived admin JWT."""
     _admin_enabled()
-    if not secrets.compare_digest(body.password, settings.admin_password):
+    # After the enabled check, so a deployment with no admin panel does not
+    # burn its allowance on requests that could never have succeeded (#682).
+    enforce_admin_login_rate_limit()
+    # Compared as bytes: compare_digest raises TypeError on a str containing
+    # non-ASCII, which would turn a passphrase with an umlaut into a 500 on
+    # every attempt — including the operator's own.
+    if not secrets.compare_digest(
+        body.password.encode("utf-8"), settings.admin_password.encode("utf-8")
+    ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
     token = auth.create_admin_token()
     return schemas.TokenResponse(access_token=token, token_type="bearer")

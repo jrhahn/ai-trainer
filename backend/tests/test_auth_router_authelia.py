@@ -342,3 +342,98 @@ async def test_session_token_returns_401_when_authelia_disabled(client, monkeypa
 
     response = await client.get("/api/v1/auth/session")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# warn_if_authelia_user_store_unwritable (#682)
+#
+# The safety net for the non-root container: registration writes
+# users_database.yml on a bind mount whose ownership comes from the host, so a
+# uid mismatch turns every sign-up into a 500. Checked once at boot so the
+# operator learns it from the logs rather than from a user who cannot register.
+#
+# os.access is monkeypatched rather than driven through real file modes,
+# because a suite running as root would find every path writable and the
+# branch under test would never be reached.
+# ---------------------------------------------------------------------------
+
+
+def test_no_warning_when_authelia_is_disabled(monkeypatch, caplog, tmp_path):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "users.yml"))
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert caplog.records == []
+
+
+def test_no_warning_when_no_user_store_is_configured(monkeypatch, caplog):
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert caplog.records == []
+
+
+def test_warns_when_the_user_store_is_missing(monkeypatch, caplog, tmp_path):
+    missing = tmp_path / "nope" / "users_database.yml"
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(missing))
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert len(caplog.records) == 1
+    assert "does not exist" in caplog.records[0].getMessage()
+
+
+def test_warns_when_the_user_store_is_not_writable(monkeypatch, caplog, tmp_path):
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(auth.os, "access", lambda *_args, **_kwargs: False)
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert len(caplog.records) == 1
+    assert "not writable" in caplog.records[0].getMessage()
+
+
+def test_warns_when_only_the_directory_is_unwritable(monkeypatch, caplog, tmp_path):
+    """The write is create-and-rename, so the *directory* has to be writable too.
+
+    A file the process can write, in a directory it cannot, still fails: the
+    temp file next to the target cannot be created. Checking only the file
+    would report healthy and let registration break anyway.
+    """
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(
+        auth.os, "access", lambda path, _mode: Path(path) != store.parent
+    )
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert len(caplog.records) == 1
+    assert "not writable" in caplog.records[0].getMessage()
+
+
+def test_silent_when_the_user_store_is_writable(monkeypatch, caplog, tmp_path):
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(auth.os, "access", lambda *_args, **_kwargs: True)
+
+    with caplog.at_level("WARNING"):
+        auth.warn_if_authelia_user_store_unwritable()
+
+    assert caplog.records == []

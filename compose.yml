@@ -63,10 +63,36 @@ services:
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
       - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
       - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
+      # Response headers for everything served over TLS (#682). The redirect
+      # above is permanent but does nothing for the *first* request a browser
+      # makes on a new network, which is the one worth protecting; HSTS is what
+      # closes that window. includeSubDomains is safe here because every
+      # hostname this stack answers on (app, auth, traefik) is already
+      # websecure-only. Preload is deliberately off: it is a one-way door
+      # enforced by browser vendors, not by this config.
+      - traefik.http.middlewares.security-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.security-headers.headers.stsPreload=false
+      # The API is served by Traefik directly, never through the frontend's
+      # nginx, so it gets none of nginx.conf's headers. These two are the ones
+      # that mean something on a JSON response.
+      - traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.security-headers.headers.referrerPolicy=no-referrer
 
   backend:
     build:
       context: ./backend
+      args:
+        # Must match the owner of ./authelia on the host, because registration
+        # writes users_database.yml there through a bind mount and the mount
+        # keeps the host's ownership (#682). Exposed as a build arg rather than
+        # fixed in the Dockerfile precisely because the right value is a
+        # property of the host, not of the image. Check with `ls -lan authelia/`
+        # before switching a running deployment: an existing users_database.yml
+        # written while the container ran as root is owned by root:root 0600 and
+        # has to be chowned too, or registration starts failing.
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -110,6 +136,25 @@ services:
       # 0 disables the budget. A coach message is ~16k tokens (#510/#556).
       AI_TOKEN_BUDGET: ${AI_TOKEN_BUDGET:-0}
       AI_TOKEN_BUDGET_WINDOW_DAYS: ${AI_TOKEN_BUDGET_WINDOW_DAYS:-30}
+      # Auth brute-force controls (#682). Listed for the same reason as the
+      # block above: a var absent here never reaches the backend, so leaving
+      # these to the code defaults would make them invisible and untunable.
+      # /admin/login is the one that matters most — it is publicly routed
+      # (PathPrefix(/api), no proxy auth) and one password stands between a
+      # guesser and every user's email address.
+      AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
+      LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-10}
+      LOGIN_RATE_LIMIT_SECONDS: ${LOGIN_RATE_LIMIT_SECONDS:-300}
+      LOGIN_RATE_LIMIT_GLOBAL_ATTEMPTS: ${LOGIN_RATE_LIMIT_GLOBAL_ATTEMPTS:-60}
+      LOGIN_RATE_LIMIT_GLOBAL_SECONDS: ${LOGIN_RATE_LIMIT_GLOBAL_SECONDS:-60}
+      REGISTRATION_RATE_LIMIT_ATTEMPTS: ${REGISTRATION_RATE_LIMIT_ATTEMPTS:-5}
+      REGISTRATION_RATE_LIMIT_SECONDS: ${REGISTRATION_RATE_LIMIT_SECONDS:-3600}
+      ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS: ${ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS:-5}
+      ADMIN_LOGIN_RATE_LIMIT_SECONDS: ${ADMIN_LOGIN_RATE_LIMIT_SECONDS:-900}
+      # Request body limits (#682).
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-67108864}
+      FIT_UPLOAD_MAX_BYTES: ${FIT_UPLOAD_MAX_BYTES:-10485760}
+      FIT_UPLOAD_BULK_MAX_FILES: ${FIT_UPLOAD_BULK_MAX_FILES:-25}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
@@ -166,14 +211,22 @@ services:
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Email=
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Name=
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Groups=
-      - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker
+      # Prove a request transited this proxy (#682). AUTHELIA_PROXY_SHARED_SECRET
+      # was read by the backend and shipped in .env long before anything set the
+      # header, so switching it on used to *disable* Authelia header trust
+      # silently rather than tighten it — a control that only looked wired.
+      # customRequestHeaders overwrites, so a client cannot supply its own
+      # value; when the secret is empty the header is removed and the backend
+      # check is a documented no-op.
+      - traefik.http.middlewares.backend-proxy-secret.headers.customRequestHeaders.${AUTHELIA_PROXY_SECRET_HEADER:-X-Authelia-Proxy-Secret}=${AUTHELIA_PROXY_SHARED_SECRET:-}
+      - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
       - traefik.http.routers.backend-public-https.entrypoints=websecure
       - traefik.http.routers.backend-public-https.tls=true
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-public-https.service=backend
       - traefik.http.routers.backend-public-https.priority=3000
-      - traefik.http.routers.backend-public-https.middlewares=backend-strip-remote@docker
+      - traefik.http.routers.backend-public-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
@@ -197,6 +250,7 @@ services:
       - traefik.http.routers.frontend-https.tls=true
       - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.frontend-https.service=frontend
+      - traefik.http.routers.frontend-https.middlewares=security-headers@docker
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
   authelia:
@@ -204,9 +258,26 @@ services:
     restart: unless-stopped
     environment:
       X_AUTHELIA_CONFIG: ${X_AUTHELIA_CONFIG:-/config/configuration.yml}
-      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:-change-this-authelia-reset-jwt-secret}
-      AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET:-change-this-authelia-session-secret}
-      AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:-change-this-authelia-storage-encryption-key}
+      # No defaults, for the same reason POSTGRES_PASSWORD has none — and a
+      # sharper one (#682). These three were `${VAR:-change-this-...}`, and
+      # `:-` substitutes on *empty* as well as unset, so a .env line reading
+      # `AUTHELIA_SESSION_SECRET=` silently deployed the placeholder. That
+      # placeholder lives in a public repository, which makes it a published
+      # secret, not a weak one:
+      #
+      #   - session.secret signs the portal's session cookies
+      #   - identity_validation.reset_password.jwt_secret signs password-reset
+      #     tokens, and auth.<domain> is publicly routed. Anyone who can mint a
+      #     valid reset token can set any user's password without ever
+      #     receiving the notification — and since auth_router.login verifies
+      #     against the same users_database.yml, that is app account takeover.
+      #   - storage.encryption_key encrypts Authelia's own database.
+      #
+      # Failing at `compose up` is the point: the previous behaviour was to
+      # come up healthy and look fine. Generate each with `openssl rand -hex 32`.
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: "${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:?must be set - generate with openssl rand -hex 32}"
+      AUTHELIA_SESSION_SECRET: "${AUTHELIA_SESSION_SECRET:?must be set - generate with openssl rand -hex 32}"
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: "${AUTHELIA_STORAGE_ENCRYPTION_KEY:?must be set - generate with openssl rand -hex 32}"
     volumes:
       - ./authelia:/config
       - authelia_data:/data
@@ -223,6 +294,7 @@ services:
       - traefik.http.routers.authelia-https.tls.certresolver=letsencrypt
       - traefik.http.routers.authelia-https.service=authelia
       - traefik.http.routers.authelia-https.priority=1000
+      - traefik.http.routers.authelia-https.middlewares=security-headers@docker
       - traefik.http.services.authelia.loadbalancer.server.port=9091
 
   # --- Monitoring (#549) -----------------------------------------------------

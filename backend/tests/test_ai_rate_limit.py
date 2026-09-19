@@ -268,6 +268,65 @@ async def test_upload_fit_is_limited_even_though_it_is_not_on_the_ai_router(
 
 
 @pytest.mark.asyncio
+async def test_bulk_upload_fit_is_limited_too(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """The bulk route was the one #676 missed (#682).
+
+    It spends through the same ``_store_fit_import`` as its single-file twin,
+    so an unlimited bulk route made the limit on the single one decorative —
+    the same work was reachable one URL over.
+    """
+    monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
+    monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
+
+    files = [("files", ("ride.fit", b"not really a fit file", "application/octet-stream"))]
+    statuses = [
+        (
+            await client.post(
+                "/api/v1/users/me/upload-fit/bulk", headers=auth_headers, files=files
+            )
+        ).status_code
+        for _ in range(3)
+    ]
+
+    assert statuses[-1] == 429, statuses
+    assert 429 not in statuses[:2], statuses
+
+
+@pytest.mark.asyncio
+async def test_a_bulk_batch_pays_per_file_not_per_request(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """Otherwise batch size is a way to buy AI calls at a flat rate of one.
+
+    Each file in the batch is its own ``_analyse_fit_import`` call, so each
+    file after the first spends from the same allowance. Hitting the limit
+    stops the batch rather than failing it: what was already imported stays
+    imported, and the response names the files that were not attempted.
+    """
+    monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
+    monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
+
+    files = [
+        ("files", (f"ride{i}.fit", b"not really a fit file", "application/octet-stream"))
+        for i in range(3)
+    ]
+    resp = await client.post(
+        "/api/v1/users/me/upload-fit/bulk", headers=auth_headers, files=files
+    )
+
+    assert resp.status_code == 200
+    results = resp.json()["files"]
+    assert len(results) == 3, results
+    # The request itself paid for file 1; file 2 paid its own way; file 3 found
+    # the allowance spent.
+    assert "rate limit" in results[-1]["message"].lower(), results
+
+
+@pytest.mark.asyncio
 async def test_the_two_routers_share_one_allowance(
     client: AsyncClient, auth_headers, monkeypatch
 ):

@@ -11,6 +11,18 @@ identity_validation:
     jwt_secret: replace-in-env
 
 authentication_backend:
+  # The reset flow was the sharp end of #682: auth.<domain> is publicly routed,
+  # and while the reset JWT was signed with a placeholder published in this
+  # repo, anyone could mint a valid reset token for any address, set that
+  # user's password, and then log in to the app itself — auth_router.login
+  # verifies against this same users_database.yml.
+  #
+  # Strong secrets close that. This closes it a second way, at no cost: the
+  # notifier here writes to /data/notification.txt rather than sending mail, so
+  # self-service reset never worked for a user anyway. An operator resets a
+  # password by editing users_database.yml.
+  password_reset:
+    disable: true
   file:
     path: /config/users_database.yml
     watch: true

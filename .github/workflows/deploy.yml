@@ -107,6 +107,15 @@ jobs:
           ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           AUTHELIA_PROXY_SHARED_SECRET: ${{ secrets.AUTHELIA_PROXY_SHARED_SECRET }}
+          # Never forwarded before #682, so app.env.j2 rendered them empty and
+          # compose's `${VAR:-change-this-...}` substituted the placeholder from
+          # this public repo — a published secret, deployed by a workflow that
+          # reported success. Same class as #617: the variable nobody passed.
+          AUTHELIA_SESSION_SECRET: ${{ secrets.AUTHELIA_SESSION_SECRET }}
+          AUTHELIA_STORAGE_ENCRYPTION_KEY: ${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}
+          AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${{ secrets.AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET }}
+          APP_UID: ${{ vars.APP_UID }}
+          APP_GID: ${{ vars.APP_GID }}
           SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
         run: |
           python - <<'PY'
@@ -127,6 +136,21 @@ jobs:
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
               "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
               "authelia_proxy_shared_secret": os.environ.get("AUTHELIA_PROXY_SHARED_SECRET", ""),
+              # Read like secrets_encryption_key below rather than with a ""
+              # fallback: an empty value here is not a missing feature, it is
+              # the placeholder path that #682 closed. Fail in the workflow,
+              # where the message names the variable.
+              "authelia_session_secret": os.environ["AUTHELIA_SESSION_SECRET"],
+              "authelia_storage_encryption_key": os.environ["AUTHELIA_STORAGE_ENCRYPTION_KEY"],
+              "authelia_identity_validation_reset_password_jwt_secret": os.environ[
+                  "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET"
+              ],
+              # Build-time uid/gid for the non-root backend container. Must match
+              # the owner of ./authelia on the host, so it is a repo *variable*
+              # rather than a secret. Defaulted, because a deployment whose host
+              # user is 1000 needs no entry at all.
+              "app_uid": os.environ.get("APP_UID") or "1000",
+              "app_gid": os.environ.get("APP_GID") or "1000",
               # Required, so read it the way the other required values are read:
               # a KeyError here is a clearer failure than an undefined variable
               # surfacing from inside a Jinja template later on.

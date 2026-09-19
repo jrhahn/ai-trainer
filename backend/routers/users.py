@@ -29,7 +29,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from routers.dependencies import enforce_ai_rate_limit
+from routers.dependencies import consume_ai_allowance, enforce_ai_rate_limit
 from services import ai_service, metrics_service
 from services import assessment_pipeline
 from services import athlete_inquiry
@@ -2075,6 +2075,43 @@ def _fit_file_parser_or_503() -> Any:
     return FitFile
 
 
+# Read granularity for the capped upload read below. Large enough that a real
+# .fit file costs a handful of awaits, small enough that the overshoot past the
+# cap is bounded by this rather than by whatever the client sent.
+_UPLOAD_CHUNK_BYTES = 256 * 1024
+
+
+async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
+    """Read *file* into memory, refusing anything over the configured cap.
+
+    ``UploadFile.read()`` with no argument buffers the whole body whatever its
+    size, so a single request could exhaust the container's memory (#682).
+    Reading in chunks and stopping at the cap means an oversized upload costs
+    one chunk more than the limit, not all of it.
+
+    Raises ``HTTPException`` 413 rather than returning a partial file: a
+    truncated .fit would parse into a plausible-looking short ride.
+    """
+    limit = settings.fit_upload_max_bytes
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=(
+                    f"{filename} is larger than the {limit // (1024 * 1024)} MB "
+                    "limit for a .fit upload"
+                ),
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post(
     "/upload-fit",
     response_model=schemas.FitUploadResponse,
@@ -2096,7 +2133,7 @@ async def upload_fit_file(
             detail="Only .fit files are accepted",
         )
 
-    raw = await file.read()
+    raw = await _read_upload_capped(file, filename or "upload")
     try:
         parsed = _parse_fit_activity(raw, filename, FitFile)
         result = await _store_fit_import(db, current_user, filename, parsed, set())
@@ -2116,7 +2153,15 @@ async def upload_fit_file(
     )
 
 
-@router.post("/upload-fit/bulk", response_model=schemas.FitBulkUploadResponse)
+@router.post(
+    "/upload-fit/bulk",
+    response_model=schemas.FitBulkUploadResponse,
+    # The second LLM-spending route outside the /ai router, and the one that
+    # was missed when #676 wired the first: every file here runs
+    # ``api:analyse-fit-import`` through ``_store_fit_import``, so a single
+    # unlimited request was worth an unbounded number of provider calls (#682).
+    dependencies=[Depends(enforce_ai_rate_limit)],
+)
 async def upload_fit_files_bulk(
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
@@ -2124,11 +2169,45 @@ async def upload_fit_files_bulk(
 ) -> schemas.FitBulkUploadResponse:
     """Import multiple .fit files, reporting success, duplicate, and failure per file."""
     FitFile = _fit_file_parser_or_503()
+    if len(files) > settings.fit_upload_bulk_max_files:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"At most {settings.fit_upload_bulk_max_files} .fit files can be "
+                "uploaded at once. Please split the batch."
+            ),
+        )
     results: list[schemas.FitUploadFileResult] = []
     seen_source_ids: set[int] = set()
 
-    for file in files:
+    for index, file in enumerate(files):
         filename = file.filename or "unnamed"
+
+        # The route dependency charged the request once, which covers the first
+        # file. Each further file is another LLM call, so it pays for itself —
+        # otherwise the batch size would be a way to buy AI calls at a flat
+        # rate of one. Limiting stops the batch rather than failing it: the
+        # files already imported stay imported, and the response says which
+        # ones were not attempted.
+        if index > 0:
+            try:
+                consume_ai_allowance(current_user.id)
+            except HTTPException as exc:
+                if exc.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+                    raise
+                results.extend(
+                    schemas.FitUploadFileResult(
+                        filename=remaining.filename or "unnamed",
+                        status="failed",
+                        message=(
+                            "Not imported: AI rate limit reached partway through "
+                            "the batch. Retry these files shortly."
+                        ),
+                    )
+                    for remaining in files[index:]
+                )
+                break
+
         if not filename.lower().endswith(".fit"):
             results.append(
                 schemas.FitUploadFileResult(
@@ -2139,11 +2218,21 @@ async def upload_fit_files_bulk(
             )
             continue
 
-        raw = await file.read()
         try:
+            # One oversized file fails its own entry rather than the batch —
+            # the same treatment an unparseable file already gets.
+            raw = await _read_upload_capped(file, filename)
             parsed = _parse_fit_activity(raw, filename, FitFile)
             result = await _store_fit_import(
                 db, current_user, filename, parsed, seen_source_ids
+            )
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_413_CONTENT_TOO_LARGE:
+                raise
+            result = schemas.FitUploadFileResult(
+                filename=filename,
+                status="failed",
+                message=str(exc.detail),
             )
         except ValueError as exc:
             result = schemas.FitUploadFileResult(
