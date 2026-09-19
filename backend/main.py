@@ -70,6 +70,7 @@ async def _create_dev_schema() -> None:
 async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
     _auth.warn_if_authelia_proxy_unprotected()
+    _auth.warn_if_authelia_user_store_unwritable()
     # Fail fast if the pipeline dependency graph is not a DAG.
     pipeline_graph.validate()
     await _create_dev_schema()
@@ -100,6 +101,40 @@ app.add_middleware(
     allow_headers=_CORS_ALLOWED_HEADERS,
     expose_headers=[_REQUEST_ID_HEADER],
 )
+
+
+@app.middleware("http")
+async def request_size_limit_middleware(request: Request, call_next) -> Response:
+    """Reject an oversized request from its declared length, before reading it.
+
+    A backstop for every route at once (#682). It is deliberately the weaker of
+    the two body limits: ``Content-Length`` is absent on a chunked request, so
+    this cannot be the guarantee. The routes that actually read a large body —
+    the .fit uploads — cap themselves *while* reading, and that is what holds.
+
+    Declared before ``request_id_middleware`` so it runs inside it: a rejected
+    request still gets a correlation ID and is still counted, which is how an
+    operator sees that it happened at all.
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            length = int(declared)
+        except ValueError:
+            length = 0
+        if length > settings.max_request_body_bytes:
+            logger.warning(
+                "Rejected %s %s: declared body of %d bytes exceeds the %d-byte limit",
+                request.method,
+                request.url.path,
+                length,
+                settings.max_request_body_bytes,
+            )
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Request body too large"},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -259,10 +294,16 @@ app.include_router(api_v1)
 
 @app.get("/healthz", tags=["ops"])
 def healthz() -> dict:
+    """Liveness only.
+
+    ``/healthz`` has its own public Traefik router, so everything it returns is
+    world-readable. It used to echo ``allowed_origins``, which published the
+    deployment's hostnames — including any that are not otherwise advertised —
+    to anyone who asked (#682). Nothing consumed it.
+    """
     return {
         "status": "ok",
         "api_version": "v1",
-        "allowed_origins": ALLOWED_ORIGINS,
     }
 
 

@@ -272,6 +272,26 @@ def ai_rate_limit_off(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def auth_rate_limit_off(monkeypatch):
+    """Disable the auth brute-force limits for the suite by default (#682).
+
+    Same trap as ``ai_rate_limit_off`` above, and worse: the login limit has a
+    *global* window, so it is not even per-test-user. Every fixture that calls
+    ``/auth/register`` or ``/auth/login`` spends from one shared bucket, and
+    the suite registers far more accounts per minute than a deployment sees in
+    a month. Left on, the failure would land on whichever test happened to run
+    after the bucket filled.
+
+    ``tests/test_auth_rate_limit.py`` owns this behaviour and turns it back on
+    explicitly. The limiters are reset there too, because this fixture only
+    stops the *check* — module state still leaks between tests.
+    """
+    from config import settings as _settings
+
+    monkeypatch.setattr(_settings, "auth_rate_limit_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def science_corpus_present(monkeypatch):
     """Pretend the cycling-science corpus is populated.
 

@@ -9,6 +9,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Brute-force limits on every auth route** (`routers/dependencies.py`,
+  `routers/auth_router.py`, `routers/admin.py`, `config.py`, `compose.yml`,
+  `deploy/ansible/templates/app.env.j2`) — #676 bounded what a *logged-in*
+  account could spend, but getting an account, or getting the admin password,
+  was still free of charge (#682). `POST /api/v1/admin/login` is publicly
+  routed (`PathPrefix(/api)`, no proxy auth) and one human-chosen password
+  stands in front of every user's email address, their token spend and
+  `DELETE /admin/users/{id}` — it was guessable at whatever rate the network
+  allowed. Login is now limited per email *and* globally (the per-email window
+  is blind to one password sprayed across many addresses, which is what a
+  credential dump is for), registration globally (an attacker picks a fresh
+  address every time, so a per-email bucket would never fill), and admin login
+  globally and tightest. Every attempt is counted, not only failures: counting
+  failures alone lets one known-good credential reset the window. Tunable via
+  `AUTH_RATE_LIMIT_*`; the suite disables them through a new `auth_rate_limit_off`
+  autouse fixture, and `tests/test_auth_rate_limit.py` turns them back on.
+- **Body-size limits** (`main.py`, `routers/users.py`, `config.py`) — the .fit
+  upload routes called `UploadFile.read()` with no argument, buffering whatever
+  arrived, so one request could exhaust the container's memory (#682). They now
+  read in chunks and stop at `FIT_UPLOAD_MAX_BYTES`, and a new middleware
+  rejects any request declaring more than `MAX_REQUEST_BODY_BYTES`. The
+  middleware is deliberately the weaker layer — it reads `Content-Length`, so a
+  chunked request slips past it; the capped read is the guarantee.
+- **A startup warning when Authelia's user store is not writable**
+  (`auth.py`) — registration writes `users_database.yml` on a bind mount whose
+  ownership comes from the host. Now that the container no longer runs as root
+  a mismatch would turn every sign-up into a 500, visible only to the person
+  failing to sign up; it is checked once at boot instead.
+
+### Fixed
+
+- **Authelia ran on three secrets published in this repository**
+  (`.github/workflows/deploy.yml`, `compose.yml`,
+  `deploy/ansible/templates/app.env.j2`, `authelia/configuration.yml`,
+  `.env.example`) — the root cause was the workflow: it never forwarded the
+  three secrets at all, neither in its `env:` block nor in the `extra_vars`
+  dict, so the template had nothing to render.
+  `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY` and
+  `AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET` were declared as
+  `${VAR:-change-this-...}`, and the deploy template rendered them as
+  `| default('')`. Compose substitutes its default for an *empty* value as well
+  as an unset one, so the empty line the template wrote silently deployed the
+  placeholder — and this repository is public, which makes that a published
+  secret rather than a weak one (#682). The reset-password secret is the sharp
+  end: `auth.<domain>` is publicly routed and its password-reset flow is
+  enabled, so a known signing key lets anyone mint a valid reset token for any
+  address and set that user's password without receiving the notification —
+  and `auth_router.login` verifies against the same `users_database.yml`, so
+  that is app account takeover. All three are now required: the workflow
+  forwards them, compose refuses to start and the playbook refuses to render
+  without them. Verified against the live `.env`, which fails exactly as
+  intended. The reset flow itself is disabled as well
+  (`authentication_backend.password_reset.disable`) — the notifier writes to a
+  file rather than sending mail, so self-service reset never worked for a user
+  anyway, and switching it off removes the entry point rather than only its
+  key.
+- **`upload-fit/bulk` bypassed the AI rate limit entirely** (`routers/users.py`)
+  — it lacked the dependency its single-file twin carries, yet spends one
+  `api:analyse-fit-import` call *per file* through `_store_fit_import`, so the
+  limit on the single-file route was decorative: the same work was reachable
+  one URL over, unmetered and unbounded (#682). The route now carries the
+  dependency, caps the batch at `FIT_UPLOAD_BULK_MAX_FILES`, and charges each
+  file after the first against the same allowance — otherwise batch size would
+  be a way to buy AI calls at a flat rate of one. Hitting the limit stops the
+  batch rather than failing it: what was imported stays imported and the
+  response names the files that were not attempted.
+- **The admin password could not contain a non-ASCII character**
+  (`routers/admin.py`) — `secrets.compare_digest` raises `TypeError` on a
+  non-ASCII `str`, so a passphrase with an umlaut turned every attempt into a
+  500, including the operator's own correct one. Compared as UTF-8 bytes.
+- **`/healthz` published the deployment's hostnames** (`main.py`) — it echoed
+  `allowed_origins` on a public route. Nothing consumed it.
+
+### Changed
+
+- **The backend container no longer runs as root** (`Dockerfile`) — the process
+  needs no write access to the image. `APP_UID` must match the owner of the
+  bind-mounted `./authelia` directory on the deploy host; the startup warning
+  above reports a mismatch.
+
+### Added
+
 - **A registered account can no longer spend the owner's provider key without
   limit** (`services/rate_limit.py`, `services/token_accounting.py`,
   `routers/ai.py`, `crud.py`, `config.py`, `compose.yml`) — three facts composed

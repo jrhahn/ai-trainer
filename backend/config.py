@@ -230,6 +230,90 @@ class Settings(BaseSettings):
     ai_token_budget_window_days: int = 30
 
     # ------------------------------------------------------------------
+    # Auth brute-force controls (#682)
+    #
+    # The AI limits above protect the owner's money. These protect the
+    # accounts, which is a different thing and was left unprotected: every
+    # auth route was reachable at unlimited rate, and ``/admin/login`` is
+    # publicly routed (``PathPrefix(/api)``, no proxy middleware) with a single
+    # human-chosen password behind it.
+    #
+    # Keyed by email and by a global bucket rather than by client IP. The IP
+    # arrives through Traefik (and, on the same-origin path, nginx) so trusting
+    # it needs a trusted-proxy hop count this app does not establish — the same
+    # reasoning routers/dependencies.py already records for the AI limit.
+    # ------------------------------------------------------------------
+    auth_rate_limit_enabled: bool = True
+
+    login_rate_limit_attempts: int = 10
+    """Login attempts per email per ``login_rate_limit_seconds``.
+
+    Counts every attempt, not only failures: counting failures alone lets an
+    attacker reset the window with one known-good credential.
+    """
+    login_rate_limit_seconds: int = 300
+
+    login_rate_limit_global_attempts: int = 60
+    """Login attempts across *all* emails per ``login_rate_limit_global_seconds``.
+
+    The per-email window does nothing against spraying one password over many
+    addresses, which is what a credential dump is used for. Deliberately
+    generous: this bucket is shared, so a low value would let an attacker lock
+    out the legitimate user. It bounds the spray rate, it does not stop it.
+    """
+    login_rate_limit_global_seconds: int = 60
+
+    registration_rate_limit_attempts: int = 5
+    """Registrations per ``registration_rate_limit_seconds``, globally.
+
+    Global rather than per email, because an attacker picks a fresh address
+    every time and a per-email bucket would never fill. Registration is public
+    on this deployment (its own Traefik router), and every account that signs
+    up can spend the owner's provider key unless ALLOW_ADMIN_AI_KEY_FALLBACK is
+    off — so this is a spend control as much as an abuse control.
+    """
+    registration_rate_limit_seconds: int = 3600
+
+    admin_login_rate_limit_attempts: int = 5
+    """Admin password attempts per ``admin_login_rate_limit_seconds``, globally.
+
+    One password guards the whole panel (every user's email, their token spend,
+    and user deletion), so this is the tightest window in the app. Global
+    because there is nothing to key on: the request carries a password and
+    nothing else.
+    """
+    admin_login_rate_limit_seconds: int = 900
+
+    # ------------------------------------------------------------------
+    # Request limits (#682)
+    # ------------------------------------------------------------------
+    max_request_body_bytes: int = 64 * 1024 * 1024
+    """Reject any request declaring a larger body, before it is read.
+
+    A backstop, not the primary control: it is enforced from ``Content-Length``
+    so a chunked request without one slips past. The routes that actually read
+    a large body (the .fit uploads) cap themselves as they read, which is the
+    guarantee that holds.
+    """
+
+    fit_upload_max_bytes: int = 10 * 1024 * 1024
+    """Per-file cap on .fit uploads.
+
+    A five-hour ride records ~1-2 MB, so this is several times the largest
+    plausible real file and still small enough that a batch cannot exhaust
+    memory. Enforced while reading, so an oversized file is never fully
+    buffered.
+    """
+
+    fit_upload_bulk_max_files: int = 25
+    """Files accepted in one bulk .fit upload.
+
+    Each file costs an LLM call (``_analyse_fit_import``), so this bounds what
+    one request can spend; the per-file rate-limit consume inside the route
+    bounds it again against the user's normal AI allowance.
+    """
+
+    # ------------------------------------------------------------------
     # AI model selection by task
     #
     # Each task type can be configured independently so cheap tasks use

@@ -1,9 +1,11 @@
 """Password hashing, JWT creation/verification, and FastAPI auth dependency."""
 
 import logging
+import os
 import secrets
 import warnings
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import bcrypt
 import jwt
@@ -83,6 +85,38 @@ def warn_if_authelia_proxy_unprotected() -> None:
             "empty: Remote-* headers are trusted on any request that reaches the "
             "backend. Ensure the backend is reachable only through the Authelia "
             "proxy, or set AUTHELIA_PROXY_SHARED_SECRET for defense-in-depth."
+        )
+
+
+def warn_if_authelia_user_store_unwritable() -> None:
+    """Warn at boot when registration cannot write Authelia's user store.
+
+    With AUTHELIA_AUTH_ENABLED, ``/auth/register`` appends to
+    ``users_database.yml`` on a bind mount whose ownership comes from the host,
+    not the image. Since the container stopped running as root (#682) a
+    mismatched owner turns every registration into a 500 — and the only place
+    that shows up is a user failing to sign up. Checked once at startup so the
+    operator learns it from the logs instead.
+    """
+    if not AUTHELIA_AUTH_ENABLED or not AUTHELIA_USERS_DB_PATH:
+        return
+    path = Path(AUTHELIA_USERS_DB_PATH)
+    if not path.exists():
+        logger.warning(
+            "AUTHELIA_AUTH_ENABLED is set but the user store %s does not exist: "
+            "registration will fail with 503.",
+            path,
+        )
+        return
+    # The directory matters as much as the file: the write is a create-and-
+    # rename, so registration needs to create a temp file next to the target.
+    if not os.access(path, os.W_OK) or not os.access(path.parent, os.W_OK):
+        logger.warning(
+            "Authelia user store %s is not writable by the backend process "
+            "(uid=%s). Registration will fail until the bind mount's ownership "
+            "matches the container user.",
+            path,
+            os.getuid(),
         )
 
 

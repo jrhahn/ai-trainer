@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **nginx forwarded client identity headers to the backend unfiltered**
+  (`nginx.conf`) — the `location /api/` proxy passed every client header
+  through by default, so a forged `Remote-Email` on that path authenticates as
+  any user without a password whenever `AUTHELIA_AUTH_ENABLED` is on. This is
+  issue #324 again, and Traefik's `backend-strip-remote` middleware does not
+  cover it, because this path does not go through Traefik's backend router
+  (#682). The only reason it was not reachable is a routing accident — the
+  backend router's explicit priority outranks the frontend router's
+  length-derived default — which is one label edit away from not being true.
+  The `Remote-*` headers and the proxy-transit secret are now stripped here
+  too, and the location caps the request body.
 - **The coach's reply could reach a third-party host** (`src/components/coachMarkdown.tsx`,
   `src/components/AIChat.tsx`, `nginx.conf`) — the message body is model-authored text rendered with
   react-markdown, whose component map only remapped headings. Everything else

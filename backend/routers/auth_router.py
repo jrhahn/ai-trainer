@@ -17,6 +17,10 @@ import auth
 import crud
 import schemas
 from database import get_db
+from routers.dependencies import (
+    enforce_login_rate_limit,
+    enforce_registration_rate_limit,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -80,6 +84,11 @@ async def register(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse | Response:
+    # Before either branch: registration is public on this deployment (it has
+    # its own Traefik router) and the Authelia branch below writes to the user
+    # store on disk, so the limit has to sit in front of both (#682).
+    enforce_registration_rate_limit()
+
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(
@@ -163,6 +172,11 @@ async def login(
     body: schemas.LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse:
+    # Both branches below verify a password, so the limit goes in front of the
+    # branch rather than inside it — otherwise flipping AUTHELIA_AUTH_ENABLED
+    # would silently change whether brute force is bounded (#682).
+    enforce_login_rate_limit(body.email)
+
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(

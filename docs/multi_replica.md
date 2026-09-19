@@ -35,16 +35,23 @@ just one. See issue #326.
    each have their own progress dict, so a user double-clicking behind a
    round-robin LB could start two concurrent imports.
 
-5. **The AI rate limit is per replica.** `services/rate_limit.SlidingWindowLimiter`
-   keeps its windows in module memory (`routers/ai._ai_limiter`), so with N
-   replicas each user gets N times the configured allowance (#676). This is a
-   weakened guarantee rather than a broken one — the limit exists to stop a
-   script, and N is small and fixed — but a deployment that scales out should
-   divide the configured limits by the replica count, or move the counter to a
-   shared store.
+5. **Every rate limit is per replica.** `services/rate_limit.SlidingWindowLimiter`
+   keeps its windows in module memory (`routers/dependencies.ai_limiter` and,
+   since #682, `login_limiter`, `registration_limiter` and
+   `admin_login_limiter` alongside it), so with N replicas each key gets N
+   times the configured allowance. This is a weakened guarantee rather than a
+   broken one — the limits exist to stop a script, and N is small and fixed —
+   but a deployment that scales out should divide the configured limits by the
+   replica count, or move the counters to a shared store.
 
-   The **token budget** on the same feature is unaffected: it sums `llm_calls`
-   in Postgres, so it is already correct across replicas.
+   The AI limit (#676) degrades gracefully this way: N× the allowance is still
+   a bound. The **auth** limits (#682) degrade less comfortably, because what
+   they bound is password guessing: N replicas mean N× the guesses per window
+   against `/admin/login` and each account. A multi-replica deployment should
+   treat a shared counter as a prerequisite rather than a nice-to-have.
+
+   The **token budget** is unaffected: it sums `llm_calls` in Postgres, so it
+   is already correct across replicas.
 
 ## What is already safe across replicas
 
