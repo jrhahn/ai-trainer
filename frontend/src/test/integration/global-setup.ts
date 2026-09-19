@@ -96,6 +96,12 @@ export async function setup(): Promise<void> {
     GEMINI_API_KEY: 'test-gemini-key',
     APP_ENV: 'test',
     AUTHELIA_AUTH_ENABLED: 'false',
+    // Each test registers its own account, and the registration limit (#682)
+    // is global by design — an attacker picks a fresh address every time, so a
+    // per-email bucket would never fill. That makes this suite look exactly
+    // like the abuse it stops, from the sixth test onward. Mirrors the
+    // `auth_rate_limit_off` fixture that does the same for pytest.
+    AUTH_RATE_LIMIT_ENABLED: 'false',
   }
 
   backendProcess = spawn(
