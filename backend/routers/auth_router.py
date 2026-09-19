@@ -4,6 +4,7 @@ import contextlib
 import fcntl
 import os
 import secrets
+import stat
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,34 @@ from routers.dependencies import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _carry_over_file_identity(original: Path, replacement: str) -> None:
+    """Give *replacement* the mode and ownership that *original* has.
+
+    ``os.replace`` swaps in a new inode, so without this an atomic write
+    silently re-owns the file to whoever ran it and resets the mode to
+    ``mkstemp``'s 0600. That is how #684 happened: a registration handled while
+    the backend still ran as root rewrote the store as ``root:root 0600``, and
+    the next deploy — which moved the backend to uid 1001 — could no longer
+    read it. Login and registration both read this file, so the whole auth
+    surface went down until the ownership was restored by hand.
+
+    Ownership is best-effort: ``chown`` needs privilege the container
+    deliberately no longer has, and failing the registration over it would be
+    worse than writing a file the process already owns. The mode is not
+    best-effort — a widened mode on a file of password hashes is a real
+    regression, and the process always owns the temp file, so the call cannot
+    fail for lack of privilege.
+    """
+    try:
+        stat_result = original.stat()
+    except FileNotFoundError:
+        return
+    os.chmod(replacement, stat.S_IMODE(stat_result.st_mode))
+    if (os.geteuid(), os.getegid()) != (stat_result.st_uid, stat_result.st_gid):
+        with contextlib.suppress(PermissionError, OSError):
+            os.chown(replacement, stat_result.st_uid, stat_result.st_gid)
 
 
 def _create_authelia_user(email: str, display_name: str, password: str) -> None:
@@ -69,6 +98,7 @@ def _create_authelia_user(email: str, display_name: str, password: str) -> None:
             try:
                 with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_fh:
                     yaml.dump(data, tmp_fh, default_flow_style=False, allow_unicode=True)
+                _carry_over_file_identity(db_path, tmp_name)
                 os.replace(tmp_name, db_path)
             except Exception:
                 with contextlib.suppress(FileNotFoundError):

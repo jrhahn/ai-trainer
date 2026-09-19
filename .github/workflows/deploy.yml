@@ -116,6 +116,7 @@ jobs:
           AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${{ secrets.AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET }}
           APP_UID: ${{ vars.APP_UID }}
           APP_GID: ${{ vars.APP_GID }}
+          AI_TOKEN_BUDGET: ${{ vars.AI_TOKEN_BUDGET }}
           SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
         run: |
           python - <<'PY'
@@ -151,6 +152,14 @@ jobs:
               # user is 1000 needs no entry at all.
               "app_uid": os.environ.get("APP_UID") or "1000",
               "app_gid": os.environ.get("APP_GID") or "1000",
+              # Left out of extra_vars entirely when unset, so app.env.j2's
+              # `default(...)` is what applies. Passing "" instead would render
+              # an empty AI_TOKEN_BUDGET, which pydantic rejects at boot.
+              **(
+                  {"ai_token_budget": os.environ["AI_TOKEN_BUDGET"]}
+                  if os.environ.get("AI_TOKEN_BUDGET")
+                  else {}
+              ),
               # Required, so read it the way the other required values are read:
               # a KeyError here is a clearer failure than an undefined variable
               # surfacing from inside a Jinja template later on.

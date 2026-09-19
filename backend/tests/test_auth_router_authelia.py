@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 from pathlib import Path
 
@@ -437,3 +438,83 @@ def test_silent_when_the_user_store_is_writable(monkeypatch, caplog, tmp_path):
         auth.warn_if_authelia_user_store_unwritable()
 
     assert caplog.records == []
+
+
+# ---------------------------------------------------------------------------
+# Atomic write keeps the file's identity (#684)
+#
+# os.replace swaps in a new inode, so an atomic write re-owns the file to
+# whoever ran it and resets the mode to mkstemp's 0600 unless something carries
+# the original across. That is not cosmetic: the backend reads this file on
+# every login, so a store it can no longer read is a total auth outage.
+# ---------------------------------------------------------------------------
+
+
+def test_registration_preserves_the_store_mode(monkeypatch, tmp_path):
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    os.chmod(store, 0o640)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
+
+    assert stat.S_IMODE(store.stat().st_mode) == 0o640
+
+
+def test_registration_does_not_widen_a_locked_down_store(monkeypatch, tmp_path):
+    """The file holds password hashes; an atomic write must not loosen it."""
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    os.chmod(store, 0o600)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
+
+    assert stat.S_IMODE(store.stat().st_mode) == 0o600
+
+
+def test_the_new_user_is_actually_written(monkeypatch, tmp_path):
+    """Guards the guard: preserving the mode must not cost the write itself."""
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    os.chmod(store, 0o640)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
+
+    written = yaml.safe_load(store.read_text())
+    assert "rider@example.com" in written["users"]
+    assert stat.S_IMODE(store.stat().st_mode) == 0o640
+
+
+def test_a_failed_chown_does_not_fail_the_registration(monkeypatch, tmp_path):
+    """chown needs privilege the container deliberately no longer has.
+
+    Refusing to register over it would trade a cosmetic problem for an outage,
+    so ownership is best-effort while the mode is not.
+    """
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    def _denied(*_args, **_kwargs):
+        raise PermissionError("not permitted")
+
+    monkeypatch.setattr(os, "chown", _denied)
+    # Force the chown branch: pretend the file belongs to somebody else.
+    real_stat = Path.stat
+
+    def _foreign_owner(self, *args, **kwargs):
+        result = real_stat(self, *args, **kwargs)
+        if self == store:
+            return os.stat_result(
+                tuple(result)[:4] + (result.st_uid + 1, result.st_gid + 1) + tuple(result)[6:]
+            )
+        return result
+
+    monkeypatch.setattr(Path, "stat", _foreign_owner)
+
+    _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
+
+    written = yaml.safe_load(store.read_text())
+    assert "rider@example.com" in written["users"]
