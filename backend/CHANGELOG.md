@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The #682 deploy took down login and the coach** (`routers/auth_router.py`,
+  `deploy/ansible/deploy.yml`, `deploy/ansible/templates/app.env.j2`,
+  `.github/workflows/deploy.yml`) — two regressions from moving the backend off
+  root and switching on the token budget (#684).
+
+  *Auth outage.* `_create_authelia_user` writes the user store through
+  `mkstemp` + `os.replace`, which swaps in a new inode — so the file silently
+  took the ownership of whoever wrote it and `mkstemp`'s 0600 mode. A
+  registration served while the backend still ran as root re-owned it to
+  `root:root`, and the deploy that moved the process to uid 1001 then could not
+  read it. `_verify_authelia_credentials` reads the same file, so this was not
+  just registration failing: every login returned 500. The atomic write now
+  carries the original mode and ownership across the replace, and the playbook
+  reasserts ownership of the bind mount on every deploy rather than trusting it
+  to stay put. The boot-time check added in #682 did fire, naming the uid and
+  the cause — but a warning is a detector, not a guard, and what was needed
+  here was a guard.
+
+  *Coach outage.* `AI_TOKEN_BUDGET` was introduced at 5,000,000 tokens per 30
+  days, a figure taken from a cost estimate rather than from this deployment.
+  Measured usage is ~6.3M for the operator's own account, so the budget locked
+  them out of their own coach with a 402 on every AI route. Raised to
+  25,000,000 — several times observed peak, and still a per-user ceiling rather
+  than none — and made overridable through the `AI_TOKEN_BUDGET` repository
+  variable so the next change does not need a code edit.
+
 ### Added
 
 - **Brute-force limits on every auth route** (`routers/dependencies.py`,
