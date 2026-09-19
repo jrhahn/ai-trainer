@@ -156,3 +156,91 @@ async def test_a_normal_request_is_unaffected(
     resp = await client.get("/api/v1/users/me", headers=auth_headers)
 
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_content_length_does_not_reject_or_crash(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """A header this middleware cannot parse is not evidence of a large body.
+
+    Treating an unparseable value as oversized would let a junk header deny
+    any request; treating it as an error would turn it into a 500. It is
+    treated as zero and the request continues to the route, which answers on
+    its own terms.
+    """
+    monkeypatch.setattr(settings, "max_request_body_bytes", 128)
+
+    resp = await client.get(
+        "/api/v1/users/me",
+        headers={**auth_headers, "Content-Length": "not-a-number"},
+    )
+
+    assert resp.status_code != 413
+    assert resp.status_code < 500
+
+
+@pytest.mark.asyncio
+async def test_healthz_does_not_publish_the_deployment_hostnames(client: AsyncClient):
+    """``/healthz`` has its own public Traefik router — everything here is world-readable."""
+    resp = await client.get("/healthz")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert "allowed_origins" not in body
+    assert "allowedOrigins" not in body
+
+
+# ---------------------------------------------------------------------------
+# The bulk route's two re-raise guards
+#
+# Both handlers catch HTTPException to turn one specific status into a per-file
+# result. Anything else has to keep propagating: silently folding an unrelated
+# HTTP error into a "failed" row would report a 200 batch while something quite
+# different went wrong.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_non_429_from_the_limiter_still_propagates(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    from fastapi import HTTPException
+
+    import routers.users as users_router
+
+    def _boom(_user_id: str) -> None:
+        raise HTTPException(status_code=503, detail="limiter backend down")
+
+    monkeypatch.setattr(users_router, "consume_ai_allowance", _boom)
+
+    resp = await client.post(
+        _BULK,
+        headers=auth_headers,
+        files=[_fit("a.fit", 64), _fit("b.fit", 64)],
+    )
+
+    assert resp.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_a_non_413_while_reading_still_propagates(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    from fastapi import HTTPException
+
+    import routers.users as users_router
+
+    async def _boom(_file, _filename):
+        raise HTTPException(status_code=507, detail="no space left")
+
+    monkeypatch.setattr(users_router, "_read_upload_capped", _boom)
+
+    resp = await client.post(
+        _BULK,
+        headers=auth_headers,
+        files=[_fit("a.fit", 64)],
+    )
+
+    assert resp.status_code == 507

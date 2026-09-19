@@ -80,7 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-ASCII `str`, so a passphrase with an umlaut turned every attempt into a
   500, including the operator's own correct one. Compared as UTF-8 bytes.
 - **`/healthz` published the deployment's hostnames** (`main.py`) — it echoed
-  `allowed_origins` on a public route. Nothing consumed it.
+  `allowed_origins` on a public route. Nothing consumed it. The handler is now
+  `async` as well: it does nothing blocking, so a sync `def` only bought a
+  threadpool hop on the route Docker polls every ten seconds.
 
 ### Changed
 

@@ -293,8 +293,13 @@ app.include_router(api_v1)
 
 
 @app.get("/healthz", tags=["ops"])
-def healthz() -> dict:
+async def healthz() -> dict:
     """Liveness only.
+
+    ``async`` because it does nothing blocking: a sync ``def`` here makes
+    Starlette hand every health check to a threadpool worker, which is a hop
+    this endpoint has no use for — and it is the busiest route on the
+    deployment, since Docker polls it every 10 seconds.
 
     ``/healthz`` has its own public Traefik router, so everything it returns is
     world-readable. It used to echo ``allowed_origins``, which published the
