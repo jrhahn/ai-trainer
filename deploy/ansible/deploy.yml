@@ -131,6 +131,24 @@
         dest: "{{ app_dir }}/.env"
         mode: "0600"
 
+    # The backend reads this bind mount for every login and writes it on every
+    # registration, and a bind mount keeps the host's ownership rather than the
+    # image's. So the moment APP_UID changed, a store still owned by root became
+    # unreadable and the whole auth surface went down (#684). Enforced on every
+    # deploy rather than fixed once by hand, because the owner can drift back:
+    # any write performed while the container ran as a different user re-owns
+    # the file through the atomic replace.
+    #
+    # No `mode` here on purpose — recurse would apply it to every file, and
+    # users_database.yml holds password hashes and must stay 0600.
+    - name: Ensure the Authelia bind mount is owned by the backend container user
+      ansible.builtin.file:
+        path: "{{ app_dir }}/authelia"
+        state: directory
+        owner: "{{ app_uid | default('1000') }}"
+        group: "{{ app_gid | default('1000') }}"
+        recurse: true
+
     # Built as its own step so the stale-container guard below can run *between*
     # the build and the start. The build is what creates the problem the guard
     # cleans up: see the comment on that task.
