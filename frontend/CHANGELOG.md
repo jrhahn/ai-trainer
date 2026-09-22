@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the section, which now carries a matching anchor. Both sides are covered by a
   test, since a renamed id would quietly restore the original problem.
 
+- **The provider hints showed model names that were never running**
+  (`src/pages/SettingsPage.tsx`, `src/components/AIKeySettings.tsx`,
+  `src/services/user.ts`) — two components carried hard-coded strings that
+  disagreed with each other, "Gemini 2.0 Flash" in one and "Gemini 2.5 Flash"
+  in the other, while the backend has run `gemini-3.5-flash-lite` since #511
+  (#691). Both now read the model from `/users/me/ai-key/status`, which reports
+  what is configured, and share one react-query key so it costs a single
+  request.
+
 - **nginx forwarded client identity headers to the backend unfiltered**
   (`nginx.conf`) — the `location /api/` proxy passed every client header
   through by default, so a forged `Remote-Email` on that path authenticates as

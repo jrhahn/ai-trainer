@@ -84,31 +84,19 @@ from services.weather_service import (
     home_coordinates_for_user,
     training_weather_context_for_user,
 )
-from routers.dependencies import enforce_ai_rate_limit
+from routers.dependencies import enforce_ai_rate_limit, set_user_ai_keys
 from services import llm as llm_service
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage, track_llm_usage_detached
 
 
-async def _set_ai_key(
-    current_user: models.User = Depends(auth.get_current_user),
-) -> None:
-    """Router-level dependency: inject per-user API keys into the LLM ContextVar."""
-    keys = {
-        "openai": current_user.user_openai_api_key,
-        "gemini": current_user.user_gemini_api_key,
-    }
-    token = llm_service.set_user_ai_keys(keys)
-    try:
-        yield
-    finally:
-        llm_service.reset_user_ai_keys(token)
-
-
 router = APIRouter(
     prefix="/ai",
     tags=["ai"],
-    dependencies=[Depends(_set_ai_key), Depends(enforce_ai_rate_limit)],
+    # ``set_user_ai_keys`` moved to routers/dependencies.py when the .fit
+    # uploads turned out to need it too (#693) — they were spending the global
+    # key with BYOK-only enabled, because no context meant the scheduler branch.
+    dependencies=[Depends(set_user_ai_keys), Depends(enforce_ai_rate_limit)],
 )
 
 logger = logging.getLogger(__name__)

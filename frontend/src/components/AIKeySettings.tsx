@@ -15,9 +15,13 @@ import {
 
 const AI_KEY_QUERY_KEY = 'ai-key-status'
 
+// No model names here on purpose (#691). They were "GPT-4o" and "Gemini 2.5
+// Flash" — the second wrong for over a release, and disagreeing with the copy
+// on the settings page itself, which claimed "Gemini 2.0 Flash". The backend
+// reports what it actually runs; see `hintFor` below.
 const PROVIDERS = [
-  { value: 'openai', label: 'OpenAI', placeholder: 'sk-...', hint: 'GPT-4o' },
-  { value: 'gemini', label: 'Google Gemini', placeholder: 'AIza...', hint: 'Gemini 2.5 Flash' },
+  { value: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
+  { value: 'gemini', label: 'Google Gemini', placeholder: 'AIza...' },
 ] as const
 
 type Provider = (typeof PROVIDERS)[number]['value']
@@ -86,6 +90,10 @@ export default function AIKeySettings() {
   const currentProviderHasKey =
     selectedProvider === 'openai' ? keyStatus?.hasOpenaiKey : keyStatus?.hasGeminiKey
 
+  /** The model the backend reports for *provider*, or nothing to show. */
+  const hintFor = (provider: Provider) =>
+    provider === 'openai' ? keyStatus?.openaiModel : keyStatus?.geminiModel
+
   return (
     // The id is the anchor target of the pointer in the AI Provider section
     // above; scroll-mt keeps the heading clear of the sticky header on jump.
@@ -119,7 +127,7 @@ export default function AIKeySettings() {
             }`}
           >
             <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-            <span className="text-xs text-gray-500">{p.hint}</span>
+            <span className="text-xs text-gray-500 font-mono">{hintFor(p.value) ?? '—'}</span>
           </button>
         ))}
       </div>

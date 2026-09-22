@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -18,7 +18,13 @@ import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
 import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
-import { deleteCurrentUser, estimateFTP, updateCurrentUser } from '../services/user'
+import {
+  deleteCurrentUser,
+  estimateFTP,
+  fetchAIKeyStatus,
+  updateCurrentUser,
+  type AIKeyStatus,
+} from '../services/user'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
 import { useImportProgress } from '../hooks/useImportProgress'
 
@@ -336,9 +342,21 @@ export default function SettingsPage() {
     }
   }
 
-  const providers: { value: AiProvider; label: string; hint: string; placeholder: string }[] = [
-    { value: 'openai', label: 'OpenAI', hint: 'GPT-4o mini', placeholder: 'sk-...' },
-    { value: 'gemini', label: 'Google Gemini', hint: 'Gemini 2.0 Flash', placeholder: 'AIza...' },
+  // The hints used to be hard-coded here as "GPT-4o mini" / "Gemini 2.0 Flash"
+  // — stale, and disagreeing with AIKeySettings, which claimed "Gemini 2.5
+  // Flash" for the same backend. Both were wrong: it has been
+  // gemini-3.5-flash-lite since #511. The backend now reports what it runs
+  // (#691). Same query key as AIKeySettings, so react-query serves both from
+  // one request.
+  const { data: keyStatus } = useQuery<AIKeyStatus>({
+    queryKey: ['ai-key-status'],
+    queryFn: () => fetchAIKeyStatus(authToken!),
+    enabled: !!authToken,
+  })
+
+  const providers: { value: AiProvider; label: string; hint?: string; placeholder: string }[] = [
+    { value: 'openai', label: 'OpenAI', hint: keyStatus?.openaiModel, placeholder: 'sk-...' },
+    { value: 'gemini', label: 'Google Gemini', hint: keyStatus?.geminiModel, placeholder: 'AIza...' },
   ]
 
   return (
@@ -374,7 +392,7 @@ export default function SettingsPage() {
               }`}
             >
               <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-              <span className="text-xs text-gray-500">{p.hint}</span>
+              <span className="text-xs text-gray-500 font-mono">{p.hint ?? '—'}</span>
             </button>
           ))}
         </div>

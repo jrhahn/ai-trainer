@@ -22,6 +22,7 @@ from fastapi import Depends, HTTPException, status
 import auth
 import models
 from config import settings
+from services import llm as llm_service
 from services.rate_limit import SlidingWindowLimiter, Window
 
 # One limiter for every AI-spending endpoint, so a user cannot get a fresh
@@ -39,6 +40,33 @@ def ai_rate_limit_windows() -> tuple[Window, ...]:
             settings.ai_rate_limit_sustained_seconds,
         ),
     )
+
+
+async def set_user_ai_keys(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Put the athlete's own API keys in scope for the request (#693).
+
+    Without this, ``llm.get_provider`` finds no BYOK context and takes the
+    branch meant for scheduler jobs: the global key, used unconditionally and
+    *without* consulting ``allow_admin_ai_key_fallback``. That is correct for a
+    nightly job, which has no user to bill. It is wrong for a request made by
+    a specific athlete — and it silently defeated BYOK-only mode on the one
+    LLM-spending pair of routes outside the ``/ai`` router, the .fit uploads,
+    which kept spending the owner's key after the fallback was turned off.
+
+    Lives here rather than in ``routers/ai.py`` for the reason this module
+    exists: two routers need it, and neither may import the other.
+    """
+    keys = {
+        "openai": current_user.user_openai_api_key,
+        "gemini": current_user.user_gemini_api_key,
+    }
+    token = llm_service.set_user_ai_keys(keys)
+    try:
+        yield
+    finally:
+        llm_service.reset_user_ai_keys(token)
 
 
 async def enforce_ai_rate_limit(
