@@ -42,6 +42,29 @@ services:
       - letsencrypt_data:/letsencrypt
     labels:
       - traefik.enable=true
+      # ---------------------------------------------------------------------
+      # DEFINED BUT DELIBERATELY UNUSED — these two middlewares are applied to
+      # ZERO routers. Grep before assuming otherwise:
+      #
+      #     grep 'middlewares=.*authelia' compose.yml      # -> no matches
+      #
+      # Authelia is not an SSO proxy in this deployment; it is the *user store*
+      # that auth_router reads directly (see the note on the backend router
+      # below, and issue #324 — gating the backend behind forward-auth returned
+      # 400 to every request and broke login in production).
+      #
+      # The consequence is easy to miss and worth stating plainly: everything
+      # in authelia/configuration.yml that depends on a request reaching
+      # Authelia's authz endpoint is inert. `access_control` with its
+      # `default_policy: deny`, the `one_factor` rule, and `session.remember_me`
+      # never fire, because no request is ever routed through them. Reading
+      # that file, it looks like the app is protected by Authelia. It is not —
+      # the app's own JWT is the only access control on /api.
+      #
+      # They are kept rather than deleted so the wiring is here if this ever
+      # does become a forward-auth deployment. Anything relying on them has to
+      # attach them to a router first.
+      # ---------------------------------------------------------------------
       - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth
       - traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true
       - traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
