@@ -14,7 +14,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from httpx import AsyncClient
 
+from config import settings
 from services import llm as llm_service
 
 
@@ -272,3 +274,153 @@ async def test_user_key_takes_priority_over_global_settings(monkeypatch):
         assert provider._client.api_key == "user-specific-key"
     finally:
         llm_service.reset_user_ai_keys(token)
+
+
+@pytest.mark.asyncio
+async def test_key_status_reports_the_models_the_backend_actually_runs(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """The UI must not have to guess, and must not be able to drift (#691).
+
+    Both settings components hard-coded these as display strings, disagreeing
+    with each other ("Gemini 2.0 Flash" vs "Gemini 2.5 Flash") and with the
+    backend, which has run gemini-3.5-flash-lite since #511. A copy of a config
+    value drifts from it; serving the value cannot.
+    """
+    monkeypatch.setattr(settings, "gemini_coach_model", "gemini-3.5-flash-lite")
+    monkeypatch.setattr(settings, "openai_coach_model", "gpt-4o")
+
+    resp = await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["geminiModel"] == "gemini-3.5-flash-lite"
+    assert body["openaiModel"] == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_saving_a_key_also_reports_the_models(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """The save path returns the same shape as the read path.
+
+    Both build ``AIKeyStatusSchema`` by hand, so a field added to one and
+    forgotten in the other is a live possibility — the UI reads whichever
+    response happens to arrive last.
+    """
+    monkeypatch.setattr(settings, "gemini_coach_model", "gemini-3.5-flash-lite")
+
+    resp = await client.put(
+        "/api/v1/users/me/ai-key",
+        headers=auth_headers,
+        json={"provider": "gemini", "apiKey": "AIza-test-key"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["geminiModel"] == "gemini-3.5-flash-lite"
+
+
+# ---------------------------------------------------------------------------
+# The .fit uploads spend tokens outside the /ai router (#693)
+# ---------------------------------------------------------------------------
+
+
+def _fake_parsed_fit():
+    """A minimally valid parse result, so the request reaches the AI call.
+
+    A bogus payload makes ``_parse_fit_activity`` raise before anything
+    LLM-shaped runs, which would make these tests pass for the wrong reason.
+    """
+    from routers.users import _ParsedFitActivity
+
+    return _ParsedFitActivity(
+        source_id=987654321,
+        source_metadata={},
+        sport_type="cycling",
+        duration_seconds=3600,
+        duration_minutes=60,
+        ride_date="2026-09-20",
+        completed_at="2026-09-20T09:00:00+00:00",
+        activity_name="Test ride",
+        avg_power=200,
+        avg_hr=140,
+        start_lat=None,
+        start_lng=None,
+        streams={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_fit_runs_inside_the_byok_context(client, auth_headers):
+    """The upload routes must put the athlete's keys in scope, like /ai does.
+
+    Without the dependency, ``get_provider`` finds no context and takes the
+    branch written for scheduler jobs: the global key, used unconditionally and
+    without consulting ``allow_admin_ai_key_fallback``. So a deployment that
+    had switched to BYOK-only kept billing the owner for every .fit import —
+    invisibly, because nothing errors on that path.
+
+    Asserting the *context* rather than the outcome is deliberate: the outcome
+    depends on which key happens to be configured, the context is the wiring
+    that was missing.
+    """
+    await client.put(
+        "/api/v1/users/me/ai-key",
+        headers=auth_headers,
+        json={"provider": "gemini", "apiKey": "AIza-user-own-key"},
+    )
+
+    seen: list[dict] = []
+
+    def capture(*_args, **_kwargs):
+        ctx = llm_service._user_ai_keys.get()
+        if ctx is not llm_service._BYOK_INACTIVE and isinstance(ctx, dict):
+            seen.append(dict(ctx))
+        raise llm_service.AIKeyNotConfiguredError("stop here — the context is the point")
+
+    with (
+        patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
+        patch("services.ai_service.get_provider", side_effect=capture),
+    ):
+        await client.post(
+            "/api/v1/users/me/upload-fit",
+            headers=auth_headers,
+            files={"file": ("ride.fit", b"not a real fit file", "application/octet-stream")},
+        )
+
+    assert any(k.get("gemini") == "AIza-user-own-key" for k in seen), (
+        "upload-fit ran outside the BYOK context, so it would spend the global "
+        f"key regardless of the fallback setting. Captured: {seen}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_bulk_upload_fit_runs_inside_the_byok_context(client, auth_headers):
+    """Same for the bulk route — it was the one missed in #682 as well."""
+    await client.put(
+        "/api/v1/users/me/ai-key",
+        headers=auth_headers,
+        json={"provider": "gemini", "apiKey": "AIza-user-own-key"},
+    )
+
+    seen: list[dict] = []
+
+    def capture(*_args, **_kwargs):
+        ctx = llm_service._user_ai_keys.get()
+        if ctx is not llm_service._BYOK_INACTIVE and isinstance(ctx, dict):
+            seen.append(dict(ctx))
+        raise llm_service.AIKeyNotConfiguredError("stop here — the context is the point")
+
+    with (
+        patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
+        patch("services.ai_service.get_provider", side_effect=capture),
+    ):
+        await client.post(
+            "/api/v1/users/me/upload-fit/bulk",
+            headers=auth_headers,
+            files=[("files", ("ride.fit", b"not a real fit file", "application/octet-stream"))],
+        )
+
+    assert any(k.get("gemini") == "AIza-user-own-key" for k in seen), (
+        f"upload-fit/bulk ran outside the BYOK context. Captured: {seen}"
+    )

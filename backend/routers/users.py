@@ -29,7 +29,11 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from routers.dependencies import consume_ai_allowance, enforce_ai_rate_limit
+from routers.dependencies import (
+    consume_ai_allowance,
+    enforce_ai_rate_limit,
+    set_user_ai_keys,
+)
 from services import ai_service, metrics_service
 from services import assessment_pipeline
 from services import athlete_inquiry
@@ -1285,6 +1289,8 @@ async def get_ai_key_status(
         provider=current_user.ai_provider or "openai",
         has_openai_key=bool(current_user.user_openai_api_key),
         has_gemini_key=bool(current_user.user_gemini_api_key),
+        openai_model=settings.openai_coach_model,
+        gemini_model=settings.gemini_coach_model,
     )
 
 
@@ -1309,6 +1315,8 @@ async def save_ai_key(
         provider=current_user.ai_provider,
         has_openai_key=bool(current_user.user_openai_api_key),
         has_gemini_key=bool(current_user.user_gemini_api_key),
+        openai_model=settings.openai_coach_model,
+        gemini_model=settings.gemini_coach_model,
     )
 
 
@@ -2117,7 +2125,11 @@ async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
     response_model=schemas.FitUploadResponse,
     # The one LLM-spending route outside the /ai router: it runs
     # ``api:analyse-fit-import`` per upload, so it needs the same limit (#676).
-    dependencies=[Depends(enforce_ai_rate_limit)],
+    # set_user_ai_keys as well as the limit (#693): without a BYOK context
+    # ``llm.get_provider`` takes the scheduler branch and spends the *global*
+    # key unconditionally, so these routes kept billing the owner after
+    # ALLOW_ADMIN_AI_KEY_FALLBACK was turned off.
+    dependencies=[Depends(set_user_ai_keys), Depends(enforce_ai_rate_limit)],
 )
 async def upload_fit_file(
     file: UploadFile,
@@ -2160,7 +2172,11 @@ async def upload_fit_file(
     # was missed when #676 wired the first: every file here runs
     # ``api:analyse-fit-import`` through ``_store_fit_import``, so a single
     # unlimited request was worth an unbounded number of provider calls (#682).
-    dependencies=[Depends(enforce_ai_rate_limit)],
+    # set_user_ai_keys as well as the limit (#693): without a BYOK context
+    # ``llm.get_provider`` takes the scheduler branch and spends the *global*
+    # key unconditionally, so these routes kept billing the owner after
+    # ALLOW_ADMIN_AI_KEY_FALLBACK was turned off.
+    dependencies=[Depends(set_user_ai_keys), Depends(enforce_ai_rate_limit)],
 )
 async def upload_fit_files_bulk(
     files: list[UploadFile] = File(...),

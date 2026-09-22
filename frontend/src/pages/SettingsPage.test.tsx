@@ -118,6 +118,21 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Google Gemini')).toBeInTheDocument()
   })
 
+  it('points to the BYOK section instead of claiming keys cannot be supplied', () => {
+    /*
+     * The old copy said "the browser no longer stores or sends provider API
+     * keys". That predated BYOK and became the opposite of true, so the page
+     * told the reader there was nothing to enter while offering the field
+     * hundreds of lines further down — which is how someone gave up looking
+     * for it entirely.
+     */
+    setup()
+
+    expect(screen.queryByText(/no longer stores or sends/i)).not.toBeInTheDocument()
+    const pointer = screen.getByRole('link', { name: /your ai provider key/i })
+    expect(pointer).toHaveAttribute('href', '#your-ai-provider-key')
+  })
+
   it('displays the logged-in user email', () => {
     setup()
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument()
