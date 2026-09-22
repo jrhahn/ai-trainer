@@ -292,6 +292,22 @@ def auth_rate_limit_off(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def captcha_off(monkeypatch):
+    """Disable the registration captcha for the suite by default (#686).
+
+    Same reasoning as ``auth_rate_limit_off``: every fixture that needs a
+    logged-in user goes through ``/auth/register``, and none of them can solve
+    a proof-of-work. Leaving it on would make each of those a 400 about a
+    missing field.
+
+    ``tests/test_captcha.py`` owns this behaviour and turns it back on.
+    """
+    from config import settings as _settings
+
+    monkeypatch.setattr(_settings, "captcha_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def science_corpus_present(monkeypatch):
     """Pretend the cycling-science corpus is populated.
 

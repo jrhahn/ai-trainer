@@ -102,6 +102,11 @@ export async function setup(): Promise<void> {
     // like the abuse it stops, from the sixth test onward. Mirrors the
     // `auth_rate_limit_off` fixture that does the same for pytest.
     AUTH_RATE_LIMIT_ENABLED: 'false',
+    // The suite drives the real `register()`, which would fetch and solve a
+    // proof-of-work per test (#686). That works, but it buys no coverage of
+    // the contract these tests exist to check and costs a solve every time.
+    // The captcha has its own tests on both sides.
+    CAPTCHA_ENABLED: 'false',
   }
 
   backendProcess = spawn(

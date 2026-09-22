@@ -285,6 +285,45 @@ class Settings(BaseSettings):
     admin_login_rate_limit_seconds: int = 900
 
     # ------------------------------------------------------------------
+    # Registration captcha (#686)
+    #
+    # Self-hosted proof-of-work, no third party and no CSP change — see the
+    # module docstring in services/captcha.py for why not Turnstile. There is
+    # deliberately no secret here: the signing key is derived from JWT_SECRET,
+    # because every secret added lately needed threading through four places
+    # and #617/#684 are both cases where one was missed.
+    # ------------------------------------------------------------------
+    captcha_enabled: bool = True
+
+    captcha_max_number: int = 20_000
+    """Upper bound on the secret the client brute-forces.
+
+    Cost is linear and the average client tries half of it, so this is ~10k
+    SHA-256 digests — a few hundred milliseconds in a browser, and invisible
+    next to the round trip. It is not tuned to make solving *expensive*; the
+    barrier is that solving requires executing the loop at all, which a bot
+    POSTing the bare form does not do. Raising it punishes slow phones far more
+    than it punishes an attacker who bothered to implement the solver.
+    """
+
+    captcha_ttl_seconds: int = 600
+    """How long an issued challenge stays valid.
+
+    Long enough to fill in a registration form unhurried, short enough that the
+    replay guard's memory stays small.
+    """
+
+    captcha_challenge_rate_limit_attempts: int = 120
+    """Challenges issued per ``captcha_challenge_rate_limit_seconds``, globally.
+
+    Generous on purpose — one human may need several (reload, an expired
+    solve, a password the strength check rejects) and each costs one HMAC.
+    This bounds using the endpoint as a hashing service; registration's own
+    limit is what bounds signup.
+    """
+    captcha_challenge_rate_limit_seconds: int = 300
+
+    # ------------------------------------------------------------------
     # Request limits (#682)
     # ------------------------------------------------------------------
     max_request_body_bytes: int = 64 * 1024 * 1024

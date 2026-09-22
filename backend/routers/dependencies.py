@@ -93,6 +93,7 @@ def consume_ai_allowance(user_id: str) -> None:
 login_limiter = SlidingWindowLimiter()
 registration_limiter = SlidingWindowLimiter()
 admin_login_limiter = SlidingWindowLimiter()
+captcha_limiter = SlidingWindowLimiter()
 
 # The key for a limit that has nothing request-specific to key on.
 _GLOBAL_KEY = "*"
@@ -164,6 +165,28 @@ def enforce_registration_rate_limit() -> None:
             ),
         ),
         "Too many accounts created recently. Please wait and try again.",
+    )
+
+
+def enforce_captcha_rate_limit() -> None:
+    """Bound how often challenges may be issued, deployment-wide (#686).
+
+    Deliberately far looser than the registration limit: one human filling in
+    the form may legitimately fetch several challenges (reload, a slow solve
+    that expires, a typo'd password rejected by the strength check), and each
+    costs one signature. This exists so the endpoint cannot be used to make the
+    server hash on demand, not to gate signup — that is registration's job.
+    """
+    _enforce(
+        captcha_limiter,
+        _GLOBAL_KEY,
+        (
+            Window(
+                settings.captcha_challenge_rate_limit_attempts,
+                settings.captcha_challenge_rate_limit_seconds,
+            ),
+        ),
+        "Too many captcha requests. Please wait and try again.",
     )
 
 

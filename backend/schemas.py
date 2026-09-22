@@ -73,10 +73,37 @@ class CamelModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class CaptchaChallengeResponse(BaseModel):
+    """A proof-of-work challenge for the registration form (#686)."""
+
+    algorithm: str
+    challenge: str
+    salt: str
+    signature: str
+    maxnumber: int
+
+
+class CaptchaSolution(BaseModel):
+    """The solved challenge, echoed back with the number the client found."""
+
+    challenge: str
+    salt: str
+    signature: str
+    number: int
+
+
 class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+    captcha: CaptchaSolution | None = None
+    """Optional in the schema, required by the route when captcha is enabled.
+
+    Kept optional here so a deployment with ``CAPTCHA_ENABLED=false`` accepts
+    the plain body, and so a missing solution fails with the route's own 400 —
+    which says what to do about it — rather than a 422 listing a field the
+    caller has never heard of.
+    """
 
     @model_validator(mode="after")
     def password_strength(self) -> "RegisterRequest":

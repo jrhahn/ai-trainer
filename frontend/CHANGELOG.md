@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The registration form solves a proof-of-work before submitting**
+  (`src/services/captcha.ts`, `src/services/auth.ts`) — invisible to the user:
+  `register()` fetches a challenge, brute-forces the number, and sends the
+  solution with the credentials (#686). `RegisterPage` already shows a pending
+  spinner for the submit mutation, so the extra few hundred milliseconds need
+  no UI of their own.
+
+  Uses `crypto.subtle`, so no hashing library is bundled and the CSP is
+  untouched — which was the point of choosing self-hosted proof-of-work over a
+  third-party widget. The solve loop yields to the event loop periodically so a
+  slow phone keeps painting instead of appearing to hang.
+
+  A server with `CAPTCHA_ENABLED=false` answers the challenge endpoint with
+  404, and the client then registers exactly as before rather than burning CPU
+  on a puzzle nobody will check.
+
 ### Fixed
 
 - **nginx forwarded client identity headers to the backend unfiltered**

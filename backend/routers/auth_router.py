@@ -17,11 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import auth
 import crud
 import schemas
+from config import settings
 from database import get_db
 from routers.dependencies import (
+    enforce_captcha_rate_limit,
     enforce_login_rate_limit,
     enforce_registration_rate_limit,
 )
+from services import captcha as captcha_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -108,6 +111,29 @@ def _create_authelia_user(email: str, display_name: str, password: str) -> None:
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
+@router.get("/captcha/challenge", response_model=schemas.CaptchaChallengeResponse)
+async def captcha_challenge() -> schemas.CaptchaChallengeResponse:
+    """Issue a proof-of-work challenge for the registration form (#686).
+
+    Rate-limited in its own right: issuing is cheap but not free, and an
+    unbounded challenge endpoint is a way to make this server hash on demand.
+    The limit is looser than the registration one because a human who reloads
+    the form legitimately asks for several.
+
+    404 when the captcha is switched off, rather than a challenge nobody will
+    check. That is what tells the client to skip solving — otherwise every
+    registration on a deployment that disabled this would still burn a few
+    hundred milliseconds of the user's CPU for nothing.
+    """
+    if not settings.captcha_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Captcha is not enabled on this server.",
+        )
+    enforce_captcha_rate_limit()
+    return schemas.CaptchaChallengeResponse(**captcha_service.issue_challenge().as_dict())
+
+
 @router.post("/register", response_model=schemas.TokenResponse)
 async def register(
     body: schemas.RegisterRequest,
@@ -118,6 +144,18 @@ async def register(
     # its own Traefik router) and the Authelia branch below writes to the user
     # store on disk, so the limit has to sit in front of both (#682).
     enforce_registration_rate_limit()
+
+    # And before any of the work: a request that cannot show a solved challenge
+    # should cost this server a signature check, not a database round trip and
+    # an Argon2 hash (#686).
+    try:
+        captcha_service.verify_solution(
+            body.captcha.model_dump() if body.captcha is not None else None
+        )
+    except captcha_service.CaptchaError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
 
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:
