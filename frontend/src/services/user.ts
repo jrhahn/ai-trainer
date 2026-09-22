@@ -949,6 +949,16 @@ export interface AIKeyStatus {
   provider: string
   hasOpenaiKey: boolean
   hasGeminiKey: boolean
+  /**
+   * The coach model each provider actually runs, served by the backend (#691).
+   *
+   * These used to be hard-coded display strings in two components that
+   * disagreed with each other and with the backend. Optional here only so an
+   * older backend does not break the page; the components fall back to the
+   * provider name rather than inventing a version number.
+   */
+  openaiModel?: string
+  geminiModel?: string
 }
 
 export async function fetchAIKeyStatus(token: string): Promise<AIKeyStatus> {

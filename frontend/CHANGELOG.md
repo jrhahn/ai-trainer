@@ -27,6 +27,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Settings told you your own API key could not be supplied** (`src/pages/SettingsPage.tsx`,
+  `src/components/AIKeySettings.tsx`) — the AI Provider section carried a
+  warning reading "Model keys live on the backend now. The browser no longer
+  stores or sends provider API keys." That predated BYOK and had become the
+  opposite of true: the *Your AI Provider Key* section on the same page sends
+  exactly that. Read top to bottom, the page announced there was nothing to
+  enter and then offered the field some 470 lines later, so the reasonable
+  conclusion was that the feature did not exist (#691).
+
+  Replaced with what is actually the case — this selector picks the model,
+  requests run on the server's key unless you supply your own — plus a link to
+  the section, which now carries a matching anchor. Both sides are covered by a
+  test, since a renamed id would quietly restore the original problem.
+
+- **The provider hints showed model names that were never running**
+  (`src/pages/SettingsPage.tsx`, `src/components/AIKeySettings.tsx`,
+  `src/services/user.ts`) — two components carried hard-coded strings that
+  disagreed with each other, "Gemini 2.0 Flash" in one and "Gemini 2.5 Flash"
+  in the other, while the backend has run `gemini-3.5-flash-lite` since #511
+  (#691). Both now read the model from `/users/me/ai-key/status`, which reports
+  what is configured, and share one react-query key so it costs a single
+  request.
+
 - **nginx forwarded client identity headers to the backend unfiltered**
   (`nginx.conf`) — the `location /api/` proxy passed every client header
   through by default, so a forged `Remote-Email` on that path authenticates as

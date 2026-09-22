@@ -1128,6 +1128,19 @@ class AIKeyStatusSchema(CamelModel):
     provider: str
     has_openai_key: bool
     has_gemini_key: bool
+    openai_model: str
+    gemini_model: str
+    """The model each provider actually runs, so the UI stops guessing (#691).
+
+    The settings page used to hard-code these as display hints, in two places
+    that disagreed with each other ("Gemini 2.0 Flash" and "Gemini 2.5 Flash")
+    and with the backend, which has been on ``gemini-3.5-flash-lite`` since
+    #511. A copy of a config value drifts from it; serving the value does not.
+
+    This is the *coach* model specifically. Tasks are configured separately
+    (classify, plan, coach, feedback), but the coach is the one the athlete
+    converses with, so it is the honest answer to "what runs if I pick this".
+    """
 
 
 class AIKeySaveRequest(CamelModel):

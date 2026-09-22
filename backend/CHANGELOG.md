@@ -48,6 +48,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **BYOK-only was bypassed by the .fit upload routes** (`routers/dependencies.py`,
+  `routers/users.py`, `routers/ai.py`) — with `ALLOW_ADMIN_AI_KEY_FALLBACK=false`,
+  `upload-fit` and `upload-fit/bulk` kept spending the *owner's* provider key,
+  silently (#693).
+
+  `llm.get_provider` has two branches: inside a BYOK context it honours the
+  fallback setting; outside one it uses the global key unconditionally. The
+  second branch is for scheduler jobs, which have no user to bill and must keep
+  running — that part is deliberate. But the context was established in exactly
+  one place, the `_set_ai_key` dependency on the `/ai` router, and the uploads
+  live on `/users/me`. They took the scheduler branch, so the setting never
+  applied to them.
+
+  Same class as the bulk-upload gap in #682: a token-spending route outside the
+  `/ai` router missing a control the router grants for free. Second occurrence,
+  same two routes. `set_user_ai_keys` therefore moves into
+  `routers/dependencies.py` — the module that exists because two routers need
+  the same AI dependency and neither may import the other — and both uploads
+  take it alongside the rate limit.
+
+  The guard asserts the context is *active* during an upload rather than
+  asserting an outcome that depends on which key is configured, and was checked
+  to have teeth: removing the dependency fails it. The pre-existing 402 test
+  would not have caught this, since it patches `get_provider` to raise and so
+  exercises the handler rather than the wiring.
+
+### Added
+
+- **`/users/me/ai-key/status` reports the models the backend actually runs**
+  (`schemas.py`, `routers/users.py`) — the settings UI hard-coded them as
+  display strings in two components that disagreed with each other ("Gemini 2.0
+  Flash" and "Gemini 2.5 Flash") and with the backend, which has been on
+  `gemini-3.5-flash-lite` since #511 (#691). A copy of a config value drifts
+  from it; serving the value cannot.
+
+### Fixed
+
 - **The #682 deploy took down login and the coach** (`routers/auth_router.py`,
   `deploy/ansible/deploy.yml`, `deploy/ansible/templates/app.env.j2`,
   `.github/workflows/deploy.yml`) — two regressions from moving the backend off
