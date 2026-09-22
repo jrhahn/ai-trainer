@@ -38,6 +38,24 @@ password_policy:
     require_number: true
     require_special: true
 
+# ---------------------------------------------------------------------------
+# INERT IN THIS DEPLOYMENT. Nothing below this line is enforced.
+#
+# access_control is evaluated by Authelia when a request reaches its authz
+# endpoint — via the forward-auth middlewares in compose.yml. Those middlewares
+# are defined but attached to no router, so no request ever arrives and none of
+# these rules run. `default_policy: deny` in particular reads like a locked
+# door; it guards a door nobody walks through.
+#
+# Authelia's role here is the *user store*: auth_router reads
+# users_database.yml directly and the app issues its own JWT. Access control
+# for /api lives in that JWT and in the per-route dependencies, not here. See
+# issue #324 for why putting the backend behind forward-auth is not a
+# straightforward switch, and #688 for why TOTP configured here would likewise
+# have no effect on app login.
+#
+# Kept so the policy is ready if this becomes a forward-auth deployment.
+# ---------------------------------------------------------------------------
 access_control:
   default_policy: deny
   rules:
