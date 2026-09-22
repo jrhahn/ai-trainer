@@ -87,7 +87,12 @@ export default function AIKeySettings() {
     selectedProvider === 'openai' ? keyStatus?.hasOpenaiKey : keyStatus?.hasGeminiKey
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    // The id is the anchor target of the pointer in the AI Provider section
+    // above; scroll-mt keeps the heading clear of the sticky header on jump.
+    <div
+      id="your-ai-provider-key"
+      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 scroll-mt-20"
+    >
       <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <Key size={16} className="text-amber-500" />
         Your AI Provider Key

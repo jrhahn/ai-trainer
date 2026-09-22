@@ -119,3 +119,16 @@ describe('AIKeySettings', () => {
     await waitFor(() => expect(mockDeleteKey).toHaveBeenCalledWith('test-token', 'openai'))
   })
 })
+
+describe('anchor target', () => {
+  it('carries the id the AI Provider section links to', () => {
+    /*
+     * The pointer added in #691 is only useful if it lands somewhere. If this
+     * id is renamed, the link in SettingsPage silently becomes a no-op and the
+     * section is hard to find again — which was the original complaint.
+     */
+    const { container } = renderComponent()
+
+    expect(container.querySelector('#your-ai-provider-key')).not.toBeNull()
+  })
+})

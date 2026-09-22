@@ -379,10 +379,23 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 flex gap-2">
-          <AlertTriangle size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-yellow-700">
-            Model keys live on the backend now. The browser no longer stores or sends provider API keys.
+        {/*
+          This used to warn that "the browser no longer stores or sends provider
+          API keys". That predates BYOK and is now the opposite of true — the
+          "Your AI Provider Key" section at the bottom of this page sends one.
+          Read in order, the page told you there was nothing to enter and then
+          offered the field 470 lines later, which is exactly how long it took
+          someone to give up looking for it.
+        */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
+          <Server size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700">
+            This picks the model only. Requests run on the server's key by default —
+            to have them billed to your own account instead, add a key under{' '}
+            <a href="#your-ai-provider-key" className="font-semibold underline">
+              Your AI Provider Key
+            </a>{' '}
+            further down this page.
           </p>
         </div>
 
