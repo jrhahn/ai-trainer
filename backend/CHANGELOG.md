@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A proof-of-work challenge gates registration** (`services/captcha.py`,
+  `routers/auth_router.py`, `routers/dependencies.py`, `schemas.py`,
+  `config.py`, `compose.yml`, `deploy/ansible/templates/app.env.j2`) — nine bot
+  signups over two months found the public `/register` router, none of which
+  ever logged in (#686). The rate limit from #682 bounds their rate but cannot
+  tell a script from a human.
+
+  `GET /auth/captcha/challenge` issues an HMAC-signed puzzle; `register`
+  refuses anything without a valid, unexpired, unused solution, before it
+  touches the database or computes a hash.
+
+  **Self-hosted rather than Turnstile or hCaptcha.** Those read behavioural
+  signals and are better at the underlying question, but they require loading a
+  third-party script and letting it call home — punching `script-src` and
+  `connect-src` holes in the CSP that #677 exists to keep shut, and showing
+  every visitor of a self-hosted app to a third party. This runs on the app's
+  own origin and needs no CSP change.
+
+  **What it buys, stated plainly:** an attacker who implements the solver pays
+  milliseconds per account. What it stops is the naive bot — one that POSTs the
+  form without executing JavaScript cannot obtain a solution at all. The
+  difficulty therefore matters far less than the protocol requirement, which is
+  why the default is tuned for an imperceptible client delay rather than a high
+  cost.
+
+  **No new secret.** The signing key derives from `JWT_SECRET` under a fixed
+  label. Every secret added lately had to be threaded through compose, the
+  ansible template and two places in the deploy workflow, and #617 and #684 are
+  both cases where one was missed and the result was a silent fallback rather
+  than an error.
+
+  Two details that would make it decorative if wrong, and are tested: a solved
+  challenge is single-use (otherwise one puzzle registers unlimited accounts),
+  and the replay claim happens only *after* a solution validates — claiming
+  earlier would let an attacker invalidate someone else's in-flight challenge
+  by submitting garbage against it.
+
 ### Fixed
 
 - **BYOK-only was bypassed by the .fit upload routes** (`routers/dependencies.py`,

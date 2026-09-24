@@ -174,6 +174,13 @@ services:
       REGISTRATION_RATE_LIMIT_SECONDS: ${REGISTRATION_RATE_LIMIT_SECONDS:-3600}
       ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS: ${ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       ADMIN_LOGIN_RATE_LIMIT_SECONDS: ${ADMIN_LOGIN_RATE_LIMIT_SECONDS:-900}
+      # Registration captcha (#686). Self-hosted proof-of-work — no third
+      # party, no CSP change, and deliberately no secret of its own: the
+      # signing key is derived from JWT_SECRET, so there is nothing extra to
+      # thread through four files and forget in one (#617/#684).
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-true}
+      CAPTCHA_MAX_NUMBER: ${CAPTCHA_MAX_NUMBER:-20000}
+      CAPTCHA_TTL_SECONDS: ${CAPTCHA_TTL_SECONDS:-600}
       # Request body limits (#682).
       MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-67108864}
       FIT_UPLOAD_MAX_BYTES: ${FIT_UPLOAD_MAX_BYTES:-10485760}
