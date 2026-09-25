@@ -2,6 +2,7 @@
 
 import contextlib
 import fcntl
+import logging
 import os
 import secrets
 import stat
@@ -27,6 +28,8 @@ from routers.dependencies import (
 from services import captcha as captcha_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 
 def _carry_over_file_identity(original: Path, replacement: str) -> None:
@@ -215,8 +218,30 @@ def _verify_authelia_credentials(email: str, password: str) -> bool:
     if not db_path.exists():
         return False
 
-    with open(db_path, "r", encoding="utf-8") as fh:
-        data: dict[str, Any] = yaml.safe_load(fh) or {}
+    try:
+        with open(db_path, "r", encoding="utf-8") as fh:
+            data: dict[str, Any] = yaml.safe_load(fh) or {}
+    except OSError as exc:
+        # Not "wrong password" — the store is there and we cannot read it, which
+        # is an operator problem and must not be reported as a credential one.
+        # It happened twice (#684, #696): the file is shared with the Authelia
+        # container, whose entrypoint chowns it to root, while this process runs
+        # as uid 1001. Before this, it surfaced as a raw traceback and a 500 on
+        # every login — true but useless. The boot-time check in ``auth`` cannot
+        # help either, because the condition appears long after boot, whenever
+        # the other container happens to restart.
+        logger.error(
+            "Cannot read the Authelia user store at %s (uid=%s): %s. "
+            "Login is down for every user until the file is readable by this "
+            "process — check ownership of the bind mount.",
+            db_path,
+            os.getuid(),
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is temporarily unavailable.",
+        ) from exc
 
     users: dict[str, Any] = data.get("users") or {}
 

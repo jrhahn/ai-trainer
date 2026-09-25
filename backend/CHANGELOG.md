@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every Authelia restart took login down** (`compose.yml`,
+  `routers/auth_router.py`) — Authelia's entrypoint chowns `/config` to the user
+  it runs as, which is root. The backend shares that directory and reads
+  `users_database.yml` on every login, as uid 1001 since #682. So each restart
+  re-owned the store to `root:root 0600` and locked the backend out:
+  `PermissionError`, 500 on every login, for all users (#696).
+
+  #684 addressed the backend's own atomic write and made the playbook reassert
+  ownership at deploy time. Neither covers a restart — and `restart:
+  unless-stopped` means restarts happen unattended, so the outage returned the
+  next time the container cycled. Confirmed by observation, not inference:
+  `docker compose restart authelia` flipped the file from 1001 to 0 on the spot.
+
+  The config mount is now **read-only**, which removes the write rather than
+  racing it. Authelia only reads that directory: its storage is the separate
+  `/data` volume, and the one flow that would rewrite the user store —
+  password reset — is disabled. Registration is unaffected, since the backend
+  writes through its own read-write mount. If password reset is ever re-enabled
+  (#687) this needs a different answer, most likely running Authelia as the
+  same uid as the backend.
+
+  Separately, an unreadable store now returns **503** with the cause and the
+  uid in the log, instead of a raw traceback and a 500. Deliberately not a 401:
+  reporting "invalid credentials" for a file the process cannot open sends
+  whoever is debugging it to look at passwords. A *missing* store still returns
+  401, because a deployment that was never set up should not announce itself as
+  broken to every visitor.
+
 ### Added
 
 - **A proof-of-work challenge gates registration** (`services/captcha.py`,
