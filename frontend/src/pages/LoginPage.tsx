@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
-import { login } from '../services/auth'
+import { loginStep, loginWithTotp } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 
 export default function LoginPage() {
@@ -14,21 +14,58 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
+  // Set once the password is accepted and a code is still needed (#688). Its
+  // presence is what swaps the form over, so the password step is never shown
+  // again with a live challenge in hand.
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [rememberDevice, setRememberDevice] = useState(false)
+
+  const finishSignIn = async (token: string) => {
+    setAuthToken(token)
+    await loadUserData(token)
+    navigate('/')
+  }
+
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const token = await login(email, password)
-      setAuthToken(token)
-      await loadUserData(token)
-      return token
+      const result = await loginStep(email, password)
+      if (result.kind === 'mfa') {
+        setChallenge(result.challenge)
+        return
+      }
+      await finishSignIn(result.token)
     },
-    onSuccess: () => {
-      navigate('/')
+  })
+
+  const totpMutation = useMutation({
+    mutationFn: async () => {
+      if (!challenge) return
+      await finishSignIn(await loginWithTotp(challenge, code, rememberDevice))
+    },
+    onError: () => {
+      // The challenge is single-use on the server, so a failed attempt has
+      // spent it. Clearing the code but keeping the field avoids the reflex of
+      // retyping into something that can no longer succeed.
+      setCode('')
     },
   })
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
     loginMutation.mutate()
+  }
+
+  const handleTotpSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    totpMutation.mutate()
+  }
+
+  const startOver = () => {
+    setChallenge(null)
+    setCode('')
+    totpMutation.reset()
+    loginMutation.reset()
   }
 
   return (
@@ -38,9 +75,79 @@ export default function LoginPage() {
       subtitle="Rides synced, plan adjusted. Pick up the conversation wherever you left it."
     >
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign In</h2>
-        <p className="text-sm text-gray-500 mb-5">Back to your coach, your plan and tomorrow's session.</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">
+          {challenge ? 'Two-Factor Code' : 'Sign In'}
+        </h2>
+        <p className="text-sm text-gray-500 mb-5">
+          {challenge
+            ? 'Open your authenticator app and enter the current 6-digit code.'
+            : "Back to your coach, your plan and tomorrow's session."}
+        </p>
 
+        {challenge ? (
+          <form onSubmit={handleTotpSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+              <input
+                type="text"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-mono tracking-widest text-center focus:ring-amber-500 focus:border-amber-500"
+                placeholder="000000"
+                /* Not type="number": a code has leading zeros and is not a
+                   quantity, and the spinner arrows are nonsense here. */
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Lost your phone? Enter one of your recovery codes instead.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={rememberDevice}
+                onChange={(event) => setRememberDevice(event.target.checked)}
+                className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+              />
+              Trust this device for 30 days
+            </label>
+
+            {totpMutation.error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                {totpMutation.error instanceof Error
+                  ? totpMutation.error.message
+                  : 'That code did not work'}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={totpMutation.isPending || !code.trim()}
+              className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold flex items-center justify-center gap-2 hover:bg-amber-400 disabled:opacity-50 transition-colors"
+            >
+              {totpMutation.isPending ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Verify'
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={startOver}
+              className="w-full text-sm text-gray-500 hover:text-gray-700"
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -86,6 +193,7 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+        )}
 
         <p className="text-sm text-gray-500 mt-5 text-center">
           Need an account?{' '}

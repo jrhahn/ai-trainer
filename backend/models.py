@@ -149,11 +149,33 @@ class User(Base):
     user_openai_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     user_gemini_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
+    # Second factor (#688). The secret is Fernet-encrypted at rest like the
+    # provider keys above — it is equivalent to a password in what it grants.
+    #
+    # `totp_secret` is set at enrollment but `totp_enabled` only once a code
+    # has been verified, so a user who cannot scan the QR is never locked out
+    # by having started the flow.
+    totp_secret: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    totp_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     training_plan: Mapped["TrainingPlan | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     workout_logs: Mapped[list["WorkoutLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    # Cascades matter here rather than being decoration: no foreign key on
+    # users.id carries ON DELETE CASCADE at the database level, so deleting a
+    # user works only because SQLAlchemy walks these relationships (#693 note
+    # in admin_delete_user). A child table without one breaks account deletion.
+    trusted_devices: Mapped[list["TrustedDevice"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    totp_recovery_codes: Mapped[list["TotpRecoveryCode"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     race_events: Mapped[list["RaceEvent"]] = relationship(
@@ -359,6 +381,57 @@ class WorkoutLog(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
+
+
+class TrustedDevice(Base):
+    """A device allowed to skip the second factor for a while (#688).
+
+    A row rather than a self-contained signed cookie, because this has to be
+    *revocable*: losing a laptop that is trusted for 30 days should be fixable
+    from the settings page, and a signed cookie cannot be withdrawn without
+    rotating the key that signs every other one too.
+
+    Only the hash of the token is stored, so a database read does not hand over
+    live devices.
+    """
+
+    __tablename__ = "trusted_devices"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Purely so the athlete can tell two rows apart when revoking one.
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="trusted_devices")
+
+
+class TotpRecoveryCode(Base):
+    """One-time codes for when the authenticator is gone (#688).
+
+    Hashed with the same password hasher rather than stored in the clear: they
+    are login credentials, and a database dump should not be a set of working
+    ones. Single-use, enforced by deleting the row on a successful match.
+    """
+
+    __tablename__ = "totp_recovery_codes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="totp_recovery_codes")
 
 
 class RaceEvent(Base):

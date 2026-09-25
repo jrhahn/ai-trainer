@@ -122,6 +122,7 @@ login_limiter = SlidingWindowLimiter()
 registration_limiter = SlidingWindowLimiter()
 admin_login_limiter = SlidingWindowLimiter()
 captcha_limiter = SlidingWindowLimiter()
+totp_code_limiter = SlidingWindowLimiter()
 
 # The key for a limit that has nothing request-specific to key on.
 _GLOBAL_KEY = "*"
@@ -215,6 +216,46 @@ def enforce_captcha_rate_limit() -> None:
             ),
         ),
         "Too many captcha requests. Please wait and try again.",
+    )
+
+
+def enforce_totp_code_rate_limit(user_id: str) -> None:
+    """Bound guesses at a six-digit code, per account (#688).
+
+    10^6 combinations sounds like a lot until you notice a step lasts 30 s with
+    ±1 drift tolerance, which widens the accepted set, and that an unlimited
+    endpoint can be hit as fast as the network allows. This is the number that
+    makes brute force impractical; the single-use challenge is what stops one
+    accepted password funding an unbounded number of attempts.
+
+    Keyed on the user the challenge names rather than on the challenge, so
+    fetching a fresh one per guess buys nothing.
+    """
+    _enforce(
+        totp_code_limiter,
+        user_id,
+        (
+            Window(
+                settings.totp_code_rate_limit_attempts,
+                settings.totp_code_rate_limit_seconds,
+            ),
+        ),
+        "Too many codes tried. Please wait and try again.",
+    )
+
+
+def enforce_admin_totp_rate_limit() -> None:
+    """Same bound for the admin panel, which has no user to key on."""
+    _enforce(
+        totp_code_limiter,
+        _GLOBAL_KEY,
+        (
+            Window(
+                settings.totp_code_rate_limit_attempts,
+                settings.totp_code_rate_limit_seconds,
+            ),
+        ),
+        "Too many codes tried. Please wait and try again.",
     )
 
 

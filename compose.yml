@@ -181,6 +181,17 @@ services:
       CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-true}
       CAPTCHA_MAX_NUMBER: ${CAPTCHA_MAX_NUMBER:-20000}
       CAPTCHA_TTL_SECONDS: ${CAPTCHA_TTL_SECONDS:-600}
+      # Second factor (#688). No signing secret here — the login challenge is
+      # HMAC'd with a key derived from JWT_SECRET, so there is nothing extra to
+      # thread through four places and forget in one (#617/#684/#694).
+      #
+      # ADMIN_TOTP_SECRET is the exception, and it is a real secret: it guards
+      # the panel that can read every athlete's email address and delete any of
+      # them. Empty leaves the panel on password plus rate limit. Generate one
+      # with `uv run python -m scripts.generate_admin_totp`.
+      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
+      TOTP_ISSUER: ${TOTP_ISSUER:-Train Like A Pro}
+      TRUSTED_DEVICE_DAYS: ${TRUSTED_DEVICE_DAYS:-30}
       # Request body limits (#682).
       MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-67108864}
       FIT_UPLOAD_MAX_BYTES: ${FIT_UPLOAD_MAX_BYTES:-10485760}

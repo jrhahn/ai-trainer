@@ -4,6 +4,7 @@ import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Hear
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
+import TotpSettings from '../components/TotpSettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import MotivationModelSettings from '../components/MotivationModelSettings'
 import AthleteModelSettings from '../components/AthleteModelSettings'
@@ -862,6 +863,8 @@ export default function SettingsPage() {
 
       {/* Per-user AI API key (BYOK) */}
       <AIKeySettings />
+
+      <TotpSettings />
 
       {/* Import historical coach conversations */}
       <ConversationImportSettings />

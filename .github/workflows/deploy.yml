@@ -118,6 +118,7 @@ jobs:
           APP_GID: ${{ vars.APP_GID }}
           AI_TOKEN_BUDGET: ${{ vars.AI_TOKEN_BUDGET }}
           ALLOW_ADMIN_AI_KEY_FALLBACK: ${{ vars.ALLOW_ADMIN_AI_KEY_FALLBACK }}
+          ADMIN_TOTP_SECRET: ${{ secrets.ADMIN_TOTP_SECRET }}
           SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
         run: |
           python - <<'PY'
@@ -137,6 +138,10 @@ jobs:
               "acme_email": os.environ.get("ACME_EMAIL", ""),
               "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
               "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
+              # Optional, so "" is the right fallback here: an empty value
+              # means "no second factor on the admin panel", which is a valid
+              # state, unlike the secrets that must never render blank (#684).
+              "admin_totp_secret": os.environ.get("ADMIN_TOTP_SECRET", ""),
               "authelia_proxy_shared_secret": os.environ.get("AUTHELIA_PROXY_SHARED_SECRET", ""),
               # Read like secrets_encryption_key below rather than with a ""
               # fallback: an empty value here is not a missing feature, it is
