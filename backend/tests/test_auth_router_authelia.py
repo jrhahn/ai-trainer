@@ -518,3 +518,65 @@ def test_a_failed_chown_does_not_fail_the_registration(monkeypatch, tmp_path):
 
     written = yaml.safe_load(store.read_text())
     assert "rider@example.com" in written["users"]
+
+
+# ---------------------------------------------------------------------------
+# An unreadable user store is an operator problem, not a wrong password (#696)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_login_reports_503_when_the_user_store_cannot_be_read(
+    client, monkeypatch, tmp_path
+):
+    """Twice now the store has become root-owned while the backend runs as 1001.
+
+    #684 was a deploy doing it, #696 was the Authelia container's entrypoint
+    chowning the shared mount on every restart. Both surfaced as a raw
+    ``PermissionError`` traceback and a 500 on every login — accurate and
+    useless. A 503 with the cause in the log says what to go and fix.
+
+    Explicitly *not* a 401: reporting "invalid credentials" for a file the
+    process cannot open would send the operator looking at passwords.
+    """
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store, {"rider@example.com": {"email": "rider@example.com"}})
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    real_open = open
+
+    def _denied(path, *args, **kwargs):
+        if str(path) == str(store):
+            raise PermissionError(13, "Permission denied", str(store))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("routers.auth_router.open", _denied, raising=False)
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "rider@example.com", "password": "whatever"},
+    )
+
+    assert resp.status_code == 503, resp.text
+    assert resp.status_code != 401
+
+
+@pytest.mark.asyncio
+async def test_a_missing_store_is_still_a_plain_auth_failure(
+    client, monkeypatch, tmp_path
+):
+    """Absent is different from unreadable, and must stay a 401.
+
+    A deployment that has not been set up yet should not report itself as
+    broken to every visitor.
+    """
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "absent.yml"))
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "rider@example.com", "password": "whatever"},
+    )
+
+    assert resp.status_code == 401

@@ -309,7 +309,29 @@ services:
       AUTHELIA_SESSION_SECRET: "${AUTHELIA_SESSION_SECRET:?must be set - generate with openssl rand -hex 32}"
       AUTHELIA_STORAGE_ENCRYPTION_KEY: "${AUTHELIA_STORAGE_ENCRYPTION_KEY:?must be set - generate with openssl rand -hex 32}"
     volumes:
-      - ./authelia:/config
+      # Read-only, and that is load-bearing rather than tidiness (#696).
+      #
+      # Authelia's entrypoint chowns /config to the user it runs as, which is
+      # root. The backend shares this directory (as /authelia-config) and reads
+      # users_database.yml on every login — as uid 1001 since #682. So every
+      # Authelia restart re-owned the user store to root:root 0600 and locked
+      # the backend out: `PermissionError` on the file, 500 on every login.
+      #
+      # #684 fixed the backend's own atomic write and made the playbook reassert
+      # ownership on deploy. Neither covers a restart, and `restart:
+      # unless-stopped` means restarts happen on their own — so the outage came
+      # back the next time the container cycled.
+      #
+      # A read-only mount removes the write instead of racing it. Authelia only
+      # *reads* this directory: its storage is the separate /data volume, and
+      # the one flow that would rewrite users_database.yml — password reset —
+      # is disabled in configuration.yml. Registration still works, because the
+      # backend writes through its own read-write mount, not this one.
+      #
+      # If password reset is ever re-enabled (#687), this has to become
+      # read-write again and the ownership conflict needs a real fix — most
+      # likely running Authelia as the same uid as the backend.
+      - ./authelia:/config:ro
       - authelia_data:/data
     labels:
       - traefik.enable=true

@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A deploy silently reverted BYOK-only** (`.github/workflows/deploy.yml`) —
+  `ALLOW_ADMIN_AI_KEY_FALLBACK` was set to `false` in the production GitHub
+  environment, but the workflow never forwarded it, so a deploy re-rendered
+  `.env` with the template default `true` and every registered account could
+  spend the owner's provider key again (#694).
+
+  Setting the repository variable is one of three required edits: the workflow
+  must also name it in `env:` and put it in `extra_vars`, and only then does
+  `app.env.j2` see it instead of falling through to `default(...)`.
+  `AI_TOKEN_BUDGET` had all three; this had only the variable. Nothing reports
+  the difference — the deploy succeeds and the container is healthy, the
+  setting simply is not what the environment says it is.
+
+  Third occurrence of this shape: #617 (`strava_encryption_key` never
+  forwarded), #684 (the Authelia secrets absent from the workflow, so
+  placeholders published in this repo were deployed), and now this.
+
+  `tests/test_deploy_wiring.py` is the guard: every variable in `app.env.j2`
+  must be **either** forwarded **or** listed in an explicit
+  `TEMPLATE_DEFAULT_ONLY` set with a note on why it is not tunable, so a new
+  setting forces the choice to be made rather than assumed. It does not demand
+  that everything be forwarded — most of the template is default-only by
+  design. A second case fails if the allow-list names variables the template no
+  longer reads, so it cannot rot into a graveyard that excuses everything, and
+  a third pins the two spend controls by name, since a future "fix" could
+  otherwise satisfy the general test by adding the name to the allow-list and
+  restore exactly this bug.
+
+- **Every Authelia restart took login down** (`compose.yml`,
+  `routers/auth_router.py`) — Authelia's entrypoint chowns `/config` to the user
+  it runs as, which is root. The backend shares that directory and reads
+  `users_database.yml` on every login, as uid 1001 since #682. So each restart
+  re-owned the store to `root:root 0600` and locked the backend out:
+  `PermissionError`, 500 on every login, for all users (#696).
+
+  #684 addressed the backend's own atomic write and made the playbook reassert
+  ownership at deploy time. Neither covers a restart — and `restart:
+  unless-stopped` means restarts happen unattended, so the outage returned the
+  next time the container cycled. Confirmed by observation, not inference:
+  `docker compose restart authelia` flipped the file from 1001 to 0 on the spot.
+
+  The config mount is now **read-only**, which removes the write rather than
+  racing it. Authelia only reads that directory: its storage is the separate
+  `/data` volume, and the one flow that would rewrite the user store —
+  password reset — is disabled. Registration is unaffected, since the backend
+  writes through its own read-write mount. If password reset is ever re-enabled
+  (#687) this needs a different answer, most likely running Authelia as the
+  same uid as the backend.
+
+  Separately, an unreadable store now returns **503** with the cause and the
+  uid in the log, instead of a raw traceback and a 500. Deliberately not a 401:
+  reporting "invalid credentials" for a file the process cannot open sends
+  whoever is debugging it to look at passwords. A *missing* store still returns
+  401, because a deployment that was never set up should not announce itself as
+  broken to every visitor.
+
 ### Added
 
 - **A proof-of-work challenge gates registration** (`services/captcha.py`,
