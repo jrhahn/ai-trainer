@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A deploy silently reverted BYOK-only** (`.github/workflows/deploy.yml`) —
+  `ALLOW_ADMIN_AI_KEY_FALLBACK` was set to `false` in the production GitHub
+  environment, but the workflow never forwarded it, so a deploy re-rendered
+  `.env` with the template default `true` and every registered account could
+  spend the owner's provider key again (#694).
+
+  Setting the repository variable is one of three required edits: the workflow
+  must also name it in `env:` and put it in `extra_vars`, and only then does
+  `app.env.j2` see it instead of falling through to `default(...)`.
+  `AI_TOKEN_BUDGET` had all three; this had only the variable. Nothing reports
+  the difference — the deploy succeeds and the container is healthy, the
+  setting simply is not what the environment says it is.
+
+  Third occurrence of this shape: #617 (`strava_encryption_key` never
+  forwarded), #684 (the Authelia secrets absent from the workflow, so
+  placeholders published in this repo were deployed), and now this.
+
+  `tests/test_deploy_wiring.py` is the guard: every variable in `app.env.j2`
+  must be **either** forwarded **or** listed in an explicit
+  `TEMPLATE_DEFAULT_ONLY` set with a note on why it is not tunable, so a new
+  setting forces the choice to be made rather than assumed. It does not demand
+  that everything be forwarded — most of the template is default-only by
+  design. A second case fails if the allow-list names variables the template no
+  longer reads, so it cannot rot into a graveyard that excuses everything, and
+  a third pins the two spend controls by name, since a future "fix" could
+  otherwise satisfy the general test by adding the name to the allow-list and
+  restore exactly this bug.
+
 - **Every Authelia restart took login down** (`compose.yml`,
   `routers/auth_router.py`) — Authelia's entrypoint chowns `/config` to the user
   it runs as, which is root. The backend shares that directory and reads

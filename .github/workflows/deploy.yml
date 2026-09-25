@@ -117,6 +117,7 @@ jobs:
           APP_UID: ${{ vars.APP_UID }}
           APP_GID: ${{ vars.APP_GID }}
           AI_TOKEN_BUDGET: ${{ vars.AI_TOKEN_BUDGET }}
+          ALLOW_ADMIN_AI_KEY_FALLBACK: ${{ vars.ALLOW_ADMIN_AI_KEY_FALLBACK }}
           SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
         run: |
           python - <<'PY'
@@ -154,10 +155,28 @@ jobs:
               "app_gid": os.environ.get("APP_GID") or "1000",
               # Left out of extra_vars entirely when unset, so app.env.j2's
               # `default(...)` is what applies. Passing "" instead would render
-              # an empty AI_TOKEN_BUDGET, which pydantic rejects at boot.
+              # an empty value, which pydantic rejects at boot.
+              #
+              # Both of these are repository *variables*, not secrets, and both
+              # have to be listed in the `env:` block above as well. Setting the
+              # variable alone does nothing — that is how #694 happened:
+              # ALLOW_ADMIN_AI_KEY_FALLBACK was set to false in the production
+              # environment, never forwarded, and the deploy silently rendered
+              # the template default of true, putting the owner's provider key
+              # back within reach of every registered account. Same shape as
+              # #617 and #684.
               **(
                   {"ai_token_budget": os.environ["AI_TOKEN_BUDGET"]}
                   if os.environ.get("AI_TOKEN_BUDGET")
+                  else {}
+              ),
+              **(
+                  {
+                      "allow_admin_ai_key_fallback": os.environ[
+                          "ALLOW_ADMIN_AI_KEY_FALLBACK"
+                      ]
+                  }
+                  if os.environ.get("ALLOW_ADMIN_AI_KEY_FALLBACK")
                   else {}
               ),
               # Required, so read it the way the other required values are read:
