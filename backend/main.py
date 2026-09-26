@@ -27,6 +27,7 @@ from services.pipeline_graph import graph as pipeline_graph
 from services.plan_maintenance import daily_plan_maintenance_job
 from services.prediction_evaluation import prediction_evaluation_job
 from services.scheduler import InProcessScheduler
+from services import totp as totp_service
 from services.token_accounting import TokenBudgetExceededError
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
     _auth.warn_if_authelia_proxy_unprotected()
     _auth.warn_if_authelia_user_store_unwritable()
+    totp_service.warn_if_admin_secret_unusable()
     # Fail fast if the pipeline dependency graph is not a DAG.
     pipeline_graph.validate()
     await _create_dev_schema()

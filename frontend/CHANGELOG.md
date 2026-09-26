@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Two-factor sign-in and setup** (`src/pages/LoginPage.tsx`,
+  `src/components/TotpSettings.tsx`, `src/services/totp.ts`,
+  `src/services/auth.ts`, `src/pages/AdminPage.tsx`, #688) — the login form
+  asks for a code when the server says one is needed, with an option to trust
+  the device for 30 days; settings gains enrollment, recovery codes and a way to
+  revoke trusted devices.
+
+  The QR arrives from the backend as an SVG string rather than being generated
+  here. That keeps a QR library out of the bundle and needs no CSP exception for
+  it (#677) — and the markup is our own server's, built from a URI our own
+  server built, with no user input in it.
+
+  A rejected code returns to the password step and carries the reason with it.
+  The challenge is single-use server-side, so the field it came from can no
+  longer succeed — retrying there answers "this challenge was already used",
+  which explains nothing. Consuming the challenge on failure is the stricter
+  choice and is kept: one guess per password entry, on top of the per-account
+  rate limit.
+
+  The admin login asks the server whether a code is required before showing the
+  field, rather than always prompting — failing a correct password for a field
+  the deployment does not use would be worse than one extra request.
+
 - **The registration form solves a proof-of-work before submitting**
   (`src/services/captcha.ts`, `src/services/auth.ts`) — invisible to the user:
   `register()` fetches a challenge, brute-forces the number, and sends the

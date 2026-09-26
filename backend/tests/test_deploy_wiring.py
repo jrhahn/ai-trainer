@@ -76,6 +76,11 @@ TEMPLATE_DEFAULT_ONLY = {
     "registration_rate_limit_seconds",
     "captcha_enabled",
     "captcha_max_number",
+    # Second factor (#688). The issuer is a display string in the authenticator
+    # app and the trust window is policy — neither is deployment-specific. The
+    # one secret here, admin_totp_secret, *is* forwarded.
+    "totp_issuer",
+    "trusted_device_days",
     # Reachable only through an SSH tunnel; Grafana forces a change on first
     # login when this is empty (#549).
     "grafana_admin_password",

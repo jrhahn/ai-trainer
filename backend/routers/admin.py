@@ -23,7 +23,11 @@ import models
 import schemas
 from config import settings
 from database import get_db
-from routers.dependencies import enforce_admin_login_rate_limit
+from routers.dependencies import (
+    enforce_admin_login_rate_limit,
+    enforce_admin_totp_rate_limit,
+)
+from services import totp as totp_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -35,6 +39,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 class AdminLoginRequest(BaseModel):
     password: str
+    code: str | None = None
+    """TOTP code, required when ADMIN_TOTP_SECRET is configured (#688)."""
 
 
 class AdminUserStat(schemas.CamelModel):
@@ -107,8 +113,36 @@ async def admin_login(body: AdminLoginRequest) -> schemas.TokenResponse:
         body.password.encode("utf-8"), settings.admin_password.encode("utf-8")
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
+
+    # A second factor for the account that can read every athlete's email
+    # address, their token spend, and delete any of them (#688). Optional, so
+    # an existing deployment keeps working, but strongly worth configuring —
+    # this is one shared password on a publicly routed endpoint.
+    #
+    # Checked after the password so an attacker cannot use the presence of a
+    # code prompt to learn that the password was right.
+    if totp_service.admin_totp_configured():
+        enforce_admin_totp_rate_limit()
+        if not body.code or not totp_service.verify_admin_code(body.code):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid password or code",
+            )
+
     token = auth.create_admin_token()
     return schemas.TokenResponse(access_token=token, token_type="bearer")
+
+
+@router.get("/totp-required")
+async def admin_totp_required() -> dict:
+    """Whether the login form should ask for a code.
+
+    Deliberately public and deliberately uninformative: it reveals only that a
+    second factor is configured, which an attacker learns anyway on their first
+    attempt, and knowing it lets the form show the right fields instead of
+    failing a correct password for a missing one.
+    """
+    return {"required": totp_service.admin_totp_configured()}
 
 
 @router.get("/users", response_model=AdminUsersResponse, dependencies=[Depends(auth.require_admin)])

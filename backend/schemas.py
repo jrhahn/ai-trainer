@@ -149,6 +149,72 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class TotpLoginRequest(CamelModel):
+    """Second step of a login that needs a code (#688).
+
+    CamelModel rather than BaseModel, and that is load-bearing: the client
+    sends ``rememberDevice``. On a plain BaseModel that key does not map to
+    ``remember_device``, so it is dropped and the field silently keeps its
+    default — the device is never trusted and nothing reports why.
+    """
+
+    challenge: str
+    code: str
+    remember_device: bool = False
+
+
+class LoginChallengeResponse(CamelModel):
+    """What ``/auth/login`` returns instead of a token when TOTP is on.
+
+    A 200 with a discriminated body rather than a 401: the password *was*
+    accepted, and reporting that as an auth failure would leave the client
+    unable to tell "wrong password" from "now show the code field".
+    """
+
+    mfa_required: bool = True
+    challenge: str
+
+
+
+class TotpEnrollResponse(CamelModel):
+    """The QR and the secret, returned once when enrollment starts."""
+
+    secret: str
+    """Grouped for transcription, for anyone entering it by hand."""
+    provisioning_uri: str
+    qr_svg: str
+
+
+
+class TotpConfirmRequest(BaseModel):
+    code: str
+
+
+class TotpStatusResponse(CamelModel):
+    enabled: bool
+    confirmed_at: datetime | None = None
+    recovery_codes_remaining: int = 0
+    trusted_device_count: int = 0
+
+
+
+class TotpRecoveryCodesResponse(CamelModel):
+    """Shown exactly once, at confirmation. Never retrievable afterwards."""
+
+    recovery_codes: list[str]
+
+
+
+class TotpDisableRequest(BaseModel):
+    """Disabling needs the password again, not just a live session.
+
+    A borrowed unlocked browser should not be enough to remove the factor that
+    protects the account.
+    """
+
+    password: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -4554,3 +4554,97 @@ async def update_ride_match(
     )
     await db.flush()
     return ride
+
+
+# ---------------------------------------------------------------------------
+# Second factor: trusted devices and recovery codes (#688)
+# ---------------------------------------------------------------------------
+
+
+async def add_trusted_device(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    token_hash: str,
+    expires_at: datetime,
+    user_agent: str | None,
+) -> models.TrustedDevice:
+    """Remember a device so it can skip the second factor until *expires_at*."""
+    device = models.TrustedDevice(
+        user_id=user_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        # Truncated rather than rejected: this is a label for the revoke list,
+        # and a long User-Agent is not a reason to fail a login.
+        user_agent=(user_agent or "")[:255] or None,
+    )
+    db.add(device)
+    await db.flush()
+    return device
+
+
+async def get_trusted_device(
+    db: AsyncSession, user_id: str, token_hash: str, *, now: datetime
+) -> models.TrustedDevice | None:
+    """A live device row for this user, or None if absent or expired."""
+    return await db.scalar(
+        select(models.TrustedDevice).where(
+            models.TrustedDevice.user_id == user_id,
+            models.TrustedDevice.token_hash == token_hash,
+            models.TrustedDevice.expires_at > now,
+        )
+    )
+
+
+async def count_trusted_devices(db: AsyncSession, user_id: str, *, now: datetime) -> int:
+    return int(
+        await db.scalar(
+            select(func.count(models.TrustedDevice.id)).where(
+                models.TrustedDevice.user_id == user_id,
+                models.TrustedDevice.expires_at > now,
+            )
+        )
+        or 0
+    )
+
+
+async def revoke_trusted_devices(db: AsyncSession, user_id: str) -> int:
+    """Drop every trusted device for *user_id*; returns how many went.
+
+    The only recovery when a trusted laptop is lost, and what disabling or
+    re-enrolling TOTP has to call — a device trusted under an old secret must
+    not survive it.
+    """
+    result = await db.execute(
+        delete(models.TrustedDevice).where(models.TrustedDevice.user_id == user_id)
+    )
+    return int(result.rowcount or 0)
+
+
+async def replace_recovery_codes(
+    db: AsyncSession, user_id: str, code_hashes: list[str]
+) -> None:
+    """Swap in a fresh set, discarding any previous one."""
+    await db.execute(
+        delete(models.TotpRecoveryCode).where(models.TotpRecoveryCode.user_id == user_id)
+    )
+    for code_hash in code_hashes:
+        db.add(models.TotpRecoveryCode(user_id=user_id, code_hash=code_hash))
+    await db.flush()
+
+
+async def list_recovery_codes(
+    db: AsyncSession, user_id: str
+) -> Sequence[models.TotpRecoveryCode]:
+    result = await db.execute(
+        select(models.TotpRecoveryCode).where(
+            models.TotpRecoveryCode.user_id == user_id
+        )
+    )
+    return result.scalars().all()
+
+
+async def consume_recovery_code(db: AsyncSession, code: models.TotpRecoveryCode) -> None:
+    """Spend a recovery code by deleting it — they are single-use."""
+    await db.delete(code)
+    await db.flush()

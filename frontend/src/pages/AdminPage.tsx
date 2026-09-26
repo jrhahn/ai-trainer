@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Shield, Loader2, LogOut, Users, Zap, Activity, Trash2 } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
 
@@ -69,8 +69,25 @@ function StatCard({ label, value, icon }: { label: string; value: string | numbe
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
+  // Asked for only when the server says a second factor is configured (#688).
+  // Rendering it unconditionally would prompt for a code on deployments that
+  // have none, and failing a correct password for a missing field is worse
+  // than one extra request on the login screen.
+  const [adminCode, setAdminCode] = useState('')
+  const [totpRequired, setTotpRequired] = useState(false)
   const [adminToken, setAdminToken] = useState<string | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
+
+  // One unauthenticated call on mount to learn whether to show the code field.
+  // It leaks only that a second factor exists, which any attempt reveals
+  // anyway. A failure leaves it off: the server is the one that enforces this,
+  // and a hidden field cannot let a wrong login through.
+  useEffect(() => {
+    void fetch(`${API_BASE}/admin/totp-required`)
+      .then((res) => (res.ok ? res.json() : { required: false }))
+      .then((data: { required?: boolean }) => setTotpRequired(!!data.required))
+      .catch(() => setTotpRequired(false))
+  }, [])
   const [loginLoading, setLoginLoading] = useState(false)
 
   const [stats, setStats] = useState<AdminUsersResponse | null>(null)
@@ -97,7 +114,7 @@ export default function AdminPage() {
       const res = await fetch(`${API_BASE}/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify(totpRequired ? { password, code: adminCode } : { password }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { detail?: string }
@@ -236,6 +253,27 @@ export default function AdminPage() {
                 autoFocus
               />
             </div>
+            {totpRequired && (
+              <div>
+                <label
+                  htmlFor="admin-totp-code"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Two-factor code
+                </label>
+                <input
+                  id="admin-totp-code"
+                  type="text"
+                  value={adminCode}
+                  onChange={(e) => setAdminCode(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                />
+              </div>
+            )}
             {loginError && (
               <p className="text-sm text-red-600">{loginError}</p>
             )}

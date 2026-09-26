@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Two-factor authentication (TOTP) for app accounts and the admin panel**
+  (`services/totp.py`, `routers/auth_router.py`, `routers/admin.py`,
+  `models.py`, `alembic/versions/20260925_000001_add_totp.py`, #688) —
+  authenticator app, QR enrollment, recovery codes, and the option to trust a
+  device for 30 days. Opt-in per user; nobody who does not enable it sees a
+  change.
+
+  **In the backend, not Authelia.** Authelia is the user store here, not a
+  forward-auth proxy — its middlewares are attached to no router and
+  `auth_router` reads `users_database.yml` directly (#324, #696), so a second
+  factor configured there would never run. Its own TOTP enrollment also
+  requires a notifier, and this deployment has no working SMTP (#687).
+  Implemented here, the feature needs neither.
+
+  **One exit, not two.** Both branches of `login` used to end by issuing a
+  token, which is precisely the shape that lets a factor be enforced on one
+  path and forgotten on the other. They now share `_complete_login`, and
+  `/auth/session` — which mints a token from an Authelia portal session without
+  ever seeing a password — goes through it too. That endpoint is currently
+  unreachable, but by routing accident rather than design, and it was the
+  obvious way around the whole feature.
+
+  **Not a bot defence, and not planned as one.** TOTP proves possession of a
+  secret the server just issued; a script enrolls its own device and computes
+  codes with a few lines of `pyotp`. Automated signup is held off by #686 and,
+  later, #687.
+
+  Details that decide whether this helps or harms:
+
+  - enrollment stores the secret but leaves the factor **off** until a code
+    verifies — otherwise someone whose camera fails halfway is locked out, and
+    they are the person least able to recover
+  - **recovery codes**, hashed like passwords, single-use, shown exactly once.
+    Without them a lost phone means SSH access and a hand-edited database, which
+    is why people switch 2FA off
+  - the login challenge is HMAC'd with a key **derived from `JWT_SECRET`** and is
+    single-use. No new secret, so it cannot be half-configured the way #617,
+    #684 and #694 all were; single-use so one accepted password does not fund
+    unlimited code attempts
+  - code submission is **rate-limited per account** — six digits is 10^6 and a
+    30 s step with ±1 drift tolerance is genuinely brute-forceable otherwise
+  - the secret is `EncryptedString`, Fernet at rest like the provider keys
+  - the trusted-device cookie is `HttpOnly` (it outlives the tab, so an XSS
+    reading it would bypass the factor for a month) and `Secure` outside
+    development — a browser discards a Secure cookie over http, and hard-coding
+    it would have made the feature unusable locally, which is how a flag ends up
+    switched off "to make it work"
+  - confirming enrollment **revokes devices trusted beforehand**: they were
+    trusted when there was no second factor at all
+  - disabling requires the **password**, not just a live session
+
+  The admin panel gets the same second factor via `ADMIN_TOTP_SECRET`. It has no
+  user row, so the secret is an environment variable and there is deliberately
+  no enrollment endpoint — one less unauthenticated surface in front of the
+  account that can read every athlete's email address and delete any of them.
+  Generate one with `uv run python -m scripts.generate_admin_totp`. The code is
+  checked *after* the password, so a prompt cannot be used to learn that the
+  password was right. A malformed secret is reported at boot and on every
+  refusal rather than becoming a silent lockout — a non-empty value makes the
+  panel demand a code that a non-base32 one can never accept, which is the
+  shape of #684 and #696.
+
 ### Fixed
 
 - **A deploy silently reverted BYOK-only** (`.github/workflows/deploy.yml`) —

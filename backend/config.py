@@ -324,6 +324,47 @@ class Settings(BaseSettings):
     captcha_challenge_rate_limit_seconds: int = 300
 
     # ------------------------------------------------------------------
+    # Second factor (#688)
+    #
+    # No signing secret here: the login challenge is HMAC'd with a key derived
+    # from JWT_SECRET. #617, #684 and #694 were all a secret configured in one
+    # of the four places it has to appear and silently defaulting in the rest;
+    # a derived key cannot be half-configured.
+    # ------------------------------------------------------------------
+    totp_issuer: str = "Train Like A Pro"
+    """Shown as the account name in the authenticator app."""
+
+    totp_challenge_ttl_seconds: int = 300
+    """How long the second step may lag the first.
+
+    Long enough to fetch a phone, short enough that an intercepted challenge is
+    not a standing invitation. It is single-use regardless.
+    """
+
+    totp_code_rate_limit_attempts: int = 5
+    """Code submissions per account per ``totp_code_rate_limit_seconds``.
+
+    Six digits is 10^6 and a step lasts 30 s with ±1 drift tolerance, so an
+    unlimited endpoint is genuinely brute-forceable. This is the number that
+    stops that; the single-use challenge is what stops one accepted password
+    being worth an unbounded number of tries.
+    """
+    totp_code_rate_limit_seconds: int = 300
+
+    trusted_device_days: int = 30
+    """How long a device may skip the second factor after opting in."""
+
+    admin_totp_secret: str = ""
+    """Base32 TOTP secret for the admin panel. Empty disables the second factor.
+
+    An environment variable rather than a stored, self-enrolled secret: the
+    panel has no user row, and an enrollment endpoint would be one more
+    unauthenticated surface in front of the account that can read every
+    athlete's email address and delete any of them. Generate one with
+    ``uv run python -m scripts.generate_admin_totp``.
+    """
+
+    # ------------------------------------------------------------------
     # Request limits (#682)
     # ------------------------------------------------------------------
     max_request_body_bytes: int = 64 * 1024 * 1024
