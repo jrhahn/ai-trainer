@@ -21,9 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it (#677) — and the markup is our own server's, built from a URI our own
   server built, with no user input in it.
 
-  A failed code clears the field: the challenge is single-use server-side, so
-  retyping into it cannot succeed and leaving the digits there invites exactly
-  that.
+  A rejected code returns to the password step and carries the reason with it.
+  The challenge is single-use server-side, so the field it came from can no
+  longer succeed — retrying there answers "this challenge was already used",
+  which explains nothing. Consuming the challenge on failure is the stricter
+  choice and is kept: one guess per password entry, on top of the per-account
+  rate limit.
 
   The admin login asks the server whether a code is required before showing the
   field, rather than always prompting — failing a correct password for a field

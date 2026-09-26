@@ -46,6 +46,7 @@ import base64
 import hashlib
 import hmac
 import io
+import logging
 import secrets
 import time
 from dataclasses import dataclass
@@ -55,6 +56,8 @@ import qrcode
 import qrcode.image.svg
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 _CHALLENGE_LABEL = b"ai-trainer/totp-challenge/v1"
 _DEVICE_LABEL = b"ai-trainer/trusted-device/v1"
@@ -266,6 +269,36 @@ def admin_totp_configured() -> bool:
     return bool(settings.admin_totp_secret)
 
 
+def admin_secret_is_usable() -> bool:
+    """Whether ``ADMIN_TOTP_SECRET`` is set *and* decodable as base32."""
+    secret = settings.admin_totp_secret
+    if not secret:
+        return False
+    try:
+        base64.b32decode(secret, casefold=True)
+    except Exception:
+        return False
+    return True
+
+
+def warn_if_admin_secret_unusable() -> None:
+    """Say so at boot when the admin secret is present but malformed.
+
+    A typo here is a silent lockout: ``admin_totp_configured`` sees a non-empty
+    value and starts demanding a code, while ``verify_admin_code`` can never
+    accept one. The operator gets "Invalid password or code" forever and nothing
+    anywhere explains why — the failure mode #684 and #696 were both made of.
+
+    Fail-closed is right; fail-closed and silent is not.
+    """
+    if settings.admin_totp_secret and not admin_secret_is_usable():
+        logger.error(
+            "ADMIN_TOTP_SECRET is set but is not valid base32, so no code can "
+            "ever be accepted and the admin panel is unreachable. Generate a "
+            "correct one with: uv run python -m scripts.generate_admin_totp"
+        )
+
+
 def verify_admin_code(code: str) -> bool:
     """Check *code* against ``ADMIN_TOTP_SECRET``.
 
@@ -274,11 +307,14 @@ def verify_admin_code(code: str) -> bool:
     unauthenticated surface in front of the account that can read every
     athlete's email address and delete any of them.
     """
-    secret = settings.admin_totp_secret
-    if not secret:
+    if not admin_secret_is_usable():
+        # Logged rather than passed over in silence: reaching here with a
+        # malformed secret means every admin login is being refused for a
+        # reason the operator cannot see from the response.
+        if settings.admin_totp_secret:
+            logger.error(
+                "Refusing an admin code because ADMIN_TOTP_SECRET is not valid "
+                "base32. The panel cannot be opened until it is fixed."
+            )
         return False
-    try:
-        base64.b32decode(secret, casefold=True)
-    except Exception:
-        return False
-    return verify_code(secret, code)
+    return verify_code(settings.admin_totp_secret, code)

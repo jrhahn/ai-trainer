@@ -9,6 +9,7 @@ it off.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
 import pyotp
@@ -534,3 +535,66 @@ async def test_the_device_cookie_is_httponly_and_secure_in_production(
     assert "httponly" in cookie.lower(), cookie
     assert "secure" in cookie.lower(), cookie
     assert "samesite=lax" in cookie.lower(), cookie
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_admin_secret_says_so_instead_of_failing_silently(
+    client: AsyncClient, monkeypatch, caplog
+):
+    """A typo in ADMIN_TOTP_SECRET was a silent lockout.
+
+    A non-empty value makes the panel start demanding a code, while a
+    non-base32 one can never be accepted — so the operator got "Invalid
+    password or code" forever with nothing anywhere explaining why. Fail-closed
+    is right; fail-closed and silent is the shape of #684 and #696.
+    """
+    monkeypatch.setattr(settings, "admin_password", "super-secret")
+    monkeypatch.setattr(settings, "admin_totp_secret", "this-is-not-base32!!")
+
+    with caplog.at_level("ERROR"):
+        resp = await client.post(
+            _ADMIN_LOGIN, json={"password": "super-secret", "code": "123456"}
+        )
+
+    assert resp.status_code == 401
+    assert any("not valid base32" in r.getMessage() for r in caplog.records), (
+        "the refusal has to be explained somewhere the operator will see it"
+    )
+
+
+def test_the_boot_check_reports_a_malformed_admin_secret(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "admin_totp_secret", "nope!!")
+
+    with caplog.at_level("ERROR"):
+        totp_service.warn_if_admin_secret_unusable()
+
+    assert any("not valid base32" in r.getMessage() for r in caplog.records)
+
+
+def test_the_boot_check_is_quiet_when_there_is_no_admin_secret(monkeypatch, caplog):
+    """An unconfigured second factor is a valid state, not a misconfiguration."""
+    monkeypatch.setattr(settings, "admin_totp_secret", "")
+
+    with caplog.at_level("ERROR"):
+        totp_service.warn_if_admin_secret_unusable()
+
+    assert caplog.records == []
+
+
+def test_a_hostile_email_cannot_inject_markup_into_the_qr():
+    """The QR is inserted with dangerouslySetInnerHTML, so this has to hold.
+
+    The account name comes from user input. It is encoded into QR *geometry*
+    rather than into markup, so the SVG contains only paths — but that is a
+    property worth pinning rather than assuming, since the render call could be
+    swapped for one that embeds text.
+    """
+    hostile = '"><script>alert(1)</script>@example.com'
+    svg = totp_service.qr_svg(
+        totp_service.provisioning_uri(totp_service.new_secret(), account=hostile)
+    )
+
+    assert "script" not in svg.lower()
+    assert "alert" not in svg
+    assert hostile not in svg
+    assert set(re.findall(r"<\s*([a-zA-Z0-9:_-]+)", svg)) <= {"svg", "path"}

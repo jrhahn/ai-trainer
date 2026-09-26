@@ -66,7 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account that can read every athlete's email address and delete any of them.
   Generate one with `uv run python -m scripts.generate_admin_totp`. The code is
   checked *after* the password, so a prompt cannot be used to learn that the
-  password was right.
+  password was right. A malformed secret is reported at boot and on every
+  refusal rather than becoming a silent lockout — a non-empty value makes the
+  panel demand a code that a non-base32 one can never accept, which is the
+  shape of #684 and #696.
 
 ### Fixed
 

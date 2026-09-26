@@ -141,11 +141,12 @@ describe('LoginPage — second factor (#688)', () => {
     })
   })
 
-  it('clears the code after a rejected attempt', async () => {
+  it('returns to the password step after a rejected code, carrying the reason', async () => {
     /*
-     * The challenge is single-use server-side, so a failed attempt has spent
-     * it. Leaving the digits in place invites retyping into something that can
-     * no longer succeed.
+     * A challenge is single-use server-side, so a rejected code has spent it:
+     * the field it came from can no longer succeed, and retrying there answers
+     * "this challenge was already used", which explains nothing. Staying put
+     * would be a dead end, so the form goes back and brings the reason along.
      */
     mockLoginStep.mockResolvedValue({ kind: 'mfa', challenge: 'chal-1' })
     mockLoginWithTotp.mockRejectedValue(new Error('That code is not valid.'))
@@ -157,8 +158,31 @@ describe('LoginPage — second factor (#688)', () => {
     await userEvent.click(screen.getByRole('button', { name: /verify/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/that code is not valid/i)).toBeInTheDocument()
+      expect(screen.getByText(/that code is not valid.*sign in again/i)).toBeInTheDocument()
     })
-    expect(screen.getByPlaceholderText('000000')).toHaveValue('')
+    // Back on the password step: the spent code field is gone.
+    expect(screen.queryByPlaceholderText('000000')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Your password')).toBeInTheDocument()
+  })
+
+  it('clears a carried-over code error once the password is re-submitted', async () => {
+    mockLoginStep
+      .mockResolvedValueOnce({ kind: 'mfa', challenge: 'chal-1' })
+      .mockResolvedValueOnce({ kind: 'mfa', challenge: 'chal-2' })
+    mockLoginWithTotp.mockRejectedValue(new Error('That code is not valid.'))
+    setup()
+
+    await signInWithPassword()
+    await waitFor(() => screen.getByPlaceholderText('000000'))
+    await userEvent.type(screen.getByPlaceholderText('000000'), '000000')
+    await userEvent.click(screen.getByRole('button', { name: /verify/i }))
+    await waitFor(() => screen.getByText(/sign in again/i))
+
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('000000')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/sign in again/i)).not.toBeInTheDocument()
   })
 })

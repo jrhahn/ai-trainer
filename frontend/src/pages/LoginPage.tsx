@@ -20,6 +20,9 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [rememberDevice, setRememberDevice] = useState(false)
+  // Survives the trip back to the password step, so the reason a code was
+  // rejected is still on screen once the challenge is gone.
+  const [mfaError, setMfaError] = useState<string | null>(null)
 
   const finishSignIn = async (token: string) => {
     setAuthToken(token)
@@ -29,6 +32,7 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
+      setMfaError(null)
       const result = await loginStep(email, password)
       if (result.kind === 'mfa') {
         setChallenge(result.challenge)
@@ -43,10 +47,24 @@ export default function LoginPage() {
       if (!challenge) return
       await finishSignIn(await loginWithTotp(challenge, code, rememberDevice))
     },
-    onError: () => {
-      // The challenge is single-use on the server, so a failed attempt has
-      // spent it. Clearing the code but keeping the field avoids the reflex of
-      // retyping into something that can no longer succeed.
+    onError: (error: unknown) => {
+      /*
+       * A challenge is single-use on the server, so a rejected code has spent
+       * it — the code field it came from can no longer succeed, and retrying
+       * there answers "this challenge was already used", which explains
+       * nothing. So this goes back to the password step and carries the reason
+       * with it rather than leaving a dead end on screen.
+       *
+       * Consuming the challenge on failure is the stricter choice and is kept
+       * deliberately: it means one guess per password entry, on top of the
+       * per-account rate limit.
+       */
+      setMfaError(
+        error instanceof Error
+          ? `${error.message} Please sign in again.`
+          : 'That code did not work. Please sign in again.',
+      )
+      setChallenge(null)
       setCode('')
     },
   })
@@ -172,9 +190,13 @@ export default function LoginPage() {
             />
           </div>
 
-          {loginMutation.error && (
+          {(loginMutation.error || mfaError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {loginMutation.error instanceof Error ? loginMutation.error.message : 'Login failed'}
+              {loginMutation.error
+                ? loginMutation.error instanceof Error
+                  ? loginMutation.error.message
+                  : 'Login failed'
+                : mfaError}
             </div>
           )}
 
