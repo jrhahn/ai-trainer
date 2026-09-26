@@ -47,7 +47,7 @@ export default function LoginPage() {
       if (!challenge) return
       await finishSignIn(await loginWithTotp(challenge, code, rememberDevice))
     },
-    onError: (error: unknown) => {
+    onError: (error: Error) => {
       /*
        * A challenge is single-use on the server, so a rejected code has spent
        * it — the code field it came from can no longer succeed, and retrying
@@ -134,13 +134,11 @@ export default function LoginPage() {
               Trust this device for 30 days
             </label>
 
-            {totpMutation.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                {totpMutation.error instanceof Error
-                  ? totpMutation.error.message
-                  : 'That code did not work'}
-              </div>
-            )}
+            {/*
+              No error box on this step: a rejected code clears the challenge,
+              which unmounts this branch, and the reason is shown on the
+              password step instead. Anything rendered here would be dead.
+            */}
 
             <button
               type="submit"
