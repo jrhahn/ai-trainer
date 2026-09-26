@@ -24,8 +24,11 @@ const user = {
 
 const statsResponse = { users: [user], totalUsers: 1, totalTokens: 12345 }
 
-function mockFetch() {
+function mockFetch(totpRequired = false) {
   return vi.fn(async (url: string, opts?: RequestInit) => {
+    if (url.endsWith('/admin/totp-required')) {
+      return { ok: true, json: async () => ({ required: totpRequired }) } as Response
+    }
     if (url.endsWith('/admin/login')) {
       return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
     }
@@ -136,5 +139,58 @@ describe('AdminPage', () => {
     expect(screen.getByText('Delete account permanently')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText('Delete account permanently')).not.toBeInTheDocument()
+  })
+})
+
+describe('AdminPage — second factor (#688)', () => {
+  it('does not ask for a code when the server has none configured', async () => {
+    /*
+     * Rendering the field unconditionally would fail a correct password on a
+     * deployment without a second factor, which is worse than the one extra
+     * request this check costs.
+     */
+    render(<AdminPage />)
+
+    await waitFor(() => screen.getByPlaceholderText('Admin password'))
+    expect(screen.queryByLabelText(/two-factor code/i)).not.toBeInTheDocument()
+  })
+
+  it('asks for a code and sends it when the server requires one', async () => {
+    vi.stubGlobal('fetch', mockFetch(true))
+    render(<AdminPage />)
+
+    const codeField = await screen.findByLabelText(/two-factor code/i)
+    await userEvent.type(screen.getByPlaceholderText('Admin password'), 'secret')
+    await userEvent.type(codeField, '123456')
+    await userEvent.click(screen.getByRole('button', { name: /sign in|log in|login/i }))
+
+    await waitFor(() => {
+      const loginCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .find((c) => String(c[0]).endsWith('/admin/login'))
+      expect(loginCall).toBeDefined()
+      expect(JSON.parse(String(loginCall![1].body))).toEqual({
+        password: 'secret',
+        code: '123456',
+      })
+    })
+  })
+
+  it('omits the code field entirely if the probe fails', async () => {
+    /*
+     * A failed probe leaves it off rather than on: the server enforces this,
+     * and a hidden field cannot let a wrong login through — whereas a field
+     * shown in error blocks a correct one.
+     */
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith('/admin/totp-required')) throw new Error('offline')
+        return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
+      }),
+    )
+    render(<AdminPage />)
+
+    await waitFor(() => screen.getByPlaceholderText('Admin password'))
+    expect(screen.queryByLabelText(/two-factor code/i)).not.toBeInTheDocument()
   })
 })

@@ -255,10 +255,14 @@ export default function AdminPage() {
             </div>
             {totpRequired && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="admin-totp-code"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Two-factor code
                 </label>
                 <input
+                  id="admin-totp-code"
                   type="text"
                   value={adminCode}
                   onChange={(e) => setAdminCode(e.target.value)}

@@ -4,7 +4,12 @@ const mockApiFetch = vi.hoisted(() => vi.fn())
 vi.mock('./api', () => ({ apiFetch: mockApiFetch }))
 
 import { loginStep, loginWithTotp } from './auth'
-import { confirmTotp, disableTotp, startTotpEnrollment } from './totp'
+import {
+  confirmTotp,
+  disableTotp,
+  revokeTrustedDevices,
+  startTotpEnrollment,
+} from './totp'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -87,6 +92,18 @@ describe('totp settings calls', () => {
       method: 'POST',
       token: 'token',
       body: { password: 'my-password' },
+    })
+  })
+
+  it('revokes trusted devices', async () => {
+    /* The lost-laptop path — the whole reason a 30-day trust is acceptable. */
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await revokeTrustedDevices('token')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/totp/trusted-devices/revoke', {
+      method: 'POST',
+      token: 'token',
     })
   })
 

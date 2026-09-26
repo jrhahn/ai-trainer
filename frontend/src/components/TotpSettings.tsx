@@ -180,10 +180,14 @@ export default function TotpSettings() {
 
           {showDisable && (
             <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-              <label className="block text-xs font-semibold text-gray-700">
+              <label
+                htmlFor="totp-disable-password"
+                className="block text-xs font-semibold text-gray-700"
+              >
                 Confirm your password to turn two-factor off
               </label>
               <input
+                id="totp-disable-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -236,10 +240,14 @@ export default function TotpSettings() {
           </details>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
+            <label
+              htmlFor="totp-enroll-code"
+              className="block text-xs font-semibold text-gray-700 mb-1"
+            >
               Code from the app
             </label>
             <input
+              id="totp-enroll-code"
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}

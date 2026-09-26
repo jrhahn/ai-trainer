@@ -598,3 +598,162 @@ def test_a_hostile_email_cannot_inject_markup_into_the_qr():
     assert "alert" not in svg
     assert hostile not in svg
     assert set(re.findall(r"<\s*([a-zA-Z0-9:_-]+)", svg)) <= {"svg", "path"}
+
+
+# ---------------------------------------------------------------------------
+# Paths the first pass left uncovered
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "",
+        "not-a-token",
+        "too.few.parts",
+        "one.two.three.four.five",
+        "user.not-a-number.nonce.sig",
+    ],
+)
+def test_malformed_challenge_tokens_are_rejected(token):
+    """A token is parsed before it is trusted, so the parse has to be strict."""
+    with pytest.raises(totp_service.TotpError):
+        totp_service.read_challenge(token)
+
+
+def test_the_replay_guard_forgets_expired_entries(monkeypatch):
+    """Otherwise the set of spent challenges grows for the life of the process.
+
+    Dropping them is safe: an expired challenge is refused by the TTL check
+    before the guard is consulted, so remembering it proves nothing.
+    """
+    monkeypatch.setattr(settings, "totp_challenge_ttl_seconds", 60)
+    first = totp_service.issue_challenge("user-1", now=1000.0)
+    totp_service.read_challenge(first, now=1000.0)
+
+    # Long enough later that the first entry has aged out of the guard.
+    second = totp_service.issue_challenge("user-2", now=5000.0)
+    totp_service.read_challenge(second, now=5000.0)
+
+    assert len(totp_service._challenge_guard._seen) == 1
+
+
+def test_an_empty_admin_secret_is_not_usable(monkeypatch):
+    monkeypatch.setattr(settings, "admin_totp_secret", "")
+
+    assert totp_service.admin_secret_is_usable() is False
+    assert totp_service.verify_admin_code("123456") is False
+
+
+@pytest.mark.asyncio
+async def test_a_blank_recovery_code_is_not_accepted(client: AsyncClient, auth_headers):
+    """Whitespace must not match a stored hash by normalising to nothing."""
+    await _enrolled(client, auth_headers)
+    challenge = (
+        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    ).json()["challenge"]
+
+    resp = await client.post(_LOGIN_TOTP, json={"challenge": challenge, "code": "   -  "})
+
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_a_challenge_is_useless_once_totp_is_turned_off(
+    client: AsyncClient, auth_headers
+):
+    """Issued under the factor, redeemed after it was removed.
+
+    Refusing is the safe answer — the second step has nothing left to check —
+    and the user simply signs in with the password alone.
+    """
+    secret = await _enrolled(client, auth_headers)
+    challenge = (
+        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    ).json()["challenge"]
+    await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
+
+    resp = await client.post(
+        _LOGIN_TOTP, json={"challenge": challenge, "code": pyotp.TOTP(secret).now()}
+    )
+
+    assert resp.status_code == 401
+    plain = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
+    assert plain.json()["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_confirming_without_enrolling_is_refused(client: AsyncClient, auth_headers):
+    resp = await client.post(_CONFIRM, headers=auth_headers, json={"code": "123456"})
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_revoking_trusted_devices_makes_the_next_login_ask_again(
+    client: AsyncClient, auth_headers
+):
+    """The lost-laptop path, end to end — and it had no test at all.
+
+    Trusting a device for 30 days is only acceptable because it can be taken
+    back, so this route is the whole justification for the feature.
+    """
+    secret = await _enrolled(client, auth_headers)
+    challenge = (
+        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    ).json()["challenge"]
+    await client.post(
+        _LOGIN_TOTP,
+        json={
+            "challenge": challenge,
+            "code": pyotp.TOTP(secret).now(),
+            "rememberDevice": True,
+        },
+    )
+    assert (await client.get(_STATUS, headers=auth_headers)).json()["trustedDeviceCount"] == 1
+
+    revoke = await client.post(
+        "/api/v1/auth/totp/trusted-devices/revoke", headers=auth_headers
+    )
+
+    assert revoke.status_code == 204
+    assert (await client.get(_STATUS, headers=auth_headers)).json()["trustedDeviceCount"] == 0
+    # The cookie is still in the jar; it just no longer matches a live row.
+    again = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
+    assert again.json().get("mfaRequired") is True
+
+
+@pytest.mark.asyncio
+async def test_disabling_verifies_against_the_authelia_store_when_enabled(
+    client: AsyncClient, auth_headers, monkeypatch, tmp_path
+):
+    """Production runs the Authelia branch, so it needs its own coverage.
+
+    The local-password branch is what the suite exercises by default; this is
+    the one that actually runs on the deployment.
+    """
+    await _enrolled(client, auth_headers)
+
+    store = tmp_path / "users_database.yml"
+    store.write_text(
+        "users:\n"
+        "  rider@example.com:\n"
+        "    disabled: false\n"
+        "    displayname: Rider\n"
+        "    email: rider@example.com\n"
+        f"    password: '{auth.hash_password(_PASSWORD)}'\n"
+        "    groups: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    wrong = await client.post(_DISABLE, headers=auth_headers, json={"password": "nope"})
+    right = await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
+
+    assert wrong.status_code == 401
+    assert right.status_code == 204

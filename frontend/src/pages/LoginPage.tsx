@@ -105,8 +105,14 @@ export default function LoginPage() {
         {challenge ? (
           <form onSubmit={handleTotpSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+              <label
+                htmlFor="login-totp-code"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Code
+              </label>
               <input
+                id="login-totp-code"
                 type="text"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
