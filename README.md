@@ -9,6 +9,10 @@ A smart cycling training app powered by AI (OpenAI or Google Gemini) with Strava
 Train Like a Pro and your Google Gemini key in about 10 minutes.
 ([Deutsche Fassung](docs/erste-schritte.md))
 
+**Running your own instance?** [Security model](docs/security.md) covers the
+controls, what has to be configured, and the limitations that are known and
+accepted. Reporting a vulnerability: [SECURITY.md](SECURITY.md).
+
 ## Repository structure
 
 ```
