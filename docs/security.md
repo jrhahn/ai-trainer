@@ -293,6 +293,19 @@ empty value and a missing one are not the same thing to `${VAR:-default}`.
 | `AI_TOKEN_BUDGET` | per user per 30 days; `0` disables the ceiling |
 | `APP_UID` / `APP_GID` | must match the owner of `authelia/` on the host |
 
+### Where the deployment lives
+
+Production secrets and host configuration belong in the private companion
+repository `ai-trainer-ops`, not here. A merge to `develop` dispatches its deploy
+workflow with the commit SHA; it checks out this repository at that commit —
+public, so no credential is involved — and ships it.
+
+The dispatch travels one way and carries nothing but a SHA. This repository
+cannot read anything in ops.
+
+Until the cutover completes, the deploy in this repository still runs. Both
+sides are guarded on the same secret, so exactly one of them ever deploys.
+
 ### The four-place rule
 
 A deployment variable has to appear in **all four** of these, or it silently

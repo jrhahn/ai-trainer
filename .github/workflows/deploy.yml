@@ -28,9 +28,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Hand the deploy to the private ops repository, which holds the production
+  # secrets and the host configuration. The dispatch travels one way and carries
+  # nothing but a SHA: this repository is public, so it should not be where
+  # production credentials live.
+  #
+  # Inert until OPS_DISPATCH_TOKEN exists — a fine-grained PAT (or GitHub App
+  # token) with `contents: write` on jrhahn/ai-trainer-ops and nothing else.
+  # Without it this step is skipped and the in-repo deploy below still runs, so
+  # merging this change breaks nothing and the cutover is a deliberate act.
+  dispatch:
+    name: Trigger ops deploy
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'develop'
+    steps:
+      - name: Dispatch to ai-trainer-ops
+        if: ${{ secrets.OPS_DISPATCH_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/jrhahn/ai-trainer-ops/dispatches \
+            -f event_type=deploy-develop \
+            -F client_payload[sha]="$GITHUB_SHA"
+
+      - name: Note that no token is configured
+        if: ${{ secrets.OPS_DISPATCH_TOKEN == '' }}
+        run: |
+          echo "OPS_DISPATCH_TOKEN is not set, so the ops deploy was not"
+          echo "triggered. The in-repo deploy job is still doing the work."
+          echo "See the cutover steps in ai-trainer-ops/runbook/deploy.md."
+
   deploy:
     name: Deploy to Hetzner
     runs-on: ubuntu-latest
+    # Stands down once the ops repository is wired up, so exactly one of the two
+    # ever deploys. Delete this job entirely after the cutover is proven.
+    if: ${{ secrets.OPS_DISPATCH_TOKEN == '' }}
     environment: production
     env:
       TARGET_HOST: ${{ vars.SERVER_IP }}
