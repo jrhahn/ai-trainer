@@ -41,6 +41,13 @@ jobs:
   gate:
     name: Is the ops deploy wired up?
     runs-on: ubuntu-latest
+    # Required, and easy to miss: OPS_DISPATCH_TOKEN is an *environment* secret,
+    # and a job that does not declare the environment sees environment secrets
+    # as empty rather than erroring. Without this line the gate always concluded
+    # "not wired up", the dispatch was skipped, and the deploy job below ran —
+    # a working deploy over the wrong path, reported as success. The run graph
+    # showing `Trigger ops deploy: skipped` is the only place it was visible.
+    environment: production
     outputs:
       use_ops: ${{ steps.check.outputs.use_ops }}
     steps:
@@ -61,11 +68,16 @@ jobs:
     needs: gate
     if: needs.gate.outputs.use_ops == 'true' && github.ref_name == 'develop'
     runs-on: ubuntu-latest
+    # Same reason as the gate: this is where the token is actually used, and an
+    # environment secret read from a job without `environment:` is silently the
+    # empty string.
+    environment: production
     steps:
       - name: Dispatch to ai-trainer-ops
         env:
           GH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
         run: |
+          test -n "$GH_TOKEN"
           gh api repos/jrhahn/ai-trainer-ops/dispatches \
             -f event_type=deploy-develop \
             -F client_payload[sha]="$GITHUB_SHA"
