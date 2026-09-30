@@ -28,9 +28,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Hand the deploy to the private ops repository, which holds the production
+  # secrets and the host configuration. The dispatch travels one way and carries
+  # nothing but a SHA: this repository is public, so it should not be where
+  # production credentials live.
+  #
+  # The `secrets` context is not available in `if:` — not at job level, not at
+  # step level — so the presence of the token cannot be tested directly in a
+  # condition. It is read into `env` here and published as an output, which is
+  # the supported way to branch on it. Getting this wrong does not fail a step:
+  # GitHub rejects the whole workflow file and the run has no jobs at all.
+  gate:
+    name: Is the ops deploy wired up?
+    runs-on: ubuntu-latest
+    outputs:
+      use_ops: ${{ steps.check.outputs.use_ops }}
+    steps:
+      - id: check
+        env:
+          OPS_DISPATCH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+        run: |
+          if [ -n "$OPS_DISPATCH_TOKEN" ]; then
+            echo "use_ops=true" >> "$GITHUB_OUTPUT"
+            echo "OPS_DISPATCH_TOKEN is set — deploying via ai-trainer-ops."
+          else
+            echo "use_ops=false" >> "$GITHUB_OUTPUT"
+            echo "No OPS_DISPATCH_TOKEN — deploying from this repository."
+          fi
+
+  dispatch:
+    name: Trigger ops deploy
+    needs: gate
+    if: needs.gate.outputs.use_ops == 'true' && github.ref_name == 'develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch to ai-trainer-ops
+        env:
+          GH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/jrhahn/ai-trainer-ops/dispatches \
+            -f event_type=deploy-develop \
+            -F client_payload[sha]="$GITHUB_SHA"
+
   deploy:
     name: Deploy to Hetzner
     runs-on: ubuntu-latest
+    # Stands down once the ops repository is wired up, so exactly one of the two
+    # ever deploys. Delete this job entirely after the cutover is proven.
+    needs: gate
+    if: needs.gate.outputs.use_ops != 'true'
     environment: production
     env:
       TARGET_HOST: ${{ vars.SERVER_IP }}
