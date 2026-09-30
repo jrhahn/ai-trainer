@@ -73,6 +73,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The deploy gate could not read the token it gates on**
+  (`.github/workflows/deploy.yml`, #700) — `OPS_DISPATCH_TOKEN` is a secret on
+  the `production` environment, and the `gate` job did not declare that
+  environment. A job without `environment:` reads that environment's secrets as
+  the empty string rather than failing, so the gate concluded the ops repository
+  was not wired up, skipped the dispatch, and let the fallback job deploy. The
+  first push after the #699 cutover therefore still deployed over the old path,
+  the one that keeps production credentials in a public repository.
+
+  Fourth instance of the #617/#684/#694 shape — configured in GitHub, never
+  reaching the code that reads it, with nothing reporting that it had no effect.
+  Here the only trace was `skipped` in the run graph. `dispatch` needed the same
+  line, since it is where the token is actually used, plus a `test -n` so an
+  unreadable token fails by name instead of as a puzzling `gh api` error.
+
 - **A deploy silently reverted BYOK-only** (`.github/workflows/deploy.yml`) —
   `ALLOW_ADMIN_AI_KEY_FALLBACK` was set to `false` in the production GitHub
   environment, but the workflow never forwarded it, so a deploy re-rendered
