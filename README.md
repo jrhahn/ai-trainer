@@ -128,12 +128,23 @@ npm run build   # outputs to frontend/dist/
 This repository includes Ansible-based deployment for a Debian Hetzner VPS:
 
 - Playbook: `deploy/ansible/deploy.yml`
+- Env template: `deploy/ansible/templates/app.env.j2`
+- Deployment inputs: `deploy/forwarded-vars.yml` (+ `deploy/render_extra_vars.py`)
 - Workflow: `.github/workflows/deploy.yml`
 
-The deployment workflow is tied to the `production` environment. If that
-environment is configured with required reviewers, deployment waits for manual
-maintainer approval. If required reviewers are not available (for example on
-free plans), deployment runs automatically after pushes to `develop`.
+A push to `develop` dispatches the deploy, which runs from a **separate private
+repository** holding the production secrets and host configuration. This
+repository keeps none of them — the dispatch carries only a commit SHA, and the
+deploy checks this repository out at that commit without any credential, because
+it is public.
+
+What does live here is the contract. `deploy/forwarded-vars.yml` lists every
+deployment input, where it comes from (GitHub secret or repository variable),
+and what its absence means; `deploy/render_extra_vars.py` applies it and fails
+naming the variable before Ansible starts. To add a setting, add the line to
+`app.env.j2` and the entry to the manifest — `backend/tests/test_deploy_wiring.py`
+checks the two agree. See [`docs/security.md`](docs/security.md) for why it is
+shaped that way.
 
 Traefik is configured as the public reverse proxy with Let's Encrypt TLS:
 

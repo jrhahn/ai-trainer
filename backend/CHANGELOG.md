@@ -71,6 +71,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panel demand a code that a non-base32 one can never accept, which is the
   shape of #684 and #696.
 
+### Changed
+
+- **The deploy contract is a manifest, and the old deploy job is gone**
+  (`deploy/forwarded-vars.yml`, `deploy/render_extra_vars.py`,
+  `.github/workflows/deploy.yml`, `backend/tests/test_deploy_wiring.py`, #700) —
+  completing the #699 cutover. This repository's workflow is now a single
+  `dispatch` job and holds no production credential; the playbook runs from the
+  private ops repository.
+
+  The guard against #617/#684/#694 had to survive that move, and it could not
+  have: `test_deploy_wiring.py` read the workflow's `env:` block and
+  `extra_vars` dict, both of which were about to become invisible here.
+  So the per-name forwarding is gone entirely. The ops workflow passes whole
+  `secrets` and `vars` contexts and names nothing; `deploy/forwarded-vars.yml`
+  says what becomes an extra-var and what absence means; `render_extra_vars.py`
+  applies it and fails naming the variable before Ansible starts. Manifest and
+  renderer are both public and both tested.
+
+  Writing the list down immediately exposed three things nobody had noticed:
+  `server_ip` was forwarded on every deploy and unread since #682, `DEPLOY_BRANCH`
+  was exported and read by nothing, and `strava_encryption_key` was invisible to
+  the old guard because it appears *only* inside a `default()` chain — which is
+  exactly the #617 shape. The template parse now reads whole Jinja expressions,
+  not just the name after `{{`.
+
 ### Fixed
 
 - **The deploy gate could not read the token it gates on**

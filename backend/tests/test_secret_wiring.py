@@ -7,7 +7,10 @@ into the container, and nothing rendered it into the deployed ``.env``.  Python
 tests could not see that, so these assertions read the deployment files.
 
 **Adding an optional credential?** The chain is .env.example -> compose.yml ->
-app.env.j2 -> deploy.yml, and it is only as good as its weakest hop. A *required*
+app.env.j2 -> forwarded-vars.yml, and it is only as good as its weakest hop.
+The last hop used to be the deploy workflow's own `extra_vars` dict; since #700
+the deploy runs from a private repository and reads the manifest instead, which
+is what keeps this hop checkable from here at all. A *required*
 variable that misses a hop crashes the deploy, which the tests below catch. An
 optional one rendered with a literal ``default('')`` fails silently instead: the
 value is simply empty forever, however carefully the GitHub secret was set.
@@ -15,6 +18,7 @@ value is simply empty forever, however carefully the GitHub secret was set.
 it, the way that PR did — there is no boot guard that will do it for you.
 """
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -25,7 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = REPO_ROOT / "compose.yml"
 ANSIBLE_ENV_TEMPLATE = REPO_ROOT / "deploy" / "ansible" / "templates" / "app.env.j2"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
-DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
+MANIFEST = REPO_ROOT / "deploy" / "forwarded-vars.yml"
+RENDERER = REPO_ROOT / "deploy" / "render_extra_vars.py"
 
 # Settings the backend cannot be trusted to run without once it leaves dev.
 SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
@@ -111,28 +116,66 @@ def _required_template_vars() -> set[str]:
     return required
 
 
-def test_deploy_workflow_passes_every_variable_the_template_requires() -> None:
+def _manifest() -> dict:
+    """Load deploy/forwarded-vars.yml through the renderer that validates it."""
+    spec = importlib.util.spec_from_file_location("render_extra_vars", RENDERER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load_manifest()
+
+
+def test_every_variable_the_template_requires_is_forwarded() -> None:
     """The link nothing checked: GitHub secret -> extra-var -> template.
 
     #612 wired the encryption key from the template all the way into the
     container and these tests confirmed every hop of it, but no hop above the
     template. The workflow never passed the variable, so the first deploy after
     the rename aborted while rendering .env — on a host it had already rsynced.
+
+    Read from the manifest rather than the workflow since #700: the deploy runs
+    from a private repository now, and the forwarding contract lives in
+    `deploy/forwarded-vars.yml` precisely so this check can still see it.
     """
-    supplied = set(re.findall(r'"([a-z_][a-z0-9_]*)":\s*os\.environ', DEPLOY_WORKFLOW.read_text()))
-    missing = _required_template_vars() - supplied
+    forwarded = {entry["var"] for entry in _manifest()["forwarded"]}
+    missing = _required_template_vars() - forwarded
     assert not missing, (
-        f"app.env.j2 cannot render without {sorted(missing)}, and the deploy "
-        "workflow does not pass them as extra-vars. The deploy will fail after "
-        "the host has been synced."
+        f"app.env.j2 cannot render without {sorted(missing)} — they have no "
+        "literal fallback — and deploy/forwarded-vars.yml does not forward "
+        "them. The deploy will fail after the host has been synced."
+    )
+
+
+def test_variables_the_template_requires_are_never_merely_optional() -> None:
+    """`optional` renders "" for an absent value, which is not the same as failing.
+
+    For a variable with no literal fallback in the template, an empty extra-var
+    is worse than a missing one: Jinja renders the line blank instead of
+    stopping, so compose falls through to `${VAR:-default}` and production runs
+    on whatever that default is. That is #684 — with placeholders committed to a
+    public repository.
+    """
+    modes = {entry["var"]: entry["mode"] for entry in _manifest()["forwarded"]}
+    merely_optional = sorted(
+        var for var in _required_template_vars() if modes.get(var) == "optional"
+    )
+    assert not merely_optional, (
+        f"{merely_optional} have no literal fallback in app.env.j2, so an empty "
+        "value renders an empty line rather than failing the deploy. Mark them "
+        "`required` in deploy/forwarded-vars.yml."
     )
 
 
 def test_the_encryption_key_is_required_rather_than_merely_forwarded() -> None:
-    """Reading it with .get(..., '') would deploy an empty key as if it were one."""
-    assert '"secrets_encryption_key": os.environ["SECRETS_ENCRYPTION_KEY"]' in (
-        DEPLOY_WORKFLOW.read_text()
-    )
+    """Forwarding it with mode `optional` would deploy an empty key as if it were one.
+
+    Pinned by name because the checks above cannot see it: its template entry
+    ends in `undef(...)`, so `_required_template_vars` reads it as already
+    guarded. It is — at render time, on a host that has already been rsynced.
+    This makes it fail in the workflow instead.
+    """
+    modes = {entry["var"]: entry["mode"] for entry in _manifest()["forwarded"]}
+    assert modes["secrets_encryption_key"] == "required"
 
 
 def test_production_app_env_reaches_the_boot_guard() -> None:

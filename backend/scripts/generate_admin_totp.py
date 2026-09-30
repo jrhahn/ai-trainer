@@ -36,9 +36,9 @@ def main() -> int:
     print("Add to the authenticator app with this URI:")
     print(f"  {uri}")
     print()
-    print("Then set it as the ADMIN_TOTP_SECRET secret in the production")
-    print("environment, and forward it in .github/workflows/deploy.yml — both")
-    print("the env: block and extra_vars, or it renders empty (#694).")
+    print("Then set it as the ADMIN_TOTP_SECRET secret on the production")
+    print("environment of the deploying repository. It is already listed in")
+    print("deploy/forwarded-vars.yml, so nothing else needs wiring (#700).")
     return 0
 
 

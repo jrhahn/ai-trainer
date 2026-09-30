@@ -1,8 +1,8 @@
 name: Deploy
 
 on:
-  # Manual deploys stay available for any ref, so a hotfix or a rollback is still
-  # one click away.
+  # Manual dispatch stays available so a deploy can be re-triggered from here
+  # without opening the ops repository.
   workflow_dispatch:
   push:
     branches:
@@ -14,245 +14,46 @@ on:
 permissions:
   contents: read
 
-# One deploy at a time. Two runs overlapping on the production host race each
-# other: both rsync the repo with --delete (which removes the live .env, since
-# it is generated rather than committed) and both then re-render it, so one run
-# can delete .env out from under the other's `docker compose up`. Compose reads
-# no .env, silently substitutes the placeholder credentials in compose.yml, and
-# the backend crash-loops on "password authentication failed".
-#
-# Queue rather than cancel: a cancelled run leaves the host half-synced, which
-# is worse than a deploy that simply waits its turn.
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
 jobs:
-  # Hand the deploy to the private ops repository, which holds the production
-  # secrets and the host configuration. The dispatch travels one way and carries
-  # nothing but a SHA: this repository is public, so it should not be where
-  # production credentials live.
+  # The deploy itself lives in the private jrhahn/ai-trainer-ops repository
+  # (#699). This repository is public, so it is the wrong place to keep the
+  # production secrets, the host address and the SSH key — and it no longer
+  # holds any of them.
   #
-  # The `secrets` context is not available in `if:` — not at job level, not at
-  # step level — so the presence of the token cannot be tested directly in a
-  # condition. It is read into `env` here and published as an output, which is
-  # the supported way to branch on it. Getting this wrong does not fail a step:
-  # GitHub rejects the whole workflow file and the run has no jobs at all.
-  gate:
-    name: Is the ops deploy wired up?
+  # The dispatch travels one way, public -> ops, and carries nothing but a SHA.
+  # The ops workflow checks this repository out with no token, because it is
+  # public, so nothing here can read anything there.
+  #
+  # What still lives here, deliberately, is the *contract*:
+  # `deploy/forwarded-vars.yml` says which inputs exist and what their absence
+  # means, `deploy/render_extra_vars.py` applies it, and
+  # `backend/tests/test_deploy_wiring.py` checks both against
+  # `deploy/ansible/templates/app.env.j2` on every PR. Moving the deploy out
+  # must not move that guard somewhere nobody reviews (#617, #684, #694, #700).
+  dispatch:
+    name: Trigger ops deploy
     runs-on: ubuntu-latest
     # Required, and easy to miss: OPS_DISPATCH_TOKEN is an *environment* secret,
     # and a job that does not declare the environment sees environment secrets
-    # as empty rather than erroring. Without this line the gate always concluded
-    # "not wired up", the dispatch was skipped, and the deploy job below ran —
-    # a working deploy over the wrong path, reported as success. The run graph
-    # showing `Trigger ops deploy: skipped` is the only place it was visible.
-    environment: production
-    outputs:
-      use_ops: ${{ steps.check.outputs.use_ops }}
-    steps:
-      - id: check
-        env:
-          OPS_DISPATCH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
-        run: |
-          if [ -n "$OPS_DISPATCH_TOKEN" ]; then
-            echo "use_ops=true" >> "$GITHUB_OUTPUT"
-            echo "OPS_DISPATCH_TOKEN is set — deploying via ai-trainer-ops."
-          else
-            echo "use_ops=false" >> "$GITHUB_OUTPUT"
-            echo "No OPS_DISPATCH_TOKEN — deploying from this repository."
-          fi
-
-  dispatch:
-    name: Trigger ops deploy
-    needs: gate
-    if: needs.gate.outputs.use_ops == 'true' && github.ref_name == 'develop'
-    runs-on: ubuntu-latest
-    # Same reason as the gate: this is where the token is actually used, and an
-    # environment secret read from a job without `environment:` is silently the
-    # empty string.
+    # as empty rather than erroring. Without this line the token read as "" —
+    # which, while a fallback deploy job still existed here, silently deployed
+    # over the old path and reported success (#700).
     environment: production
     steps:
       - name: Dispatch to ai-trainer-ops
         env:
           GH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
         run: |
-          test -n "$GH_TOKEN"
+          # There is no fallback path any more, so failing loudly here is the
+          # whole safety net: an unreadable token must stop the deploy, not
+          # quietly route it somewhere else.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::OPS_DISPATCH_TOKEN is empty. It is a secret on the" \
+                 "'production' environment — check it is set there, and that" \
+                 "this job still declares 'environment: production'."
+            exit 1
+          fi
           gh api repos/jrhahn/ai-trainer-ops/dispatches \
             -f event_type=deploy-develop \
             -F client_payload[sha]="$GITHUB_SHA"
-
-  deploy:
-    name: Deploy to Hetzner
-    runs-on: ubuntu-latest
-    # Stands down once the ops repository is wired up, so exactly one of the two
-    # ever deploys. Delete this job entirely after the cutover is proven.
-    needs: gate
-    if: needs.gate.outputs.use_ops != 'true'
-    environment: production
-    env:
-      TARGET_HOST: ${{ vars.SERVER_IP }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Ansible
-        run: pip install ansible
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install community.docker ansible.posix
-
-      - name: Validate required deployment inputs
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
-          SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
-          SERVER_URL: ${{ vars.SERVER_URL }}
-          SERVER_URL_2: ${{ vars.SERVER_URL_2 }}
-        run: |
-          test -n "$TARGET_HOST"
-          test -n "$SERVER_URL"
-          test -n "$SERVER_URL_2"
-          test -n "$SSH_KEY"
-          test -n "$JWT_SECRET"
-          test -n "$POSTGRES_PASSWORD"
-          test -n "$ADMIN_PASS_HASH"
-          # Deliberately checked here rather than only in the template: the
-          # playbook renders .env after it has already rsynced the repo, so a
-          # missing key aborts mid-deploy. app.env.j2 has no fallback for it on
-          # purpose (#612), which makes this the last point where failing is free.
-          test -n "$SECRETS_ENCRYPTION_KEY"
-
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
-
-      - name: Add host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: Create runtime inventory
-        run: |
-          cat > /tmp/hetzner-inventory.ini <<EOF
-          [production]
-          hetzner ansible_host=$TARGET_HOST ansible_user=root ansible_python_interpreter=/usr/bin/python3
-          EOF
-
-      - name: Run deployment playbook
-        env:
-          SERVER_URL: ${{ vars.SERVER_URL }}
-          SERVER_URL_2: ${{ vars.SERVER_URL_2 }}
-          SERVER_IP: ${{ vars.SERVER_IP }}
-          DEPLOY_BRANCH: ${{ github.ref_name }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
-          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
-          ADMIN_PASS_HASH: ${{ secrets.ADMIN_PASS_HASH }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          AUTHELIA_PROXY_SHARED_SECRET: ${{ secrets.AUTHELIA_PROXY_SHARED_SECRET }}
-          # Never forwarded before #682, so app.env.j2 rendered them empty and
-          # compose's `${VAR:-change-this-...}` substituted the placeholder from
-          # this public repo — a published secret, deployed by a workflow that
-          # reported success. Same class as #617: the variable nobody passed.
-          AUTHELIA_SESSION_SECRET: ${{ secrets.AUTHELIA_SESSION_SECRET }}
-          AUTHELIA_STORAGE_ENCRYPTION_KEY: ${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}
-          AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${{ secrets.AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET }}
-          APP_UID: ${{ vars.APP_UID }}
-          APP_GID: ${{ vars.APP_GID }}
-          AI_TOKEN_BUDGET: ${{ vars.AI_TOKEN_BUDGET }}
-          ALLOW_ADMIN_AI_KEY_FALLBACK: ${{ vars.ALLOW_ADMIN_AI_KEY_FALLBACK }}
-          ADMIN_TOTP_SECRET: ${{ secrets.ADMIN_TOTP_SECRET }}
-          SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-
-          extra_vars = {
-              "server_url": os.environ["SERVER_URL"],
-              "server_url_2": os.environ["SERVER_URL_2"],
-              "server_ip": os.environ["SERVER_IP"],
-              "jwt_secret": os.environ["JWT_SECRET"],
-              "postgres_password": os.environ["POSTGRES_PASSWORD"],
-              "strava_client_id": os.environ.get("STRAVA_CLIENT_ID", ""),
-              "strava_client_secret": os.environ.get("STRAVA_CLIENT_SECRET", ""),
-              "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
-              "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
-              "acme_email": os.environ.get("ACME_EMAIL", ""),
-              "admin_pass_hash": os.environ.get("ADMIN_PASS_HASH", ""),
-              "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
-              # Optional, so "" is the right fallback here: an empty value
-              # means "no second factor on the admin panel", which is a valid
-              # state, unlike the secrets that must never render blank (#684).
-              "admin_totp_secret": os.environ.get("ADMIN_TOTP_SECRET", ""),
-              "authelia_proxy_shared_secret": os.environ.get("AUTHELIA_PROXY_SHARED_SECRET", ""),
-              # Read like secrets_encryption_key below rather than with a ""
-              # fallback: an empty value here is not a missing feature, it is
-              # the placeholder path that #682 closed. Fail in the workflow,
-              # where the message names the variable.
-              "authelia_session_secret": os.environ["AUTHELIA_SESSION_SECRET"],
-              "authelia_storage_encryption_key": os.environ["AUTHELIA_STORAGE_ENCRYPTION_KEY"],
-              "authelia_identity_validation_reset_password_jwt_secret": os.environ[
-                  "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET"
-              ],
-              # Build-time uid/gid for the non-root backend container. Must match
-              # the owner of ./authelia on the host, so it is a repo *variable*
-              # rather than a secret. Defaulted, because a deployment whose host
-              # user is 1000 needs no entry at all.
-              "app_uid": os.environ.get("APP_UID") or "1000",
-              "app_gid": os.environ.get("APP_GID") or "1000",
-              # Left out of extra_vars entirely when unset, so app.env.j2's
-              # `default(...)` is what applies. Passing "" instead would render
-              # an empty value, which pydantic rejects at boot.
-              #
-              # Both of these are repository *variables*, not secrets, and both
-              # have to be listed in the `env:` block above as well. Setting the
-              # variable alone does nothing — that is how #694 happened:
-              # ALLOW_ADMIN_AI_KEY_FALLBACK was set to false in the production
-              # environment, never forwarded, and the deploy silently rendered
-              # the template default of true, putting the owner's provider key
-              # back within reach of every registered account. Same shape as
-              # #617 and #684.
-              **(
-                  {"ai_token_budget": os.environ["AI_TOKEN_BUDGET"]}
-                  if os.environ.get("AI_TOKEN_BUDGET")
-                  else {}
-              ),
-              **(
-                  {
-                      "allow_admin_ai_key_fallback": os.environ[
-                          "ALLOW_ADMIN_AI_KEY_FALLBACK"
-                      ]
-                  }
-                  if os.environ.get("ALLOW_ADMIN_AI_KEY_FALLBACK")
-                  else {}
-              ),
-              # Required, so read it the way the other required values are read:
-              # a KeyError here is a clearer failure than an undefined variable
-              # surfacing from inside a Jinja template later on.
-              "secrets_encryption_key": os.environ["SECRETS_ENCRYPTION_KEY"],
-          }
-
-          with open("/tmp/deploy-vars.json", "w", encoding="utf-8") as fh:
-              json.dump(extra_vars, fh)
-          PY
-
-          ansible-playbook \
-            -i /tmp/hetzner-inventory.ini \
-            deploy/ansible/deploy.yml \
-            --extra-vars "@/tmp/deploy-vars.json"
+          echo "Dispatched $GITHUB_SHA. The deploy runs in jrhahn/ai-trainer-ops."
