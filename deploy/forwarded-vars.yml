@@ -1,0 +1,318 @@
+# Every deployment input, and what happens when it is absent.
+#
+# This file is the contract between three things that used to agree only by
+# coincidence:
+#
+#   1. `deploy/ansible/templates/app.env.j2`, which reads the variables
+#   2. the deploy workflow, which has to forward them
+#   3. `backend/tests/test_deploy_wiring.py`, which checks that 1 and 2 match
+#
+# Four times a setting was configured in GitHub and silently ignored in
+# production, because the workflow never passed it and Jinja quietly fell back
+# to `default(...)`:
+#
+#   #617  strava_encryption_key was never forwarded; the deploy failed naming a
+#         variable nobody had ever set
+#   #684  the three Authelia secrets were absent from the workflow entirely, so
+#         the template rendered them empty and compose substituted placeholders
+#         that are published in this repository
+#   #694  ALLOW_ADMIN_AI_KEY_FALLBACK was set to false in the production
+#         environment and never forwarded, so a deploy re-rendered .env with the
+#         template default true and put the owner's provider key back within
+#         reach of every registered account
+#   #700  OPS_DISPATCH_TOKEN was set as an environment secret and read by a job
+#         with no `environment:`, so the ops cutover silently did not happen
+#
+# The shape is always the same and always silent: setting the value in GitHub
+# feels like the whole job, and nothing anywhere reports that it had no effect.
+#
+# Why a manifest rather than a list in the workflow: the deploy now runs from
+# the private `ai-trainer-ops` repository (#699), so the workflow that forwards
+# these values is not visible to this repository's tests. Keeping the list here
+# means the guard survives the move, and `deploy/render_extra_vars.py` — also
+# here, also reviewable — is what actually reads it. The ops workflow passes
+# whole `secrets` and `vars` contexts and forwards nothing by name, so there is
+# no per-name `env:` block left to forget.
+#
+# ---------------------------------------------------------------------------
+# `mode` decides what absence means. Choosing it is the whole point of this
+# file, so there is no default:
+#
+#   required       Must be present and non-empty. The renderer fails naming it,
+#                  before Ansible starts. For values where an empty render is
+#                  worse than no deploy at all — a published placeholder (#684)
+#                  or plaintext token storage (#612).
+#
+#   optional       Absent becomes "". Only for values where empty is a real,
+#                  intended state rather than a missing configuration.
+#
+#   omit_if_empty  Absent is left out of extra-vars entirely, so app.env.j2's
+#                  own `default(...)` applies. Passing "" instead would render
+#                  an empty value, which pydantic rejects at boot.
+#
+#   fallback       Absent becomes the literal in `fallback`. For values the
+#                  playbook needs concretely and where one literal is right for
+#                  most hosts.
+# ---------------------------------------------------------------------------
+
+forwarded:
+  # --- identity of the deployment -----------------------------------------
+  - var: server_url
+    from: variable
+    name: SERVER_URL
+    mode: required
+    why: >-
+      The whole template derives from it — CORS allowlist, backend URL, ACME
+      contact. Nothing sensible to fall back to.
+
+  - var: server_url_2
+    from: variable
+    name: SERVER_URL_2
+    mode: required
+    why: The second domain in the CORS allowlist; FRONTEND_URL interpolates it.
+
+  - var: acme_email
+    from: variable
+    name: ACME_EMAIL
+    mode: optional
+    why: Template falls back to admin@<server_url>, which is a valid contact.
+
+  # --- database and tokens -------------------------------------------------
+  - var: postgres_password
+    from: secret
+    name: POSTGRES_PASSWORD
+    mode: required
+    why: >-
+      An empty value makes compose substitute the placeholder in compose.yml and
+      the backend crash-loops on "password authentication failed" (#504).
+
+  - var: jwt_secret
+    from: secret
+    name: JWT_SECRET
+    mode: required
+    why: >-
+      Signs session tokens, and the captcha and TOTP-challenge HMAC keys are
+      derived from it. Deriving rather than adding settings is deliberate: a
+      derived key cannot be half-configured.
+
+  - var: secrets_encryption_key
+    from: secret
+    name: SECRETS_ENCRYPTION_KEY
+    mode: required
+    why: >-
+      Without it the Fernet column type stores user API keys and Strava OAuth
+      tokens as plaintext, and before #612 that happened silently. Checked here
+      rather than only in the template because the playbook renders .env after
+      it has already rsynced the repo — this is the last point where failing is
+      free.
+
+  # --- admin surface -------------------------------------------------------
+  - var: admin_pass_hash
+    from: secret
+    name: ADMIN_PASS_HASH
+    mode: required
+    why: TRAEFIK_DASHBOARD_AUTH has no template default; an empty render is a broken dashboard.
+
+  - var: admin_password
+    from: secret
+    name: ADMIN_PASSWORD
+    mode: optional
+    why: Empty disables the admin panel login, which is a valid state.
+
+  - var: admin_totp_secret
+    from: secret
+    name: ADMIN_TOTP_SECRET
+    mode: optional
+    why: >-
+      Empty leaves the admin panel on password plus the #682 rate limit — a
+      valid state, unlike the secrets that must never render blank. A malformed
+      value is reported at boot rather than becoming a silent lockout (#688).
+
+  # --- Authelia ------------------------------------------------------------
+  - var: authelia_session_secret
+    from: secret
+    name: AUTHELIA_SESSION_SECRET
+    mode: required
+    why: >-
+      Was never forwarded before #682, so the template rendered it empty and
+      compose's `${VAR:-change-this-...}` substituted the placeholder committed
+      to this public repository.
+
+  - var: authelia_storage_encryption_key
+    from: secret
+    name: AUTHELIA_STORAGE_ENCRYPTION_KEY
+    mode: required
+    why: >-
+      Same published-placeholder path as the session secret (#682). Rotating it
+      on a live instance needs `authelia storage encryption change-key`.
+
+  - var: authelia_identity_validation_reset_password_jwt_secret
+    from: secret
+    name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
+    mode: required
+    why: >-
+      The sharp one: auth.<domain> is publicly routed, and a forgeable reset
+      token sets any user's password, which logs in to the app (#682).
+
+  - var: authelia_proxy_shared_secret
+    from: secret
+    name: AUTHELIA_PROXY_SHARED_SECRET
+    mode: optional
+    why: >-
+      Defence in depth for a middleware chain that is currently attached to no
+      router (#688), so empty degrades nothing that is load-bearing today.
+
+  # --- third-party providers ----------------------------------------------
+  - var: strava_client_id
+    from: secret
+    name: STRAVA_CLIENT_ID
+    mode: optional
+    why: Empty disables the Strava integration rather than breaking boot.
+
+  - var: strava_client_secret
+    from: secret
+    name: STRAVA_CLIENT_SECRET
+    mode: optional
+    why: >-
+      Half of one OAuth app registration with strava_client_id, so it shares
+      that variable's reasoning: absent means no Strava integration, not a
+      broken deployment.
+
+  - var: openai_api_key
+    from: secret
+    name: OPENAI_API_KEY
+    mode: optional
+    why: >-
+      The operator-provided key. Empty is the BYOK-only end state; every
+      athlete then has to bring their own.
+
+  - var: gemini_api_key
+    from: secret
+    name: GEMINI_API_KEY
+    mode: optional
+    why: >-
+      Same as openai_api_key: empty is the BYOK-only end state. This is the key
+      allow_admin_ai_key_fallback decides who may spend, so the two are read
+      together.
+
+  # --- container identity --------------------------------------------------
+  - var: app_uid
+    from: variable
+    name: APP_UID
+    mode: fallback
+    fallback: "1000"
+    why: >-
+      Build-time uid for the non-root backend container, and it must match the
+      owner of ./authelia on the host: registration writes users_database.yml
+      through that bind mount, and a bind mount keeps host ownership. Getting it
+      wrong took down every login twice (#684, #696). A host whose user is 1000
+      needs no entry at all, hence the literal.
+
+  - var: app_gid
+    from: variable
+    name: APP_GID
+    mode: fallback
+    fallback: "1000"
+    why: >-
+      The group half of app_uid, and it has to match ./authelia the same way;
+      the playbook chowns that directory to this pair on every deploy.
+
+  # --- spend controls ------------------------------------------------------
+  # These two are the #694 regression. They are repository *variables*, and
+  # both are deployment-specific in a way the other limits are not: the budget
+  # depends on what this operator actually uses, and the fallback depends on
+  # whether they are willing to fund other people's accounts.
+  - var: ai_token_budget
+    from: variable
+    name: AI_TOKEN_BUDGET
+    mode: omit_if_empty
+    why: >-
+      Never pick this from a cost estimate. The first value, 5M, was below the
+      operator's own usage — measured at ~6.3M tokens per rolling 30 days from
+      the llm_calls table — and locked them out of their own coach (#684).
+
+  - var: allow_admin_ai_key_fallback
+    from: variable
+    name: ALLOW_ADMIN_AI_KEY_FALLBACK
+    mode: omit_if_empty
+    why: >-
+      False means BYOK-only. Set to false in the production environment and
+      never forwarded, so a deploy silently restored the template default of
+      true and every registered account could spend the owner's provider key
+      again (#694).
+
+# Values the workflow itself consumes, which never reach the playbook as
+# extra-vars. Listed so the renderer can fail on them early and by name,
+# instead of an action failing obscurely eight steps later.
+workflow_only:
+  - name: SSH_KEY
+    from: secret
+    mode: required
+    why: Consumed by webfactory/ssh-agent. An empty key fails inside the action.
+
+  - name: SERVER_IP
+    from: variable
+    mode: required
+    why: >-
+      The Ansible inventory host and the ssh-keyscan target. Was also forwarded
+      as a `server_ip` extra-var until this manifest made it obvious that
+      nothing in deploy/ has read it since #682 removed the bare-IP CORS origin.
+
+# Variables app.env.j2 reads that are deliberately NOT tunable per deployment.
+# Adding a name here is a decision, not a formality: it says this setting is not
+# worth exposing. If that turns out to be wrong, move it to `forwarded` above
+# and delete the entry.
+template_default_only:
+  # Identity and naming — changing these would need a database migration or a
+  # DNS change, so a per-deploy override would be a trap rather than a knob.
+  - postgres_db
+  - postgres_user
+  - app_env
+  # Derived from server_url, which *is* forwarded.
+  - backend_url
+  - frontend_url
+  - vite_backend_url
+  - vite_authelia_url
+  # Protocol constants. The Authelia header names have to agree with the
+  # Traefik middleware in compose.yml, so they are not independently tunable.
+  - jwt_algorithm
+  - jwt_expire_minutes
+  - authelia_auth_enabled
+  - authelia_remote_user_header
+  - authelia_remote_email_header
+  - authelia_remote_name_header
+  # SMTP is unconfigured on this deployment (the notifier writes to a file).
+  # When it is set up, these move into `forwarded` — see #687. Note that
+  # authelia_notifier_smtp_address also decides whether the playbook layers in
+  # compose.smtp.yml, so it is read outside the template too.
+  - authelia_notifier_smtp_address
+  - authelia_notifier_smtp_username
+  - authelia_notifier_smtp_password
+  - authelia_notifier_smtp_sender
+  - authelia_notifier_smtp_identifier
+  - authelia_notifier_smtp_startup_check_address
+  # Abuse and spend limits whose defaults are the policy. The two that are
+  # genuinely deployment-specific are forwarded instead.
+  - ai_rate_limit_enabled
+  - ai_token_budget_window_days
+  - auth_rate_limit_enabled
+  - admin_login_rate_limit_attempts
+  - admin_login_rate_limit_seconds
+  - registration_rate_limit_attempts
+  - registration_rate_limit_seconds
+  - captcha_enabled
+  - captcha_max_number
+  # Second factor (#688). The issuer is a display string in the authenticator
+  # app and the trust window is policy — neither is deployment-specific. The one
+  # secret here, admin_totp_secret, *is* forwarded.
+  - totp_issuer
+  - trusted_device_days
+  # Reachable only through an SSH tunnel; Grafana forces a change on first login
+  # when this is empty (#549).
+  - grafana_admin_password
+  # Not a knob at all: the pre-#613 name for secrets_encryption_key, accepted
+  # inside that variable's default() chain so a vault still carrying the old
+  # name keeps working. Listed because it *is* read by the template, and the
+  # #617 failure was a variable that only ever appeared inside a default()
+  # chain — which is precisely what this list has to be able to see.
+  - strava_encryption_key

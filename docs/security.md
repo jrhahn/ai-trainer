@@ -303,27 +303,47 @@ public, so no credential is involved — and ships it.
 The dispatch travels one way and carries nothing but a SHA. This repository
 cannot read anything in ops.
 
-Until the cutover completes, the deploy in this repository still runs. Both
-sides are guarded on the same secret, so exactly one of them ever deploys.
+The cutover is complete. The workflow here is one `dispatch` job, and the only
+secret it needs is the dispatch token — which can trigger a deploy in ops and
+do nothing else.
 
-### The four-place rule
+It did not go cleanly, and the failure is the useful part. The first attempt
+kept a fallback deploy job here, guarded on whether `OPS_DISPATCH_TOKEN` was
+readable. That token is an **environment** secret, and the job testing for it
+did not declare `environment: production` — an environment secret read from a
+job with no environment is the empty string, not an error. The gate concluded
+"not wired up", skipped the dispatch, and the fallback deployed successfully
+over the path the move existed to retire (#700).
 
-A deployment variable has to appear in **all four** of these, or it silently
-takes the template default and nothing anywhere says so:
+### How a deployment variable reaches production
 
-1. `compose.yml` — `KEY: ${KEY:-default}`
-2. `deploy/ansible/templates/app.env.j2`
-3. `.github/workflows/deploy.yml` — the `env:` block
-4. `.github/workflows/deploy.yml` — the `extra_vars` dict
+This used to be a four-place rule: `compose.yml`, the env template, the
+workflow's `env:` block, and the workflow's `extra_vars` dict. Miss either of
+the last two and the value silently took the template default — the deploy
+succeeded, the container came up healthy, and the setting was quietly not what
+you set. That cost something three times: #617, #684, #694.
 
-Setting it in the GitHub environment alone does nothing. The deploy succeeds,
-the container comes up healthy, and the value is quietly not what you set. This
-has cost something three times: #617, #684, #694.
+The two workflow places are gone. The ops workflow forwards the whole `secrets`
+and `vars` contexts and names nothing, so there is no list to forget:
 
-`backend/tests/test_deploy_wiring.py` now enforces it — every variable in the
-template must be either forwarded or listed in `TEMPLATE_DEFAULT_ONLY` with a
-reason. If that test fails, the fix is usually steps 3 and 4, **not** adding a
-name to the allow-list.
+1. `deploy/ansible/templates/app.env.j2` — the line that reads it
+2. `deploy/forwarded-vars.yml` — the entry saying where it comes from, and what
+   its absence means (`required`, `optional`, `omit_if_empty`, `fallback`)
+3. `compose.yml` — `KEY: ${KEY:-default}`, only if a container needs it
+
+`deploy/render_extra_vars.py` applies the manifest and fails naming the variable
+*before* Ansible starts, which matters because the playbook renders `.env` only
+after it has rsynced the repo.
+
+All three places are in this public repository on purpose. Moving the deploy out
+would otherwise have taken the guard with it: `test_deploy_wiring.py` used to
+read the workflow, and the workflow was about to become invisible here. It now
+checks the manifest against the template, pins the six values whose absence
+must never render as empty, and rejects forwarding that nothing reads.
+
+What it still cannot check is whether a `mode` is *right* — `optional` on
+something that must never be blank would pass the general test, which is why
+those six are asserted by name.
 
 ### After a deploy
 
