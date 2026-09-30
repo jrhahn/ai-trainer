@@ -73,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`scripts/generate_admin_totp` no longer tells you to do four things**
+  (`backend/scripts/generate_admin_totp.py`, #700) — it pointed at the workflow
+  `env:` block and `extra_vars` dict, neither of which exists since the deploy
+  moved to a manifest. `admin_totp_secret` is already forwarded, so setting the
+  GitHub secret is the whole job now. Also states the ordering that the script
+  can make expensive to get wrong: enrol in the authenticator *before* the next
+  deploy, because a non-empty secret makes the panel demand a code and an
+  unscanned one is a code nobody can produce.
+
 - **The deploy contract is a manifest, and the old deploy job is gone**
   (`deploy/forwarded-vars.yml`, `deploy/render_extra_vars.py`,
   `.github/workflows/deploy.yml`, `backend/tests/test_deploy_wiring.py`, #700) —

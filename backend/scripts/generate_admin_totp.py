@@ -7,9 +7,14 @@ there is no enrollment endpoint — one less unauthenticated surface in front of
 the account that can read every athlete's email address and delete any of them.
 That trade means enrolling is this manual step.
 
-Prints the secret once. Put it in the deploy secrets (all four places — see
-tests/test_deploy_wiring.py for why that is not a joke) and do not keep the
-output.
+Prints the secret once, and does not store it. Set it as `ADMIN_TOTP_SECRET` on
+the `production` environment of the deploying repository — `admin_totp_secret`
+is already in `deploy/forwarded-vars.yml`, so nothing else needs wiring (#700).
+Do not keep the output.
+
+Enrol in the authenticator *before* the next deploy. A non-empty secret makes
+the panel demand a code, and an unscanned one is a code nobody can produce; the
+way back is to clear the variable and deploy again.
 """
 
 from __future__ import annotations
