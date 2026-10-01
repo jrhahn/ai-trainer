@@ -4,13 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SessionSettings from './SessionSettings'
 
-const { mockRevokeAll, mockLogout } = vi.hoisted(() => ({
+const { mockRevokeAll, mockLogout, mockEndSession } = vi.hoisted(() => ({
   mockRevokeAll: vi.fn(),
   mockLogout: vi.fn(),
+  mockEndSession: vi.fn(),
 }))
 
 vi.mock('../services/sessions', () => ({
   revokeAllSessions: mockRevokeAll,
+  endSession: mockEndSession,
 }))
 
 vi.mock('../store/useAppStore', () => ({
@@ -54,10 +56,10 @@ describe('SessionSettings', () => {
     await waitFor(() => {
       expect(mockRevokeAll).toHaveBeenCalledWith('test-token', 'Str0ng!Pass')
     })
-    // The request really does invalidate the token it was made with, so
-    // staying on the page would leave a session the server has already
-    // refused — every subsequent call would 401.
-    await waitFor(() => expect(mockLogout).toHaveBeenCalled())
+    // Through `endSession`, not a bare `logout()`: the server has ended every
+    // app session, and Authelia's own cookie has to go with it or "everywhere"
+    // is untrue for the session the athlete is sitting in.
+    await waitFor(() => expect(mockEndSession).toHaveBeenCalledWith(mockLogout))
   })
 
   it('warns that this browser goes too, before anything is sent', async () => {
@@ -89,8 +91,9 @@ describe('SessionSettings', () => {
     await user.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
 
     expect(await screen.findByText('Incorrect password.')).toBeInTheDocument()
-    // Logging out on a failed attempt would turn a typo into a sign-out, and
+    // Signing out on a failed attempt would turn a typo into a sign-out, and
     // hide from the athlete that nothing was actually revoked.
+    expect(mockEndSession).not.toHaveBeenCalled()
     expect(mockLogout).not.toHaveBeenCalled()
   })
 

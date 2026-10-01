@@ -3,19 +3,21 @@ import { useMutation } from '@tanstack/react-query'
 import { LogOut, ShieldAlert } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { revokeAllSessions } from '../services/sessions'
+import { endSession, revokeAllSessions } from '../services/sessions'
 
 /**
  * Signing out everywhere (#704).
  *
- * Kept apart from the two-factor card even though both ask for the password:
- * that one is about how you prove who you are next time, this one is about
- * ending access that has already been granted. Someone looking for "my token
- * leaked, make it stop" should not have to read a 2FA panel to find it.
+ * Sits directly under the Account card, next to the plain "Sign Out". It was
+ * five cards further down at first, which read well as a taxonomy and failed
+ * the only test that counts: the first person to go looking for it clicked
+ * "Sign Out" instead. Someone who wants every session gone starts where
+ * signing out is.
  *
- * The success path logs this browser out too, because the request really does
- * invalidate the token it was made with. Doing anything else — staying on the
- * page, re-issuing quietly — would misrepresent what just happened.
+ * The success path signs this browser out too — through `endSession`, so
+ * Authelia's cookie goes with the app token. The request really does invalidate
+ * the token that made it, and staying on the page would leave a session the
+ * server has already refused.
  */
 export default function SessionSettings() {
   const { authToken, logout } = useAppStore(
@@ -29,7 +31,11 @@ export default function SessionSettings() {
     mutationFn: () => revokeAllSessions(authToken!, password),
     onSuccess: () => {
       setPassword('')
-      logout()
+      // The full sign-out, not just `logout()`. The server has ended every app
+      // session; Authelia still holds its own cookie on the parent domain, and
+      // leaving that behind would make "everywhere" untrue for the one session
+      // the athlete is sitting in.
+      endSession(logout)
     },
   })
 

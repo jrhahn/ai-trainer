@@ -6,7 +6,7 @@ import { useImportProgress } from '../hooks/useImportProgress'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
-import { AUTHELIA_URL } from '../services/api'
+import { endSession } from '../services/sessions'
 
 const navItems: { to: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
   { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
@@ -111,12 +111,7 @@ export default function Layout() {
   const [toast, setToast] = useState<string | null>(null)
   const drawerRef = useRef<HTMLElement>(null)
 
-  const handleLogout = () => {
-    logout()
-    if (AUTHELIA_URL) {
-      window.location.href = `${AUTHELIA_URL}/logout`
-    }
-  }
+  const handleLogout = () => endSession(logout)
 
   useEffect(() => {
     if (prevStatusRef.current === 'running' && importProgress.status === 'done') {
