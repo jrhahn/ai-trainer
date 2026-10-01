@@ -68,6 +68,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every logged-out page load flashed Authelia before the homepage**
+  (`src/App.tsx`, #704) — App probed `GET /auth/session` on mount whenever there
+  was no token, behind an overlay reading "Checking your secure session…
+  Authelia will continue sign-in if needed." It could never succeed: that
+  endpoint answers from `Remote-*` headers, and forward-auth is attached to no
+  router (#696). So every visitor paid a round trip and a flash of a service
+  they have no account on, and each one wrote `WARNING: Authelia session not
+  found` to the backend log. The landing page now renders immediately.
+
+  `/auth/callback` still calls `getSessionToken`, deliberately — that route
+  exists for a portal-authenticated user to be *sent* to, and costs nothing while
+  nobody is. Reinstate the automatic probe when forward-auth is actually wired
+  up, not before.
+
+  `src/App.test.tsx` is new, and asserts a signed-out visitor triggers **no**
+  request at all. Verified to fail against the previous code rather than merely
+  pass against the new: the overlay assertion is checked on the first paint,
+  without `waitFor`, because a retrying assertion simply waits out the flash.
+
 - **Signing out stranded you on the Authelia portal** (`src/services/sessions.ts`,
   `src/components/Layout.tsx`, `src/pages/SettingsPage.tsx`, #704) — both
   sign-out buttons navigated to `${AUTHELIA_URL}/logout`, which left the athlete
