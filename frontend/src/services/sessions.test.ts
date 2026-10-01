@@ -1,92 +1,62 @@
 /**
- * Where signing out sends the browser (#704).
+ * What signing out does, and what it deliberately does not do (#704).
  *
- * This was untested, which is why nobody noticed that `${AUTHELIA_URL}/logout`
- * with no `rd` leaves the athlete stranded on the Authelia portal — a page that
- * cannot sign them in to this app, because forward-auth is attached to no
- * router (#696).
+ * Both sign-out buttons used to navigate to `${AUTHELIA_URL}/logout`, which
+ * left the athlete stranded on the Authelia portal. Adding `?rd=` did not fix
+ * it: Authelia logged nothing for the attempt, because an app user has no
+ * Authelia session to log out of — sign-in reads `users_database.yml` directly
+ * and never touches the portal (#324). These tests pin the conclusion, so the
+ * redirect is not reintroduced as an obvious-looking improvement.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-async function load(autheliaUrl: string) {
-  vi.resetModules()
-  vi.doMock('./api', () => ({
-    AUTHELIA_URL: autheliaUrl,
-    apiFetch: vi.fn(),
-  }))
-  return import('./sessions')
-}
-
-afterEach(() => {
-  vi.doUnmock('./api')
-  vi.resetModules()
-})
-
-describe('autheliaLogoutUrl', () => {
-  it('sends the athlete back to the app, not to the portal', async () => {
-    const { autheliaLogoutUrl } = await load('https://auth.trainlikea.pro')
-
-    expect(autheliaLogoutUrl('https://trainlikea.pro')).toBe(
-      'https://auth.trainlikea.pro/logout?rd=https%3A%2F%2Ftrainlikea.pro'
-    )
-  })
-
-  it('returns null when no Authelia is configured', async () => {
-    const { autheliaLogoutUrl } = await load('')
-
-    // Development runs without it, and a bare `/logout` against an empty base
-    // would navigate to the wrong origin entirely.
-    expect(autheliaLogoutUrl('http://localhost:5173')).toBeNull()
-  })
-
-  it('defaults to the origin the athlete is actually on', async () => {
-    const { autheliaLogoutUrl } = await load('https://auth.trainlikea.pro')
-
-    // Two domains are configured in authelia/configuration.yml and Authelia
-    // rejects an `rd` outside the cookie domain of the session it issued, so a
-    // hardcoded return target would be wrong on one of them.
-    expect(autheliaLogoutUrl()).toBe(
-      `https://auth.trainlikea.pro/logout?rd=${encodeURIComponent(window.location.origin)}`
-    )
-  })
-
-  it('escapes the return target rather than pasting it in', async () => {
-    const { autheliaLogoutUrl } = await load('https://auth.trainlikea.pro')
-
-    expect(autheliaLogoutUrl('https://trainlikea.pro/?next=/settings')).toContain(
-      'rd=https%3A%2F%2Ftrainlikea.pro%2F%3Fnext%3D%2Fsettings'
-    )
-  })
-})
+import { describe, expect, it, vi } from 'vitest'
+import { endSession } from './sessions'
 
 describe('endSession', () => {
-  it('drops the app token before navigating away', async () => {
-    const { endSession } = await load('https://auth.trainlikea.pro')
+  it('drops the app token', () => {
+    const clear = vi.fn()
+
+    endSession(clear)
+
+    expect(clear).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not navigate anywhere', () => {
     const clear = vi.fn()
     const assign = vi.fn()
+    const original = window.location
     Object.defineProperty(window, 'location', {
-      value: { origin: 'https://trainlikea.pro', set href(v: string) { assign(v) } },
+      value: {
+        origin: 'https://trainlikea.pro',
+        set href(value: string) {
+          assign(value)
+        },
+      },
       writable: true,
       configurable: true,
     })
 
-    endSession(clear)
-
-    // Order matters: the navigation may not be interruptible, and leaving the
-    // token in sessionStorage because a redirect raced it would mean the next
-    // tab is still signed in.
-    expect(clear).toHaveBeenCalled()
-    expect(assign).toHaveBeenCalledWith(
-      'https://auth.trainlikea.pro/logout?rd=https%3A%2F%2Ftrainlikea.pro'
-    )
+    try {
+      endSession(clear)
+      // The app renders its own landing page once the token is gone. Sending
+      // the browser to auth.<domain> is what produced the dead end: that page
+      // cannot sign anyone in here while forward-auth is attached to no
+      // router (#696).
+      expect(assign).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window, 'location', {
+        value: original,
+        writable: true,
+        configurable: true,
+      })
+    }
   })
 
-  it('still clears the token when there is nowhere to redirect', async () => {
-    const { endSession } = await load('')
-    const clear = vi.fn()
+  it('exposes no Authelia logout URL to call', async () => {
+    const module = await import('./sessions')
 
-    endSession(clear)
-
-    expect(clear).toHaveBeenCalled()
+    // Keeping a helper nobody calls is how the redirect comes back. If
+    // forward-auth is ever enabled, reintroduce it on purpose and with a test
+    // that asserts the navigation.
+    expect(Object.keys(module).sort()).toEqual(['endSession', 'revokeAllSessions'])
   })
 })

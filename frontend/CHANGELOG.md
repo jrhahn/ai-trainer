@@ -70,24 +70,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Signing out stranded you on the Authelia portal** (`src/services/sessions.ts`,
   `src/components/Layout.tsx`, `src/pages/SettingsPage.tsx`, #704) — both
-  sign-out buttons navigated to `${AUTHELIA_URL}/logout` with no `rd`, so
-  Authelia ended the session and left the athlete sitting on
-  `auth.<domain>`: a portal that cannot sign them in to this app at all, since
-  forward-auth is attached to no router (#696). The app's own login page is the
-  only way back in, and nothing said so. Now `?rd=` returns the browser to the
-  origin it came from — which also keeps it correct across the two domains
-  configured in `authelia/configuration.yml`, as Authelia rejects an `rd`
-  outside the cookie domain of the session it issued.
+  sign-out buttons navigated to `${AUTHELIA_URL}/logout`, which left the athlete
+  parked on `auth.<domain>`: a page that cannot sign them back in, because
+  forward-auth is attached to no router (#696). Signing out now drops the app
+  token and nothing else; the app renders its own landing page.
 
-  Reported after the first real use of "sign out everywhere", and the reason it
-  went unnoticed for so long is that the redirect had no test. It has four now.
+  **There is no Authelia session to end.** Sign-in goes through `/auth/login`,
+  which reads `users_database.yml` directly and never touches the portal (#324),
+  so one is never created. The first attempt at this added `?rd=` on the theory
+  that Authelia was logging the user out and merely failing to send them back.
+  It changed nothing, and Authelia logged *nothing at all* for the attempt — the
+  portal only performs the return redirect after a logout it actually carried
+  out. The navigation was never the problem; going there was.
 
-- **"Sign out everywhere" left Authelia's own session standing**
-  (`src/components/SessionSettings.tsx`, #704) — it dropped the app token and
-  stopped there, so the one control that promises *every* session kept the
-  session cookie on the parent domain. All three sign-out paths now share
-  `endSession`; three call sites spelling it out separately is how one of them
-  ends up forgetting half of it.
+  All three sign-out paths now share `endSession`, so the question "what does
+  signing out do" has one answer in one place. If forward-auth is ever wired up,
+  Authelia will hold the session and the logout call has to come back — noted at
+  `endSession` alongside the other two pieces of the same dormant design,
+  `/auth/session` and the probe in `App.tsx`.
+
+  The reason this survived so long is that the redirect had no test. It has
+  three now, including one that fails if an Authelia logout URL is reintroduced
+  without a test asserting the navigation.
 
 - **"Sign out everywhere" was five cards below where anyone looks for it**
   (`src/pages/SettingsPage.tsx`, #704) — it sat under the two-factor panel,
