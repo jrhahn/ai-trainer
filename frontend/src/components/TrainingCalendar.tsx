@@ -23,6 +23,14 @@ import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '.
 import { parseLocalDate } from '../utils/workout'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
+import {
+  PLAN_SPORT_CYCLING,
+  PLAN_SPORT_RUNNING,
+  PLAN_SPORT_STRENGTH,
+  isCyclingSession,
+  planSport,
+  planSportLabel,
+} from '../utils/planSport'
 import WeatherBadge from './WeatherBadge'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
@@ -43,6 +51,25 @@ const typeEmoji: Record<TrainingDay['workoutType'], string> = {
   race: '🏆',
   recovery: '💚',
   strength: '💪',
+}
+
+const sportEmoji: Record<string, string> = {
+  [PLAN_SPORT_CYCLING]: '🚴',
+  [PLAN_SPORT_RUNNING]: '🏃',
+  [PLAN_SPORT_STRENGTH]: '💪',
+}
+
+/** The emoji for one session, which the sport decides when the type cannot (#710).
+ *
+ * `endurance` and `strength` name a sport rather than an intent, so a planned run
+ * showed the athlete a bicycle. Every other type — rest, intervals, tempo, race,
+ * recovery — describes what the session is *for* in any sport, and keeps its own.
+ */
+function sessionEmoji(session: TrainingDay): string {
+  if (session.workoutType === 'endurance' || session.workoutType === 'strength') {
+    return sportEmoji[planSport(session)] ?? typeEmoji[session.workoutType]
+  }
+  return typeEmoji[session.workoutType]
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -421,11 +448,20 @@ export default function TrainingCalendar({
                           <div key={sessionKey(session)} className="mb-0.5 last:mb-0">
                             <div className="flex items-center gap-1">
                               <span className="text-base leading-none">
-                                {typeEmoji[session.workoutType]}
+                                {sessionEmoji(session)}
                               </span>
                               {label && (
                                 <span className="text-[9px] font-bold uppercase opacity-70">
                                   {label}
+                                </span>
+                              )}
+                              {/* Named, not just drawn: an emoji is ambiguous at
+                                  this size, and "is Tuesday a run?" must have an
+                                  unambiguous answer (#710). Cycling stays silent —
+                                  it is what the whole calendar is unless stated. */}
+                              {!isCyclingSession(session) && (
+                                <span className="text-[9px] font-bold uppercase opacity-70">
+                                  {planSportLabel(planSport(session))}
                                 </span>
                               )}
                               {sessions.length > 1 && session.completed && (

@@ -14,7 +14,7 @@ import models
 import schemas
 from services import ai_service
 from services import coach_summary
-from services.activity_identity import activities_form_one_session
+from services.activity_identity import activities_form_one_session, training_sport
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
 from services.duration_range import duration_range
@@ -143,42 +143,26 @@ def _all_plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
     }
 
 
-# Sport-type fragments that mark an executed activity as a gym/mobility session
-# rather than a ride, so a planned strength session and a planned ride on the same
-# date each pull the activity that actually belongs to them.
-_STRENGTH_SPORT_MARKERS = (
-    "weight",
-    "strength",
-    "workout",
-    "gym",
-    "crossfit",
-    "yoga",
-    "pilates",
-    "core",
-)
-
-
-def _is_strength_activity(ride: models.RideMetric) -> bool:
-    sport_type = str(ride.sport_type or "").lower()
-    return any(marker in sport_type for marker in _STRENGTH_SPORT_MARKERS)
-
-
 def _session_accepts_ride(session: dict, ride: models.RideMetric) -> bool:
-    """Whether ``ride``'s sport is plausible for this planned session.
+    """Whether ``ride``'s sport is the one this planned session prescribes.
 
-    Deliberately permissive: it only rules out the two combinations that are
-    clearly wrong (a gym activity against a planned ride, a ride against a
-    planned strength session). Everything else stays eligible and is decided on
-    duration, so an unusual sport type never leaves a session unmatched.
+    Both sides are read through the shared sport vocabulary (#710), so a planned
+    sport and a logged sport have to actually agree before the two can be one
+    session — the plan-side half of the rule
+    ``activity_identity.activities_form_one_session`` already enforces between
+    two recordings. Before the plan had a sport at all, this could only compare
+    the one thing the old vocabulary stated: ``workoutType == "strength"``. That
+    kept a gym session and a ride apart but let a planned ride swallow a run.
+
+    Permissive in exactly one case: an activity whose sport type is missing or
+    unreadable. That is a genuine unknown, not a claim that it was not the
+    planned session, so it stays eligible and is decided on duration — the same
+    reading ``activity_identity.non_cycling_classification`` takes.
     """
-    workout_type = str(
-        session.get("workoutType") or session.get("workout_type") or ""
-    ).lower()
-    if workout_type == "strength":
-        return _is_strength_activity(ride)
-    if _is_strength_activity(ride):
-        return False
-    return True
+    actual = training_sport(ride.sport_type)
+    if actual is None:
+        return True
+    return actual == schemas.day_sport(session)
 
 
 def _session_duration_cost(session: dict, ride: models.RideMetric) -> float:
@@ -360,14 +344,19 @@ def _is_structured_hard_plan(day: dict) -> bool:
 
 
 def _is_duration_focused_ride_plan(day: dict, rides: list[models.RideMetric]) -> bool:
+    """Is this a session that "how long did you go for" can settle?
+
+    Every candidate must be the sport the session prescribes. That is already
+    guaranteed by ``_session_accepts_ride``, so this is a safety net rather than
+    a filter — but it is the net that keeps the duration path from summing a
+    yoga class into a planned ride, which is how it earned its place (#578 /
+    the 2026-08-09 production day). Asking for *cycling* specifically was the
+    same question while cycling was the only sport a plan could hold; a planned
+    run is as duration-settleable as a planned endurance ride (#710).
+    """
     if _plan_duration_minutes(day) is None or _is_structured_hard_plan(day):
         return False
-    return all(_is_cycling_ride(ride) for ride in rides)
-
-
-def _is_cycling_ride(ride: models.RideMetric) -> bool:
-    sport_type = str(ride.sport_type or "").lower()
-    return "ride" in sport_type or "cycling" in sport_type or "bike" in sport_type
+    return all(_session_accepts_ride(day, ride) for ride in rides)
 
 
 def _rides_are_one_split_session(
@@ -714,7 +703,7 @@ async def apply_ride_plan_matches(
         # all. The guard already existed and is what the two-a-day path uses
         # (#496); the single-session path never asked, so one yoga class on a
         # cycling day made `_is_duration_focused_ride_plan` false for the whole
-        # day — `all(_is_cycling_ride(...))` over a list containing it — and
+        # day — `all(...)` over a list containing it — and
         # dropped every activity into `ambiguous`. On 2026-08-09 that left two
         # road rides and a yoga session all asking the athlete which one was the
         # planned recovery spin.

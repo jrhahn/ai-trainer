@@ -1290,6 +1290,19 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "stands on its own — an arrangement nobody agreed to would freeze those days "
         "against every automatic adjustment for no reason. "
     )
+    # Sport is the one plan field with no default worth guessing: every stored day
+    # is cycling, and a session whose sport is wrong is not a mistuned session, it
+    # is the wrong session entirely (#710).
+    _sport_rule = (
+        '- "sport": which sport the session is — "cycling", "running" or '
+        '"strength". Omit it unless you are deliberately changing the sport, in '
+        "which case say so in your response: it is cycling on every day that does "
+        "not say otherwise, and an unrequested switch reads to the athlete as a "
+        "mistake. Set it when the athlete tells you what they are actually doing "
+        '("I\'ll go to the gym instead", "swapping Thursday for a run"), and keep '
+        "the title and description in the same sport — a run described in watts is "
+        "a session the athlete cannot execute. "
+    )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
         "athlete profile, structured athlete context, evidence-backed memory facts, coach "
@@ -1308,10 +1321,12 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             "(2) You propose a coaching change to the currently-viewed workout (see above) — "
             "even if the athlete did not explicitly request a change. "
             'Each update must include "date" (ISO string matching an existing plan date) and any '
-            'fields to change: "workoutType", "title", "description", "durationMinutes", '
-            '"targetPower", "targetHeartRate", "intervals", "workoutPurpose", "keyFocusPoints". '
+            'fields to change: "sport", "workoutType", "title", "description", '
+            '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
+            '"workoutPurpose", "keyFocusPoints". '
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
+            f"{_sport_rule}"
             f"{_constraints_rule}"
             f"{_adjacency_rule}"
             f"{_rich_description_rule} "
@@ -1323,11 +1338,12 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         '- "planUpdates": an array of training day updates (optional). Only include this '
         "field when the athlete explicitly asks to change, swap, skip, or reschedule a "
         'workout. Each update must include "date" (ISO string matching an existing plan '
-        'date) and any fields to change: "workoutType", "title", "description", '
-        '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
-        '"workoutPurpose", "keyFocusPoints". '
+        'date) and any fields to change: "sport", "workoutType", "title", '
+        '"description", "durationMinutes", "targetPower", "targetHeartRate", '
+        '"intervals", "workoutPurpose", "keyFocusPoints". '
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
+        f"{_sport_rule}"
         f"{_constraints_rule}"
         f"{_adjacency_rule}"
         f"{_duration_rule} "
@@ -4137,7 +4153,7 @@ def _plan_change_is_visible(row) -> bool:
         return True
     return any(
         (old or {}).get(field) != (new or {}).get(field)
-        for field in ("durationMinutes", "workoutType", "title", "completed")
+        for field in ("durationMinutes", "workoutType", "title", "completed", "sport")
     )
 
 

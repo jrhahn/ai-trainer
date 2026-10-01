@@ -36,6 +36,55 @@ def activity_family(sport_type: str | None) -> str:
 CYCLING_FAMILY = "cycling"
 UNREADABLE_FAMILY = "activity"
 
+# The sports a training plan can prescribe (#710). Coarser than
+# ``activity_family`` on purpose: the planner, the load model and the ride↔plan
+# matcher all have to agree on what a sport *is*, and a provider's free-text
+# sport name is not that. Anything outside these three keeps its family token so
+# a disagreement is still detectable — it just has no plan support yet.
+SPORT_CYCLING = "cycling"
+SPORT_RUNNING = "running"
+SPORT_STRENGTH = "strength"
+PLANNABLE_SPORTS: tuple[str, ...] = (SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH)
+
+# What marks an activity as gym work rather than a ride or a run. Wider than
+# ``activity_family``'s "weight"/"strength" test because this is the bucket the
+# *planner* reasons about: a yoga class and a core session are not strength
+# training in any physiological sense, but they are what the athlete does when
+# the plan says "off the bike", and the matcher must not read them as a failed
+# ride. ``activity_family`` deliberately keeps them distinct — it feeds the
+# athlete-facing classification, where "Recorded as Yoga" is the whole point
+# (#578).
+_GYM_SPORT_MARKERS = (
+    "weight",
+    "strength",
+    "workout",
+    "gym",
+    "crossfit",
+    "yoga",
+    "pilates",
+    "core",
+)
+
+
+def training_sport(sport_type: str | None) -> str | None:
+    """The coarse trainable sport of an activity or a plan day, or ``None``.
+
+    ``None`` means the sport type was missing or unreadable — a genuine unknown,
+    not a claim about what the session was. Callers decide what to do with that:
+    a plan day defaults to cycling, the matcher stays permissive. Shared by both
+    sides so a planned sport and a logged sport are compared in one vocabulary
+    instead of two that drift (#710).
+    """
+    normalized = re.sub(r"[^a-z0-9]", "", normalize_activity_text(sport_type))
+    if not normalized:
+        return None
+    family = activity_family(sport_type)
+    if family in (SPORT_CYCLING, SPORT_RUNNING):
+        return family
+    if any(marker in normalized for marker in _GYM_SPORT_MARKERS):
+        return SPORT_STRENGTH
+    return None if family == UNREADABLE_FAMILY else family
+
 
 def non_cycling_classification(sport_type: str | None) -> tuple[str, str, str] | None:
     """Return ``(ride_purpose, confidence, reason)`` for a non-cycling activity.

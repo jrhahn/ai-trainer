@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A planned session says which sport it is** (`src/utils/planSport.ts`,
+  `src/components/TrainingCalendar.tsx`, `src/components/SessionHero.tsx`,
+  `src/store/useAppStore.ts`, #710, epic #709) — `TrainingDay.sport` plus
+  `utils/planSport`, which defaults a missing value to cycling: the field is
+  absent on every day written before it existed *and* on every cycling day, since
+  the backend omits the default to keep storage byte-stable. The vocabulary is
+  the backend's, so `utils/activityType` labels planned sessions and logged
+  activities with the same nouns instead of growing a second set.
+
+  The calendar draws the sport rather than the workout type where the two
+  disagree — `endurance` and `strength` name a sport, so a planned run used to
+  show the athlete a bicycle — and names it in text as well, because an emoji is
+  ambiguous at that size. Purposes that mean the same in every sport (intervals,
+  tempo, race, recovery, rest) keep their own icon. The session card on the
+  dashboard gains a matching chip. Cycling stays unlabelled in both: it is what
+  the plan is unless stated, and a chip on every day would be noise.
+
 - **"Sign out everywhere" in settings** (`src/components/SessionSettings.tsx`,
   `src/services/sessions.ts`, `src/pages/SettingsPage.tsx`, #704) — ends every
   session for the account, including the browser it is pressed in, after

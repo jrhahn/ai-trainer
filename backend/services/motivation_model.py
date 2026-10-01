@@ -101,12 +101,14 @@ MODALITY_MTB = "mtb"
 MODALITY_GRAVEL = "gravel"
 MODALITY_INDOOR = "indoor"
 MODALITY_GYM = "gym"
+MODALITY_RUN = "run"
 MODALITIES: tuple[str, ...] = (
     MODALITY_ROAD,
     MODALITY_MTB,
     MODALITY_GRAVEL,
     MODALITY_INDOOR,
     MODALITY_GYM,
+    MODALITY_RUN,
 )
 
 # Affinities are *independent* scores in [0, 1], not a distribution: liking the

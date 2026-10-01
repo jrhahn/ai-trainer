@@ -175,6 +175,11 @@ def _clean_rationale(value: object) -> str | None:
 
 _SLIM_PLAN_KEEP = {
     "date",
+    # Which sport the session is (#710). Free for a cycling plan: the persist
+    # gate omits the default, so the key only exists on days that are not rides —
+    # and on those the coach has to know, or it discusses a planned run as if it
+    # were one.
+    "sport",
     "workoutType",
     "workout_type",
     "title",

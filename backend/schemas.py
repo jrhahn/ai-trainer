@@ -22,6 +22,7 @@ from pydantic import (
 )
 
 from services import ride_purpose_question
+from services.activity_identity import SPORT_CYCLING, training_sport
 
 if TYPE_CHECKING:
     import models
@@ -1278,6 +1279,55 @@ def _normalise_strava_sport_type(value: Optional[str]) -> Optional[str]:
     return stripped
 
 
+# What a plan day prescribes when it says nothing: this product's sport, and the
+# sport every plan written before #710 was implicitly about.
+DEFAULT_PLAN_SPORT = SPORT_CYCLING
+
+
+def normalise_plan_sport(value: Any) -> str:
+    """The sport a plan day prescribes, in the shared sport vocabulary.
+
+    Total by design, like :func:`normalize_slot`: a sport is part of a session's
+    meaning, so an unreadable one must never drop the day at the persist gate. An
+    unknown or missing sport is the cycling session this product has always
+    assumed. A sport outside :data:`activity_identity.PLANNABLE_SPORTS` is kept
+    as its family token rather than coerced to cycling — the planner cannot write
+    one, but an athlete's own edit must not be silently relabelled.
+    """
+    if not isinstance(value, str):
+        # Only a string can name a sport. Stringifying anything else produced
+        # real-looking sports out of structured junk ("{'a': 1}" → "a1").
+        return DEFAULT_PLAN_SPORT
+    return training_sport(value) or DEFAULT_PLAN_SPORT
+
+
+def day_sport(day: Any) -> str:
+    """The sport of ``day``, accepting a ``PlanDay``, dict or alias case.
+
+    Plans written before #710 carry no sport at all. A ``workoutType`` of
+    ``"strength"`` on such a day is the one case where the *old* vocabulary
+    already stated a sport, so it is honoured rather than read as cycling —
+    otherwise every historical gym session would start matching bike rides.
+    """
+    if isinstance(day, PlanDay):
+        return day.sport
+    if isinstance(day, dict):
+        raw = day.get("sport")
+        if raw is None:
+            raw = day.get("sport_type") or day.get("sportType")
+        if raw is None:
+            workout_type = day.get("workoutType") or day.get("workout_type")
+            # Only the literal "strength" carried sport meaning in the old
+            # vocabulary; every other workout type ("endurance", "intervals",
+            # "rest", …) says what the session is for and nothing about which
+            # sport it is.
+            if str(workout_type or "").strip().lower() != "strength":
+                return DEFAULT_PLAN_SPORT
+            raw = workout_type
+        return normalise_plan_sport(raw)
+    return normalise_plan_sport(getattr(day, "sport", None))
+
+
 class StravaActivitySchema(CamelModel):
     """Mirrors the TypeScript StravaActivity interface."""
 
@@ -1372,6 +1422,9 @@ class PlanDayUpdateSchema(CamelModel):
     # day's first (lowest-slot) session, which is what every pre-two-a-day caller
     # and every single-session day resolves to.
     slot: Optional[int] = None
+    # Which sport the session prescribes (#710). ``None`` leaves the day's
+    # current sport alone, so no existing caller changes it by omission.
+    sport: Optional[str] = None
     time_of_day: Optional[str] = None
     workout_type: Optional[str] = None
     title: Optional[str] = None
@@ -1538,6 +1591,13 @@ class PlanDay(CamelModel):
     # session, 1 the second, and so on. A legacy single-workout day carries no
     # slot and reads back as slot 0, so every stored plan migrates losslessly.
     slot: int = 0
+    # Which sport this session prescribes (#710). ``workout_type`` says what the
+    # session is *for* ("endurance", "intervals"); this says what the athlete
+    # actually does. Defaults to cycling, so every stored plan — all of which
+    # predate the field — reads back as the cycling plan it is, exactly the way
+    # ``slot`` migrated in #496. Normalised into the shared sport vocabulary so a
+    # planned sport and an imported activity's sport are comparable.
+    sport: str = DEFAULT_PLAN_SPORT
     # Optional free-text when-in-the-day hint ("am", "pm", "18:30"). Advisory
     # only — ``slot`` is the identity and the ordering; this is for display and
     # for the coach's AM/PM load reasoning.
@@ -1568,6 +1628,14 @@ class PlanDay(CamelModel):
     def _coerce_ranges(cls, value: Any) -> Any:
         return _coerce_target_range(value)
 
+    @field_validator("sport", mode="before")
+    @classmethod
+    def _coerce_sport(cls, value: Any) -> Any:
+        # Same reasoning as the slot coercion below: a garbage sport must not
+        # drop the day at the persist gate, and an absent one is the cycling
+        # session every pre-#710 plan is.
+        return normalise_plan_sport(value)
+
     @field_validator("slot", mode="before")
     @classmethod
     def _coerce_slot(cls, value: Any) -> Any:
@@ -1578,8 +1646,8 @@ class PlanDay(CamelModel):
         return normalize_slot(value)
 
     @model_serializer(mode="wrap")
-    def _omit_default_slot(self, handler: Any) -> Any:
-        """Serialize slot 0 as absent, so a single-session day is stored as before.
+    def _omit_storage_defaults(self, handler: Any) -> Any:
+        """Serialize slot 0 and a cycling sport as absent, as they were before.
 
         Slot 0 *is* the legacy "no slot" day, so writing it out would rewrite every
         stored plan on the first commit after #496 ships and — worse — make a
@@ -1587,10 +1655,18 @@ class PlanDay(CamelModel):
         every no-op write into a real write that cascades a login-summary refresh
         and a ride-snapshot rebuild. Omitting the default keeps storage byte-stable
         and no-op detection honest; readers already default a missing slot to 0.
+
+        ``sport`` is omitted for exactly the same reason (#710): every stored plan
+        predates the field and is implicitly cycling, so emitting ``"cycling"``
+        would rewrite all of them on the first commit and turn every subsequent
+        no-op into a real write. :func:`day_sport` defaults a missing sport, so
+        nothing downstream can tell the difference.
         """
         data = handler(self)
         if isinstance(data, dict) and data.get("slot") in (0, None):
             data.pop("slot", None)
+        if isinstance(data, dict) and data.get("sport") in (DEFAULT_PLAN_SPORT, None):
+            data.pop("sport", None)
         return data
 
     @model_validator(mode="after")

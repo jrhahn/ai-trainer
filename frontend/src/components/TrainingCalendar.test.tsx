@@ -700,4 +700,56 @@ describe('TrainingCalendar', () => {
       expect(screen.queryByText('1/1')).not.toBeInTheDocument()
     })
   })
+
+  describe('sport (#710)', () => {
+    it('does not draw a bicycle on a planned run', () => {
+      const date = monthDate(0, 15)
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date, 'endurance'), sport: 'running' }],
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.textContent).toContain('🏃')
+      expect(cell.textContent).not.toContain('🚴')
+      // Named as well as drawn: an emoji is ambiguous at this size.
+      expect(screen.getByText('Running')).toBeInTheDocument()
+    })
+
+    it('leaves a cycling day exactly as it was', () => {
+      const date = monthDate(0, 16)
+      useAppStore.setState({ trainingPlan: [makeDay(date, 'endurance')] })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.textContent).toContain('🚴')
+      expect(screen.queryByText('Cycling')).not.toBeInTheDocument()
+    })
+
+    it('keeps a workout type that means the same in every sport', () => {
+      // "intervals" is a purpose, not a sport: a run with intervals is still ⚡.
+      const date = monthDate(0, 17)
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date, 'intervals'), sport: 'running' }],
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      expect(screen.getByLabelText(`Calendar day ${date}`).textContent).toContain('⚡')
+    })
+  })
 })

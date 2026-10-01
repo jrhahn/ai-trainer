@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A plan day now has a sport** (`schemas.py`, `services/activity_identity.py`,
+  `services/ride_matching.py`, `services/coach_schema.py`, `services/prompts.py`,
+  `services/ai_service.py`, #710, epic #709) — `PlanDay.sport` makes sport a
+  planning dimension instead of something only imported activities had.
+  `sport_type` was already stored on every `RideMetric` and `WorkoutLog`,
+  normalised from Strava and rendered run/hike/strength-aware by the frontend —
+  but a *plan* could not say "Tuesday is a run", so the coach could not write one
+  and the matcher could not check one.
+
+  Defaults to `"cycling"` and is omitted from storage when it is the default,
+  exactly the way `slot` migrated in #496: every stored plan predates the field
+  and is implicitly cycling, so emitting it would rewrite all of them on the
+  first commit and turn every subsequent no-op write into a real one — cascading
+  a login-summary refresh and a ride-snapshot rebuild each time.
+
+  One vocabulary on both sides. `activity_identity.training_sport()` is shared by
+  planned sessions and imported activities, so a planned sport and a logged sport
+  are compared in one set of names rather than two that drift. It is deliberately
+  coarser than `activity_family()`, which stays as it is because it feeds the
+  athlete-facing classification where "Recorded as Yoga" is the whole point
+  (#578).
+
+  The coach can set it (`"cycling"`, `"running"`, `"strength"`, enumerated in the
+  reply schema so an invented sport cannot silently become a bike session) and
+  can see it: `sport` is in the chat context allowlist, which costs nothing on a
+  cycling plan because cycling days carry no sport key at all.
+
 - **Issued JWTs can now be revoked** (`auth.py`, `crud.py`,
   `routers/auth_router.py`, `routers/admin.py`, `models.py`,
   `alembic/versions/20261001_000001_add_token_generation.py`, #704) — the last
@@ -104,6 +131,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape of #684 and #696.
 
 ### Changed
+
+- **A planned sport and a logged sport have to agree before the two are one
+  session** (`services/ride_matching.py`, #710) — `_session_accepts_ride` could
+  previously only compare the one thing the old vocabulary stated,
+  `workoutType == "strength"`. That kept a gym session and a ride apart but let a
+  planned ride swallow a run, and let a hike be offered to the athlete as a
+  candidate for their planned ride — the #578 symptom with a hike in place of the
+  yoga class, which `tests/test_strava.py` had encoded as expected behaviour. An
+  activity whose sport type is missing or unreadable stays eligible: that is a
+  genuine unknown, not a claim about what the session was.
+
+- **A run is finally visible to the motivation model**
+  (`services/training_utility.py`, `services/motivation_model.py`,
+  `services/motivation_inference.py`, #710) — `modality_for_sport("Run")`
+  returned `None`, so every run fell out of behaviour scoring entirely: an
+  athlete could run four times a week and the evidence would record nothing. The
+  new `run` modality is counted as evidence but stays out of the affinity nudge,
+  which reads "did not ride it" as evidence against — and an athlete who ran
+  instead of riding did not decline the road bike, they did something else.
 
 - **Every route that re-checks the password now shares one check**
   (`routers/auth_router.py`, #704) — `_require_password`, used by
