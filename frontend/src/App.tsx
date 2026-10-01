@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
 import Layout from './components/Layout'
@@ -13,8 +13,7 @@ import StravaCallbackPage from './pages/StravaCallbackPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import { useImportProgress } from './hooks/useImportProgress'
-import { getSessionToken } from './services/auth'
-import { AUTH_EXPIRED_EVENT, AUTHELIA_URL } from './services/api'
+import { AUTH_EXPIRED_EVENT } from './services/api'
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -25,11 +24,9 @@ export default function App() {
   const loadingStep = useAppStore((s) => s.loadingStep)
   const loadUserData = useAppStore((s) => s.loadUserData)
   const logout = useAppStore((s) => s.logout)
-  const setAuthToken = useAppStore((s) => s.setAuthToken)
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
-  const [isCheckingAutheliaSession, setIsCheckingAutheliaSession] = useState(Boolean(AUTHELIA_URL && !authToken))
 
   useEffect(() => {
     if (authToken) {
@@ -37,51 +34,36 @@ export default function App() {
     }
   }, [authToken, loadUserData])
 
+  // A 401 on a request that carried a token means the session is finished —
+  // expired, or revoked by "sign out everywhere" or an operator (#704).
+  //
+  // This used to also kick off a `GET /auth/session` probe against Authelia,
+  // on every logged-out page load, behind an overlay reading "Checking your
+  // secure session… Authelia will continue sign-in if needed." It could never
+  // succeed here: that endpoint answers from `Remote-*` headers, and
+  // forward-auth is attached to no router (#696). So every visitor paid a round
+  // trip and a flash of Authelia before the landing page, and every one of them
+  // wrote `WARNING: Authelia session not found` to the backend log.
+  //
+  // `/auth/callback` still calls it, deliberately — that route exists for a
+  // portal-authenticated user to be sent to, and costs nothing while nobody is.
+  // Reinstate the automatic probe when forward-auth is actually wired up, not
+  // before; see `endSession` for the rest of that dormant design.
   useEffect(() => {
-    const handleAuthExpired = () => {
-      logout()
-      if (AUTHELIA_URL) {
-        setIsCheckingAutheliaSession(true)
-      }
-    }
+    const handleAuthExpired = () => logout()
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
   }, [logout])
 
-  useEffect(() => {
-    if (!AUTHELIA_URL || authToken || !isCheckingAutheliaSession) return
-
-    let cancelled = false
-    void getSessionToken()
-      .then((token) => {
-        if (!cancelled) {
-          setIsCheckingAutheliaSession(false)
-          setAuthToken(token)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setIsCheckingAutheliaSession(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [authToken, isCheckingAutheliaSession, setAuthToken])
-
-  const showCheckingSession = isCheckingAutheliaSession && !authToken
-  const showOverlay = Boolean((authToken && isLoadingUserData) || showCheckingSession)
+  const showOverlay = Boolean(authToken && isLoadingUserData)
   const isPreparingImport = importProgress.status === 'running' && importProgress.total === 0
   const hasGlobalImportProgress = importProgress.status === 'running' && importProgress.total > 0
   const showPercent = !isPreparingImport
   const pct = hasGlobalImportProgress
     ? Math.round((Math.min(importProgress.processed, importProgress.total) / importProgress.total) * 100)
     : Math.round((Math.min(loadingStep, USER_DATA_LOADING_STEPS) / USER_DATA_LOADING_STEPS) * 100)
-  let loadingTitle = 'Loading your training data...'
+  const loadingTitle = 'Loading your training data...'
   let loadingSubtitle = 'Syncing profile, plan, workouts, and chat.'
-  if (showCheckingSession) {
-    loadingTitle = 'Checking your secure session...'
-    loadingSubtitle = 'Authelia will continue sign-in if needed.'
-  }
   if (isPreparingImport) {
     loadingSubtitle = 'Preparing Strava import...'
   } else if (hasGlobalImportProgress) {
