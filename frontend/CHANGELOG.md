@@ -68,6 +68,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Signing out stranded you on the Authelia portal** (`src/services/sessions.ts`,
+  `src/components/Layout.tsx`, `src/pages/SettingsPage.tsx`, #704) — both
+  sign-out buttons navigated to `${AUTHELIA_URL}/logout` with no `rd`, so
+  Authelia ended the session and left the athlete sitting on
+  `auth.<domain>`: a portal that cannot sign them in to this app at all, since
+  forward-auth is attached to no router (#696). The app's own login page is the
+  only way back in, and nothing said so. Now `?rd=` returns the browser to the
+  origin it came from — which also keeps it correct across the two domains
+  configured in `authelia/configuration.yml`, as Authelia rejects an `rd`
+  outside the cookie domain of the session it issued.
+
+  Reported after the first real use of "sign out everywhere", and the reason it
+  went unnoticed for so long is that the redirect had no test. It has four now.
+
+- **"Sign out everywhere" left Authelia's own session standing**
+  (`src/components/SessionSettings.tsx`, #704) — it dropped the app token and
+  stopped there, so the one control that promises *every* session kept the
+  session cookie on the parent domain. All three sign-out paths now share
+  `endSession`; three call sites spelling it out separately is how one of them
+  ends up forgetting half of it.
+
+- **"Sign out everywhere" was five cards below where anyone looks for it**
+  (`src/pages/SettingsPage.tsx`, #704) — it sat under the two-factor panel,
+  which reads well as a taxonomy and failed the only test that counts: the first
+  person to go looking for it clicked the plain "Sign Out" in the Account card
+  instead. It now sits directly under that card.
+
 - **Settings told you your own API key could not be supplied** (`src/pages/SettingsPage.tsx`,
   `src/components/AIKeySettings.tsx`) — the AI Provider section carried a
   warning reading "Model keys live on the backend now. The browser no longer

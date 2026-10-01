@@ -19,7 +19,8 @@ import { SETUP_GUIDE_SECTIONS } from '../utils/links'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
-import { BACKEND_URL, AUTHELIA_URL } from '../services/api'
+import { BACKEND_URL } from '../services/api'
+import { endSession } from '../services/sessions'
 import {
   deleteCurrentUser,
   estimateFTP,
@@ -295,12 +296,7 @@ export default function SettingsPage() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
-    if (AUTHELIA_URL) {
-      window.location.href = `${AUTHELIA_URL}/logout`
-    }
-  }
+  const handleLogout = () => endSession(logout)
 
   const handleStravaAutoSyncChange = async (enabled: boolean) => {
     if (!authToken) return
@@ -463,6 +459,12 @@ export default function SettingsPage() {
           <LogOut size={15} /> Sign Out
         </button>
       </div>
+
+      {/* Ending sessions elsewhere (#704). Immediately after the Account card
+          on purpose: this is where someone looks when they want to be signed
+          out, and the first person to go looking for it clicked "Sign Out"
+          above instead. */}
+      <SessionSettings />
 
       {/* FTP Management */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -866,9 +868,6 @@ export default function SettingsPage() {
       <AIKeySettings />
 
       <TotpSettings />
-
-      {/* Ending sessions that are already signed in (#704) */}
-      <SessionSettings />
 
       {/* Import historical coach conversations */}
       <ConversationImportSettings />
