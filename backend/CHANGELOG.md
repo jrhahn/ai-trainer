@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Issued JWTs can now be revoked** (`auth.py`, `crud.py`,
+  `routers/auth_router.py`, `routers/admin.py`, `models.py`,
+  `alembic/versions/20261001_000001_add_token_generation.py`, #704) — the last
+  open finding of the 2026-09-19 audit. `users.token_generation` is a counter;
+  every access token carries the value it had when it was minted, and
+  `get_current_user` refuses a token whose claim no longer matches the row. The
+  user is already loaded there, so this costs no extra query.
+
+  `POST /auth/sessions/revoke` is the athlete's "sign out everywhere". It needs
+  the password, like `/auth/totp/disable`, and it signs the caller out as well —
+  it really does invalidate the token that made the request. Trusted devices go
+  with it, because the reason to press it is that a device is out of your hands.
+  `POST /admin/users/{id}/revoke-sessions` is the operator's version, for a leak
+  reported by someone who cannot sign in, or a password changed by hand in
+  Authelia's user store — which the app's tokens otherwise know nothing about.
+
+  A counter rather than a "valid from" timestamp: `iat` has one-second
+  resolution, so a timestamp has to take a position on tokens minted inside the
+  same second as the revocation, and both positions are wrong in one direction.
+  Not a `jti` deny list either — that buys per-token revocation this app has no
+  use for, at the price of a table, a sweep and a lookup per request.
+
+  Deploying it signs nobody out: an older token carries no claim, which reads as
+  0, the value the migration gives every existing row.
+
+- **Admin tokens are bound to the admin credentials** (`auth.py`, #704) — they
+  have no user row to count against, so the token carries an HMAC over
+  `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET` and `require_admin` checks it.
+  Rotating either now invalidates outstanding admin tokens, which is the point:
+  rotating the admin password is what you do when you think one leaked, and
+  until now it left the leaked token working for its full two hours.
+
 - **Two-factor authentication (TOTP) for app accounts and the admin panel**
   (`services/totp.py`, `routers/auth_router.py`, `routers/admin.py`,
   `models.py`, `alembic/versions/20260925_000001_add_totp.py`, #688) —
@@ -72,6 +104,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape of #684 and #696.
 
 ### Changed
+
+- **Every route that re-checks the password now shares one check**
+  (`routers/auth_router.py`, #704) — `_require_password`, used by
+  `/auth/totp/disable` and `/auth/sessions/revoke`. The Authelia branch is the
+  trap: with Authelia as the user store the password is not in
+  `users.hashed_password` at all, so a route that consulted only the column
+  would accept nothing in production. A step-up check that gets that wrong in
+  one route out of several stops being a check.
 
 - **`scripts/generate_admin_totp` no longer tells you to do four things**
   (`backend/scripts/generate_admin_totp.py`, #700) — it pointed at the workflow

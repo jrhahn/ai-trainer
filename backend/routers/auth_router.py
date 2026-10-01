@@ -206,7 +206,9 @@ async def register(
     # response is sent, which creates a race window; an explicit commit here
     # closes it.
     await db.commit()
-    token = auth.create_access_token(user.id)
+    token = auth.create_access_token(
+        user.id, token_generation=user.token_generation
+    )
     return schemas.TokenResponse(access_token=token)
 
 
@@ -330,7 +332,11 @@ async def _complete_login(
         )
 
     user.last_login = datetime.now(timezone.utc)
-    return schemas.TokenResponse(access_token=auth.create_access_token(user.id))
+    return schemas.TokenResponse(
+        access_token=auth.create_access_token(
+            user.id, token_generation=user.token_generation
+        )
+    )
 
 
 @router.post("/login")
@@ -483,7 +489,11 @@ async def login_totp(
         _set_trusted_device_cookie(response, device_token)
 
     user.last_login = datetime.now(timezone.utc)
-    return schemas.TokenResponse(access_token=auth.create_access_token(user.id))
+    return schemas.TokenResponse(
+        access_token=auth.create_access_token(
+            user.id, token_generation=user.token_generation
+        )
+    )
 
 
 @router.get("/totp/status", response_model=schemas.TotpStatusResponse)
@@ -576,6 +586,27 @@ async def totp_confirm(
     return schemas.TotpRecoveryCodesResponse(recovery_codes=codes)
 
 
+def _require_password(user: models.User, password: str) -> None:
+    """Re-check *user*'s password, or raise 401.
+
+    Shared by every route that demands the password on top of a live session,
+    because the two branches are the trap: with Authelia as the user store the
+    password is not in ``users.hashed_password`` at all (that column holds a
+    random throwaway, see ``register``), so a route that checked only the
+    column would accept nothing in production, and one that checked only the
+    store would accept nothing in development. Getting that wrong in one route
+    out of several is how step-up auth quietly stops being a check.
+    """
+    if auth.AUTHELIA_AUTH_ENABLED:
+        valid = _verify_authelia_credentials(user.email, password)
+    else:
+        valid = auth.verify_password(password, user.hashed_password)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password."
+        )
+
+
 @router.post("/totp/disable", status_code=status.HTTP_204_NO_CONTENT)
 async def totp_disable(
     body: schemas.TotpDisableRequest,
@@ -588,15 +619,7 @@ async def totp_disable(
     the second factor exists to provide.
     """
     enforce_login_rate_limit(current_user.email)
-
-    if auth.AUTHELIA_AUTH_ENABLED:
-        valid = _verify_authelia_credentials(current_user.email, body.password)
-    else:
-        valid = auth.verify_password(body.password, current_user.hashed_password)
-    if not valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password."
-        )
+    _require_password(current_user, body.password)
 
     current_user.totp_enabled = False
     current_user.totp_secret = None
@@ -616,3 +639,45 @@ async def revoke_trusted_devices(
     await crud.revoke_trusted_devices(db, current_user.id)
     await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Session revocation (#704)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sessions/revoke", response_model=schemas.SessionRevokeResponse)
+async def revoke_sessions(
+    body: schemas.SessionRevokeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.SessionRevokeResponse:
+    """Sign out everywhere, including here.
+
+    Until this existed, an access token could not be taken back at all: seven
+    days of validity, and the only lever was rotating ``JWT_SECRET``, which
+    signs out every athlete at once and re-keys the captcha and TOTP-challenge
+    HMACs along the way, because both derive from it. A control that drastic
+    does not get pulled, which is the same as not having one.
+
+    Requires the password, like ``/totp/disable``: a borrowed unlocked browser
+    must not be able to lock the owner out of their own account.
+
+    The commit is explicit. A revocation that is reported as done and then
+    rolled back by a later failure in the same request would be the worst
+    possible outcome here — the athlete has been told their sessions are gone
+    and would stop looking for the problem.
+    """
+    enforce_login_rate_limit(current_user.email)
+    _require_password(current_user, body.password)
+
+    generation = await crud.revoke_user_tokens(db, current_user.id)
+    await db.commit()
+
+    logger.info(
+        "Revoked all sessions for user %s at the athlete's request; "
+        "token generation is now %s.",
+        current_user.id,
+        generation,
+    )
+    return schemas.SessionRevokeResponse(token_generation=generation)

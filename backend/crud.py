@@ -4648,3 +4648,35 @@ async def consume_recovery_code(db: AsyncSession, code: models.TotpRecoveryCode)
     """Spend a recovery code by deleting it — they are single-use."""
     await db.delete(code)
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Token revocation (#704)
+# ---------------------------------------------------------------------------
+
+
+async def revoke_user_tokens(db: AsyncSession, user_id: str) -> int:
+    """End every session for *user_id*; returns the generation now in force.
+
+    Incrementing in SQL rather than reading, adding one and writing back: two
+    revocations racing each other would otherwise both write the same value,
+    and the later token would survive the later revocation. The increment also
+    means an intermediate generation is never reachable again, so a token
+    captured between two revocations stays dead.
+
+    Trusted devices go with it. The reason to press this is that a device is
+    out of your hands, and a trusted-device cookie skips the second factor for
+    thirty days — leaving those behind would revoke the session but keep the
+    bypass that made it easy to get one.
+    """
+    await db.execute(
+        update(models.User)
+        .where(models.User.id == user_id)
+        .values(token_generation=models.User.token_generation + 1)
+    )
+    await revoke_trusted_devices(db, user_id)
+    await db.flush()
+    generation = await db.scalar(
+        select(models.User.token_generation).where(models.User.id == user_id)
+    )
+    return int(generation or 0)

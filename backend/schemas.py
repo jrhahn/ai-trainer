@@ -215,6 +215,28 @@ class TotpDisableRequest(BaseModel):
     password: str
 
 
+class SessionRevokeRequest(BaseModel):
+    """Signing out everywhere needs the password, for the same reason as above.
+
+    It is also the one request that deliberately invalidates the token making
+    it: whoever presses this wants every session gone, including this one
+    (#704).
+    """
+
+    password: str
+
+
+class SessionRevokeResponse(CamelModel):
+    """What the client needs to know: the session it holds is finished.
+
+    ``token_generation`` is returned because it is the only visible evidence
+    the revocation happened, and an operator reading the admin panel or a log
+    can line it up with the column.
+    """
+
+    token_generation: int
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

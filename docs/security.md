@@ -76,6 +76,33 @@ record, so the secret is an environment variable and there is deliberately **no
 enrollment endpoint** — one less unauthenticated surface in front of the account
 that can read every athlete's address and delete any of them.
 
+### Sessions and revocation
+
+The access token is a JWT, valid for seven days, held in `sessionStorage` so it
+dies with the tab rather than outliving the browser.
+
+It is **revocable** (#704). `users.token_generation` is a counter; every token
+carries the value it had when the token was minted, and `get_current_user`
+refuses a token whose claim no longer matches the row. The user row is loaded
+there already, so this costs no extra query.
+
+Two things bump the counter, and both end every session for the account at
+once — there is no per-device revocation:
+
+| | |
+|---|---|
+| `POST /auth/sessions/revoke` | the athlete's "sign out everywhere". Needs the password, like turning the second factor off, and signs the caller out too — it genuinely invalidates the token that made the request. Trusted devices go with it. |
+| `POST /admin/users/{id}/revoke-sessions` | the operator's version, for a leak reported by someone who cannot sign in, or a password changed by hand in `users_database.yml` — which the app's tokens know nothing about. |
+
+Admin tokens have no user row to count against, so they are bound to the
+credentials instead: the token carries an HMAC over `ADMIN_PASSWORD` and
+`ADMIN_TOTP_SECRET`, checked in `require_admin`. Rotating either invalidates
+every admin token issued under the old one, which matters because rotating the
+admin password is exactly what you do when you suspect one leaked.
+
+A token minted before #704 carries no claim, which reads as 0 — the value the
+migration gives every existing row. Deploying it therefore signed nobody out.
+
 ### Authorisation
 
 Every athlete-facing route lives under `/users/me` and every CRUD call is scoped
@@ -232,6 +259,25 @@ an Authelia portal session *without ever seeing a password* — goes through it
 too. That endpoint is currently unreachable, but by routing accident rather than
 design.
 
+### Why revocation counts rather than timestamps
+
+The obvious design is a "sessions valid from" timestamp compared against the
+token's `iat`. It does not survive contact with the resolution of `iat`, which
+is one second. A token minted in the same second as a revocation has to be
+either accepted — leaving the revocation a hole — or rejected, which can fail
+the legitimate re-login that immediately follows. Both answers are wrong, and
+which one bites you depends on sub-second timing.
+
+An integer has no such edge: it changes or it does not. It needs no clock, no
+skew allowance, and it reads back as "this account has been signed out
+everywhere N times". The counter is not a secret — a forged token still has to
+be signed — so it only has to *change*, never to be unguessable.
+
+For the same reason revocation is not implemented as a deny list of `jti`
+values: that needs a table, an expiry sweep, and a lookup per request, to buy
+per-token revocation the app has no use for. The token already dies with the
+tab.
+
 ### Why the Authelia config is mounted read-only
 
 Authelia's entrypoint chowns `/config` to the user it runs as (root) on **every
@@ -357,6 +403,20 @@ ls -lan authelia/users_database.yml                    # owner must match
 docker compose logs --since 5m backend | grep -i warning
 ```
 
+### If a session is compromised
+
+In rough order of reach, so stop at the first one that covers the case:
+
+| Suspicion | Action |
+|---|---|
+| One athlete's token | admin panel, the revoke button on their row — or `POST /api/v1/admin/users/{id}/revoke-sessions` with an admin token. They can do it themselves from settings if they can still sign in. |
+| An admin token | rotate `ADMIN_PASSWORD` in the ops `production` environment and deploy. Every issued admin token stops verifying, because they are bound to it (#704). |
+| The signing key itself | rotate `JWT_SECRET`. Signs out every athlete and re-keys the captcha and TOTP-challenge HMACs, which derive from it. |
+
+A password changed directly in `authelia/users_database.yml` invalidates
+nothing on its own — the app's tokens know nothing about that file. Revoke the
+athlete's sessions in the same sitting.
+
 ---
 
 ## Known limitations
@@ -364,11 +424,20 @@ docker compose logs --since 5m backend | grep -i warning
 Recorded because a maintainer needs them, and because they are visible in the
 code anyway.
 
-**JWT has no revocation.** Tokens are valid for seven days and carry no `jti`.
-Logging out or changing a password does not invalidate one already issued, and
-enabling TOTP does not either. `get_current_user` re-reads the user on every
-request, so a *deleted* account loses access immediately. Rotating `JWT_SECRET`
-invalidates everything at once.
+**Revocation is per account, not per session.** Closed in #704, but with
+edges worth knowing. There is no "sign this one device out" — the counter is on
+the user row, so every revocation takes all of them, the caller included.
+Nothing revokes *automatically*: enrolling the second factor drops trusted
+devices but leaves sessions alone, on the grounds that it would sign the
+athlete out in the middle of securing their account, and the explicit button is
+right there. And the token is still valid for seven days if nobody presses
+anything.
+
+**Revocation does not reach the Authelia header path.** `get_current_user`
+authenticates on `Remote-*` headers before it looks at a token, so a session
+arriving that way has no generation to check. Unreachable today — the
+forward-auth middlewares are attached to no router (#696) — and something that
+would need its own answer before that changed.
 
 **Rate limits are per process.** Windows live in module memory, so with N
 replicas each key gets N times the allowance. This degrades gracefully for the
@@ -405,3 +474,5 @@ at them rather than repeating them.
 | #693 | BYOK bypassed by the `.fit` upload routes |
 | #694 | a deploy silently reverting a spend control |
 | #696 | Authelia's entrypoint re-owning the shared config mount |
+| #700 | the deployment contract as a checked-in manifest |
+| #704 | making an issued JWT revocable |

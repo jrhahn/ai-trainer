@@ -1,9 +1,12 @@
 """Password hashing, JWT creation/verification, and FastAPI auth dependency."""
 
+import hashlib
+import hmac
 import logging
 import os
 import secrets
 import warnings
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -168,29 +171,28 @@ def password_needs_rehash(hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def create_access_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
-    payload = {"sub": user_id, "exp": expire}
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+GENERATION_CLAIM = "gen"
+"""Which generation of the account's sessions this token belongs to (#704)."""
+
+ADMIN_CREDENTIAL_CLAIM = "cred"
+"""Which admin credentials this token was issued against (#704)."""
+
+SESSION_REVOKED_DETAIL = "Session has been signed out. Please sign in again."
+ADMIN_SESSION_STALE_DETAIL = "Admin credentials changed. Sign in again."
 
 
-def create_admin_token() -> str:
-    """Return a short-lived JWT that grants admin panel access."""
-    expire = datetime.now(timezone.utc) + timedelta(hours=2)
-    payload = {"sub": "admin", "role": "admin", "exp": expire}
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+@dataclass(frozen=True)
+class AccessTokenClaims:
+    """What an athlete's access token asserts, once the signature has held."""
+
+    user_id: str
+    token_generation: int
 
 
-def decode_token(token: str) -> str:
-    """Return user_id or raise HTTP 401."""
+def _decode(token: str) -> dict:
+    """Verify the signature and expiry, or raise 401. Says nothing about revocation."""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id: str | None = payload.get("sub")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-            )
-        return user_id
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
@@ -199,6 +201,90 @@ def decode_token(token: str) -> str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
+
+
+def create_access_token(user_id: str, *, token_generation: int = 0) -> str:
+    """Mint an access token for *user_id*, stamped with its session generation.
+
+    Pass the user's current ``token_generation``. Omitting it stamps the token
+    with 0, which is right for a user who has never revoked and wrong — in the
+    safe direction — for one who has: ``get_current_user`` refuses it at once,
+    rather than handing out a token the revocation cannot reach (#704).
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    payload = {"sub": user_id, "exp": expire, GENERATION_CLAIM: token_generation}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def admin_credential_fingerprint() -> str:
+    """A short HMAC over the admin credentials, as they stand right now.
+
+    The admin panel has no user row, so there is no counter to bump and no
+    ``token_generation`` to compare against (#704). Binding the token to the
+    credentials gives the same property by another route: rotating
+    ``ADMIN_PASSWORD`` or ``ADMIN_TOTP_SECRET`` changes this value, and every
+    admin token issued under the old one stops verifying.
+
+    That is the sequence that matters — rotating the admin password is exactly
+    what an operator does when they suspect a token leaked, and until now it
+    left the leaked token working for its full two hours.
+
+    Keyed with ``JWT_SECRET`` so the digest cannot be recomputed from a guessed
+    password, and truncated because 128 bits of a SHA-256 HMAC is already far
+    more than a two-hour token needs.
+    """
+    material = "\x00".join((settings.admin_password, settings.admin_totp_secret))
+    digest = hmac.new(
+        JWT_SECRET.encode("utf-8"), material.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return digest[:32]
+
+
+def create_admin_token() -> str:
+    """Return a short-lived JWT that grants admin panel access."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=2)
+    payload = {
+        "sub": "admin",
+        "role": "admin",
+        "exp": expire,
+        ADMIN_CREDENTIAL_CLAIM: admin_credential_fingerprint(),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def read_access_token(token: str) -> AccessTokenClaims:
+    """Return the claims of a well-formed access token, or raise 401.
+
+    The generation is read but not judged here — that needs the user row, and
+    the only place that has one is ``get_current_user``. Nothing else should
+    authenticate on the strength of this function alone.
+    """
+    payload = _decode(token)
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+
+    generation = payload.get(GENERATION_CLAIM, 0)
+    # ``bool`` is an ``int`` in Python, and a token claiming ``true`` would
+    # otherwise compare equal to generation 1.
+    if isinstance(generation, bool) or not isinstance(generation, int):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+
+    return AccessTokenClaims(user_id=user_id, token_generation=generation)
+
+
+def decode_token(token: str) -> str:
+    """Return the user id a token names, or raise HTTP 401.
+
+    Identity only: a token revoked by ``/auth/sessions/revoke`` still decodes
+    here. Authenticate with ``get_current_user``, which also checks the
+    generation.
+    """
+    return read_access_token(token).user_id
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +297,18 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> models.User:
+    """The only place a bearer token becomes an authenticated athlete.
+
+    The generation check lives here rather than in ``read_access_token``
+    because this is the function that holds the user row — and it already
+    loaded it, which is why making tokens revocable costs no extra query
+    (#704).
+
+    The Authelia branch above it authenticates on headers and never looks at a
+    token, so revocation does not reach it. That path is unreachable today (the
+    forward-auth middlewares are attached to no router, #696) and would need
+    its own answer if it ever became live.
+    """
     if AUTHELIA_AUTH_ENABLED:
         authelia_user = await _get_or_create_authelia_user(request, db)
         if authelia_user is not None:
@@ -220,11 +318,18 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
         )
-    user_id = decode_token(credentials.credentials)
-    user = await crud.get_user_by_id(db, user_id)
+    claims = read_access_token(credentials.credentials)
+    user = await crud.get_user_by_id(db, claims.user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
+    if claims.token_generation != user.token_generation:
+        # Either the account signed out everywhere, or an operator revoked it.
+        # 401 and not 403: the frontend tears the session down on a 401 with a
+        # token, which is exactly the right response to this.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=SESSION_REVOKED_DETAIL
         )
     return user
 
@@ -237,21 +342,20 @@ def require_admin(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
         )
-    try:
-        payload = jwt.decode(
-            credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
-        )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
+    payload = _decode(credentials.credentials)
     if payload.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+
+    # Checked after the role so a plain athlete token still gets the 403 that
+    # names the actual problem.
+    provided = payload.get(ADMIN_CREDENTIAL_CLAIM)
+    if not isinstance(provided, str) or not secrets.compare_digest(
+        provided, admin_credential_fingerprint()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=ADMIN_SESSION_STALE_DETAIL
         )
 
 

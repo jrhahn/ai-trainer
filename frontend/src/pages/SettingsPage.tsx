@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
+import SessionSettings from '../components/SessionSettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import MotivationModelSettings from '../components/MotivationModelSettings'
 import AthleteModelSettings from '../components/AthleteModelSettings'
@@ -865,6 +866,9 @@ export default function SettingsPage() {
       <AIKeySettings />
 
       <TotpSettings />
+
+      {/* Ending sessions that are already signed in (#704) */}
+      <SessionSettings />
 
       {/* Import historical coach conversations */}
       <ConversationImportSettings />
