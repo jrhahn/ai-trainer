@@ -6,46 +6,36 @@
  * you cannot reach: a token copied off a shared computer, or a browser left
  * signed in somewhere you no longer have.
  */
-import { apiFetch, AUTHELIA_URL } from './api'
+import { apiFetch } from './api'
 
 /**
- * Where to send the browser so Authelia's own session ends too, or null.
- *
- * Authelia is the user store here, and it keeps a session cookie of its own on
- * the parent domain. Dropping only the app token would leave that standing —
- * which matters most for the one control that promises *every* session.
- *
- * `rd` is the part that was missing. Without it, Authelia logs the user out and
- * leaves them sitting on `auth.<domain>`, a portal that cannot sign them in to
- * this app at all: forward-auth is attached to no router (#696), so the app's
- * own login page is the only way back in. Landing there looks like being
- * dumped somewhere broken, because it is.
- *
- * The return target comes from `location.origin` rather than a constant: two
- * domains are configured in `authelia/configuration.yml`, and Authelia rejects
- * an `rd` outside the cookie domain it issued the session for. Using whichever
- * domain the user is actually on is correct for both.
- */
-export function autheliaLogoutUrl(
-  returnTo: string = typeof window === 'undefined' ? '' : window.location.origin
-): string | null {
-  if (!AUTHELIA_URL) return null
-  return `${AUTHELIA_URL}/logout?rd=${encodeURIComponent(returnTo)}`
-}
-
-/**
- * End the session in this browser: drop the app token, then Authelia's cookie.
+ * End the session in this browser: drop the app token. That is the whole of it.
  *
  * The one definition of "sign out", shared by the nav, the Account card and
- * "sign out everywhere". Three call sites spelling it out separately is how one
- * of them ends up forgetting half of it.
+ * "sign out everywhere", so that three call sites cannot drift apart.
+ *
+ * **There is deliberately no Authelia logout here, and that is the fix.** Both
+ * sign-out buttons used to navigate to `${AUTHELIA_URL}/logout`, on the belief
+ * that Authelia holds a session of its own that has to be ended too. It does
+ * not — not for an app user. Sign-in goes through `/auth/login`, which reads
+ * `users_database.yml` directly and never touches Authelia's portal (#324), so
+ * no Authelia session is ever created. The portal's logout had nothing to end,
+ * so it did nothing and left the athlete parked on `auth.<domain>`: a page that
+ * cannot sign them back in, because forward-auth is attached to no router
+ * (#696).
+ *
+ * Adding `?rd=` did not help, which is what proved the diagnosis — Authelia
+ * logged *nothing at all* for the attempt, because the SPA only performs the
+ * return redirect after a logout it actually carried out. The navigation was
+ * never the problem; going there at all was.
+ *
+ * If forward-auth is ever wired up, Authelia *will* hold the session and this
+ * becomes wrong in the other direction. That is the moment to bring the logout
+ * call back — along with `/auth/session` and the probe in `App.tsx`, which
+ * belong to the same dormant design.
  */
 export function endSession(clearToken: () => void): void {
   clearToken()
-  const url = autheliaLogoutUrl()
-  if (url) {
-    window.location.href = url
-  }
 }
 
 export interface SessionRevokeResult {
