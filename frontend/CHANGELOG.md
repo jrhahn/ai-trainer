@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Sign out everywhere" in settings** (`src/components/SessionSettings.tsx`,
+  `src/services/sessions.ts`, `src/pages/SettingsPage.tsx`, #704) — ends every
+  session for the account, including the browser it is pressed in, after
+  confirming the password. Kept as its own card rather than folded into the
+  two-factor panel: that one is about proving who you are next time, this one is
+  about ending access already granted, and someone looking for "my session
+  leaked, make it stop" should not have to read a 2FA panel to find it.
+
+  The success path logs this browser out, because the request really does
+  invalidate the token it was made with. Staying on the page would leave a
+  session the server has already refused, and every later call would 401.
+
+- **Revoke an athlete's sessions from the admin panel**
+  (`src/pages/AdminPage.tsx`, #704) — a per-row action for the cases the
+  athlete's own button cannot cover, since that one needs their password. A
+  `confirm()` rather than a modal: unlike deletion this is recoverable, so the
+  dialog is there to stop a misclick on the wrong row.
+
 - **Two-factor sign-in and setup** (`src/pages/LoginPage.tsx`,
   `src/components/TotpSettings.tsx`, `src/services/totp.ts`,
   `src/services/auth.ts`, `src/pages/AdminPage.tsx`, #688) — the login form

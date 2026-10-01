@@ -94,7 +94,19 @@ describe('planForRide', () => {
 
 describe('TrainingCalendar', () => {
   it('shows both sessions of a two-a-day', () => {
-    useAppStore.setState({ trainingPlan: [AM, PM], rideMetricsHistory: [] })
+    // The calendar opens on the *current* month, so a session has to be dated
+    // into it to be rendered at all. The fixed `DATE` above is fine for the
+    // `planForRide` cases, which never look at a clock; using it here made this
+    // test pass for the fortnight after it was written and fail on 1 October.
+    const now = new Date()
+    const midMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`
+    useAppStore.setState({
+      trainingPlan: [
+        { ...AM, date: midMonth },
+        { ...PM, date: midMonth },
+      ],
+      rideMetricsHistory: [],
+    })
 
     render(
       <MemoryRouter>

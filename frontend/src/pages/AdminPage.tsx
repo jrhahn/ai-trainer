@@ -101,6 +101,8 @@ export default function AdminPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [revokingUserId, setRevokingUserId] = useState<string | null>(null)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
 
   // -------------------------------------------------------------------------
   // Login
@@ -188,6 +190,40 @@ export default function AdminPage() {
       setDeleteError(err instanceof Error ? err.message : 'Delete failed')
     } finally {
       setDeleteLoading(false)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Revoke an athlete's sessions (#704)
+  //
+  // The operator's half of revocation. The athlete's own button needs their
+  // password, which is no help in the cases that bring someone here: a token
+  // reported leaked by somebody who cannot sign in, or a password changed
+  // directly in Authelia's user store — which the app's tokens know nothing
+  // about, so every one of them would otherwise stay valid for a week.
+  // -------------------------------------------------------------------------
+
+  const handleRevokeSessions = async (user: AdminUserStat) => {
+    if (!adminToken) return
+    // A confirm() rather than a modal: unlike deletion this is recoverable —
+    // the athlete signs in again — so the dialog is here to stop a misclick on
+    // the wrong row, not to make anyone think twice.
+    if (!window.confirm(`Sign ${user.email} out of every device?`)) return
+    setRevokingUserId(user.id)
+    setRevokeError(null)
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${user.id}/revoke-sessions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { detail?: string }
+        throw new Error(data.detail ?? 'Could not revoke sessions')
+      }
+    } catch (err) {
+      setRevokeError(err instanceof Error ? err.message : 'Could not revoke sessions')
+    } finally {
+      setRevokingUserId(null)
     }
   }
 
@@ -329,6 +365,9 @@ export default function AdminPage() {
         )}
 
         {/* Error / loading */}
+        {revokeError && (
+          <p className="text-sm text-red-600 mb-4">{revokeError}</p>
+        )}
         {statsError && (
           <p className="text-sm text-red-600 mb-4">{statsError}</p>
         )}
@@ -382,13 +421,27 @@ export default function AdminPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => openDeleteModal(u)}
-                        className="text-gray-300 hover:text-red-500 transition-colors"
-                        title="Delete user"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => void handleRevokeSessions(u)}
+                          disabled={revokingUserId === u.id}
+                          className="text-gray-300 hover:text-amber-600 transition-colors disabled:opacity-40"
+                          /* Not "Sign out …": that is the accessible name of
+                             the panel's own sign-out button in the header, and
+                             two buttons answering to it would be ambiguous to
+                             a screen reader and to a test. */
+                          title="Revoke all sessions"
+                        >
+                          <LogOut size={15} />
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(u)}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          title="Delete user"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -161,6 +161,24 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # What makes an issued JWT revocable (#704). Every access token carries the
+    # value this column had when it was minted; ``get_current_user`` compares
+    # the two and refuses the token when they differ, so bumping this ends
+    # every session for the account at once.
+    #
+    # A counter rather than a "sessions valid from" timestamp: `iat` has
+    # one-second resolution, so a timestamp has to decide what happens to a
+    # token minted inside the same second as the revocation, and both answers
+    # are wrong — reject and a legitimate re-login can fail, accept and the
+    # revocation has a hole. Integers have no such edge, and the value reads
+    # back as "this account has been signed out everywhere N times".
+    #
+    # Nothing secret: a forged token still has to be signed. The counter only
+    # has to *change*, not be unguessable.
+    token_generation: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
+
     # Relationships
     training_plan: Mapped["TrainingPlan | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"

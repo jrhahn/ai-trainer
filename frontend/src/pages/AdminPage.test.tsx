@@ -35,6 +35,9 @@ function mockFetch(totpRequired = false) {
     if (opts?.method === 'DELETE') {
       return { ok: true, json: async () => ({}) } as Response
     }
+    if (url.endsWith('/revoke-sessions')) {
+      return { ok: true, json: async () => ({ tokenGeneration: 1 }) } as Response
+    }
     return { ok: false, json: async () => ({ detail: 'unexpected' }) } as Response
   })
 }
@@ -130,6 +133,58 @@ describe('AdminPage', () => {
     )
     // stats reloaded after delete
     expect(mockApiFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('revokes an athlete’s sessions after a confirmation (#704)', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    render(<AdminPage />)
+    await login()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        'http://api.test/api/v1/admin/users/u1/revoke-sessions',
+        expect.objectContaining({ method: 'POST' })
+      )
+    )
+  })
+
+  it('sends nothing if the confirmation is dismissed', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    render(<AdminPage />)
+    await login()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
+
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/revoke-sessions'),
+      expect.anything()
+    )
+  })
+
+  it('surfaces a failed revocation instead of looking like it worked', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/admin/totp-required')) {
+          return { ok: true, json: async () => ({ required: false }) } as Response
+        }
+        if (url.endsWith('/admin/login')) {
+          return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
+        }
+        return { ok: false, json: async () => ({ detail: 'Admin credentials changed. Sign in again.' }) } as Response
+      })
+    )
+    render(<AdminPage />)
+    await login()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
+
+    expect(
+      await screen.findByText('Admin credentials changed. Sign in again.')
+    ).toBeInTheDocument()
   })
 
   it('closes the delete modal on cancel', async () => {

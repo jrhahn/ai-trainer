@@ -275,3 +275,35 @@ async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db)) ->
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     await db.delete(user)
+
+
+@router.post(
+    "/users/{user_id}/revoke-sessions",
+    response_model=schemas.SessionRevokeResponse,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_revoke_user_sessions(
+    user_id: str, db: AsyncSession = Depends(get_db)
+) -> schemas.SessionRevokeResponse:
+    """End every session for one athlete, without touching their account (#704).
+
+    The operator's half of revocation. The athlete's own button needs their
+    password, which is no use in the two cases that actually bring an operator
+    here: a token reported leaked by someone who cannot log in, and a password
+    changed directly in Authelia's user store — which, because the store is a
+    file on the host and the app's JWTs know nothing about it, otherwise leaves
+    every issued token working for its full seven days.
+
+    Deliberately not paired with "and now reset their password": that cannot be
+    done from here anyway, and an endpoint that both locks someone out and
+    changes their credentials is a worse thing to leave behind one shared
+    password than one that only ends sessions.
+    """
+    _admin_enabled()
+    user = await db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    generation = await crud.revoke_user_tokens(db, user_id)
+    await db.commit()
+    return schemas.SessionRevokeResponse(token_generation=generation)
