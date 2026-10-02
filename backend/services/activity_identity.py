@@ -86,6 +86,35 @@ def training_sport(sport_type: str | None) -> str | None:
     return None if family == UNREADABLE_FAMILY else family
 
 
+# Provider labels that name no sport at all. Strava's "Workout" is an explicit
+# catch-all and intervals.icu uses "Other" the same way, so neither is evidence
+# about what the session was. A steady 300 W hour recorded under one of these is
+# a bike whatever the label says, and the power model is entitled to say so.
+_UNSPECIFIC_SPORT_LABELS = frozenset({"workout", "other", "training", "activity"})
+
+
+def power_model_applies(sport_type: str | None) -> bool:
+    """Whether watts from this sport mean what the cycling power model assumes.
+
+    The one gate every power-derived statement is meant to pass (#711): FTP and
+    its power–duration envelope, watt zones, intensity factor, cycling TSS, the
+    interval classifier. All of them are calibrated against cycling FTP, and a
+    number they produce for another sport is not approximate, it is about a
+    different quantity — running watts are real and have nothing to do with the
+    threshold the zones are cut from.
+
+    Deliberately stricter than ``non_cycling_classification`` is permissive:
+    power is withheld only when the provider *affirmatively named* a sport whose
+    watts are not cycling watts. A missing, unreadable or catch-all label is
+    evidence of nothing, so the power model still gets to answer — which is also
+    what keeps "has a power stream" from quietly becoming the sport test again.
+    """
+    normalized = re.sub(r"[^a-z0-9]", "", normalize_activity_text(sport_type))
+    if not normalized or normalized in _UNSPECIFIC_SPORT_LABELS:
+        return True
+    return activity_family(sport_type) == CYCLING_FAMILY
+
+
 def non_cycling_classification(sport_type: str | None) -> tuple[str, str, str] | None:
     """Return ``(ride_purpose, confidence, reason)`` for a non-cycling activity.
 

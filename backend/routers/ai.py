@@ -458,8 +458,16 @@ async def _auto_rate_ride(
     Returns the coach note string, or None when there is insufficient data.
     """
     try:
-        stream_delta = compare_planned_vs_actual(plan_day, streams, ftp=ftp)
-        ride_analysis = build_ride_analysis(streams, ftp) if ftp else None
+        # The planned sport decides whether watts mean anything here (#711): the
+        # streams belong to the session being rated, so a planned run's footpod
+        # power must not be read against the athlete's cycling FTP.
+        sport = schemas.day_sport(plan_day)
+        stream_delta = compare_planned_vs_actual(
+            plan_day, streams, ftp=ftp, sport_type=sport
+        )
+        ride_analysis = (
+            build_ride_analysis(streams, ftp, sport_type=sport) if ftp else None
+        )
         result = await ai_service.rate_completed_workout(
             plan_day,
             profile,
@@ -1551,6 +1559,7 @@ async def rate_workout(
                     body.day.model_dump(by_alias=True),
                     streams,
                     ftp=ftp,
+                    sport_type=body.day.sport,
                 )
         except HTTPException as exc:
             logger.warning(

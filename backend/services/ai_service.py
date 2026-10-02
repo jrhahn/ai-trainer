@@ -20,6 +20,7 @@ from pydantic import ValidationError
 import schemas
 
 from . import metrics, token_accounting
+from .activity_identity import power_model_applies
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -397,50 +398,70 @@ async def analyse_strava_activities(
     user_ftp: int | None = None,
     timezone_name: str | None = None,
 ) -> dict:
+    # The batch's primary sport, which is what the prose is written about.
     sport_type = _primary_sport_type(activities, fallback=sport_type)
-    is_running = sport_type.lower() in ("running", "run")
 
     # --- Algorithmic computation from per-activity stream data ---
     computed_ftp: int | None = None
     computed_hr_zones: dict | None = None
     ride_analyses: dict[str, dict] = {}  # activity_id -> per-activity analysis
 
-    if streams_by_id:
-        raw_ftp, _raw_threshold_hr = compute_ftp_from_streams(
-            streams_by_id, max_heart_rate
+    # Which sport each activity in the batch was. One verdict for the whole
+    # batch is the right shape for the prose and the wrong shape for the power
+    # maths: a batch of nine rides and one run read as "cycling", so the run's
+    # watts joined the FTP envelope — and a batch that was mostly runs read as
+    # "running", so its rides got no power analysis at all (#711).
+    sport_by_id = {
+        str(activity.get("id")): (
+            activity.get("sportType")
+            or activity.get("sport_type")
+            or activity.get("type")
         )
-        # Skip power-based FTP for running — no watts stream expected
-        if not is_running:
-            computed_ftp = raw_ftp
+        for activity in activities
+        if activity.get("id") is not None
+    }
+
+    if streams_by_id:
+        computed_ftp, _raw_threshold_hr = compute_ftp_from_streams(
+            streams_by_id, max_heart_rate, sport_by_id=sport_by_id
+        )
 
         # --- Per-activity analysis: category + interval detection + HR drift ---
-        # Only meaningful for cycling where power streams are available.
-        if not is_running:
-            ftp_for_analysis = float(computed_ftp) if computed_ftp else None
-            if ftp_for_analysis is None:
-                # Rough proxy: compute global average power across all activities with power data
-                all_avg_watts = [
-                    a.get("averageWatts") or a.get("average_watts") for a in activities
-                ]
-                valid = [w for w in all_avg_watts if w and w > 0]
-                if valid:
-                    ftp_for_analysis = (
-                        float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
+        ftp_for_analysis = float(computed_ftp) if computed_ftp else None
+        if ftp_for_analysis is None:
+            # Rough proxy: the average power across the activities the power
+            # model applies to. Averaging a run's watts in here moved the proxy
+            # threshold every later classification was measured against.
+            all_avg_watts = [
+                activity.get("averageWatts") or activity.get("average_watts")
+                for activity in activities
+                if power_model_applies(
+                    activity.get("sportType")
+                    or activity.get("sport_type")
+                    or activity.get("type")
+                )
+            ]
+            valid = [w for w in all_avg_watts if w and w > 0]
+            if valid:
+                ftp_for_analysis = (
+                    float(sum(valid) / len(valid)) * AVG_POWER_TO_FTP_RATIO
+                )
+        if ftp_for_analysis and ftp_for_analysis > 0:
+            for act_id, streams in streams_by_id.items():
+                analysis = build_ride_analysis(
+                    streams, ftp_for_analysis, sport_type=sport_by_id.get(act_id)
+                )
+                if analysis:
+                    # Find the matching activity name for context
+                    act_name = next(
+                        (
+                            a.get("name", act_id)
+                            for a in activities
+                            if str(a.get("id")) == act_id
+                        ),
+                        act_id,
                     )
-            if ftp_for_analysis and ftp_for_analysis > 0:
-                for act_id, streams in streams_by_id.items():
-                    analysis = build_ride_analysis(streams, ftp_for_analysis)
-                    if analysis:
-                        # Find the matching activity name for context
-                        act_name = next(
-                            (
-                                a.get("name", act_id)
-                                for a in activities
-                                if str(a.get("id")) == act_id
-                            ),
-                            act_id,
-                        )
-                        ride_analyses[act_name] = analysis
+                    ride_analyses[act_name] = analysis
 
     if max_heart_rate:
         computed_hr_zones = compute_hr_zones(max_heart_rate)
@@ -474,8 +495,12 @@ async def analyse_strava_activities(
     # ground zone claims in measured time rather than guessing (#468). Keyed by
     # activity id to match the labeled power block.
     time_in_zone_by_id: dict[str, dict] = {}
-    if streams_by_id and not is_running and user_ftp and user_ftp > 0:
+    if streams_by_id and user_ftp and user_ftp > 0:
         for act_id, streams in streams_by_id.items():
+            # Zones are cut from a cycling FTP, so time in them is a cycling
+            # statement — per activity, not per batch (#711).
+            if not power_model_applies(sport_by_id.get(act_id)):
+                continue
             watts = streams.get("watts", {}).get("data", [])
             time_data = streams.get("time", {}).get("data", [])
             tiz = _time_in_power_zones(watts, time_data, float(user_ftp))
@@ -525,12 +550,14 @@ async def analyse_fit_activity(
     - Running: FTP is set to ``null``.
     Threshold HR is never estimated — only the user-entered value is used.
     """
-    is_running = sport_type.lower() in ("running", "run")
+    # Not "is it running": a reported watt number from any sport the cycling
+    # power model does not describe is not a threshold proxy (#711).
+    power_applies = power_model_applies(sport_type)
 
     computed_ftp: int | None = None
     computed_hr_zones: dict | None = None
 
-    if not is_running and avg_power and avg_power > 0:
+    if power_applies and avg_power and avg_power > 0:
         computed_ftp = round(avg_power * AVG_POWER_TO_FTP_RATIO)
 
     if max_heart_rate and max_heart_rate > 0:
@@ -544,7 +571,7 @@ async def analyse_fit_activity(
     }
 
     computed_section = analyse_activities_computed_section(
-        computed_ftp if not is_running else None,
+        computed_ftp,
         max_heart_rate,
         computed_hr_zones,
     )
