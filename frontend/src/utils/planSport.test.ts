@@ -53,8 +53,20 @@ describe('naming', () => {
     expect(planSportNoun({ sport: 'strength' })).toBe('strength session')
   })
 
+  it('labels every sport the plan editor offers', () => {
+    expect(planSportLabel(PLAN_SPORT_CYCLING)).toBe('Cycling')
+    expect(planSportLabel(PLAN_SPORT_RUNNING)).toBe('Running')
+    expect(planSportLabel(PLAN_SPORT_STRENGTH)).toBe('Strength')
+  })
+
   it('labels an unsupported sport rather than hiding it', () => {
     expect(planSportLabel('swim')).toBe('Swim')
+  })
+
+  it('says nothing when there is no sport to name', () => {
+    // Stored plan data routinely has none, so this is a normal input.
     expect(planSportLabel('')).toBe('')
+    expect(planSportLabel(null)).toBe('')
+    expect(planSportLabel(undefined)).toBe('')
   })
 })

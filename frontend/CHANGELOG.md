@@ -22,9 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree — `endurance` and `strength` name a sport, so a planned run used to
   show the athlete a bicycle — and names it in text as well, because an emoji is
   ambiguous at that size. Purposes that mean the same in every sport (intervals,
-  tempo, race, recovery, rest) keep their own icon. The session card on the
-  dashboard gains a matching chip. Cycling stays unlabelled in both: it is what
-  the plan is unless stated, and a chip on every day would be noise.
+  tempo, race, recovery, rest) keep their own icon, and a sport with no icon of
+  its own gets a stopwatch rather than inheriting the bicycle. The session card
+  on the dashboard gains a matching chip. Cycling stays unlabelled in both: it is
+  what the plan is unless stated, and a chip on every day would be noise.
 
 - **"Sign out everywhere" in settings** (`src/components/SessionSettings.tsx`,
   `src/services/sessions.ts`, `src/pages/SettingsPage.tsx`, #704) — ends every

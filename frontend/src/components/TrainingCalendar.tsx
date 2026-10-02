@@ -59,6 +59,16 @@ const sportEmoji: Record<string, string> = {
   [PLAN_SPORT_STRENGTH]: '💪',
 }
 
+/** What to draw for a session in a sport we have no icon for.
+ *
+ * A stopwatch, deliberately: duration is all such a session reliably is, and it
+ * names no sport. Falling back to the workout type's own emoji would put a
+ * bicycle on a planned swim, which is the exact confusion `sessionEmoji` exists
+ * to remove. Reachable through a stored sport outside `PLANNABLE_SPORTS` — the
+ * persist gate keeps an athlete's own edit rather than relabelling it as cycling.
+ */
+const UNKNOWN_SPORT_EMOJI = '⏱️'
+
 /** The emoji for one session, which the sport decides when the type cannot (#710).
  *
  * `endurance` and `strength` name a sport rather than an intent, so a planned run
@@ -67,7 +77,7 @@ const sportEmoji: Record<string, string> = {
  */
 function sessionEmoji(session: TrainingDay): string {
   if (session.workoutType === 'endurance' || session.workoutType === 'strength') {
-    return sportEmoji[planSport(session)] ?? typeEmoji[session.workoutType]
+    return sportEmoji[planSport(session)] ?? UNKNOWN_SPORT_EMOJI
   }
   return typeEmoji[session.workoutType]
 }

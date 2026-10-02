@@ -56,8 +56,13 @@ export function planSportNoun(
   return activityNoun(planSport(day))
 }
 
-/** Display label for a sport, for pickers and badges. */
-export function planSportLabel(sport: string): string {
+/** Display label for a sport, for pickers and badges.
+ *
+ * Accepts a missing value because callers read the sport off stored plan data,
+ * where it is routinely absent — an empty label is the right answer there, not a
+ * crash or the word "undefined".
+ */
+export function planSportLabel(sport: string | null | undefined): string {
   const normalized = (sport ?? '').trim().toLowerCase()
   if (!normalized) return ''
   switch (normalized) {

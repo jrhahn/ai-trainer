@@ -136,6 +136,28 @@ def test_a_sport_the_planner_cannot_write_is_kept_rather_than_relabelled():
     assert schemas.PlanDay.model_validate({"date": DATE, "sport": "Swim"}).sport == "swim"
 
 
+def test_day_sport_reads_every_shape_a_plan_day_arrives_in():
+    """Total over the three shapes, like ``day_slot``: a stored dict, a validated
+    ``PlanDay``, and an ORM-ish object carrying the attribute. Callers hand it
+    whichever they have, and a sport is not something any of them may fail on."""
+    assert schemas.day_sport(schemas.PlanDay.model_validate(_session(sport="run"))) == "running"
+    assert schemas.day_sport({"date": DATE, "sport": "WeightTraining"}) == "strength"
+
+    class _Row:
+        sport = "Run"
+
+    assert schemas.day_sport(_Row()) == "running"
+    # Nothing to read is the cycling session every pre-#710 caller meant.
+    assert schemas.day_sport(object()) == "cycling"
+    assert schemas.day_sport(None) == "cycling"
+
+
+def test_day_sport_accepts_the_provider_spelling_of_the_key():
+    """Ride snapshots and imported-activity dicts spell it ``sportType``."""
+    assert schemas.day_sport({"date": DATE, "sportType": "Run"}) == "running"
+    assert schemas.day_sport({"date": DATE, "sport_type": "Run"}) == "running"
+
+
 def test_a_plan_update_can_change_the_sport_and_omission_leaves_it_alone():
     day = schemas.PlanDay.model_validate(_session(sport="run"))
 

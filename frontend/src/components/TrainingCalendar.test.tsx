@@ -736,6 +736,26 @@ describe('TrainingCalendar', () => {
       expect(screen.queryByText('Cycling')).not.toBeInTheDocument()
     })
 
+    it('draws no bicycle for a sport it has no icon for', () => {
+      // A sport outside the three the planner can write still reaches storage —
+      // the persist gate keeps an athlete's own edit rather than relabelling it
+      // as cycling — and drawing a bike for it is the bug this all fixes.
+      const date = monthDate(0, 18)
+      useAppStore.setState({
+        trainingPlan: [{ ...makeDay(date, 'endurance'), sport: 'swim' }],
+      })
+
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.textContent).not.toContain('🚴')
+      expect(screen.getByText('Swim')).toBeInTheDocument()
+    })
+
     it('keeps a workout type that means the same in every sport', () => {
       // "intervals" is a purpose, not a sport: a run with intervals is still ⚡.
       const date = monthDate(0, 17)
