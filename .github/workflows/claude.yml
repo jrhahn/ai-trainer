@@ -1,0 +1,77 @@
+name: Claude
+
+# Claude Code as a review bot, mirroring the GitLab bot in ci-instance.
+#
+# This repository is PUBLIC, which constrains the design in two ways:
+#
+#   * Secrets are not available to workflows triggered by a pull request from a
+#     fork. The auto-review job therefore skips forks instead of failing on an
+#     empty token. Reviewing an outside contribution means asking for it with
+#     "@claude" from an account that has write access.
+#   * `pull_request_target` is deliberately not used. It would run with secrets
+#     in the base repository's context, and any step that checks out the fork's
+#     head would hand the token to code we have not read.
+#
+# Claude comments; it does not push. `contents: read` is what enforces that,
+# not the prompt. Granting `contents: write` would let anything that reaches
+# the model through PR or issue text steer a commit, so it stays read-only
+# until there is a reason to revisit that.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  # "@claude ..." in a PR or issue comment, from someone with write access.
+  # The author_association check duplicates a permission check the action also
+  # makes; doing it here means a drive-by mention never starts a billed job.
+  mention:
+    name: Answer @claude
+    if: |
+      github.event_name != 'pull_request' &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+  # Unprompted review when a PR opens. Only for branches in this repository:
+  # a fork PR has no token here, and drafts are skipped so work in progress
+  # does not get reviewed on every push.
+  review:
+    name: Review pull request
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review this pull request. Follow the repository's CLAUDE.md and
+            AGENTS.md. Report correctness bugs, missing test coverage for the
+            behaviour that changed, and anything that contradicts a convention
+            the repository already follows. Skip style nits. If the diff is
+            fine, say so in one line rather than inventing findings.
+          claude_args: '--allowed-tools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*)"'
