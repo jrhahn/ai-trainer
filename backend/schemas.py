@@ -22,7 +22,11 @@ from pydantic import (
 )
 
 from services import ride_purpose_question
-from services.activity_identity import SPORT_CYCLING, training_sport
+from services.activity_identity import (
+    CYCLING_SPORT_TYPES,
+    SPORT_CYCLING,
+    training_sport,
+)
 
 if TYPE_CHECKING:
     import models
@@ -1256,25 +1260,20 @@ class ExtractAthleteFactsResponse(CamelModel):
 # AI endpoints
 # ---------------------------------------------------------------------------
 
-_CYCLING_ACTIVITY_TYPES = {
-    "ride",
-    "virtualride",
-    "mountainbikeride",
-    "gravelride",
-    "ebikeride",
-    "emountainbikeride",
-    "handcycle",
-    "velomobile",
-}
-
-
 def _normalise_strava_sport_type(value: Optional[str]) -> Optional[str]:
+    """Collapse every provider name for a bike ride onto ``"cycling"``.
+
+    The vocabulary is shared with ``activity_identity.power_model_applies``,
+    which has to recognise the same set: a handcycle is a bike ride whether it
+    is being normalised at the import boundary or asked whether watts mean
+    anything for it.
+    """
     if value is None:
         return None
     stripped = str(value).strip()
     if not stripped:
         return None
-    if stripped.replace("_", "").replace("-", "").lower() in _CYCLING_ACTIVITY_TYPES:
+    if stripped.replace("_", "").replace("-", "").lower() in CYCLING_SPORT_TYPES:
         return "cycling"
     return stripped
 

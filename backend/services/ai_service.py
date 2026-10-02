@@ -20,7 +20,7 @@ from pydantic import ValidationError
 import schemas
 
 from . import metrics, token_accounting
-from .activity_identity import power_model_applies
+from .activity_identity import activity_sport_type, power_model_applies
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -344,13 +344,13 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
 
 
 def _activity_sport_type(activity: dict) -> str:
-    value = (
-        activity.get("sportType")
-        or activity.get("sport_type")
-        or activity.get("type")
-        or "cycling"
-    )
-    return str(value).strip() or "cycling"
+    """The activity's sport, defaulting to this app's own sport when it has none.
+
+    Which key holds it is ``activity_identity.activity_sport_type``'s business —
+    shared so the gates that read a sport cannot drift apart on which spelling
+    they trust (#711).
+    """
+    return activity_sport_type(activity) or "cycling"
 
 
 def _primary_sport_type(activities: list[dict], fallback: str = "cycling") -> str:
@@ -411,12 +411,14 @@ async def analyse_strava_activities(
     # maths: a batch of nine rides and one run read as "cycling", so the run's
     # watts joined the FTP envelope — and a batch that was mostly runs read as
     # "running", so its rides got no power analysis at all (#711).
+    #
+    # Read through ``_activity_sport_type``, so a sport-less activity resolves
+    # to the same thing here as it does in ``_primary_sport_type`` above. Not to
+    # the batch verdict: that is ``"mixed"`` for a mixed batch, which names no
+    # sport and would have withheld power from every activity that did not
+    # state its own.
     sport_by_id = {
-        str(activity.get("id")): (
-            activity.get("sportType")
-            or activity.get("sport_type")
-            or activity.get("type")
-        )
+        str(activity.get("id")): _activity_sport_type(activity)
         for activity in activities
         if activity.get("id") is not None
     }
@@ -435,11 +437,7 @@ async def analyse_strava_activities(
             all_avg_watts = [
                 activity.get("averageWatts") or activity.get("average_watts")
                 for activity in activities
-                if power_model_applies(
-                    activity.get("sportType")
-                    or activity.get("sport_type")
-                    or activity.get("type")
-                )
+                if power_model_applies(_activity_sport_type(activity))
             ]
             valid = [w for w in all_avg_watts if w and w > 0]
             if valid:

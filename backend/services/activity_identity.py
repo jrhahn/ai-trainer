@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
+from typing import Any
 
 CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS = 10 * 60
@@ -35,6 +37,51 @@ def activity_family(sport_type: str | None) -> str:
 # unreadable — that is a genuine unknown, not a statement that it was not a ride.
 CYCLING_FAMILY = "cycling"
 UNREADABLE_FAMILY = "activity"
+
+# Every provider sport type that *is* a bike ride, for the ones whose name does
+# not contain "ride", "bike" or "cycling" and so are invisible to
+# ``activity_family``'s substring test. A handcycle is a bicycle with the cranks
+# in a different place: the power meter, the threshold and the zones all mean
+# exactly what they mean on any other bike, and withholding the power model from
+# one would be the opposite of this gate's purpose.
+CYCLING_SPORT_TYPES = frozenset(
+    {
+        "ride",
+        "roadride",
+        "virtualride",
+        "indoorride",
+        "mountainbikeride",
+        "emountainbikeride",
+        "mtb",
+        "gravelride",
+        "gravel",
+        "cyclocross",
+        "ebikeride",
+        "handcycle",
+        "velomobile",
+        "cycling",
+    }
+)
+
+
+def activity_sport_type(activity: Mapping[str, Any]) -> str | None:
+    """The sport an activity payload claims, or ``None`` when it claims none.
+
+    Provider payloads reach us in three spellings depending on the path they
+    came in by — camelCase from our own schemas, snake_case from the raw Strava
+    JSON, and ``type`` from Strava's older field. Read in one place so the
+    callers that gate on sport cannot drift apart on *which* key they trust.
+    ``None`` rather than a default, so each caller decides what an absent sport
+    means for its own question.
+    """
+    value = (
+        activity.get("sportType")
+        or activity.get("sport_type")
+        or activity.get("type")
+    )
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
 
 # The sports a training plan can prescribe (#710). Coarser than
 # ``activity_family`` on purpose: the planner, the load model and the ride↔plan
@@ -111,6 +158,8 @@ def power_model_applies(sport_type: str | None) -> bool:
     """
     normalized = re.sub(r"[^a-z0-9]", "", normalize_activity_text(sport_type))
     if not normalized or normalized in _UNSPECIFIC_SPORT_LABELS:
+        return True
+    if normalized in CYCLING_SPORT_TYPES:
         return True
     return activity_family(sport_type) == CYCLING_FAMILY
 

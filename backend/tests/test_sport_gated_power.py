@@ -17,8 +17,12 @@ from __future__ import annotations
 
 import pytest
 
-from services import analysis, prompts
-from services.activity_identity import power_model_applies
+import crud
+import models
+import schemas
+from services import ai_service, analysis, prompts, ride_matching
+from services.activity_identity import CYCLING_SPORT_TYPES, power_model_applies
+from tests.conftest import TestSessionLocal
 
 DATE = "2026-10-02"
 FTP = 320.0
@@ -50,6 +54,27 @@ def test_a_label_that_names_no_sport_keeps_the_power_model(sport_type):
     activity was not a ride. Strava's "Workout" is an explicit catch-all, so a
     steady 300 W hour recorded under it is a bike whatever the label says."""
     assert power_model_applies(sport_type) is True
+
+
+@pytest.mark.parametrize(
+    "sport_type",
+    ["Handcycle", "Velomobile", "handcycle", "virtual_ride", "e-bike-ride"],
+)
+def test_a_bike_whose_name_says_neither_ride_nor_bike_keeps_the_power_model(sport_type):
+    """``activity_family`` finds cycling by substring, which "Handcycle" and
+    "Velomobile" do not contain. A handcycle is a bicycle with the cranks in a
+    different place — the power meter, the threshold and the zones all mean
+    exactly what they mean on any other bike, so withholding the power model
+    from one would be the opposite of this gate's purpose."""
+    assert power_model_applies(sport_type) is True
+
+
+def test_the_cycling_vocabulary_is_shared_with_the_import_boundary():
+    """One list, so a sport cannot be a ride when it is normalised on import and
+    not a ride when it is asked whether watts mean anything."""
+    for sport_type in CYCLING_SPORT_TYPES:
+        assert schemas._normalise_strava_sport_type(sport_type) == "cycling"
+        assert power_model_applies(sport_type) is True
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +422,21 @@ def test_a_mixed_batch_keeps_the_zones_it_needs_for_its_rides():
     assert "power zones at FTP 320 W" in user_msg
 
 
+def test_a_sport_less_activity_is_resolved_the_way_the_rest_of_the_module_does():
+    """Not against the batch verdict, which is ``"mixed"`` as soon as the sports
+    differ — a token that names no sport and would have withheld power from
+    every activity in a mixed batch that did not state its own."""
+    activities = [_activity(1, "Ride"), {"id": 2, "name": "No sport", "type": None}]
+
+    # The trap, pinned so it cannot be reintroduced as a "simplification".
+    assert ai_service._primary_sport_type(activities) == "mixed"
+    assert power_model_applies("mixed") is False
+
+    # What the gate actually reads: the same default the prose path uses.
+    assert ai_service._activity_sport_type(activities[1]) == "cycling"
+    assert power_model_applies(ai_service._activity_sport_type(activities[1])) is True
+
+
 def test_a_cycling_batch_keeps_its_power_zone_block():
     user_msg = prompts.analyse_activities_user(
         [_activity(1, "Ride")],
@@ -407,3 +447,150 @@ def test_a_cycling_batch_keeps_its_power_zone_block():
     )
 
     assert "power zones at FTP 320 W" in user_msg
+
+
+# ---------------------------------------------------------------------------
+# The call sites: which sport each one reads
+# ---------------------------------------------------------------------------
+#
+# The gate is only as good as the sport handed to it, and each of these reads it
+# from a different place. A wrong source regresses silently — the analysis still
+# runs, it just answers the cycling question again — so what is pinned here is
+# the *source*, not the arithmetic.
+
+
+def _capture_sport(monkeypatch, module) -> dict:
+    """Record the ``sport_type`` each analysis entry point is called with."""
+    seen: dict = {}
+
+    def fake_compare(planned, streams, ftp=None, sport_type=None):
+        seen["compare"] = sport_type
+        return {}
+
+    def fake_analysis(streams, ftp, sport_type=None):
+        seen["analysis"] = sport_type
+        return {}
+
+    monkeypatch.setattr(module, "compare_planned_vs_actual", fake_compare)
+    monkeypatch.setattr(module, "build_ride_analysis", fake_analysis)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_the_matched_ride_review_reads_the_logged_activitys_sport(monkeypatch):
+    """``review_matched_ride_and_adapt`` has both a planned and a logged sport to
+    hand. The logged one is right: these streams are what the athlete actually
+    did, and #710 makes the two agree before a match is ever made."""
+    seen = _capture_sport(monkeypatch, ride_matching)
+
+    async def fake_rate(*args, **kwargs):
+        return {"feedback": ""}
+
+    monkeypatch.setattr(ride_matching.ai_service, "rate_completed_workout", fake_rate)
+
+    plan_day = {
+        "date": DATE,
+        "sport": "running",
+        "workoutType": "endurance",
+        "durationMinutes": 45,
+    }
+    async with TestSessionLocal() as db:
+        user = models.User(
+            email="matched-review-sport@example.com",
+            name="Rider",
+            hashed_password="x" * 20,
+            is_onboarded=True,
+            bike_type="road",
+            training_goal="general_fitness",
+            fitness_level="intermediate",
+            current_ftp=250,
+            ai_provider="gemini",
+        )
+        db.add(user)
+        await db.flush()
+        ride = await crud.upsert_ride_metric(
+            db,
+            user.id,
+            strava_activity_id=9100,
+            activity_source="intervals",
+            external_activity_id="i9100",
+            activity_date=DATE,
+            sport_type="Run",
+            duration_seconds=2700,
+        )
+        await crud.update_ride_match(
+            db,
+            ride,
+            status=ride_matching.MATCH_AUTO,
+            matched_plan_date=DATE,
+            matched_plan_slot=0,
+            matched_plan_snapshot=plan_day,
+        )
+        await db.commit()
+
+        await ride_matching.review_matched_ride_and_adapt(
+            db,
+            user,
+            ride,
+            [plan_day],
+            provider="gemini",
+            streams=_streams(minutes=45),
+        )
+
+    assert seen["compare"] == "Run"
+    assert seen["analysis"] == "Run"
+
+
+@pytest.mark.asyncio
+async def test_rate_workout_reads_the_planned_sessions_sport(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    """The ``/rate-workout`` path has no logged activity row to ask — only the
+    planned day the athlete is rating, and the id of the activity to fetch."""
+    from unittest.mock import AsyncMock, patch
+
+    from routers import ai as ai_router
+
+    seen = _capture_sport(monkeypatch, ai_router)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        user.strava_token = models.StravaToken(
+            user_id=user.id,
+            access_token="fake-access-token",
+            refresh_token="fake-refresh-token",
+            expires_at=9999999999,
+            athlete_id=12345,
+        )
+        user.current_ftp = 250
+        await db.commit()
+
+    with (
+        patch(
+            "routers.ai.ensure_fresh_strava_token",
+            new=AsyncMock(return_value="fake-token"),
+        ),
+        patch(
+            "routers.ai.fetch_activity_streams",
+            new=AsyncMock(return_value=_streams(minutes=45)),
+        ),
+    ):
+        response = await client.post(
+            "/api/v1/ai/rate-workout",
+            headers=auth_headers,
+            json={
+                "day": {
+                    "date": DATE,
+                    "sport": "run",
+                    "workoutType": "endurance",
+                    "title": "Easy run",
+                    "description": "45 min easy",
+                    "durationMinutes": 45,
+                },
+                "stravaActivityId": 9200,
+            },
+        )
+
+    assert response.status_code == 200
+    # Normalised by the persist gate on the way in, so the gate sees "running".
+    assert seen["compare"] == "running"

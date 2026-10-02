@@ -10,10 +10,15 @@ import json
 from datetime import date
 
 from . import plan_compliance, untrusted_text
-from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
+from .activity_identity import (
+    CYCLING_FAMILY,
+    UNREADABLE_FAMILY,
+    activity_family,
+    activity_sport_type,
+    power_model_applies,
+)
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
-from .activity_identity import power_model_applies
 from .analysis import power_zone_boundaries
 from .dates import (
     activity_date_anchor,
@@ -492,9 +497,7 @@ def activity_power_metrics_block(
         # watts, and presenting them here — as authoritative figures the coach is
         # told to cite verbatim, with an intensity factor against cycling FTP —
         # is how a run came back described as a threshold effort.
-        if not power_model_applies(
-            activity.get("sportType") or activity.get("sport_type") or activity.get("type")
-        ):
+        if not power_model_applies(activity_sport_type(activity)):
             continue
         avg = activity.get("average_watts")
         np = activity.get("weighted_average_watts")
@@ -585,10 +588,7 @@ def analyse_activities_user(
     # of runs with one ride still needs the boundaries to discuss the ride, and a
     # batch of gym sessions was getting watt zones because none of them was a run.
     has_power_sport = any(
-        power_model_applies(
-            activity.get("sportType") or activity.get("sport_type") or activity.get("type")
-        )
-        for activity in activities
+        power_model_applies(activity_sport_type(activity)) for activity in activities
     )
     zones_block = power_zones_block(user_ftp) if has_power_sport else ""
     zone_guidance = (
@@ -3883,6 +3883,11 @@ def refresh_login_summary_user(
     # first is how a strength session got asked what its intervals were (#578).
     _conf = (latest_ride_confidence or "").lower()
     _family = activity_family(latest_ride_sport_type)
+    # Deliberately not ``power_model_applies``, which the two lines below look
+    # like: that one treats a catch-all label ("Workout", "Other") as evidence of
+    # nothing, because a 300 W hour recorded under one is a bike. Here the
+    # question is what to *call* the session to the athlete, and the provider's
+    # own word for it is the best answer available (#711).
     _is_non_cycling = bool(latest_ride_sport_type) and _family not in (
         CYCLING_FAMILY,
         UNREADABLE_FAMILY,

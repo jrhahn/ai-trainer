@@ -171,6 +171,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   batch that was mostly runs read as "running" and its rides got no power
   analysis at all.
 
+  The cycling vocabulary now lives in one place. `activity_family` finds cycling
+  by substring, which `"Handcycle"` and `"Velomobile"` do not contain — so a
+  handcycle would have lost its power model, which is the opposite of the point.
+  `CYCLING_SPORT_TYPES` moved out of `schemas.py` into `activity_identity` and is
+  shared by the import-boundary normalisation and the gate, so a sport cannot be
+  a bike ride in one and not the other.
+
   Historical rows keep whatever they were written with; the gate applies at
   write time and a re-import corrects them. The only rows it can affect are
   non-cycling activities that carried stream or provider power, which the #578

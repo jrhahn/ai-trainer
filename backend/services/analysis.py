@@ -1828,7 +1828,9 @@ def build_ride_analysis(
     duration_seconds = round(_stream_duration_seconds(time_data))
 
     non_cycling = (
-        None if power_model_applies(sport_type) else non_cycling_classification(sport_type)
+        None
+        if power_model_applies(sport_type)
+        else non_cycling_classification(sport_type)
     )
     if non_cycling is not None:
         category, confidence, reason = non_cycling
