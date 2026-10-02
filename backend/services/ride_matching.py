@@ -1052,8 +1052,15 @@ async def review_matched_ride_and_adapt(
     ride_analysis = None
     if streams and ftp > 0:
         try:
-            stream_delta = compare_planned_vs_actual(day_for_rating, streams, ftp=ftp)
-            ride_analysis = build_ride_analysis(streams, ftp)
+            # The logged activity's own sport, not the planned one: these streams
+            # are what the athlete actually did, and #710 guarantees the two
+            # agree anyway before a match is made (#711).
+            stream_delta = compare_planned_vs_actual(
+                day_for_rating, streams, ftp=ftp, sport_type=ride.sport_type
+            )
+            ride_analysis = build_ride_analysis(
+                streams, ftp, sport_type=ride.sport_type
+            )
         except Exception:
             logger.warning("Failed to build planned-vs-actual stream context", exc_info=True)
 

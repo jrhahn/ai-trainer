@@ -132,6 +132,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Every power-derived number is now gated on the sport**
+  (`services/activity_identity.py`, `services/analysis.py`,
+  `services/ai_service.py`, `services/prompts.py`, `services/ride_matching.py`,
+  `routers/ai.py`, #711, epic #709) — FTP and its power–duration envelope, watt
+  zones, intensity factor, cycling TSS and the interval classifier are all
+  calibrated against cycling FTP. Run over another sport they do not produce an
+  approximation, they produce a number about a different quantity: a footpod
+  reports real watts that have nothing to do with the threshold the zones are
+  cut from.
+
+  The gate used to be "does this activity have a power stream", which was never
+  the same question. `activity_identity.power_model_applies()` is the one that
+  gets asked now, and it is deliberately stricter than
+  `non_cycling_classification` is permissive: power is withheld only when the
+  provider *affirmatively named* a sport whose watts are not cycling watts. A
+  missing, unreadable or catch-all label — Strava's "Workout", intervals.icu's
+  "Other" — is evidence of nothing, so a steady 300 W hour recorded under one
+  still gets the power model.
+
+  Gated: the stream recompute, the provider watt summary and the provider
+  interval fallback in `build_ride_metrics_chain`; `perf_signals`, so a run
+  contributes no points to the envelope that FTP inference and the FTP-vs-curve
+  check are read from; `estimate_ftp_over_time` and `compute_ftp_from_streams`,
+  so an estimate over a mixed history is the estimate over its cycling subset;
+  `build_ride_analysis`, which now states the sport instead of classifying its
+  watts; the power half of `compare_planned_vs_actual`, which keeps its HR half
+  because heart rate means the same thing in every sport; and both prompt power
+  blocks.
+
+  **Not** gated: the provider's own *load*. It is the first rung of the load
+  ladder precisely because the provider computed it for the sport it was —
+  intervals.icu's figure for a run is its own run load, not a cycling TSS.
+
+  Three gates moved from per-batch to per-activity. `analyse_strava_activities`
+  decided power questions from the batch's primary sport, so nine rides and one
+  run read as "cycling" and the run's watts joined the FTP envelope, while a
+  batch that was mostly runs read as "running" and its rides got no power
+  analysis at all.
+
+  Removed `routers/ai.py:_auto_rate_ride` along the way. Its last caller went
+  years ago and only the definition was left, so it was the one place the sport
+  gate could not be verified — a path nothing can reach is a path no test can
+  pin.
+
+  The cycling vocabulary now lives in one place. `activity_family` finds cycling
+  by substring, which `"Handcycle"` and `"Velomobile"` do not contain — so a
+  handcycle would have lost its power model, which is the opposite of the point.
+  `CYCLING_SPORT_TYPES` moved out of `schemas.py` into `activity_identity` and is
+  shared by the import-boundary normalisation and the gate, so a sport cannot be
+  a bike ride in one and not the other.
+
+  Historical rows keep whatever they were written with; the gate applies at
+  write time and a re-import corrects them. The only rows it can affect are
+  non-cycling activities that carried stream or provider power, which the #578
+  backfill did not cover — a targeted backfill belongs with the per-sport load
+  model (#712/#713), which has to rebuild the CTL chain anyway.
+
 - **A planned sport and a logged sport have to agree before the two are one
   session** (`services/ride_matching.py`, #710) — `_session_accepts_ride` could
   previously only compare the one thing the old vocabulary stated,

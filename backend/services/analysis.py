@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from services.activity_identity import non_cycling_classification
+from services.activity_identity import non_cycling_classification, power_model_applies
 from services.training_load import format_load, resolve_training_load
 
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
@@ -1655,10 +1655,44 @@ def _detect_intensity_spikes(
     return spikes
 
 
+def _hr_comparison(
+    planned: dict, hr_data: list[float], sample_count: int
+) -> dict:
+    """Actual HR, its drift, and the delta from the planned HR target.
+
+    The sport-independent half of :func:`compare_planned_vs_actual`: heart rate
+    means the same thing on a bike, on the road and in the gym. ``sample_count``
+    is the stream the HR series has to line up with — the power stream when there
+    is one, the time stream otherwise — because a mismatched length means the
+    samples do not correspond and nothing can be read from them.
+    """
+    if not hr_data or len(hr_data) != sample_count:
+        return {}
+    result: dict = {}
+    avg_hr = sum(hr_data) / len(hr_data)
+    result["avg_hr_bpm"] = round(avg_hr)
+
+    drift = compute_hr_drift(hr_data)
+    if drift is not None:
+        result["hr_drift_bpm"] = round(drift * len(hr_data), 1)
+
+    target_hr = planned.get("targetHeartRate")
+    if target_hr and isinstance(target_hr, dict):
+        hr_low = target_hr.get("low") or 0
+        hr_high = target_hr.get("high") or 0
+        if hr_low > 0 and hr_high > 0:
+            result["target_hr_low"] = hr_low
+            result["target_hr_high"] = hr_high
+            hr_mid = (hr_low + hr_high) / 2.0
+            result["avg_hr_delta_pct"] = round((avg_hr - hr_mid) / hr_mid * 100.0, 1)
+    return result
+
+
 def compare_planned_vs_actual(
     planned: dict,
     streams: dict,
     ftp: float | None = None,
+    sport_type: str | None = None,
 ) -> dict:
     """Compare planned workout targets against actual Strava stream data.
 
@@ -1670,6 +1704,10 @@ def compare_planned_vs_actual(
         ftp: The athlete's current FTP in watts (used for time-in-zone
             and zone-relative delta calculations).  When ``None`` the
             time-in-zones field is omitted.
+        sport_type: The activity's sport, when known.  A sport the cycling
+            power model does not describe gets the HR half of this comparison
+            and none of the power half (#711).  Omitting it means "unknown",
+            which keeps the power model and every existing caller unchanged.
 
     Returns:
         A dict with the following keys (all optional — only present when the
@@ -1706,6 +1744,16 @@ def compare_planned_vs_actual(
     watts: list[float] = streams.get("watts", {}).get("data", [])
     hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
     time_data: list[float] = streams.get("time", {}).get("data", [])
+
+    # For a sport the cycling power model does not describe, drop the power half
+    # and report what still means something: heart rate against the planned HR
+    # target (#711). Everything below this line compares watts to a target that
+    # is in watts, which for a run is a comparison between two different
+    # quantities — and the athlete was told they went 18 % over target.
+    if not power_model_applies(sport_type):
+        if not time_data:
+            return {}
+        return _hr_comparison(planned, hr_data, len(time_data))
 
     if not watts or not time_data:
         return {}
@@ -1744,25 +1792,7 @@ def compare_planned_vs_actual(
         result["time_in_zones"] = _time_in_power_zones(watts, time_data, ftp)
 
     # --- HR metrics ---
-    if hr_data and len(hr_data) == len(watts):
-        avg_hr = sum(hr_data) / len(hr_data)
-        result["avg_hr_bpm"] = round(avg_hr)
-
-        drift = compute_hr_drift(hr_data)
-        if drift is not None:
-            result["hr_drift_bpm"] = round(drift * len(hr_data), 1)
-
-        target_hr = planned.get("targetHeartRate")
-        if target_hr and isinstance(target_hr, dict):
-            hr_low = target_hr.get("low") or 0
-            hr_high = target_hr.get("high") or 0
-            if hr_low > 0 and hr_high > 0:
-                result["target_hr_low"] = hr_low
-                result["target_hr_high"] = hr_high
-                hr_mid = (hr_low + hr_high) / 2.0
-                result["avg_hr_delta_pct"] = round(
-                    (avg_hr - hr_mid) / hr_mid * 100.0, 1
-                )
+    result.update(_hr_comparison(planned, hr_data, len(watts)))
 
     # --- Intensity spikes ---
     if target_mid is not None:
@@ -1776,10 +1806,17 @@ def compare_planned_vs_actual(
 def build_ride_analysis(
     streams: dict,
     ftp: float,
+    sport_type: str | None = None,
 ) -> dict:
     """Compute a structured analysis of a single ride from its stream data.
 
     Returns a dict suitable for embedding into the AI prompt.
+
+    ``sport_type`` gates the power analysis (#711). Omitting it means "sport
+    unknown", which keeps the power model — so no existing caller changes
+    behaviour — but any caller that knows the sport should pass it: the interval
+    classifier and the %FTP annotations below are cycling statements, and for a
+    footpod run they described the athlete's cycling threshold instead.
     """
     watts: list[float] = streams.get("watts", {}).get("data", [])
     hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
@@ -1789,6 +1826,23 @@ def build_ride_analysis(
         return {}
 
     duration_seconds = round(_stream_duration_seconds(time_data))
+
+    non_cycling = (
+        None
+        if power_model_applies(sport_type)
+        else non_cycling_classification(sport_type)
+    )
+    if non_cycling is not None:
+        category, confidence, reason = non_cycling
+        # The sport is stated, so the classification is not a guess — what is
+        # unknown about a gym session is its intensity, not its identity (#578).
+        return {
+            "ride_category": category,
+            "classification_confidence": confidence,
+            "classification_reason": reason,
+            "duration_seconds": duration_seconds,
+            "intervals_detected": [],
+        }
 
     if not watts or len(watts) != len(time_data):
         no_intervals: list[dict] = []
@@ -1847,12 +1901,19 @@ def build_ride_analysis(
 def compute_ftp_from_streams(
     streams_by_id: dict[str, dict],
     max_heart_rate: int | None = None,
+    sport_by_id: dict[str, str | None] | None = None,
 ) -> tuple[int | None, int | None]:
     """Estimate FTP and threshold HR from activity stream data.
 
     Uses demonstrated power-duration evidence and returns the best FTP-like
     estimate.  HR, when available, is only used to reject low-intensity windows;
     it is not used to scale power into FTP.
+
+    ``sport_by_id`` maps each activity id to its sport; activities in a sport the
+    cycling power model does not describe are skipped entirely, so an estimate
+    over a mixed history is the estimate over its cycling subset (#711). An id
+    the map does not mention counts as unknown and is kept, which is what leaves
+    every caller that passes nothing behaving as before.
 
     Returns ``(computed_ftp, computed_threshold_hr)``.  Both are ``None`` when
     insufficient data is available.
@@ -1861,7 +1922,15 @@ def compute_ftp_from_streams(
     threshold_hrs: list[int] = []
     envelope_points: dict[float, tuple[float, int, int]] = {}
 
+    sport_by_id = sport_by_id or {}
+
     for _act_id, streams in streams_by_id.items():
+        # A footpod run's watts are watts, and they are not this athlete's
+        # cycling threshold (#711). Left in, they joined the same
+        # power–duration envelope as the rides and argued about FTP.
+        if not power_model_applies(sport_by_id.get(_act_id)):
+            continue
+
         watts_data: list[float] = streams.get("watts", {}).get("data", [])
         hr_data: list[float] = streams.get("heartrate", {}).get("data", [])
         time_data: list[float] = streams.get("time", {}).get("data", [])
@@ -2037,6 +2106,10 @@ def estimate_ftp_over_time(
             - ``activity_date`` (str, ISO date YYYY-MM-DD)
             - ``streams`` (dict of Strava stream objects with ``watts``,
               ``heartrate``, and ``time`` keys)
+            - ``sport_type`` (str, optional) — a sport the cycling power model
+              does not describe is skipped, so the estimate over a mixed
+              history is the estimate over its cycling subset (#711). Absent
+              means unknown, which is kept.
 
         max_heart_rate: Athlete's max heart rate in bpm.  Used only to filter
             low-intensity HR windows; power-only estimates require longer
@@ -2066,6 +2139,13 @@ def estimate_ftp_over_time(
     for ride in rides:
         activity_date = ride.get("activity_date", "")
         if not activity_date:
+            continue
+
+        # Only sports the cycling power model describes contribute to the
+        # power–duration envelope (#711). A run's watts are a different
+        # quantity, and a hard footpod effort would raise the estimate of a
+        # threshold it says nothing about.
+        if not power_model_applies(ride.get("sport_type")):
             continue
 
         streams = ride.get("streams", {})
@@ -2341,14 +2421,28 @@ def build_ride_metrics_chain(
         watts: list[float] = streams.get("watts", {}).get("data", [])
         time_data: list[float] = streams.get("time", {}).get("data", [])
 
+        # What sport was this, and does the cycling power model describe it?
+        # Asked once, up front, because every power-derived field below is
+        # calibrated against cycling FTP (#711). A Stryd run reports watts, so
+        # "has a power stream" was never the same question as "is a bike ride" —
+        # and treating the two as one gave a run an intensity factor against the
+        # athlete's cycling threshold.
+        non_cycling = non_cycling_classification(ride.get("sport_type"))
+        power_applies = power_model_applies(ride.get("sport_type"))
+
         # Compact per-ride physiological signals for the cross-workout inference
         # engine (#476). Best-effort: never let signal extraction break the chain.
-        try:
-            perf_signals = compute_ride_performance_signals(
-                streams, ride.get("duration_seconds")
-            )
-        except Exception:  # pragma: no cover - defensive
-            perf_signals = None
+        # Power-model sports only: these points are the power–duration envelope
+        # FTP inference and the FTP-vs-curve check are read from, so one run in
+        # the window would argue about a cycling threshold.
+        perf_signals = None
+        if power_applies:
+            try:
+                perf_signals = compute_ride_performance_signals(
+                    streams, ride.get("duration_seconds")
+                )
+            except Exception:  # pragma: no cover - defensive
+                perf_signals = None
 
         # --- Per-ride metrics ---
         avg_power: int | None = None
@@ -2357,9 +2451,8 @@ def build_ride_metrics_chain(
         tss: float | None = None
         ride_purpose: str | None = None
         intervals: list[dict] = []
-        non_cycling: tuple[str, str, str] | None = None
 
-        if watts and time_data and len(watts) == len(time_data):
+        if power_applies and watts and time_data and len(watts) == len(time_data):
             avg_power = round(sum(watts) / len(watts))
             np_raw = _normalized_power(watts, time_data)
             if np_raw is not None:
@@ -2370,27 +2463,25 @@ def build_ride_metrics_chain(
             ride_purpose = classify_ride_purpose(watts, time_data, ftp)
             if ftp > 0:
                 intervals = detect_intervals(watts, time_data, ftp)
+        elif non_cycling is not None:
+            # A gym session, a hike or a yoga class is not an unsure
+            # classification, it is a different sport that power cannot
+            # describe (#578). Taken whether or not a stream exists: a run
+            # recorded with a footpod has watts, and running them through the
+            # cycling classifier produced a confident reading of a quantity the
+            # athlete's FTP says nothing about (#711).
+            ride_purpose = non_cycling[0]
         else:
-            # No usable power stream. Before calling this an unclassifiable
-            # ride, ask what sport it was: a gym session, a hike or a yoga
-            # class is not an unsure classification, it is a different sport
-            # that power cannot describe (#578). Anything the power classifier
-            # can still answer for keeps its own path above, so nothing that
-            # classifies today changes.
-            non_cycling = non_cycling_classification(ride.get("sport_type"))
-            if non_cycling is not None:
-                ride_purpose = non_cycling[0]
-            else:
-                # Missing or mismatched streams are not enough evidence for a
-                # training-purpose label.
-                ride_purpose = "unknown"
+            # A bike ride with missing or mismatched streams. Not enough
+            # evidence for a training-purpose label.
+            ride_purpose = "unknown"
 
         # Provider-interval fallback: when the raw stream gives us no shape
         # (missing/unusable, so ``unknown``), fall back to the provider's own
         # structured interval breakdown — intervals.icu ships clean per-interval
         # averages even when the per-second stream is absent, so a real interval
         # session is classified instead of silently reading as "unknown".
-        if ride_purpose in (None, "unknown") and ftp > 0:
+        if power_applies and ride_purpose in (None, "unknown") and ftp > 0:
             provider_intervals = ride.get("_provider_intervals")
             if provider_intervals:
                 p_purpose, p_intervals = classify_from_provider_intervals(
@@ -2407,8 +2498,18 @@ def build_ride_metrics_chain(
         # ~20 W above Strava). Trust the provider figure when present; the stream
         # computation above remains the fallback (and still drives ride_purpose and
         # interval detection, which need shape rather than a single headline number).
-        summary_avg = ride.get("_summary_avg_power_w")
-        summary_np = ride.get("_summary_np_w")
+        # The two watt figures are gated on the sport for the same reason the
+        # stream recompute is: the provider reports watts for a footpod run too,
+        # and provider-ness is not what makes a number comparable to a cycling
+        # FTP (#711).
+        #
+        # The provider's *load* is not gated. It is the first rung of the load
+        # ladder precisely because the provider computed it for the sport it
+        # was — intervals.icu's figure for a run is its own run load, not a
+        # cycling TSS — so dropping it here would replace a better number with
+        # our own estimate for exactly the sessions that have least to go on.
+        summary_avg = ride.get("_summary_avg_power_w") if power_applies else None
+        summary_np = ride.get("_summary_np_w") if power_applies else None
         summary_tss = ride.get("_summary_tss")
         if summary_avg is not None:
             avg_power = int(round(summary_avg))

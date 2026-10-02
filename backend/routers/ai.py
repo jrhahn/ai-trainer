@@ -50,7 +50,6 @@ from services.analysis import (
     _project_training_load,
     project_training_load_from_seed,
     build_ride_metrics_chain,
-    build_ride_analysis,
 )
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
@@ -444,34 +443,6 @@ def _token_usage_scope(
     finds the other (#549).
     """
     return track_llm_usage(db, user, source=source)
-
-
-async def _auto_rate_ride(
-    plan_day: dict,
-    streams: dict,
-    ftp: float | None,
-    profile: dict,
-    provider: str,
-) -> str | None:
-    """Generate a coach note for a completed ride by comparing it against the plan.
-
-    Returns the coach note string, or None when there is insufficient data.
-    """
-    try:
-        stream_delta = compare_planned_vs_actual(plan_day, streams, ftp=ftp)
-        ride_analysis = build_ride_analysis(streams, ftp) if ftp else None
-        result = await ai_service.rate_completed_workout(
-            plan_day,
-            profile,
-            provider=provider,
-            stream_delta=stream_delta,
-            ride_analysis=ride_analysis,
-        )
-        feedback_text = result.get("feedback", "")
-        return feedback_text or None
-    except Exception:
-        logger.warning("Auto-rate ride failed", exc_info=True)
-        return None
 
 
 _MEMORY_UPDATE_MAX_ATTEMPTS = 3
@@ -1551,6 +1522,7 @@ async def rate_workout(
                     body.day.model_dump(by_alias=True),
                     streams,
                     ftp=ftp,
+                    sport_type=body.day.sport,
                 )
         except HTTPException as exc:
             logger.warning(

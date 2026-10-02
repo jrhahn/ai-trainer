@@ -10,7 +10,13 @@ import json
 from datetime import date
 
 from . import plan_compliance, untrusted_text
-from .activity_identity import CYCLING_FAMILY, UNREADABLE_FAMILY, activity_family
+from .activity_identity import (
+    CYCLING_FAMILY,
+    UNREADABLE_FAMILY,
+    activity_family,
+    activity_sport_type,
+    power_model_applies,
+)
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
@@ -487,6 +493,12 @@ def activity_power_metrics_block(
     time_in_zone_by_id = time_in_zone_by_id or {}
     lines: list[str] = []
     for activity in activities:
+        # Per activity, because a batch is mixed (#711). A footpod run reports
+        # watts, and presenting them here — as authoritative figures the coach is
+        # told to cite verbatim, with an intensity factor against cycling FTP —
+        # is how a run came back described as a threshold effort.
+        if not power_model_applies(activity_sport_type(activity)):
+            continue
         avg = activity.get("average_watts")
         np = activity.get("weighted_average_watts")
         peak = activity.get("max_watts")
@@ -570,11 +582,18 @@ def analyse_activities_user(
     metrics_block = activity_power_metrics_block(
         activities, user_ftp, time_in_zone_by_id
     )
-    # Power zones are FTP-based and only meaningful for cycling power data.
-    zones_block = "" if is_running else power_zones_block(user_ftp)
+    # Power zones are cut from a cycling FTP, so they are worth their tokens only
+    # when at least one activity in the batch is a sport they describe (#711).
+    # Asked of the activities rather than of the batch's primary sport: a batch
+    # of runs with one ride still needs the boundaries to discuss the ride, and a
+    # batch of gym sessions was getting watt zones because none of them was a run.
+    has_power_sport = any(
+        power_model_applies(activity_sport_type(activity)) for activity in activities
+    )
+    zones_block = power_zones_block(user_ftp) if has_power_sport else ""
     zone_guidance = (
         ""
-        if is_running
+        if not has_power_sport
         else (
             "Characterize intensity or training zones ONLY using the power-zone "
             "boundaries and per-activity time-in-zone provided above. Never claim a "
@@ -3864,6 +3883,11 @@ def refresh_login_summary_user(
     # first is how a strength session got asked what its intervals were (#578).
     _conf = (latest_ride_confidence or "").lower()
     _family = activity_family(latest_ride_sport_type)
+    # Deliberately not ``power_model_applies``, which the two lines below look
+    # like: that one treats a catch-all label ("Workout", "Other") as evidence of
+    # nothing, because a 300 W hour recorded under one is a bike. Here the
+    # question is what to *call* the session to the athlete, and the provider's
+    # own word for it is the best answer available (#711).
     _is_non_cycling = bool(latest_ride_sport_type) and _family not in (
         CYCLING_FAMILY,
         UNREADABLE_FAMILY,
