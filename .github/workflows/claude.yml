@@ -74,6 +74,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Without this the action runs Claude and drops the result on the
+          # floor: in prompt mode nothing posts a comment by itself. This opens
+          # one on the PR for Claude to write the review into.
+          track_progress: true
           prompt: |
             Review this pull request. Follow the repository's CLAUDE.md and
             AGENTS.md. Report correctness bugs, missing test coverage for the
