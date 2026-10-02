@@ -12,6 +12,10 @@ name: Claude
 #     in the base repository's context, and any step that checks out the fork's
 #     head would hand the token to code we have not read.
 #
+# The Claude Code GitHub App is deliberately not used. `github_token` hands the
+# action the workflow's own token instead, so there is no app installation to
+# keep in sync with an Anthropic account; comments arrive as github-actions[bot].
+#
 # Claude comments; it does not push. `contents: read` is what enforces that,
 # not the prompt. Granting `contents: write` would let anything that reaches
 # the model through PR or issue text steer a commit, so it stays read-only
@@ -29,9 +33,6 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  # The action exchanges an OIDC token for its own short-lived GitHub App
-  # token; without this it fails before Claude is ever started.
-  id-token: write
 
 jobs:
   # "@claude ..." in a PR or issue comment, from someone with write access.
@@ -52,6 +53,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # Unprompted review when a PR opens. Only for branches in this repository:
   # a fork PR has no token here, and drafts are skipped so work in progress
@@ -71,6 +73,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             Review this pull request. Follow the repository's CLAUDE.md and
             AGENTS.md. Report correctness bugs, missing test coverage for the
