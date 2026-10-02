@@ -29,6 +29,9 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  # The action exchanges an OIDC token for its own short-lived GitHub App
+  # token; without this it fails before Claude is ever started.
+  id-token: write
 
 jobs:
   # "@claude ..." in a PR or issue comment, from someone with write access.
