@@ -460,7 +460,11 @@ def test_a_cycling_batch_keeps_its_power_zone_block():
 
 
 def _capture_sport(monkeypatch, module) -> dict:
-    """Record the ``sport_type`` each analysis entry point is called with."""
+    """Record the ``sport_type`` each analysis entry point is called with.
+
+    Only the entry points the module actually imports: ``/rate-workout``
+    compares the session against its plan and builds no ride analysis.
+    """
     seen: dict = {}
 
     def fake_compare(planned, streams, ftp=None, sport_type=None):
@@ -472,7 +476,8 @@ def _capture_sport(monkeypatch, module) -> dict:
         return {}
 
     monkeypatch.setattr(module, "compare_planned_vs_actual", fake_compare)
-    monkeypatch.setattr(module, "build_ride_analysis", fake_analysis)
+    if hasattr(module, "build_ride_analysis"):
+        monkeypatch.setattr(module, "build_ride_analysis", fake_analysis)
     return seen
 
 

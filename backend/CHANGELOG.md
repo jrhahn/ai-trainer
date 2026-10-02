@@ -171,6 +171,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   batch that was mostly runs read as "running" and its rides got no power
   analysis at all.
 
+  Removed `routers/ai.py:_auto_rate_ride` along the way. Its last caller went
+  years ago and only the definition was left, so it was the one place the sport
+  gate could not be verified — a path nothing can reach is a path no test can
+  pin.
+
   The cycling vocabulary now lives in one place. `activity_family` finds cycling
   by substring, which `"Handcycle"` and `"Velomobile"` do not contain — so a
   handcycle would have lost its power model, which is the opposite of the point.
