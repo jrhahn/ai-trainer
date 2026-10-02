@@ -56,14 +56,17 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # Unprompted review when a PR opens. Only for branches in this repository:
-  # a fork PR has no token here. Drafts are skipped until they are marked
-  # ready, so an unfinished PR is reviewed once, when it is meant to be.
+  # a fork PR has no token here, and neither does a Dependabot one — those run
+  # with Dependabot secrets, so CLAUDE_CODE_OAUTH_TOKEN would be empty. Drafts
+  # are skipped until they are marked ready, so an unfinished PR is reviewed
+  # once, when it is meant to be.
   review:
     name: Review pull request
     if: |
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == false
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

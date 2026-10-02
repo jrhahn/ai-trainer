@@ -1,0 +1,38 @@
+# Weekly dependency updates, grouped. Ungrouped, three ecosystems in a repo
+# this size produce more pull requests than anyone reads, and unread update
+# PRs are worse than none: they make a stale lockfile look attended to.
+#
+# Dependabot pull requests get Dependabot secrets, not Actions secrets, so the
+# Claude review workflow skips them by actor — it would otherwise start with an
+# empty token and fail. See .github/workflows/claude.yml.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor together: these are the ones that either pass CI or
+      # are reverted. Majors stay separate, one PR each, because they need
+      # reading.
+      frontend:
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
