@@ -80,6 +80,3 @@ jobs:
             behaviour that changed, and anything that contradicts a convention
             the repository already follows. Skip style nits. If the diff is
             fine, say so in one line rather than inventing findings.
-          claude_args: '--allowed-tools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*)"'
-          # Temporary: the run fails with is_error:true and the message hidden.
-          show_full_output: true
