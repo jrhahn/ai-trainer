@@ -594,3 +594,45 @@ async def test_rate_workout_reads_the_planned_sessions_sport(
     assert response.status_code == 200
     # Normalised by the persist gate on the way in, so the gate sees "running".
     assert seen["compare"] == "running"
+
+
+def test_planned_vs_actual_needs_a_time_stream_even_without_power():
+    """The HR-only path still has to line the HR samples up against something,
+    and with no time stream there is nothing to line them up against."""
+    assert (
+        analysis.compare_planned_vs_actual(
+            {"targetHeartRate": {"low": 140, "high": 155}},
+            {"heartrate": {"data": [150.0] * 100}},
+            ftp=FTP,
+            sport_type="Run",
+        )
+        == {}
+    )
+
+
+@pytest.mark.asyncio
+async def test_time_in_zone_is_withheld_from_a_non_cycling_activity(monkeypatch):
+    """Zones are cut from a cycling FTP, so measured time in them is a cycling
+    statement. Captured off the prompt call, because that is the only thing the
+    map is built for."""
+    seen: dict = {}
+
+    def fake_user(activities, computed_section, ride_analyses_section, **kwargs):
+        seen["tiz"] = kwargs.get("time_in_zone_by_id")
+        return "prompt"
+
+    async def fake_chat(*args, **kwargs):
+        return "{}"
+
+    monkeypatch.setattr(ai_service, "analyse_activities_user", fake_user)
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.analyse_strava_activities(
+        [_activity(1, "Run"), _activity(2, "Ride")],
+        streams_by_id={"1": _streams(minutes=30), "2": _streams(minutes=30)},
+        user_ftp=320,
+    )
+
+    # The ride has measured time in zones; the run is absent entirely.
+    assert "2" in seen["tiz"]
+    assert "1" not in seen["tiz"]
