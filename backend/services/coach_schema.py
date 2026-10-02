@@ -61,6 +61,14 @@ _PLAN_UPDATE = {
         "date": {"type": "STRING", "description": "ISO date of an existing plan day"},
         # Two-a-days: which session on that date this update targets (#496).
         "slot": {"type": "INTEGER"},
+        # Which sport the session is (#710). Enumerated rather than free text:
+        # the persist gate maps anything it does not recognise back to cycling,
+        # so an invented sport would silently become a bike session.
+        "sport": {
+            "type": "STRING",
+            "enum": ["cycling", "running", "strength"],
+            "description": "Omit to leave the session's sport unchanged",
+        },
         "timeOfDay": {"type": "STRING"},
         "workoutType": {"type": "STRING"},
         "title": {"type": "STRING"},
@@ -80,6 +88,7 @@ _PLAN_UPDATE = {
     "propertyOrdering": [
         "date",
         "slot",
+        "sport",
         "timeOfDay",
         "workoutType",
         "title",

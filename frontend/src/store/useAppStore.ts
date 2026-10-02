@@ -138,6 +138,14 @@ export interface TrainingDay {
   slot?: number
   /** Free-text when-in-the-day hint ("am", "pm", "18:30"); display only. */
   timeOfDay?: string
+  /**
+   * Which sport the session prescribes (#710). `workoutType` says what the
+   * session is *for*; this says what the athlete actually does. Absent on every
+   * day written before the field existed, and on every cycling day — the
+   * backend omits the default so storage stays byte-stable. Read it through
+   * utils/planSport, never directly, so a missing value reads as cycling.
+   */
+  sport?: string
   workoutType: 'rest' | 'endurance' | 'intervals' | 'tempo' | 'race' | 'recovery' | 'strength'
   title: string
   description: string

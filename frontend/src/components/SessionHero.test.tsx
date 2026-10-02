@@ -176,4 +176,18 @@ describe('SessionHero', () => {
 
     expect(screen.getAllByText('Done')).toHaveLength(1)
   })
+
+  it('says when the session is not a ride', () => {
+    // An "endurance" chip over a planned run reads as a ride, and a ride is
+    // then what the athlete goes out and does (#710).
+    renderHero({ day: day({ workoutType: 'endurance', sport: 'running' }) })
+
+    expect(screen.getByText('Running')).toBeInTheDocument()
+  })
+
+  it('stays silent about cycling, which is what the plan is unless stated', () => {
+    renderHero({ day: day({ workoutType: 'endurance' }) })
+
+    expect(screen.queryByText('Cycling')).not.toBeInTheDocument()
+  })
 })

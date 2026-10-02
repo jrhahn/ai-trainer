@@ -70,6 +70,9 @@ _GAIN_SCORE = {
 # short; a long off-road ride needs daylight, dry ground and a free morning.
 _MODALITY_RELIABILITY = {
     mm.MODALITY_INDOOR: 0.95,
+    # Shoes and a door. Nothing to pack, nothing to charge, and no weather that
+    # stops it — only the trainer is harder to cancel.
+    mm.MODALITY_RUN: 0.85,
     mm.MODALITY_GYM: 0.8,
     mm.MODALITY_ROAD: 0.7,
     mm.MODALITY_GRAVEL: 0.6,
@@ -82,6 +85,13 @@ _MODALITY_RELIABILITY = {
 _MODALITY_RISK = {
     mm.MODALITY_INDOOR: 0.05,
     mm.MODALITY_GYM: 0.15,
+    # Running carries no crash exposure and real overuse exposure, which is a
+    # different kind of risk from the one this axis was built for: it is a
+    # function of how much running the athlete has recently done, not of the
+    # modality. Deliberately below RISK_FILTER_THRESHOLD — an athlete who says
+    # they cannot afford a crash is not asking to stop running. The
+    # exposure-dependent part is the run durability ceiling (#717).
+    mm.MODALITY_RUN: 0.4,
     mm.MODALITY_ROAD: 0.45,
     mm.MODALITY_GRAVEL: 0.5,
     mm.MODALITY_MTB: 0.8,
@@ -115,6 +125,9 @@ _MODALITY_STRUCTURE = {
     mm.MODALITY_INDOOR: 1.0,
     mm.MODALITY_ROAD: 0.85,
     mm.MODALITY_GYM: 0.8,
+    # Pace is holdable, but it is a noisier target than watts: gradient, wind and
+    # surface all move it, and the correction for them (GAP) is an estimate (#716).
+    mm.MODALITY_RUN: 0.75,
     mm.MODALITY_GRAVEL: 0.6,
     mm.MODALITY_MTB: 0.4,
 }
@@ -145,6 +158,16 @@ _SPORT_TO_MODALITY = {
     "weighttraining": mm.MODALITY_GYM,
     "workout": mm.MODALITY_GYM,
     "strength": mm.MODALITY_GYM,
+    # Running (#710). Its absence was not a decision: ``modality_for_sport("Run")``
+    # returned ``None``, so every run fell out of behaviour scoring entirely — an
+    # athlete could run four times a week and the evidence would record nothing at
+    # all. Counting them is the whole fix here; what a run is *worth* against a
+    # ride is the per-sport ROI question (#718).
+    "run": mm.MODALITY_RUN,
+    "running": mm.MODALITY_RUN,
+    "trailrun": mm.MODALITY_RUN,
+    "virtualrun": mm.MODALITY_RUN,
+    "treadmill": mm.MODALITY_RUN,
 }
 
 

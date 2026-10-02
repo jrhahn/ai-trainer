@@ -4,6 +4,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { DailyForecast, TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel } from '../utils/planSessions'
+import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import { sessionTypeStyleOnDark } from '../utils/sessionType'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import WeatherBadge from './WeatherBadge'
@@ -39,6 +40,14 @@ function SessionBlock({
         >
           {day.workoutType}
         </span>
+        {/* The sport, when it is not the one the whole app assumes (#710). An
+            "endurance" chip over a planned run reads as a ride, which is the
+            session the athlete would then go out and do. */}
+        {!isCyclingSession(day) && (
+          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
+            {planSportLabel(planSport(day))}
+          </span>
+        )}
         {isDone && (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
             <CheckCircle2 size={12} aria-hidden="true" />

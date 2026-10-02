@@ -657,9 +657,12 @@ def score_behaviour(evidence: BehaviourEvidence) -> dict[str, float]:
     return nudges
 
 
-# The modalities ride data can speak to. Gym affinity is not observable from a
-# cycling feed, so the behavioural pass leaves it alone rather than inferring a
-# dislike from silence.
+# The modalities ride data can speak to, i.e. the ones that are genuinely
+# alternatives to each other: every one of them is a way of doing the same
+# planned ride. Gym and run affinity are not observable this way — the share
+# logic below reads "did not ride it" as evidence against, and an athlete who
+# ran instead of riding did not decline the road bike, they did something else.
+# So they are counted as evidence (#710) and left out of the affinity nudge.
 _RIDEABLE_MODALITIES = (
     mm.MODALITY_ROAD,
     mm.MODALITY_MTB,

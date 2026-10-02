@@ -388,13 +388,23 @@ async def test_import_background_matches_imported_activities_to_plan(
     async with async_session_maker() as session:
         rides = await crud.get_all_ride_metrics_ordered(session, user_id)
 
-    assert {ride.plan_match_status for ride in rides} == {"ambiguous"}
-    assert {ride.matched_plan_date for ride in rides} == {"2026-04-02"}
-    assert {
-        ride.matched_plan_snapshot["title"]
-        for ride in rides
-        if ride.matched_plan_snapshot
-    } == {"Aerobic Base Builder"}
+    by_id = {ride.strava_activity_id: ride for ride in rides}
+
+    # The ride takes the planned cycling session. It used to come back
+    # ``ambiguous`` together with the hike — the athlete was asked which of the
+    # two was their planned ride, which is the #578 / 2026-08-09 symptom with a
+    # hike in place of the yoga class. A planned sport and a logged sport now
+    # have to agree (#710), so there is only ever one candidate here.
+    assert by_id[222].plan_match_status == "auto_matched"
+    assert by_id[222].matched_plan_date == "2026-04-02"
+    assert by_id[222].matched_plan_snapshot["title"] == "Aerobic Base Builder"
+
+    # The hike was never a candidate for a bike session, so it is not linked to
+    # one and carries no verdict about one.
+    assert by_id[111].plan_match_status == "unmatched"
+    assert by_id[111].matched_plan_date is None
+    assert by_id[111].matched_plan_snapshot is None
+    assert by_id[111].label_override is None
 
 
 @pytest.mark.asyncio
