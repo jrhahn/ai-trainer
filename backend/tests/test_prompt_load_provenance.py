@@ -50,7 +50,7 @@ def test_an_estimated_load_is_marked_as_one():
             )
         ]
     )
-    assert "load ~34 (estimated from HR)" in section
+    assert "load ~34 (estimated from HR, medium confidence)" in section
     # The number must never appear as a bare TSS the coach can compare against a
     # power-based figure.
     assert "TSS 34" not in section
