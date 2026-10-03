@@ -16,11 +16,15 @@ from services.training_load import (
     LOAD_SOURCE_HEART_RATE,
     LOAD_SOURCE_POWER,
     LOAD_SOURCE_PROVIDER,
+    LOAD_SOURCE_RPE,
+    LoadSignals,
     duration_training_load,
     format_load,
     format_load_field,
     hr_training_load,
     resolve_training_load,
+    rpe_training_load,
+    session_load,
 )
 
 MAX_HR = 185
@@ -221,19 +225,33 @@ def test_an_unknown_sport_costs_no_less_than_the_cheapest_known_one():
 def test_a_measured_load_reads_as_tss_and_an_estimate_does_not():
     assert format_load(94, LOAD_SOURCE_POWER) == "TSS 94"
     assert format_load(88, LOAD_SOURCE_PROVIDER) == "TSS 88"
-    assert format_load(28, LOAD_SOURCE_HEART_RATE) == "load ~28 (estimated from HR)"
+    assert (
+        format_load(28, LOAD_SOURCE_HEART_RATE)
+        == "load ~28 (estimated from HR, medium confidence)"
+    )
     assert (
         format_load(34, LOAD_SOURCE_DURATION)
-        == "load ~34 (estimated from duration)"
+        == "load ~34 (estimated from duration, low confidence)"
     )
     assert format_load(None, LOAD_SOURCE_POWER) is None
+
+
+def test_an_estimate_says_how_much_weight_it_carries():
+    """Naming the model is not enough on its own: "estimated from duration" and
+    "estimated from HR" are not close, and a reader told only the model has no
+    way to know which to discount (#712)."""
+    assert "low confidence" in format_load(34, LOAD_SOURCE_DURATION)
+    assert "medium confidence" in format_load(28, LOAD_SOURCE_HEART_RATE)
+    assert "medium confidence" in format_load(85, LOAD_SOURCE_RPE)
+    # A measured figure carries no qualifier, so the common case costs nothing.
+    assert format_load(94, LOAD_SOURCE_POWER) == "TSS 94"
 
 
 def test_the_labelled_form_does_not_call_an_estimate_tss():
     """Calling it "TSS" is exactly the conflation this exists to prevent."""
     assert format_load_field(94, LOAD_SOURCE_POWER) == "TSS: 94"
     assert format_load_field(28, LOAD_SOURCE_HEART_RATE) == (
-        "Load: ~28 (estimated from HR)"
+        "Load: ~28 (estimated from HR, medium confidence)"
     )
 
 

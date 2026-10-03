@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One load currency that can price any session** (`services/training_load.py`,
+  `services/analysis.py`, `services/prompts.py`, #712, epic #709) —
+  `session_load(LoadSignals)` is now the single abstraction, returning a value
+  with its `unit`, `source` and `confidence`. `resolve_training_load` is a thin
+  keyword wrapper over it, so every existing caller — including the FTP-recompute
+  and backfill paths that share the rule — behaves exactly as before.
+
+  `LoadSignals` is one argument rather than eight keywords because the list grows
+  with every sport: running needs a pace model (#716), strength needs tonnage
+  (#714), and a caller that must be edited for each is a caller that gets missed.
+
+- **Session-RPE (Foster) as a rung of the load ladder**
+  (`services/training_load.py`, #712) — the broadest validated cross-sport load
+  currency, and the only one that works for a session no device described. It
+  sits above the duration rung and below heart rate: an athlete reporting how
+  hard an hour of lifting was is evidence, where an assumed cost per hour is not.
+
+  Two scale problems had to be stated rather than hidden. The stored effort scale
+  is 1–5, not Foster's CR10, so it is doubled — the same mapping `ride_matching`
+  already uses in reverse when it reads an "RPE 8/10" out of a ride note. And
+  sRPE is linear in effort while TSS is quadratic in intensity, so no single
+  factor is right everywhere: the alignment is placed at the top of the scale, so
+  an hour at a reported maximum is 110 TSS-equivalent. Anchoring at threshold
+  instead produced 143 for that hour, a figure no hour of training has ever cost.
+  What falls out for 1–5 is 22 / 44 / 66 / 88 / 110 per hour, whose middle lands
+  beside the assumed per-hour figures — the sanity check that matters.
+
 - **A plan day now has a sport** (`schemas.py`, `services/activity_identity.py`,
   `services/ride_matching.py`, `services/coach_schema.py`, `services/prompts.py`,
   `services/ai_service.py`, #710, epic #709) — `PlanDay.sport` makes sport a
@@ -131,6 +158,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape of #684 and #696.
 
 ### Changed
+
+- **A planned day is priced in its own sport** (`services/analysis.py`, #712) —
+  `compute_training_load` and `project_training_load_from_seed` carried a copy
+  each of the same estimator, and both priced every planned day in watts: a
+  planned gym hour as 65 % of the athlete's FTP, a planned run as 68 %. Numbers
+  about cycling that went straight into CTL. Now that a plan day states its sport
+  (#710) it is asked, and a non-cycling day is priced from its duration and its
+  sport through the same table the logged session uses.
+
+  That closes a disagreement nobody could see: a planned gym hour came out at 42
+  while the same hour, once logged, was 55. One session cannot cost two different
+  amounts depending on which side of it you ask. Cycling days are untouched —
+  target power, then the workout-type fraction of FTP, to the digit. The shared
+  estimator is now `planned_day_load`, so the two projections cannot drift apart.
+
+- **The load ladder's heart-rate rung can finally fire**
+  (`services/analysis.py`, #712) — `build_ride_metrics_chain` read
+  `perf_signals["avg_hr_bpm"]` while `compute_ride_performance_signals` wrote
+  `avg_hr`, so it had never once fired from stream data. Fixed by deleting the
+  key rather than correcting it: `_stream_avg_hr` reads the HR series against the
+  time series, which also works where `perf_signals` cannot — it needs a power
+  stream, and is `None` for every non-cycling activity since #711, which is
+  exactly the set of sessions whose load has to come from heart rate.
+
+- **An estimated load now says how much weight it carries**
+  (`services/training_load.py`, `services/prompts.py`, #712) — `load ~34
+  (estimated from HR, medium confidence)` rather than just the model. Naming the
+  model was not enough on its own: "estimated from duration" and "estimated from
+  HR" are not close, and a reader told only the model has no way to know which to
+  discount. Measured figures stay a bare `TSS 94`, so the common case costs no
+  tokens, and `ESTIMATED_LOAD_RULE` now covers reported effort and states the
+  ranking.
 
 - **Every power-derived number is now gated on the sport**
   (`services/activity_identity.py`, `services/analysis.py`,

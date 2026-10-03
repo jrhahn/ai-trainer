@@ -52,11 +52,15 @@ BADGE_GROUNDING_RULE = (
 # measurement, and the coach has to be told which it is holding.
 ESTIMATED_LOAD_RULE = (
     "A load written as 'load ~N' was estimated, not measured: that session had no "
-    "power meter, so the figure comes from heart rate or from time on task. Count "
-    "it as real fatigue — it is why CTL/ATL/TSB move — but do not quote it as a "
-    "precise number, do not compare it against a power-based TSS as if the two "
-    "were the same measurement, and never describe cycling form or power progress "
-    "on the strength of a non-cycling session's estimated load."
+    "power meter, so the figure comes from heart rate, from the athlete's own "
+    "reported effort, or from time on task — each line says which, and how much "
+    "weight it carries. Medium confidence (heart rate, reported effort) is real "
+    "evidence about how hard the session was; low confidence (time on task) only "
+    "says how long it lasted, so lean on the athlete's account over it. Count "
+    "every one of them as real fatigue — it is why CTL/ATL/TSB move — but do not "
+    "quote one as a precise number, do not compare it against a power-based TSS "
+    "as if the two were the same measurement, and never describe cycling form or "
+    "power progress on the strength of a non-cycling session's estimated load."
 )
 
 # Shared instruction reused by every prompt that names when a planned session

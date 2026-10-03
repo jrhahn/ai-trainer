@@ -851,6 +851,85 @@ def classify_ride_confidence_and_reason(
     return "medium", "Classification based on available power data."
 
 
+_PLANNED_INTENSITY_BY_WORKOUT_TYPE = {
+    "rest": 0.0,
+    "recovery": 0.50,
+    "endurance": 0.68,
+    "tempo": 0.80,
+    "intervals": 0.90,
+    "strength": 0.65,
+    "race": 0.95,
+}
+
+
+def planned_day_load(day: dict, ftp: float) -> float:
+    """What one *planned* session is expected to cost, as TSS(-equivalent).
+
+    One estimator for both the whole-plan simulation and the seeded projection;
+    they carried a copy each, which is two places for the same rule to drift
+    (#712).
+
+    A planned session in a sport the cycling power model does not describe is
+    priced from its duration and its sport, not from a fraction of the athlete's
+    FTP. The %FTP table below is the only thing a plan day used to offer, so a
+    planned gym hour was priced as 65 % of FTP on the bike and a planned run as
+    68 % — numbers about the wrong sport that nonetheless went straight into
+    CTL. Now that a plan day states its sport (#710), it can be asked.
+
+    Returns ``0.0`` rather than ``None`` for a rest day or a day with no
+    duration: those are genuine zeros — nothing was planned — unlike the absent
+    load that #579 is about.
+    """
+    from services.training_load import duration_training_load
+
+    workout_type = str(
+        day.get("workoutType") or day.get("workout_type") or ""
+    ).lower()
+    if workout_type == "rest":
+        return 0.0
+
+    duration_min = day.get("durationMinutes") or day.get("duration_minutes") or 0
+    try:
+        duration_s = float(duration_min) * 60.0
+    except (TypeError, ValueError):
+        return 0.0
+    if duration_s <= 0:
+        return 0.0
+
+    import schemas
+
+    sport = schemas.day_sport(day)
+    if not power_model_applies(sport):
+        return (
+            duration_training_load(duration_seconds=duration_s, sport_type=sport)
+            or 0.0
+        )
+
+    # Cycling: the planned watt target when there is one, else the workout
+    # type's assumed fraction of FTP. Unchanged from the day this shipped.
+    target_power = day.get("targetPower")
+    np_approx: float | None = None
+    if target_power and isinstance(target_power, dict):
+        low = target_power.get("low") or 0
+        high = target_power.get("high") or 0
+        if low > 0 and high > 0:
+            np_approx = (low + high) / 2.0
+        elif high > 0:
+            np_approx = float(high)
+        elif low > 0:
+            np_approx = float(low)
+
+    if np_approx is None or np_approx <= 0:
+        np_approx = ftp * _PLANNED_INTENSITY_BY_WORKOUT_TYPE.get(workout_type, 0.65)
+
+    if np_approx <= 0:
+        return 0.0
+
+    intensity_factor = np_approx / ftp
+    tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
+    return round(tss, 1)
+
+
 def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     """Compute CTL, ATL, and TSB training load metrics from plan days.
 
@@ -872,52 +951,7 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
         return {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
 
     # --- Estimate TSS per day ---
-    daily_tss: list[float] = []
-    for day in plan_days:
-        duration_min = day.get("durationMinutes") or 0
-        duration_s = duration_min * 60.0
-        if duration_s <= 0:
-            daily_tss.append(0.0)
-            continue
-
-        # Try to use targetPower mid-point as NP approximation
-        target_power = day.get("targetPower")
-        if target_power and isinstance(target_power, dict):
-            low = target_power.get("low") or 0
-            high = target_power.get("high") or 0
-            if low > 0 and high > 0:
-                np_approx = (low + high) / 2.0
-            elif high > 0:
-                np_approx = float(high)
-            elif low > 0:
-                np_approx = float(low)
-            else:
-                np_approx = None
-        else:
-            np_approx = None
-
-        # Fall back to workout-type heuristic when no power target is available
-        if np_approx is None or np_approx <= 0:
-            workout_type = (day.get("workoutType") or "").lower()
-            type_pct_map = {
-                "rest": 0.0,
-                "recovery": 0.50,
-                "endurance": 0.68,
-                "tempo": 0.80,
-                "intervals": 0.90,
-                "strength": 0.65,
-                "race": 0.95,
-            }
-            pct = type_pct_map.get(workout_type, 0.65)
-            np_approx = ftp * pct
-
-        if np_approx <= 0:
-            daily_tss.append(0.0)
-            continue
-
-        intensity_factor = np_approx / ftp
-        tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
-        daily_tss.append(round(tss, 1))
+    daily_tss = [planned_day_load(day, ftp) for day in plan_days]
 
     # --- Compute CTL and ATL via exponential weighted averages ---
     # CTL: 42-day time constant → smoothing factor α = 1 - exp(-1/42)
@@ -1432,47 +1466,11 @@ def project_training_load_from_seed(
     atl = seed_atl
     daily_tss: list[float] = []
 
-    # Re-use TSS estimation logic from compute_training_load
+    # One shared estimator with compute_training_load, so the two projections
+    # cannot disagree about what a planned day costs (#712).
     for day in future_plan_days:
-        duration_min = day.get("durationMinutes") or 0
-        duration_s = duration_min * 60.0
-        if duration_s <= 0:
-            tss = 0.0
-        else:
-            target_power = day.get("targetPower")
-            np_approx: float | None = None
-            if target_power and isinstance(target_power, dict):
-                low = target_power.get("low") or 0
-                high = target_power.get("high") or 0
-                if low > 0 and high > 0:
-                    np_approx = (low + high) / 2.0
-                elif high > 0:
-                    np_approx = float(high)
-                elif low > 0:
-                    np_approx = float(low)
-
-            if np_approx is None or np_approx <= 0:
-                workout_type = (day.get("workoutType") or "").lower()
-                type_pct_map = {
-                    "rest": 0.0,
-                    "recovery": 0.50,
-                    "endurance": 0.68,
-                    "tempo": 0.80,
-                    "intervals": 0.90,
-                    "strength": 0.65,
-                    "race": 0.95,
-                }
-                np_approx = ftp * type_pct_map.get(workout_type, 0.65)
-
-            if np_approx <= 0:
-                tss = 0.0
-            else:
-                intensity_factor = np_approx / ftp
-                tss = (
-                    (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
-                )
-
-        daily_tss.append(round(tss, 1))
+        tss = planned_day_load(day, ftp)
+        daily_tss.append(tss)
         ctl = ctl + alpha_ctl * (tss - ctl)
         atl = atl + alpha_atl * (tss - atl)
 
@@ -2001,6 +1999,27 @@ def compute_ftp_from_streams(
 PERF_SIGNAL_DURATIONS_MIN: tuple[float, ...] = (1, 3, 4, 5, 8, 10, 12, 20, 30, 40, 60)
 
 
+def _stream_avg_hr(streams: dict) -> float | None:
+    """Average heart rate from the stream, for the load ladder's HR rung.
+
+    Read from the time stream rather than from ``perf_signals``, for two
+    reasons. The ladder used to look for ``perf_signals["avg_hr_bpm"]`` while
+    the writer stored ``avg_hr``, so the HR rung had never once fired from
+    stream data. And ``perf_signals`` requires a power stream — it is ``None``
+    without one, and ``None`` for every non-cycling activity since #711 — which
+    is exactly the set of sessions whose load *has* to come from heart rate.
+
+    ``None`` when the HR series does not line up with the time series: a length
+    mismatch means the samples do not correspond, and an average over them is a
+    number about nothing.
+    """
+    hr_data: list[float] = streams.get("heartrate", {}).get("data", []) or []
+    time_data: list[float] = streams.get("time", {}).get("data", []) or []
+    if not hr_data or len(hr_data) != len(time_data):
+        return None
+    return sum(hr_data) / len(hr_data)
+
+
 def compute_ride_performance_signals(
     streams: dict,
     duration_seconds: int | None = None,
@@ -2327,7 +2346,7 @@ def build_rule_based_summary(
     Examples:
     - "Threshold intervals: 3×10 min @ 275 W · TSS 94 · 1h20m"
     - "Endurance: NP 198 W · TSS 61 · 2h05m"
-    - "Strength · load ~34 (estimated from HR) · 58m"
+    - "Strength · load ~34 (estimated from HR, medium confidence) · 58m"
     - "Recovery: 45 min"
 
     ``tss_source`` decides whether the load is printed as a measured figure or
@@ -2534,8 +2553,7 @@ def build_ride_metrics_chain(
             duration_seconds=ride.get("duration_seconds"),
             sport_type=ride.get("sport_type"),
             avg_hr_bpm=(
-                ride.get("_summary_avg_hr_bpm")
-                or (perf_signals or {}).get("avg_hr_bpm")
+                ride.get("_summary_avg_hr_bpm") or _stream_avg_hr(streams)
             ),
             max_heart_rate=max_heart_rate,
             resting_heart_rate=resting_heart_rate,
