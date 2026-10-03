@@ -33,7 +33,7 @@ from services import rider_identity
 from services import summary_pipeline
 from services import workout_curiosity
 from services.activity_imports import ImportedActivity
-from services.activity_identity import are_near_duplicate_activities
+from services.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
 from services.ai_service import (
     MAX_CONVERSATION_HISTORY,
     AIRateLimitError,
@@ -51,6 +51,7 @@ from services.analysis import (
     project_training_load_from_seed,
     build_ride_metrics_chain,
 )
+from services.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import (
@@ -727,16 +728,7 @@ async def analyse_activities(
     ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
     if analysis_activities:
         latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-        seed_ctl = (
-            latest_metric.ctl_after
-            if latest_metric and latest_metric.ctl_after
-            else 0.0
-        )
-        seed_atl = (
-            latest_metric.atl_after
-            if latest_metric and latest_metric.atl_after
-            else 0.0
-        )
+        seed_ledger = ledger_from_metric(latest_metric)
         rides_input = []
         for activity in analysis_activities:
             a_dict = activity.model_dump()
@@ -803,8 +795,7 @@ async def analyse_activities(
             metrics_chain = build_ride_metrics_chain(
                 rides_input,
                 ftp_for_chain,
-                seed_ctl,
-                seed_atl,
+                initial_ledger=seed_ledger,
                 max_heart_rate=current_user.max_heart_rate,
                 resting_heart_rate=current_user.resting_heart_rate,
             )
@@ -1881,24 +1872,29 @@ async def readiness_score(
     # --- Compute current CTL/ATL/TSB from actual ride metrics ---
     latest_ride = await crud.get_latest_ride_metric(db, current_user.id)
     if latest_ride is not None and latest_ride.ctl_after is not None:
-        current_ctl = float(latest_ride.ctl_after)
-        current_atl = float(latest_ride.atl_after or 0.0)
-        current_tsb = float(
-            latest_ride.tsb_after
-            if latest_ride.tsb_after is not None
-            else current_ctl - current_atl
-        )
+        # Race readiness is scored against FTP and a cycling plan, so the
+        # fitness half has to be the *cycling* rung of the ledger (#713). The
+        # row's own ``ctl_after`` is whichever sport was logged last, which for
+        # an athlete who ran yesterday would hand the readiness model a running
+        # CTL. Fatigue is the aggregate either way — that is the point of it.
+        current_ledger = ledger_from_metric(latest_ride)
     else:
         # Fall back to plan simulation when no ride data is available
         plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
         fallback_load = (
             compute_training_load(plan_to_today, ftp)
             if ftp > 0
-            else {"ctl": 0.0, "atl": 0.0, "tsb": 0.0}
+            else {"atl": 0.0, "ctl_by_sport": {}}
         )
-        current_ctl = fallback_load["ctl"]
-        current_atl = fallback_load["atl"]
-        current_tsb = fallback_load["tsb"]
+        current_ledger = ledger_from_row(
+            fallback_load.get("ctl_by_sport"),
+            ctl_after=None,
+            atl_after=fallback_load["atl"],
+        )
+
+    current_ctl = current_ledger.ctl(SPORT_CYCLING)
+    current_atl = current_ledger.atl
+    current_tsb = current_ledger.tsb(SPORT_CYCLING)
 
     # --- Compute days until race ---
     days_until_race = 0
@@ -1931,7 +1927,7 @@ async def readiness_score(
     if race_date_str and days_until_race > 0:
         future_plan_days = [d for d in plan if d.get("date", "") > today_str]
         projected_load = project_training_load_from_seed(
-            future_plan_days, ftp, seed_ctl=current_ctl, seed_atl=current_atl
+            future_plan_days, ftp, seed_ledger=current_ledger
         )
         projected_result = compute_readiness_score(
             ctl=projected_load["ctl"],
@@ -2206,33 +2202,22 @@ async def next_ride_recommendation(
         rides = [latest] if latest is not None else []
 
     # --- Extract CTL/ATL/TSB from the most recent ride metric ---
+    # The recommendation is for the next *ride*, so the fitness figure is the
+    # cycling rung of the stored ledger rather than the row's own ``ctl_after``,
+    # which states whatever sport that session was (#713). Fatigue stays the
+    # aggregate: a long run is exactly the kind of thing that should make the
+    # recommended ride easier.
+    load_row = rides[-1] if rides else await crud.get_latest_ride_metric(
+        db, current_user.id
+    )
     ctl: float | None = None
     atl: float | None = None
     tsb: float | None = None
-    if rides:
-        last = rides[-1]
-        ctl = float(last.ctl_after) if last.ctl_after is not None else None
-        atl = float(last.atl_after) if last.atl_after is not None else None
-        tsb = float(last.tsb_after) if last.tsb_after is not None else None
-    else:
-        # Fall back to the global latest ride metric for training-load context
-        latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-        if latest_metric is not None:
-            ctl = (
-                float(latest_metric.ctl_after)
-                if latest_metric.ctl_after is not None
-                else None
-            )
-            atl = (
-                float(latest_metric.atl_after)
-                if latest_metric.atl_after is not None
-                else None
-            )
-            tsb = (
-                float(latest_metric.tsb_after)
-                if latest_metric.tsb_after is not None
-                else None
-            )
+    if load_row is not None and load_row.ctl_after is not None:
+        ledger = ledger_from_metric(load_row)
+        ctl = ledger.ctl(SPORT_CYCLING)
+        atl = ledger.atl
+        tsb = ledger.tsb(SPORT_CYCLING)
 
     async with _token_usage_scope(db, current_user, source="api:next-ride-recommendation"):
         try:

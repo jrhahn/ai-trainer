@@ -14,6 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
+from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
@@ -467,21 +468,10 @@ async def run_intervals_import(
             # The load ladder needs the athlete's HR bounds to estimate a load
             # for the stream-less activities this import is full of (#579).
             chain_user = await crud.get_user_by_id(db, user_id)
-        seed_ctl = (
-            latest_metric.ctl_after
-            if latest_metric and latest_metric.ctl_after
-            else 0.0
-        )
-        seed_atl = (
-            latest_metric.atl_after
-            if latest_metric and latest_metric.atl_after
-            else 0.0
-        )
         metrics_chain = build_ride_metrics_chain(
             rides,
             ftp,
-            seed_ctl,
-            seed_atl,
+            initial_ledger=ledger_from_metric(latest_metric),
             max_heart_rate=getattr(chain_user, "max_heart_rate", None),
             resting_heart_rate=getattr(chain_user, "resting_heart_rate", None),
         )

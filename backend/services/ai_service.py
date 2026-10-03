@@ -51,6 +51,7 @@ from .prompts import (
     analyse_activities_computed_section,
     analyse_activities_system,
     analyse_activities_user,
+    ctl_label,
     generate_plan_system,
     generate_plan_user,
     adapt_plan_system,
@@ -315,7 +316,9 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
     if tss is not None:
         load_bits.append(f"TSS {round(float(tss))}")
     if ctl is not None:
-        load_bits.append(f"CTL {round(float(ctl), 1)}")
+        # Sport-qualified: this is the latest activity's own sport's fitness,
+        # where the ATL beside it is the athlete's aggregate (#713).
+        load_bits.append(f"{ctl_label(latest)} {round(float(ctl), 1)}")
     if atl is not None:
         load_bits.append(f"ATL {round(float(atl), 1)}")
     if tsb is not None:

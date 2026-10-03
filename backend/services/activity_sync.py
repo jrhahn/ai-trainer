@@ -19,6 +19,7 @@ from services.analysis import (
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )
+from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
     find_existing_import,
@@ -219,12 +220,7 @@ async def _persist_and_adapt(
     rides = to_ride_inputs(activities)
 
     latest_metric = await crud.get_latest_ride_metric(db, user.id)
-    seed_ctl = (
-        latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
-    )
-    seed_atl = (
-        latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
-    )
+    seed_ledger = ledger_from_metric(latest_metric)
     ftp = float(user.current_ftp or 0)
     if (
         ftp <= 0
@@ -236,8 +232,7 @@ async def _persist_and_adapt(
     metrics_chain = build_ride_metrics_chain(
         rides,
         ftp,
-        seed_ctl,
-        seed_atl,
+        initial_ledger=seed_ledger,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,
     )

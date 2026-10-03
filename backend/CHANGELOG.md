@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-sport fitness, one aggregated fatigue** (`services/fitness_ledger.py`,
+  `services/analysis.py`, `services/metrics_service.py`, migration
+  `20261003_000001`, #713, epic #709) — CTL is now one number **per sport** and
+  ATL one number **across all of them**, with TSB derived per sport as that
+  sport's CTL minus the aggregate ATL.
+
+  The split is not a refinement, it is a correction. Once a run and a gym hour
+  carry a load (#712), a single CTL asserts that running made the athlete better
+  at cycling — and the figure is worse than no figure, because everything
+  downstream reads it as a bike number. Fatigue is the opposite: whatever the
+  athlete did yesterday, the legs and the sleep debt are shared, and that is what
+  decides whether today's session should happen. So a hard week of running now
+  shows up as cycling fatigue, exactly as it is felt, without inflating cycling
+  fitness. Cross-sport *transfer* is deliberately not modelled — pricing it is the
+  thing one shared CTL got wrong in the first place.
+
+  `services/fitness_ledger.py` is the single gate: `LoadLedger.advance()` books a
+  session's load to its own sport's CTL and to the one ATL, and `ledger_sport()`
+  decides which rung by asking `power_model_applies` first — the rung has to agree
+  with the currency the load was priced in, so a handcycle (a bicycle with the
+  cranks elsewhere, #711) and the provider catch-all labels stay cycling rather
+  than each acquiring a rung of their own. `apply_ctl_atl_decay` moved here from
+  `services/analysis.py` and is still importable from there, because two alembic
+  revisions replay the chain with it and a migration that has already run against
+  production is not a file to edit.
+
+  The same split was applied to the forward projections (`compute_training_load`,
+  `project_training_load_from_seed`): projected and measured CTL have to mean the
+  same thing, or the dashboard shows a projection the chain can never reach. A
+  planned run now raises projected fatigue and lowers projected cycling form
+  without raising projected cycling fitness.
+
+- **`ctl_by_sport` on `ride_metrics` and `athlete_metric_snapshots`** (`models.py`,
+  `crud.py`, `schemas.py`, #713) — the whole ledger, because `ctl_after` can only
+  hold the rung of the sport that happened to be logged. Five import paths seeded
+  their incremental chain from the newest row's `ctl_after`; after the split that
+  scalar is whichever sport came last, so the first time an athlete's most recent
+  activity was a run, the next ride's chain would have continued from their
+  *running* CTL. `ledger_from_metric()` is now the one helper all five use.
+
 - **One load currency that can price any session** (`services/training_load.py`,
   `services/analysis.py`, `services/prompts.py`, #712, epic #709) —
   `session_load(LoadSignals)` is now the single abstraction, returning a value
@@ -158,6 +198,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape of #684 and #696.
 
 ### Changed
+
+- **CTL is named by its sport wherever a per-session figure is printed**
+  (`services/prompts.py`, `services/ai_service.py`, `services/metrics_service.py`,
+  #713) — `prompts.ctl_label()` renders "cycling CTL after: 61.4". Unqualified, a
+  ride history that mixes sports reads as one CTL series that silently switches
+  sport between lines, and the coach would read a 50-point step as lost fitness.
+  The headline CTL each coach prompt receives stays **cycling** (race readiness,
+  the next-ride recommendation and plan adaptation are all cycling-plan
+  decisions), so that number means one fixed thing; per-sport presentation to the
+  coach is #718.
+
+- **Migration `20261003_000001` replays every athlete's chain per sport.** A
+  single-sport history comes out bit-identical — with one sport there is nothing
+  else to decay, so the ledger reduces to the old recurrence. Mixed histories
+  change, which is the point: cycling CTL stops counting strength and running
+  load as cycling fitness while ATL keeps all of it. Verified on a seeded
+  database: a cyclist and a multisport athlete with identical loads on identical
+  dates end with the same ATL (60.53) and different cycling CTL (19.84 against
+  9.8), and `downgrade()` returns the multisport athlete to 19.84 — which is also
+  the proof that the old chain really did bank a run as cycling fitness.
+  `athlete_metric_snapshots` rows are left NULL rather than backfilled; they are
+  derived views, and `ledger_from_row` reads a NULL ledger as cycling-only, which
+  is what that number meant when it was written.
 
 - **A planned day is priced in its own sport** (`services/analysis.py`, #712) —
   `compute_training_load` and `project_training_load_from_seed` carried a copy

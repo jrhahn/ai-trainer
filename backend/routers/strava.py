@@ -20,6 +20,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
+from services.fitness_ledger import LoadLedger, ledger_from_row
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
 from services.progress_store import mark_finished, prune_progress, try_mark_running
@@ -103,16 +104,18 @@ def _build_metrics_chain_resilient(
 
     metrics_chain: list[dict] = []
     failed = 0
-    ctl = 0.0
-    atl = 0.0
+    # One ride at a time so a single bad ride cannot sink the import, which means
+    # the ledger has to be carried by hand between chunks. Carrying the whole
+    # per-sport ledger rather than one CTL (#713): reading ``ctl_after`` back as
+    # the next chunk's seed would feed a run's CTL into the following ride.
+    ledger = LoadLedger()
 
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
             chunk = build_ride_metrics_chain(
                 [ride],
                 ftp,
-                initial_ctl=ctl,
-                initial_atl=atl,
+                initial_ledger=ledger,
                 max_heart_rate=max_heart_rate,
                 resting_heart_rate=resting_heart_rate,
             )
@@ -122,8 +125,11 @@ def _build_metrics_chain_resilient(
         if not chunk:
             continue
         metric = chunk[0]
-        ctl = float(metric.get("ctl_after") or ctl)
-        atl = float(metric.get("atl_after") or atl)
+        ledger = ledger_from_row(
+            metric.get("ctl_by_sport"),
+            ctl_after=metric.get("ctl_after"),
+            atl_after=metric.get("atl_after"),
+        )
         metrics_chain.append(metric)
 
     return metrics_chain, failed

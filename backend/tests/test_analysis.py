@@ -378,6 +378,9 @@ def test_compute_training_load_ftp_guard():
         "atl": 0.0,
         "tsb": 0.0,
         "daily_tss": [],
+        # Empty rather than absent: no plan means no sport has any fitness,
+        # which is a statement, not a gap (#713).
+        "ctl_by_sport": {},
     }
 
 

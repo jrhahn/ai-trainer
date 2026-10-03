@@ -3427,6 +3427,7 @@ async def create_athlete_metric_snapshot(
     ctl: float | None = None,
     atl: float | None = None,
     tsb: float | None = None,
+    ctl_by_sport: dict[str, float] | None = None,
     source: str = "strava_analysis",
     recorded_at: datetime | None = None,
 ) -> models.AthleteMetricSnapshot:
@@ -3442,6 +3443,7 @@ async def create_athlete_metric_snapshot(
         ctl=ctl,
         atl=atl,
         tsb=tsb,
+        ctl_by_sport=ctl_by_sport,
         source=source,
     )
     if recorded_at is not None:
@@ -3615,6 +3617,7 @@ async def upsert_ride_metric(
     ctl_after: float | None = None,
     atl_after: float | None = None,
     tsb_after: float | None = None,
+    ctl_by_sport: dict[str, float] | None = None,
     ride_purpose: str | None = None,
     classification_confidence: str | None = None,
     classification_reason: str | None = None,
@@ -3658,6 +3661,7 @@ async def upsert_ride_metric(
         ctl_after=ctl_after,
         atl_after=atl_after,
         tsb_after=tsb_after,
+        ctl_by_sport=ctl_by_sport,
         ride_purpose=ride_purpose,
         classification_confidence=classification_confidence,
         classification_reason=classification_reason,

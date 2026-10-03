@@ -1793,6 +1793,10 @@ class AthleteMetricSnapshotSchema(CamelModel):
     ctl: Optional[float] = None
     atl: Optional[float] = None
     tsb: Optional[float] = None
+    ctl_by_sport: Optional[dict[str, float]] = None
+    """Per-sport chronic load at the time of the snapshot (#713). ``ctl`` above
+    is a single sport's rung out of this; ``atl`` is the aggregate across all of
+    them. ``null`` on snapshots recorded before the split, which mean cycling."""
     source: str = "strava_analysis"
 
 
@@ -1925,9 +1929,15 @@ class RideMetricSchema(CamelModel):
     # avoid labelling an estimated load as a measured TSS (#579).
     tss_source: Optional[str] = None
     ftp_used: Optional[int] = None
+    # ``ctl_after`` is this session's own sport's fitness; ``atl_after`` is the
+    # athlete's aggregate fatigue across every sport, and ``ctl_by_sport`` the
+    # whole ledger so a chart can draw one line per sport instead of one line
+    # that changes sport whenever the athlete cross-trains (#713). NULL on rows
+    # written before #713.
     ctl_after: Optional[float] = None
     atl_after: Optional[float] = None
     tsb_after: Optional[float] = None
+    ctl_by_sport: Optional[dict[str, float]] = None
     ride_purpose: Optional[str] = None
     classification_confidence: Optional[str] = None
     classification_reason: Optional[str] = None
