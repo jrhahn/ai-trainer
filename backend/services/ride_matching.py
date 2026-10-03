@@ -14,7 +14,12 @@ import models
 import schemas
 from services import ai_service
 from services import coach_summary
-from services.activity_identity import activities_form_one_session, training_sport
+from services.activity_identity import (
+    SPORT_CYCLING,
+    activities_form_one_session,
+    training_sport,
+)
+from services.fitness_ledger import ledger_from_metric
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today_iso
 from services.duration_range import duration_range
@@ -1121,6 +1126,7 @@ async def review_matched_ride_and_adapt(
             if (athlete_model_row is not None and user.memory_updates_enabled)
             else None
         )
+        ride_ledger = ledger_from_metric(ride)
         result = await ai_service.recommend_next_session(
             rides=session_rides,
             plan=plan,
@@ -1131,9 +1137,14 @@ async def review_matched_ride_and_adapt(
             athlete_context=athlete_context,
             athlete_memory_facts=athlete_memory_facts,
             athlete_model=athlete_model,
-            ctl=float(ride.ctl_after) if ride.ctl_after is not None else None,
-            atl=float(ride.atl_after) if ride.atl_after is not None else None,
-            tsb=float(ride.tsb_after) if ride.tsb_after is not None else None,
+            # Cycling fitness against aggregate fatigue (#713). The headline
+            # CTL every coach prompt receives means one fixed thing — cycling —
+            # because what it feeds is a cycling-plan decision; the row's own
+            # ``ctl_after`` would change sport with whatever was matched. The
+            # per-ride history lines in the same prompt do name their sport.
+            ctl=ride_ledger.ctl(SPORT_CYCLING),
+            atl=ride_ledger.atl,
+            tsb=ride_ledger.tsb(SPORT_CYCLING),
         )
         plan_updates = result.get("plan_updates") or None
         if plan_updates:

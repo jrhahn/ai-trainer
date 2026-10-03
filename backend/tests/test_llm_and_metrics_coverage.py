@@ -362,6 +362,7 @@ def test_build_last_ride_feedback_with_full_metrics():
     metric.atl_after = 60.0
     metric.tsb_after = -8.0
     metric.ride_purpose = "endurance"
+    metric.sport_type = "Ride"
 
     result = build_last_ride_feedback(metric, ftp_value=260)
 
@@ -387,6 +388,7 @@ def test_build_last_ride_feedback_with_no_power():
     metric.atl_after = None
     metric.tsb_after = None
     metric.ride_purpose = "unknown"
+    metric.sport_type = "Ride"
 
     result = build_last_ride_feedback(metric, ftp_value=250)
     assert "250" in result
@@ -400,6 +402,7 @@ def test_recalculate_metric_chain_single_ride():
     metric.normalized_power_w = 230.0
     metric.duration_seconds = 3600
     metric.activity_date = "2026-04-15"
+    metric.sport_type = "Ride"
     metric.tss = None
     metric.tss_source = None
     metric.intensity_factor = None
@@ -427,6 +430,7 @@ def test_recalculate_metric_chain_no_power():
     metric.normalized_power_w = None
     metric.duration_seconds = 3600
     metric.activity_date = "2026-04-16"
+    metric.sport_type = "Ride"
     metric.tss = None
     metric.tss_source = None
 
@@ -450,6 +454,7 @@ def test_recalculate_metric_chain_keeps_a_derived_load():
     gym.normalized_power_w = None
     gym.duration_seconds = 58 * 60
     gym.activity_date = "2026-08-06"
+    gym.sport_type = "WeightTraining"
     gym.tss = 34.0
     gym.tss_source = "heart_rate"
 
@@ -468,6 +473,7 @@ def test_recalculate_metric_chain_does_not_overwrite_a_provider_load():
     ride.normalized_power_w = 250.0
     ride.duration_seconds = 3600
     ride.activity_date = "2026-08-06"
+    ride.sport_type = "Ride"
     ride.tss = 88.0
     ride.tss_source = "provider"
 
@@ -488,12 +494,14 @@ def test_recalculate_metric_chain_gap_between_rides():
     metric1.normalized_power_w = 250.0
     metric1.duration_seconds = 3600
     metric1.activity_date = "2026-04-01"
+    metric1.sport_type = "Ride"
     metric1.tss_source = None
 
     metric2 = MagicMock()
     metric2.normalized_power_w = 250.0
     metric2.duration_seconds = 3600
     metric2.activity_date = "2026-04-08"  # 7-day gap
+    metric2.sport_type = "Ride"
     metric2.tss_source = None
 
     updated = _recalculate_metric_chain([metric1, metric2], ftp_value=250)

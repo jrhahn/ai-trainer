@@ -1227,13 +1227,25 @@ async def test_rate_completed_workout_with_stream_delta():
 
 def test_compute_training_load_empty():
     result = analysis.compute_training_load([], 250.0)
-    assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+    assert result == {
+        "ctl": 0.0,
+        "atl": 0.0,
+        "tsb": 0.0,
+        "daily_tss": [],
+        "ctl_by_sport": {},
+    }
 
 
 def test_compute_training_load_zero_ftp():
     plan = [{"durationMinutes": 60, "workoutType": "endurance"}]
     result = analysis.compute_training_load(plan, 0.0)
-    assert result == {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+    assert result == {
+        "ctl": 0.0,
+        "atl": 0.0,
+        "tsb": 0.0,
+        "daily_tss": [],
+        "ctl_by_sport": {},
+    }
 
 
 def test_compute_training_load_returns_expected_keys():

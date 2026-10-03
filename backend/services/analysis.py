@@ -11,8 +11,21 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from services.activity_identity import non_cycling_classification, power_model_applies
+from services.activity_identity import (
+    SPORT_CYCLING,
+    non_cycling_classification,
+    power_model_applies,
+)
+from services.fitness_ledger import LoadLedger, ledger_sport
 from services.training_load import format_load, resolve_training_load
+
+# ``apply_ctl_atl_decay`` lived here until #713, when the chain grew a CTL per
+# sport and the primitive moved to ``services.fitness_ledger`` next to the ledger
+# that drives it. Two alembic revisions (20260815_000001, 20260818_000001) import
+# it from *this* module to replay the chain they rewrote, and a migration that has
+# already run against production is not a file to edit — so the name stays
+# importable from here. The redundant alias is the explicit-re-export form.
+from services.fitness_ledger import apply_ctl_atl_decay as apply_ctl_atl_decay
 
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
 # 87% is a well-established estimate for trained cyclists.
@@ -955,35 +968,46 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     ATL — 7-day exponential weighted average of daily TSS (fatigue).
     TSB — CTL − ATL (form/freshness).
 
-    Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float]}``.
+    ``ctl`` is the **cycling** rung of the projected ledger and ``atl`` the
+    aggregate across every planned sport (#713), for the same reason the chain
+    over real rides splits them: a planned run is real fatigue to budget for but
+    it is not projected cycling fitness. ``ctl_by_sport`` carries the rest.
+    Callers are cycling-plan decisions — race readiness, the plan-derived
+    fallback the coach is handed — so the headline ``ctl``/``tsb`` stay cycling
+    rather than changing sport with whatever the plan happens to contain.
+
+    Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float],
+    "ctl_by_sport": dict[str, float]}``.
     """
     if ftp <= 0:
-        return {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
+        return {
+            "ctl": 0.0,
+            "atl": 0.0,
+            "tsb": 0.0,
+            "daily_tss": [],
+            "ctl_by_sport": {},
+        }
 
-    # --- Estimate TSS per day ---
+    # --- Estimate TSS per day and book it to that day's sport ---
     # One shared estimator with project_training_load_from_seed (#712). It
     # returns the unrounded cost; the EWMA accumulates that and only the
-    # reported series is rounded.
-    planned = [planned_day_load(day, ftp) for day in plan_days]
+    # reported series is rounded. One plan day is one calendar day, which is why
+    # every advance below is a single day's step.
+    import schemas
 
-    # --- Compute CTL and ATL via exponential weighted averages ---
-    # CTL: 42-day time constant → smoothing factor α = 1 - exp(-1/42)
-    # ATL: 7-day time constant  → smoothing factor α = 1 - exp(-1/7)
-    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
-    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
+    ledger = LoadLedger()
+    planned: list[float] = []
+    for day in plan_days:
+        load = planned_day_load(day, ftp)
+        planned.append(load)
+        ledger = ledger.advance(sport=schemas.day_sport(day), load=load)
 
-    ctl = 0.0
-    atl = 0.0
-    for tss in planned:
-        ctl = ctl + alpha_ctl * (tss - ctl)
-        atl = atl + alpha_atl * (tss - atl)
-
-    tsb = ctl - atl
     return {
-        "ctl": round(ctl, 1),
-        "atl": round(atl, 1),
-        "tsb": round(tsb, 1),
+        "ctl": round(ledger.ctl(SPORT_CYCLING), 1),
+        "atl": round(ledger.atl, 1),
+        "tsb": round(ledger.tsb(SPORT_CYCLING), 1),
         "daily_tss": [round(tss, 1) for tss in planned],
+        "ctl_by_sport": ledger.as_dict(digits=1),
     }
 
 
@@ -1448,8 +1472,10 @@ def _project_training_load(
 def project_training_load_from_seed(
     future_plan_days: list[dict],
     ftp: float,
-    seed_ctl: float,
-    seed_atl: float,
+    seed_ctl: float = 0.0,
+    seed_atl: float = 0.0,
+    *,
+    seed_ledger: LoadLedger | None = None,
 ) -> dict:
     """Forward-project CTL/ATL/TSB starting from real (seeded) CTL/ATL values.
 
@@ -1462,38 +1488,53 @@ def project_training_load_from_seed(
     point reflects what the athlete has actually done rather than what the plan
     assumed.
 
-    Returns ``{"ctl": float, "atl": float, "tsb": float, "daily_tss": list[float]}``.
+    ``seed_ctl`` is read as *cycling* CTL. Prefer ``seed_ledger``, which carries
+    every sport's rung, so that a plan containing both rides and runs projects
+    each sport's fitness from where that sport actually is (#713). The two forms
+    are mutually exclusive: passing both states the same thing twice, and the
+    point of the ledger is that there is one answer.
+
+    Returns the same shape as :func:`compute_training_load`, with ``ctl``/``tsb``
+    cycling and ``atl`` the aggregate.
     """
+    if seed_ledger is not None and (seed_ctl or seed_atl):
+        raise ValueError("pass either seed_ledger or seed_ctl/seed_atl, not both")
+
+    seed = (
+        seed_ledger
+        if seed_ledger is not None
+        else LoadLedger.seeded(cycling_ctl=seed_ctl, atl=seed_atl)
+    )
+
     if ftp <= 0:
         return {
-            "ctl": seed_ctl,
-            "atl": seed_atl,
-            "tsb": seed_ctl - seed_atl,
+            "ctl": seed.ctl(SPORT_CYCLING),
+            "atl": seed.atl,
+            "tsb": seed.tsb(SPORT_CYCLING),
             "daily_tss": [],
+            "ctl_by_sport": seed.as_dict(digits=1),
         }
 
-    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
-    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
+    import schemas
 
-    ctl = seed_ctl
-    atl = seed_atl
+    ledger = seed
     daily_tss: list[float] = []
 
     # One shared estimator with compute_training_load, so the two projections
-    # cannot disagree about what a planned day costs (#712). The full value
-    # drives the EWMA; only the reported series is rounded.
+    # cannot disagree about what a planned day costs (#712), and one shared
+    # ledger so they cannot disagree about which sport it costs it to (#713).
+    # The full value drives the EWMA; only the reported series is rounded.
     for day in future_plan_days:
         tss = planned_day_load(day, ftp)
         daily_tss.append(round(tss, 1))
-        ctl = ctl + alpha_ctl * (tss - ctl)
-        atl = atl + alpha_atl * (tss - atl)
+        ledger = ledger.advance(sport=schemas.day_sport(day), load=tss)
 
-    tsb = ctl - atl
     return {
-        "ctl": round(ctl, 1),
-        "atl": round(atl, 1),
-        "tsb": round(tsb, 1),
+        "ctl": round(ledger.ctl(SPORT_CYCLING), 1),
+        "atl": round(ledger.atl, 1),
+        "tsb": round(ledger.tsb(SPORT_CYCLING), 1),
         "daily_tss": daily_tss,
+        "ctl_by_sport": ledger.as_dict(digits=1),
     }
 
 
@@ -2322,40 +2363,6 @@ def compute_ride_tss(
     return round(tss, 1)
 
 
-def apply_ctl_atl_decay(
-    prev_ctl: float,
-    prev_atl: float,
-    tss: float,
-    gap_days: int = 1,
-) -> tuple[float, float]:
-    """Advance CTL/ATL by ``gap_days``, applying zero-TSS decay for silent days
-    then ``tss`` on the final (ride) day.
-
-    ``gap_days=1`` means the ride is on the very next day — no silent days.
-    ``gap_days=3`` means 2 rest days then the ride day.
-
-    Uses standard exponential smoothing constants:
-    - CTL: 42-day time constant  → α = 1 − exp(−1/42)
-    - ATL: 7-day time constant   → α = 1 − exp(−1/7)
-    """
-    alpha_ctl = 1.0 - math.exp(-1.0 / 42.0)
-    alpha_atl = 1.0 - math.exp(-1.0 / 7.0)
-
-    # Decay through silent days (TSS = 0 each day before the ride)
-    silent_days = max(0, gap_days - 1)
-    if silent_days > 0:
-        # Compounded zero-TSS decay: CTL_n = CTL_0 * (1 - α)^n
-        decay_ctl = (1.0 - alpha_ctl) ** silent_days
-        decay_atl = (1.0 - alpha_atl) ** silent_days
-        prev_ctl = prev_ctl * decay_ctl
-        prev_atl = prev_atl * decay_atl
-
-    # Apply ride TSS on the ride day
-    new_ctl = prev_ctl + alpha_ctl * (tss - prev_ctl)
-    new_atl = prev_atl + alpha_atl * (tss - prev_atl)
-    return new_ctl, new_atl
-
-
 def build_rule_based_summary(
     ride_purpose: str,
     duration_seconds: float,
@@ -2420,6 +2427,7 @@ def build_ride_metrics_chain(
     initial_ctl: float = 0.0,
     initial_atl: float = 0.0,
     *,
+    initial_ledger: LoadLedger | None = None,
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
 ) -> list[dict]:
@@ -2435,8 +2443,15 @@ def build_ride_metrics_chain(
             - ``duration_seconds`` (int)
             - ``streams`` (dict of Strava stream objects keyed by type)
         ftp: Current FTP in watts. Used for all rides (single snapshot).
-        initial_ctl: Starting CTL value (0.0 for full historical rebuild).
+        initial_ctl: Starting *cycling* CTL (0.0 for full historical rebuild).
+            The pre-#713 single-sport seed; prefer ``initial_ledger``.
         initial_atl: Starting ATL value (0.0 for full historical rebuild).
+        initial_ledger: The per-sport ledger to continue from (#713) — what an
+            incremental import should pass, since the newest stored row's
+            ``ctl_after`` is only the sport that happened to be logged last.
+            Mutually exclusive with the two scalars above: passing both says
+            two different things about the same state, so it raises rather than
+            picking one.
         max_heart_rate: The athlete's maximum HR, when known. Without it the
             load ladder cannot use heart rate and drops to the duration rung.
         resting_heart_rate: The athlete's resting HR, when known. Optional —
@@ -2448,14 +2463,22 @@ def build_ride_metrics_chain(
     """
     import datetime as _dt  # local import to avoid circular deps at module level
 
+    if initial_ledger is not None and (initial_ctl or initial_atl):
+        raise ValueError(
+            "pass either initial_ledger or initial_ctl/initial_atl, not both"
+        )
+
     if not rides:
         return []
 
     # Sort by date ascending to build the chain correctly
     sorted_rides = sorted(rides, key=lambda r: r["activity_date"])
 
-    ctl = initial_ctl
-    atl = initial_atl
+    ledger = (
+        initial_ledger
+        if initial_ledger is not None
+        else LoadLedger.seeded(cycling_ctl=initial_ctl, atl=initial_atl)
+    )
     prev_date_str: str | None = None
     result: list[dict] = []
 
@@ -2586,19 +2609,32 @@ def build_ride_metrics_chain(
         tss_source = load.source if load is not None else None
 
         # --- CTL/ATL decay and update ---
+        # The load lands on this session's *own sport's* CTL and on the one
+        # aggregate ATL (#713). Fitness is sport-specific, fatigue is not, so a
+        # run raises the fatigue a cyclist feels without claiming it made them a
+        # better cyclist. ``ctl_after`` therefore states this sport's fitness,
+        # ``atl_after`` the athlete's; ``ctl_by_sport`` carries the whole ledger
+        # so a reader that needs another sport's rung is not left guessing.
         activity_date_str = ride["activity_date"]
-        gap_days = 1
+        days_since_previous = 1
         if prev_date_str is not None:
             try:
                 prev_date = _dt.date.fromisoformat(prev_date_str)
                 curr_date = _dt.date.fromisoformat(activity_date_str)
-                gap_days = max(1, (curr_date - prev_date).days)
+                days_since_previous = max(0, (curr_date - prev_date).days)
             except ValueError:
-                gap_days = 1
+                days_since_previous = 1
 
+        ride_sport = ledger_sport(ride.get("sport_type"))
         ride_tss = tss if tss is not None else 0.0
-        ctl, atl = apply_ctl_atl_decay(ctl, atl, ride_tss, gap_days=gap_days)
-        tsb = ctl - atl
+        ledger = ledger.advance(
+            sport=ride_sport,
+            load=ride_tss,
+            days_since_previous=days_since_previous,
+        )
+        ctl = ledger.ctl(ride_sport)
+        atl = ledger.atl
+        tsb = ledger.tsb(ride_sport)
         prev_date_str = activity_date_str
 
         # --- Rule-based summary ---
@@ -2658,6 +2694,7 @@ def build_ride_metrics_chain(
                 "ctl_after": round(ctl, 2),
                 "atl_after": round(atl, 2),
                 "tsb_after": round(tsb, 2),
+                "ctl_by_sport": ledger.as_dict(),
                 "ride_purpose": ride_purpose,
                 "classification_confidence": classification_confidence,
                 "classification_reason": classification_reason,

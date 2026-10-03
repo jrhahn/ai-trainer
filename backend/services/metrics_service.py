@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from services import assessment_pipeline, plan_compliance
-from services.analysis import apply_ctl_atl_decay, compute_ride_tss
+from services.analysis import compute_ride_tss
+from services.fitness_ledger import LoadLedger, ledger_sport
 from services.training_load import LOAD_SOURCE_POWER
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,10 @@ def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
 
     load_bits: list[str] = []
     if metric.ctl_after is not None:
-        load_bits.append(f"CTL {metric.ctl_after:.1f}")
+        # Named, because CTL is now one sport's fitness while ATL and TSB below
+        # are the athlete's aggregate (#713) — an unqualified "CTL 61.4" next to
+        # them reads as a claim about the whole athlete.
+        load_bits.append(f"{ledger_sport(metric.sport_type)} CTL {metric.ctl_after:.1f}")
     if metric.atl_after is not None:
         load_bits.append(f"ATL {metric.atl_after:.1f}")
     if metric.tsb_after is not None:
@@ -128,6 +132,7 @@ async def _rebuild_metric_snapshots(
             ctl=round(metric.ctl_after, 1) if metric.ctl_after is not None else None,
             atl=round(metric.atl_after, 1) if metric.atl_after is not None else None,
             tsb=round(metric.tsb_after, 1) if metric.tsb_after is not None else None,
+            ctl_by_sport=metric.ctl_by_sport,
             source="manual_recalculate",
             recorded_at=ride_dt,
         )
@@ -170,8 +175,9 @@ def _recalculate_metric_chain(
     ftp_value: int,
 ) -> int:
     ftp_float = float(ftp_value)
-    ctl = 0.0
-    atl = 0.0
+    # Rebuilt from zero across every sport, so this replay produces the same
+    # ledger ``build_ride_metrics_chain`` would (#713).
+    ledger = LoadLedger()
     prev_date_str: str | None = None
     updated = 0
 
@@ -195,27 +201,32 @@ def _recalculate_metric_chain(
         else:
             new_tss = metric.tss
 
-        gap_days = 1
+        days_since_previous = 1
         if prev_date_str is not None:
             try:
                 prev_d = _date.fromisoformat(prev_date_str)
                 curr_d = _date.fromisoformat(metric.activity_date)
-                gap_days = max(1, (curr_d - prev_d).days)
+                days_since_previous = max(0, (curr_d - prev_d).days)
             except ValueError:
-                gap_days = 1
+                days_since_previous = 1
 
+        sport = ledger_sport(metric.sport_type)
         ride_tss = new_tss if new_tss is not None else 0.0
-        ctl, atl = apply_ctl_atl_decay(ctl, atl, ride_tss, gap_days=gap_days)
-        tsb = ctl - atl
+        ledger = ledger.advance(
+            sport=sport,
+            load=ride_tss,
+            days_since_previous=days_since_previous,
+        )
         prev_date_str = metric.activity_date
 
         metric.tss = round(new_tss, 1) if new_tss is not None else None
         metric.tss_source = new_source if new_tss is not None else None
         metric.intensity_factor = new_if
         metric.ftp_used = ftp_value
-        metric.ctl_after = round(ctl, 2)
-        metric.atl_after = round(atl, 2)
-        metric.tsb_after = round(tsb, 2)
+        metric.ctl_after = round(ledger.ctl(sport), 2)
+        metric.atl_after = round(ledger.atl, 2)
+        metric.tsb_after = round(ledger.tsb(sport), 2)
+        metric.ctl_by_sport = ledger.as_dict()
         updated += 1
 
     return updated

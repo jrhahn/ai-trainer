@@ -17,6 +17,7 @@ from .activity_identity import (
     activity_sport_type,
     power_model_applies,
 )
+from .fitness_ledger import ledger_sport
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
@@ -85,6 +86,19 @@ ACTIVITY_TIMING_RULE = (
     "state only what was *scheduled*: a planned session the athlete did not ride "
     "has no activity here, so never describe it as something they did."
 )
+
+
+def ctl_label(metric: object) -> str:
+    """``"cycling CTL"`` — the sport-qualified name for a row's ``ctl_after``.
+
+    CTL is one sport's fitness since #713, while the ATL and TSB printed beside
+    it are the athlete's aggregate. Unqualified, a ride history that mixes sports
+    renders as a single CTL series that silently switches sport between lines,
+    and the coach reads a 50-point drop as lost fitness rather than as the next
+    line being about running. Written once so the four renderers that print this
+    agree on the wording.
+    """
+    return f"{ledger_sport(getattr(metric, 'sport_type', None))} CTL"
 
 
 def annotated_plan_json(
@@ -4433,7 +4447,7 @@ def ride_metrics_context_section(
         atl = getattr(m, "atl_after", None)
         tsb = getattr(m, "tsb_after", None)
         if ctl is not None:
-            parts.append(f"CTL {round(ctl, 1)}")
+            parts.append(f"{ctl_label(m)} {round(ctl, 1)}")
         if atl is not None:
             parts.append(f"ATL {round(atl, 1)}")
         if tsb is not None:
@@ -4591,7 +4605,7 @@ def batch_review_user(
         atl = getattr(m, "atl_after", None)
         tsb = getattr(m, "tsb_after", None)
         if ctl is not None:
-            parts.append(f"CTL: {round(ctl, 1)}")
+            parts.append(f"{ctl_label(m)}: {round(ctl, 1)}")
         if atl is not None:
             parts.append(f"ATL: {round(atl, 1)}")
         if tsb is not None:
@@ -4779,7 +4793,7 @@ def next_ride_recommendation_user(
             m_atl = getattr(m, "atl_after", None)
             m_tsb = getattr(m, "tsb_after", None)
             if m_ctl is not None:
-                ride_parts.append(f"CTL after: {round(m_ctl, 1)}")
+                ride_parts.append(f"{ctl_label(m)} after: {round(m_ctl, 1)}")
             if m_atl is not None:
                 ride_parts.append(f"ATL after: {round(m_atl, 1)}")
             if m_tsb is not None:
@@ -4945,7 +4959,7 @@ def process_pending_feedbacks_user(
             atl = getattr(m, "atl_after", None)
             tsb = getattr(m, "tsb_after", None)
             if ctl is not None:
-                ride_parts.append(f"CTL after: {round(float(ctl), 1)}")
+                ride_parts.append(f"{ctl_label(m)} after: {round(float(ctl), 1)}")
             if atl is not None:
                 ride_parts.append(f"ATL after: {round(float(atl), 1)}")
             if tsb is not None:

@@ -45,6 +45,7 @@ from services.analysis import (
     check_ftp_against_map,
 )
 from services.activity_imports import ImportedActivity, find_existing_import
+from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today_iso
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
@@ -1381,6 +1382,7 @@ async def get_metrics_history(
                 ctl=s.ctl,
                 atl=s.atl,
                 tsb=s.tsb,
+                ctl_by_sport=s.ctl_by_sport,
                 source=s.source,
             )
             for s in snapshots
@@ -2030,19 +2032,12 @@ async def _store_fit_import(
             )
 
     latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-    seed_ctl = (
-        latest_metric.ctl_after if latest_metric and latest_metric.ctl_after else 0.0
-    )
-    seed_atl = (
-        latest_metric.atl_after if latest_metric and latest_metric.atl_after else 0.0
-    )
     ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
     ride_input = imported_activity.to_ride_input()
     metrics_chain = build_ride_metrics_chain(
         [ride_input],
         ftp_for_chain,
-        seed_ctl,
-        seed_atl,
+        initial_ledger=ledger_from_metric(latest_metric),
         max_heart_rate=current_user.max_heart_rate,
         resting_heart_rate=current_user.resting_heart_rate,
     )

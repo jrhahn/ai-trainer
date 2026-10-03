@@ -351,10 +351,21 @@ def test_the_two_projections_price_a_plan_identically():
 
 def test_a_plan_of_gym_sessions_does_not_project_as_rest():
     """A week of strength work used to move CTL only through a watt figure
-    invented from the athlete's FTP; now it moves it through the sport."""
-    week = [_day(sport="strength", workoutType="strength") for _ in range(7)]
+    invented from the athlete's FTP; now it moves it through the sport.
 
-    assert analysis.compute_training_load(week, 250.0)["ctl"] > 0
+    #713 moved *where* it shows up without changing whether it does: the load
+    lands on the strength rung and on the one aggregate fatigue, and the
+    headline ``ctl`` — cycling — is correctly zero, because a week in the gym
+    built no cycling fitness. The original claim, that a gym week is not a rest
+    week, is now the ``atl`` assertion.
+    """
+    week = [_day(sport="strength", workoutType="strength") for _ in range(7)]
+    projected = analysis.compute_training_load(week, 250.0)
+
+    assert projected["atl"] > 0
+    assert projected["ctl_by_sport"]["strength"] > 0
+    assert projected["ctl"] == 0.0
+    assert projected["tsb"] < 0
 
 
 # ---------------------------------------------------------------------------

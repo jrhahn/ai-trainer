@@ -1360,9 +1360,15 @@ class AthleteMetricSnapshot(Base):
     # Best 5-minute mean power at the time of the snapshot — the maximal aerobic
     # power proxy that FTP is sanity-checked against (FTP must sit below it).
     map_5min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # ``ctl`` is one sport's chronic load (the sport of the session this snapshot
+    # was taken after), ``atl`` the aggregate across all of them (#713).
     ctl: Mapped[float | None] = mapped_column(nullable=True)
     atl: Mapped[float | None] = mapped_column(nullable=True)
     tsb: Mapped[float | None] = mapped_column(nullable=True)
+    # The full per-sport CTL ledger at the time of the snapshot, so the history
+    # chart can show each sport's fitness curve rather than one line that
+    # silently switches sport. NULL on pre-#713 snapshots — read as cycling.
+    ctl_by_sport: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="strava_analysis")
 
     user: Mapped["User"] = relationship(back_populates="athlete_metric_snapshots")
@@ -1510,9 +1516,20 @@ class RideMetric(Base):
     # NULL alongside a NULL ``tss`` means no load could be established at all.
     tss_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ftp_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # ``ctl_after`` is the chronic load of *this session's own sport* after it,
+    # ``atl_after`` the athlete's aggregate acute load across every sport, and
+    # ``tsb_after`` the difference — so a running week shows as cycling fatigue
+    # without inflating cycling fitness (#713). For a single-sport athlete all
+    # three mean exactly what they meant before.
     ctl_after: Mapped[float | None] = mapped_column(nullable=True)
     atl_after: Mapped[float | None] = mapped_column(nullable=True)
     tsb_after: Mapped[float | None] = mapped_column(nullable=True)
+    # The whole per-sport CTL ledger after this session, ``{"cycling": 61.4,
+    # "running": 8.2}``. ``ctl_after`` is one entry out of it; a reader that
+    # needs another sport's rung — a cycling plan projection on a day the athlete
+    # ran — has to be able to ask. NULL on rows written before #713, which
+    # ``fitness_ledger.ledger_from_row`` reads back as cycling-only.
+    ctl_by_sport: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ride_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # When the provider answered 404 for this row's external_activity_id. The
     # id is then permanently dead — rows imported before the id-precision fix
