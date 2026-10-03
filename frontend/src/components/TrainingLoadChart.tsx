@@ -14,7 +14,7 @@ export default function TrainingLoadChart() {
 
   if (rideMetricsHistory.length < 2) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
             <Activity size={16} className="text-blue-600" />
@@ -69,7 +69,7 @@ export default function TrainingLoadChart() {
   const latestTSS = tssData[tssData.length - 1]
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4">
+    <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-4 space-y-4">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
           <Activity size={16} className="text-blue-600" />

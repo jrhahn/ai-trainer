@@ -86,7 +86,7 @@ export default function TotpSettings() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         {status?.enabled ? (
           <ShieldCheck size={16} className="text-green-600" />
@@ -153,7 +153,7 @@ export default function TotpSettings() {
 
           {status.recoveryCodesRemaining === 0 && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-xs">
-              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+              <AlertCircle size={14} className="shrink-0 mt-0.5" />
               No recovery codes left. If you lose your phone now, you will need
               server access to get back in — turn two-factor off and on again to
               get a fresh set.

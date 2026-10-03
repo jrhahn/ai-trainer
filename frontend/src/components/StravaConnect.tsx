@@ -63,7 +63,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
     <div className="flex flex-col gap-2">
       <button
         onClick={handleConnect}
-        className="flex items-center gap-2 bg-[#fc4c02] text-white rounded-xl px-5 py-3 font-semibold text-sm hover:bg-[#e03d00] transition-colors shadow-sm"
+        className="flex items-center gap-2 bg-[#fc4c02] text-white rounded-xl px-5 py-3 font-semibold text-sm hover:bg-[#e03d00] transition-colors shadow-xs"
       >
         <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
           <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
@@ -72,7 +72,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
       </button>
       {connectError && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
           {connectError}
         </div>
       )}

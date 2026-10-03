@@ -99,7 +99,7 @@ export default function AIKeySettings() {
     // above; scroll-mt keeps the heading clear of the sticky header on jump.
     <div
       id="your-ai-provider-key"
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 scroll-mt-20"
+      className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
     >
       <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <Key size={16} className="text-amber-500" />
@@ -171,9 +171,9 @@ export default function AIKeySettings() {
             }`}
           >
             {testMsg.type === 'success' ? (
-              <CheckCircle size={15} className="flex-shrink-0 mt-0.5" />
+              <CheckCircle size={15} className="shrink-0 mt-0.5" />
             ) : (
-              <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
             )}
             {testMsg.text}
           </div>

@@ -105,7 +105,7 @@ export default function ConversationImportSettings() {
   const canExtract = !!authToken && transcript.trim().length > 0 && !extractMutation.isPending
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
         <MessageSquareText size={16} /> Import Coach Conversations
       </h2>
@@ -121,7 +121,7 @@ export default function ConversationImportSettings() {
         onChange={(e) => setTranscript(e.target.value)}
         rows={6}
         placeholder="Paste your historical coaching conversation here…"
-        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
       />
 
       <div className="mt-2 flex items-center gap-3">

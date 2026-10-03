@@ -81,13 +81,13 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
     <div className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
       {coachNote ? (
         <p className="flex items-start gap-1.5 text-xs text-amber-900 leading-relaxed">
-          <Bot size={13} className="mt-0.5 flex-shrink-0 text-amber-600" />
+          <Bot size={13} className="mt-0.5 shrink-0 text-amber-600" />
           {coachNote}
         </p>
       ) : (
         <>
           <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-            <HelpCircle size={13} className="flex-shrink-0" />
+            <HelpCircle size={13} className="shrink-0" />
             {multiple ? 'Which session was this?' : 'Was this your planned session?'}
           </p>
           <p className="mt-0.5 text-[11px] text-amber-700 leading-snug">

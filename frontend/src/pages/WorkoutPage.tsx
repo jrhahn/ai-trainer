@@ -51,7 +51,7 @@ function ChangeHistorySection({
   entries: PlanDayHistoryEntry[]
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100">
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-6 py-4 text-left"
@@ -263,7 +263,7 @@ export default function WorkoutPage() {
           Back to Dashboard
         </button>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
           <p className="text-sm font-semibold text-gray-800">{label}</p>
           <p className="text-sm text-gray-500 mt-1">
             This day is no longer part of your current plan, but its change history
@@ -320,7 +320,7 @@ export default function WorkoutPage() {
         onSelect={selectSession}
       />
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
             <span
@@ -417,7 +417,7 @@ export default function WorkoutPage() {
       </div>
 
       {ridesNeedingAnswers.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-3">
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-3">
           <h2 className="text-sm font-semibold text-gray-800">
             {ridesNeedingAnswers.length > 1
               ? 'Rides your coach has a question about'

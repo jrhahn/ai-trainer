@@ -19,7 +19,7 @@ function Brand({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => 
       to="/"
       end
       onClick={onNavigate}
-      className="flex items-center gap-2 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+      className="flex items-center gap-2 rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
     >
       <div className={`bg-amber-500 rounded-lg ${compact ? 'p-1' : 'p-1.5'}`}>
         <Bike size={compact ? 18 : 20} className="text-white" />
@@ -84,7 +84,7 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
     <div className="border-t border-white/10 pt-2 mt-2">
       {userProfile?.name && (
         <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400">
-          <User size={16} className="flex-shrink-0" />
+          <User size={16} className="shrink-0" />
           <span className="truncate">{userProfile.name}</span>
         </div>
       )}
@@ -199,7 +199,7 @@ export default function Layout() {
       {/* Import complete toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg animate-fade-in">
-          <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+          <CheckCircle size={16} className="text-green-400 shrink-0" />
           {toast}
           <button
             onClick={() => setToast(null)}

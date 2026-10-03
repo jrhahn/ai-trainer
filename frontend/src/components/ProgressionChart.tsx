@@ -100,7 +100,7 @@ export default function ProgressionChart() {
 
   if (metricsHistory.length < 2) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
             <TrendingUp size={16} className="text-amber-600" />
@@ -175,7 +175,7 @@ export default function ProgressionChart() {
   const latestTSB = snapshots.findLast((s) => s.tsb != null)?.tsb
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4">
+    <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-4 space-y-4">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
           <TrendingUp size={16} className="text-amber-600" />

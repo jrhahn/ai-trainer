@@ -931,13 +931,13 @@ export default function DashboardPage() {
 
         {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
           <div
-            className={`border rounded-xl shadow-sm px-4 py-3 mb-3 ${
+            className={`border rounded-xl shadow-xs px-4 py-3 mb-3 ${
               trainingStatus?.className ?? 'bg-white border-gray-100'
             }`}
             title={trainingStatus?.title}
           >
             <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                 <Bot size={14} className="text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
@@ -980,7 +980,7 @@ export default function DashboardPage() {
 
         <AIChat
           contextWorkout={coachContextWorkout}
-          className="h-[60vh] min-h-[24rem] shadow-sm"
+          className="h-[60vh] min-h-[24rem] shadow-xs"
         />
       </div>
 
@@ -1004,14 +1004,14 @@ export default function DashboardPage() {
                 >
                   {/* Activity row */}
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-500 flex-shrink-0 w-16">
+                    <p className="text-xs text-gray-500 shrink-0 w-16">
                       {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',
                       })}
                     </p>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize flex-shrink-0">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize shrink-0">
                       {ride.sportType.toLowerCase().replace(/_/g, ' ')}
                     </span>
                     <span className="text-xs text-gray-700 font-medium flex-1 truncate">
@@ -1019,7 +1019,7 @@ export default function DashboardPage() {
                     </span>
                     {ride.weatherTemperatureC != null && (
                       <span
-                        className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0"
+                        className="flex items-center gap-1 text-xs text-gray-500 shrink-0"
                         title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
                       >
                         <WeatherIcon condition={ride.weatherCondition} />
@@ -1027,13 +1027,13 @@ export default function DashboardPage() {
                       </span>
                     )}
                     {ride.durationSeconds != null && (
-                      <span className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0">
+                      <span className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
                         <Clock size={11} />
                         {formatDuration(ride.durationSeconds)}
                       </span>
                     )}
                     {isNew(ride) && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
                         new
                       </span>
                     )}
@@ -1058,14 +1058,14 @@ export default function DashboardPage() {
                           setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
                         }
                         title="Ask coach about this match"
-                        className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
                       >
                         {scoreLabel}
                       </button>
                     )}
                     {authToken && (
                       <div
-                        className="flex items-center gap-0.5 flex-shrink-0"
+                        className="flex items-center gap-0.5 shrink-0"
                         role="group"
                         aria-label="How did your legs feel?"
                       >
@@ -1110,7 +1110,7 @@ export default function DashboardPage() {
       {/* Everything below here is expert mode, gathered in one place so turning
           it on adds a block at the bottom rather than pushing the coach down. */}
       {isExpertMode && (
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-xs">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
             Consumed tokens
           </p>

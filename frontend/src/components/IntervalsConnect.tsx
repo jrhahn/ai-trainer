@@ -136,7 +136,7 @@ export default function IntervalsConnect() {
       </button>
       {error && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
           {error}
         </div>
       )}

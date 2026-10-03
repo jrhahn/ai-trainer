@@ -381,7 +381,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const renderMessage = (msg: ChatMessage, key: string) => (
     <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
       {msg.role === 'assistant' && (
-        <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+        <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
           <Bot size={14} className="text-amber-600" />
         </div>
       )}
@@ -506,7 +506,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         )}
       </div>
       {msg.role === 'user' && (
-        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
           <User size={14} className="text-gray-600" />
         </div>
       )}
@@ -537,7 +537,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         data-event-kind={event.kind}
         className="flex items-start gap-2.5 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2"
       >
-        <Icon size={16} className={`mt-0.5 flex-shrink-0 ${iconClass}`} />
+        <Icon size={16} className={`mt-0.5 shrink-0 ${iconClass}`} />
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{event.title}</p>
           <p className="text-sm text-gray-700">{event.body}</p>
@@ -682,7 +682,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   }
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 flex flex-col ${className ?? 'shadow-sm h-[28rem]'}`}>
+    <div className={`bg-white rounded-xl border border-gray-100 flex flex-col ${className ?? 'shadow-xs h-[28rem]'}`}>
       {/* Header */}
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -801,7 +801,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
             data-testid="older-history-fade"
             aria-hidden="true"
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/20 via-white/85 to-white" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-white/20 via-white/85 to-white" />
             <div className="relative mt-8 h-1 w-16 rounded-full bg-gray-200" />
           </div>
         )}

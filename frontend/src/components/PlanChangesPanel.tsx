@@ -33,7 +33,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
   const dayGroups = groupEntriesByDate(recent)
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-5">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-3">
         <History size={16} className="text-amber-500" />
         Recent plan changes

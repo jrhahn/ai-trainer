@@ -88,7 +88,7 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
         data-testid="session-purpose-answered"
         className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800"
       >
-        <Check size={13} className="flex-shrink-0" />
+        <Check size={13} className="shrink-0" />
         Noted — {answered}. Your coach will use that.
       </div>
     )
@@ -102,7 +102,7 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
       className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2"
     >
       <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-        <HelpCircle size={13} className="flex-shrink-0" />
+        <HelpCircle size={13} className="shrink-0" />
         What was this session?
       </p>
       <p className="mt-0.5 text-[11px] leading-snug text-amber-700">
