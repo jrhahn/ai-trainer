@@ -1,10 +1,10 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.64.0"
+version = "0.65.0"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi==0.142.0",
+    "fastapi==0.142.1",
     "httpx==0.28.1",
     "email-validator>=2.2.0",
     "python-dotenv==1.2.3",
