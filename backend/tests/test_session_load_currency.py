@@ -188,6 +188,45 @@ def test_reported_effort_beats_an_assumption_about_the_sport():
     assert reported.confidence != assumed.confidence
 
 
+def test_heart_rate_outranks_a_reported_effort_even_in_the_gym():
+    """The one precedence worth stating outright, because sRPE's reputation
+    argues the other way: Foster's sRPE is the better-validated *cross-sport*
+    currency, so why is a strap above it on exactly the session where a strap
+    measures least?
+
+    Because on this app's own numbers heart rate is the closer estimate. An hour
+    of lifting at 118-130 bpm prices at 38-52, straddling the 55 that
+    ``DEFAULT_LOAD_PER_HOUR`` independently assumes for strength; the same hour
+    reported at 4/5 prices at 88. A reported effort is also the one input an
+    athlete can be systematically wrong about in one direction, all month.
+
+    Pinned rather than left implicit so that making the order sport-dependent
+    (#714, once tonnage and real logged sessions exist to judge it) has to be a
+    decision someone takes on purpose.
+    """
+    both = session_load(
+        LoadSignals(
+            sport_type="WeightTraining",
+            duration_seconds=HOUR,
+            avg_hr_bpm=125,
+            max_heart_rate=185,
+            resting_heart_rate=50,
+            perceived_effort=4,
+        )
+    )
+    assert both.source == LOAD_SOURCE_HEART_RATE
+
+    # The two rungs share a confidence, so the label is what tells the reader
+    # which model produced the number.
+    rpe_only = session_load(
+        LoadSignals(
+            sport_type="WeightTraining", duration_seconds=HOUR, perceived_effort=4
+        )
+    )
+    assert both.confidence == rpe_only.confidence
+    assert both.label != rpe_only.label
+
+
 # ---------------------------------------------------------------------------
 # A planned day is priced in its own sport
 # ---------------------------------------------------------------------------
@@ -257,6 +296,41 @@ def test_a_planned_rest_day_is_a_real_zero():
     assert analysis.planned_day_load(_day(sport="running", workoutType="rest"), 250.0) == 0.0
 
 
+def test_a_day_whose_duration_is_not_a_number_is_not_a_crash():
+    """``planned_day_load`` is now module-level and #713 will call it directly,
+    so its guards are tested here rather than through a projection that happens
+    to exclude the input. A plan day is a dict that has survived the persist
+    gate, not a validated model, and a string duration must cost nothing rather
+    than take down the whole CTL computation."""
+    for bad in ("sixty", {}, [], object()):
+        assert analysis.planned_day_load(
+            _day(workoutType="endurance", durationMinutes=bad), 250.0
+        ) == 0.0
+
+
+def test_a_cycling_day_priced_without_an_ftp_is_zero_not_an_exception():
+    """Both callers guard ``ftp <= 0`` before they ever reach here, which is why
+    this line is unreachable through them — and exactly why it is worth pinning
+    directly: the final step divides by FTP, so a future caller without that
+    guard would get a ZeroDivisionError instead of a number."""
+    day = _day(workoutType="endurance")
+    assert analysis.planned_day_load(day, 0.0) == 0.0
+    # A non-cycling day never touches FTP at all, so it still prices normally.
+    assert analysis.planned_day_load(_day(sport="running", workoutType="endurance"), 0.0) > 0
+
+
+def test_the_estimator_returns_the_unrounded_cost():
+    """The two projections disagreed about this: one fed its EWMA the value
+    rounded to 1 dp, the other the full value, so a single shared estimator
+    could not reproduce both. Rounding now happens where the number is shown,
+    and both accumulate the full one."""
+    day = _day(workoutType="endurance", durationMinutes=37)
+    raw = analysis.planned_day_load(day, 251.0)
+
+    assert raw != round(raw, 1)
+    assert analysis.compute_training_load([day], 251.0)["daily_tss"] == [round(raw, 1)]
+
+
 def test_the_two_projections_price_a_plan_identically():
     """``compute_training_load`` and ``project_training_load_from_seed`` carried a
     copy each of the estimator, which is two places for one rule to drift."""
@@ -321,6 +395,45 @@ def test_a_run_without_a_heart_rate_stream_falls_to_its_sport():
     )[0]
 
     assert metrics["tss_source"] == LOAD_SOURCE_DURATION
+    assert metrics["tss"] > 0
+
+
+@pytest.mark.parametrize(
+    "heartrate",
+    [
+        None,  # key present, value null — attribute access on None
+        {"data": None},  # series present, samples null
+        {},  # no series at all
+    ],
+)
+def test_a_malformed_heart_rate_stream_falls_through_instead_of_failing(heartrate):
+    """This read happens for *every* imported activity, so an exception here
+    fails the whole metrics chain rather than one analysis block. The session
+    still happened: it has to drop to a lower rung, not vanish."""
+    ride = _ride("Run", hr=None)
+    ride["streams"]["heartrate"] = heartrate
+
+    metrics = analysis.build_ride_metrics_chain(
+        [ride], ftp=250.0, max_heart_rate=190
+    )[0]
+
+    assert metrics["tss_source"] == LOAD_SOURCE_DURATION
+    assert metrics["tss"] > 0
+
+
+def test_null_samples_do_not_poison_the_average():
+    """Providers ship gaps inside an otherwise good series. Averaging what was
+    recorded beats discarding the session, and beats summing a None."""
+    ride = _ride("Run", minutes=45, hr=150.0)
+    samples = list(ride["streams"]["heartrate"]["data"])
+    samples[0] = samples[500] = None
+    ride["streams"]["heartrate"]["data"] = samples
+
+    metrics = analysis.build_ride_metrics_chain(
+        [ride], ftp=250.0, max_heart_rate=190
+    )[0]
+
+    assert metrics["tss_source"] == LOAD_SOURCE_HEART_RATE
     assert metrics["tss"] > 0
 
 

@@ -169,9 +169,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   That closes a disagreement nobody could see: a planned gym hour came out at 42
   while the same hour, once logged, was 55. One session cannot cost two different
-  amounts depending on which side of it you ask. Cycling days are untouched —
-  target power, then the workout-type fraction of FTP, to the digit. The shared
-  estimator is now `planned_day_load`, so the two projections cannot drift apart.
+  amounts depending on which side of it you ask. A cycling day is priced exactly
+  as before — target power, then the workout-type fraction of FTP, to the digit.
+  The shared estimator is now `planned_day_load`, so the two projections cannot
+  drift apart.
+
+  One nuance the shared estimator forced into the open: the two copies disagreed
+  about rounding. `compute_training_load` fed its EWMA the day costs rounded to
+  1 dp, `project_training_load_from_seed` fed them unrounded, so a single
+  estimator cannot reproduce both. Rounding now happens where the number is
+  shown — `planned_day_load` returns the full value, `daily_tss` is rounded for
+  reporting, and both projections accumulate the full one. CTL/ATL from
+  `compute_training_load` can therefore move by up to 0,05, which is below the
+  0,1 its own output is rounded to.
 
 - **The load ladder's heart-rate rung can finally fire**
   (`services/analysis.py`, #712) — `build_ride_metrics_chain` read
@@ -181,6 +191,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time series, which also works where `perf_signals` cannot — it needs a power
   stream, and is `None` for every non-cycling activity since #711, which is
   exactly the set of sessions whose load has to come from heart rate.
+
+  It reads defensively, because unlike the analysis blocks around it this one
+  runs for *every* imported activity: a `heartrate` key present with a null
+  value, or a null sample inside an otherwise good series, would have failed the
+  whole metrics chain rather than one analysis block. A malformed series now
+  drops to a lower rung and the session keeps a load.
 
 - **An estimated load now says how much weight it carries**
   (`services/training_load.py`, `services/prompts.py`, #712) — `load ~34

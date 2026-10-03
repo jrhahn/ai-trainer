@@ -42,10 +42,19 @@ LOAD_SOURCE_LABELS = {
 
 # How much the number can be trusted, which is not the same question as whether
 # a device produced it (#712). Session-RPE is *reported* rather than measured,
-# yet Foster's sRPE is the best-validated cross-sport load currency there is —
-# better evidence than an assumed intensity per hour, and on a gym session
-# better than a heart rate that says little about mechanical work. So the order
-# here is the ladder's order, and "measured" is a separate axis.
+# yet Foster's sRPE is the best-validated cross-sport load currency there is, and
+# far better evidence than an assumed intensity per hour. So it shares heart
+# rate's confidence while sitting below it in the ladder, and "measured" is a
+# separate axis from "trusted".
+#
+# Heart rate stays above sRPE even on the gym session where sRPE has the better
+# reputation, because on this app's numbers it is the closer estimate: an hour at
+# 118-130 bpm prices at 38-52, which brackets the 55 that ``DEFAULT_LOAD_PER_HOUR``
+# independently assumes for strength, where sRPE at 4/5 gives 88. A reported
+# effort is also the one input an athlete can be systematically wrong about in
+# one direction. Whether the order should become sport-dependent is a real
+# question — ``LoadSignals`` allows it — but it wants the tonnage model and actual
+# logged sessions to decide it (#714), not a guess made before either exists.
 CONFIDENCE_HIGH = "high"
 CONFIDENCE_MEDIUM = "medium"
 CONFIDENCE_LOW = "low"

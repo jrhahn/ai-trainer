@@ -879,6 +879,17 @@ def planned_day_load(day: dict, ftp: float) -> float:
     Returns ``0.0`` rather than ``None`` for a rest day or a day with no
     duration: those are genuine zeros — nothing was planned — unlike the absent
     load that #579 is about.
+
+    The figure is **unrounded**. The two projections used to disagree about this:
+    one fed its EWMA the value rounded to 1 dp, the other the full value, so a
+    shared estimator cannot reproduce both. Rounding belongs where the number is
+    shown, not where it is computed, so callers round for display and accumulate
+    the full value.
+
+    ``ftp`` must be positive for a cycling day — the final division is by it.
+    Zero is handled (the %FTP fallback collapses to 0 and returns early), but a
+    negative FTP is not, and both callers are expected to keep their ``ftp <= 0``
+    guard rather than rely on this one.
     """
     from services.training_load import duration_training_load
 
@@ -926,8 +937,7 @@ def planned_day_load(day: dict, ftp: float) -> float:
         return 0.0
 
     intensity_factor = np_approx / ftp
-    tss = (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
-    return round(tss, 1)
+    return (duration_s * np_approx * intensity_factor) / (ftp * 3600.0) * 100.0
 
 
 def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
@@ -951,7 +961,10 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
         return {"ctl": 0.0, "atl": 0.0, "tsb": 0.0, "daily_tss": []}
 
     # --- Estimate TSS per day ---
-    daily_tss = [planned_day_load(day, ftp) for day in plan_days]
+    # One shared estimator with project_training_load_from_seed (#712). It
+    # returns the unrounded cost; the EWMA accumulates that and only the
+    # reported series is rounded.
+    planned = [planned_day_load(day, ftp) for day in plan_days]
 
     # --- Compute CTL and ATL via exponential weighted averages ---
     # CTL: 42-day time constant → smoothing factor α = 1 - exp(-1/42)
@@ -961,7 +974,7 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
 
     ctl = 0.0
     atl = 0.0
-    for tss in daily_tss:
+    for tss in planned:
         ctl = ctl + alpha_ctl * (tss - ctl)
         atl = atl + alpha_atl * (tss - atl)
 
@@ -970,7 +983,7 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
         "ctl": round(ctl, 1),
         "atl": round(atl, 1),
         "tsb": round(tsb, 1),
-        "daily_tss": daily_tss,
+        "daily_tss": [round(tss, 1) for tss in planned],
     }
 
 
@@ -1467,10 +1480,11 @@ def project_training_load_from_seed(
     daily_tss: list[float] = []
 
     # One shared estimator with compute_training_load, so the two projections
-    # cannot disagree about what a planned day costs (#712).
+    # cannot disagree about what a planned day costs (#712). The full value
+    # drives the EWMA; only the reported series is rounded.
     for day in future_plan_days:
         tss = planned_day_load(day, ftp)
-        daily_tss.append(tss)
+        daily_tss.append(round(tss, 1))
         ctl = ctl + alpha_ctl * (tss - ctl)
         atl = atl + alpha_atl * (tss - atl)
 
@@ -2012,12 +2026,22 @@ def _stream_avg_hr(streams: dict) -> float | None:
     ``None`` when the HR series does not line up with the time series: a length
     mismatch means the samples do not correspond, and an average over them is a
     number about nothing.
+
+    Reads defensively because this one runs for *every* imported activity, so a
+    malformed stream here fails the whole metrics chain rather than one analysis
+    block: a key present with a ``None`` value would break attribute access, and
+    a ``None`` sample would break the sum. The sibling readers in this module
+    share the first exposure through the same ``.get(k, {})`` idiom; left alone
+    here because changing eight call sites belongs in its own change.
     """
-    hr_data: list[float] = streams.get("heartrate", {}).get("data", []) or []
-    time_data: list[float] = streams.get("time", {}).get("data", []) or []
-    if not hr_data or len(hr_data) != len(time_data):
+    hr_data = (streams.get("heartrate") or {}).get("data") or []
+    time_data = (streams.get("time") or {}).get("data") or []
+    if len(hr_data) != len(time_data):
         return None
-    return sum(hr_data) / len(hr_data)
+    samples = [s for s in hr_data if isinstance(s, (int, float))]
+    if not samples:
+        return None
+    return sum(samples) / len(samples)
 
 
 def compute_ride_performance_signals(
