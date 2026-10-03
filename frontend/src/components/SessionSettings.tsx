@@ -40,7 +40,7 @@ export default function SessionSettings() {
   })
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <LogOut size={16} className="text-gray-400" />
         Active Sessions
@@ -63,7 +63,7 @@ export default function SessionSettings() {
       {confirming && (
         <div className="border border-gray-200 rounded-lg p-3 space-y-2">
           <div className="flex items-start gap-2 text-xs text-gray-600">
-            <ShieldAlert size={14} className="flex-shrink-0 mt-0.5 text-amber-500" />
+            <ShieldAlert size={14} className="shrink-0 mt-0.5 text-amber-500" />
             <span>
               You will be signed out here as well and will need to sign in again.
               Any device you told us to remember for two-factor will have to show a

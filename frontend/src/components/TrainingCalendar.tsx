@@ -361,7 +361,7 @@ export default function TrainingCalendar({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <p className="text-sm font-bold text-gray-800">{monthLabel}</p>
           <div className="flex items-center gap-1">
@@ -434,7 +434,7 @@ export default function TrainingCalendar({
                   <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-xs font-bold">{parseLocalDate(date).getDate()}</span>
                     {allCompleted ? (
-                      <CheckCircle size={12} className="text-green-500 flex-shrink-0" />
+                      <CheckCircle size={12} className="text-green-500 shrink-0" />
                     ) : (
                       // Forecast on planned days inside the ~16-day horizon (#495).
                       // Past and unplanned days show nothing rather than a stale
@@ -443,7 +443,7 @@ export default function TrainingCalendar({
                         <WeatherBadge
                           forecast={weatherForecast[date]}
                           size={10}
-                          className="flex-shrink-0 text-[10px] font-semibold"
+                          className="shrink-0 text-[10px] font-semibold"
                         />
                       )
                     )}
@@ -475,7 +475,7 @@ export default function TrainingCalendar({
                                 </span>
                               )}
                               {sessions.length > 1 && session.completed && (
-                                <CheckCircle size={9} className="text-green-600 flex-shrink-0" />
+                                <CheckCircle size={9} className="text-green-600 shrink-0" />
                               )}
                             </div>
                             <p className="text-xs font-medium leading-tight truncate">
@@ -506,8 +506,8 @@ export default function TrainingCalendar({
                             title={`Logged: ${sport}${duration ? ` · ${duration}` : ''} (${status.label})`}
                             className="flex items-center gap-1 rounded border border-gray-200 bg-white/80 px-1 py-0.5 text-[10px] font-medium text-gray-700"
                           >
-                            <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${status.dot}`} />
-                            <Activity size={9} className="flex-shrink-0 text-gray-500" />
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
+                            <Activity size={9} className="shrink-0 text-gray-500" />
                             <span className="truncate">{duration || sport}</span>
                           </div>
                         )

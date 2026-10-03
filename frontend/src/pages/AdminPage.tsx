@@ -53,7 +53,7 @@ function relativeDate(iso: string): string {
 
 function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm flex items-center gap-4">
+    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-xs flex items-center gap-4">
       <div className="text-blue-500">{icon}</div>
       <div>
         <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{label}</p>
@@ -283,7 +283,7 @@ export default function AdminPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 placeholder="Admin password"
                 required
                 autoFocus
@@ -302,7 +302,7 @@ export default function AdminPage() {
                   type="text"
                   value={adminCode}
                   onChange={(e) => setAdminCode(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-mono tracking-widest text-center focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   placeholder="000000"
                   inputMode="numeric"
                   autoComplete="one-time-code"
@@ -379,7 +379,7 @@ export default function AdminPage() {
 
         {/* Table */}
         {stats && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -470,7 +470,7 @@ export default function AdminPage() {
               type="text"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-red-500 mb-4"
               placeholder={`delete ${deleteTarget.email}`}
               autoFocus
               disabled={deleteLoading}

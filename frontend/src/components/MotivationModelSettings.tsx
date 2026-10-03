@@ -123,7 +123,7 @@ function EntryRow({
             value={entry.text}
             aria-label={`${label} ${index + 1}`}
             onChange={(event) => onChange(event.target.value)}
-            className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-gray-800 hover:border-gray-200 focus:border-amber-400 focus:outline-none"
+            className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-gray-800 hover:border-gray-200 focus:border-amber-400 focus:outline-hidden"
           />
           <EvidenceLine
             source={entry.source}
@@ -188,14 +188,14 @@ export default function MotivationModelSettings() {
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
         <p className="text-sm text-gray-400">Loading your objective…</p>
       </div>
     )
   }
   if (isError || !draft) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
         <p className="text-sm text-red-600">Could not load your objective.</p>
       </div>
     )
@@ -303,7 +303,7 @@ export default function MotivationModelSettings() {
   )
 
   return (
-    <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
       <div>
         <h2 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
           <Target size={16} /> What You Train For
@@ -330,7 +330,7 @@ export default function MotivationModelSettings() {
           onChange={(event) =>
             setDraft({ ...draft, primaryObjective: event.target.value })
           }
-          className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:border-amber-400 focus:outline-none"
+          className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:border-amber-400 focus:outline-hidden"
         />
         {draft.primaryObjective ? (
           <EvidenceLine

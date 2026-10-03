@@ -47,6 +47,11 @@ describe('FitFileUpload', () => {
     expect(screen.getByText('Choose .fit files')).toBeInTheDocument()
   })
 
+  it('drops the card chrome when embedded in another panel', () => {
+    const { container } = render(<FitFileUpload embedded />)
+    expect(container.firstElementChild).toHaveAttribute('class', '')
+  })
+
   it('uploads selected files and shows the per-file result summary', async () => {
     mockUploadFitFiles.mockResolvedValue(response())
     const { container } = render(<FitFileUpload />)

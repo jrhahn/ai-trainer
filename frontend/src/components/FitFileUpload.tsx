@@ -41,7 +41,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
   }
 
   return (
-    <div className={embedded ? '' : 'bg-white rounded-xl shadow-sm border border-gray-100 p-4'}>
+    <div className={embedded ? '' : 'bg-white rounded-xl shadow-xs border border-gray-100 p-4'}>
       <div className="flex items-center gap-2 mb-3">
         <Upload size={16} className="text-blue-500" />
         <h3 className="text-sm font-bold text-gray-800">Upload .fit Files</h3>
@@ -93,7 +93,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
 
       {status === 'error' && (
         <div className="mt-3 flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <p className="text-xs">{error}</p>
         </div>
       )}
@@ -104,11 +104,11 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
 function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
   const icon =
     file.status === 'imported' ? (
-      <CheckCircle size={13} className="mt-0.5 flex-shrink-0 text-green-600" />
+      <CheckCircle size={13} className="mt-0.5 shrink-0 text-green-600" />
     ) : file.status === 'skipped' ? (
-      <CircleSlash size={13} className="mt-0.5 flex-shrink-0 text-amber-600" />
+      <CircleSlash size={13} className="mt-0.5 shrink-0 text-amber-600" />
     ) : (
-      <FileWarning size={13} className="mt-0.5 flex-shrink-0 text-red-600" />
+      <FileWarning size={13} className="mt-0.5 shrink-0 text-red-600" />
     )
   const detail = [
     file.sportType ? `${file.sportType}` : null,

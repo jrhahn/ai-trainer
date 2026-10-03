@@ -181,7 +181,7 @@ export default function AthleteModelSettings() {
                     e.target.value === '' ? null : Number(e.target.value)
                   )
                 }
-                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
               />
             </label>
             <label className="text-sm">
@@ -196,7 +196,7 @@ export default function AthleteModelSettings() {
                     e.target.value === '' ? null : Number(e.target.value)
                   )
                 }
-                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
               />
             </label>
           </div>
@@ -209,7 +209,7 @@ export default function AthleteModelSettings() {
                 value={(draft[key] as string) ?? ''}
                 placeholder={placeholder}
                 onChange={(e) => setField(key, e.target.value as never)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
               />
             </label>
           ))}
@@ -225,7 +225,7 @@ export default function AthleteModelSettings() {
                 onChange={(e) =>
                   setListText((prev) => ({ ...prev, [key]: e.target.value }))
                 }
-                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
               />
             </label>
           ))}
@@ -236,7 +236,7 @@ export default function AthleteModelSettings() {
               rows={2}
               value={draft.summary}
               onChange={(e) => setField('summary', e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
             />
           </label>
 

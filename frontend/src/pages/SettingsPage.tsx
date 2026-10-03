@@ -371,7 +371,7 @@ export default function SettingsPage() {
       )}
 
       {/* AI Provider */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">AI Provider</h2>
         <p className="text-xs text-gray-500 mb-4">
           Choose which server-side model powers your training plan and coach chat.
@@ -404,7 +404,7 @@ export default function SettingsPage() {
           someone to give up looking for it.
         */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-          <Server size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700">
             This picks the model only. Requests run on the server's key by default —
             to have them billed to your own account instead, add a key under{' '}
@@ -425,7 +425,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
         <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
 
@@ -467,7 +467,7 @@ export default function SettingsPage() {
       <SessionSettings />
 
       {/* FTP Management */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">FTP Management</h2>
         <p className="text-xs text-gray-500 mb-4">
           Override your current FTP value and optionally recalculate all historical training-stress metrics
@@ -533,7 +533,7 @@ export default function SettingsPage() {
             Progression chart on your dashboard.
           </p>
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
-            <AlertTriangle size={15} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+            <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
             <p className="text-xs text-yellow-700">
               This operation <strong>cannot be reversed</strong>. All historical training-stress values
               will be overwritten. A confirmation dialog will appear before any data is changed.
@@ -551,7 +551,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Heart Rate Settings */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
         <p className="text-xs text-gray-500 mb-1">
           Max HR and resting HR are used for HR-based FTP estimation and training zones.
@@ -679,7 +679,7 @@ export default function SettingsPage() {
               </button>
             </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
-              <AlertTriangle size={14} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle size={14} className="text-yellow-600 shrink-0 mt-0.5" />
               <p className="text-xs text-yellow-700">
                 This will overwrite all historical training-stress values and <strong>cannot be reversed</strong>.
               </p>
@@ -689,7 +689,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Data Sources */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
         <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
         <p className="text-xs text-gray-500 mb-2">
           Choose how AI Trainer imports your training history. Automatic sources are convenient,
@@ -703,7 +703,7 @@ export default function SettingsPage() {
         </p>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-          <Server size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700">
             Connection secrets are handled by the backend at{' '}
             <code className="font-mono bg-blue-100 px-1 rounded">{BACKEND_URL}</code>.
@@ -745,7 +745,7 @@ export default function SettingsPage() {
                   </p>
                 )}
               </div>
-              <label className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center">
+              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
                 <input
                   type="checkbox"
                   className="peer sr-only"
@@ -792,7 +792,7 @@ export default function SettingsPage() {
                   </p>
                 )}
               </div>
-              <label className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center">
+              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
                 <input
                   type="checkbox"
                   className="peer sr-only"
@@ -890,7 +890,7 @@ export default function SettingsPage() {
       <HomeLocationSettings />
 
       {/* Danger zone */}
-      <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">
         <h2 className="text-base font-bold text-red-600 mb-1">Danger Zone</h2>
         <p className="text-xs text-gray-500 mb-4">
           Permanently delete all your data and start over from scratch.

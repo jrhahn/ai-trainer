@@ -147,7 +147,7 @@ function TraitRow({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
-            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
           />
           <div className="flex items-center gap-2">
             <button
@@ -777,7 +777,7 @@ export default function AthleteTraitsSettings() {
   const memoryEnabled = privacyData?.memoryUpdatesEnabled ?? true
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-6">
       <div>
         <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
           <Brain size={16} /> Learned Athlete Traits
@@ -940,7 +940,7 @@ export default function AthleteTraitsSettings() {
             aria-checked={memoryEnabled}
             onClick={() => toggleMemoryMutation.mutate(!memoryEnabled)}
             disabled={toggleMemoryMutation.isPending}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
               memoryEnabled ? 'bg-blue-600' : 'bg-gray-200'
             }`}
           >

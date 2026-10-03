@@ -13,7 +13,7 @@ function ReadinessExplainer() {
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-600 space-y-1.5 min-w-[180px]">
       <div className="flex items-center gap-1.5 mb-1">
-        <Info size={12} className="text-gray-400 flex-shrink-0" />
+        <Info size={12} className="text-gray-400 shrink-0" />
         <span className="font-semibold text-gray-700">How it works</span>
       </div>
       <ul className="space-y-1 list-disc list-inside leading-snug">
@@ -90,7 +90,7 @@ function ReadinessMetric({
 }) {
   return (
     <div className="flex items-start gap-2">
-      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${color}`}>
+      <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${color}`}>
         {icon}
       </div>
       <div>
@@ -244,7 +244,7 @@ export default function RaceReadinessCard() {
   })
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-7 h-7 rounded-md bg-purple-50 flex items-center justify-center">
           <Target size={15} className="text-purple-600" />
