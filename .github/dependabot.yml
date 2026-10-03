@@ -19,6 +19,12 @@ updates:
       # reading.
       frontend:
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint pins peer typescript to <6.1.0, so a TypeScript 7
+      # bump cannot install at all (npm ci fails with ERESOLVE). Drop this
+      # entry once typescript-eslint ships a release that accepts 7.x.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: uv
     directory: /backend
