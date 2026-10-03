@@ -11,6 +11,16 @@ Rules:
 ## Testing (backend)
 
 - Run backend tests from `backend/` with `uv run pytest`.
+- **Run one suite at a time.** Measured cost of the whole suite (2904 tests) on
+  this machine: **~330 s and ~256 MiB peak RSS** plain, **~570 s and ~350 MiB**
+  with `--cov`. That is cheap — but the box has 7,7 GB and is usually a couple of
+  GB into swap, so two or three concurrent runs are what actually puts it at
+  risk, and competing runs make each other look pathologically slow (a lone run
+  that "times out" after 600 s is almost always racing a sibling). Nothing in the
+  suite leaks: the `/dev/shm` database stays under 1 MB, the process holds one
+  thread, and per-module growth is bounded.
+- Skip `--cov` locally; CI runs it with `--cov-fail-under=88` (currently ~94 %).
+  Without it a full run fits inside a 10-minute command timeout, with it barely.
 - **NixOS gotcha:** `backend/tests/conftest.py` re-execs the test process via
   `os.execvpe` to fix `LD_LIBRARY_PATH` for C extensions (greenlet, aiosqlite).
   Under `uv run pytest` this re-exec swallows all pytest output (you see an
