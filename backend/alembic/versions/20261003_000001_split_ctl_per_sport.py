@@ -29,6 +29,21 @@ next recalculation writes the real ledger.
 
 Idempotent: the replay derives the same ledger from the same stored loads.
 
+The replay imports the **live** ledger rather than freezing a private copy of
+it, which is a decision with an obligation attached. Freezing would make this
+revision replay a fresh database under a rule the app no longer uses — values the
+running code would never produce — and that is worse than the inconsistency it
+avoids. The repository's answer to a changed load rule is a new replay revision:
+20260818_000001 exists precisely because ``DEFAULT_LOAD_PER_HOUR`` moved and
+stored history had to follow. 20260815_000001 and 20260818_000001 both import
+live code for the same reason.
+
+So: **if ``ledger_sport`` or the ledger's decay rule changes (#714, #716, or the
+cross-sport transfer work), that change needs its own replay revision**, exactly
+as the constants change did. Without one, an already-migrated database keeps the
+old rule's values while a fresh one gets the new rule's, and nothing corrects
+either.
+
 Revision ID: 20261003_000001
 Revises: 20261001_000001
 Create Date: 2026-10-03 00:00:01

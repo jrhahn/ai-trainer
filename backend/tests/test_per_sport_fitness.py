@@ -355,6 +355,78 @@ def test_a_two_a_day_does_not_decay_the_other_sports_twice():
     assert same_day.atl == next_day.atl
 
 
+def test_a_two_a_day_reaches_the_ledger_as_a_same_day_session():
+    """The clamp change, pinned where it actually landed.
+
+    Both chains used to compute ``gap_days = max(1, delta)`` and now compute
+    ``days_since_previous = max(0, delta)``, so the ledger can tell a two-a-day
+    from a next-day session. Asserting that only on ``LoadLedger.advance`` would
+    leave the two callers free to clamp it back on the way in — and the symptom
+    would be a silent one: the morning ride's CTL decaying for an afternoon run
+    on the same date.
+
+    Plan identity is ``(date, slot)`` for exactly this reason (#496), so a
+    two-a-day is a shape the rest of the app already supports.
+    """
+    morning_then_afternoon = _chain(
+        [
+            _ride("2026-10-01", tss=80.0, ident=1),
+            _ride("2026-10-01", sport="Run", tss=60.0, ident=2),
+        ]
+    )
+    across_midnight = _chain(
+        [
+            _ride("2026-10-01", tss=80.0, ident=1),
+            _ride("2026-10-02", sport="Run", tss=60.0, ident=2),
+        ]
+    )
+
+    ride_ctl = morning_then_afternoon[0]["ctl_after"]
+    # Same day: the ride's own fitness is untouched by the run that followed it.
+    assert morning_then_afternoon[1]["ctl_by_sport"][SPORT_CYCLING] == ride_ctl
+    # A day later: it has decayed.
+    assert across_midnight[1]["ctl_by_sport"][SPORT_CYCLING] < ride_ctl
+    # The sport that trained, and the shared fatigue, advance either way — that
+    # is the pre-existing clamped behaviour, which must not have moved.
+    assert (
+        morning_then_afternoon[1]["ctl_by_sport"][SPORT_RUNNING]
+        == across_midnight[1]["ctl_by_sport"][SPORT_RUNNING]
+    )
+    assert morning_then_afternoon[1]["atl_after"] == across_midnight[1]["atl_after"]
+
+
+def test_the_recalculation_handles_a_two_a_day_the_same_way():
+    """The second copy of the clamp, pinned against the first."""
+
+    class _Row:
+        def __init__(self, date: str, sport: str, tss: float):
+            self.activity_date = date
+            self.sport_type = sport
+            self.tss = tss
+            self.tss_source = "provider"
+            self.normalized_power_w = None
+            self.duration_seconds = HOUR
+            self.intensity_factor = None
+            self.ftp_used = None
+            self.ctl_after = self.atl_after = self.tsb_after = None
+            self.ctl_by_sport = None
+
+    rows = [_Row("2026-10-01", "Ride", 80.0), _Row("2026-10-01", "Run", 60.0)]
+    metrics_service._recalculate_metric_chain(rows, 250)
+
+    chain = _chain(
+        [
+            _ride("2026-10-01", tss=80.0, ident=1),
+            _ride("2026-10-01", sport="Run", tss=60.0, ident=2),
+        ]
+    )
+    assert [r.ctl_by_sport for r in rows] == [m["ctl_by_sport"] for m in chain]
+    assert [r.atl_after for r in rows] == [m["atl_after"] for m in chain]
+    # Anchored to the behaviour, not only to the other copy: reverting the clamp
+    # in *both* places would keep them agreeing with each other while both drifted.
+    assert rows[1].ctl_by_sport[SPORT_CYCLING] == rows[0].ctl_after
+
+
 def test_a_decayed_rung_is_dropped_rather_than_stored_as_zero():
     """A sport untouched for years should not keep an entry alive forever, and
     ``ctl()`` already answers 0.0 for one that is absent.

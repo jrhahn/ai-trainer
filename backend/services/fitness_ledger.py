@@ -213,6 +213,16 @@ def ledger_from_row(
     absent, which is what a pre-#713 row means: every sport's load was summed
     into one CTL that the dashboard, the coach prompt and the plan projection all
     read as the athlete's cycling fitness.
+
+    What comes back is the **stored** ledger, so an incremental chain continues
+    from values rounded to 2 dp and without the rungs :meth:`LoadLedger.as_dict`
+    dropped for rounding to zero. Both are deliberate and neither is new: the
+    scalar ``ctl_after`` this replaces was already stored at 2 dp and already
+    reseeded every incremental import from the rounded figure. The per-step error
+    is bounded at 0.005 against an α of 0.0235 and a reported value rounded to
+    0.1, and a rung that rounds to zero reads back as the 0.0 it would have
+    decayed to anyway. Carrying the unrounded ledger would mean returning state
+    the chain does not persist, which is a larger change than the drift is worth.
     """
     atl = float(atl_after or 0.0)
     if ctl_by_sport:
