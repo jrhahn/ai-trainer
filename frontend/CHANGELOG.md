@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A prescribed gym session shows what to lift** (`src/components/WorkoutDetails.tsx`,
+  `src/store/useAppStore.ts`, #714, epic #709) — a "Lifts" table alongside the
+  interval breakdown, with exercise, sets × reps and intensity.
+
+  Intensity renders as **"RIR 2"** rather than as a weight, which is the point of
+  the unit: the plan cannot know what 100 kg will feel like on a Thursday after a
+  hard weekend, so leaving two reps in reserve is an instruction the athlete can
+  follow honestly whether they are fresh or tired. A percentage-based block shows
+  **"@ 78%"** instead; the backend's persist gate keeps at most one of the two, so
+  the table never has to show both. An exercise with neither — "3×12 push-ups" is
+  a legitimate volume prescription — shows an em dash, because a blank cell reads
+  as a value that failed to load.
+
+  `strengthExercises` is a separate field from `intervals` rather than a reuse of
+  it, and both tables render when a session carries both: an interval is a
+  duration at a power and a set is reps at a load, so one schema covering both
+  would describe neither.
+
 - **A planned session says which sport it is** (`src/utils/planSport.ts`,
   `src/components/TrainingCalendar.tsx`, `src/components/SessionHero.tsx`,
   `src/store/useAppStore.ts`, #710, epic #709) — `TrainingDay.sport` plus

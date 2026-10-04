@@ -1254,6 +1254,18 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "Never describe the intervals only in text and omit the array — always materialise "
         "every rep as a separate object in the array."
     )
+    _strength_rule = (
+        '- "strengthExercises": on a strength session, what to lift — '
+        '[{"exercise": "back squat", "sets": 3, "reps": 5, "rir": 2}]. '
+        "Prescribe intensity as reps in reserve (RIR 0-3 for working sets), not as "
+        "kilos: you cannot know what a given weight will feel like on the day, and "
+        "RIR is a prescription the athlete can execute honestly when they are tired "
+        'as well as when they are fresh. Use "percentE1rm" instead only when you are '
+        "writing a percentage-based block, and never both on one exercise — they name "
+        "different weights on exactly the days they disagree. Put the lifts in the "
+        "array as well as in the description, the same way intervals work: a session "
+        "described only in prose is one the app cannot track tonnage or e1RM from. "
+    )
     _duration_rule = (
         "CRITICAL — duration: whenever you change how long a session is, you MUST set the "
         'numeric duration in planUpdates, not only in the "description" text. For a single '
@@ -1360,7 +1372,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "sport", "workoutType", "title", "description", '
             '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
-            '"workoutPurpose", "keyFocusPoints". '
+            '"strengthExercises", "workoutPurpose", "keyFocusPoints". '
             'Always include "title" and "description" so the plan entry stays informative. '
             'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
             f"{_sport_rule}"
@@ -1368,6 +1380,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             f"{_adjacency_rule}"
             f"{_rich_description_rule} "
             f"{_intervals_rule} "
+            f"{_strength_rule}"
             f"{_ride_label_rule}"
             f"{_commitment_rule}"
         )
@@ -1377,7 +1390,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'workout. Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "sport", "workoutType", "title", '
         '"description", "durationMinutes", "targetPower", "targetHeartRate", '
-        '"intervals", "workoutPurpose", "keyFocusPoints". '
+        '"intervals", "strengthExercises", "workoutPurpose", "keyFocusPoints". '
         'Always include "title" and "description" so the plan entry stays informative. '
         'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
         f"{_sport_rule}"
@@ -1386,6 +1399,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         f"{_duration_rule} "
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
+        f"{_strength_rule}"
         f"{_ride_label_rule}"
         f"{_commitment_rule}"
     )

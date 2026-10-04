@@ -85,4 +85,62 @@ describe('WorkoutDetails', () => {
 
     expect(screen.queryByRole('button', { name: 'Regenerate your plan' })).not.toBeInTheDocument()
   })
+
+  describe('strength prescriptions (#714)', () => {
+    it('prescribes reps in reserve rather than a weight', () => {
+      // The whole point of the unit: the plan cannot know what 100 kg will feel
+      // like on a Thursday, so "RIR 2" is an instruction the athlete can follow
+      // honestly on a good day and a bad one.
+      renderDetails({
+        workoutType: 'strength',
+        sport: 'strength',
+        strengthExercises: [{ exercise: 'back squat', sets: 3, reps: 5, rir: 2 }],
+      })
+
+      expect(screen.getByText('back squat')).toBeInTheDocument()
+      expect(screen.getByText('3 × 5')).toBeInTheDocument()
+      expect(screen.getByText('RIR 2')).toBeInTheDocument()
+    })
+
+    it('shows a percentage block as a percentage', () => {
+      renderDetails({
+        workoutType: 'strength',
+        strengthExercises: [
+          { exercise: 'bench press', sets: 4, reps: 6, percentE1rm: 77.5 },
+        ],
+      })
+
+      expect(screen.getByText('@ 78%')).toBeInTheDocument()
+    })
+
+    it('says so when an exercise prescribes no intensity', () => {
+      // "3x12 push-ups" is a legitimate volume prescription. A blank cell would
+      // read as a value that failed to load.
+      renderDetails({
+        workoutType: 'strength',
+        strengthExercises: [{ exercise: 'push-up', sets: 3, reps: 12 }],
+      })
+
+      expect(screen.getByText('—')).toBeInTheDocument()
+    })
+
+    it('leaves the lifts table out of a ride', () => {
+      renderDetails({ intervals: [{ duration: 720, power: 260, rest: 240 }] })
+
+      expect(screen.queryByRole('heading', { name: 'Lifts' })).not.toBeInTheDocument()
+    })
+
+    it('shows the lifts alongside intervals without either replacing the other', () => {
+      // A session can carry both — the backend keeps them as separate fields
+      // because an interval is a duration at a power and a set is reps at a
+      // load, so neither table should hide the other.
+      renderDetails({
+        intervals: [{ duration: 720, power: 260, rest: 240 }],
+        strengthExercises: [{ exercise: 'back squat', sets: 3, reps: 5, rir: 2 }],
+      })
+
+      expect(screen.getByRole('heading', { name: /Interval Breakdown/ })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Lifts/ })).toBeInTheDocument()
+    })
+  })
 })

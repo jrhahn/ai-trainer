@@ -1,4 +1,13 @@
-import { BarChart2, Clock, Heart, ListChecks, RefreshCw, Target, Zap } from 'lucide-react'
+import {
+  BarChart2,
+  Clock,
+  Dumbbell,
+  Heart,
+  ListChecks,
+  RefreshCw,
+  Target,
+  Zap,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
@@ -7,6 +16,22 @@ function seconds(value: number): string {
   return value >= 60
     ? `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`
     : `${value}s`
+}
+
+/** How a prescribed lift's intensity reads to the athlete (#714).
+ *
+ *  "RIR 2" rather than a weight, because the plan cannot know what a given
+ *  weight will feel like on the day — leaving two reps in reserve is an
+ *  instruction they can follow honestly when fresh and when tired. "@ 75 %"
+ *  for a percentage-based block. The backend's persist gate keeps at most one of
+ *  the two, so this never has to show both; an exercise with neither is a pure
+ *  volume prescription ("3×12 push-ups") and renders without an intensity. */
+function intensity(exercise: { rir?: number; percentE1rm?: number }): string | null {
+  if (exercise.rir !== undefined && exercise.rir !== null) return `RIR ${exercise.rir}`
+  if (exercise.percentE1rm !== undefined && exercise.percentE1rm !== null) {
+    return `@ ${Math.round(exercise.percentE1rm)}%`
+  }
+  return null
 }
 
 /** Where this renders.  The workout page is a light document; the dashboard hero
@@ -188,6 +213,42 @@ export default function WorkoutDetails({
                     <td className={`py-1.5 font-medium ${c.tableValue}`}>{seconds(iv.duration)}</td>
                     <td className={`py-1.5 font-medium ${c.tableValue}`}>{iv.power}W</td>
                     <td className={`py-1.5 ${c.tableRest}`}>{seconds(iv.rest)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {day.strengthExercises && day.strengthExercises.length > 0 && (
+        <div className="mt-4">
+          <h3 className={`font-semibold text-sm mb-2 flex items-center gap-1.5 ${c.tableHeading}`}>
+            <Dumbbell size={15} />
+            Lifts
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className={c.tableHead}>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Exercise</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Sets × Reps</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Intensity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {day.strengthExercises.map((ex, i) => (
+                  <tr key={`${ex.exercise}-${i}`} className={c.tableRow}>
+                    <td className={`py-1.5 font-medium capitalize ${c.tableValue}`}>
+                      {ex.exercise}
+                    </td>
+                    <td className={`py-1.5 font-medium ${c.tableValue}`}>
+                      {ex.sets} × {ex.reps}
+                    </td>
+                    {/* An em dash rather than a blank cell: "no intensity
+                        prescribed" is a statement, and an empty cell reads as a
+                        value that failed to load. */}
+                    <td className={`py-1.5 ${c.tableRest}`}>{intensity(ex) ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

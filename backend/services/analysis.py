@@ -2442,6 +2442,10 @@ def build_ride_metrics_chain(
             - ``sport_type`` (str)
             - ``duration_seconds`` (int)
             - ``streams`` (dict of Strava stream objects keyed by type)
+            - ``_reported_effort`` (optional) the athlete's session-RPE on this
+              app's 1-5 scale, from their own workout log. Feeds the sRPE rung
+              of the ladder (#714), which sits below heart rate and above the
+              flat per-hour assumption.
         ftp: Current FTP in watts. Used for all rides (single snapshot).
         initial_ctl: Starting *cycling* CTL (0.0 for full historical rebuild).
             The pre-#713 single-sport seed; prefer ``initial_ledger``.
@@ -2594,6 +2598,12 @@ def build_ride_metrics_chain(
         # strength training *raise* TSB (#579). The ladder falls back to heart
         # rate and then to time on task, and records which rung answered so a
         # derived load can never be mistaken for a measured one.
+        # ``_reported_effort`` is the athlete's own session-RPE for this session,
+        # carried in by the caller from their workout log (#714). The sRPE rung
+        # has existed since #712 and had no production feeder: nothing passed
+        # this, so a gym session with no heart-rate monitor was priced from a flat
+        # per-hour assumption about every gym session anybody has ever done,
+        # while the athlete had already told the app how hard it was.
         load = resolve_training_load(
             provider_tss=summary_tss,
             power_tss=tss,
@@ -2604,6 +2614,7 @@ def build_ride_metrics_chain(
             ),
             max_heart_rate=max_heart_rate,
             resting_heart_rate=resting_heart_rate,
+            perceived_effort=ride.get("_reported_effort"),
         )
         tss = load.tss if load is not None else None
         tss_source = load.source if load is not None else None

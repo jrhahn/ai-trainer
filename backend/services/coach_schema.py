@@ -54,6 +54,29 @@ _INTERVAL = {
     "propertyOrdering": ["duration", "power", "rest"],
 }
 
+# One prescribed lift on a gym session (#714). ``rir`` is the autoregulation
+# unit and the one the persist gate keeps when both are given, because the plan
+# cannot know what a given weight will feel like on the day — which is the whole
+# reason to prescribe in reps-in-reserve rather than in kilos.
+_STRENGTH_EXERCISE = {
+    "type": "OBJECT",
+    "properties": {
+        "exercise": {"type": "STRING", "description": "e.g. back squat"},
+        "sets": {"type": "INTEGER"},
+        "reps": {"type": "INTEGER"},
+        "rir": {
+            "type": "INTEGER",
+            "description": "reps in reserve, 0-10; preferred over percentE1rm",
+        },
+        "percentE1rm": {
+            "type": "NUMBER",
+            "description": "percent of estimated 1RM; omit when rir is given",
+        },
+    },
+    "required": ["exercise", "sets", "reps"],
+    "propertyOrdering": ["exercise", "sets", "reps", "rir", "percentE1rm"],
+}
+
 # Mirrors schemas.PlanDayUpdateSchema field for field; see the module docstring.
 _PLAN_UPDATE = {
     "type": "OBJECT",
@@ -80,6 +103,7 @@ _PLAN_UPDATE = {
         "targetPower": _RANGE,
         "targetHeartRate": _RANGE,
         "intervals": {"type": "ARRAY", "items": _INTERVAL},
+        "strengthExercises": {"type": "ARRAY", "items": _STRENGTH_EXERCISE},
         "workoutPurpose": {"type": "STRING"},
         "keyFocusPoints": {"type": "ARRAY", "items": {"type": "STRING"}},
         "completed": {"type": "BOOLEAN"},
@@ -99,6 +123,7 @@ _PLAN_UPDATE = {
         "targetPower",
         "targetHeartRate",
         "intervals",
+        "strengthExercises",
         "workoutPurpose",
         "keyFocusPoints",
         "completed",

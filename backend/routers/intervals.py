@@ -14,6 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
+from services import reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today
 from services.intervals_service import (
@@ -468,6 +469,10 @@ async def run_intervals_import(
             # The load ladder needs the athlete's HR bounds to estimate a load
             # for the stream-less activities this import is full of (#579).
             chain_user = await crud.get_user_by_id(db, user_id)
+            # Same reason as every other chain caller: a rebuild re-derives the
+            # loads, so the athlete's logged effort has to travel with the rides
+            # (#714).
+            await reported_effort.annotate_from_logs(db, user_id, rides)
         metrics_chain = build_ride_metrics_chain(
             rides,
             ftp,

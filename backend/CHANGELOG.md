@@ -9,6 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A gym session is a first-class session, in the gym's own units**
+  (`services/strength_model.py`, `models.StrengthSet`, migration
+  `20261004_000001`, #714, epic #709) — exercises × sets × reps × load, with
+  optional RIR or RPE per set, and three derived quantities computed from them:
+  **volume load** (Σ reps × kg), **e1RM** per exercise (Epley or Brzycki), and
+  **relative intensity** as %e1RM.
+
+  Cyclists already lift; the app planned as though they did not. #579 stopped a
+  strength session counting as a rest day and #713 stopped its load being banked
+  as cycling fitness, but both treat the session as a quantity of fatigue and
+  nothing else — which is the same as recording that the athlete did something
+  unspecified for an hour.
+
+  **Tonnage and e1RM are never converted into TSS**, and a test asserts it on the
+  module's import graph rather than on a convention: `strength_model` may not
+  import the load chain or the ledger, so adding a path from kilos into cycling
+  fitness requires deleting a test that says why not. That conversion is what the
+  rest of the epic exists to avoid.
+
+  Three details that are easy to get wrong and are pinned by tests: a true single
+  returns the weight itself (Epley would otherwise credit 3,3 % more than the
+  athlete *measured*); Brzycki refuses a rep count past 36, where its
+  `36/(37−reps)` goes negative and a progression chart would show a strength
+  collapse; and RIR raises the *effective* rep count, so a 5-rep set at RIR 2 is
+  evidence about a 7-rep maximum — feeding the raw 5 in understates an athlete
+  who is getting stronger while training further from failure.
+
+  `StrengthSet` is rows, not a JSON blob, because "e1RM trends over time, per
+  exercise" is a query. Identity is `(user_id, date, slot, exercise, set_index)`:
+  the session is still `(date, slot)` as #496 established, and the session-level
+  facts — duration, session-RPE, notes — stay on `WorkoutLog` rather than being
+  copied. No derived columns, so correcting a formula corrects every historical
+  figure.
+
+- **The session-RPE rung finally has a feeder** (`services/reported_effort.py`,
+  `services/analysis.py`, `routers/users.py`, #714) — #712 built the rung and
+  nothing ever passed it, so an athlete could log "that gym hour was a 4 out of
+  5" and the app went on pricing the session from a flat per-hour assumption
+  about every gym session anybody has ever done.
+
+  Wired in both directions, because both orders happen: logging effort re-prices
+  the session immediately, and an import picks up a log that was written before
+  the activity synced. Two rules keep it safe — it only ever *improves* the rung
+  (a provider, power or heart-rate figure is a measurement and keeps its place,
+  which is #579's mistake with the signs reversed), and it is matched on date
+  **and sport**, because the two-a-day this app already models is precisely a gym
+  session and an evening ride, and attaching the gym RPE to the ride would price
+  the ride from how hard the lifting felt.
+
+  New endpoints: `GET /users/me/workouts/{date}/strength`,
+  `GET /users/me/strength/exercises`, `GET /users/me/strength/e1rm/{exercise}`.
+
+- **Strength prescriptions in RIR or %e1RM** (`schemas.StrengthPrescription`,
+  `services/coach_schema.py`, `services/prompts.py`, #714) — the coach can write
+  `3×5 @ RIR 2` instead of an absolute weight it has no way of knowing is
+  achievable on the day. Added at the canonical `schemas.PlanDay` gate, which
+  normalises rather than rejects (#424): both intensity units on one exercise is
+  not a richer prescription but an ambiguous one — they name different weights on
+  exactly the days they disagree, which are the days autoregulation exists for —
+  so RIR wins and the percentage is dropped.
+
 - **Per-sport fitness, one aggregated fatigue** (`services/fitness_ledger.py`,
   `services/analysis.py`, `services/metrics_service.py`, migration
   `20261003_000001`, #713, epic #709) — CTL is now one number **per sport** and
@@ -199,6 +260,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`WorkoutLogRequest` is a `CamelModel`, and a logged session records its
+  sport** (`schemas.py`, `routers/users.py`, #714) — the request model was a bare
+  `BaseModel`, which was invisible until a field had more than one word in its
+  name (`feedback` and `slot` camelise to themselves). `populate_by_name` means
+  both spellings are accepted, so no client changes.
+
+  Separately, `WorkoutLog.sport_type` defaulted to cycling and *nothing ever
+  passed it*, so every logged session — gym ones included — was a bike ride as
+  far as the database was concerned. It is now read off the plan day for that
+  `(date, slot)`, the sport the session was prescribed in (#710), which is also
+  what made pricing a gym session from its reported effort possible at all.
+
+- **One ledger replay, shared** (`services/metrics_service.py`, #714) —
+  `replay_load_chain` extracted from `_recalculate_metric_chain`, so anything
+  that changes a stored load has one way to fix up the chain after it. A changed
+  load invalidates every chain value following it, which is the same reason the
+  two alembic revisions that rewrote loads replayed the chain afterwards.
+
 - **CTL is named by its sport wherever a per-session figure is printed**
   (`services/prompts.py`, `services/ai_service.py`, `services/metrics_service.py`,
   #713) — `prompts.ctl_label()` renders "cycling CTL after: 61.4". Unqualified, a
@@ -387,6 +466,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not just the name after `{{`.
 
 ### Fixed
+
+- **A prescribed lift could cost the athlete a whole plan**
+  (`schemas.StrengthPrescription`, `schemas.PlanDay._coerce_strength_exercises`,
+  #714, epic #709) — `strengthExercises` was the only field on `PlanDay` that
+  could still fail validation. Every other one coerces: a garbage `sport` becomes
+  cycling, an unreadable `slot` becomes 0, an omitted `sets` becomes 1. A model
+  that wrote the field as `["3x5 squat"]` instead of a list of objects raised,
+  and because `ai_service` *retries* on a `ValidationError` and then raises
+  `AIResponseFormatError`, that shape burned all three plan-sized attempts and
+  left the athlete with no plan at all. In `plan_pipeline` it was quieter and
+  still wrong: `_to_canonical_day` caught the error and passed the day through
+  unchanged, so a day that failed on its lifts silently skipped the duration
+  window and the slot/sport storage omission too.
+
+  The field now reads what the writer meant or nothing: a bare string is read as
+  an exercise name (the same information the object form carries with `sets` and
+  `reps` omitted, which already default), unreadable entries are dropped
+  individually so one bad entry does not cost the ones written correctly, a
+  nameless prescription is dropped because it renders as a blank row and can
+  never be matched against a logged set, and a list with nothing readable left
+  becomes absent rather than `[]` — an empty list would put a new key into every
+  stored plan day and cost the byte-stability the `slot`/`sport` omissions exist
+  to protect (#496/#710).
+
+  Also found by the same coverage report: the RIR clamp was a hardcoded `10`
+  beside `strength_model.MAX_RIR`, so a prescription and a logged set could have
+  come to disagree about what RIR 12 means. It now imports the constant.
+
+  The prescription path had **no tests at all** — every `StrengthPrescription`
+  validator was unexecuted, which is how both of these shipped.
+  `tests/test_strength_prescription.py` covers it.
 
 - **The deploy gate could not read the token it gates on**
   (`.github/workflows/deploy.yml`, #700) — `OPS_DISPATCH_TOKEN` is a secret on

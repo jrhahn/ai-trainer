@@ -51,6 +51,7 @@ from services.analysis import (
     project_training_load_from_seed,
     build_ride_metrics_chain,
 )
+from services import reported_effort
 from services.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
@@ -792,6 +793,11 @@ async def analyse_activities(
             )
             rides_input.append(imported_activity.to_ride_input())
         if rides_input:
+            # The athlete's logged effort travels with the rides, or this path
+            # prices a gym session from time on task again (#714).
+            await reported_effort.annotate_from_logs(
+                db, current_user.id, rides_input
+            )
             metrics_chain = build_ride_metrics_chain(
                 rides_input,
                 ftp_for_chain,

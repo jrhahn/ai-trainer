@@ -19,6 +19,7 @@ from services import (
     motivation_model,
     plan_compliance,
     ride_purpose_question,
+    strength_model,
     uncertainty_lifecycle,
     uncertainty_value,
 )
@@ -539,6 +540,120 @@ async def upsert_workout_log(
         existing.sport_type = sport_type
     await db.flush()
     return existing
+
+
+# ---------------------------------------------------------------------------
+# StrengthSet (#714)
+# ---------------------------------------------------------------------------
+
+
+async def get_strength_sets(
+    db: AsyncSession, user_id: str, date: str, slot: int = 0
+) -> list[models.StrengthSet]:
+    """The sets logged for one gym session, in the order they were performed."""
+    result = await db.scalars(
+        select(models.StrengthSet)
+        .where(
+            models.StrengthSet.user_id == user_id,
+            models.StrengthSet.date == date,
+            models.StrengthSet.slot == slot,
+        )
+        .order_by(models.StrengthSet.exercise, models.StrengthSet.set_index)
+    )
+    return list(result)
+
+
+async def replace_strength_sets(
+    db: AsyncSession,
+    user_id: str,
+    date: str,
+    slot: int,
+    sets: Sequence[strength_model.StrengthSet],
+) -> list[models.StrengthSet]:
+    """Make the stored session exactly *sets* and return the stored rows.
+
+    Replace rather than upsert-in-place. A re-log is the athlete correcting the
+    session — dropping a set they did not do, reordering two exercises — and an
+    upsert keyed on ``set_index`` would leave the removed tail behind, so the
+    session would silently grow every time it was edited down. Deleting first
+    makes the stored session equal to what was submitted, which is what the
+    athlete means by saving the form.
+
+    The sets are grouped per exercise and numbered from 1 in submission order, so
+    ``set_index`` states the order they were performed in rather than a position
+    in whatever order the client happened to send.
+    """
+    await db.execute(
+        delete(models.StrengthSet).where(
+            models.StrengthSet.user_id == user_id,
+            models.StrengthSet.date == date,
+            models.StrengthSet.slot == slot,
+        )
+    )
+
+    seen_per_exercise: dict[str, int] = {}
+    rows: list[models.StrengthSet] = []
+    for one_set in sets:
+        index = seen_per_exercise.get(one_set.exercise, 0) + 1
+        seen_per_exercise[one_set.exercise] = index
+        row = models.StrengthSet(
+            user_id=user_id,
+            date=date,
+            slot=slot,
+            exercise=one_set.exercise,
+            set_index=index,
+            reps=one_set.reps,
+            weight_kg=one_set.weight_kg,
+            rir=one_set.rir,
+            rpe=one_set.rpe,
+        )
+        db.add(row)
+        rows.append(row)
+
+    await db.flush()
+    return rows
+
+
+async def get_strength_sets_for_exercise(
+    db: AsyncSession,
+    user_id: str,
+    exercise: str,
+    *,
+    limit_days: int = 365,
+) -> list[models.StrengthSet]:
+    """Every set of one exercise, oldest first — the input to an e1RM trend.
+
+    Returns the *sets*, not an e1RM series, because the formula choice belongs to
+    the caller and ``services.strength_model`` owns the arithmetic. A crud
+    function that returned estimates would be a second place the formula lives.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=limit_days)).date().isoformat()
+    result = await db.scalars(
+        select(models.StrengthSet)
+        .where(
+            models.StrengthSet.user_id == user_id,
+            models.StrengthSet.exercise == exercise,
+            models.StrengthSet.date >= cutoff,
+        )
+        .order_by(models.StrengthSet.date, models.StrengthSet.set_index)
+    )
+    return list(result)
+
+
+async def get_logged_exercises(db: AsyncSession, user_id: str) -> list[str]:
+    """Which exercises this athlete has ever logged, alphabetically.
+
+    So the trend endpoint and the log form can offer the athlete's own lifts
+    rather than a hardcoded list of exercises someone else thought they should
+    be doing.
+    """
+    result = await db.scalars(
+        select(models.StrengthSet.exercise)
+        .where(models.StrengthSet.user_id == user_id)
+        .distinct()
+        .order_by(models.StrengthSet.exercise)
+    )
+    return list(result)
 
 
 # ---------------------------------------------------------------------------
