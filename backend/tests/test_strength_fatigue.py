@@ -398,3 +398,213 @@ def test_an_ftp_recompute_still_leaves_a_reported_load_alone():
     # The ride's power-derived load did move with the new FTP.
     assert ride.tss != 80.0
     assert ride.tss_source == LOAD_SOURCE_POWER
+
+
+# ---------------------------------------------------------------------------
+# Which activity a logged effort describes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("stored", "logged", "expected"),
+    [
+        # Readable on both sides: handled before the family fallback is reached.
+        ("Hike", "Walk", False),
+        ("Hike", "Hike", True),
+        # An empty sport on either side is a genuine unknown, and guessing would
+        # attach the gym effort to the evening ride.
+        ("", "Ride", False),
+        ("Ride", "", False),
+        # Non-empty but unreadable — a provider sending punctuation. It never
+        # matches a readable sport, which is the property that matters.
+        ("-", "Ride", False),
+        ("Ride", "-", False),
+        # Two equally unreadable sports are one anonymous family. Defensive
+        # rather than reachable: the logged side always arrives through
+        # ``normalise_plan_sport`` or the plan day, so it is readable already.
+        ("-", "!!!", True),
+    ],
+)
+def test_sport_matching_falls_back_to_the_family_for_an_unreadable_sport(
+    stored, logged, expected
+):
+    assert reported_effort._same_sport(stored, logged) is expected
+
+
+def test_two_stored_activities_of_one_sport_on_a_date_are_not_guessed():
+    """Picking one would make the stored load depend on row order.
+
+    The two-a-day this app already models (#496) is a gym session and a ride on
+    one date, and those are told apart by sport. Two sessions of the *same*
+    sport on one date cannot be, so the effort is left unapplied rather than
+    attached to whichever row came back first.
+    """
+    both = [_Row("2026-12-10", "WeightTraining", None) for _ in range(2)]
+
+    assert reported_effort._candidate(both, "strength") is None
+    # One of them on its own is unambiguous.
+    assert reported_effort._candidate(both[:1], "strength") is both[0]
+
+
+# ---------------------------------------------------------------------------
+# Re-pricing: the cases that must change nothing
+# ---------------------------------------------------------------------------
+
+
+class _FakeDb:
+    """Enough of a session for ``apply_reported_effort``."""
+
+    def __init__(self) -> None:
+        self.flushed = 0
+
+    async def flush(self) -> None:
+        self.flushed += 1
+
+
+class _User:
+    id = "user-1"
+
+
+def _patch_metrics(monkeypatch, rows: list) -> dict:
+    """Serve *rows* to both reads, recording whether the replay read ran."""
+    calls = {"ordered": 0}
+
+    async def by_date(db, user_id, date):
+        return [r for r in rows if r.activity_date == date]
+
+    async def ordered(db, user_id):
+        calls["ordered"] += 1
+        return rows
+
+    monkeypatch.setattr(reported_effort.crud, "get_ride_metrics_by_date", by_date)
+    monkeypatch.setattr(reported_effort.crud, "get_all_ride_metrics_ordered", ordered)
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("effort", [None, 0])
+async def test_no_effort_reported_is_not_evidence(effort):
+    """Nothing to re-price from, and the DB is never touched for it."""
+    assert (
+        await reported_effort.apply_reported_effort(
+            None, _User(), date="2026-12-11", perceived_effort=effort, sport_type="strength"
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_session_with_no_imported_activity_has_nothing_to_re_price(monkeypatch):
+    """The log still stands on its own; there is just no row for the chain.
+
+    Synthesising an activity from a manual log would change what counts as an
+    activity across matching, dashboards and history, which is a larger decision
+    than this function should make.
+    """
+    calls = _patch_metrics(monkeypatch, [])
+
+    assert (
+        await reported_effort.apply_reported_effort(
+            _FakeDb(), _User(), date="2026-12-11", perceived_effort=4, sport_type="strength"
+        )
+        is None
+    )
+    assert calls["ordered"] == 0
+
+
+@pytest.mark.asyncio
+async def test_the_logged_duration_prices_a_row_that_has_none(monkeypatch):
+    """A manually logged gym session often has no duration on the metric row.
+
+    The ladder's sRPE rung needs one, so the duration the athlete typed into the
+    same form is used rather than giving up on the session.
+    """
+    row = _Row("2026-12-12", "WeightTraining", None)
+    row.tss_source = None
+    row.duration_seconds = None
+    calls = _patch_metrics(monkeypatch, [row])
+    db = _FakeDb()
+
+    changed = await reported_effort.apply_reported_effort(
+        db,
+        _User(),
+        date="2026-12-12",
+        perceived_effort=4,
+        sport_type="strength",
+        duration_minutes=60,
+    )
+
+    assert changed is row
+    assert row.tss == 88.0
+    assert row.tss_source == LOAD_SOURCE_RPE
+    # The chain after it was replayed, once.
+    assert calls["ordered"] == 1
+    assert db.flushed == 1
+
+
+@pytest.mark.asyncio
+async def test_an_effort_with_no_duration_anywhere_cannot_price_the_session(monkeypatch):
+    """An effort is a rate, not a load: without a duration there is no session.
+
+    Priced at zero it would read as a rest day, which is exactly what #579
+    fixed.
+    """
+    row = _Row("2026-12-13", "WeightTraining", None)
+    row.tss_source = None
+    row.duration_seconds = None
+    calls = _patch_metrics(monkeypatch, [row])
+
+    assert (
+        await reported_effort.apply_reported_effort(
+            _FakeDb(), _User(), date="2026-12-13", perceived_effort=4, sport_type="strength"
+        )
+        is None
+    )
+    assert row.tss is None
+    assert calls["ordered"] == 0
+
+
+@pytest.mark.asyncio
+async def test_re_saving_the_same_effort_does_not_replay_the_history(monkeypatch):
+    """This path runs on every save of the workout form.
+
+    Replaying the whole history to write back the number already there would be
+    work for nothing.
+    """
+    row = _Row("2026-12-14", "WeightTraining", 88.0)
+    row.tss_source = LOAD_SOURCE_RPE
+    calls = _patch_metrics(monkeypatch, [row])
+    db = _FakeDb()
+
+    assert (
+        await reported_effort.apply_reported_effort(
+            db, _User(), date="2026-12-14", perceived_effort=4, sport_type="strength"
+        )
+        is None
+    )
+    assert calls["ordered"] == 0
+    assert db.flushed == 0
+
+
+# ---------------------------------------------------------------------------
+# The replay survives bad stored data
+# ---------------------------------------------------------------------------
+
+
+def test_an_unparseable_stored_date_does_not_break_the_replay():
+    """A malformed ``activity_date`` is treated as one day on from the previous.
+
+    The chain is a decay over elapsed days, so a date it cannot read has to pick
+    *something*; assuming a day passed keeps the ledger moving forward and keeps
+    the row's own load in it, where raising would lose every figure after it.
+    """
+    good = _Row("2026-12-20", "Ride", 70.0)
+    bad = _Row("not-a-date", "Ride", 70.0)
+    after = _Row("2026-12-22", "Ride", 70.0)
+
+    metrics_service.replay_load_chain([good, bad, after])
+
+    for row in (good, bad, after):
+        assert row.ctl_after is not None and row.atl_after is not None
+    # The malformed row still banked its own load rather than being skipped.
+    assert bad.atl_after > good.atl_after

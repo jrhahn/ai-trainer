@@ -258,7 +258,7 @@ def test_a_nameless_prescription_is_not_one():
 
 
 @pytest.mark.parametrize(
-    "given", [[], [42], ["   "], [{"sets": 3}], "", 42, [None]]
+    "given", [None, [], [42], ["   "], [{"sets": 3}], "", 42, [None]]
 )
 def test_a_list_with_nothing_readable_becomes_absent_rather_than_empty(given):
     """``[]`` would put a new key into every stored plan day.

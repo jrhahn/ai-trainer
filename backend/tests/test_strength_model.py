@@ -25,6 +25,7 @@ from services.strength_model import (
     best_e1rm_per_exercise,
     e1rm,
     e1rm_is_confident,
+    e1rm_trend,
     effective_reps,
     normalize_exercise_name,
     relative_intensity,
@@ -330,3 +331,82 @@ def test_nothing_here_converts_strength_work_into_cycling_load():
     # here hands back a TSS or touches a fitness figure.
     public = [name for name in dir(strength_model) if not name.startswith("_")]
     assert not [n for n in public if "tss" in n.lower() or "ctl" in n.lower()]
+
+
+# ---------------------------------------------------------------------------
+# The trend line
+# ---------------------------------------------------------------------------
+
+
+def test_the_trend_takes_the_best_estimate_from_each_session():
+    """Back-off sets would otherwise draw a sawtooth.
+
+    Within one hour the athlete does not get weaker and stronger again; the top
+    set is the session's statement about maximal strength and the back-offs are
+    the same session's accumulated volume.
+    """
+    dated = [
+        ("2026-10-01", StrengthSet("back squat", 5, 100.0, rir=2)),
+        ("2026-10-01", StrengthSet("back squat", 8, 80.0, rir=2)),
+        ("2026-10-08", StrengthSet("back squat", 5, 105.0, rir=2)),
+    ]
+
+    points = e1rm_trend(dated)
+
+    assert [p.date for p in points] == ["2026-10-01", "2026-10-08"]
+    assert points[0].weight_kg == 100.0
+    assert points[1].e1rm_kg > points[0].e1rm_kg
+
+
+def test_a_session_with_nothing_estimable_is_absent_rather_than_zero():
+    """Unweighted work says nothing about maximal strength.
+
+    Plotting it as 0 kg would read as a total loss of it — the same mistake as
+    pricing a session the ladder cannot read at zero load (#579).
+    """
+    dated = [
+        ("2026-10-01", StrengthSet("plank", 1, 0.0)),
+        ("2026-10-02", StrengthSet("push-ups", 0, 0.0)),
+        ("2026-10-03", StrengthSet("back squat", 5, 100.0, rir=2)),
+    ]
+
+    points = e1rm_trend(dated)
+
+    assert [p.date for p in points] == ["2026-10-03"]
+
+
+def test_the_trend_reports_the_set_behind_each_point():
+    """So a surprising point can be explained rather than only shown."""
+    points = e1rm_trend([("2026-10-01", StrengthSet("deadlift", 3, 140.0, rir=1))])
+
+    only = points[0]
+    assert (only.reps, only.weight_kg, only.rir) == (3, 140.0, 1)
+    assert only.confident is True
+
+
+def test_a_rep_count_outside_the_fitted_range_is_marked_not_hidden():
+    """A 25-rep set still yields an estimate; it is weaker evidence.
+
+    The trend line has to be able to say so rather than quietly presenting it
+    beside a 5-rep top set as though they carried equal weight.
+    """
+    points = e1rm_trend([("2026-10-01", StrengthSet("leg press", 25, 60.0))])
+
+    assert len(points) == 1
+    assert points[0].confident is False
+
+
+def test_the_trend_can_be_drawn_on_either_formula():
+    """Checked at 15 reps, because Epley and Brzycki coincide exactly at 10.
+
+    36/27 == 1 + 10/30, so a formula-choice test anchored at ten reps passes
+    whichever formula actually ran.
+    """
+    dated = [("2026-10-01", StrengthSet("back squat", 15, 80.0))]
+
+    epley = e1rm_trend(dated, formula=FORMULA_EPLEY)[0].e1rm_kg
+    brzycki = e1rm_trend(dated, formula=FORMULA_BRZYCKI)[0].e1rm_kg
+
+    assert epley != brzycki
+    assert epley == pytest.approx(80.0 * (1 + 15 / 30))
+    assert brzycki == pytest.approx(80.0 * 36 / (37 - 15))

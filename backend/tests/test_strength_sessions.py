@@ -686,3 +686,128 @@ async def test_the_endpoints_require_authentication(client):
         "/api/v1/users/me/workouts/2026-09-23/strength",
     ):
         assert (await client.get(path)).status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Which sport the session is recorded as
+# ---------------------------------------------------------------------------
+
+
+async def _stored_sport(email: str, date: str, slot: int = 0) -> str | None:
+    """The ``sport_type`` actually written to the workout log."""
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, email)
+        assert user is not None
+        log = await crud.get_workout_log_by_date(db, user.id, date, slot)
+        assert log is not None, f"no workout log stored for {date}/{slot}"
+        return log.sport_type
+
+
+@pytest.mark.asyncio
+async def test_a_logged_session_takes_its_sport_from_the_plan(client, auth_headers):
+    """The reason the helper exists, and nothing covered it.
+
+    Every existing client posts a workout log with no ``sport``, and until #714
+    every one of those was stored as cycling — including the gym sessions, which
+    is also why their reported effort could not price them. The plan day is the
+    authoritative statement of what the session was meant to be (#710), so it is
+    read from there rather than demanded of the client.
+    """
+    plan = [
+        {
+            "date": "2026-10-12",
+            "sport": "strength",
+            "workoutType": "strength",
+            "title": "Gym",
+            "description": "Lower body",
+            "durationMinutes": 45,
+        }
+    ]
+    saved = await client.put(
+        "/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan}
+    )
+    assert saved.status_code == 200, saved.text
+
+    # Note: no "sport" key — exactly what a pre-#714 client sends.
+    logged = await client.post(
+        "/api/v1/users/me/workouts/2026-10-12",
+        headers=auth_headers,
+        json={"feedback": {**GYM_FEEDBACK, "completedAt": "2026-10-12T19:30:00Z"}},
+    )
+    assert logged.status_code == 200, logged.text
+
+    assert await _stored_sport("rider@example.com", "2026-10-12") == "strength"
+
+
+@pytest.mark.asyncio
+async def test_an_unplanned_session_falls_back_to_cycling(client, auth_headers):
+    """What the column defaulted to for every row written until now."""
+    logged = await client.post(
+        "/api/v1/users/me/workouts/2026-10-13",
+        headers=auth_headers,
+        json={"feedback": {**GYM_FEEDBACK, "completedAt": "2026-10-13T19:30:00Z"}},
+    )
+    assert logged.status_code == 200, logged.text
+
+    assert await _stored_sport("rider@example.com", "2026-10-13") == "cycling"
+
+
+@pytest.mark.asyncio
+async def test_a_plan_the_app_cannot_read_still_saves_the_log(
+    client, auth_headers, monkeypatch
+):
+    """A sport is a nicety; saving the athlete's log is not.
+
+    If reading the plan fails the session is recorded as cycling rather than
+    lost, because the athlete pressed save on work they actually did.
+    """
+    import crud
+
+    async def boom(db, user_id):
+        raise RuntimeError("plan table unavailable")
+
+    monkeypatch.setattr(crud, "get_training_plan", boom)
+
+    logged = await client.post(
+        "/api/v1/users/me/workouts/2026-10-14",
+        headers=auth_headers,
+        json={"feedback": {**GYM_FEEDBACK, "completedAt": "2026-10-14T19:30:00Z"}},
+    )
+    assert logged.status_code == 200, logged.text
+
+    assert await _stored_sport("rider@example.com", "2026-10-14") == "cycling"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_re_price_does_not_lose_the_logged_session(
+    client, auth_headers, monkeypatch
+):
+    """Re-pricing is an improvement on the session's load, not a precondition.
+
+    The log and its sets are what the athlete typed; a failure in the load chain
+    behind them must not answer with an error and throw the work away.
+    """
+    from services import reported_effort
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("ledger unavailable")
+
+    monkeypatch.setattr(reported_effort, "apply_reported_effort", boom)
+
+    await _log(
+        client,
+        auth_headers,
+        "2026-10-15",
+        [{"exercise": "Back Squat", "reps": 5, "weightKg": 100.0, "rir": 2}],
+    )
+
+    body = (
+        await client.get(
+            "/api/v1/users/me/workouts/2026-10-15/strength", headers=auth_headers
+        )
+    ).json()
+    assert body["volumeLoadKg"] == pytest.approx(500.0)
+    assert await _stored_sport("rider@example.com", "2026-10-15") == "strength"

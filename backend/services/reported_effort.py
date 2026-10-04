@@ -69,11 +69,18 @@ _NO_GAIN_SOURCES = frozenset({LOAD_SOURCE_DURATION})
 def _same_sport(metric_sport: str | None, logged_sport: str | None) -> bool:
     """Whether a stored activity and a logged session are the same sport.
 
-    Compared through ``training_sport`` so "WeightTraining" and "strength" match,
-    then through ``activity_family`` as a fallback so two sports outside the
-    plannable three (two different hikes, say) are not silently treated as one.
-    An unreadable sport on either side matches nothing: guessing would attach the
-    athlete's gym effort to their evening ride.
+    Compared through ``training_sport`` so "WeightTraining" and "strength" match.
+    That already distinguishes sports outside the plannable three — a hike reads
+    as ``"hike"`` and a walk as ``"walk"`` — so the ``activity_family`` fallback
+    below is reached only when a sport is non-empty but still unreadable, which
+    in this app means a provider sent something like ``"-"``.
+
+    In that case: an empty sport on either side matches nothing, and an
+    unreadable one never matches a readable one, so a gym effort can never be
+    attached to the evening ride. Two *equally* unreadable sports do match, both
+    being the same anonymous family; it is defensive rather than reachable, since
+    the logged side always arrives through ``normalise_plan_sport`` or the plan
+    day and is therefore readable by construction.
     """
     logged = training_sport(logged_sport)
     stored = training_sport(metric_sport)
