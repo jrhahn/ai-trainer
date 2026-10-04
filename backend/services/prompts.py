@@ -18,6 +18,7 @@ from .activity_identity import (
     power_model_applies,
 )
 from .fitness_ledger import ledger_sport
+from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
@@ -4317,6 +4318,45 @@ def plan_coherence_section(repeats: list[dict] | None, today=None) -> str:
         "days you would change and to what, and never describe the pair as a "
         "deliberate progression. Only leave it alone when the athlete has "
         "explicitly asked for both."
+    )
+    return "\n".join(lines)
+
+
+def plan_interference_section(findings: list[dict] | None, today=None) -> str:
+    """Concurrent-training clashes the plan currently contains (#715).
+
+    The gate reverts the ones *a write created* and can give a session back for.
+    Everything else reaches the coach here: a clash that was already in the plan
+    before the write, and one created by appending a session that has no previous
+    version to restore. Those are left for the coach precisely because the fix is
+    a coaching decision — which session moves and to when — and a guard that
+    invented one would cost the athlete a session (#651).
+
+    Stated as fact with the rule attached, because a writer told only "this is
+    not allowed" argues with it, while a writer told *why* plans around it.
+    """
+    if not findings:
+        return ""
+    if isinstance(today, str):
+        today = _parse_today(today)
+    lines = [
+        "Concurrent-training check (computed from the plan, not inferred — treat as "
+        "fact):"
+    ]
+    for finding in findings:
+        dates = sorted({finding.get("strength_date"), finding.get("key_date")} - {None})
+        when = " and ".join(
+            f"{d} ({plan_day_date_labels(d, today).get('weekday') or '?'})"
+            for d in dates
+        )
+        lines.append(f"  {when}: {finding_statement(finding)}")
+    lines.append(
+        "Say which session you would move and to when, rather than describing the "
+        "clash as deliberate. Endurance work impairs strength adaptation more than "
+        "the reverse, and running interferes more than cycling — so where the two "
+        "have to share a day, the quality session goes first and the gym work goes "
+        "at least six hours later. Only leave a clash alone when the athlete has "
+        "explicitly asked for it."
     )
     return "\n".join(lines)
 

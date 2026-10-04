@@ -295,4 +295,54 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="1",
         tests=("tests/test_rag.py",),
     ),
+    # --- Whether lifting and riding are allowed to collide (#715) -----------
+    PolicyGuard(
+        target="services.interference:HEAVY_RIR_MAX",
+        decides=(
+            "how close to failure a prescribed lift has to be before the gate "
+            "will move the plan for it — the boundary between 'the athlete lifted' "
+            "and 'the athlete cannot ride tomorrow's intervals'"
+        ),
+        # Below 0 no prescription can ever be heavy, so the whole rule goes quiet
+        # while every test about it still has a plan to run against.
+        moved_to="-1",
+        tests=("tests/test_interference_guards.py",),
+    ),
+    PolicyGuard(
+        target="services.interference:HEAVY_PERCENT_E1RM_MIN",
+        decides="the same boundary expressed as a fraction of the athlete's maximum",
+        # Above any real prescription: 200 % of an e1RM is not a weight.
+        moved_to="200.0",
+        tests=("tests/test_interference_guards.py",),
+    ),
+    PolicyGuard(
+        target="services.interference:MIN_SEPARATION_HOURS",
+        decides=(
+            "how far apart a ride and a gym session on one date have to be before "
+            "they stop competing as adaptive signals"
+        ),
+        # 0 h clears every pair, however close together.
+        moved_to="0.0",
+        tests=("tests/test_interference_guards.py",),
+    ),
+    PolicyGuard(
+        target="services.interference:KEY_WORKOUT_TYPES",
+        decides=(
+            "which sessions are the ones a week is built around, and therefore "
+            "which ones heavy legs the day before are not allowed to cost"
+        ),
+        # An empty set leaves no session worth protecting.
+        moved_to="frozenset()",
+        tests=("tests/test_interference_guards.py",),
+    ),
+    PolicyGuard(
+        target="services.interference:MODALITY_WEIGHT",
+        decides=(
+            "whether running interferes more than cycling — the modality finding "
+            "that decides which of two competing findings resolves a session"
+        ),
+        # Equal weights make the two modalities indistinguishable.
+        moved_to="{'running': 1.0, 'cycling': 1.0}",
+        tests=("tests/test_interference_guards.py",),
+    ),
 )

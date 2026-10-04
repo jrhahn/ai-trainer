@@ -9,6 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The plan gate now knows that lifting and riding interfere**
+  (`services/interference.py`, `plan_pipeline._revert_new_interference`, #715,
+  epic #709) — three rules, each decidable from the plan alone, enforced at the
+  one gate every trigger passes:
+
+  1. **Heavy lower-body work the day before a key session.** Squats at RIR 2 on
+     Tuesday and 4×8 min threshold on Wednesday is not the session that was
+     prescribed — the legs cannot produce its power.
+  2. **Lifting ahead of the same day's key session.** The quality session goes
+     first, while the athlete can still produce it. Read from `slot`, so it fires
+     on every two-a-day whether or not a `timeOfDay` was written.
+  3. **A ride and a gym session less than six hours apart on one date.** The
+     expensive direction: endurance work in the hours before lifting is where
+     interference runs most strongly.
+
+  `plan_coherence`'s module docstring drew a line this could not previously
+  cross — *"whether a strength day may sit next to a threshold session depends on
+  whether it loads the legs, which is real coaching, stated in the prompt and
+  left there."* #714 moved that line: a planned gym session now carries its
+  prescribed lifts, so "does it load the legs" is a list of exercises with an
+  intensity unit rather than a judgement. That is the only reason these rules are
+  safe to enforce rather than merely mention, and what is still judgement stays
+  out — a prescription that named no intensity is **not** read as heavy, and a
+  gym session with no prescription at all is not guessed at from its description.
+  Both are reported to the coach and left alone.
+
+  **Which session is given back.** Unlike the coherence gate, whose two days are
+  interchangeable, these two are not: one is a key endurance session and one is
+  the gym work scheduled around it. So the gym session is reverted by preference,
+  the key session only when the gym session predates the write and there is
+  nothing to give back on that side, and a pair where neither session has a
+  previous version is left alone entirely — deleting an appended session to
+  resolve a clash is the #651 mistake.
+
+  **Directional and modality weighting** (Hickson; Wilson et al. 2012) ranks the
+  findings and resolves a write that creates two of them competing for one
+  session: endurance-before-strength outweighs strength-before-endurance, and
+  running outweighs cycling. It is deliberately *not* a firing threshold — every
+  rule here is already a fact about the plan, and a threshold would turn a fact
+  into a tunable set by the author's taste rather than the athlete's data.
+
+  All five numbers these rules decide with — `HEAVY_RIR_MAX`,
+  `HEAVY_PERCENT_E1RM_MIN`, `MIN_SEPARATION_HOURS`, `KEY_WORKOUT_TYPES`,
+  `MODALITY_WEIGHT` — are on the policy-guard register (#600) and held their
+  perturbations, so a later edit cannot quietly loosen one together with its
+  test.
+
+- **The move repair runs after the week-shaped guards, not only before them**
+  (`plan_pipeline._enforce_and_persist`, #715) — `_revert_orphaned_moves` existed
+  to stop half an applied move deleting a session (#651), and ran before the two
+  guards that hand a session back. So a session handed back by the coherence
+  guard (#665) could itself be one half of a move whose other half had already
+  applied, re-entering the exact failure mode from behind the repair. It now runs
+  again over the finished week. A same-date swap blocked at one end is therefore
+  undone at both, and the athlete keeps the day they had.
+
+- **A guard that corrects the plan records the rule it applied**
+  (`plan_day_history.reason`, #715) — written with the row rather than backfilled
+  by the narrator, so the correction is attributable whether or not the narration
+  ran, and `crud.set_plan_day_reasons` no longer overwrites a reason that is
+  already there (the narrator's retelling must not replace the fact).
+
+  A revert is deliberately **not** narrated to the athlete as a plan change: it
+  restores the content they last saw, so there is nothing to announce, and
+  announcing it would mean a chat message every night the nightly job retried the
+  same bad combination. The rule reaches the athlete through the coach's prompt
+  instead, where they are present to discuss it.
+
 - **A gym session is a first-class session, in the gym's own units**
   (`services/strength_model.py`, `models.StrengthSet`, migration
   `20261004_000001`, #714, epic #709) — exercises × sets × reps × load, with
