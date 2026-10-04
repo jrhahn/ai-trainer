@@ -9,6 +9,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Running has its own performance model** (`services/run_model.py`, #716,
+  epic #709) — Critical Speed and D′ from the pace–duration envelope, threshold
+  pace, grade-adjusted pace, pace zones and rTSS. The fitting machinery is the
+  cycling one; the watt assumptions baked around it are not, which is the whole
+  reason the module exists rather than a flag on the power model (#711).
+
+  - **Critical Speed and D′** by the hyperbolic speed–duration relationship
+    (Monod & Scherrer; Hill; Jones & Vanhatalo), fitted as
+    `distance = CS × t + D′`. The intercept the cycling fit discards is kept:
+    for a cyclist W′ is a curiosity next to CP, while for a runner D′ *is* the
+    kick, and it is what a 400 m repeat session trains.
+  - **The fit refuses more often than it answers.** Fewer than three points, a
+    span under 8 minutes, a curve that does not descend, a residual the
+    hyperbola cannot explain, or a CS or D′ outside what a runner can be — each
+    returns nothing. An invented Critical Speed would set the athlete's
+    threshold pace, their zones and every rTSS figure in their history, and once
+    stored it is indistinguishable from a measured one. The residual is checked
+    in *speed* space rather than by the usual r², which is computed on the
+    linearised distance–time form where the points are nearly collinear by
+    construction and comes out above 0,99 for curves the model does not
+    describe at all.
+  - **Grade-adjusted pace** from Minetti et al. (2002), so a hill run and a flat
+    run are comparable and the athlete's own hilly loop stops looking like a bad
+    day. Gradients are computed over 30 m segments, because a metre of GPS
+    altitude wobble over three metres of running is a 33 % climb and would make
+    the adjustment add noise instead of removing it. The downhill discount stops
+    at 20 %: Minetti measured oxygen uptake, which keeps falling to about 55 %
+    of flat, and misses the eccentric braking load a descent actually costs.
+  - **Running power is deliberately not computed.** Stryd and GOVSS model it
+    from pace, mass and gradient — all of which this module has — and the
+    arithmetic would be easy. A modelled watt that looks like a measured one is
+    the conflation #579 and #712 spent two issues separating. A
+    provider-reported running power is welcome; one of ours would be a guess
+    wearing a unit.
+
+- **rTSS is a rung of the load ladder** (`services/training_load.py`, #716) —
+  `hours × IF² × 100` on grade-adjusted pace against threshold pace, the figure
+  TrainingPeaks publishes under the same name. It sits beside the power rung and
+  above heart rate: pace and power measure what the athlete did, where heart
+  rate is a response that moves with heat, caffeine, altitude and sleep without
+  the work changing. Gated on sport from the other side of #711 — a 35 km/h hour
+  would price as IF 1,3 against any runner's threshold — and labelled `pace`, so
+  it reads as `TSS 94` rather than as an estimate, because rTSS *is* TSS in the
+  sense the athlete's own training software means it.
+
+  A run with no threshold pace still falls through to heart rate and then to
+  time on task. That is the point of the ladder: a missing model costs a rung,
+  not the row, and an rTSS computed against a threshold nobody established is
+  not a better number than an hrTSS — it only looks like one.
+
+- **A run now leaves an envelope behind it** (`services/analysis.py`, #716) —
+  `build_ride_metrics_chain` fills `perf_signals` for runs too, with the
+  pace–duration curve (raw and grade-adjusted), the distance both ways and the
+  two halves of the run. The blob carries a `sport` marker and deliberately
+  omits `power_curve` and `first_half_power`: those are the keys the cycling
+  inference engine reads, and a footpod run landing in them would argue about a
+  cycling threshold — the #711 error one level further in. `distance` was added
+  to the streams requested from Strava, so the envelope is built from the
+  provider's measurement rather than from an integrated speed stream.
+
+- **The athlete model reports Critical Speed, D′ and threshold pace**
+  (`services/athlete_model_inference.py`, #716) — three attributes from one fit,
+  each with its confidence, its evidence and what is missing, reported
+  `unknown` with the time-trial protocol that would settle it when the envelope
+  is thin. The engine now splits ride signals from run signals explicitly rather
+  than relying on which keys happen to be absent. A running *limiter* is
+  deliberately not detected yet; that is #718's job.
+
+- **The athlete can state their running threshold pace**
+  (`users.threshold_pace_seconds_per_km`, #716) — what `current_ftp` is to the
+  bike. Nullable with no default, because a default threshold pace would price
+  every athlete's runs against a stranger's. Stored in seconds because "4:20" is
+  a string nothing can compute with, and per kilometre because that is the unit
+  a runner knows their threshold in. The Critical Speed fit fills the gap when
+  they have not stated one *and* the fit clears a confidence floor; it never
+  writes to the column, so an inference can never later be mistaken for
+  something the athlete said.
+
+- **The coach is shown pace for runs and watts for rides, never crossed**
+  (`services/prompts.py`, #716) — per-run pace as min:sec per km with distance
+  and elevation gain, plus the athlete's pace-zone boundaries, gated on the
+  batch containing a run exactly as the watt zones are gated on it containing a
+  ride. With no threshold pace established the coach is told so and told not to
+  characterise a run's intensity, because silence in a prompt is filled with an
+  invention. Elevation gain is named as the reason a pace looks slow, so a hilly
+  run is not read as a drop in form.
+
+- **Eight new entries in the policy-guard register** (`tests/policy_guards.py`,
+  #600) — the threshold-pace fraction of Critical Speed, the fit's four refusal
+  boundaries, the grade-adjustment floor and segment length, the confidence
+  floor that lets an inferred pace price a run, and the intensity cap that stops
+  one GPS artefact spiking ATL. Each holds its perturbation.
+
 - **The plan gate now knows that lifting and riding interfere**
   (`services/interference.py`, `plan_pipeline._revert_new_interference`, #715,
   epic #709) — three rules, each decidable from the plan alone, enforced at the
@@ -325,6 +418,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refusal rather than becoming a silent lockout — a non-empty value makes the
   panel demand a code that a non-base32 one can never accept, which is the
   shape of #684 and #696.
+
+### Fixed
+
+- **An uploaded run had a speed stream and no clock** (`routers/users.py`, #716)
+  — the .fit parser only emitted `time` alongside `watts`, so a run, which has
+  no power stream, arrived with `velocity_smooth` and nothing to read it
+  against. A speed without a clock is not a pace, and the pace model could not
+  see the file at all. The speed samples' own timestamps are now the time base
+  when there is no power; a ride upload keeps the power time base it had.
+
+- **The profile the coach reads carries a rendered pace, not a number**
+  (`schemas.UserProfileSchema`, #716) — every call site of that schema dumps it
+  into a prompt as JSON, where a bare `250` is the unlabelled figure #467 spent
+  an issue removing from the power block, and a reader cannot tell seconds from
+  a pace per mile from a speed. It is `"4:10 /km"` there; `UserResponse` and the
+  profile-update request still carry the number, which is what the browser needs.
 
 ### Changed
 

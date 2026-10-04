@@ -101,7 +101,7 @@ async def fetch_activity_streams_strict(access_token: str, activity_id: int) -> 
     error, or network error) so the caller can retry rather than import degraded
     data (#325).
     """
-    keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
+    keys = "watts,heartrate,cadence,velocity_smooth,altitude,distance,time,latlng"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(

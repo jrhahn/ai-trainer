@@ -14,7 +14,11 @@ as ``unknown`` at low confidence rather than guessed. An LLM is deliberately not
 used here — the numbers must be reproducible and explainable.
 
 Attributes produced: ``ftp``, ``map``, ``vo2max``, ``fractional_utilization``,
-``aerobic_endurance``, ``fatigue_resistance`` and ``anaerobic_capacity``. On
+``aerobic_endurance``, ``fatigue_resistance`` and ``anaerobic_capacity`` for the
+bike, plus ``critical_speed``, ``d_prime`` and ``threshold_pace`` for running
+(#716) — fitted from the pace-duration envelope by ``services.run_model``, and
+kept strictly apart from the power envelope, since the two describe different
+thresholds and mixing them is the #711 error one level in. On
 refresh, :mod:`services.limiter_detection` (#477) reads those attributes to fill
 ``likely_limiter`` and the ranked ``limiters`` list.
 """
@@ -29,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import analysis, limiter_detection
+from services import analysis, limiter_detection, run_model
 
 logger = logging.getLogger(__name__)
 
@@ -518,6 +522,132 @@ def _infer_anaerobic_capacity(envelope: dict, ftp: int | None) -> dict:
     )
 
 
+def _speed_envelope(
+    signals: list[tuple[models.RideMetric, dict]],
+) -> dict[float, tuple[float, int, str | None]]:
+    """Best mean speed per probed duration across the window, grade-adjusted.
+
+    ``{minutes: (best_m_s, contributing_run_count, best_date)}``. The running
+    counterpart of :func:`_power_envelope`, with two differences that are not
+    cosmetic: the key is a number rather than a string, because the Critical
+    Speed fit does arithmetic with it; and it reads the grade-adjusted curve
+    first, because a hilly maximal effort is a maximal effort and the raw curve
+    would read it as a slow one and leave the athlete's best work out of the fit.
+    """
+    envelope: dict[float, tuple[float, int, str | None]] = {}
+    for metric, sig in signals:
+        curve = sig.get("gap_speed_curve") or sig.get("speed_curve") or {}
+        if not isinstance(curve, dict):
+            continue
+        for key, speed in curve.items():
+            if not isinstance(speed, (int, float)) or isinstance(speed, bool):
+                continue
+            try:
+                minutes = float(key)
+            except (TypeError, ValueError):
+                continue
+            best, count, best_date = envelope.get(minutes, (0.0, 0, None))
+            new_best, new_date = (
+                (float(speed), metric.activity_date)
+                if speed > best
+                else (best, best_date)
+            )
+            envelope[minutes] = (new_best, count + 1, new_date)
+    return envelope
+
+
+def _infer_run_attributes(
+    signals: list[tuple[models.RideMetric, dict]],
+    recent_days: int | None,
+) -> dict[str, dict]:
+    """Critical Speed, D′ and threshold pace from the run envelope (#716).
+
+    Three attributes from one fit, because they answer three questions: CS is
+    the aerobic ceiling, D′ is the finite distance above it (the kick), and
+    threshold pace is the reference every rTSS figure and every pace zone is cut
+    from — which is why it is reported separately and read back by
+    ``metrics_service.get_effective_threshold_pace`` rather than recomputed
+    wherever it is needed.
+
+    When the envelope cannot support a fit, all three are reported ``unknown``
+    at low confidence with what is missing named. That is the running side of
+    the discipline the cycling attributes already keep: an invented Critical
+    Speed would set the athlete's zones and their whole load history, and it
+    would be indistinguishable from a measured one.
+    """
+    if not signals:
+        return {}
+
+    envelope = _speed_envelope(signals)
+    points = {minutes: point[0] for minutes, point in envelope.items() if point[0] > 0}
+    fit = run_model.critical_speed_from_points(points)
+    if fit is None:
+        missing = [
+            "No maximal run efforts spanning "
+            f"{run_model.MIN_CS_SPAN_MINUTES:g}+ minutes "
+            f"({run_model.MIN_CS_POINTS} points needed between "
+            f"{min(run_model.CRITICAL_SPEED_DURATIONS):g} and "
+            f"{max(run_model.CRITICAL_SPEED_DURATIONS):g} min)"
+        ]
+        unknown = _attr(
+            score="unknown",
+            confidence=0.1,
+            missing_information=missing,
+            validation_protocol=(
+                "Two maximal time trials on separate days — 3 min and 12 min — "
+                "fit Critical Speed and D′ directly"
+            ),
+        )
+        return {
+            "critical_speed": unknown,
+            "d_prime": dict(unknown),
+            "threshold_pace": dict(unknown),
+        }
+
+    confidence = run_model.critical_speed_confidence(fit, recent_days)
+    run_count = max(point[1] for point in envelope.values())
+    evidence = [
+        f"Critical Speed {run_model.format_pace(fit.speed_m_s)} fitted from "
+        f"{fit.points_used} envelope points spanning {fit.span_minutes:g} min "
+        f"across {run_count} run(s)",
+        f"Worst fit residual {fit.max_residual:.1%} of speed",
+    ]
+    missing = [
+        "Efforts were taken from training, not from a time-trial protocol, so "
+        "they may not have been maximal"
+    ]
+    return {
+        "critical_speed": _attr(
+            estimate=fit.speed_m_s,
+            unit="m/s",
+            confidence=confidence,
+            evidence=evidence,
+            missing_information=missing,
+        ),
+        "d_prime": _attr(
+            estimate=fit.d_prime_m,
+            unit="m",
+            confidence=confidence,
+            evidence=[
+                f"D′ {fit.d_prime_m:.0f} m — the distance available above "
+                f"Critical Speed, from the same fit"
+            ],
+            missing_information=missing,
+        ),
+        "threshold_pace": _attr(
+            estimate=round(fit.threshold_pace_seconds_per_km, 1),
+            unit="s/km",
+            confidence=confidence,
+            evidence=[
+                f"Threshold pace {run_model.format_pace(fit.threshold_speed_m_s)}, "
+                f"{run_model.THRESHOLD_FRACTION_OF_CRITICAL_SPEED:.0%} of Critical "
+                f"Speed"
+            ],
+            missing_information=missing,
+        ),
+    }
+
+
 def infer_performance_attributes(
     metrics: list[models.RideMetric],
     *,
@@ -535,25 +665,41 @@ def infer_performance_attributes(
     if not signals:
         return {}
 
+    # One column holds both envelopes (#716), so the two models are separated
+    # here rather than hoped apart. A run's blob carries no ``power_curve`` and
+    # no ``first_half_power`` by construction, but relying on an absence is how
+    # a footpod run ends up arguing about a cycling threshold the first time
+    # someone stores a key for a good reason — so the split is explicit.
+    ride_signals = [(m, s) for m, s in signals if not run_model.is_run_signals(s)]
+    run_signals = [(m, s) for m, s in signals if run_model.is_run_signals(s)]
+
     ref = (now or datetime.now(timezone.utc)).date()
     # Recency of the window: days since the newest ride that carried signals.
     recent_days = _days_since(signals[0][0].activity_date, ref)
+    ride_recent_days = (
+        _days_since(ride_signals[0][0].activity_date, ref) if ride_signals else None
+    )
+    run_recent_days = (
+        _days_since(run_signals[0][0].activity_date, ref) if run_signals else None
+    )
 
-    envelope = _power_envelope(signals)
-    ftp_used = next((m.ftp_used for m, _ in signals if m.ftp_used), None)
+    envelope = _power_envelope(ride_signals)
+    ftp_used = next((m.ftp_used for m, _ in ride_signals if m.ftp_used), None)
 
-    ftp_attr, ftp_val = _infer_ftp(envelope, ftp_used, recent_days)
-    map_attr, map_val = _infer_map(envelope, recent_days)
+    ftp_attr, ftp_val = _infer_ftp(envelope, ftp_used, ride_recent_days or recent_days)
+    map_attr, map_val = _infer_map(envelope, ride_recent_days or recent_days)
 
-    return {
+    attributes = {
         "ftp": ftp_attr,
         "map": map_attr,
         "vo2max": _infer_vo2max(map_val, weight_kg),
         "fractional_utilization": _infer_fractional_utilization(ftp_val, map_val),
-        "aerobic_endurance": _infer_aerobic_endurance(signals),
-        "fatigue_resistance": _infer_fatigue_resistance(signals),
+        "aerobic_endurance": _infer_aerobic_endurance(ride_signals),
+        "fatigue_resistance": _infer_fatigue_resistance(ride_signals),
         "anaerobic_capacity": _infer_anaerobic_capacity(envelope, ftp_val),
     }
+    attributes.update(_infer_run_attributes(run_signals, run_recent_days))
+    return attributes
 
 
 async def refresh_performance_model(

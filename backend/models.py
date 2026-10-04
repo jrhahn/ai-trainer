@@ -111,6 +111,13 @@ class User(Base):
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
     current_ftp: Mapped[int | None] = mapped_column(Integer)
+    # The athlete's running threshold pace, in seconds per kilometre — what FTP
+    # is to the bike (#716). Stored as a pace rather than a speed because that
+    # is the unit a runner knows their own threshold in, and as seconds rather
+    # than "4:20" because a time string is not a number anything can compute
+    # with. NULL means they have not stated one, and the Critical Speed fit over
+    # their run history fills in when it is confident enough.
+    threshold_pace_seconds_per_km: Mapped[float | None] = mapped_column(Float)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
     consumed_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)

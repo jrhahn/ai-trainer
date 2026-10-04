@@ -20,7 +20,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
-from services import reported_effort
+from services import metrics_service, reported_effort
 from services.fitness_ledger import LoadLedger, ledger_from_row
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
@@ -63,7 +63,15 @@ def _sanitize_streams(streams: object) -> dict:
     if not isinstance(streams, dict):
         return {}
     cleaned: dict[str, dict[str, list]] = {}
-    for key in ("watts", "heartrate", "cadence", "velocity_smooth", "altitude", "time"):
+    for key in (
+        "watts",
+        "heartrate",
+        "cadence",
+        "velocity_smooth",
+        "altitude",
+        "distance",
+        "time",
+    ):
         stream_obj = streams.get(key)
         if not isinstance(stream_obj, dict):
             continue
@@ -95,6 +103,7 @@ def _build_metrics_chain_resilient(
     *,
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
+    threshold_pace_seconds_per_km: float | None = None,
 ) -> tuple[list[dict], int]:
     """Build metrics while tolerating failures on individual rides.
 
@@ -119,6 +128,7 @@ def _build_metrics_chain_resilient(
                 initial_ledger=ledger,
                 max_heart_rate=max_heart_rate,
                 resting_heart_rate=resting_heart_rate,
+                threshold_pace_seconds_per_km=threshold_pace_seconds_per_km,
             )
         except Exception:  # noqa: BLE001
             failed += 1
@@ -379,7 +389,7 @@ async def _run_import_background(
         # --- Fetch streams per activity ---
         rides: list[dict] = []
         skipped = 0
-        keys = "watts,heartrate,cadence,velocity_smooth,altitude,time,latlng"
+        keys = "watts,heartrate,cadence,velocity_smooth,altitude,distance,time,latlng"
         # Resolved once for the whole import: indoor rides carry no GPS, so their
         # conditions come from the athlete's training location (#495).
         async with async_session_maker() as db:
@@ -476,14 +486,24 @@ async def _run_import_background(
         # re-derives every load from these ride inputs, so without this a
         # full-history import would price each gym session from time on task again
         # and discard the efforts already applied.
+        # The threshold pace comes from the same block, for the same reason: a
+        # rebuild re-derives every load, so a run has to be priced against the
+        # athlete's own threshold here or it drops to heart rate (#716).
+        threshold_pace: float | None = None
         async with async_session_maker() as db:
             await reported_effort.annotate_from_logs(db, user_id, rides)
+            chain_user = await crud.get_user_by_id(db, user_id)
+            if chain_user is not None:
+                threshold_pace = await metrics_service.get_effective_threshold_pace(
+                    db, chain_user
+                )
 
         metrics_chain, failed_metrics = _build_metrics_chain_resilient(
             rides,
             ftp,
             max_heart_rate=max_heart_rate,
             resting_heart_rate=resting_heart_rate,
+            threshold_pace_seconds_per_km=threshold_pace,
         )
         skipped += failed_metrics
         _import_progress[user_id]["skipped"] = skipped

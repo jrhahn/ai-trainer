@@ -11,13 +11,16 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from services import run_model
 from services.activity_identity import (
     SPORT_CYCLING,
+    SPORT_RUNNING,
     non_cycling_classification,
     power_model_applies,
+    training_sport,
 )
 from services.fitness_ledger import LoadLedger, ledger_sport
-from services.training_load import format_load, resolve_training_load
+from services.training_load import LoadSignals, format_load, session_load
 
 # ``apply_ctl_atl_decay`` lived here until #713, when the chain grew a CTL per
 # sport and the primitive moved to ``services.fitness_ledger`` next to the ledger
@@ -2430,6 +2433,7 @@ def build_ride_metrics_chain(
     initial_ledger: LoadLedger | None = None,
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
+    threshold_pace_seconds_per_km: float | None = None,
 ) -> list[dict]:
     """Compute per-ride metrics and the rolling CTL/ATL/TSB chain.
 
@@ -2460,6 +2464,13 @@ def build_ride_metrics_chain(
             load ladder cannot use heart rate and drops to the duration rung.
         resting_heart_rate: The athlete's resting HR, when known. Optional —
             it only sharpens the hrTSS estimate (see ``services.training_load``).
+        threshold_pace_seconds_per_km: The athlete's running threshold pace, when
+            known — their own if they set one, otherwise the Critical Speed fit
+            over their run history if it was confident enough (see
+            ``metrics_service.get_effective_threshold_pace``). Its absence is
+            what keeps a run on the heart-rate rung: rTSS against a threshold
+            pace nobody established would be a worse number wearing a better
+            label (#716).
 
     Returns:
         List of metric dicts (same order as input) ready for DB upsert.
@@ -2485,6 +2496,7 @@ def build_ride_metrics_chain(
     )
     prev_date_str: str | None = None
     result: list[dict] = []
+    threshold_speed = run_model.speed_from_pace_seconds(threshold_pace_seconds_per_km)
 
     for ride in sorted_rides:
         streams = ride.get("streams", {})
@@ -2505,14 +2517,23 @@ def build_ride_metrics_chain(
         # Power-model sports only: these points are the power–duration envelope
         # FTP inference and the FTP-vs-curve check are read from, so one run in
         # the window would argue about a cycling threshold.
+        # A run gets the running envelope instead (#716), in the same column and
+        # marked with its sport: pace–duration points, grade-adjusted distance
+        # and the two halves of the run. Separate branch rather than a widened
+        # one, because the two blobs answer to different models and the keys the
+        # cycling engine reads must not appear in a run's.
         perf_signals = None
-        if power_applies:
-            try:
+        try:
+            if power_applies:
                 perf_signals = compute_ride_performance_signals(
                     streams, ride.get("duration_seconds")
                 )
-            except Exception:  # pragma: no cover - defensive
-                perf_signals = None
+            elif training_sport(ride.get("sport_type")) == SPORT_RUNNING:
+                perf_signals = run_model.run_performance_signals(
+                    streams, ride.get("duration_seconds")
+                )
+        except Exception:  # pragma: no cover - defensive
+            perf_signals = None
 
         # --- Per-ride metrics ---
         avg_power: int | None = None
@@ -2604,17 +2625,25 @@ def build_ride_metrics_chain(
         # this, so a gym session with no heart-rate monitor was priced from a flat
         # per-hour assumption about every gym session anybody has ever done,
         # while the athlete had already told the app how hard it was.
-        load = resolve_training_load(
-            provider_tss=summary_tss,
-            power_tss=tss,
-            duration_seconds=ride.get("duration_seconds"),
-            sport_type=ride.get("sport_type"),
-            avg_hr_bpm=(
-                ride.get("_summary_avg_hr_bpm") or _stream_avg_hr(streams)
-            ),
-            max_heart_rate=max_heart_rate,
-            resting_heart_rate=resting_heart_rate,
-            perceived_effort=ride.get("_reported_effort"),
+        # Built as a ``LoadSignals`` rather than through the keyword wrapper
+        # because this is the call site #712 predicted would have to grow with
+        # every sport: the pace rung needs two more fields than the wrapper
+        # carries, and the next sport will need others again.
+        load = session_load(
+            LoadSignals(
+                sport_type=ride.get("sport_type"),
+                duration_seconds=ride.get("duration_seconds"),
+                provider_load=summary_tss,
+                power_tss=tss,
+                gap_speed_m_s=run_model.mean_gap_speed(perf_signals),
+                threshold_speed_m_s=threshold_speed,
+                avg_hr_bpm=(
+                    ride.get("_summary_avg_hr_bpm") or _stream_avg_hr(streams)
+                ),
+                max_heart_rate=max_heart_rate,
+                resting_heart_rate=resting_heart_rate,
+                perceived_effort=ride.get("_reported_effort"),
+            )
         )
         tss = load.tss if load is not None else None
         tss_source = load.source if load is not None else None

@@ -113,6 +113,10 @@ export interface UserProfile {
   maxHeartRate?: number
   restingHeartRate?: number
   currentFTP?: number
+  /** Running threshold pace in seconds per kilometre — what FTP is to the bike
+   * (#716). Undefined means the athlete has not set one, and their runs are
+   * priced against the Critical Speed fit over their history instead. */
+  thresholdPaceSecondsPerKm?: number
   consumedTokens?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }

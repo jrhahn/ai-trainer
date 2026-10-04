@@ -35,6 +35,7 @@ interface BackendUserResponse {
   maxHeartRate?: number
   restingHeartRate?: number
   currentFTP?: number
+  thresholdPaceSecondsPerKm?: number | null
   consumedTokens: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -95,6 +96,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       maxHeartRate: user.maxHeartRate,
       restingHeartRate: user.restingHeartRate,
       currentFTP: user.currentFTP,
+      thresholdPaceSecondsPerKm: user.thresholdPaceSecondsPerKm ?? undefined,
       consumedTokens: user.consumedTokens ?? 0,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -128,6 +130,7 @@ export async function updateCurrentUser(
     maxHeartRate: updates.maxHeartRate,
     restingHeartRate: updates.restingHeartRate,
     currentFTP: updates.currentFTP,
+    thresholdPaceSecondsPerKm: updates.thresholdPaceSecondsPerKm,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,

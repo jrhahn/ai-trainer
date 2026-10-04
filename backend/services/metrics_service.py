@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import assessment_pipeline, plan_compliance
+from services import assessment_pipeline, plan_compliance, run_model
 from services.analysis import compute_ride_tss
 from services.fitness_ledger import LoadLedger, ledger_sport
 from services.training_load import LOAD_SOURCE_POWER
@@ -33,6 +33,54 @@ def get_effective_ftp(user: models.User, ftp_override: int | None = None) -> int
     if user.current_ftp:
         return user.current_ftp
     return None
+
+
+def threshold_pace_from_attributes(attributes: object) -> float | None:
+    """The inferred threshold pace in s/km, if it is good enough to price runs.
+
+    Reads the ``threshold_pace`` attribute of the Athlete Performance Model
+    (#475), which #716 fills from the Critical Speed fit over the athlete's run
+    history. ``None`` below :data:`run_model.MIN_CS_CONFIDENCE_FOR_LOAD`, which
+    is the whole discipline of the thing: an rTSS computed against a threshold
+    pace we are guessing at is not a better figure than an hrTSS, it only looks
+    like one, and the ladder's next rung can answer honestly instead.
+    """
+    if not isinstance(attributes, dict):
+        return None
+    attribute = attributes.get("threshold_pace")
+    if not isinstance(attribute, dict):
+        return None
+    estimate = attribute.get("estimate")
+    confidence = attribute.get("confidence")
+    if not isinstance(estimate, (int, float)) or isinstance(estimate, bool):
+        return None
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        return None
+    if estimate <= 0 or confidence < run_model.MIN_CS_CONFIDENCE_FOR_LOAD:
+        return None
+    return float(estimate)
+
+
+async def get_effective_threshold_pace(
+    db: AsyncSession, user: models.User
+) -> float | None:
+    """The athlete's running threshold pace in s/km, or ``None``.
+
+    Priority order: what the athlete set → what the Critical Speed fit over
+    their runs inferred, when confident. The same shape as
+    :func:`get_effective_ftp`, and for the same reason: the athlete owns their
+    thresholds, and an inference only fills a gap they left.
+
+    Reads the performance model with a query rather than through
+    ``user.athlete_performance_model``, because that relationship is not among
+    the ones eagerly loaded on the authenticated user and a lazy load here would
+    raise rather than return a pace.
+    """
+    stored = getattr(user, "threshold_pace_seconds_per_km", None)
+    if isinstance(stored, (int, float)) and not isinstance(stored, bool) and stored > 0:
+        return float(stored)
+    model = await crud.get_athlete_performance_model(db, user.id)
+    return threshold_pace_from_attributes(getattr(model, "attributes", None))
 
 
 def _last_ride_recommendation(ride_purpose: str | None, tsb_after: float | None) -> str:
