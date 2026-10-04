@@ -170,15 +170,49 @@ async def _refresh_rider_assessment_feedback(
     await assessment_pipeline.notify_changed(db, user)
 
 
+def replay_load_chain(all_metrics: list[models.RideMetric]) -> None:
+    """Rewrite every row's CTL/ATL/TSB from the loads as they now stand.
+
+    Date order, rebuilt from zero across every sport, so it produces the same
+    ledger ``build_ride_metrics_chain`` would (#713).
+
+    Extracted so there is one ledger loop rather than one per caller (#714).
+    Anything that changes a stored load has to call this: a load that changes
+    invalidates every chain value after it, which is the same reason the two
+    alembic revisions that rewrote loads replayed the chain afterwards.
+    """
+    ledger = LoadLedger()
+    prev_date_str: str | None = None
+
+    for metric in all_metrics:
+        days_since_previous = 1
+        if prev_date_str is not None:
+            try:
+                prev_d = _date.fromisoformat(prev_date_str)
+                curr_d = _date.fromisoformat(metric.activity_date)
+                days_since_previous = max(0, (curr_d - prev_d).days)
+            except ValueError:
+                days_since_previous = 1
+
+        sport = ledger_sport(metric.sport_type)
+        ledger = ledger.advance(
+            sport=sport,
+            load=metric.tss if metric.tss is not None else 0.0,
+            days_since_previous=days_since_previous,
+        )
+        prev_date_str = metric.activity_date
+
+        metric.ctl_after = round(ledger.ctl(sport), 2)
+        metric.atl_after = round(ledger.atl, 2)
+        metric.tsb_after = round(ledger.tsb(sport), 2)
+        metric.ctl_by_sport = ledger.as_dict()
+
+
 def _recalculate_metric_chain(
     all_metrics: list[models.RideMetric],
     ftp_value: int,
 ) -> int:
     ftp_float = float(ftp_value)
-    # Rebuilt from zero across every sport, so this replay produces the same
-    # ledger ``build_ride_metrics_chain`` would (#713).
-    ledger = LoadLedger()
-    prev_date_str: str | None = None
     updated = 0
 
     for metric in all_metrics:
@@ -201,34 +235,14 @@ def _recalculate_metric_chain(
         else:
             new_tss = metric.tss
 
-        days_since_previous = 1
-        if prev_date_str is not None:
-            try:
-                prev_d = _date.fromisoformat(prev_date_str)
-                curr_d = _date.fromisoformat(metric.activity_date)
-                days_since_previous = max(0, (curr_d - prev_d).days)
-            except ValueError:
-                days_since_previous = 1
-
-        sport = ledger_sport(metric.sport_type)
-        ride_tss = new_tss if new_tss is not None else 0.0
-        ledger = ledger.advance(
-            sport=sport,
-            load=ride_tss,
-            days_since_previous=days_since_previous,
-        )
-        prev_date_str = metric.activity_date
-
         metric.tss = round(new_tss, 1) if new_tss is not None else None
         metric.tss_source = new_source if new_tss is not None else None
         metric.intensity_factor = new_if
         metric.ftp_used = ftp_value
-        metric.ctl_after = round(ledger.ctl(sport), 2)
-        metric.atl_after = round(ledger.atl, 2)
-        metric.tsb_after = round(ledger.tsb(sport), 2)
-        metric.ctl_by_sport = ledger.as_dict()
         updated += 1
 
+    # The loads are final; now the chain over them.
+    replay_load_chain(all_metrics)
     return updated
 
 

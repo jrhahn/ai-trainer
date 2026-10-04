@@ -407,11 +407,95 @@ class WorkoutFeedbackSchema(CamelModel):
     completed_at: str
 
 
-class WorkoutLogRequest(BaseModel):
+class StrengthSetSchema(CamelModel):
+    """One set of one exercise, as performed (#714).
+
+    ``rir`` and ``rpe`` are optional *per set* because that is how an
+    autoregulated session is logged: nobody annotates the warm-ups, and the
+    working set is the one that carries the number. A missing ``rir`` is read as
+    missing, never as "taken to failure" — see ``strength_model.effective_reps``.
+    """
+
+    exercise: str
+    reps: int
+    weight_kg: float
+    rir: Optional[int] = None
+    rpe: Optional[float] = None
+
+
+class StrengthSetResultSchema(StrengthSetSchema):
+    """A stored set, with the figures derived from it.
+
+    The derived fields are computed on read by ``services.strength_model`` rather
+    than stored, so correcting a formula corrects every historical figure
+    instead of leaving stored values behind it.
+    """
+
+    set_index: int
+    e1rm_kg: Optional[float] = None
+    #: Whether the rep count sits inside the range the e1RM formulas were fitted
+    #: on. A 25-rep set still yields an estimate; it is just weaker evidence, and
+    #: a trend line should be able to say so.
+    e1rm_confident: bool = True
+    relative_intensity_pct: Optional[float] = None
+
+
+class WorkoutLogRequest(CamelModel):
+    """The workout log a client submits.
+
+    ``CamelModel`` since #714 — it was a bare ``BaseModel``, which was invisible
+    until a field had more than one word in its name: ``feedback`` and ``slot``
+    camelise to themselves, so nothing noticed. ``populate_by_name`` means both
+    spellings are still accepted, so no existing client changes.
+    """
+
     feedback: WorkoutFeedbackSchema
     # Which session on the logged date this feedback is for (#496). Absent from
     # every pre-two-a-day client and from single-session days, meaning slot 0.
     slot: Optional[int] = None
+    # Which sport the session was (#714). Absent from every existing client, in
+    # which case it is read off the plan day for this (date, slot) — the sport the
+    # session was *prescribed* in (#710) — and only then falls back to cycling.
+    # Before this, every logged session was stored as cycling, including the gym
+    # ones, which is also why their reported effort could not price them.
+    sport: Optional[str] = None
+    # The sets, when this was a gym session. Part of the workout log rather than
+    # a separate endpoint because a gym session *is* a workout log — duration,
+    # session-RPE and notes — plus its sets, and splitting them would put the
+    # session's identity in two places.
+    strength_sets: Optional[list[StrengthSetSchema]] = None
+
+
+class StrengthSessionResponse(CamelModel):
+    date: str
+    slot: int
+    sets: list[StrengthSetResultSchema]
+    #: Σ reps × kg across every set. Zero for a session with no sets, which is a
+    #: true statement about work moved rather than a missing measurement.
+    volume_load_kg: float
+    #: Best estimate per exercise from this session's own sets.
+    best_e1rm_kg: dict[str, float]
+
+
+class E1rmPointSchema(CamelModel):
+    date: str
+    e1rm_kg: float
+    confident: bool
+    #: The set the estimate came from, so a surprising point can be explained
+    #: rather than only shown.
+    reps: int
+    weight_kg: float
+    rir: Optional[int] = None
+
+
+class E1rmTrendResponse(CamelModel):
+    exercise: str
+    formula: str
+    points: list[E1rmPointSchema]
+
+
+class LoggedExercisesResponse(CamelModel):
+    exercises: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1520,10 @@ class PlanDayUpdateSchema(CamelModel):
     target_power: Optional[Any] = None
     target_heart_rate: Optional[Any] = None
     intervals: Optional[list[Any]] = None
+    # The prescribed lifts, when the coach is writing a gym session (#714).
+    # ``None`` leaves the day's current prescription alone, so no existing caller
+    # clears one by omission — the same convention as ``sport`` above.
+    strength_exercises: Optional[list[Any]] = None
     workout_purpose: Optional[str] = None
     key_focus_points: Optional[list[str]] = None
     # Marks the day done. Set by activity-sync when a ride auto-matches the day
@@ -1559,6 +1647,73 @@ def session_key(day: Any) -> tuple[str, int]:
     return (str(getattr(day, "date", "") or ""), day_slot(day))
 
 
+class StrengthPrescription(CamelModel):
+    """One prescribed exercise on a planned gym session (#714).
+
+    The intensity unit is **RIR by preference**, which is the point: the plan
+    cannot know what 100 kg will feel like on a Thursday after a hard weekend,
+    and "3×5 at RIR 2" is a prescription the athlete can execute honestly on a
+    good day and a bad one. An absolute weight is a guess the app has no way to
+    check; a percentage of e1RM is better but still assumes today's maximum
+    equals last month's estimate.
+
+    ``percent_e1rm`` is offered because it is how a block is often written, and
+    because it is the unit that makes sense for an exercise the athlete has
+    enough history on. Neither is required: "3×12 push-ups" is a legitimate
+    prescription with no intensity unit at all.
+    """
+
+    exercise: str
+    sets: int = 1
+    reps: int = 1
+    #: Reps in reserve. The autoregulation unit, and the one that wins when both
+    #: are given — see :meth:`_one_intensity_unit`.
+    rir: Optional[int] = None
+    percent_e1rm: Optional[float] = None
+
+    @field_validator("exercise", mode="before")
+    @classmethod
+    def _normalise_exercise(cls, value: Any) -> Any:
+        # The same normalisation the *logged* sets go through, so a prescribed
+        # "Back Squat" and a logged "back squat" are one exercise and the
+        # prescription can be compared with what was done.
+        from services.strength_model import normalize_exercise_name
+
+        return normalize_exercise_name(value if isinstance(value, str) else None)
+
+    @field_validator("sets", "reps", mode="before")
+    @classmethod
+    def _at_least_one(cls, value: Any) -> Any:
+        # A prescription of zero sets is not a prescription, and an LLM that
+        # omits the field must not drop the whole day at the persist gate.
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return 1
+        return max(1, number)
+
+    @model_validator(mode="after")
+    def _one_intensity_unit(self) -> "StrengthPrescription":
+        """Keep RIR and drop the percentage when both are given.
+
+        Normalised rather than rejected, in keeping with this gate: a day must
+        never fail validation and vanish (#424). Both units together is not a
+        richer prescription, it is an ambiguous one — they name different weights
+        on exactly the days they disagree, which are the days autoregulation
+        exists for. RIR wins because it is the unit that survives the athlete
+        being tired, which is the whole argument for prescribing in it.
+        """
+        if self.rir is not None and self.percent_e1rm is not None:
+            self.percent_e1rm = None
+        if self.rir is not None:
+            self.rir = max(0, min(int(self.rir), 10))
+        if self.percent_e1rm is not None and not 0 < self.percent_e1rm <= 150:
+            # Outside this a percentage is a typo, not a prescription — 800 % of
+            # an e1RM is not a weight anyone can lift, and 0 % is not a set.
+            self.percent_e1rm = None
+        return self
+
+
 class PlanDay(CamelModel):
     """Canonical, self-normalizing training-plan *session*.
 
@@ -1612,6 +1767,11 @@ class PlanDay(CamelModel):
     target_power: Optional[PowerRange] = None
     target_heart_rate: Optional[HeartRateRange] = None
     intervals: Optional[list[PlanInterval]] = None
+    # What the athlete is meant to lift, when this is a gym session (#714).
+    # ``intervals`` above is the cycling equivalent and is deliberately not
+    # reused: an interval is a duration at a power, a set is reps at a load, and
+    # one schema covering both would be a schema that describes neither.
+    strength_exercises: Optional[list[StrengthPrescription]] = None
     completed: Optional[bool] = None
     feedback: Optional[WorkoutFeedbackSchema] = None
     coach_feedback: Optional[str] = None
@@ -1666,6 +1826,14 @@ class PlanDay(CamelModel):
             data.pop("slot", None)
         if isinstance(data, dict) and data.get("sport") in (DEFAULT_PLAN_SPORT, None):
             data.pop("sport", None)
+        # And ``strengthExercises`` for the third time (#714). Every stored plan
+        # predates the field, so emitting an explicit ``null`` would make each one
+        # compare unequal to its own re-dump and rewrite the lot on the first
+        # commit — the same cascade into a login-summary refresh and a
+        # ride-snapshot rebuild that the two above exist to prevent.
+        if isinstance(data, dict) and data.get("strengthExercises") is None:
+            data.pop("strengthExercises", None)
+            data.pop("strength_exercises", None)
         return data
 
     @model_validator(mode="after")

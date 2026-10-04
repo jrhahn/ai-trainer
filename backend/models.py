@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -184,6 +185,10 @@ class User(Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     workout_logs: Mapped[list["WorkoutLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    # Cascade is load-bearing, not decoration — see the note just below (#693).
+    strength_sets: Mapped[list["StrengthSet"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     # Cascades matter here rather than being decoration: no foreign key on
@@ -399,6 +404,74 @@ class WorkoutLog(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
+
+
+class StrengthSet(Base):
+    """One set of one exercise, as the athlete performed it (#714).
+
+    Rows rather than a JSON blob on :class:`WorkoutLog`, because the feature this
+    exists for is "e1RM trends over time, per exercise" — which is a query. A
+    blob would make reading six months of squat progression a full scan and a
+    parse, and would make the obvious index impossible.
+
+    Identity is ``(user_id, date, slot, exercise, set_index)``. The session itself
+    is still ``(date, slot)``, the identity #496 established for two-a-days, and
+    the session-level facts — duration, session-RPE, notes — stay on
+    ``WorkoutLog`` rather than being copied here. One source of truth per fact:
+    a gym session's perceived effort is the thing its *load* is derived from, and
+    two places to store it is two places to disagree.
+
+    Derived quantities (tonnage, e1RM, %e1RM) are deliberately **not** columns.
+    They are computed by ``services.strength_model`` from these rows, so there is
+    one implementation of each formula and no stored value that can fall out of
+    step with it when the formula is corrected.
+    """
+
+    __tablename__ = "strength_sets"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "date",
+            "slot",
+            "exercise",
+            "set_index",
+            name="uq_strength_sets_identity",
+        ),
+        Index("ix_strength_sets_user_exercise_date", "user_id", "exercise", "date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # Which session on ``date`` these sets belong to (#496) — gym in the morning
+    # and a ride in the evening are two sessions, and so are two gym sessions.
+    slot: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Normalised by ``strength_model.normalize_exercise_name`` before it gets
+    # here, so "Back Squat" and "back  squat" are one progression rather than
+    # three. Storing the athlete's own spelling would fragment the trend this
+    # table exists to produce.
+    exercise: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Position within the exercise, 1-based. Part of the identity so re-logging a
+    # session corrects its sets instead of appending a second copy of them.
+    set_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    reps: Mapped[int] = mapped_column(Integer, nullable=False)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    # Reps in reserve, and the RPE it maps onto. Both nullable and both optional
+    # *per set*, because that is how autoregulated sessions are logged: nobody
+    # annotates the warm-up sets, and the working set is the one that carries the
+    # number. A NULL is read as missing, never as "taken to failure" — see
+    # ``strength_model.effective_reps``.
+    rir: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rpe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="strength_sets")
 
 
 class TrustedDevice(Base):

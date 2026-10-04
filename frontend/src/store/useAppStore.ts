@@ -160,6 +160,25 @@ export interface TrainingDay {
   targetPower?: { low: number; high: number }
   targetHeartRate?: { low: number; high: number }
   intervals?: Array<{ duration: number; power: number; rest: number }>
+  /**
+   * What to lift on a strength session (#714). The gym's counterpart to
+   * `intervals`, and deliberately a separate field: an interval is a duration at
+   * a power, a set is reps at a load.
+   *
+   * Intensity is `rir` (reps in reserve) by preference — the plan cannot know
+   * what a given weight will feel like on the day, so RIR is the prescription
+   * the athlete can execute honestly whether they are fresh or tired.
+   * `percentE1rm` is the alternative for a percentage-based block. The backend's
+   * persist gate keeps at most one of the two, so both are never set together.
+   * Absent on every day that is not a prescribed gym session.
+   */
+  strengthExercises?: Array<{
+    exercise: string
+    sets: number
+    reps: number
+    rir?: number
+    percentE1rm?: number
+  }>
   completed?: boolean
   feedback?: WorkoutFeedback
   coachFeedback?: string

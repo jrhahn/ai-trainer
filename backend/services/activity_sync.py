@@ -19,6 +19,7 @@ from services.analysis import (
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )
+from services import reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
@@ -218,6 +219,14 @@ async def _persist_and_adapt(
     if not activities:
         return 0, 0
     rides = to_ride_inputs(activities)
+
+    # The athlete's own session-RPE, where they logged one before the activity
+    # synced (#714). The sRPE rung has existed since #712 with nothing feeding
+    # it, so a gym session with no heart-rate monitor was priced from a flat
+    # per-hour assumption while the athlete had already said how hard it was.
+    reported_effort.annotate_rides_with_reported_effort(
+        rides, await crud.get_workout_logs(db, user.id)
+    )
 
     latest_metric = await crud.get_latest_ride_metric(db, user.id)
     seed_ledger = ledger_from_metric(latest_metric)
