@@ -314,6 +314,11 @@ async def record_plan_day_changes(
     ``applied`` defaults to True, ``slot`` to 0 (the single-session day, #496).
     No-op when ``changes`` is empty.
 
+    An optional ``reason`` is the rationale of a guard that made the change
+    itself — the interference reverts (#715). It is written with the row rather
+    than backfilled, because the guard's reason is a fact it already knows and
+    must survive the narrator not running at all.
+
     All rows from this call share one ``batch_id`` so the coach run they belong
     to (one plan generation, nightly tune-up or chat edit) can be reconstituted
     from the log and collapsed into a single Coach Timeline card (#435).
@@ -331,6 +336,7 @@ async def record_plan_day_changes(
             new_day=change.get("new_day"),
             source=source,
             applied=change.get("applied", True),
+            reason=change.get("reason"),
         )
         for change in changes
     ]
@@ -366,6 +372,13 @@ async def set_plan_day_reasons(
     ``reasons`` maps a plan-day date to its one-line rationale. Only the rows of
     the given ``batch_id`` are touched, so the per-day "why" lands next to the
     diff it explains. Dates absent from ``reasons`` are left as-is.
+
+    A row that already carries a reason is left alone. That is a guard stating
+    why it corrected the plan (#715) — a deterministic fact about the rule it
+    applied — and the narrator's retelling of a *different* change on the same
+    date must not overwrite it. ``reasons`` is keyed by date rather than by
+    session, so without this a two-a-day whose AM session was narrated would
+    replace the rule recorded against its PM session.
     """
     if not reasons:
         return
@@ -376,7 +389,7 @@ async def set_plan_day_reasons(
     )
     for row in rows:
         reason = reasons.get(row.date)
-        if reason:
+        if reason and not row.reason:
             row.reason = reason
     await db.flush()
 

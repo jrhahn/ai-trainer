@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from services import interference
 from services import plan_coherence
 from services import plan_commitments
 from services.dates import app_today_iso
@@ -578,6 +579,7 @@ def _plan_day_changes(
     merged: list[dict],
     proposal: list[dict],
     source: PlanSource,
+    reasons: dict[tuple[str, int], str] | None = None,
 ) -> list[dict]:
     """Build per-session history records for one plan write (#343).
 
@@ -590,7 +592,22 @@ def _plan_day_changes(
     Records are per session, not per date: a two-a-day whose PM ride was retuned
     logs one row for that session rather than one conflated row for the date, so
     the history stays a faithful diff of what the athlete actually saw (#496).
+
+    ``reasons`` carries a deterministic rationale per session for a correction a
+    guard made itself — the interference reverts (#715). It is recorded so the
+    correction is attributable from the history alone; the athlete hears the rule
+    through the coach's prompt, not through the narrator (see below).
+
+    A guard revert lands on the ``applied=False`` record, never the
+    ``applied=True`` one, and that is structural rather than incidental:
+    reverting a session restores content already in the plan, so there is no
+    diff to report. What the history has to say about it is that the trigger
+    *wanted* a change and a rule stopped it — which is exactly what an
+    ``applied=False`` row means (#343), now with the rule attached. Which is
+    also why the narrator never sees it: it is handed ``applied=True`` changes
+    only, and a revert produces none.
     """
+    reasons = reasons or {}
     current_by = {_key(d): d for d in current_plan if d.get("date")}
     merged_by = {_key(d): d for d in merged if d.get("date")}
     changes: list[dict] = []
@@ -617,15 +634,17 @@ def _plan_day_changes(
             if _content_differs(cur, day) and not _content_differs(
                 cur, merged_by.get(key)
             ):
-                changes.append(
-                    {
-                        "date": key[0],
-                        "slot": key[1],
-                        "old_day": cur,
-                        "new_day": day,
-                        "applied": False,
-                    }
-                )
+                blocked = {
+                    "date": key[0],
+                    "slot": key[1],
+                    "old_day": cur,
+                    "new_day": day,
+                    "applied": False,
+                }
+                reason = reasons.get(key)
+                if reason:
+                    blocked["reason"] = reason
+                changes.append(blocked)
     return changes
 
 
@@ -758,6 +777,108 @@ def _revert_new_incoherences(
     return result
 
 
+# Reverting one session can expose a second interference pair, for the same
+# reason the coherence gate repeats. Bounded for the same reason too: a plan that
+# still interferes after three reverts is not one more revert away from being
+# coachable, and grinding on would be an automated writer deleting a week.
+_MAX_INTERFERENCE_PASSES = 3
+
+# Which session a revert gives back, and how that reads in the history row. The
+# gym session by preference: it is the companion load, and the key endurance
+# session is what the week is built around — reverting the quality session to
+# protect the lifting would be the trade backwards.
+_INTERFERENCE_REVERTED_STRENGTH = (
+    " The gym session was reverted to what the plan held before this write."
+)
+# Two wordings for the key side rather than one, because "the gym session was not
+# this write's to give back" is true for two different reasons and the recorded
+# rationale has to say which. Conflating them put a false sentence in
+# ``plan_day_history`` whenever the gym session was the newly appended one.
+_INTERFERENCE_REVERTED_KEY_UNCHANGED = (
+    " This write did not change the gym session, so it was not this write's to"
+    " give back; the session it clashes with was reverted instead."
+)
+_INTERFERENCE_REVERTED_KEY_NEW = (
+    " The gym session is new and has no earlier version to restore, so the"
+    " session it clashes with was reverted instead."
+)
+
+
+def _revert_new_interference(
+    merged: list[dict], current_plan: list[dict], today: str
+) -> tuple[list[dict], dict[tuple[str, int], str]]:
+    """Undo a write that put a gym session where it costs a key session (#715).
+
+    The same discipline as :func:`_revert_new_incoherences`, one step further
+    into coaching: only interference *this write created* is reverted, and only
+    to content that was already in the plan. A pair already sitting in
+    ``current_plan`` is pre-existing, and undoing an unrelated edit over it would
+    punish this write for someone else's mess.
+
+    What differs is which of the two sessions is given back. The coherence gate
+    hands back the later day, because its two days are interchangeable — either
+    could be the duplicate. Here they are not: one is a key endurance session and
+    one is the gym work scheduled around it, so the gym session is reverted by
+    preference and the key session only when the gym session predates this write
+    and there is nothing to give back on that side. A pair where neither session
+    has a previous version is left alone entirely and reported to the coach
+    instead; deleting an appended session to resolve it would cost the athlete a
+    session, which is the #651 mistake.
+
+    Returns the plan and the rationale per reverted session, so the correction is
+    attributable in ``plan_day_history`` whether or not the narrator runs.
+    """
+    current_by = {_key(d): d for d in current_plan if d.get("date")}
+    if not current_by:
+        return merged, {}
+    before = set(interference.interference_keys(current_plan, today))
+    result = merged
+    reasons: dict[tuple[str, int], str] = {}
+    for _ in range(_MAX_INTERFERENCE_PASSES):
+        created = {
+            key: finding
+            for key, finding in interference.interference_keys(result, today).items()
+            if key not in before
+        }
+        if not created:
+            break
+        result_by = {_key(d): d for d in result if d.get("date")}
+        # Only sessions this write actually changed can be handed back, and only
+        # to the content that was there before it ran.
+        changed = {
+            key
+            for key, day in result_by.items()
+            if key in current_by and _content_differs(current_by[key], day)
+        }
+        restore: dict[tuple[str, int], str] = {}
+        # Heaviest first, so when two findings compete for one session the
+        # heavier one decides which side of its pair is given back.
+        for finding in sorted(created.values(), key=lambda f: -f["weight"]):
+            strength_key = (finding["strength_date"], finding["strength_slot"])
+            sides = (
+                (strength_key, _INTERFERENCE_REVERTED_STRENGTH),
+                (
+                    (finding["key_date"], finding["key_slot"]),
+                    _INTERFERENCE_REVERTED_KEY_UNCHANGED
+                    if strength_key in current_by
+                    else _INTERFERENCE_REVERTED_KEY_NEW,
+                ),
+            )
+            for candidate, suffix in sides:
+                if candidate in changed and candidate not in restore:
+                    restore[candidate] = (
+                        interference.finding_statement(finding) + suffix
+                    )
+                    break
+        if not restore:
+            break
+        result = [
+            current_by[_key(day)] if _key(day) in restore else day for day in result
+        ]
+        reasons.update(restore)
+    return result, reasons
+
+
 def _to_canonical_day(day: dict) -> dict:
     """Validate + normalize one day through the canonical ``PlanDay`` model.
 
@@ -802,6 +923,9 @@ async def _enforce_and_persist(
     # The sanitized proposal before edit-protection — what the trigger "wanted",
     # used to log automated changes that a pin/completed-day then blocked.
     proposal = enforced
+    # Rationales a guard recorded for a correction it made itself. Empty for
+    # user-driven triggers, which skip the guards entirely.
+    guard_reasons: dict[tuple[str, int], str] = {}
     if source.respect_pins:
         enforced = _protect_user_pinned_days(enforced, current_plan)
     merged = merge_preserving_user_edits(base_plan, enforced, current_plan)
@@ -826,10 +950,17 @@ async def _enforce_and_persist(
         # A move is one decision across two days; applying only the half that
         # cleared the guards deletes the session outright (#651).
         merged = _revert_orphaned_moves(merged, current_plan, proposal)
-        # Last, because it reads the finished week: every guard above protects a
-        # day in isolation, and a write can satisfy all of them while still
-        # stacking two gym days back to back (#665).
+        # Then the two week-shaped guards, because they read the finished week:
+        # every guard above protects a day in isolation, and a write can satisfy
+        # all of them while still stacking two gym days back to back (#665) or
+        # dropping heavy squats the day before the intervals (#715).
         merged = _revert_new_incoherences(merged, current_plan, today)
+        merged, guard_reasons = _revert_new_interference(merged, current_plan, today)
+        # Both of those guards hand a session back, and a session handed back can
+        # be one half of a move whose other half already applied — exactly the
+        # #651 failure mode, re-entered from a guard that runs after the repair.
+        # So the repair runs again over the finished week.
+        merged = _revert_orphaned_moves(merged, current_plan, proposal)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
@@ -839,7 +970,9 @@ async def _enforce_and_persist(
     merged = [_to_canonical_day(day) for day in merged]
     # Record per-day history (append-only) before the early no-op return so that
     # a fully-blocked automated write still logs its attempted corrections.
-    changes = _plan_day_changes(current_plan, merged, proposal, source)
+    changes = _plan_day_changes(
+        current_plan, merged, proposal, source, reasons=guard_reasons
+    )
     batch_id: str | None = None
     if changes:
         rows = await crud.record_plan_day_changes(db, user.id, changes, source.trigger)

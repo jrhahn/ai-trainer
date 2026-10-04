@@ -23,12 +23,14 @@ from datetime import datetime
 
 import crud
 from services.dates import app_today
+from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
 from services.plan_commitments import commitment_to_dict
 from services.prompts import (
     plan_change_history_section,
     plan_coherence_section,
     plan_commitments_section,
+    plan_interference_section,
 )
 
 # How far back the change log is read. Long enough to cover an overnight run and
@@ -72,8 +74,25 @@ async def plan_writer_context(
     )
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=plan_coherence_section(find_repeated_sessions(plan, today), today),
+        coherence=_coherence_block(plan, today),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
     )
+
+
+def _coherence_block(plan: list[dict] | None, today) -> str:
+    """The deterministic audits of the week, as one prompt block.
+
+    Two sections sharing one slot rather than a second prompt parameter through
+    four call sites: both answer the same question — what is wrong with this week
+    that is decidable without an LLM — and both go to the same place in every
+    prompt that has them. Adding the interference audit (#715) to the block is
+    therefore a change to this file, which is the whole reason #666 moved the
+    construction here.
+    """
+    sections = [
+        plan_coherence_section(find_repeated_sessions(plan, today), today),
+        plan_interference_section(find_interference(plan, today), today),
+    ]
+    return "\n\n".join(section for section in sections if section)
