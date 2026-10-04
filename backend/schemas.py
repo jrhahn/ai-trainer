@@ -1703,10 +1703,14 @@ class StrengthPrescription(CamelModel):
         exists for. RIR wins because it is the unit that survives the athlete
         being tired, which is the whole argument for prescribing in it.
         """
+        from services.strength_model import MAX_RIR
+
         if self.rir is not None and self.percent_e1rm is not None:
             self.percent_e1rm = None
         if self.rir is not None:
-            self.rir = max(0, min(int(self.rir), 10))
+            # Clamped against the same ceiling the *logged* sets are, so a
+            # prescription and a log cannot disagree about what RIR 12 means.
+            self.rir = max(0, min(int(self.rir), MAX_RIR))
         if self.percent_e1rm is not None and not 0 < self.percent_e1rm <= 150:
             # Outside this a percentage is a typo, not a prescription — 800 % of
             # an e1RM is not a weight anyone can lift, and 0 % is not a set.
@@ -1794,6 +1798,50 @@ class PlanDay(CamelModel):
         # drop the day at the persist gate, and an absent one is the cycling
         # session every pre-#710 plan is.
         return normalise_plan_sport(value)
+
+    @field_validator("strength_exercises", mode="before")
+    @classmethod
+    def _coerce_strength_exercises(cls, value: Any) -> Any:
+        """Read what the writer meant, or nothing — but never raise (#714).
+
+        This was the one field on the model that could still fail validation,
+        and the cost was not a dropped day: ``ai_service`` *retries* on a
+        ``ValidationError``, so a model that wrote ``["3x5 squat"]`` burned all
+        three plan-sized attempts and the athlete got no plan at all. The
+        structured prescription is a bonus on top of the session description —
+        it must never be the reason a whole plan write fails.
+
+        A bare string is read as an exercise name, which is the same information
+        the dict form carries with ``sets``/``reps`` omitted, and those already
+        default rather than reject. Anything genuinely unreadable is dropped,
+        and a list with nothing readable left in it becomes absent rather than
+        ``[]`` — an empty list would put a new key into every stored plan day
+        and cost the byte-stability :meth:`_omit_storage_defaults` protects.
+        """
+        from services.strength_model import normalize_exercise_name
+
+        if value is None:
+            return None
+        # A single prescription written without its list, which is a common
+        # shape when the session has exactly one lift.
+        entries = value if isinstance(value, list) else [value]
+
+        kept: list[Any] = []
+        for entry in entries:
+            if isinstance(entry, str):
+                entry = {"exercise": entry}
+            if not isinstance(entry, dict):
+                continue
+            # A nameless prescription is not one: it renders as a blank row and
+            # can never be matched against what the athlete actually lifted.
+            if not normalize_exercise_name(
+                entry.get("exercise")
+                if isinstance(entry.get("exercise"), str)
+                else None
+            ):
+                continue
+            kept.append(entry)
+        return kept or None
 
     @field_validator("slot", mode="before")
     @classmethod

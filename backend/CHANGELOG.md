@@ -467,6 +467,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A prescribed lift could cost the athlete a whole plan**
+  (`schemas.StrengthPrescription`, `schemas.PlanDay._coerce_strength_exercises`,
+  #714, epic #709) — `strengthExercises` was the only field on `PlanDay` that
+  could still fail validation. Every other one coerces: a garbage `sport` becomes
+  cycling, an unreadable `slot` becomes 0, an omitted `sets` becomes 1. A model
+  that wrote the field as `["3x5 squat"]` instead of a list of objects raised,
+  and because `ai_service` *retries* on a `ValidationError` and then raises
+  `AIResponseFormatError`, that shape burned all three plan-sized attempts and
+  left the athlete with no plan at all. In `plan_pipeline` it was quieter and
+  still wrong: `_to_canonical_day` caught the error and passed the day through
+  unchanged, so a day that failed on its lifts silently skipped the duration
+  window and the slot/sport storage omission too.
+
+  The field now reads what the writer meant or nothing: a bare string is read as
+  an exercise name (the same information the object form carries with `sets` and
+  `reps` omitted, which already default), unreadable entries are dropped
+  individually so one bad entry does not cost the ones written correctly, a
+  nameless prescription is dropped because it renders as a blank row and can
+  never be matched against a logged set, and a list with nothing readable left
+  becomes absent rather than `[]` — an empty list would put a new key into every
+  stored plan day and cost the byte-stability the `slot`/`sport` omissions exist
+  to protect (#496/#710).
+
+  Also found by the same coverage report: the RIR clamp was a hardcoded `10`
+  beside `strength_model.MAX_RIR`, so a prescription and a logged set could have
+  come to disagree about what RIR 12 means. It now imports the constant.
+
+  The prescription path had **no tests at all** — every `StrengthPrescription`
+  validator was unexecuted, which is how both of these shipped.
+  `tests/test_strength_prescription.py` covers it.
+
 - **The deploy gate could not read the token it gates on**
   (`.github/workflows/deploy.yml`, #700) — `OPS_DISPATCH_TOKEN` is a secret on
   the `production` environment, and the `gate` job did not declare that
