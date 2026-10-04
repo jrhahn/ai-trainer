@@ -392,9 +392,11 @@ def test_the_ordering_rule_needs_no_clock_at_all():
         ("6 pm", 1080),
         ("06.00", 360),
         ("18h30", 1110),
-        ("7", 420),
         ("12am", 0),
         ("12pm", 720),
+        # A bare hour past noon can only be 24-hour, so it is read.
+        ("18", 1080),
+        ("12", 720),
         ("25:00", None),
         ("10:70", None),
         ("morning", None),
@@ -405,6 +407,18 @@ def test_the_ordering_rule_needs_no_clock_at_all():
 )
 def test_only_an_actual_clock_time_reads_as_one(raw, minutes):
     assert interference.minutes_into_day(raw) == minutes
+
+
+@pytest.mark.parametrize("raw", ["6", "7", "9", "11"])
+def test_a_bare_morning_hour_is_ambiguous_and_is_refused(raw):
+    """"6" is as likely the evening as the morning.
+
+    Reading it as 06:00 would turn a four-hour gap into a twelve-hour one and
+    quietly clear the separation guard. Writing the minutes states the 24-hour
+    convention and is read.
+    """
+    assert interference.minutes_into_day(raw) is None
+    assert interference.minutes_into_day(f"{raw}:00") == int(raw) * 60
 
 
 def test_a_ride_three_hours_before_the_gym_is_too_close():
@@ -638,7 +652,34 @@ async def test_the_key_session_is_reverted_when_the_gym_day_is_not_this_writes()
     assert sessions[(wed, 0)]["title"] == "Steady Ride"
     rows = await _history(user_id, wed)
     reasons = [r.reason for r in rows if r.reason]
-    assert reasons and "predates this write" in reasons[0]
+    assert reasons and "did not change the gym session" in reasons[0]
+
+
+@pytest.mark.asyncio
+async def test_a_newly_appended_gym_day_says_so_rather_than_claiming_it_is_old():
+    """The same revert, for a different reason, so it must give that reason.
+
+    One wording for both cases wrote a false sentence into the history whenever
+    the gym session was the one this write had just appended.
+    """
+    tue, wed = _dates(2)
+    user_id = await _create_user(
+        "interference-newgym@example.com",
+        [_day(wed, "endurance", "Steady Ride", 90)],
+    )
+
+    result = await _commit(
+        user_id,
+        [_gym(tue), _day(wed, "intervals", "4x8 min Threshold", 75)],
+        "nightly_maintenance",
+    )
+
+    sessions = _sessions(result.plan)
+    assert sessions[(tue, 0)]["workoutType"] == "strength", "the appended day stays"
+    assert sessions[(wed, 0)]["title"] == "Steady Ride"
+    reasons = [r.reason for r in await _history(user_id, wed) if r.reason]
+    assert reasons and "has no earlier version to restore" in reasons[0]
+    assert "predates" not in reasons[0]
 
 
 @pytest.mark.asyncio

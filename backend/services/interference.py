@@ -240,6 +240,12 @@ def minutes_into_day(time_of_day: object) -> int | None:
     "evening" are *not* converted to notional hours: inventing 09:00 and 18:00
     for them would manufacture a nine-hour separation the athlete never stated,
     and then clear or fire the separation guard on a number nobody wrote.
+
+    A bare hour under twelve with neither minutes nor a suffix is refused for
+    the same reason. "6" is as likely to be the evening as the morning, and
+    reading it as 06:00 would turn a four-hour gap into a twelve-hour one and
+    quietly clear the guard. Writing the minutes ("6:00", "06.00") states the
+    24-hour convention every other time in this app uses, and is read as such.
     """
     if isinstance(time_of_day, bool) or not isinstance(time_of_day, (str, int, float)):
         return None
@@ -251,6 +257,8 @@ def minutes_into_day(time_of_day: object) -> int | None:
     if minute > 59:
         return None
     suffix = match.group("suffix")
+    if match.group("minute") is None and suffix is None and hour < 12:
+        return None
     if suffix == "pm" and hour < 12:
         hour += 12
     elif suffix == "am" and hour == 12:

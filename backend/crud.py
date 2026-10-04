@@ -375,9 +375,10 @@ async def set_plan_day_reasons(
 
     A row that already carries a reason is left alone. That is a guard stating
     why it corrected the plan (#715) — a deterministic fact about the rule it
-    applied — and the narrator's retelling of the same change must not overwrite
-    it. The narrator is given the guard's reason as input, so the athlete-facing
-    summary still says the same thing.
+    applied — and the narrator's retelling of a *different* change on the same
+    date must not overwrite it. ``reasons`` is keyed by date rather than by
+    session, so without this a two-a-day whose AM session was narrated would
+    replace the rule recorded against its PM session.
     """
     if not reasons:
         return

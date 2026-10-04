@@ -594,17 +594,18 @@ def _plan_day_changes(
     the history stays a faithful diff of what the athlete actually saw (#496).
 
     ``reasons`` carries a deterministic rationale per session for a correction a
-    guard made itself — the interference reverts (#715). Recorded on the row so
-    the correction is attributable even when the narrator never runs, and handed
-    to the narrator when it does so the athlete is told the actual rule instead
-    of a plausible reconstruction of it.
+    guard made itself — the interference reverts (#715). It is recorded so the
+    correction is attributable from the history alone; the athlete hears the rule
+    through the coach's prompt, not through the narrator (see below).
 
     A guard revert lands on the ``applied=False`` record, never the
     ``applied=True`` one, and that is structural rather than incidental:
     reverting a session restores content already in the plan, so there is no
     diff to report. What the history has to say about it is that the trigger
     *wanted* a change and a rule stopped it — which is exactly what an
-    ``applied=False`` row means (#343), now with the rule attached.
+    ``applied=False`` row means (#343), now with the rule attached. Which is
+    also why the narrator never sees it: it is handed ``applied=True`` changes
+    only, and a revert produces none.
     """
     reasons = reasons or {}
     current_by = {_key(d): d for d in current_plan if d.get("date")}
@@ -789,9 +790,17 @@ _MAX_INTERFERENCE_PASSES = 3
 _INTERFERENCE_REVERTED_STRENGTH = (
     " The gym session was reverted to what the plan held before this write."
 )
-_INTERFERENCE_REVERTED_KEY = (
-    " The gym session predates this write and was not its to give back, so the"
-    " newly written session it clashes with was reverted instead."
+# Two wordings for the key side rather than one, because "the gym session was not
+# this write's to give back" is true for two different reasons and the recorded
+# rationale has to say which. Conflating them put a false sentence in
+# ``plan_day_history`` whenever the gym session was the newly appended one.
+_INTERFERENCE_REVERTED_KEY_UNCHANGED = (
+    " This write did not change the gym session, so it was not this write's to"
+    " give back; the session it clashes with was reverted instead."
+)
+_INTERFERENCE_REVERTED_KEY_NEW = (
+    " The gym session is new and has no earlier version to restore, so the"
+    " session it clashes with was reverted instead."
 )
 
 
@@ -845,14 +854,14 @@ def _revert_new_interference(
         # Heaviest first, so when two findings compete for one session the
         # heavier one decides which side of its pair is given back.
         for finding in sorted(created.values(), key=lambda f: -f["weight"]):
+            strength_key = (finding["strength_date"], finding["strength_slot"])
             sides = (
-                (
-                    (finding["strength_date"], finding["strength_slot"]),
-                    _INTERFERENCE_REVERTED_STRENGTH,
-                ),
+                (strength_key, _INTERFERENCE_REVERTED_STRENGTH),
                 (
                     (finding["key_date"], finding["key_slot"]),
-                    _INTERFERENCE_REVERTED_KEY,
+                    _INTERFERENCE_REVERTED_KEY_UNCHANGED
+                    if strength_key in current_by
+                    else _INTERFERENCE_REVERTED_KEY_NEW,
                 ),
             )
             for candidate, suffix in sides:
