@@ -524,17 +524,23 @@ def _infer_anaerobic_capacity(envelope: dict, ftp: int | None) -> dict:
 
 def _speed_envelope(
     signals: list[tuple[models.RideMetric, dict]],
-) -> dict[float, tuple[float, int, str | None]]:
+) -> tuple[dict[float, tuple[float, int, str | None]], int]:
     """Best mean speed per probed duration across the window, grade-adjusted.
 
-    ``{minutes: (best_m_s, contributing_run_count, best_date)}``. The running
-    counterpart of :func:`_power_envelope`, with two differences that are not
-    cosmetic: the key is a number rather than a string, because the Critical
-    Speed fit does arithmetic with it; and it reads the grade-adjusted curve
-    first, because a hilly maximal effort is a maximal effort and the raw curve
-    would read it as a slow one and leave the athlete's best work out of the fit.
+    Returns ``({minutes: (best_m_s, run_count_at_that_duration, best_date)},
+    runs_that_contributed_anything)``. The running counterpart of
+    :func:`_power_envelope`, with three differences that are not cosmetic: the
+    key is a number rather than a string, because the Critical Speed fit does
+    arithmetic with it; it reads the grade-adjusted curve first, because a hilly
+    maximal effort is a maximal effort and the raw curve would read it as a slow
+    one and leave the athlete's best work out of the fit; and the number of
+    contributing runs is counted for the envelope as a whole rather than taken
+    from one duration's tally. Two runs that are each strongest at a different
+    duration contribute one point apiece, and reporting "1 run" for a fit built
+    from both would understate the evidence.
     """
     envelope: dict[float, tuple[float, int, str | None]] = {}
+    contributors: set[int] = set()
     for metric, sig in signals:
         curve = sig.get("gap_speed_curve") or sig.get("speed_curve") or {}
         if not isinstance(curve, dict):
@@ -553,7 +559,8 @@ def _speed_envelope(
                 else (best, best_date)
             )
             envelope[minutes] = (new_best, count + 1, new_date)
-    return envelope
+            contributors.add(id(metric))
+    return envelope, len(contributors)
 
 
 def _infer_run_attributes(
@@ -578,7 +585,7 @@ def _infer_run_attributes(
     if not signals:
         return {}
 
-    envelope = _speed_envelope(signals)
+    envelope, run_count = _speed_envelope(signals)
     points = {minutes: point[0] for minutes, point in envelope.items() if point[0] > 0}
     fit = run_model.critical_speed_from_points(points)
     if fit is None:
@@ -605,7 +612,6 @@ def _infer_run_attributes(
         }
 
     confidence = run_model.critical_speed_confidence(fit, recent_days)
-    run_count = max(point[1] for point in envelope.values())
     evidence = [
         f"Critical Speed {run_model.format_pace(fit.speed_m_s)} fitted from "
         f"{fit.points_used} envelope points spanning {fit.span_minutes:g} min "
@@ -673,9 +679,11 @@ def infer_performance_attributes(
     ride_signals = [(m, s) for m, s in signals if not run_model.is_run_signals(s)]
     run_signals = [(m, s) for m, s in signals if run_model.is_run_signals(s)]
 
+    # Recency per sport, because a cycling attribute's confidence is a statement
+    # about when the athlete last *rode*. ``None`` when that sport contributed
+    # nothing, which ``_confidence`` and ``critical_speed_confidence`` both read
+    # as "no recency information" rather than as "today".
     ref = (now or datetime.now(timezone.utc)).date()
-    # Recency of the window: days since the newest ride that carried signals.
-    recent_days = _days_since(signals[0][0].activity_date, ref)
     ride_recent_days = (
         _days_since(ride_signals[0][0].activity_date, ref) if ride_signals else None
     )
@@ -686,8 +694,11 @@ def infer_performance_attributes(
     envelope = _power_envelope(ride_signals)
     ftp_used = next((m.ftp_used for m, _ in ride_signals if m.ftp_used), None)
 
-    ftp_attr, ftp_val = _infer_ftp(envelope, ftp_used, ride_recent_days or recent_days)
-    map_attr, map_val = _infer_map(envelope, ride_recent_days or recent_days)
+    # Passed straight through, never ``x or y``: a ride from *today* is 0 days
+    # old, which is falsy, so an ``or`` silently substitutes the other sport's
+    # recency for the freshest evidence there is.
+    ftp_attr, ftp_val = _infer_ftp(envelope, ftp_used, ride_recent_days)
+    map_attr, map_val = _infer_map(envelope, ride_recent_days)
 
     attributes = {
         "ftp": ftp_attr,

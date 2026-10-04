@@ -421,12 +421,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A footpod run was read on the wrong clock** (`services/run_model.py`, #716)
+  — not every field is recorded at the same rate, and the importers say so:
+  `velocity_time`, `altitude_time` and `heartrate_time` sit beside their fields
+  precisely because they can differ from the primary `time` stream. Reading
+  `time` blindly cost a Stryd run its pace model: power gives the run a clock of
+  its own, and the device records speed at a standstill where it drops power, so
+  any run with a pause in it has more speed samples than power samples and the
+  two no longer line up. Each field is now resolved against its own clock, by a
+  lookup table rather than a `f"{key}_time"` guess — the importer spells the
+  speed stream's clock `velocity_time`, and guessing the suffix finds nothing and
+  silently falls back to the clock that was wrong.
+
+  Altitude alignment is strict: the gradient is only applied when the altitude
+  resolves to the *same* clock as the distance, because two streams of equal
+  length on two different clocks would pair each metre with somebody else's hill.
+
+- **Correcting a threshold pace now re-prices the runs it priced**
+  (`services/metrics_service.py`, #716) — a new threshold pace moves every rTSS
+  figure exactly as a new FTP moves every TSS one, so "Recalculate metrics"
+  rebuilds both. Only rows the pace rung actually priced are touched, and only
+  when a threshold pace is available: re-pricing a run against nothing would
+  delete its load, which is #579 again by a different route. Rows imported
+  before #716 carry no stored pace envelope and keep what they have.
+
 - **An uploaded run had a speed stream and no clock** (`routers/users.py`, #716)
   — the .fit parser only emitted `time` alongside `watts`, so a run, which has
   no power stream, arrived with `velocity_smooth` and nothing to read it
   against. A speed without a clock is not a pace, and the pace model could not
   see the file at all. The speed samples' own timestamps are now the time base
   when there is no power; a ride upload keeps the power time base it had.
+
+- **A ride from today was treated as having no recency**
+  (`services/athlete_model_inference.py`, #716) — the per-sport recency split
+  introduced here read `ride_recent_days or recent_days`, and a ride from today
+  is 0 days old, which is falsy. It happened to give the same answer while the
+  two could not diverge; it is now passed straight through, which is what
+  `_confidence` already expects.
+
+- **The envelope's run count was one duration's tally** (`_speed_envelope`,
+  #716) — two runs each strongest at a different duration contribute one point
+  apiece, and the evidence line said "1 run" for a fit built from both. Counted
+  for the envelope as a whole now.
 
 - **The profile the coach reads carries a rendered pace, not a number**
   (`schemas.UserProfileSchema`, #716) — every call site of that schema dumps it

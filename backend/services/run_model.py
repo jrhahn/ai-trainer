@@ -312,47 +312,96 @@ def _numeric_stream(streams: object, key: str) -> list[float]:
     ]
 
 
-def cumulative_distance(streams: dict) -> list[float] | None:
-    """Metres travelled at each sample, or ``None`` when the run has no distance.
+# Which companion stream carries a field's own timestamps. A table rather than
+# a ``f"{key}_time"`` suffix because the .fit importer does not spell them that
+# way: ``velocity_smooth`` — Strava's name for the speed stream, which the
+# importer adopts — has its clock under ``velocity_time``. Guessing the suffix
+# finds nothing and falls back to the primary clock, which is the bug this
+# whole mechanism exists to fix.
+_TIME_STREAM_KEYS: dict[str, tuple[str, ...]] = {
+    "distance": ("distance_time",),
+    "velocity_smooth": ("velocity_time", "velocity_smooth_time"),
+    "altitude": ("altitude_time",),
+    "heartrate": ("heartrate_time",),
+}
+
+
+def _stream_with_time(
+    streams: object, key: str
+) -> tuple[list[float], list[float]] | None:
+    """A stream and the time base it is actually sampled on, or ``None``.
+
+    Not every field is recorded at the same rate, and the importers say so: the
+    .fit parser stores ``velocity_time``, ``altitude_time`` and
+    ``heartrate_time`` beside their fields precisely because those can differ
+    from the primary ``time`` stream. The companion wins when it is there; the
+    primary ``time`` stream is used only when its length matches, because a
+    mismatch is the very case the companion exists for.
+
+    Reading the primary stream blindly is how a Stryd run lost its pace model:
+    a footpod gives the run a power stream, so ``time`` is the *power* clock,
+    and the speed samples — which the device does record at standstill where
+    power is dropped — no longer line up with it.
+    """
+    values = _numeric_stream(streams, key)
+    if len(values) < 2:
+        return None
+    for candidate in _TIME_STREAM_KEYS.get(key, ()):
+        own = _numeric_stream(streams, candidate)
+        if len(own) == len(values):
+            return values, own
+    primary = _numeric_stream(streams, "time")
+    if len(primary) == len(values):
+        return values, primary
+    return None
+
+
+def distance_with_time(streams: dict) -> tuple[list[float], list[float]] | None:
+    """Metres travelled and the clock they were travelled on, or ``None``.
+
+    Returns ``(cumulative_metres, seconds)`` — a pair rather than the distance
+    alone, because the clock the distance is on is not always the run's primary
+    ``time`` stream (see :func:`_stream_with_time`), and a pace is a distance
+    *and* the time it took.
 
     The provider's own ``distance`` stream when there is one, because it is the
-    measurement; otherwise the integral of ``velocity_smooth`` over ``time``,
-    because Strava does not return distance unless asked and older imports were
-    not. The integral is the weaker of the two — it inherits whatever smoothing
-    the provider applied to the speed — which is why it is the fallback and not
-    the rule (#466).
+    measurement; otherwise the integral of ``velocity_smooth``, because Strava
+    does not return distance unless asked and older imports did not. The
+    integral is the weaker of the two — it inherits whatever smoothing the
+    provider applied to the speed — which is why it is the fallback and not the
+    rule (#466).
 
     Monotonic by construction: a negative step is a GPS artefact, not the
     athlete running backwards, so it contributes nothing rather than subtracting.
     """
-    time_data = _numeric_stream(streams, "time")
-    if len(time_data) < 2:
-        return None
-
-    distance = _numeric_stream(streams, "distance")
-    if len(distance) == len(time_data):
+    measured = _stream_with_time(streams, "distance")
+    if measured is not None:
+        distance, times = measured
         cumulative = [0.0]
         total = 0.0
         for previous, current in zip(distance, distance[1:]):
             total += max(0.0, current - previous)
             cumulative.append(total)
-        return cumulative
+        return cumulative, times
 
-    speeds = _numeric_stream(streams, "velocity_smooth")
-    if len(speeds) != len(time_data):
+    integrated = _stream_with_time(streams, "velocity_smooth")
+    if integrated is None:
         return None
+    speeds, times = integrated
     cumulative = [0.0]
     total = 0.0
-    for index in range(1, len(time_data)):
-        step_seconds = time_data[index] - time_data[index - 1]
+    for index in range(1, len(times)):
+        step_seconds = times[index] - times[index - 1]
         if step_seconds > 0:
             total += max(0.0, speeds[index]) * step_seconds
         cumulative.append(total)
-    return cumulative
+    return cumulative, times
 
 
 def grade_adjusted_distance(
-    streams: dict, distance: list[float] | None = None
+    streams: dict,
+    distance: list[float] | None = None,
+    times: list[float] | None = None,
 ) -> list[float] | None:
     """Cumulative grade-adjusted metres, or ``None`` when no usable altitude.
 
@@ -363,13 +412,23 @@ def grade_adjusted_distance(
     out of the last few metres. ``None`` rather than a copy of the raw distance
     when altitude is missing or misaligned, so the caller can say which figure
     it is holding instead of claiming an adjustment it did not make.
+
+    "Misaligned" is strict: the altitude must resolve to the *same* clock as the
+    distance. Equal lengths are not enough — two streams of the same length on
+    two different clocks would pair each metre with somebody else's hill.
     """
-    distances = distance if distance is not None else cumulative_distance(streams)
-    if distances is None:
+    resolved = (
+        (distance, times)
+        if distance is not None and times is not None
+        else distance_with_time(streams)
+    )
+    if resolved is None:
         return None
-    altitude = _numeric_stream(streams, "altitude")
-    if len(altitude) != len(distances):
+    distances, distance_times = resolved
+    altitude_pair = _stream_with_time(streams, "altitude")
+    if altitude_pair is None or altitude_pair[1] != distance_times:
         return None
+    altitude = altitude_pair[0]
 
     adjusted = [0.0] * len(distances)
     total = 0.0
@@ -475,16 +534,16 @@ def run_performance_signals(
     carried a footpod: those keys are what the cycling inference engine reads,
     and a Stryd run landing in them would argue about a cycling threshold.
     """
-    time_data = _numeric_stream(streams, "time")
-    distance = cumulative_distance(streams)
-    if distance is None or len(time_data) < 2:
+    resolved = distance_with_time(streams)
+    if resolved is None:
         return None
+    distance, time_data = resolved
 
     total_secs = time_data[-1] - time_data[0]
     if total_secs <= 0 or distance[-1] <= 0:
         return None
 
-    adjusted = grade_adjusted_distance(streams, distance)
+    adjusted = grade_adjusted_distance(streams, distance, time_data)
     signals: dict = {
         "sport": RUN_SIGNALS_SPORT,
         "duration_s": round(total_secs),
@@ -499,11 +558,15 @@ def run_performance_signals(
         signals["gap_distance_m"] = round(adjusted[-1])
         signals["gap_speed_curve"] = speed_curve(adjusted, time_data)
 
+    # The whole-session HR figures need no alignment — a mean and a maximum do
+    # not care which clock the samples sat on — so they are read from the raw
+    # stream. The two halves do care, and are only split when the heart rate is
+    # on the same clock as the distance.
     hr_data = _numeric_stream(streams, "heartrate")
+    if hr_data:
+        signals["avg_hr"] = round(sum(hr_data) / len(hr_data))
+        signals["max_hr"] = round(max(hr_data))
     usable_hr = hr_data if len(hr_data) == len(time_data) else None
-    if usable_hr:
-        signals["avg_hr"] = round(sum(usable_hr) / len(usable_hr))
-        signals["max_hr"] = round(max(usable_hr))
 
     mid_time = time_data[0] + total_secs / 2.0
     split = next(
@@ -616,7 +679,10 @@ def critical_speed_from_points(points: dict[float, float]) -> CriticalSpeedFit |
     mean_t = sum(times) / len(times)
     mean_d = sum(distances) / len(distances)
     denominator = sum((t - mean_t) ** 2 for t in times)
-    if denominator <= 0:
+    if denominator <= 0:  # pragma: no cover - unreachable, guards the division
+        # The durations are dict keys, so they are distinct, and there are at
+        # least MIN_CS_POINTS of them — the variance cannot be zero. Kept
+        # because what follows divides by it.
         return None
     cs = (
         sum((times[i] - mean_t) * (distances[i] - mean_d) for i in range(len(times)))

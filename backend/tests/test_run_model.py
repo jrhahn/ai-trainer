@@ -21,7 +21,7 @@ from services.run_model import (
     MIN_CS_CONFIDENCE_FOR_LOAD,
     critical_speed_confidence,
     critical_speed_from_points,
-    cumulative_distance,
+    distance_with_time,
     format_pace,
     grade_adjusted_distance,
     grade_adjusted_speed,
@@ -90,6 +90,9 @@ def test_a_pace_is_rendered_as_minutes_and_seconds():
 def test_a_non_speed_is_not_a_pace(value):
     assert pace_seconds_per_km(value) is None
     assert format_pace(value) is None
+    # And the inverse direction, which is what the chain calls with a threshold
+    # pace the athlete has not set.
+    assert speed_from_pace_seconds(value) is None
 
 
 # ---------------------------------------------------------------------------
@@ -140,12 +143,14 @@ def test_the_providers_own_distance_is_preferred_to_an_integrated_speed():
     """The measurement beats the integral of a smoothed stream (#466)."""
     streams = _streams(seconds=60, speed=4.0)
     streams["velocity_smooth"] = {"data": [99.0] * 61}
-    distance = cumulative_distance(streams)
+    distance, _ = distance_with_time(streams)
     assert distance[-1] == pytest.approx(240.0)
 
 
 def test_speed_is_integrated_when_the_provider_sent_no_distance():
-    distance = cumulative_distance(_streams(seconds=60, speed=4.0, use_distance=False))
+    distance, _ = distance_with_time(
+        _streams(seconds=60, speed=4.0, use_distance=False)
+    )
     assert distance[-1] == pytest.approx(240.0, rel=0.02)
 
 
@@ -155,12 +160,45 @@ def test_a_backwards_distance_step_contributes_nothing():
         "time": {"data": [0.0, 1.0, 2.0, 3.0]},
         "distance": {"data": [0.0, 4.0, 1.0, 8.0]},
     }
-    assert cumulative_distance(streams)[-1] == pytest.approx(4.0 + 7.0)
+    distance, _ = distance_with_time(streams)
+    assert distance[-1] == pytest.approx(4.0 + 7.0)
 
 
 def test_a_run_with_no_distance_at_all_has_no_envelope():
-    assert cumulative_distance({"time": {"data": [0.0, 1.0]}}) is None
+    assert distance_with_time({"time": {"data": [0.0, 1.0]}}) is None
     assert run_performance_signals({"time": {"data": [0.0, 1.0]}}) is None
+
+
+def test_a_field_on_its_own_clock_is_read_on_that_clock():
+    """The importers store a companion time stream when the rates differ.
+
+    A footpod run has a power stream, so the primary ``time`` is the *power*
+    clock — and the speed samples, which the device records at standstill where
+    power is dropped, no longer line up with it. Reading ``time`` blindly is how
+    such a run lost its pace model entirely.
+    """
+    streams = {
+        # 30 power samples on the power clock ...
+        "time": {"data": [float(t) for t in range(30)]},
+        "watts": {"data": [280.0] * 30},
+        # ... and 61 speed samples on their own.
+        "velocity_smooth": {"data": [4.0] * 61},
+        "velocity_time": {"data": [float(t) for t in range(61)]},
+    }
+    distance, times = distance_with_time(streams)
+    assert times == [float(t) for t in range(61)]
+    assert distance[-1] == pytest.approx(240.0, rel=0.02)
+
+
+def test_two_streams_of_equal_length_on_different_clocks_are_not_paired():
+    """Equal lengths are not alignment: each metre would get someone else's hill."""
+    streams = {
+        "time": {"data": [float(t) for t in range(61)]},
+        "distance": {"data": [float(t) * 3.0 for t in range(61)]},
+        "altitude": {"data": [float(t) * 0.2 for t in range(61)]},
+        "altitude_time": {"data": [float(t) * 2.0 for t in range(61)]},
+    }
+    assert grade_adjusted_distance(streams) is None
 
 
 def test_the_best_mean_speed_is_exact_rather_than_an_average_of_samples():
@@ -197,14 +235,15 @@ def test_a_one_metre_altitude_wobble_is_not_a_thirty_percent_climb():
             "altitude": {"data": wobble},
         },
         distance,
+        time_data,
     )
     assert adjusted[-1] == pytest.approx(distance[-1], rel=0.05)
 
 
 def test_a_real_climb_is_adjusted_upwards():
     streams = _streams(seconds=600, speed=3.0, altitude_per_sample=0.15)
-    distance = cumulative_distance(streams)
-    adjusted = grade_adjusted_distance(streams, distance)
+    distance, times = distance_with_time(streams)
+    adjusted = grade_adjusted_distance(streams, distance, times)
     # 0,15 m of rise per 3 m of run is a 5 % gradient throughout.
     assert adjusted[-1] == pytest.approx(distance[-1] * grade_cost_factor(0.05), rel=0.02)
 
@@ -551,5 +590,140 @@ def test_the_tail_of_a_run_keeps_the_previous_gradient():
             "altitude": {"data": altitude},
         },
         distance,
+        time_data,
     )
     assert adjusted[-1] == pytest.approx(distance[-1], rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# What the readers do with input that is not what they asked for
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", [None, 0, -2.0, "slow", True])
+def test_a_non_speed_cannot_be_grade_adjusted(value):
+    assert grade_adjusted_speed(value, 0.05) is None
+
+
+@pytest.mark.parametrize(
+    "streams",
+    [
+        None,
+        "velocity_smooth",
+        42,
+        {"time": "not a stream"},
+        {"time": {"data": "not a list"}},
+        {"time": {}},
+    ],
+)
+def test_a_stream_payload_that_is_not_one_reads_as_empty(streams):
+    """Provider payloads arrive malformed; one bad file must not raise."""
+    assert run_model._numeric_stream(streams, "time") == []
+    assert distance_with_time(streams if isinstance(streams, dict) else {}) is None
+
+
+def test_a_single_sample_is_not_a_stream():
+    """One point has no duration, so it cannot carry a distance or a pace."""
+    assert distance_with_time({"time": {"data": [0.0]}, "distance": {"data": [0.0]}}) is None
+
+
+def test_non_numeric_samples_are_dropped_rather_than_crashing():
+    values = run_model._numeric_stream(
+        {"time": {"data": [0.0, "x", None, 2.0, True, 3]}}, "time"
+    )
+    assert values == [0.0, 2.0, 3.0]
+
+
+def test_grade_adjustment_of_a_run_with_no_distance_is_refused():
+    assert grade_adjusted_distance({"altitude": {"data": [0.0, 1.0, 2.0]}}) is None
+
+
+@pytest.mark.parametrize(
+    ("distance", "times", "minutes"),
+    [
+        ([], [], 1.0),
+        ([0.0, 1.0], [0.0], 1.0),
+        ([0.0, 1.0], [0.0, 1.0], 0.0),
+        ([0.0, 1.0], [0.0, 1.0], -5.0),
+    ],
+)
+def test_a_window_that_cannot_be_measured_has_no_best_speed(distance, times, minutes):
+    assert run_model.best_mean_speed(distance, times, minutes) == (None, 0, 0)
+
+
+@pytest.mark.parametrize(
+    ("distance", "times"),
+    [([], []), ([0.0, 4.0], [0.0])],
+)
+def test_a_curve_cannot_be_cut_from_mismatched_streams(distance, times):
+    assert speed_curve(distance, times) == {}
+
+
+def test_a_run_that_covered_no_ground_has_no_signals():
+    """A recording with a clock and no movement is a reading, not a run."""
+    standing = {
+        "time": {"data": [0.0, 1.0, 2.0]},
+        "distance": {"data": [0.0, 0.0, 0.0]},
+    }
+    assert run_performance_signals(standing) is None
+
+
+def test_a_run_whose_clock_never_advances_has_no_signals():
+    frozen = {
+        "time": {"data": [5.0, 5.0, 5.0]},
+        "distance": {"data": [0.0, 4.0, 8.0]},
+    }
+    assert run_performance_signals(frozen) is None
+
+
+def test_a_hilly_runs_signals_carry_both_envelopes():
+    """The grade-adjusted curve is what the Critical Speed fit reads."""
+    signals = run_performance_signals(
+        _streams(seconds=1200, speed=3.0, altitude_per_sample=0.15)
+    )
+    assert signals["gap_distance_m"] > signals["distance_m"]
+    assert signals["gap_speed_curve"]["10"] > signals["speed_curve"]["10"]
+
+
+def test_a_d_prime_beyond_a_runner_is_refused_outright():
+    """Decisive, not "either None or in range": the bound has to be the reason.
+
+    A 2 km D′ would mean the athlete can run two kilometres at any speed at all.
+    """
+    cs, absurd = 4.0, 2000.0
+    points = {m: cs + absurd / (m * 60.0) for m in (2, 5, 10, 20)}
+    fit = critical_speed_from_points(points)
+    assert fit is None
+    # And the same curve with a plausible D′ is accepted, so it is the bound
+    # doing the refusing and not some other guard.
+    plausible = {m: cs + 250.0 / (m * 60.0) for m in (2, 5, 10, 20)}
+    assert critical_speed_from_points(plausible) is not None
+
+
+def test_a_curve_whose_distance_falls_with_time_is_refused():
+    """A negative Critical Speed is arithmetic, not a runner.
+
+    Speed falling faster than 1/t means the athlete covered *less* ground in
+    twenty minutes than in two, so the least-squares slope through
+    ``distance = CS × t + D′`` comes out negative. The curve is well formed —
+    it descends steeply and spans the band — so no earlier guard sees it.
+    """
+    points = {2: 100.0, 10: 5.0, 20: 1.0}
+    assert points[2] / points[20] > run_model.MIN_CS_CURVE_DECLINE
+    assert critical_speed_from_points(points) is None
+
+
+def test_a_critical_speed_far_below_the_slowest_effort_is_refused():
+    """A 20-minute maximal effort is run a few percent above CS, not 25 % above.
+
+    A slow runner with a large D′ passes the D′ bound and still implies a CS the
+    longest effort cannot be reconciled with — the fit extrapolated rather than
+    interpolated, which is what this bound exists to catch.
+    """
+    cs, big_d_prime = 2.5, 900.0
+    points = {m: cs + big_d_prime / (m * 60.0) for m in (2, 5, 10, 20)}
+    longest = points[20]
+    # The D′ bound is satisfied, so it is the CS bound doing the refusing.
+    assert run_model.D_PRIME_MIN_M <= big_d_prime <= run_model.D_PRIME_MAX_M
+    assert cs < longest * run_model.CS_LOWER_BOUND_OF_LONGEST
+    assert critical_speed_from_points(points) is None

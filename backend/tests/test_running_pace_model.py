@@ -727,3 +727,282 @@ def test_the_profile_the_coach_reads_carries_a_rendered_pace_not_a_number():
 
     user.threshold_pace_seconds_per_km = None
     assert schemas.UserProfileSchema.from_user(user).threshold_pace is None
+
+
+def _fake_stryd_run_fit(*, seconds: int = 1800, speed: float = 4.0) -> type:
+    """A footpod run: power *and* speed, recorded at different rates.
+
+    The .fit parser drops a power sample of zero and keeps a speed sample of
+    zero, so the two streams diverge over any run with a pause in it — which is
+    why the power clock cannot be used to read the speed.
+    """
+    start = datetime(2026, 10, 1, 7, 0, tzinfo=timezone.utc)
+    records = []
+    for t in range(seconds + 1):
+        fields = {
+            "timestamp": start + timedelta(seconds=t),
+            "enhanced_speed": speed,
+            "heart_rate": 150,
+        }
+        # Standing at the lights: the footpod reports no power, but the run is
+        # still being recorded.
+        if not 600 <= t < 660:
+            fields["power"] = 280
+        records.append(_FakeFitRecord(fields))
+    return type(
+        "StrydRunFitFile",
+        (_FakeFitFile,),
+        {
+            "messages": {
+                "session": [
+                    _FakeFitRecord(
+                        {"sport": "running", "total_elapsed_time": seconds}
+                    )
+                ],
+                "record": records,
+            }
+        },
+    )
+
+
+def test_a_footpod_run_still_gets_a_pace_model():
+    """Power is what makes this hard: it hands the run a clock of its own.
+
+    With a `watts` stream the parser's primary `time` is the *power* clock, so a
+    run with any pause in it has more speed samples than power samples. Reading
+    the speed against `time` finds a length mismatch, produces no distance, and
+    drops the run to heart rate — the exact failure this PR set out to remove,
+    arriving by a different door.
+    """
+    parsed = users_router._parse_fit_activity(b"", "stryd.fit", _fake_stryd_run_fit())
+    assert "watts" in parsed.streams
+    assert len(parsed.streams["velocity_smooth"]["data"]) != len(
+        parsed.streams["time"]["data"]
+    ), "the premise: the two streams really do diverge"
+
+    chain = build_ride_metrics_chain(
+        [
+            {
+                "strava_activity_id": 9,
+                "activity_date": "2026-10-01",
+                "sport_type": parsed.sport_type,
+                "duration_seconds": 1800,
+                "streams": parsed.streams,
+            }
+        ],
+        ftp=250.0,
+        max_heart_rate=190,
+        threshold_pace_seconds_per_km=THRESHOLD_PACE,
+    )
+    assert chain[0]["tss_source"] == LOAD_SOURCE_PACE
+    assert run_model.is_run_signals(chain[0]["perf_signals"])
+    assert chain[0]["perf_signals"]["distance_m"] > 0
+    # And still no cycling claim from the footpod's watts (#711).
+    assert chain[0]["intensity_factor"] is None
+
+
+# ---------------------------------------------------------------------------
+# Correcting a threshold pace re-prices the runs it priced
+# ---------------------------------------------------------------------------
+
+
+class _Row:
+    """A ``RideMetric`` as the recalculation loop sees it.
+
+    Lightweight rather than a DB row, matching ``test_per_sport_fitness``: the
+    loop is pure, and the relationships a real row carries are what make it
+    expensive to build.
+    """
+
+    def __init__(self, *, tss: float, source: str, perf_signals: dict | None = None):
+        self.activity_date = "2026-10-01"
+        self.sport_type = "Run"
+        self.tss = tss
+        self.tss_source = source
+        self.normalized_power_w = None
+        self.duration_seconds = HOUR
+        self.intensity_factor = None
+        self.ftp_used = None
+        self.perf_signals = perf_signals
+        self.ctl_after = self.atl_after = self.tsb_after = None
+        self.ctl_by_sport = None
+        self.matched_plan_snapshot = None
+
+
+def _priced_run() -> _Row:
+    return _Row(
+        tss=100.0,
+        source=LOAD_SOURCE_PACE,
+        perf_signals={
+            "sport": run_model.RUN_SIGNALS_SPORT,
+            "duration_s": HOUR,
+            "moving_duration_s": HOUR,
+            "distance_m": round(THRESHOLD_SPEED * HOUR),
+        },
+    )
+
+
+def test_correcting_a_threshold_pace_reprices_the_runs():
+    """A new threshold pace moves every rTSS, as a new FTP moves every TSS.
+
+    A runner who corrects their threshold and finds their history unchanged has
+    been given a button that does not do what it says. Here the threshold turns
+    out to be 10 % slower, so the same run was done at a higher fraction of it
+    and cost 1,1² more.
+    """
+    row = _priced_run()
+    metrics_service._recalculate_metric_chain([row], 250, THRESHOLD_PACE * 1.1)
+
+    assert row.tss_source == LOAD_SOURCE_PACE
+    assert row.tss == pytest.approx(121.0, abs=1.0)
+
+
+def test_the_same_threshold_pace_leaves_the_figure_where_it_was():
+    row = _priced_run()
+    metrics_service._recalculate_metric_chain([row], 250, THRESHOLD_PACE)
+    assert row.tss == pytest.approx(100.0, abs=1.0)
+
+
+def test_clearing_a_threshold_pace_does_not_wipe_a_runs_load():
+    """Re-pricing to nothing would be #579 again by a different route."""
+    row = _priced_run()
+    metrics_service._recalculate_metric_chain([row], 250, None)
+    assert row.tss == pytest.approx(100.0)
+    assert row.tss_source == LOAD_SOURCE_PACE
+
+
+def test_a_run_with_no_stored_envelope_cannot_be_repriced():
+    """Rows imported before #716 carry no pace signals; they keep their load."""
+    row = _Row(tss=100.0, source=LOAD_SOURCE_PACE, perf_signals=None)
+    metrics_service._recalculate_metric_chain([row], 250, THRESHOLD_PACE * 1.1)
+    assert row.tss == pytest.approx(100.0)
+
+
+def test_a_threshold_pace_does_not_touch_a_run_the_pace_rung_never_priced():
+    """The mirror of #579's rule: only the rung's own rows are its to rewrite."""
+    row = _Row(tss=64.0, source=LOAD_SOURCE_HEART_RATE, perf_signals=_run_signals())
+    metrics_service._recalculate_metric_chain([row], 250, THRESHOLD_PACE * 1.1)
+    assert row.tss == pytest.approx(64.0)
+    assert row.tss_source == LOAD_SOURCE_HEART_RATE
+
+
+@pytest.mark.asyncio
+async def test_the_recalculation_reads_the_athletes_threshold_pace(
+    db: AsyncSession,
+) -> None:
+    """The wiring: the rebuild has to fetch the pace, not just accept one."""
+    user = await crud.create_user(
+        db, email="reprice-wiring@example.com", name="R", hashed_password="x"
+    )
+    user.current_ftp = 250
+    user.threshold_pace_seconds_per_km = THRESHOLD_PACE
+    seen: list[float | None] = []
+    original = metrics_service._recalculate_metric_chain
+
+    def _capture(all_metrics, ftp_value, threshold=None):
+        seen.append(threshold)
+        return original(all_metrics, ftp_value, threshold)
+
+    metrics_service._recalculate_metric_chain = _capture
+    try:
+        await crud.upsert_ride_metric(
+            db,
+            user.id,
+            strava_activity_id=4711,
+            activity_date="2026-10-01",
+            sport_type="Run",
+            duration_seconds=HOUR,
+            tss=100.0,
+            tss_source=LOAD_SOURCE_PACE,
+        )
+        await db.refresh(user, ["rider_assessment"])
+        await metrics_service.recalculate_metrics_for_user(db, user)
+    finally:
+        metrics_service._recalculate_metric_chain = original
+
+    assert seen == [THRESHOLD_PACE]
+
+
+def test_a_ride_from_today_is_not_treated_as_having_no_recency():
+    """0 days old is falsy, and an ``or`` would substitute the other sport's."""
+    attributes = ami.infer_performance_attributes(
+        [
+            SimpleNamespace(
+                perf_signals=compute_ride_performance_signals(
+                    {
+                        "time": {"data": [float(t) for t in range(0, 2400, 5)]},
+                        "watts": {"data": [250.0] * 480},
+                    }
+                ),
+                ftp_used=250,
+                activity_date=NOW.date().isoformat(),
+            )
+        ],
+        now=NOW,
+    )
+    fresh = attributes["ftp"]["confidence"]
+
+    stale = ami.infer_performance_attributes(
+        [
+            SimpleNamespace(
+                perf_signals=compute_ride_performance_signals(
+                    {
+                        "time": {"data": [float(t) for t in range(0, 2400, 5)]},
+                        "watts": {"data": [250.0] * 480},
+                    }
+                ),
+                ftp_used=250,
+                activity_date="2026-01-01",
+            )
+        ],
+        now=NOW,
+    )["ftp"]["confidence"]
+    assert fresh > stale
+
+
+def test_an_unreadable_speed_curve_contributes_nothing_to_the_envelope():
+    """A stored blob is whatever an older version wrote; read it defensively."""
+    junk = [
+        SimpleNamespace(
+            perf_signals={
+                "sport": run_model.RUN_SIGNALS_SPORT,
+                "gap_speed_curve": "not a curve",
+            },
+            ftp_used=None,
+            activity_date="2026-10-01",
+        ),
+        SimpleNamespace(
+            perf_signals={
+                "sport": run_model.RUN_SIGNALS_SPORT,
+                "speed_curve": {"5": "fast", "10": None, "20": True, "oops": 4.0},
+            },
+            ftp_used=None,
+            activity_date="2026-10-01",
+        ),
+    ]
+    attributes = ami.infer_performance_attributes(junk, now=NOW)
+    assert attributes["critical_speed"]["estimate"] is None
+    assert attributes["critical_speed"]["score"] == "unknown"
+
+
+def test_the_envelope_takes_each_durations_best_across_runs():
+    """Two runs, each strongest at a different duration, make one envelope."""
+    short = {str(int(m)): round(_envelope_curve(m), 3) for m in (2, 3)}
+    long = {str(int(m)): round(_envelope_curve(m), 3) for m in (10, 20)}
+    attributes = ami.infer_performance_attributes(
+        [
+            SimpleNamespace(
+                perf_signals={"sport": run_model.RUN_SIGNALS_SPORT, "speed_curve": short},
+                ftp_used=None,
+                activity_date="2026-10-02",
+            ),
+            SimpleNamespace(
+                perf_signals={"sport": run_model.RUN_SIGNALS_SPORT, "speed_curve": long},
+                ftp_used=None,
+                activity_date="2026-10-01",
+            ),
+        ],
+        now=NOW,
+    )
+    assert attributes["critical_speed"]["estimate"] == pytest.approx(4.0, abs=0.05)
+    assert "2 run(s)" in attributes["critical_speed"]["evidence"][0]

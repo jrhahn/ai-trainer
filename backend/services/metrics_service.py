@@ -17,7 +17,7 @@ import models
 from services import assessment_pipeline, plan_compliance, run_model
 from services.analysis import compute_ride_tss
 from services.fitness_ledger import LoadLedger, ledger_sport
-from services.training_load import LOAD_SOURCE_POWER
+from services.training_load import LOAD_SOURCE_PACE, LOAD_SOURCE_POWER
 
 logger = logging.getLogger(__name__)
 
@@ -259,8 +259,10 @@ def replay_load_chain(all_metrics: list[models.RideMetric]) -> None:
 def _recalculate_metric_chain(
     all_metrics: list[models.RideMetric],
     ftp_value: int,
+    threshold_pace_seconds_per_km: float | None = None,
 ) -> int:
     ftp_float = float(ftp_value)
+    threshold_speed = run_model.speed_from_pace_seconds(threshold_pace_seconds_per_km)
     updated = 0
 
     for metric in all_metrics:
@@ -277,9 +279,29 @@ def _recalculate_metric_chain(
         # row from power alone would silently delete the loads the ladder
         # established for sessions that never had a power meter, and put those
         # activities back to entering the chain as rest days (#579).
+        #
+        # The pace rung gets the same treatment from its own side (#716): a new
+        # threshold pace moves every rTSS figure, exactly as a new FTP moves
+        # every TSS one, and a runner who corrects their threshold and finds
+        # their history unchanged has been given a button that does not do what
+        # it says. Only rows the pace rung actually priced are touched, and only
+        # when a threshold pace is available — clearing the pace must not wipe a
+        # load, which would be #579 again by a different route.
+        pace_speed = (
+            run_model.mean_gap_speed(metric.perf_signals)
+            if metric.tss_source == LOAD_SOURCE_PACE and threshold_speed is not None
+            else None
+        )
         if metric.tss_source in (None, LOAD_SOURCE_POWER) and np_w and duration_s > 0:
             new_tss = compute_ride_tss(float(duration_s), float(np_w), ftp_float)
             new_source = LOAD_SOURCE_POWER if new_tss is not None else None
+        elif pace_speed is not None:
+            repriced = run_model.run_training_load(
+                duration_seconds=duration_s,
+                gap_speed_m_s=pace_speed,
+                threshold_speed_m_s=threshold_speed,
+            )
+            new_tss = repriced if repriced is not None else metric.tss
         else:
             new_tss = metric.tss
 
@@ -321,6 +343,11 @@ async def recalculate_metrics_for_user(
     When *ftp_override* is given the user's ``current_ftp`` profile field is
     updated before the recalculation so subsequent analyses use the new value.
 
+    Runs are re-priced against the athlete's current threshold pace at the same
+    time (#716). There is no pace override to match ``ftp_override``: a
+    threshold pace is set on the profile and this rebuild reads whatever is
+    there, which is the same thing the FTP path does when no override is given.
+
     Returns ``(updated_count, ftp_used)``.
 
     Raises ``ValueError`` when no FTP value is available.
@@ -339,7 +366,8 @@ async def recalculate_metrics_for_user(
         await db.flush()
         return 0, ftp_value
 
-    updated = _recalculate_metric_chain(all_metrics, ftp_value)
+    threshold_pace = await get_effective_threshold_pace(db, user)
+    updated = _recalculate_metric_chain(all_metrics, ftp_value, threshold_pace)
     _rescore_compliance_badges(all_metrics)
 
     await _rebuild_metric_snapshots(db, user, all_metrics, ftp_value)
