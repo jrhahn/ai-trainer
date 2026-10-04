@@ -224,9 +224,7 @@ async def _persist_and_adapt(
     # synced (#714). The sRPE rung has existed since #712 with nothing feeding
     # it, so a gym session with no heart-rate monitor was priced from a flat
     # per-hour assumption while the athlete had already said how hard it was.
-    reported_effort.annotate_rides_with_reported_effort(
-        rides, await crud.get_workout_logs(db, user.id)
-    )
+    await reported_effort.annotate_from_logs(db, user.id, rides)
 
     latest_metric = await crud.get_latest_ride_metric(db, user.id)
     seed_ledger = ledger_from_metric(latest_metric)

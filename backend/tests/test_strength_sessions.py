@@ -461,6 +461,205 @@ async def test_one_athlete_cannot_read_another_s_lifts(client, auth_headers):
     ).json()["points"] == []
 
 
+async def _gym_activity(date: str, *, duration_minutes: int = 58) -> None:
+    """An imported gym session priced from time on task — the weakest rung.
+
+    The state ``apply_reported_effort`` exists to improve on: an activity the
+    provider gave us with no power, no heart rate and no load of its own.
+    """
+    import crud
+    from database import async_session_maker
+
+    async with async_session_maker() as db:
+        from sqlalchemy import select
+
+        import models
+
+        user_id = await db.scalar(select(models.User.id))
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=int(date.replace("-", "")),
+            activity_date=date,
+            sport_type="WeightTraining",
+            duration_seconds=duration_minutes * 60,
+            tss=34.0,
+            tss_source="duration",
+            ctl_after=10.0,
+            atl_after=20.0,
+            tsb_after=-10.0,
+        )
+        await db.commit()
+
+
+async def _stored_load(date: str) -> tuple[float | None, str | None]:
+    from database import async_session_maker
+
+    async with async_session_maker() as db:
+        from sqlalchemy import select
+
+        import models
+
+        row = await db.scalar(
+            select(models.RideMetric).where(models.RideMetric.activity_date == date)
+        )
+        return (row.tss, row.tss_source) if row is not None else (None, None)
+
+
+@pytest.mark.asyncio
+async def test_logging_an_effort_prices_a_gym_session_the_provider_could_not(
+    client, auth_headers
+):
+    """The #712 rung finally firing, over HTTP."""
+    await _gym_activity("2026-10-12")
+    await _log(client, auth_headers, "2026-10-12", [])
+
+    load, source = await _stored_load("2026-10-12")
+    assert source == "rpe"
+    assert load is not None and load != 34.0
+
+
+@pytest.mark.asyncio
+async def test_correcting_the_effort_re_prices_the_session(client, auth_headers):
+    """An athlete who saves RPE 4 and then changes it to 2 has corrected the only
+    input this row has.
+
+    Found in review: the first re-price set ``tss_source`` to the sRPE source,
+    and the replaceable-source guard then declined every later one — so the row
+    kept the first answer forever and the stale load stayed in CTL/ATL. The guard
+    exists to stop an *opinion* displacing a *measurement*, which is a different
+    question from whether the opinion may be updated.
+    """
+    await _gym_activity("2026-10-13")
+
+    await client.post(
+        "/api/v1/users/me/workouts/2026-10-13",
+        headers=auth_headers,
+        json={
+            "feedback": {**GYM_FEEDBACK, "perceivedEffort": 5},
+            "sport": "strength",
+        },
+    )
+    hard_load, hard_source = await _stored_load("2026-10-13")
+
+    await client.post(
+        "/api/v1/users/me/workouts/2026-10-13",
+        headers=auth_headers,
+        json={
+            "feedback": {**GYM_FEEDBACK, "perceivedEffort": 2},
+            "sport": "strength",
+        },
+    )
+    easy_load, easy_source = await _stored_load("2026-10-13")
+
+    assert hard_source == easy_source == "rpe"
+    assert easy_load < hard_load
+
+
+@pytest.mark.asyncio
+async def test_an_effort_still_cannot_displace_a_measured_load(client, auth_headers):
+    """The other half of the same guard, which the fix above must not weaken."""
+    import crud
+    from database import async_session_maker
+
+    async with async_session_maker() as db:
+        from sqlalchemy import select
+
+        import models
+
+        user_id = await db.scalar(select(models.User.id))
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=20261014,
+            activity_date="2026-10-14",
+            sport_type="WeightTraining",
+            duration_seconds=58 * 60,
+            tss=41.0,
+            tss_source="heart_rate",
+        )
+        await db.commit()
+
+    await _log(client, auth_headers, "2026-10-14", [])
+
+    load, source = await _stored_load("2026-10-14")
+    assert (load, source) == (41.0, "heart_rate")
+
+
+@pytest.mark.asyncio
+async def test_a_mistyped_set_is_refused_rather_than_silently_dropped(
+    client, auth_headers
+):
+    """Found in review: the write *replaces*, so accepting a session minus the
+    row that could not be read would delete the athlete's previous sets and
+    answer "ok" for work they believe they saved.
+
+    A blank trailing row is still dropped silently — that one is normal.
+    """
+    await _log(
+        client,
+        auth_headers,
+        "2026-10-15",
+        [{"exercise": "Squat", "reps": 5, "weightKg": 100.0}],
+    )
+
+    response = await client.post(
+        "/api/v1/users/me/workouts/2026-10-15",
+        headers=auth_headers,
+        json=_session(
+            "2026-10-15",
+            [
+                {"exercise": "Squat", "reps": 5, "weightKg": 100.0},
+                # Named, repped, but no weight: a mistype, not a blank row.
+                {"exercise": "Deadlift", "reps": 5, "weightKg": 0.0},
+            ],
+        ),
+    )
+    assert response.status_code == 422
+
+    # And the earlier session survived the refusal.
+    body = (
+        await client.get(
+            "/api/v1/users/me/workouts/2026-10-15/strength", headers=auth_headers
+        )
+    ).json()
+    assert len(body["sets"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_absurd_trend_window_does_not_fault(client, auth_headers):
+    """Found in review: ``days`` is turned into a ``timedelta``, which overflows
+    on a large enough value and returned a 500.
+    """
+    response = await client.get(
+        "/api/v1/users/me/strength/e1rm/Squat?days=999999999999",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["points"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_client_supplied_sport_is_normalised(client, auth_headers):
+    """Found in review: the sport was stored exactly as sent. It goes through the
+    same gate a plan day's sport does, so it lands in the vocabulary the load
+    ladder and the ledger read rather than as free text.
+    """
+    await _log(client, auth_headers, "2026-10-16", [], sport="WeightTraining")
+
+    from database import async_session_maker
+
+    async with async_session_maker() as db:
+        from sqlalchemy import select
+
+        import models
+
+        row = await db.scalar(
+            select(models.WorkoutLog).where(models.WorkoutLog.date == "2026-10-16")
+        )
+        assert row is not None and row.sport_type == "strength"
+
+
 def test_the_gym_session_reuses_the_modality_that_already_existed():
     """#714 asks for the structured session to be wired to ``MODALITY_GYM``
     rather than for a parallel concept to be invented.

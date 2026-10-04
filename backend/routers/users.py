@@ -460,7 +460,14 @@ async def save_workout(
 ) -> dict:
     feedback = body.feedback
     slot = schemas.normalize_slot(body.slot)
-    sport = body.sport or await _planned_sport_for_session(db, current_user.id, date, slot)
+    # Normalised through the same gate a plan day's sport goes through, so a
+    # client-supplied sport lands in the shared vocabulary the load ladder and
+    # the ledger read (#710) instead of being stored as whatever was sent.
+    sport = (
+        schemas.normalise_plan_sport(body.sport)
+        if body.sport
+        else await _planned_sport_for_session(db, current_user.id, date, slot)
+    )
 
     await crud.upsert_workout_log(
         db,
@@ -478,21 +485,32 @@ async def save_workout(
     )
 
     if body.strength_sets is not None:
+        parsed_sets = []
+        unreadable = 0
+        for one_set in body.strength_sets:
+            payload = one_set.model_dump(by_alias=False)
+            parsed = strength_model.set_from_payload(payload)
+            if parsed is not None:
+                parsed_sets.append(parsed)
+            elif not strength_model.payload_is_blank(payload):
+                unreadable += 1
+
+        if unreadable:
+            # A blank trailing row is normal and is dropped. A row with content
+            # that cannot be read is the athlete having mistyped something, and
+            # accepting the session without it would delete their old sets (the
+            # write replaces) and answer "ok" for work they believe they saved.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"{unreadable} strength set(s) could not be read. Each set "
+                    "needs an exercise name, at least one rep and a positive "
+                    "weight."
+                ),
+            )
+
         await crud.replace_strength_sets(
-            db,
-            current_user.id,
-            date,
-            slot,
-            [
-                parsed
-                for parsed in (
-                    strength_model.set_from_payload(
-                        one_set.model_dump(by_alias=False)
-                    )
-                    for one_set in body.strength_sets
-                )
-                if parsed is not None
-            ],
+            db, current_user.id, date, slot, parsed_sets
         )
 
     # Logging effort is new evidence about what the session cost, so the session
@@ -642,7 +660,14 @@ async def get_e1rm_trend(
 
     normalized = strength_model.normalize_exercise_name(exercise)
     rows = await crud.get_strength_sets_for_exercise(
-        db, current_user.id, normalized, limit_days=max(1, days)
+        db,
+        current_user.id,
+        normalized,
+        # Clamped at both ends: the window is turned into a ``timedelta``, and an
+        # unbounded value from the query string overflows it into a 500. Ten
+        # years is past any athlete's logged history here, so the ceiling costs
+        # nothing real.
+        limit_days=max(1, min(int(days), 3650)),
     )
     points = strength_model.e1rm_trend(
         ((row.date, strength_model.set_from_row(row)) for row in rows),
@@ -2225,6 +2250,9 @@ async def _store_fit_import(
     latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
     ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
     ride_input = imported_activity.to_ride_input()
+    # A .fit upload of a gym session is priced the same way as an imported one:
+    # from the effort the athlete logged for it, where they logged one (#714).
+    await reported_effort.annotate_from_logs(db, current_user.id, [ride_input])
     metrics_chain = build_ride_metrics_chain(
         [ride_input],
         ftp_for_chain,

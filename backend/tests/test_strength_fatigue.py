@@ -254,6 +254,66 @@ def test_sport_matching_uses_one_vocabulary(logged, stored, expected):
 # ---------------------------------------------------------------------------
 
 
+def test_every_chain_caller_feeds_the_reported_effort():
+    """Found in review: the feeder was wired into one of five callers.
+
+    Every path that builds the chain re-derives each session's load from the ride
+    inputs it is handed, so a caller that does not annotate prices a gym session
+    from time on task again — and silently discards a re-price
+    ``apply_reported_effort`` had already made. One missed caller is enough for
+    the athlete's answer to come and go depending on which import ran last, which
+    is worse than it never having worked.
+
+    Asserted structurally rather than by testing five paths, because the failure
+    mode is *a new sixth caller* and no behavioural test of today's five would
+    catch that.
+    """
+    import pathlib
+
+    backend = pathlib.Path(__file__).resolve().parent.parent
+    missing: list[str] = []
+    for path in sorted(backend.rglob("*.py")):
+        parts = set(path.parts)
+        if parts & {"tests", "alembic", ".venv"}:
+            continue
+        source = path.read_text()
+        if "build_ride_metrics_chain(" not in source:
+            continue
+        if path.name == "analysis.py":
+            continue  # where it is defined
+        if "annotate_from_logs" not in source:
+            missing.append(str(path.relative_to(backend)))
+
+    assert not missing, (
+        "these build the load chain without feeding it the athlete's logged "
+        f"effort (#714): {missing}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "blank"),
+    [
+        ({}, True),
+        ({"exercise": "", "reps": 0, "weight_kg": 0.0}, True),
+        ({"exercise": "   "}, True),
+        # Some content, but not enough to read: a mistype, not an empty row.
+        ({"exercise": "Deadlift", "reps": 5, "weight_kg": 0.0}, False),
+        ({"exercise": "Squat"}, False),
+        ({"reps": 5}, False),
+        ({"exercise": "", "rir": 2}, False),
+    ],
+)
+def test_a_blank_row_is_told_apart_from_a_mistyped_one(payload, blank):
+    """Found in review: both used to return ``None`` from ``set_from_payload``
+    and both were dropped. Since the write *replaces*, dropping a mistyped row
+    deleted the athlete's previous sets and answered "ok" for work they believe
+    they saved. A genuinely empty trailing row is still dropped silently.
+    """
+    from services.strength_model import payload_is_blank
+
+    assert payload_is_blank(payload) is blank
+
+
 class _Row:
     def __init__(self, date: str, sport: str, tss: float | None):
         self.activity_date = date

@@ -20,6 +20,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
+from services import reported_effort
 from services.fitness_ledger import LoadLedger, ledger_from_row
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
@@ -471,6 +472,13 @@ async def _run_import_background(
                 _import_progress[user_id]["processed"] = idx + 1
 
         # --- Build chain and persist in batches ---
+        # The athlete's own session-RPE, where they logged one (#714). A rebuild
+        # re-derives every load from these ride inputs, so without this a
+        # full-history import would price each gym session from time on task again
+        # and discard the efforts already applied.
+        async with async_session_maker() as db:
+            await reported_effort.annotate_from_logs(db, user_id, rides)
+
         metrics_chain, failed_metrics = _build_metrics_chain_resilient(
             rides,
             ftp,

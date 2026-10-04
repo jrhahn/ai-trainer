@@ -316,13 +316,33 @@ def normalize_exercise_name(name: str | None) -> str:
     return " ".join((name or "").strip().casefold().split())
 
 
+def payload_is_blank(payload: Mapping[str, object]) -> bool:
+    """Whether this row says nothing at all — an empty trailing form row.
+
+    The distinction that keeps :func:`set_from_payload`'s ``None`` from being two
+    different answers. A blank row is normal and is dropped silently; a row with
+    *some* content that still cannot be read is the athlete having mistyped
+    something, and silently dropping that one loses work they believe they
+    saved. Callers refuse the request for the second case.
+    """
+    exercise = payload.get("exercise")
+    return not (
+        (isinstance(exercise, str) and exercise.strip())
+        or _non_negative_int(payload.get("reps"))
+        or _positive(payload.get("weight_kg") or payload.get("weightKg"))
+        or _non_negative_int(payload.get("rir")) is not None
+        or _positive(payload.get("rpe")) is not None
+    )
+
+
 def set_from_payload(payload: Mapping[str, object]) -> StrengthSet | None:
-    """Read one logged set from a request body, or ``None`` if it says nothing.
+    """Read one logged set from a request body, or ``None`` if it cannot be read.
 
     Validation lives here rather than in the schema because "this set is not
     loggable" and "this request is malformed" are different answers: a form that
     submits an empty trailing row is normal, and rejecting the whole session for
-    it would lose the sets the athlete did fill in.
+    it would lose the sets the athlete did fill in. Use
+    :func:`payload_is_blank` to tell an empty row from a mistyped one.
     """
     exercise = normalize_exercise_name(
         payload.get("exercise") if isinstance(payload.get("exercise"), str) else None
