@@ -1,0 +1,63 @@
+NOTICE — Authorship and ownership
+=================================
+
+Statement recorded on 2026-10-05 by Jürgen Hahn.
+
+Authorship
+----------
+
+AI Trainer is the personal work of Jürgen Hahn <mail.jhahn@gmail.com>.
+
+It was conceived, designed, and written outside of any employment, on the
+author's own time and using the author's own hardware and accounts. No
+employer of the author commissioned this project, assigned it, directed its
+development, or contributed resources to it. It is not related to the subject
+matter of the author's employment.
+
+Git author addresses
+--------------------
+
+Part of this repository's commit history carries the author address
+`juergen.hahn@core-sensing.de` instead of the author's personal address.
+
+This is a Git misconfiguration, not a statement about ownership. The address
+belonged to an employer of the author at the time and was left configured
+globally on a shared workstation, so it was applied to commits in this
+repository as well as to unrelated work. Commits bearing that address were
+written by the same author, on the same personal time and equipment, as every
+other commit here.
+
+The history has deliberately not been rewritten: the record is left intact and
+this statement is recorded instead. The record supports the above. Of the 1285
+commits in this repository as of this date, 666 (52%) were authored after 19:00
+and 429 (33%) on a Saturday or Sunday; 235 (18%) fall within Monday-to-Friday
+09:00-17:00. The 181 commits carrying the `core-sensing.de` address are
+distributed across weekday and time of day in the same proportion as the
+repository as a whole — also 18% within those hours. The address correlates with
+nothing, which is the signature of a misconfigured global Git identity.
+
+As of this date the repository's local Git configuration pins the author
+identity to the personal address, so the misconfiguration cannot recur.
+
+Other contributors
+------------------
+
+No other natural person has contributed to this repository.
+
+Commits authored by `copilot-swe-agent[bot]` and `dependabot[bot]` are machine
+generated — code suggestions accepted by the author and automated dependency
+version bumps respectively. They introduce no third-party authorship.
+
+Third-party components
+----------------------
+
+This project depends on third-party open source libraries, each under its own
+license, declared in `backend/pyproject.toml` and `frontend/package.json`. This
+notice concerns only the code authored in this repository.
+
+Licensing
+---------
+
+See LICENSE for the terms under which this code is distributed. The author is
+the sole copyright holder and reserves the right to license this work under
+other terms.
