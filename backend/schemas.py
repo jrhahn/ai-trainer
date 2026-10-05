@@ -1661,6 +1661,46 @@ def day_slot(day: Any) -> int:
     return normalize_slot(getattr(day, "slot", None))
 
 
+def day_field(day: Any, *names: str, default: Any = None) -> Any:
+    """Read one field off a plan day, accepting either key spelling.
+
+    ``PlanDay`` is lenient on input by design (#368, #422): a day may arrive
+    camelCase from an LLM write or snake_case from a stored row, so every reader
+    outside this model has to try both. The widespread idiom for that was
+
+        day.get("durationMinutes") or day.get("duration_minutes") or 0
+
+    and it is unsound whenever the canonical value is legitimately falsy. A day
+    blanked to ``durationMinutes: 0`` that still carries a stale
+    ``duration_minutes: 90`` reads back as a 90-minute session, because ``0 or
+    90`` is 90 — which is how a gate came to judge its own output in violation
+    of the constraint it had just enforced (ai-trainer-ops#29).
+
+    So this resolves on **presence**, in the order given, and only treats
+    ``None`` as absent. ``0``, ``""`` and ``False`` are answers.
+
+    Mirrors what :func:`day_slot` already does for ``slot``/``session_slot``;
+    this is the same rule for every other field.
+    """
+    if isinstance(day, PlanDay):
+        for name in names:
+            if hasattr(day, name):
+                value = getattr(day, name)
+                if value is not None:
+                    return value
+        return default
+    if not isinstance(day, dict):
+        for name in names:
+            value = getattr(day, name, None)
+            if value is not None:
+                return value
+        return default
+    for name in names:
+        if name in day and day[name] is not None:
+            return day[name]
+    return default
+
+
 def session_key(day: Any) -> tuple[str, int]:
     """The unique identity of a plan session: ``(date, slot)`` (#496).
 

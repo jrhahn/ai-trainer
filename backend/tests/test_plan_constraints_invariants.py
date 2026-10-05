@@ -35,7 +35,6 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -146,14 +145,6 @@ _SETTINGS = settings(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defect: the gate writes camelCase and leaves the snake_case twin in "
-    "place, so a rewritten day carries two contradicting answers. Because 0 is "
-    "falsy, the module's own `durationMinutes or duration_minutes` reader then "
-    "returns the stale 90 instead of the blanked 0, and the gate judges its own "
-    "output to still be in violation. See ai-trainer-ops#29.",
-)
 @_SETTINGS
 @given(plan=plans(), constraints=constraint_lists())
 def test_no_output_session_trains_on_an_unavailable_date(plan, constraints):
@@ -243,14 +234,6 @@ def test_days_on_unconstrained_dates_are_returned_untouched(plan, constraints):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defect: no_training only outranks required_workout on the first pass. "
-    "Once the day is blanked it is no longer `is_training`, so the second pass "
-    "skips the no_training branch and the required-workout coercion wins — a day "
-    "the athlete blocked comes back holding a 60-minute session. "
-    "See ai-trainer-ops#30.",
-)
 @_SETTINGS
 @given(plan=plans(), constraints=constraint_lists())
 def test_sanitising_twice_is_sanitising_once(plan, constraints):
@@ -270,14 +253,6 @@ def test_sanitising_twice_is_sanitising_once(plan, constraints):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defect: the gate writes camelCase and leaves the snake_case twin in "
-    "place, so a rewritten day carries two contradicting answers. Because 0 is "
-    "falsy, the module's own `durationMinutes or duration_minutes` reader then "
-    "returns the stale 90 instead of the blanked 0, and the gate judges its own "
-    "output to still be in violation. See ai-trainer-ops#29.",
-)
 @_SETTINGS
 @given(plan=plans(camel=True), constraints=constraint_lists())
 def test_behaviour_does_not_depend_on_key_spelling(plan, constraints):
@@ -307,14 +282,6 @@ def test_behaviour_does_not_depend_on_key_spelling(plan, constraints):
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defect: the gate writes camelCase and leaves the snake_case twin in "
-    "place, so a rewritten day carries two contradicting answers. Because 0 is "
-    "falsy, the module's own `durationMinutes or duration_minutes` reader then "
-    "returns the stale 90 instead of the blanked 0, and the gate judges its own "
-    "output to still be in violation. See ai-trainer-ops#29.",
-)
 @_SETTINGS
 @given(day=days(), constraints=constraint_lists())
 def test_a_sanitised_day_does_not_contradict_itself(day, constraints):
@@ -333,14 +300,6 @@ def test_a_sanitised_day_does_not_contradict_itself(day, constraints):
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defect: the gate writes camelCase and leaves the snake_case twin in "
-    "place, so a rewritten day carries two contradicting answers. Because 0 is "
-    "falsy, the module's own `durationMinutes or duration_minutes` reader then "
-    "returns the stale 90 instead of the blanked 0, and the gate judges its own "
-    "output to still be in violation. See ai-trainer-ops#29.",
-)
 @_SETTINGS
 @given(day=days(), constraints=constraint_lists())
 def test_violation_verdict_matches_what_the_gate_did(day, constraints):
