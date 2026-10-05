@@ -430,4 +430,94 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="100.0",
         tests=("tests/test_run_model.py",),
     ),
+    # --- How much running the athlete's legs have met (#717) ---------------
+    PolicyGuard(
+        target="services.run_durability:MAX_ACUTE_CHRONIC_RATIO",
+        decides=(
+            "how far above their own four-week running exposure a single 7-day "
+            "block may sit — the whole progression ceiling"
+        ),
+        # 100× is no ceiling at all: every running week passes, including the
+        # six hours prescribed to someone who has never run.
+        moved_to="100.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:MAX_WEEKLY_STEP_MINUTES",
+        decides=(
+            "whether the ceiling becomes more permissive the closer the athlete "
+            "gets to the volume where overuse injuries happen"
+        ),
+        # 10 000 min removes the cap, so a 600 min/week runner is licensed three
+        # further hours of impact in one week.
+        moved_to="10000.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:MIN_LONG_RUN_STEP_MINUTES",
+        decides="the smallest increase to a long run worth calling a progression",
+        # 0 min hands an athlete whose longest run is 20 minutes a 26-minute
+        # allowance, which is not a step anyone can execute.
+        moved_to="0.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:MAX_LONG_RUN_STEP_MINUTES",
+        decides=(
+            "how much may be added to the week's single most concentrated "
+            "exposure, which is not the same allowance as the week's total"
+        ),
+        # 10 000 min lets the long run grow by the full weekly step, so thirty
+        # minutes spread over three days and thirty added to one become equal.
+        moved_to="10000.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:BEGINNER_WEEKLY_MINUTES",
+        decides=(
+            "what a fit cyclist who has never run is allowed, which is the one "
+            "figure #717 exists to put in front of the planner"
+        ),
+        # 10 000 min hands a CTL-90 cyclist an unlimited running week — the exact
+        # failure the module was written to prevent.
+        moved_to="10000.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:BEGINNER_LONGEST_RUN_MINUTES",
+        decides="how long a single run may be for an athlete with no run history",
+        # 10 000 min lets the whole beginner allowance go into one session.
+        moved_to="10000.0",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:RUN_EXPOSURE_WINDOW_DAYS",
+        decides=(
+            "how far back running exposure is read, and therefore how fast a "
+            "lapse lowers the ceiling"
+        ),
+        # A year makes a block of running from eleven months ago current
+        # exposure, so a returning runner is treated as never having stopped.
+        moved_to="365",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:ROLLING_WINDOW_DAYS",
+        decides=(
+            "the span a planned running load is measured over — rolling, so a "
+            "block placed across a calendar week boundary is still one week"
+        ),
+        # 1 day measures each day alone, which is how a Sunday/Monday double
+        # becomes two compliant half-weeks.
+        moved_to="1",
+        tests=("tests/test_run_durability.py",),
+    ),
+    PolicyGuard(
+        target="services.run_durability:MAX_REPORTED_WINDOWS",
+        decides="how many overlapping views of one build-up the coach is shown",
+        # 100 states every window, so one block becomes a dozen near-identical
+        # lines and the coach stops reading them.
+        moved_to="100",
+        tests=("tests/test_run_durability.py",),
+    ),
 )
