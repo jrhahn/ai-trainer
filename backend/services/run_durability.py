@@ -544,11 +544,24 @@ def find_run_volume_excess(
     at today would let an automated write stack three more runs onto a week that
     is already at its limit and see nothing wrong.
 
-    Across that boundary each date is counted once and from one source: completed
-    minutes for dates before today, planned minutes for today and after. A run
-    completed this morning that is still on today's plan therefore counts once
-    rather than twice, which matters because the plan is where the ride↔plan match
-    lives and double counting would flag the athlete for training as instructed.
+    Across that boundary each date is counted once: completed minutes before
+    today, planned minutes after it, and **today whichever of the two is larger**.
+    Today needs that rule rather than one source or the other. Reading today from
+    the plan alone loses an ad-hoc run — one the athlete went out and did this
+    morning with nothing prescribed, or a run longer than the session it was
+    matched to — which is exposure their legs have taken and the window would not
+    see. Adding the two would double count the ordinary case, where the run on
+    today's plan and the run in today's history are the same run, and would flag
+    the athlete for training exactly as instructed.
+
+    The split between ``completed_minutes`` and the planned remainder is for
+    reporting only — "40 min of that already run" is worth saying — and does not
+    change the total. The residual imprecision is a deliberate floor rather than a
+    sum: an athlete who does a prescribed 90 min *and* an unplanned 20 min jog on
+    the same day is counted as 90, not 110. Preferring the larger figure to the
+    sum means this guard can under-count a genuine double day and never
+    over-counts one, and an over-count is what reverts a session nobody should
+    have lost.
 
     One finding per exceeding window, overlaps and all. The overlaps are real —
     seven different seven-day blocks can each be over — and collapsing them here
@@ -574,9 +587,17 @@ def find_run_volume_excess(
             if when < reference:
                 completed_total += exposure.minutes_by_date.get(when, 0.0)
                 continue
-            for session in planned.get(when, []):
-                sessions.append(session)
-                planned_total += session["minutes"]
+            day_sessions = planned.get(when, [])
+            # Listed whatever the arithmetic below decides, because these are the
+            # sessions the gate can still hand back.
+            sessions.extend(day_sessions)
+            prescribed = sum(session["minutes"] for session in day_sessions)
+            if when != reference:
+                planned_total += prescribed
+                continue
+            already_run = exposure.minutes_by_date.get(when, 0.0)
+            completed_total += already_run
+            planned_total += max(0.0, prescribed - already_run)
         # A window that starts before today and contains no completed running is
         # a shifted view of a window that starts today — same sessions, same
         # total, one more line in the prompt saying it. Only the windows where

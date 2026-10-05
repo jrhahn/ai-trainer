@@ -87,7 +87,7 @@ async def plan_writer_context(
 async def athlete_run_exposure(
     db,
     user_id: str,
-    today=None,
+    today,
     *,
     limit: int = run_durability.HISTORY_ROW_LIMIT,
 ) -> run_durability.RunExposure:
@@ -99,6 +99,13 @@ async def athlete_run_exposure(
     re-import leaves behind. A duplicated run would be counted twice, and the
     direction that errs in is the dangerous one: an inflated chronic figure raises
     the ceiling.
+
+    ``today`` is required, with no default. An absent reference date makes
+    ``run_exposure`` return an empty exposure, which is *not* the safe direction
+    it looks like: an empty exposure hands a 200 km-a-month runner the beginner
+    ceiling, and the gate then reverts perfectly good writes. A caller that forgot
+    it should fail loudly rather than quietly re-classify the athlete as a
+    beginner.
 
     Shared with the plan gate (``plan_pipeline._revert_new_run_overload``) so the
     figure the planner is given and the figure the gate enforces cannot drift —

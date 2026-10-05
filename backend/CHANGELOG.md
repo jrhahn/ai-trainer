@@ -40,8 +40,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Monday is one week of loading to the tissue and two compliant half-weeks to
     a calendar, which is the only arrangement that actually needed catching.
     Windows start six days *before* today, so running already completed this
-    week counts — each date counted once, from history before today and from the
-    plan today onwards.
+    week counts — each date counted once: history before today, the plan after
+    it, and **today whichever of the two is larger**. Today needs its own rule:
+    reading it from the plan alone loses an ad-hoc run, or one longer than the
+    session it was matched to, while adding the two double counts the ordinary
+    case where the run in today's history *is* the run on today's plan and would
+    flag the athlete for training exactly as instructed. Preferring the larger
+    figure to the sum means the guard can under-count a genuine double day and
+    never over-counts one — and an over-count is what reverts a session nobody
+    should have lost.
   - **Minutes, not kilometres.** Distance is reported wherever it is known (and
     marked when coverage is partial), but it is known only for runs that
     produced a usable stream, so governing on it would mean a ceiling that

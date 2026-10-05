@@ -241,6 +241,17 @@ def test_the_ceiling_cannot_read_a_fitness_figure():
         assert not any(forbidden in name for name in fields)
 
 
+def test_the_exposure_reader_insists_on_being_told_today():
+    """An absent reference date is not the safe direction it looks like.
+
+    ``run_exposure`` answers an empty exposure, which hands a 200 km-a-month
+    runner the beginner ceiling and makes the gate revert perfectly good writes.
+    A caller that forgot should fail loudly instead.
+    """
+    params = inspect.signature(plan_context.athlete_run_exposure).parameters
+    assert params["today"].default is inspect.Parameter.empty
+
+
 def test_a_fit_cyclist_who_has_never_run_is_capped_like_a_beginner():
     """The acceptance criterion, and the whole point of the module.
 
@@ -549,6 +560,51 @@ def test_running_already_done_this_week_counts_against_the_ceiling():
     assert max(f["completed_minutes"] for f in spanning) == pytest.approx(120.0)
     # One window holds both completed runs and both planned ones.
     assert max(f["planned_minutes"] for f in spanning) == pytest.approx(240.0)
+
+
+def test_an_ad_hoc_run_done_today_counts_against_the_ceiling():
+    """Today is read as whichever of history and plan is larger.
+
+    Reading today from the plan alone loses a run the athlete went out and did
+    this morning with nothing prescribed — exposure their legs have taken that
+    the window would not see.
+    """
+    rows = [_run_row(0, 70.0)]
+    exposure = run_durability.run_exposure(rows, TODAY)
+    ceiling = run_durability.run_volume_ceiling(exposure)
+    plan = [_plan_run(_in(2), 40)]
+    findings = run_durability.find_run_volume_excess(plan, exposure, ceiling, TODAY)
+    assert findings, "70 min this morning plus 40 planned is over a 60 min ceiling"
+    assert max(f["completed_minutes"] for f in findings) == pytest.approx(70.0)
+
+
+def test_a_run_matching_todays_plan_is_not_counted_twice():
+    """The ordinary case: the run in today's history *is* the run on today's plan.
+
+    Summing them would flag the athlete for training exactly as instructed.
+    """
+    rows = [_run_row(0, 50.0)]
+    exposure = run_durability.run_exposure(rows, TODAY)
+    ceiling = run_durability.run_volume_ceiling(exposure)
+    # A second run later in the week, so a window genuinely exceeds the ceiling
+    # and the assertion is about the total rather than about an empty list.
+    plan = [_plan_run(TODAY.isoformat(), 50), _plan_run(_in(3), 40)]
+    findings = run_durability.find_run_volume_excess(plan, exposure, ceiling, TODAY)
+    assert findings
+    assert max(f["planned_minutes"] for f in findings) == pytest.approx(90.0), (
+        "double counting today would read 140"
+    )
+
+
+def test_overshooting_todays_session_counts_what_was_actually_run():
+    """Prescribed 40, ran 90 — the legs took 90."""
+    rows = [_run_row(0, 90.0)]
+    exposure = run_durability.run_exposure(rows, TODAY)
+    ceiling = run_durability.run_volume_ceiling(exposure)
+    plan = [_plan_run(TODAY.isoformat(), 40)]
+    findings = run_durability.find_run_volume_excess(plan, exposure, ceiling, TODAY)
+    assert findings
+    assert max(f["planned_minutes"] for f in findings) == pytest.approx(90.0)
 
 
 def test_a_window_before_today_with_no_completed_running_is_not_reported_twice():
