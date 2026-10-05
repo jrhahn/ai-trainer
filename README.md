@@ -13,6 +13,30 @@ Train Like a Pro and your Google Gemini key in about 10 minutes.
 controls, what has to be configured, and the limitations that are known and
 accepted. Reporting a vulnerability: [SECURITY.md](SECURITY.md).
 
+## License: source available, not open source
+
+This code is published under the [Functional Source License](LICENSE)
+(`FSL-1.1-ALv2`), which is **source available**, not open source. The difference
+is deliberate and it is worth two sentences of your time.
+
+**Why it is published at all.** A coach that makes claims about your training
+and your health should be auditable. The physiological model here is
+deterministic and carries its evidence and its confidence with every number, and
+the point of that is lost if you have to take it on faith. So: read it, check it,
+disagree with it.
+
+**What you may do.** Read the code, modify it, and run your own instance for
+yourself — `for your internal use and access` is an explicitly permitted purpose.
+Non-commercial research and education too. Every version additionally becomes
+Apache 2.0 two years after its release, automatically and irrevocably.
+
+**What you may not do.** Offer it to others as a commercial product or service.
+That is the one thing reserved, because hosting it is how this is paid for.
+
+If you want to do something the license does not cover — running it for the
+athletes you coach, for instance — ask. The answer is often yes, and it has to be
+in writing to count.
+
 ## Repository structure
 
 ```
