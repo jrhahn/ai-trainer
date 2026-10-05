@@ -1662,11 +1662,11 @@ def day_slot(day: Any) -> int:
 
 
 def day_field(day: Any, *names: str, default: Any = None) -> Any:
-    """Read one field off a plan day, accepting either key spelling.
+    """Read one field off a plan-day **dict**, accepting either key spelling.
 
     ``PlanDay`` is lenient on input by design (#368, #422): a day may arrive
     camelCase from an LLM write or snake_case from a stored row, so every reader
-    outside this model has to try both. The widespread idiom for that was
+    working on raw dicts has to try both. The widespread idiom for that was
 
         day.get("durationMinutes") or day.get("duration_minutes") or 0
 
@@ -1679,21 +1679,16 @@ def day_field(day: Any, *names: str, default: Any = None) -> Any:
     So this resolves on **presence**, in the order given, and only treats
     ``None`` as absent. ``0``, ``""`` and ``False`` are answers.
 
-    Mirrors what :func:`day_slot` already does for ``slot``/``session_slot``;
-    this is the same rule for every other field.
+    Same rule :func:`day_slot` applies to ``slot``/``session_slot``, generalised
+    to every other field — but deliberately *not* the same shape handling.
+    ``day_slot`` accepts a ``PlanDay`` because its callers hold one; this takes
+    dicts only, because spelling ambiguity is a property of raw dicts and a
+    ``PlanDay`` has none by construction. If you hold the model, read the
+    attribute. Accepting shapes no caller passes is how a reader ends up with an
+    untested branch that quietly disagrees with the tested one, which is the
+    class of defect this function exists to end.
     """
-    if isinstance(day, PlanDay):
-        for name in names:
-            if hasattr(day, name):
-                value = getattr(day, name)
-                if value is not None:
-                    return value
-        return default
     if not isinstance(day, dict):
-        for name in names:
-            value = getattr(day, name, None)
-            if value is not None:
-                return value
         return default
     for name in names:
         if name in day and day[name] is not None:
