@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
@@ -16,6 +16,7 @@ import HomeLocationSettings from '../components/HomeLocationSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
 import SetupGuideLink from '../components/SetupGuideLink'
 import { SETUP_GUIDE_SECTIONS } from '../utils/links'
+import { formatPaceFromSeconds, parsePaceToSeconds } from '../utils/pace'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
@@ -74,6 +75,7 @@ export default function SettingsPage() {
 
   const profileNameInput = userProfile?.name ?? ''
   const profileFtpInput = userProfile?.currentFTP != null ? String(userProfile.currentFTP) : ''
+  const profilePaceInput = formatPaceFromSeconds(userProfile?.thresholdPaceSecondsPerKm)
   const profileMaxHrInput = userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : ''
   const profileRestingHrInput = userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : ''
 
@@ -90,6 +92,12 @@ export default function SettingsPage() {
   const ftpInput = ftpDraft ?? profileFtpInput
   const [ftpSaving, setFtpSaving] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Running threshold-pace state (#716)
+  const [paceDraft, setPaceDraft] = useState<string | null>(null)
+  const paceInput = paceDraft ?? profilePaceInput
+  const [paceSaving, setPaceSaving] = useState(false)
+  const [paceMsg, setPaceMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Heart Rate settings state
   const [maxHrDraft, setMaxHrDraft] = useState<string | null>(null)
@@ -149,6 +157,28 @@ export default function SettingsPage() {
       setFtpMsg({ type: 'error', text: 'Failed to save FTP. Please try again.' })
     } finally {
       setFtpSaving(false)
+    }
+  }
+
+  const saveThresholdPace = async () => {
+    if (!authToken || !userProfile) return
+    const parsed = parsePaceToSeconds(paceInput)
+    if (parsed === null) {
+      setPaceMsg({ type: 'error', text: 'Enter a pace as minutes:seconds per km, e.g. 4:10.' })
+      return
+    }
+    setPaceSaving(true)
+    setPaceMsg(null)
+    try {
+      const updated = await updateCurrentUser(authToken, { thresholdPaceSecondsPerKm: parsed })
+      setUserProfile(updated.profile)
+      setPaceDraft(null)
+      setPaceMsg({ type: 'success', text: `Threshold pace updated to ${formatPaceFromSeconds(parsed)} /km.` })
+      setTimeout(() => setPaceMsg(null), 3000)
+    } catch {
+      setPaceMsg({ type: 'error', text: 'Failed to save threshold pace. Please try again.' })
+    } finally {
+      setPaceSaving(false)
     }
   }
 
@@ -465,6 +495,62 @@ export default function SettingsPage() {
           out, and the first person to go looking for it clicked "Sign Out"
           above instead. */}
       <SessionSettings />
+
+      {/* Running threshold pace — what FTP is to the bike (#716). */}
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+        <h2 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          The pace you could hold for about an hour. Runs are scored against it (rTSS) instead of
+          being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
+          we estimate it from your own maximal efforts — and say so rather than guess when there
+          are not enough of them.
+          {userProfile?.thresholdPaceSecondsPerKm != null && (
+            <span className="ml-1 font-medium text-gray-700">
+              Current threshold pace:{' '}
+              <span className="text-purple-700">{profilePaceInput} /km</span>
+            </span>
+          )}
+        </p>
+
+        {paceMsg && (
+          <div
+            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+              paceMsg.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {paceMsg.text}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <Footprints size={14} />
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label="Running threshold pace"
+              value={paceInput}
+              onChange={(e) => setPaceDraft(e.target.value)}
+              placeholder="e.g. 4:10"
+              className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+              min/km
+            </span>
+          </div>
+          <button
+            onClick={() => void saveThresholdPace()}
+            disabled={paceSaving || !paceInput.trim() || paceInput.trim() === profilePaceInput}
+            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+          >
+            <Save size={15} /> {paceSaving ? 'Saving…' : 'Save pace'}
+          </button>
+        </div>
+      </div>
 
       {/* FTP Management */}
       <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">

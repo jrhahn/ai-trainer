@@ -14,7 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
-from services import reported_effort
+from services import metrics_service, reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today
 from services.intervals_service import (
@@ -473,12 +473,18 @@ async def run_intervals_import(
             # loads, so the athlete's logged effort has to travel with the rides
             # (#714).
             await reported_effort.annotate_from_logs(db, user_id, rides)
+            threshold_pace = (
+                await metrics_service.get_effective_threshold_pace(db, chain_user)
+                if chain_user is not None
+                else None
+            )
         metrics_chain = build_ride_metrics_chain(
             rides,
             ftp,
             initial_ledger=ledger_from_metric(latest_metric),
             max_heart_rate=getattr(chain_user, "max_heart_rate", None),
             resting_heart_rate=getattr(chain_user, "resting_heart_rate", None),
+            threshold_pace_seconds_per_km=threshold_pace,
         )
         logger.info(
             "Intervals.icu history import mapped user=%s rides=%s metrics=%s failed=%s metric_ids=%s",

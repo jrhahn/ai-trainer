@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A failed pace save says so, and stops the spinner** (`src/pages/SettingsPage.tsx`,
+  #716) — the two paths the first cut of the card left untested: a rejected
+  request now shows "Failed to save threshold pace" with the button enabled
+  again, because a spinner that never stops is a field the athlete cannot
+  retry; and the card does not attempt a save before the profile has loaded.
+
+- **Running threshold pace is editable in Settings** (`src/pages/SettingsPage.tsx`,
+  `src/utils/pace.ts`, #716, epic #709) — entered and shown as `4:10`, stored as
+  a number of seconds. The parser is strict on purpose: a bare `4` is refused
+  rather than read as a four-second kilometre, and `4.17` is refused rather than
+  silently becoming four, because this one value is the reference every pace zone
+  and every rTSS figure is cut from. Left empty, the backend estimates it from
+  the athlete's own maximal efforts and says so when there are not enough of them.
+
 - **A prescribed gym session shows what to lift** (`src/components/WorkoutDetails.tsx`,
   `src/store/useAppStore.ts`, #714, epic #709) — a "Lifts" table alongside the
   interval breakdown, with exercise, sets × reps and intensity.

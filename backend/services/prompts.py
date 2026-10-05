@@ -9,13 +9,15 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from . import plan_compliance, untrusted_text
+from . import plan_compliance, run_model, untrusted_text
 from .activity_identity import (
     CYCLING_FAMILY,
+    SPORT_RUNNING,
     UNREADABLE_FAMILY,
     activity_family,
     activity_sport_type,
     power_model_applies,
+    training_sport,
 )
 from .fitness_ledger import ledger_sport
 from .interference import finding_statement
@@ -480,6 +482,123 @@ def power_zones_block(user_ftp: int | None) -> str:
     )
 
 
+def _activity_pace_seconds_per_km(activity: dict) -> float | None:
+    """A run's average pace from the provider's own figures, never recomputed.
+
+    Prefers ``average_speed`` (what the provider computed over the whole file)
+    and falls back to distance over moving time. A stream mean is deliberately
+    not an option here: the streams are downsampled, and re-averaging one is how
+    a ride came back described with a power figure 20 W off the provider's
+    (#466).
+    """
+    speed = activity.get("average_speed")
+    if isinstance(speed, (int, float)) and not isinstance(speed, bool) and speed > 0:
+        return 1000.0 / float(speed)
+    distance = activity.get("distance")
+    moving = activity.get("moving_time") or activity.get("elapsed_time")
+    if (
+        isinstance(distance, (int, float))
+        and not isinstance(distance, bool)
+        and isinstance(moving, (int, float))
+        and not isinstance(moving, bool)
+        and distance > 0
+        and moving > 0
+    ):
+        return float(moving) / (float(distance) / 1000.0)
+    return None
+
+
+def run_pace_block(
+    activities: list[dict],
+    threshold_pace_seconds_per_km: float | None = None,
+) -> str:
+    """Per-run pace, and the athlete's pace zones when a threshold is known.
+
+    The running half of what ``activity_power_metrics_block`` and
+    ``power_zones_block`` do for the bike, and gated the same way from the other
+    side (#716): a pace zone is cut from a *running* threshold, so it is as
+    meaningless for a ride as a watt zone is for a run. Both gates ask the
+    activities rather than the batch's nominal sport, because a mixed batch
+    needs whichever blocks its members earn.
+
+    Returns "" when no activity in the batch is a run.
+    """
+    lines: list[str] = []
+    has_run = False
+    for activity in activities:
+        if training_sport(activity_sport_type(activity)) != SPORT_RUNNING:
+            continue
+        has_run = True
+        pace = _activity_pace_seconds_per_km(activity)
+        if pace is None:
+            continue
+        parts = [f"average pace {run_model.format_pace(1000.0 / pace)}"]
+        distance = activity.get("distance")
+        if isinstance(distance, (int, float)) and not isinstance(distance, bool):
+            parts.append(f"distance {float(distance) / 1000.0:.1f} km")
+        gain = activity.get("total_elevation_gain")
+        if isinstance(gain, (int, float)) and not isinstance(gain, bool) and gain > 0:
+            # Named as the reason a pace is slower than it looks, so the coach
+            # has the fact rather than inferring a bad day from the number.
+            parts.append(f"elevation +{round(float(gain))} m")
+        name = untrusted_text.mark(activity.get("name")) or (
+            activity.get("type") or "run"
+        )
+        day = (activity.get("start_date_local") or activity.get("start_date") or "")[
+            :10
+        ]
+        label = f"{name} ({day})" if day else str(name)
+        lines.append(f"- {label}: " + " · ".join(parts))
+
+    # A run whose pace we could not read still earns the zones and the
+    # instruction, so ``has_run`` is tracked separately from ``lines``.
+    if not has_run:
+        return ""
+
+    block = ""
+    if lines:
+        block += (
+            "\n\nPer-run pace (authoritative — cite these verbatim, always as "
+            "min:sec per km, never as a decimal and never a bare number):\n"
+            + "\n".join(lines)
+        )
+
+    threshold_speed = run_model.speed_from_pace_seconds(threshold_pace_seconds_per_km)
+    if threshold_speed is None:
+        # Saying so is the point. Without it the coach fills the silence with a
+        # pace judgement of its own, and an invented threshold is exactly what
+        # the Critical Speed fit refuses to supply (#716).
+        return block + (
+            "\n\nNo running threshold pace is established for this athlete, so "
+            "do not characterise a run's pace as easy, threshold or hard, and do "
+            "not state or imply a pace zone."
+        )
+
+    zones = run_model.pace_zone_boundaries(threshold_speed)
+    rendered: list[str] = []
+    for zone in zones:
+        fast, slow = zone["fast_pace_seconds_per_km"], zone["slow_pace_seconds_per_km"]
+        if slow is None:
+            span = f"slower than {run_model.format_pace(1000.0 / fast)}"
+        elif fast is None:
+            span = f"faster than {run_model.format_pace(1000.0 / slow)}"
+        else:
+            span = (
+                f"{run_model.format_pace(1000.0 / slow)} – "
+                f"{run_model.format_pace(1000.0 / fast)}"
+            )
+        rendered.append(f"{zone['zone']} {zone['name']} {span}")
+    threshold = run_model.format_pace(threshold_speed)
+    return block + (
+        f"\n\nYour pace zones at a threshold pace of {threshold}: "
+        + " · ".join(rendered)
+        + ". Characterise a run's intensity only against these boundaries, and "
+        "cite the boundary alongside the pace. A pace on a hilly run is slower "
+        "than the same effort on the flat, so do not read a slow pace with "
+        "elevation gain as a drop in form."
+    )
+
+
 def _time_in_zone_summary(tiz: dict | None) -> str:
     """Compact 'Z2 210 min · Z3 15 min' summary; "" when no zone has time."""
     if not tiz:
@@ -565,6 +684,7 @@ def analyse_activities_user(
     timezone_name: str | None = None,
     user_ftp: int | None = None,
     time_in_zone_by_id: dict[str, dict] | None = None,
+    threshold_pace_seconds_per_km: float | None = None,
 ) -> str:
     sport_key = sport_type.lower()
     is_running = sport_key in ("running", "run")
@@ -610,6 +730,8 @@ def analyse_activities_user(
         power_model_applies(activity_sport_type(activity)) for activity in activities
     )
     zones_block = power_zones_block(user_ftp) if has_power_sport else ""
+    # The running side, gated on its own sport for the same reason (#716).
+    pace_block = run_pace_block(activities, threshold_pace_seconds_per_km)
     zone_guidance = (
         ""
         if not has_power_sport
@@ -628,6 +750,7 @@ def analyse_activities_user(
         f"Last {len(activities)} {activities_noun}:\n{json.dumps(dump_activities, indent=2)}"
         f"{metrics_block}"
         f"{zones_block}"
+        f"{pace_block}"
         f"{computed_section}"
         f"{ride_analyses_section}"
         f"{plan_section}\n\n"

@@ -20,6 +20,7 @@ from database import async_session_maker, get_db
 from services import ai_service
 from services import athlete_model_inference
 from services import freshness_allocation
+from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
@@ -678,6 +679,11 @@ async def analyse_activities(
                 user_ftp=body.current_ftp
                 or (int(current_user.current_ftp) if current_user.current_ftp else None),
                 timezone_name=_request_timezone(request),
+                threshold_pace_seconds_per_km=(
+                    await metrics_service.get_effective_threshold_pace(
+                        db, current_user
+                    )
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(
@@ -804,6 +810,11 @@ async def analyse_activities(
                 initial_ledger=seed_ledger,
                 max_heart_rate=current_user.max_heart_rate,
                 resting_heart_rate=current_user.resting_heart_rate,
+                threshold_pace_seconds_per_km=(
+                    await metrics_service.get_effective_threshold_pace(
+                        db, current_user
+                    )
+                ),
             )
             ride_meta_by_id = {r["strava_activity_id"]: r for r in rides_input}
             for metric in metrics_chain:

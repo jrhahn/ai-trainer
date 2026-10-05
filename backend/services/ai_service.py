@@ -400,6 +400,7 @@ async def analyse_strava_activities(
     training_plan: list[dict] | None = None,
     user_ftp: int | None = None,
     timezone_name: str | None = None,
+    threshold_pace_seconds_per_km: float | None = None,
 ) -> dict:
     # The batch's primary sport, which is what the prose is written about.
     sport_type = _primary_sport_type(activities, fallback=sport_type)
@@ -517,6 +518,7 @@ async def analyse_strava_activities(
         timezone_name=timezone_name,
         user_ftp=user_ftp,
         time_in_zone_by_id=time_in_zone_by_id,
+        threshold_pace_seconds_per_km=threshold_pace_seconds_per_km,
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)

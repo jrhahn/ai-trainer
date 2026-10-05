@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 
-from services import ride_purpose_question
+from services import ride_purpose_question, run_model
 from services.activity_identity import (
     CYCLING_SPORT_TYPES,
     SPORT_CYCLING,
@@ -53,6 +53,12 @@ MAX_HR_MIN_BPM = 120
 MAX_HR_MAX_BPM = 230
 RESTING_HR_MIN_BPM = 25
 RESTING_HR_MAX_BPM = 120
+# Running threshold pace, seconds per kilometre (#716). 2:00/km is faster than
+# the world record for any distance beyond 800 m and 15:00/km is slower than
+# walking, so anything outside is a typo or a unit mix-up — most likely a pace
+# per mile pasted into a per-kilometre field.
+THRESHOLD_PACE_MIN_SECONDS_PER_KM = 120.0
+THRESHOLD_PACE_MAX_SECONDS_PER_KM = 900.0
 
 
 def _to_camel(name: str) -> str:
@@ -300,6 +306,13 @@ class UserResponse(CamelModel):
     max_heart_rate: Optional[int] = None
     resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
+    threshold_pace_seconds_per_km: Optional[float] = None
+    """The athlete's running threshold pace in seconds per kilometre (#716).
+
+    What ``current_ftp`` is to the bike. ``null`` means they have not set one,
+    in which case the Critical Speed fit over their run history prices their
+    runs when it is confident enough — this field only ever holds what the
+    athlete said."""
     fitness_level: Optional[str] = None
     ai_provider: str = "openai"
     consumed_tokens: int = 0
@@ -338,6 +351,11 @@ class UpdateProfileRequest(CamelModel):
     )
     current_ftp: Optional[int] = Field(
         default=None, ge=FTP_MIN_WATTS, le=FTP_MAX_WATTS
+    )
+    threshold_pace_seconds_per_km: Optional[float] = Field(
+        default=None,
+        ge=THRESHOLD_PACE_MIN_SECONDS_PER_KM,
+        le=THRESHOLD_PACE_MAX_SECONDS_PER_KM,
     )
     fitness_level: Optional[str] = None
     ai_provider: Optional[str] = None
@@ -1462,6 +1480,13 @@ class UserProfileSchema(CamelModel):
     max_heart_rate: Optional[int] = None
     resting_heart_rate: Optional[int] = None
     current_ftp: Optional[int] = None
+    threshold_pace: Optional[str] = None
+    """The athlete's running threshold pace, already rendered as ``"4:10 /km"``.
+
+    A string where ``UserResponse`` carries the number, because this schema's
+    only consumers are prompt payloads: every call site dumps it into JSON the
+    coach reads, and a bare ``250`` there is the unlabelled figure #467 and #716
+    both forbid. ``None`` when the athlete has not set a threshold pace."""
     fitness_level: str
 
     @classmethod
@@ -1479,6 +1504,9 @@ class UserProfileSchema(CamelModel):
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,
             current_ftp=user.current_ftp,
+            threshold_pace=run_model.format_pace(
+                run_model.speed_from_pace_seconds(user.threshold_pace_seconds_per_km)
+            ),
             fitness_level=user.fitness_level or "",
         )
 

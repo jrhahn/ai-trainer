@@ -345,4 +345,89 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="{'running': 1.0, 'cycling': 1.0}",
         tests=("tests/test_interference_guards.py",),
     ),
+    # --- How fast the athlete is, and what that costs them (#716) ----------
+    PolicyGuard(
+        target="services.run_model:THRESHOLD_FRACTION_OF_CRITICAL_SPEED",
+        decides=(
+            "the reference every rTSS figure and every pace zone is cut from — "
+            "Critical Speed is a ~30 min pace, threshold pace is the hour"
+        ),
+        # Equal to CS: makes every rTSS figure ~8 % too small, and every zone
+        # boundary too fast, while still looking entirely plausible.
+        moved_to="1.0",
+        tests=("tests/test_run_model.py", "tests/test_running_pace_model.py"),
+    ),
+    PolicyGuard(
+        target="services.run_model:MIN_CS_SPAN_MINUTES",
+        decides=(
+            "how far apart two maximal efforts must sit before a Critical Speed "
+            "fit over them means anything"
+        ),
+        # 0 min accepts three points crowded into a minute, where D′ is
+        # invented by rounding error.
+        moved_to="0.0",
+        tests=("tests/test_run_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:MAX_CS_SPEED_RESIDUAL",
+        decides=(
+            "whether the fitted hyperbola actually passes through the athlete's "
+            "own efforts, which the usual r-squared cannot tell"
+        ),
+        # A residual bound of 100 % of speed accepts any curve at all.
+        moved_to="1.0",
+        tests=("tests/test_run_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:MIN_CS_CURVE_DECLINE",
+        decides=(
+            "whether the pace–duration envelope descended, i.e. whether the short "
+            "effort was maximal at all"
+        ),
+        # 1,0 accepts a flat curve, which puts CS above threshold.
+        moved_to="1.0",
+        tests=("tests/test_run_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:MIN_GRADE_COST_FACTOR",
+        decides=(
+            "how much of a descent's cost grade adjustment is allowed to forgive, "
+            "given that Minetti measured oxygen uptake and not eccentric load"
+        ),
+        # Raw Minetti reaches ~0,55; a floor at 0,1 prices a long descent as
+        # very nearly free.
+        moved_to="0.1",
+        tests=("tests/test_run_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:GAP_SEGMENT_METRES",
+        decides=(
+            "over what distance a gradient is computed, and therefore whether GPS "
+            "altitude noise is smoothed or amplified"
+        ),
+        # Per-sample grade: one metre of wobble over three metres of running
+        # reads as a 33 % climb.
+        moved_to="0.0",
+        tests=("tests/test_run_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:MIN_CS_CONFIDENCE_FOR_LOAD",
+        decides=(
+            "how good the Critical Speed fit has to be before a threshold pace "
+            "derived from it is allowed to price the athlete's runs"
+        ),
+        # 0,0 lets any fit at all set the athlete's whole load history.
+        moved_to="0.0",
+        tests=("tests/test_running_pace_model.py",),
+    ),
+    PolicyGuard(
+        target="services.run_model:MAX_RUN_INTENSITY_FACTOR",
+        decides=(
+            "the point past which a run's pace is a GPS artefact rather than a "
+            "very fast session"
+        ),
+        # 100× lets one stream artefact spike ATL.
+        moved_to="100.0",
+        tests=("tests/test_run_model.py",),
+    ),
 )

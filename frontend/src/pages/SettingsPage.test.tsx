@@ -211,6 +211,81 @@ describe('SettingsPage', () => {
     expect(within(hrSection).getByText(/188 bpm/i)).toBeInTheDocument()
   })
 
+  it('shows a stored threshold pace as minutes and seconds, never as a decimal', () => {
+    useAppStore.setState({
+      userProfile: { ...baseProfile, thresholdPaceSecondsPerKm: 250 },
+    })
+
+    setup()
+
+    const paceSection = screen
+      .getByRole('heading', { name: /Running Threshold Pace/i })
+      .closest('div')!
+    expect(within(paceSection).getByDisplayValue('4:10')).toBeInTheDocument()
+    expect(within(paceSection).queryByDisplayValue('250')).not.toBeInTheDocument()
+    expect(within(paceSection).getByRole('button', { name: /Save pace/i })).toBeDisabled()
+  })
+
+  it('saves a threshold pace as a number of seconds', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile } })
+    mockUpdateCurrentUser.mockResolvedValue({
+      profile: { ...baseProfile, thresholdPaceSecondsPerKm: 245 },
+      ftpPlausibilityWarning: null,
+    })
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4:05')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), {
+        thresholdPaceSecondsPerKm: 245,
+      })
+    })
+  })
+
+  it('reports a failed pace save rather than leaving the button spinning', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile } })
+    mockUpdateCurrentUser.mockRejectedValue(new Error('network'))
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4:05')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    expect(await screen.findByText(/Failed to save threshold pace/i)).toBeInTheDocument()
+    // The spinner has to stop, or the athlete cannot retry.
+    expect(screen.getByRole('button', { name: /Save pace/i })).toBeEnabled()
+  })
+
+  it('does not attempt a pace save before the profile has loaded', async () => {
+    useAppStore.setState({ userProfile: null })
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4:05')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('refuses a pace that is not minutes and seconds instead of sending a guess', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile } })
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4.17')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    expect(await screen.findByText(/minutes:seconds per km/i)).toBeInTheDocument()
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
   it('shows the FTP plausibility warning when one is present', () => {
     useAppStore.setState({
       userProfile: { ...baseProfile, currentFTP: 300 },

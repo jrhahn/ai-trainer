@@ -19,22 +19,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from services.activity_identity import activity_family
+from services import run_model
+from services.activity_identity import (
+    SPORT_RUNNING,
+    activity_family,
+    training_sport,
+)
 
 # The rungs, strongest first. Stored verbatim in ``ride_metrics.tss_source``.
 LOAD_SOURCE_PROVIDER = "provider"
 LOAD_SOURCE_POWER = "power"
+LOAD_SOURCE_PACE = "pace"
 LOAD_SOURCE_HEART_RATE = "heart_rate"
 LOAD_SOURCE_RPE = "rpe"
 LOAD_SOURCE_DURATION = "duration"
 
-#: Rungs whose number came from a device rather than from an assumption.
-MEASURED_LOAD_SOURCES = frozenset({LOAD_SOURCE_PROVIDER, LOAD_SOURCE_POWER})
+# Rungs whose number came from a device rather than from an assumption. Pace
+# belongs here with power: a run's grade-adjusted speed against the athlete's
+# threshold pace is rTSS in the sense the athlete's own training software means
+# it, and labelling it an estimate would understate it exactly as calling a gym
+# session's figure "TSS" overstates that one (#579). Both rungs lean on a
+# threshold the athlete may not have tested — which is a question about the
+# reference, not about whether a device measured the effort.
+MEASURED_LOAD_SOURCES = frozenset(
+    {LOAD_SOURCE_PROVIDER, LOAD_SOURCE_POWER, LOAD_SOURCE_PACE}
+)
 
 #: Human-readable provenance, for prompts and anything else that shows a load.
 LOAD_SOURCE_LABELS = {
     LOAD_SOURCE_PROVIDER: "provider-computed",
     LOAD_SOURCE_POWER: "from power",
+    LOAD_SOURCE_PACE: "from pace",
     LOAD_SOURCE_HEART_RATE: "estimated from HR",
     LOAD_SOURCE_RPE: "from reported effort",
     LOAD_SOURCE_DURATION: "estimated from duration",
@@ -62,6 +77,7 @@ CONFIDENCE_LOW = "low"
 LOAD_SOURCE_CONFIDENCE = {
     LOAD_SOURCE_PROVIDER: CONFIDENCE_HIGH,
     LOAD_SOURCE_POWER: CONFIDENCE_HIGH,
+    LOAD_SOURCE_PACE: CONFIDENCE_HIGH,
     LOAD_SOURCE_HEART_RATE: CONFIDENCE_MEDIUM,
     LOAD_SOURCE_RPE: CONFIDENCE_MEDIUM,
     LOAD_SOURCE_DURATION: CONFIDENCE_LOW,
@@ -160,6 +176,10 @@ class LoadSignals:
     provider_load: float | int | None = None
     #: TSS from power against FTP. Only ever a cycling number (#711).
     power_tss: float | int | None = None
+    #: Mean grade-adjusted speed of a run, m/s. Only ever a running number.
+    gap_speed_m_s: float | int | None = None
+    #: The athlete's threshold pace as a speed, m/s — the rTSS reference.
+    threshold_speed_m_s: float | int | None = None
     avg_hr_bpm: float | int | None = None
     max_heart_rate: int | None = None
     resting_heart_rate: int | None = None
@@ -175,9 +195,16 @@ def session_load(signals: LoadSignals) -> TrainingLoad | None:
 
     1. the provider's own figure, computed for the sport it actually was;
     2. TSS from power against FTP — cycling only, by #711;
-    3. hrTSS from average heart rate;
-    4. session-RPE from the athlete's reported effort (Foster);
-    5. duration times an assumed intensity for the sport.
+    3. rTSS from grade-adjusted pace against threshold pace — running only (#716);
+    4. hrTSS from average heart rate;
+    5. session-RPE from the athlete's reported effort (Foster);
+    6. duration times an assumed intensity for the sport.
+
+    The two sport-specific rungs sit side by side at the same height and neither
+    can answer for the other's sport. They outrank heart rate for the same
+    reason: pace and power are measurements of what the athlete *did*, where
+    heart rate is a response to it, and that response moves with heat, caffeine,
+    altitude and sleep without the work changing at all.
 
     A lower rung is only consulted when every rung above it had nothing to say,
     so deriving a load can never overwrite a measured one. ``None`` when not even
@@ -192,6 +219,15 @@ def session_load(signals: LoadSignals) -> TrainingLoad | None:
     power = _positive(signals.power_tss)
     if power is not None:
         return TrainingLoad(round(power, 1), LOAD_SOURCE_POWER)
+
+    from_pace = pace_training_load(
+        sport_type=signals.sport_type,
+        duration_seconds=signals.duration_seconds,
+        gap_speed_m_s=signals.gap_speed_m_s,
+        threshold_speed_m_s=signals.threshold_speed_m_s,
+    )
+    if from_pace is not None:
+        return TrainingLoad(from_pace, LOAD_SOURCE_PACE)
 
     from_hr = hr_training_load(
         duration_seconds=signals.duration_seconds,
@@ -225,6 +261,30 @@ def _positive(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None
+
+
+def pace_training_load(
+    *,
+    sport_type: str | None,
+    duration_seconds: float | int | None,
+    gap_speed_m_s: float | int | None,
+    threshold_speed_m_s: float | int | None,
+) -> float | None:
+    """rTSS, but only for a run (#716). ``None`` for every other sport.
+
+    The gate is the mirror of ``power_model_applies`` (#711) and exists for the
+    same reason, from the other side: a threshold *pace* describes running and
+    nothing else, so a bike ride's speed against it is not an approximate
+    intensity, it is a number about a different quantity. A 35 km/h hour on the
+    flat would price as IF 1,3 against any runner's threshold.
+    """
+    if training_sport(sport_type) != SPORT_RUNNING:
+        return None
+    return run_model.run_training_load(
+        duration_seconds=duration_seconds,
+        gap_speed_m_s=gap_speed_m_s,
+        threshold_speed_m_s=threshold_speed_m_s,
+    )
 
 
 def hr_training_load(

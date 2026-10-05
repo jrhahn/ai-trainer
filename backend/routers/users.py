@@ -154,6 +154,7 @@ def _user_to_response(
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,
         current_ftp=user.current_ftp,
+        threshold_pace_seconds_per_km=user.threshold_pace_seconds_per_km,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
         consumed_tokens=user.consumed_tokens or 0,
@@ -2095,6 +2096,12 @@ def _parse_fit_activity(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitAc
     if watts and watt_times and len(watts) == len(watt_times):
         streams["watts"] = {"data": watts}
         streams["time"] = {"data": watt_times}
+    elif speeds and speed_times and len(speeds) == len(speed_times):
+        # A run has no power stream, so until #716 an uploaded run arrived with a
+        # speed stream and no time base at all — and a speed without a clock is
+        # not a pace. The speed samples' own timestamps become the primary time
+        # stream, which is also what aligns ``velocity_smooth`` with it.
+        streams["time"] = {"data": speed_times}
     if heart_rates:
         streams["heartrate"] = {"data": heart_rates}
         streams["heartrate_time"] = {"data": hr_times}
@@ -2259,6 +2266,9 @@ async def _store_fit_import(
         initial_ledger=ledger_from_metric(latest_metric),
         max_heart_rate=current_user.max_heart_rate,
         resting_heart_rate=current_user.resting_heart_rate,
+        threshold_pace_seconds_per_km=(
+            await metrics_service.get_effective_threshold_pace(db, current_user)
+        ),
     )
     if metrics_chain:
         metric = metrics_chain[0]

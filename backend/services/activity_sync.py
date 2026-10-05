@@ -19,7 +19,7 @@ from services.analysis import (
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )
-from services import reported_effort
+from services import metrics_service, reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
@@ -129,7 +129,15 @@ def _sanitize_strava_streams(streams: object) -> dict:
     if not isinstance(streams, dict):
         return {}
     cleaned: dict[str, dict[str, list]] = {}
-    for key in ("watts", "heartrate", "cadence", "velocity_smooth", "altitude", "time"):
+    for key in (
+        "watts",
+        "heartrate",
+        "cadence",
+        "velocity_smooth",
+        "altitude",
+        "distance",
+        "time",
+    ):
         stream_obj = streams.get(key)
         if not isinstance(stream_obj, dict):
             continue
@@ -242,6 +250,9 @@ async def _persist_and_adapt(
         initial_ledger=seed_ledger,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,
+        threshold_pace_seconds_per_km=(
+            await metrics_service.get_effective_threshold_pace(db, user)
+        ),
     )
     rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
     for metric in metrics_chain:
