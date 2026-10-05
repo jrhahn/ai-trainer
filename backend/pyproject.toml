@@ -45,6 +45,9 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
     "aiosqlite>=0.20.0",
+    # Property-based testing for the plan gates: the example tests cover the
+    # cases we thought of, these cover the ones we did not.
+    "hypothesis>=6.100.0",
 ]
 
 [tool.pytest.ini_options]
