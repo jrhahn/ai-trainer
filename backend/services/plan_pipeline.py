@@ -30,6 +30,8 @@ import schemas
 from services import interference
 from services import plan_coherence
 from services import plan_commitments
+from services import plan_context
+from services import run_durability
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
@@ -879,6 +881,108 @@ def _revert_new_interference(
     return result, reasons
 
 
+# Reverting one run can leave the week still over its ceiling, so the detection
+# repeats — and is bounded for the reason every other repeat here is: a plan still
+# over the ceiling after three reverts is not one more revert away from being
+# coachable, and grinding on would be an automated writer deleting a running
+# block the athlete may have asked for.
+_MAX_RUN_OVERLOAD_PASSES = 3
+
+_RUN_OVERLOAD_REVERTED = (
+    " The run was reverted to the duration the plan held before this write."
+)
+
+
+def _run_minutes_added(previous: dict | None, proposed: dict | None) -> float:
+    """How much running ``proposed`` adds to this session over ``previous``.
+
+    Negative or zero when the write left the session alone or made it shorter —
+    and that sign is load-bearing. A write that shortens Tuesday's run while
+    lengthening Saturday's puts Tuesday in the same overloaded window, and
+    "reverting" Tuesday would hand back the *longer* version and raise the week's
+    volume. The guard would then have made the thing it fired on worse.
+    """
+    before = run_durability.planned_run_minutes(previous) or 0.0
+    after = run_durability.planned_run_minutes(proposed) or 0.0
+    return after - before
+
+
+def _revert_new_run_overload(
+    merged: list[dict],
+    current_plan: list[dict],
+    today: str,
+    exposure: run_durability.RunExposure,
+) -> tuple[list[dict], dict[tuple[str, int], str]]:
+    """Undo a write that pushed running past what the athlete's legs have met (#717).
+
+    The same discipline as :func:`_revert_new_interference`: only an overload
+    *this write created*, only by restoring content the plan already held, and
+    never by deleting a session. A week that was already over the ceiling is not
+    this write's doing, and a run appended with no previous version is left in
+    place and reported to the coach — shortening it to fit would be the silent
+    clamp #717 explicitly rules out, and deleting it would be #651.
+
+    Which session is handed back is decided by two facts in order: the finding
+    with the largest excess goes first, and within it the longest run that this
+    write actually lengthened. The longest run is both the biggest contributor to
+    the excess and the most concentrated exposure in the window, so it is the one
+    revert that does the most to bring the week back.
+
+    Note what this guard cannot do, and why that is the right shape: it runs only
+    for pin-respecting (automated) triggers, so an athlete who asks the coach for
+    a bigger running week gets it. The ceiling brakes the writer that cannot feel
+    the athlete's shins, not the athlete.
+    """
+    current_by = {_key(d): d for d in current_plan if d.get("date")}
+    if not current_by:
+        return merged, {}
+    ceiling = run_durability.run_volume_ceiling(exposure)
+    before = set(
+        run_durability.run_overload_keys(current_plan, exposure, ceiling, today)
+    )
+    result = merged
+    reasons: dict[tuple[str, int], str] = {}
+    for _ in range(_MAX_RUN_OVERLOAD_PASSES):
+        created = {
+            key: finding
+            for key, finding in run_durability.run_overload_keys(
+                result, exposure, ceiling, today
+            ).items()
+            if key not in before
+        }
+        if not created:
+            break
+        result_by = {_key(d): d for d in result if d.get("date")}
+        # Only sessions this write made *longer* can be handed back, and only to
+        # the content that was there before it ran.
+        lengthened = {
+            key
+            for key, day in result_by.items()
+            if key in current_by
+            and _content_differs(current_by[key], day)
+            and _run_minutes_added(current_by[key], day) > 0
+        }
+        restore: dict[tuple[str, int], str] = {}
+        for finding in sorted(created.values(), key=lambda f: -f["excess_minutes"]):
+            for session in sorted(
+                finding["sessions"], key=lambda s: -s["minutes"]
+            ):
+                candidate = (session["date"], session["slot"])
+                if candidate in lengthened and candidate not in restore:
+                    restore[candidate] = (
+                        run_durability.finding_statement(finding)
+                        + _RUN_OVERLOAD_REVERTED
+                    )
+                    break
+        if not restore:
+            break
+        result = [
+            current_by[_key(day)] if _key(day) in restore else day for day in result
+        ]
+        reasons.update(restore)
+    return result, reasons
+
+
 def _to_canonical_day(day: dict) -> dict:
     """Validate + normalize one day through the canonical ``PlanDay`` model.
 
@@ -956,7 +1060,23 @@ async def _enforce_and_persist(
         # dropping heavy squats the day before the intervals (#715).
         merged = _revert_new_incoherences(merged, current_plan, today)
         merged, guard_reasons = _revert_new_interference(merged, current_plan, today)
-        # Both of those guards hand a session back, and a session handed back can
+        # The durability ceiling is the one week-shaped guard that needs history
+        # rather than the plan: how much running the athlete's legs have actually
+        # met is not written anywhere in the week being enforced (#717). Asked
+        # only when the enforced week actually contains a run, so a pure
+        # cyclist's nightly write does not pay for a history query that could not
+        # change its outcome — every finding names a planned run session, and
+        # there are none.
+        if run_durability.plan_has_running(merged, today):
+            exposure = await plan_context.athlete_run_exposure(db, user.id, today)
+            merged, run_reasons = _revert_new_run_overload(
+                merged, current_plan, today, exposure
+            )
+            # No key can appear in both: a session the interference guard handed
+            # back now matches ``current_plan``, so the durability guard no
+            # longer sees it as lengthened by this write.
+            guard_reasons.update(run_reasons)
+        # All of those guards hand a session back, and a session handed back can
         # be one half of a move whose other half already applied — exactly the
         # #651 failure mode, re-entered from a guard that runs after the repair.
         # So the repair runs again over the finished week.

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
+from services import run_durability
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -31,6 +32,7 @@ from services.prompts import (
     plan_coherence_section,
     plan_commitments_section,
     plan_interference_section,
+    run_durability_section,
 )
 
 # How far back the change log is read. Long enough to cover an overnight run and
@@ -72,27 +74,79 @@ async def plan_writer_context(
     commitment_rows = await crud.list_active_plan_commitments(
         db, user_id, today=today.isoformat()
     )
+    exposure = await athlete_run_exposure(db, user_id, today)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(plan, today),
+        coherence=_coherence_block(plan, today, exposure),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
     )
 
 
-def _coherence_block(plan: list[dict] | None, today) -> str:
+async def athlete_run_exposure(
+    db,
+    user_id: str,
+    today,
+    *,
+    limit: int = run_durability.HISTORY_ROW_LIMIT,
+) -> run_durability.RunExposure:
+    """One athlete's running exposure, read from their recorded activities (#717).
+
+    The query lives here rather than in ``services/run_durability`` so that module
+    stays pure, and it goes through ``crud.get_ride_metrics_history`` rather than
+    a query of its own because that reader collapses the duplicate rows a
+    re-import leaves behind. A duplicated run would be counted twice, and the
+    direction that errs in is the dangerous one: an inflated chronic figure raises
+    the ceiling.
+
+    ``today`` is required, with no default. An absent reference date makes
+    ``run_exposure`` return an empty exposure, which is *not* the safe direction
+    it looks like: an empty exposure hands a 200 km-a-month runner the beginner
+    ceiling, and the gate then reverts perfectly good writes. A caller that forgot
+    it should fail loudly rather than quietly re-classify the athlete as a
+    beginner.
+
+    Shared with the plan gate (``plan_pipeline._revert_new_run_overload``) so the
+    figure the planner is given and the figure the gate enforces cannot drift —
+    the same reason #666 moved the context construction into this file.
+    """
+    rows = await crud.get_ride_metrics_history(db, user_id, limit=limit)
+    return run_durability.run_exposure(list(rows), today)
+
+
+def _coherence_block(
+    plan: list[dict] | None, today, exposure: run_durability.RunExposure
+) -> str:
     """The deterministic audits of the week, as one prompt block.
 
-    Two sections sharing one slot rather than a second prompt parameter through
-    four call sites: both answer the same question — what is wrong with this week
-    that is decidable without an LLM — and both go to the same place in every
-    prompt that has them. Adding the interference audit (#715) to the block is
-    therefore a change to this file, which is the whole reason #666 moved the
-    construction here.
+    Sections sharing one slot rather than another prompt parameter through four
+    call sites: they answer the same question — what is wrong with this week that
+    is decidable without an LLM — and go to the same place in every prompt that
+    has them. Adding the interference audit (#715) and the durability ceiling
+    (#717) to the block is therefore a change to this file, which is the whole
+    reason #666 moved the construction here.
+
+    The durability section is the one that speaks when nothing is wrong, because
+    the ceiling is a constraint to plan inside rather than a defect to report;
+    see ``prompts.run_durability_section``. It is skipped entirely for an athlete
+    with no running history *and* no running in the plan — running is not in play
+    for them, and a pure cyclist should not carry a paragraph about tibias in
+    every prompt.
     """
     sections = [
         plan_coherence_section(find_repeated_sessions(plan, today), today),
         plan_interference_section(find_interference(plan, today), today),
+        _durability_section(plan, today, exposure),
     ]
     return "\n\n".join(section for section in sections if section)
+
+
+def _durability_section(
+    plan: list[dict] | None, today, exposure: run_durability.RunExposure
+) -> str:
+    if not exposure.has_history and not run_durability.plan_has_running(plan, today):
+        return ""
+    ceiling = run_durability.run_volume_ceiling(exposure)
+    findings = run_durability.find_run_overload(plan, exposure, ceiling, today)
+    return run_durability_section(exposure, ceiling, findings, today)

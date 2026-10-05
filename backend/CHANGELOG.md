@@ -9,6 +9,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Running volume has a durability ceiling, and it is not a function of
+  fitness** (`services/run_durability.py`, #717, epic #709) — weekly running
+  exposure, its rate of change, and a progression ceiling derived from the
+  athlete's own running history and from nothing else.
+
+  Cycling has no eccentric-loading ceiling; running does. That makes a fit
+  cyclist the *most* exposed athlete here rather than the least: a CTL of 90
+  says the aerobic system can sustain a great deal of running and says nothing
+  about whether the bone and tendon that absorb each stride can. Before this,
+  the planner read CTL 90, concluded the athlete was well trained, and
+  prescribed a running week a trained runner would handle — to someone whose
+  legs had never run. The aerobic system would have coped. That was the problem.
+
+  - **The ceiling can't read a fitness figure.** `run_volume_ceiling()` takes a
+    `RunExposure` and has no parameter a CTL, FTP or TSB could arrive through,
+    and `RunExposure` holds no such field. That is pinned by a test, because the
+    failure being prevented is precisely a reasoning step from aerobic fitness
+    to running volume.
+  - **No "10 % rule" dressed up as science.** The trials that tested it (Buist
+    et al. 2008; Nielsen et al. 2014) did not find it protective, and 10 % means
+    three minutes at 30 min/week and a full hour at 600. What is encoded instead
+    is exposure and its rate of change: a planned rolling 7-day block against
+    the athlete's four-week mean, at a 1,3× step — the acute:chronic shape
+    (Gabbett 2016), which is itself contested (Impellizzeri et al. 2020). Every
+    statement the module produces says the figure is a convention this app chose
+    and not a measured property of the athlete, so an athlete who is told they
+    may not do something can argue about it.
+  - **Rolling 7-day windows, never calendar weeks.** A block placed Sunday and
+    Monday is one week of loading to the tissue and two compliant half-weeks to
+    a calendar, which is the only arrangement that actually needed catching.
+    Windows start six days *before* today, so running already completed this
+    week counts — each date counted once: history before today, the plan after
+    it, and **today whichever of the two is larger**. Today needs its own rule:
+    reading it from the plan alone loses an ad-hoc run, or one longer than the
+    session it was matched to, while adding the two double counts the ordinary
+    case where the run in today's history *is* the run on today's plan and would
+    flag the athlete for training exactly as instructed. Preferring the larger
+    figure to the sum means the guard can under-count a genuine double day and
+    never over-counts one — and an over-count is what reverts a session nobody
+    should have lost.
+  - **Minutes, not kilometres.** Distance is reported wherever it is known (and
+    marked when coverage is partial), but it is known only for runs that
+    produced a usable stream, so governing on it would mean a ceiling that
+    silently stopped applying to treadmill sessions. Mileage is quoted raw
+    rather than grade-adjusted — GAP distance prices the load (#716), but a
+    hill-inflated figure is not one the athlete can check against their watch.
+  - **A lapse needs no decay rule.** The four-week window counts empty weeks as
+    the zeros they are, so a runner three weeks off the road already reads at a
+    quarter of their former chronic figure.
+  - **The long run is its own ceiling**, stepped tighter (max +30 min) than the
+    week's total, because the same thirty minutes spread over three days and
+    added to one session are not the same stimulus — and a single run is never
+    permitted to exceed the whole week's allowance.
+  - **A planned duration window is read at its upper bound.** A session written
+    as 60–90 min is one the athlete may legitimately run for 90; checking the
+    midpoint would wave through a week that exceeds the ceiling, and the athlete
+    who took the plan at its word is the one who gets hurt.
+
+  Surfaced to every plan writer and to the coach through
+  `plan_context._coherence_block`, which means the chat and the nightly job
+  cannot drift apart on it (#666). The section is **present whenever running is
+  in play, not only when something is wrong**, because the ceiling is a
+  constraint to plan inside rather than a defect to report — stating it only on
+  violation would mean the first running week is written blind. A pure cyclist
+  with no runs planned and no run history carries none of it.
+
+  The gate (`plan_pipeline._revert_new_run_overload`) hands back a run that an
+  **automated** write lengthened past the ceiling, with the #715 discipline
+  throughout: only an overload that write created, only to content the plan
+  already held, never by deleting a session, and bounded at three passes. A run
+  appended with no earlier version stands and is reported to the coach instead —
+  shortening it would be the silent clamp #717 rules out and deleting it would
+  be #651. Only sessions the write made *longer* are eligible, because
+  "reverting" a shortened run would hand back the longer version and raise the
+  volume the guard fired on. User-driven triggers skip it entirely: the ceiling
+  brakes the writer that cannot feel the athlete's shins, not the athlete.
+
+  Nine entries in the #600 policy-guard register, each holding its perturbation.
+  A tenth — a floor on the weekly step — **slipped**, and the finding was that
+  the constant was real but redundant: `BEGINNER_WEEKLY_MINUTES` is already an
+  absolute floor sitting above everything a proportional step fails to deliver,
+  so a 15-minute floor could only ever change the ceiling for a chronic figure
+  between 45 and 50 min/week, and then by under three minutes. It was removed
+  rather than given a `reason`.
+
 - **Running has its own performance model** (`services/run_model.py`, #716,
   epic #709) — Critical Speed and D′ from the pace–duration envelope, threshold
   pace, grade-adjusted pace, pace zones and rTSS. The fitting machinery is the

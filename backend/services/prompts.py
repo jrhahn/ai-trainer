@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from . import plan_compliance, run_model, untrusted_text
+from . import plan_compliance, run_durability, run_model, untrusted_text
 from .activity_identity import (
     CYCLING_FAMILY,
     SPORT_RUNNING,
@@ -4481,6 +4481,100 @@ def plan_interference_section(findings: list[dict] | None, today=None) -> str:
         "at least six hours later. Only leave a clash alone when the athlete has "
         "explicitly asked for it."
     )
+    return "\n".join(lines)
+
+
+def run_durability_section(
+    exposure, ceiling, findings: list[dict] | None = None, today=None
+) -> str:
+    """The athlete's running exposure, the ceiling it supports, and any plan over it (#717).
+
+    Always present when running is in play, not only when something is wrong.
+    That is the difference between this section and the two audits above: a
+    coherence collision is a defect and says nothing when there is none, whereas
+    the ceiling is a *constraint the writer has to plan inside*. Stating it only
+    on violation would mean the first run week is written blind and corrected
+    afterwards, and the correction is the thing #717 is trying to avoid needing.
+
+    The reasoning travels with the figure in both directions. A writer told only
+    "cap running at 60 minutes" has no way to weigh that against a race in eight
+    weeks; a writer told why the ceiling is 60 can plan a build-up that arrives
+    somewhere. And the athlete has to be able to hear it: the ceiling is never
+    applied to their plan as a silent trim, so if the coach cannot explain it the
+    athlete simply finds their long run missing.
+    """
+    if exposure is None or ceiling is None:
+        return ""
+    # ``find_run_overload`` takes an ISO string and ``plan_day_date_labels`` takes
+    # a date; callers pair the two, so accept either here rather than making the
+    # mismatch their problem.
+    if isinstance(today, str):
+        today = _parse_today(today)
+    weekdays = {
+        iso: plan_day_date_labels(iso, today).get("weekday") or ""
+        for finding in findings or []
+        for iso in (finding.get("window_start"), finding.get("window_end"))
+        if iso
+    }
+    lines = [
+        "Running durability (computed from recorded activities and the plan — treat "
+        "the figures as fact and the ceiling as a constraint, not a suggestion):",
+        f"  {run_durability.ceiling_statement(exposure, ceiling)}",
+    ]
+    ordered = sorted(
+        findings or [],
+        key=lambda f: (-float(f.get("excess_minutes") or 0.0), f.get("window_start") or ""),
+    )
+    weekly = [
+        f for f in ordered if f.get("rule") == run_durability.RULE_WEEKLY_RUN_VOLUME
+    ]
+    long_runs = [
+        f for f in ordered if f.get("rule") == run_durability.RULE_LONG_RUN_STEP
+    ]
+    # Overlapping windows describe one build-up from seven starting days, so only
+    # the heaviest few are stated. The count is kept, because "and 4 further
+    # 7-day windows are also over" is the sentence that tells a writer this is a
+    # block rather than one bad day.
+    for finding in weekly[: run_durability.MAX_REPORTED_WINDOWS]:
+        lines.append(
+            f"  {run_durability.finding_statement(finding, weekdays=weekdays)}"
+        )
+    hidden = len(weekly) - run_durability.MAX_REPORTED_WINDOWS
+    if hidden > 0:
+        lines.append(
+            f"  {hidden} further overlapping 7-day window"
+            f"{'s' if hidden > 1 else ''} in this stretch also exceed the ceiling — "
+            "the whole block is above it, not one day."
+        )
+    for finding in long_runs[: run_durability.MAX_REPORTED_WINDOWS]:
+        lines.append(
+            f"  {run_durability.finding_statement(finding, weekdays=weekdays)}"
+        )
+    over_long = len(long_runs) - run_durability.MAX_REPORTED_WINDOWS
+    if over_long > 0:
+        lines.append(
+            f"  {over_long} further planned run"
+            f"{'s' if over_long > 1 else ''} also exceed"
+            f"{'' if over_long > 1 else 's'} the single-run ceiling."
+        )
+    if weekly or long_runs:
+        lines.append(
+            "Bring the running back under the ceiling and say why you did: name the "
+            "athlete's own recent running exposure, and say plainly that their "
+            "aerobic fitness supports more than their running-specific exposure does "
+            "yet. Do not present the cap as settled science — the figure is a "
+            "conservative convention. Cycling volume is not limited by this and "
+            "should not be cut to make room; if the athlete wants the bigger running "
+            "week anyway, that is their decision to make with the reasoning in front "
+            "of them."
+        )
+    else:
+        lines.append(
+            "Nothing in the plan exceeds it. Build running volume towards that "
+            "ceiling rather than sitting under it indefinitely — the ceiling rises "
+            "as the exposure does, and an athlete kept at a beginner allowance "
+            "forever never stops being a beginner."
+        )
     return "\n".join(lines)
 
 
