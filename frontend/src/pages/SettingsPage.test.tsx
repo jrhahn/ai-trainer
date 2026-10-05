@@ -246,6 +246,33 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('reports a failed pace save rather than leaving the button spinning', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile } })
+    mockUpdateCurrentUser.mockRejectedValue(new Error('network'))
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4:05')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    expect(await screen.findByText(/Failed to save threshold pace/i)).toBeInTheDocument()
+    // The spinner has to stop, or the athlete cannot retry.
+    expect(screen.getByRole('button', { name: /Save pace/i })).toBeEnabled()
+  })
+
+  it('does not attempt a pace save before the profile has loaded', async () => {
+    useAppStore.setState({ userProfile: null })
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    await userEvent.type(input, '4:05')
+    await userEvent.click(screen.getByRole('button', { name: /Save pace/i }))
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
   it('refuses a pace that is not minutes and seconds instead of sending a guess', async () => {
     useAppStore.setState({ userProfile: { ...baseProfile } })
 
