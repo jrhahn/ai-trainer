@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
-from services import run_durability
+from services import run_durability, training_monotony
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -33,6 +33,7 @@ from services.prompts import (
     plan_commitments_section,
     plan_interference_section,
     run_durability_section,
+    training_monotony_section,
 )
 
 # How far back the change log is read. Long enough to cover an overnight run and
@@ -74,14 +75,46 @@ async def plan_writer_context(
     commitment_rows = await crud.list_active_plan_commitments(
         db, user_id, today=today.isoformat()
     )
-    exposure = await athlete_run_exposure(db, user_id, today)
+    # One read of the activity history for both audits that need it. They want the
+    # same rows over the same window, and the alternative is two identical queries
+    # on every prompt build.
+    activity_rows = await athlete_activity_history(db, user_id)
+    exposure = run_durability.run_exposure(activity_rows, today)
+    distribution = training_monotony.load_distribution(activity_rows, today)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(plan, today, exposure),
+        coherence=_coherence_block(plan, today, exposure, distribution),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
     )
+
+
+async def athlete_activity_history(
+    db,
+    user_id: str,
+    *,
+    limit: int | None = None,
+) -> list:
+    """The athlete's recent activity rows, for every audit that reads history.
+
+    Goes through ``crud.get_ride_metrics_history`` rather than a query of its own
+    because that reader collapses the duplicate rows a re-import leaves behind.
+    Both consumers care, and both are harmed in the direction that *hides* their
+    finding: a duplicated run inflates the chronic figure and raises the run
+    ceiling, and a duplicated day inflates one day's load, raising the standard
+    deviation and lowering monotony.
+
+    The default reads both modules' limits at call time rather than binding their
+    maximum into the signature, for the reason ``training_monotony`` spells out:
+    a default argument is evaluated once at import, so either module raising its
+    own limit later would be silently ignored here.
+    """
+    if limit is None:
+        limit = max(
+            run_durability.HISTORY_ROW_LIMIT, training_monotony.HISTORY_ROW_LIMIT
+        )
+    return list(await crud.get_ride_metrics_history(db, user_id, limit=limit))
 
 
 async def athlete_run_exposure(
@@ -109,14 +142,22 @@ async def athlete_run_exposure(
 
     Shared with the plan gate (``plan_pipeline._revert_new_run_overload``) so the
     figure the planner is given and the figure the gate enforces cannot drift —
-    the same reason #666 moved the context construction into this file.
+    the same reason #666 moved the context construction into this file. Since #747
+    the prompt build reads the rows once for both audits and calls
+    ``run_exposure`` directly, so what this guarantees is narrower and still the
+    part that matters: both paths derive the exposure from the same pure function
+    over the same deduplicated reader.
     """
-    rows = await crud.get_ride_metrics_history(db, user_id, limit=limit)
-    return run_durability.run_exposure(list(rows), today)
+    return run_durability.run_exposure(
+        await athlete_activity_history(db, user_id, limit=limit), today
+    )
 
 
 def _coherence_block(
-    plan: list[dict] | None, today, exposure: run_durability.RunExposure
+    plan: list[dict] | None,
+    today,
+    exposure: run_durability.RunExposure,
+    distribution: training_monotony.LoadDistribution | None,
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
 
@@ -133,11 +174,17 @@ def _coherence_block(
     with no running history *and* no running in the plan — running is not in play
     for them, and a pure cyclist should not carry a paragraph about tibias in
     every prompt.
+
+    The monotony section (#747) is the one that describes what *was done* rather
+    than what is planned. It belongs in this block anyway: it is decidable without
+    an LLM, it is about this week, and the writer has to know it before it writes —
+    a flat week is fixed by placing an easy day, which is a planning act.
     """
     sections = [
         plan_coherence_section(find_repeated_sessions(plan, today), today),
         plan_interference_section(find_interference(plan, today), today),
         _durability_section(plan, today, exposure),
+        training_monotony_section(distribution),
     ]
     return "\n\n".join(section for section in sections if section)
 

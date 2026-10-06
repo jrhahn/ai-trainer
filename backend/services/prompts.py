@@ -9,7 +9,13 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from . import plan_compliance, run_durability, run_model, untrusted_text
+from . import (
+    plan_compliance,
+    run_durability,
+    run_model,
+    training_monotony,
+    untrusted_text,
+)
 from .activity_identity import (
     CYCLING_FAMILY,
     SPORT_RUNNING,
@@ -4482,6 +4488,30 @@ def plan_interference_section(findings: list[dict] | None, today=None) -> str:
         "explicitly asked for it."
     )
     return "\n".join(lines)
+
+
+def training_monotony_section(distribution) -> str:
+    """How evenly the completed week's load was spread, when that is a problem (#747).
+
+    Silent unless the week is both monotonous and loaded — one of the audits that
+    speaks only on a finding, unlike ``run_durability_section``, which states a
+    ceiling the writer has to plan inside even when nothing is wrong. There is no
+    monotony ceiling to plan inside: variation is not a budget, and an athlete
+    whose week already has contrast in it does not need a paragraph confirming it.
+
+    The section describes *history*, not the plan, which is what makes it worth
+    stating here rather than leaving to the coach to notice. The daily series is
+    the one thing the coach is never shown — it reads CTL, ATL and TSB, and all
+    three are means. A week with no easy day in it is invisible in every number the
+    prompt otherwise carries.
+    """
+    if not training_monotony.is_monotonous(distribution):
+        return ""
+    return (
+        "Training monotony (computed from recorded activities — treat the figures "
+        "as fact):\n"
+        f"  {training_monotony.distribution_statement(distribution)}"
+    )
 
 
 def run_durability_section(
