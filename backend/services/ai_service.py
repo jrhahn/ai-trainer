@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 import schemas
 
-from . import metrics, output_audit, token_accounting
+from . import metrics, output_audit, token_accounting, untrusted_text
 from .activity_identity import activity_sport_type, power_model_applies
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
@@ -865,7 +865,12 @@ async def ask_trainer(
         (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
     )
     memory_section = (
-        f"\n\nCoach notes about this athlete (remember these):\n{trimmed_memory}"
+        # Marked: the coach's own notes are written by an earlier model turn out
+        # of whatever the athlete and Strava supplied, and they are *durable* —
+        # an instruction that lands here is re-read on every future turn rather
+        # than once (ai-trainer-ops#33).
+        f"\n\nCoach notes about this athlete (remember these):\n"
+        f"{untrusted_text.mark(trimmed_memory)}"
         if trimmed_memory
         else ""
     )

@@ -22,6 +22,7 @@ import json
 import pytest
 
 from services.motivation_model import normalize_model
+from services.untrusted_text import CLOSE, OPEN
 from services.prompts import (
     ask_trainer_plan_updates_rule,
     ask_trainer_system,
@@ -68,7 +69,7 @@ def test_overtraining_context_present_when_athlete_is_fresh():
 
     # Context block must be present
     assert "Structured athlete context (durable coaching model)" in prompt
-    assert '"trainingTendency": "overtrains"' in prompt
+    assert f'"trainingTendency": "{OPEN}overtrains{CLOSE}"' in prompt
     assert "adds extra intervals when feeling good" in prompt
 
     # Training load (freshness signal) must also be present
@@ -154,7 +155,7 @@ def test_rest_anxiety_context_reaches_prompt():
         },
     )
 
-    assert '"restResponse": "anxious"' in prompt
+    assert f'"restResponse": "{OPEN}anxious{CLOSE}"' in prompt
     assert "FOMO" in prompt or "anxious" in prompt.lower()
     # The rest-recommendation rule must address this explicitly
     assert "rest" in prompt.lower()

@@ -11,6 +11,7 @@ import pytest
 
 import services.ai_service as ai_service
 import services.analysis as analysis
+from services.untrusted_text import CLOSE, OPEN
 
 
 def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative():
@@ -2932,8 +2933,10 @@ def test_ask_trainer_system_includes_structured_athlete_context():
     )
 
     assert "Structured athlete context (durable coaching model)" in prompt
-    assert '"trainingTendency": "overtrains"' in prompt
-    assert '"restResponse": "restless"' in prompt
+    # Marked: the athlete context is derived from the athlete's own prose and
+    # from Strava text, so it reaches the model as data (ai-trainer-ops#33).
+    assert f'"trainingTendency": "{OPEN}overtrains{CLOSE}"' in prompt
+    assert f'"restResponse": "{OPEN}restless{CLOSE}"' in prompt
     assert "doing too much when fresh" in prompt
     assert "stable knowledge" in prompt
 
@@ -3468,7 +3471,7 @@ def test_ask_trainer_system_includes_hard_session_spacing_rules():
     assert "positive tsb" in prompt
     assert "2026-06-18 | sport:cycling | interval_vo2max" in prompt
     assert '"date": "2026-06-20"' in prompt
-    assert '"title": "VO2max intervals"'.lower() in prompt
+    assert f'"title": "{OPEN}VO2max intervals{CLOSE}"'.lower() in prompt
 
 
 @pytest.mark.asyncio

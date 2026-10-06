@@ -2,11 +2,19 @@
 
 All functions are pure: they accept typed parameters and return strings.
 No LLM client logic, algorithmic computation, or I/O here.
+
+``json`` is deliberately not imported. Every structure this module renders into
+a prompt is one the athlete or an external service had a hand in — a profile, a
+plan, an activity dump, a derived model — and all of them go through
+``untrusted_text.marked_json`` so their free text arrives as data rather than as
+instruction (ai-trainer-ops#33). Leaving the import out means a bare
+``json.dumps`` cannot be added here without adding the import back, which is a
+visible line in a diff rather than a habit; ``test_prompt_injection_containment``
+asserts it stays out.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 from . import (
@@ -124,7 +132,7 @@ def annotated_plan_json(
     annotated = annotate_plan_days(
         training_plan, app_today(timezone_name=timezone_name)
     )
-    return json.dumps(annotated, indent=indent)
+    return untrusted_text.marked_json(annotated, indent=indent)
 
 
 def _plan_day_when(day: dict, today) -> str:
@@ -753,7 +761,8 @@ def analyse_activities_user(
     )
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n\n"
-        f"Last {len(activities)} {activities_noun}:\n{json.dumps(dump_activities, indent=2)}"
+        f"Last {len(activities)} {activities_noun}:\n"
+        f"{untrusted_text.marked_json(dump_activities, indent=2)}"
         f"{metrics_block}"
         f"{zones_block}"
         f"{pace_block}"
@@ -1040,7 +1049,7 @@ def race_events_context_section(race_events: list[dict] | None) -> str:
         lines.append(
             f"- {date}{time_part}: {distance:g} km with {elevation} m climbing"
             if isinstance(distance, (int, float)) and elevation is not None
-            else f"- {json.dumps(event)}"
+            else f"- {untrusted_text.marked_json(event)}"
         )
     lines.append(
         "Treat these events as real calendar commitments. Build race-specific preparation, "
@@ -1065,7 +1074,8 @@ def race_profile_context_section(profile: dict) -> str:
         )
     if race_description:
         lines.append(
-            f"- Race description: {race_description} (treat this as event context for training decisions)."
+            f"- Race description: {untrusted_text.mark(race_description)} "
+            "(treat this as event context for training decisions)."
         )
     return "\n".join(lines)
 
@@ -1088,7 +1098,7 @@ def generate_plan_user(
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
+        f"Profile: {untrusted_text.marked_json(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
         f"Generate a {PLAN_HORIZON_DAYS}-day training plan starting from today that reflects "
         "the athlete's actual fitness level from recent rides and any upcoming race context."
     )
@@ -1176,7 +1186,7 @@ def adapt_plan_user(
     timezone_name: str | None = None,
 ) -> str:
     assessment_section = (
-        f"\nRider assessment: {json.dumps(rider_assessment)}"
+        f"\nRider assessment: {untrusted_text.marked_json(rider_assessment)}"
         if rider_assessment
         else ""
     )
@@ -1227,9 +1237,9 @@ def adapt_plan_user(
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
-        f"Profile: {json.dumps(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
-        f"Recent feedback: {json.dumps(recent_feedback)}\n"
-        f"Remaining plan days: {json.dumps(annotated_days)}"
+        f"Profile: {untrusted_text.marked_json(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
+        f"Recent feedback: {untrusted_text.marked_json(recent_feedback)}\n"
+        f"Remaining plan days: {untrusted_text.marked_json(annotated_days)}"
         f"{history_section}{coherence_warnings}{commitments_section}\n"
         + stale_note
         + "Adapt the remaining days based on the feedback. Return only the days you "
@@ -1301,7 +1311,7 @@ def plan_change_summary_user(
         for c in changes
     )
     assessment_section = (
-        f"\nRider assessment: {json.dumps(rider_assessment)}"
+        f"\nRider assessment: {untrusted_text.marked_json(rider_assessment)}"
         if rider_assessment
         else ""
     )
@@ -1318,7 +1328,7 @@ def plan_change_summary_user(
     )
     return (
         f"Context: {run_context}\n"
-        f"Athlete profile: {json.dumps(profile)}"
+        f"Athlete profile: {untrusted_text.marked_json(profile)}"
         f"{assessment_section}{load_section}{weather_section}\n"
         f"{athlete_language_section(language_samples)}"
         "Changes you just made (old → new):\n"
@@ -1340,11 +1350,11 @@ def ask_trainer_assessment_section(
         return ""
     rider_type = rider_assessment.get("riderType", "")
     notes = rider_assessment.get("notes", "")
-    assessment_lines = [f"- Rider type: {rider_type}"]
+    assessment_lines = [f"- Rider type: {untrusted_text.mark(rider_type)}"]
     if current_ftp:
         assessment_lines.append(f"- FTP: {current_ftp} W")
     if notes:
-        assessment_lines.append(f"- Assessment notes: {notes}")
+        assessment_lines.append(f"- Assessment notes: {untrusted_text.mark(notes)}")
     return (
         "\n\nRider assessment from recent Strava analysis:\n"
         + "\n".join(assessment_lines)
@@ -1358,7 +1368,7 @@ def ask_trainer_workout_section(context_workout: dict | None) -> str:
         return ""
     return (
         f"\n\nThe athlete is currently viewing this specific workout:\n"
-        f"{json.dumps(context_workout, indent=2)}"
+        f"{untrusted_text.marked_json(context_workout, indent=2)}"
         "\nWhen the athlete refers to 'this workout', 'today's session', or similar, "
         "they mean the workout above. "
         "IMPORTANT: whenever your coaching response proposes ANY change or adjustment to this "
@@ -1550,7 +1560,7 @@ def athlete_context_section(athlete_context: dict | None) -> str:
 
     return (
         "\n\nStructured athlete context (durable coaching model): "
-        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        f"{untrusted_text.marked_json(compact)}\n"
         "Use this as stable knowledge about how the athlete tends to train, "
         "respond to rest, stay motivated, and where coaching needs extra care. "
         "Do not repeat it verbatim; apply it only when relevant."
@@ -1599,11 +1609,13 @@ def motivation_model_section(motivation: dict | None) -> str:
         qualifier = ""
         if inferred and isinstance(confidence, (int, float)):
             qualifier = f" (inferred, confidence {float(confidence):.2f})"
-        lines.append(f"- Primary: {primary}{qualifier}")
+        lines.append(f"- Primary: {untrusted_text.mark(primary)}{qualifier}")
     if secondary:
-        lines.append(f"- Also matters: {'; '.join(secondary)}")
+        lines.append(f"- Also matters: {'; '.join(untrusted_text.mark(t) for t in secondary)}")
     if constraints:
-        lines.append(f"- Must not be traded away: {'; '.join(constraints)}")
+        lines.append(
+            f"- Must not be traded away: {'; '.join(untrusted_text.mark(t) for t in constraints)}"
+        )
     lines.append(
         "Fitness is the means, not the end: this is what the training serves. "
         "Treat it as the athlete's goal even where it differs from what would "
@@ -1638,7 +1650,7 @@ def athlete_model_section(athlete_model: dict | None) -> str:
 
     return (
         "\n\nLong-term athlete model (durable physiology & performance profile): "
-        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        f"{untrusted_text.marked_json(compact)}\n"
         "These are slow-changing capabilities (threshold power, VO2 max, how the "
         "athlete holds threshold, recovers, and tolerates heat), not a report on a "
         "single session. Use them to set realistic targets and pacing; do not "
@@ -1867,10 +1879,10 @@ def active_hypotheses_section(hypotheses: list[dict] | None) -> str:
             if isinstance(confidence, (int, float))
             else ""
         )
-        line = f"- {statement}{conf_txt}"
+        line = f"- {untrusted_text.mark(statement)}{conf_txt}"
         evidence = hyp.get("evidence") or []
         if evidence:
-            line += f"\n  Evidence: {'; '.join(str(e) for e in evidence)[:280]}"
+            line += f"\n  Evidence: {untrusted_text.mark('; '.join(str(e) for e in evidence)[:280])}"
         alternatives = (
             hyp.get("alternative_explanations")
             or hyp.get("alternativeExplanations")
@@ -1878,7 +1890,8 @@ def active_hypotheses_section(hypotheses: list[dict] | None) -> str:
         )
         if alternatives:
             line += (
-                f"\n  Could also be: {'; '.join(str(a) for a in alternatives)[:280]}"
+                f"\n  Could also be: "
+                f"{untrusted_text.mark('; '.join(str(a) for a in alternatives)[:280])}"
             )
         entries.append(line)
 
@@ -2121,7 +2134,7 @@ def rider_identity_section(identity: dict | None) -> str:
     style = identity.get("style")
     if isinstance(style, dict) and style.get("reading"):
         lines.append(
-            f"- Style: {style['reading']} — read from {style.get('basis', '')} "
+            f"- Style: {untrusted_text.mark(style['reading'])} — read from {untrusted_text.mark(style.get('basis', ''))} "
             f"(confidence {float(style.get('confidence') or 0):.2f})"
         )
 
@@ -2130,13 +2143,13 @@ def rider_identity_section(identity: dict | None) -> str:
         if not isinstance(entry, dict) or not entry.get("pattern"):
             continue
         lines.append(
-            f"- Pattern: {entry['pattern']} "
+            f"- Pattern: {untrusted_text.mark(entry['pattern'])} "
             f"(confidence {float(entry.get('confidence') or 0):.2f}). "
-            f"On a session meant to be easy, {entry.get('onAnEasyDay', '')}"
+            f"On a session meant to be easy, {untrusted_text.mark(entry.get('onAnEasyDay', ''))}"
         )
         words = entry.get("theirWords")
         if words:
-            lines.append(f"  Their words: \"{words}\"")
+            lines.append(f"  Their words: {untrusted_text.mark(words)}")
 
     if len(lines) == 1:
         return ""
@@ -2203,7 +2216,7 @@ def workout_curiosity_section(curiosity: dict | None) -> str:
 
     noticed = curiosity.get("noticed") or []
     compact = [
-        f"{item.get('kind')}: {item.get('signal')}"
+        f"{item.get('kind')}: {untrusted_text.mark(item.get('signal'))}"
         for item in noticed
         if item.get("signal")
     ]
@@ -2217,18 +2230,18 @@ def workout_curiosity_section(curiosity: dict | None) -> str:
     ]
     curious_about = curiosity.get("curiousAbout") or curiosity.get("curious_about")
     if curious_about:
-        lines.append(f"Ask about: {curious_about}")
+        lines.append(f"Ask about: {untrusted_text.mark(curious_about)}")
     why = curiosity.get("whyItMatters") or curiosity.get("why_it_matters")
     if why:
-        lines.append(f"Why it is worth a question: {why}")
+        lines.append(f"Why it is worth a question: {untrusted_text.mark(why)}")
     reading = curiosity.get("readingToOffer") or curiosity.get("reading_to_offer")
     if reading:
         lines.append(
-            f"A reading you may offer, hedged and correctable: {reading}"
+            f"A reading you may offer, hedged and correctable: {untrusted_text.mark(reading)}"
         )
     words = curiosity.get("theirWords") or curiosity.get("their_words")
     if words:
-        lines.append(f"Their words: \"{words}\"")
+        lines.append(f"Their words: {untrusted_text.mark(words)}")
     lines.append(
         "Use the physiological items above for the analysis, not for the question — "
         "the training data already answers those. Ask about the one named."
@@ -2338,7 +2351,7 @@ def open_questions_section(open_questions: list[dict] | None) -> str:
 
     return (
         "\n\nOpen questions the coach is still trying to answer about this athlete: "
-        f"{json.dumps(compact_questions, ensure_ascii=False)}\n"
+        f"{untrusted_text.marked_json(compact_questions)}\n"
         "These are acknowledged uncertainties, not facts. Do not assert them as "
         "settled. When the conversation or recent data offers a chance to resolve "
         "one — or a low-cost test in 'needs' fits naturally — take it, but never "
@@ -2375,7 +2388,7 @@ def pending_inquiries_section(inquiries: list[dict] | None) -> str:
 
     return (
         "\n\nQuestions you have already put to this athlete and are waiting on: "
-        f"{json.dumps(compact, ensure_ascii=False)}\n"
+        f"{untrusted_text.marked_json(compact)}\n"
         "They are pinned in the chat with their own answer box, so do NOT ask them "
         "again here — asking twice reads as not listening. If the athlete answers "
         "one of them in passing, simply use what they said."
@@ -2424,13 +2437,13 @@ def athlete_memory_facts_section(facts: list[dict] | None) -> str:
     if stable_facts:
         sections.append(
             "Stable athlete facts (measured/stated values — FTP, max HR, weight): "
-            f"{json.dumps(stable_facts, ensure_ascii=False)}"
+            f"{untrusted_text.marked_json(stable_facts)}"
         )
     if observations:
         sections.append(
             "Behavioural observations (patterns inferred from training history — treat "
             "as tendencies, not certainties): "
-            f"{json.dumps(observations, ensure_ascii=False)}"
+            f"{untrusted_text.marked_json(observations)}"
         )
 
     return (
@@ -2817,15 +2830,15 @@ def ask_trainer_system_sections(
             f"Today's date: {today}\n"
             f"{date_context}\n"
         ),
-        "profile": f"Athlete profile: {json.dumps(profile)}\n",
+        "profile": f"Athlete profile: {untrusted_text.marked_json(profile)}\n",
         "race-profile": race_profile_section,
         "plan-past": (
             "Last 7 days of training (historical context, not upcoming): "
-            f"{json.dumps(last_7_days)}\n"
+            f"{untrusted_text.marked_json(last_7_days)}\n"
         ),
         "plan-upcoming": (
             f"Upcoming plan (today and future only, next {len(next_n_days)} days): "
-            f"{json.dumps(next_n_days)}"
+            f"{untrusted_text.marked_json(next_n_days)}"
         ),
         # Immediately after the plan it explains: the plan is the state, this is
         # how it got there, and "why did today change?" needs both (#652).
@@ -3117,7 +3130,7 @@ def derive_athlete_model_user(
     if current:
         current_section = (
             "Current athlete model on file (refine, do not blindly discard):\n"
-            f"{json.dumps(current, ensure_ascii=False)}"
+            f"{untrusted_text.marked_json(current)}"
         )
     else:
         current_section = "No athlete model exists yet; build one from the history."
@@ -3794,7 +3807,9 @@ def rate_workout_user(
         5: "Max",
     }
 
-    profile_section = f"\n\nAthlete profile: {json.dumps(profile)}" if profile else ""
+    profile_section = (
+        f"\n\nAthlete profile: {untrusted_text.marked_json(profile)}" if profile else ""
+    )
 
     # --- Strava stream delta section ---
     delta_section = ""
@@ -4133,7 +4148,8 @@ def refresh_login_summary_user(
         parts.append(f"Per-activity analysis narrative:\n{ride_insights}")
     if training_plan:
         parts.append(
-            f"Current training plan (for plan alignment):\n{json.dumps(training_plan, indent=2)}"
+            f"Current training plan (for plan alignment):\n"
+            f"{untrusted_text.marked_json(training_plan, indent=2)}"
         )
     if not parts:
         parts.append("No prior activity data available.")
@@ -4218,7 +4234,7 @@ def training_status_user(
     parts: list[str] = [app_date_context(timezone_name=timezone_name)]
     parts.append(
         "Deterministic training-status audit of the last 7 days (authoritative):\n"
-        f"{json.dumps(anchored, indent=2)}"
+        f"{untrusted_text.marked_json(anchored, indent=2)}"
     )
     if training_plan:
         parts.append(
@@ -4439,7 +4455,7 @@ def plan_coherence_section(repeats: list[dict] | None, today=None) -> str:
         length = f", {duration} min" if duration not in (None, "") else ""
         lines.append(
             f"  {when} are both scheduled as the SAME session: "
-            f"{repeat.get('workoutType')} — \"{repeat.get('title')}\"{length}."
+            f"{repeat.get('workoutType')} — {untrusted_text.mark(repeat.get('title'))}{length}."
         )
     lines.append(
         "Back-to-back identical sessions are almost never what the athlete needs. "
@@ -4636,7 +4652,7 @@ def plan_commitments_section(commitments: list[dict] | None, today=None) -> str:
         text = str(commitment.get("text") or "").strip()
         if not text:
             continue
-        lines.append(f"  {span}: {text}")
+        lines.append(f"  {span}: {untrusted_text.mark(text)}")
     if len(lines) == 1:
         return ""
     lines.append(
@@ -4862,7 +4878,9 @@ def batch_review_user(
     *rides* is a list of RideMetric ORM objects (or duck-typed equivalents).
     """
     date_context = app_date_context(timezone_name=timezone_name)
-    profile_section = f"\nAthlete profile: {json.dumps(profile)}" if profile else ""
+    profile_section = (
+        f"\nAthlete profile: {untrusted_text.marked_json(profile)}" if profile else ""
+    )
 
     plan_section = ""
     if training_plan:
@@ -5027,11 +5045,13 @@ def next_ride_recommendation_user(
     physiology_parts: list[str] = []
 
     if profile:
-        athlete_context_parts.append(f"Athlete profile: {json.dumps(profile)}")
+        athlete_context_parts.append(
+            f"Athlete profile: {untrusted_text.marked_json(profile)}"
+        )
 
     if rider_assessment:
         athlete_context_parts.append(
-            f"Rider assessment: {json.dumps(rider_assessment)}"
+            f"Rider assessment: {untrusted_text.marked_json(rider_assessment)}"
         )
 
     structured_context = athlete_context_section(athlete_context).strip()
