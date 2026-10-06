@@ -20,6 +20,7 @@ from database import async_session_maker, get_db
 from services import ai_service
 from services import athlete_model_inference
 from services import freshness_allocation
+from services import logged_sessions
 from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
@@ -825,6 +826,10 @@ async def analyse_activities(
                     apply_summary_fallback(metric, meta)
             for m in metrics_chain:
                 await crud.upsert_ride_metric(db, current_user.id, **m)
+            # After the rows exist, not before: a session the athlete logged by
+            # hand stops standing in for itself once its recording is here
+            # (#745).
+            await logged_sessions.reconcile_logged_sessions(db, current_user)
             if body.source == "intervals":
                 logger.info(
                     "Intervals analysis persisted ride metrics user=%s rides_input=%s metrics=%s metric_ids=%s",

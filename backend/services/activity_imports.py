@@ -16,7 +16,12 @@ import crud
 import models
 from sqlalchemy.ext.asyncio import AsyncSession
 
-ActivitySource = Literal["strava", "intervals", "fit"]
+# "logged" is the one source that imported nothing: it marks a session the
+# athlete typed in and no device recorded (#745). It belongs here because such a
+# session needs exactly what this module provides — a stable external id and a
+# legacy BIGINT — and nowhere else, since there is no file and no provider to
+# fetch. ``services.logged_sessions`` owns when one exists.
+ActivitySource = Literal["strava", "intervals", "fit", "logged"]
 
 
 def synthetic_activity_id(source: ActivitySource, external_activity_id: str) -> int:

@@ -35,6 +35,7 @@ from routers.dependencies import (
     set_user_ai_keys,
 )
 from services import ai_service, metrics_service
+from services import logged_sessions
 from services import reported_effort, strength_model
 from services import assessment_pipeline
 from services import athlete_inquiry
@@ -532,6 +533,18 @@ async def save_workout(
             "Could not re-price session %s for user %s from reported effort",
             date,
             current_user.id,
+            exc_info=True,
+        )
+
+    # And where nothing imported the session at all, the log is the only record
+    # it ever had, so it becomes a session in the load chain in its own right
+    # (#745). Separately guarded from the re-price above: the two answer
+    # different questions and one failing must not skip the other.
+    try:
+        await logged_sessions.reconcile_logged_sessions(db, current_user)
+    except Exception:  # noqa: BLE001 - the log itself must still save
+        logger.warning(
+            "Could not reconcile logged sessions for user %s", current_user.id,
             exc_info=True,
         )
 
@@ -2282,6 +2295,10 @@ async def _store_fit_import(
             training_plan,
             [parsed.source_id],
         )
+        # After the row exists, not before: this upload may be the recording of a
+        # session the athlete had already logged by hand, which until now was
+        # standing in for itself (#745).
+        await logged_sessions.reconcile_logged_sessions(db, current_user)
 
     await db.flush()
     return schemas.FitUploadFileResult(

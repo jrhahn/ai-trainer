@@ -20,7 +20,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
-from services import metrics_service, reported_effort
+from services import logged_sessions, metrics_service, reported_effort
 from services.fitness_ledger import LoadLedger, ledger_from_row
 from services.activity_imports import ImportedActivity
 from services.ride_matching import apply_ride_plan_matches
@@ -515,6 +515,17 @@ async def _run_import_background(
                 await db.commit()
 
             _import_progress[user_id]["imported"] = min(i + BATCH, len(metrics_chain))
+
+        # After every batch is written, not inside the loop: a session the
+        # athlete logged by hand stops standing in for itself once its recording
+        # is here (#745), and that is only visible once the rows exist. Once per
+        # import rather than once per fifty activities, because each run reads
+        # the athlete's whole history.
+        async with async_session_maker() as db:
+            import_user = await crud.get_user_by_id(db, user_id)
+            if import_user is not None:
+                await logged_sessions.reconcile_logged_sessions(db, import_user)
+                await db.commit()
 
         if metrics_chain:
             async with async_session_maker() as db:
