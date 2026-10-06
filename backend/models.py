@@ -942,6 +942,16 @@ class AthleteHypothesis(Base):
         JSON, nullable=True
     )
     confidence: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    # Which sport the claim is about (#718). NULL for an LLM-formed hypothesis and
+    # for every row written before per-sport reasoning existed, both of which were
+    # about cycling in practice but never said so.
+    #
+    # Not a discriminator — ``category`` is still the thing that separates the
+    # deterministic writer's hypotheses from the LLM's, and the uniqueness index
+    # is still (user, category, statement_key). This is here because the sport was
+    # otherwise only recoverable by reading the statement text, and inferring a
+    # fact from prose is what the rest of this epic has been removing.
+    sport: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # How many supporting observations back the hypothesis (the "Evidence" count).
     evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     # proposed (needs validation) -> confirmed | refuted.

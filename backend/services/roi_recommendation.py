@@ -21,11 +21,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 from services.limiter_detection import (
     LIMITER_DURABILITY,
+    LIMITER_RUN_CRITICAL_SPEED,
+    LIMITER_RUN_DURABILITY,
+    LIMITER_RUN_SPEED_CEILING,
     LIMITER_THRESHOLD,
     LIMITER_VO2MAX,
+    pace_label,
     top_limiter,
+    top_limiter_for_sport,
 )
 
 # Physiological systems a recommendation can emphasise.
@@ -33,6 +39,16 @@ SYSTEM_THRESHOLD = "threshold"
 SYSTEM_VO2MAX = "vo2max"
 SYSTEM_ENDURANCE = "endurance"
 SYSTEM_ANAEROBIC = "anaerobic"
+
+# The running systems (#718), named separately rather than reusing the four
+# above. "Threshold" in this module has always meant watts at FTP; a running
+# threshold session is a pace against Critical Speed, and letting one identifier
+# mean both is the conflation #579, #712 and #716 each spent an issue undoing.
+# Distinct names also mean a weekly emphasis can hold two threshold sessions —
+# one on the bike and one on foot — without them collapsing into each other.
+SYSTEM_RUN_THRESHOLD = "run_threshold"
+SYSTEM_RUN_VO2MAX = "run_vo2max"
+SYSTEM_RUN_ENDURANCE = "run_endurance"
 
 # Expected-gain buckets, coarse on purpose — the model is not precise enough to
 # claim watt-level returns, so we speak in relative return-on-investment.
@@ -50,6 +66,9 @@ _SYSTEM_LABEL = {
     SYSTEM_VO2MAX: "VO₂max",
     SYSTEM_ENDURANCE: "Long endurance",
     SYSTEM_ANAEROBIC: "Anaerobic",
+    SYSTEM_RUN_THRESHOLD: "Threshold pace",
+    SYSTEM_RUN_VO2MAX: "Run VO₂max",
+    SYSTEM_RUN_ENDURANCE: "Long run",
 }
 
 # Per-limiter expected gain across systems. The limiter is the highest-return
@@ -74,6 +93,26 @@ _GAIN_BY_LIMITER: dict[str, dict[str, str]] = {
         SYSTEM_VO2MAX: GAIN_SMALL,
         SYSTEM_ANAEROBIC: GAIN_MAINTENANCE,
     },
+    # Running (#718). Only running systems appear, which is the whole point: a
+    # recommendation built from running evidence must not reach for a bike. There
+    # is no running anaerobic system because nothing in the model measures one —
+    # D′ is reported but we never know a short run effort was maximal, so a
+    # recommendation resting on it would be a scoring artefact.
+    LIMITER_RUN_CRITICAL_SPEED: {
+        SYSTEM_RUN_THRESHOLD: GAIN_LARGE,
+        SYSTEM_RUN_VO2MAX: GAIN_SMALL,
+        SYSTEM_RUN_ENDURANCE: GAIN_MAINTENANCE,
+    },
+    LIMITER_RUN_SPEED_CEILING: {
+        SYSTEM_RUN_VO2MAX: GAIN_LARGE,
+        SYSTEM_RUN_THRESHOLD: GAIN_MODERATE,
+        SYSTEM_RUN_ENDURANCE: GAIN_MAINTENANCE,
+    },
+    LIMITER_RUN_DURABILITY: {
+        SYSTEM_RUN_ENDURANCE: GAIN_LARGE,
+        SYSTEM_RUN_THRESHOLD: GAIN_MODERATE,
+        SYSTEM_RUN_VO2MAX: GAIN_SMALL,
+    },
 }
 
 # Suggested sessions per week for the top three systems, given a limiter. The
@@ -85,6 +124,25 @@ _EMPHASIS_BY_LIMITER: dict[str, list[tuple[str, int]]] = {
         (SYSTEM_ENDURANCE, 2),
         (SYSTEM_THRESHOLD, 1),
         (SYSTEM_VO2MAX, 1),
+    ],
+    # The running weeks are one session lighter than their cycling equivalents,
+    # and that is the #717 ceiling showing up here rather than being left for the
+    # plan gate to undo. Two hard running sessions plus a long run is a week most
+    # runners can absorb; three is where the eccentric load starts outrunning the
+    # tissue, and a recommendation that has to be capped downstream was the wrong
+    # recommendation.
+    LIMITER_RUN_CRITICAL_SPEED: [
+        (SYSTEM_RUN_THRESHOLD, 2),
+        (SYSTEM_RUN_ENDURANCE, 1),
+    ],
+    LIMITER_RUN_SPEED_CEILING: [
+        (SYSTEM_RUN_VO2MAX, 1),
+        (SYSTEM_RUN_THRESHOLD, 1),
+        (SYSTEM_RUN_ENDURANCE, 1),
+    ],
+    LIMITER_RUN_DURABILITY: [
+        (SYSTEM_RUN_ENDURANCE, 2),
+        (SYSTEM_RUN_THRESHOLD, 1),
     ],
 }
 
@@ -194,10 +252,102 @@ def _durability_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
     return hypothesis, " ".join(bits)
 
 
+def _run_critical_speed_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
+    """(hypothesis, rationale) for a runner whose CS is behind their ceiling.
+
+    Cites pace, not m/s. The stored attribute is a speed because the model does
+    arithmetic with it; an athlete reads 4:35 /km and recognises it, and reads
+    3.64 m/s and does not.
+    """
+    cs = _num(attrs.get("critical_speed"))
+    ceiling = _num(attrs.get("velocity_at_vo2max"))
+    frac = _num(attrs.get("run_fractional_utilization"))
+
+    hypothesis = (
+        "Your top-end running speed is ahead of the pace you can sustain — "
+        "threshold-pace work is the higher-return target right now, not more "
+        "track intervals."
+    )
+    bits: list[str] = []
+    if cs and ceiling:
+        bits.append(
+            f"Your 5-minute speed ({pace_label(ceiling)}) sits well ahead of your "
+            f"Critical Speed ({pace_label(cs)})"
+            + (f", which is only {frac:.0%} of it" if frac else "")
+            + "."
+        )
+    bits.append(
+        "Tempo and threshold-pace running is expected to close that gap faster "
+        "than more VO₂max intervals, which are also the highest-impact sessions "
+        "in the sport."
+    )
+    return hypothesis, " ".join(bits)
+
+
+def _run_speed_ceiling_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
+    cs = _num(attrs.get("critical_speed"))
+    ceiling = _num(attrs.get("velocity_at_vo2max"))
+    frac = _num(attrs.get("run_fractional_utilization"))
+
+    hypothesis = (
+        "Your sustainable pace already sits close to your top-end speed — raising "
+        "the ceiling offers more headroom than more threshold-pace work."
+    )
+    bits: list[str] = []
+    if cs and ceiling:
+        bits.append(
+            f"Your Critical Speed ({pace_label(cs)}) is close to your 5-minute speed "
+            f"({pace_label(ceiling)})"
+            + (f", about {frac:.0%} of it" if frac else "")
+            + "."
+        )
+    bits.append(
+        "With sustainable pace this near the ceiling, lifting the ceiling itself "
+        "is the higher-return target — introduce it gradually, because these are "
+        "the sessions running injuries come from."
+    )
+    return hypothesis, " ".join(bits)
+
+
+def _run_durability_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
+    fat = _score(attrs.get("run_fatigue_resistance"))
+
+    hypothesis = (
+        "Your pace fades through long runs — extending durability is the "
+        "higher-return target than more speed work."
+    )
+    bits: list[str] = []
+    if fat:
+        bits.append(
+            f"Run fatigue resistance scores '{fat}' — pace drops in the second "
+            "half of long runs."
+        )
+    bits.append(
+        "Steady aerobic volume, built up gradually, is expected to pay off more "
+        "than additional intensity until pace holds to the end of a long run."
+    )
+    return hypothesis, " ".join(bits)
+
+
 _RATIONALE_BY_LIMITER = {
     LIMITER_THRESHOLD: _threshold_rationale,
     LIMITER_VO2MAX: _vo2max_rationale,
     LIMITER_DURABILITY: _durability_rationale,
+    LIMITER_RUN_CRITICAL_SPEED: _run_critical_speed_rationale,
+    LIMITER_RUN_SPEED_CEILING: _run_speed_ceiling_rationale,
+    LIMITER_RUN_DURABILITY: _run_durability_rationale,
+}
+
+# Which sport each limiter's recommendation belongs to. Derived from the limiter
+# rather than passed in, so a caller cannot ask for a cycling recommendation and
+# be handed a running one.
+_SPORT_BY_LIMITER = {
+    LIMITER_THRESHOLD: SPORT_CYCLING,
+    LIMITER_VO2MAX: SPORT_CYCLING,
+    LIMITER_DURABILITY: SPORT_CYCLING,
+    LIMITER_RUN_CRITICAL_SPEED: SPORT_RUNNING,
+    LIMITER_RUN_SPEED_CEILING: SPORT_RUNNING,
+    LIMITER_RUN_DURABILITY: SPORT_RUNNING,
 }
 
 # Short per-system justification, keyed by (limiter, gain), kept generic so the
@@ -210,21 +360,45 @@ _GAIN_REASON = {
 }
 
 
-def _fallback(reason: str) -> dict[str, Any]:
-    """A neutral recommendation telling the caller to keep its own periodization."""
-    gains = [
-        _system_gain(SYSTEM_VO2MAX, GAIN_MODERATE, "balanced default"),
-        _system_gain(SYSTEM_THRESHOLD, GAIN_MODERATE, "balanced default"),
-        _system_gain(SYSTEM_ENDURANCE, GAIN_MAINTENANCE, "maintain aerobic base"),
-    ]
+_RUN_FALLBACK_EMPHASIS = [
+    (SYSTEM_RUN_THRESHOLD, 1),
+    (SYSTEM_RUN_ENDURANCE, 1),
+]
+
+
+def _fallback(reason: str, sport: str = SPORT_CYCLING) -> dict[str, Any]:
+    """A neutral recommendation telling the caller to keep its own periodization.
+
+    Sport-scoped since #718, because the "neutral" week was not neutral: a
+    runner with no confident limiter was handed a balanced *cycling* week —
+    VO₂max, threshold and endurance on the bike — which is a cycling
+    intervention on running evidence arriving through the one path nobody looks
+    at, the one that fires when the model knows nothing.
+    """
+    if sport == SPORT_RUNNING:
+        gains = [
+            _system_gain(SYSTEM_RUN_THRESHOLD, GAIN_MODERATE, "balanced default"),
+            _system_gain(
+                SYSTEM_RUN_ENDURANCE, GAIN_MAINTENANCE, "maintain aerobic base"
+            ),
+        ]
+        emphasis = _RUN_FALLBACK_EMPHASIS
+    else:
+        gains = [
+            _system_gain(SYSTEM_VO2MAX, GAIN_MODERATE, "balanced default"),
+            _system_gain(SYSTEM_THRESHOLD, GAIN_MODERATE, "balanced default"),
+            _system_gain(SYSTEM_ENDURANCE, GAIN_MAINTENANCE, "maintain aerobic base"),
+        ]
+        emphasis = _FALLBACK_EMPHASIS
     return {
         "sufficient": False,
         "limiter": None,
+        "sport": sport,
         "confidence": 0.0,
         "hypothesis": "",
         "rationale": reason,
         "expected_gain": gains,
-        "weekly_emphasis": [_emphasis(s, n) for s, n in _FALLBACK_EMPHASIS],
+        "weekly_emphasis": [_emphasis(s, n) for s, n in emphasis],
     }
 
 
@@ -234,11 +408,22 @@ def _fallback(reason: str) -> dict[str, Any]:
 # than a recommendation.
 _UTILITY_MODALITIES = ("road", "mtb", "gravel", "indoor")
 
+# Per sport (#718). Running has one modality, and listing the bike ones against
+# a running system was the concrete form of "proposes a cycling intervention on
+# running evidence": a runner whose limiter was durability would have been
+# offered a gravel ride as a way to fix it, ranked and scored, with no hint that
+# the evidence behind the ranking was about their legs on foot.
+_UTILITY_MODALITIES_BY_SPORT = {
+    SPORT_CYCLING: _UTILITY_MODALITIES,
+    SPORT_RUNNING: ("run",),
+}
+
 
 def _utility_block(
     gain_map: dict[str, str],
     motivation: dict[str, Any] | None,
     upcoming_races: int,
+    sport: str = SPORT_CYCLING,
 ) -> dict[str, Any] | None:
     """Rank (system, modality) options by expected athlete utility (#564).
 
@@ -257,7 +442,7 @@ def _utility_block(
     options = [
         (system, modality, gain)
         for system, gain in gain_map.items()
-        for modality in _UTILITY_MODALITIES
+        for modality in _UTILITY_MODALITIES_BY_SPORT.get(sport, _UTILITY_MODALITIES)
     ]
     return rank_options(
         options, motivation=motivation, upcoming_races=upcoming_races
@@ -269,11 +454,19 @@ def recommend_training_roi(
     limiters: list[dict] | None,
     motivation: dict[str, Any] | None = None,
     upcoming_races: int = 0,
+    sport: str | None = None,
 ) -> dict[str, Any]:
     """Map the performance model + detected limiter to an ROI recommendation.
 
     ``attributes`` is the Athlete Performance Model attribute map and ``limiters``
     the ranked list from :func:`services.limiter_detection.detect_limiters`.
+
+    ``sport`` picks which sport's limiter to build the recommendation from.
+    ``None`` — the default, and what every pre-#718 caller gets — means
+    "whichever sport the model is most sure about", which for a cycling-only
+    athlete is cycling and reproduces the previous behaviour exactly. The result
+    carries a ``sport`` field either way, so a caller never has to infer from the
+    limiter id which sport it was handed.
 
     Returns a dict with machine-readable ``expected_gain`` (per system: gain bucket
     + short reason), a ``weekly_emphasis`` list (system/label/sessions), a
@@ -289,11 +482,20 @@ def recommend_training_roi(
     Without it the output is exactly what it has always been.
     """
     attrs = attributes or {}
-    limiter = top_limiter(limiters or [])
+    limiter = (
+        top_limiter(limiters or [])
+        if sport is None
+        else top_limiter_for_sport(limiters, sport)
+    )
+    # Which sport this recommendation is actually about. Read off the limiter, not
+    # off the argument, so the systems, the modalities and the fallback week can
+    # never disagree with the evidence that produced them.
+    for_sport = _SPORT_BY_LIMITER.get(limiter or "", sport or SPORT_CYCLING)
     if limiter is None or limiter not in _GAIN_BY_LIMITER:
         return _fallback(
             "The performance model has no confident limiter yet, so no ROI-based "
-            "emphasis is asserted — fall back to standard periodization."
+            "emphasis is asserted — fall back to standard periodization.",
+            for_sport,
         )
 
     confidence = 0.0
@@ -316,13 +518,42 @@ def recommend_training_roi(
     result = {
         "sufficient": True,
         "limiter": limiter,
+        "sport": for_sport,
         "confidence": round(confidence, 2),
         "hypothesis": hypothesis,
         "rationale": rationale,
         "expected_gain": expected_gain,
         "weekly_emphasis": weekly_emphasis,
     }
-    utility = _utility_block(gain_map, motivation, upcoming_races)
+    utility = _utility_block(gain_map, motivation, upcoming_races, for_sport)
     if utility is not None:
         result["utility"] = utility
     return result
+
+
+def recommend_training_roi_by_sport(
+    attributes: dict[str, dict] | None,
+    limiters: list[dict] | None,
+    motivation: dict[str, Any] | None = None,
+    upcoming_races: int = 0,
+) -> dict[str, dict[str, Any]]:
+    """One ROI recommendation per sport the athlete actually trains (#718).
+
+    Keyed by sport, and **only** sports with a confident limiter appear — an
+    athlete who rides and has never run gets a one-entry map, which is the honest
+    answer rather than a running recommendation built from nothing.
+
+    This is the entry point for a caller that has to serve a multisport athlete.
+    :func:`recommend_training_roi` remains the single-sport answer and the one
+    every existing caller uses; it is not a wrapper around this, because "the
+    sport we are most sure about" and "every sport" are different questions and
+    collapsing them would make the common case pay for the rare one.
+    """
+    from services.limiter_detection import top_limiter_by_sport
+
+    return {
+        sport: recommend_training_roi(
+            attributes, limiters, motivation, upcoming_races, sport=sport
+        )
+        for sport in top_limiter_by_sport(limiters)
+    }

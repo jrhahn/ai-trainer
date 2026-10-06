@@ -118,6 +118,13 @@ _SYSTEM_RACE_SPECIFICITY = {
     # Real, and at two removes from a result: it holds a position and keeps the
     # athlete uninjured, it does not make them faster on the day.
     SYSTEM_STRENGTH: 0.25,
+    # Running (#718). The same shape as their cycling counterparts, because a
+    # running race result is made of the same two systems — and listed
+    # explicitly rather than left to the 0.5 default, which would have quietly
+    # ranked a threshold-pace session as less race-relevant than a long ride.
+    "run_threshold": 0.9,
+    "run_vo2max": 0.85,
+    "run_endurance": 0.5,
 }
 # Structured work is easier to execute precisely indoors; a technical trail ride
 # is a poor place to hold 300 W for 20 minutes.
