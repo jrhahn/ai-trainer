@@ -78,6 +78,20 @@ COACH_REPLIES = Counter(
     registry=REGISTRY,
 )
 
+OUTPUT_AUDITS = Counter(
+    "coach_output_audits_total",
+    "Pieces of coach output put through the deterministic output audit.",
+    ["surface"],
+    registry=REGISTRY,
+)
+
+OUTPUT_AUDIT_FINDINGS = Counter(
+    "coach_output_audit_findings_total",
+    "Findings from the deterministic audit of coach output, by surface and check.",
+    ["surface", "check"],
+    registry=REGISTRY,
+)
+
 SCHEDULER_RUNS = Counter(
     "scheduler_job_runs_total",
     "Scheduler job executions, by job and outcome.",
@@ -127,6 +141,30 @@ def record_coach_reply(*, contract: str) -> None:
     Flash rather than Flash-Lite" stays a matter of opinion (#511, #558).
     """
     COACH_REPLIES.labels(contract=contract).inc()
+
+
+def record_output_audit(*, surface: str, counts: dict[str, int]) -> None:
+    """Count one audited piece of coach output and whatever it was found to contain.
+
+    The audit (``services/output_audit``) checks that the language layer invented
+    no number the deterministic model never produced, and that it said nothing
+    that reads as medicine (ai-trainer-ops#28). It reports rather than gates, so
+    this counter is the whole of its output in production.
+
+    Both series are needed to read either. ``coach_output_audit_findings_total``
+    alone cannot distinguish "the coach started inventing numbers" from "the
+    coach is being asked more questions" — the denominator is
+    ``coach_output_audits_total`` for the same surface, which is incremented for
+    every audited reply including the clean ones.
+
+    Deliberately no label for *which* number or *which* term was found. That is
+    the athlete's health data (#499) and it is also unbounded, which is the one
+    thing a Prometheus label must never be.
+    """
+    OUTPUT_AUDITS.labels(surface=surface).inc()
+    for check, count in counts.items():
+        if count > 0:
+            OUTPUT_AUDIT_FINDINGS.labels(surface=surface, check=check).inc(count)
 
 
 def record_scheduler_run(*, job: str, status: str, duration_ms: int) -> None:

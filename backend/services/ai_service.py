@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 import schemas
 
-from . import metrics, token_accounting
+from . import metrics, output_audit, token_accounting
 from .activity_identity import activity_sport_type, power_model_applies
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
@@ -921,6 +921,13 @@ async def ask_trainer(
     date_stamp = app_today_stamp(timezone_name=timezone_name)
     messages = [*history, {"role": "user", "content": f"{date_stamp}\n{question}"}]
 
+    # What the coach was given, for the provenance half of the output audit
+    # (ai-trainer-ops#28): the prompt is already the deterministic model's
+    # numbers rendered for the model to read, so it needs no second assembly.
+    # The messages belong in it too — an athlete who writes "my FTP is 290" has
+    # supplied that number, and the coach repeating it invented nothing.
+    audited_context = [system_prompt, messages]
+
     # Retry empty/blank coach replies with exponential backoff before giving up;
     # rate-limit errors are not retried here and propagate to the caller.
     for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
@@ -951,6 +958,7 @@ async def ask_trainer(
                     "```" in raw,
                 )
                 metrics.record_coach_reply(contract="prose")
+                output_audit.report(prose, audited_context, surface="ask_trainer")
                 return _coach_result({}, prose)
             parsed = {}
 
@@ -959,6 +967,7 @@ async def ask_trainer(
         response = parsed.get("response")
         if isinstance(response, str) and response.strip():
             metrics.record_coach_reply(contract="json")
+            output_audit.report(response, audited_context, surface="ask_trainer")
             return _coach_result(parsed, response.strip())
 
         if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
