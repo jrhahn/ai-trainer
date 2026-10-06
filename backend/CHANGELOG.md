@@ -9,6 +9,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The limiter / ROI / hypothesis chain reasons per sport** (#718, epic #709 —
+  the last issue in it) — `services/limiter_detection.py` now has one rule set
+  per sport, each with its own attribute keys, its own limiter identifiers and
+  its own thresholds.
+
+  The #474 chain reasoned in watts throughout: MAP against FTP, fractional
+  utilisation, a power curve. Run over a multisport athlete unchanged it would
+  have asserted a *runner's* limiter out of cycling evidence — and it already did
+  something nearly as bad, telling a run-only athlete that it needed "FTP, MAP
+  and long-ride data" before it could help them.
+
+  - **The running analogue, not a copy.** Critical Speed stands where FTP stands
+    and the velocity at VO₂max where MAP stands, so the same "if the engine is
+    already big, raise the floor" reasoning applies — but the bands differ,
+    because CS sits near 90 % of vVO₂max (Jones & Vanhatalo 2017) where FTP sits
+    near 75 % of MAP. Borrowing the cycling numbers would call every runner alive
+    ceiling-limited and send them all to the track, which is where running
+    injuries come from. Three new limiters: `run_critical_speed`,
+    `run_speed_ceiling`, `run_durability`.
+  - **Three new attributes to support them** (`velocity_at_vo2max`,
+    `run_fractional_utilization`, `run_fatigue_resistance`). The ceiling comes
+    from the envelope's 5-minute point, because time to exhaustion at vVO₂max is
+    ~6 min (Billat & Koralsztein 1996) and 5 is the nearest duration the run
+    envelope probes. Five minutes is faster than six, so it **overestimates** the
+    ceiling and biases the limiter towards "work on Critical Speed" rather than
+    "work on vVO₂max" — the safer direction by a long way, and stated on the
+    attribute rather than buried in a comment.
+  - **The running durability bands are tighter than the cycling ones.** A
+    runner's speed varies far less than a cyclist's power — no coasting, and the
+    hills are already out via grade adjustment — so reused cycling bands would
+    score every run "high" and the attribute would never say anything.
+  - **The ceiling and the durability score survive a refused Critical Speed
+    fit.** A runner whose pace collapses in the second half of every long run has
+    a limiter whether or not their envelope can support a CS estimate, and
+    withholding the whole running model because one attribute of it is unknown is
+    how a sport ends up invisible to the chain.
+  - **A limiter is never asserted for a sport the athlete has no data in.** An
+    attribute that exists but reads `unknown` is the inference engine reporting
+    that it could not tell — not data. A sport with data but nothing conclusive
+    gets its own `insufficient_data` entry naming what *that sport* is missing,
+    and those entries sort after every real candidate so `likely_limiter` can
+    never land on one.
+  - **Evidence cites only same-sport observations**, structurally rather than by
+    convention: each sport's rules are handed its own attribute subset and cannot
+    reach the other's keys. Pinned from both directions — no wattage in a running
+    limiter, no pace in a cycling one.
+  - **A cycling-only history reads as it did before**, with two documented
+    exceptions. Asserted over four differently shaped models (threshold, VO₂max,
+    durability, nothing-conclusive) against the ranking captured by *executing
+    the pre-change module from `origin/develop`* rather than from reading the
+    code — on those four, the only difference is the additive `sport` field. The
+    exceptions: a model where **nothing at all** is known now gets a sportless
+    "no sport carries enough signal" entry instead of the old "need FTP, MAP and
+    long-ride data" one, because that branch fires when no sport has data and the
+    old wording told a run-only athlete to go and measure their FTP; and the
+    ranking's tie-break is now the generation index rather than insertion order,
+    which reproduces the old stable sort but is stated rather than relied upon.
+
+  **ROI** gains running systems (`run_threshold`, `run_vo2max`,
+  `run_endurance`), named separately because "threshold" in that module has
+  always meant watts at FTP. A running limiter now yields only running systems,
+  and the `(system, modality)` utility board offers only `run` — before this, a
+  runner whose limiter was durability was offered a gravel ride as the way to fix
+  it, ranked and scored, with nothing saying the evidence behind the ranking was
+  about their legs on foot. The **fallback** is sport-scoped too, which was the
+  quieter half of the same bug: a runner with no confident limiter was handed a
+  balanced *cycling* week through the branch that fires when the model knows
+  nothing. `recommend_training_roi` takes an optional `sport` (default: whichever
+  sport the model is most sure about, which reproduces the old behaviour exactly)
+  and `recommend_training_roi_by_sport` returns one recommendation per sport the
+  athlete actually trains. The running weeks are a session lighter than their
+  cycling equivalents — #717's ceiling applied where the recommendation is made,
+  because a recommendation that has to be capped downstream was the wrong
+  recommendation.
+
+  **Hypotheses** carry their sport (new nullable `athlete_hypotheses.sport`,
+  migration `20261006_000001`) and there is now one limiter claim per sport,
+  taken from that sport's own ranking rather than from the overall top — a
+  multisport athlete is limited by something in each sport they train, and
+  reporting only the more confident of the two means the coach never hears about
+  the other. `category=performance_model` remains the discriminator and the
+  uniqueness index is unchanged; what keeps the two sports' evidence from pooling
+  is that their statements differ, which is asserted rather than assumed. The two
+  standalone claims stay cycling-only on purpose: both rest on
+  `aerobic_endurance`, which is cardiac drift on long *rides*, and borrowing it
+  to make a claim about running would be the pooling this issue forbids.
+
+  **Strength is deliberately not a sport here.** It is a limiter *input*; giving
+  it its own chain would mean asserting that an athlete's limiter is their squat,
+  which is a claim about a lift rather than about what holds back their riding or
+  running.
+
+### Fixed
+
+- **The ROI fallback handed a run-only athlete a cycling week on the only path
+  production uses** — `sport=None` is how every caller invokes
+  `recommend_training_roi` (`routers/ai.py`, `schemas.py`,
+  `freshness_allocation.py`), and with no confident limiter there is no limiter
+  to read the sport off, so it defaulted to cycling. The sport now comes from the
+  ranking, which carries it even on its per-sport `insufficient_data` entries —
+  so a runner with a near-miss pace limiter, or with nothing conclusive at all,
+  gets a running fallback. Cycling remains the default only when the ranking
+  names no sport whatsoever. This was the half of the bug the first attempt
+  missed: the fix existed but the test asserted it with the sport passed
+  explicitly, so it never exercised the default path.
+- **Equal confidences no longer reorder a cyclist's ranking** — the per-sport
+  sort key briefly included the limiter id, which put `endurance_durability`
+  ahead of `threshold` on a tie. The pre-#718 sort was stable on a
+  confidence-only key, so a tie kept rule order; the tie-break is now the
+  generation index, which reproduces that exactly. Ties are not rare, because
+  confidences are rounded to 2 dp before they reach the sort.
+- **`top_limiter_for_sport` no longer trusts the order it was handed** — it reads
+  the top of a filtered list, and these lists are also read back out of a stored
+  `limiters` column. It now re-sorts by confidence; a silently wrong "top"
+  limiter reads as a coaching opinion.
+- **A hypothesis writer that states no sport no longer erases one** — the field
+  is set but never cleared, so the weekly LLM pass (which states no sport) cannot
+  blank what the deterministic engine recorded.
+- **A dead confidence re-check in the hypothesis engine** —
+  `derive_performance_hypotheses` re-tested the limiter confidence against a
+  constant equal to the one `top_limiter` had already applied, so the branch
+  could never execute. Removed, with the relationship between the two constants
+  asserted in a test instead, because a branch that cannot run is a comment that
+  looks like code.
+- **Three copies of the same pace-label helper**, one per stage, collapsed into
+  `limiter_detection.pace_label`. Three places for "unknown pace" to drift into a
+  traceback inside a coach prompt.
+
 - **Running volume has a durability ceiling, and it is not a function of
   fitness** (`services/run_durability.py`, #717, epic #709) — weekly running
   exposure, its rate of change, and a progression ceiling derived from the

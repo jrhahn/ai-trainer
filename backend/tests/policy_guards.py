@@ -520,4 +520,51 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="100",
         tests=("tests/test_run_durability.py",),
     ),
+    # --- Where a runner is limited, as opposed to a cyclist (#718) ----------
+    PolicyGuard(
+        target="services.limiter_detection:RUN_FRAC_CS_LIMITED",
+        decides=(
+            "how far Critical Speed must sit below the running aerobic ceiling "
+            "before sustainable pace is named the limiter"
+        ),
+        # The cycling value. Critical Speed sits near 90 % of vVO₂max where FTP
+        # sits near 75 % of MAP, so borrowing 0.72 means no runner is ever
+        # pace-limited and every one of them is sent to the track.
+        moved_to="0.72",
+        tests=("tests/test_per_sport_limiter_chain.py",),
+    ),
+    PolicyGuard(
+        target="services.limiter_detection:RUN_FRAC_SPEED_CEILING",
+        decides=(
+            "when a runner's sustainable pace is close enough to their top-end "
+            "speed that the ceiling is what has to move"
+        ),
+        # The cycling value again, and the dangerous direction: 0.80 calls an
+        # ordinary runner ceiling-limited and prescribes the highest-impact
+        # sessions in the sport.
+        moved_to="0.80",
+        tests=("tests/test_per_sport_limiter_chain.py",),
+    ),
+    PolicyGuard(
+        target="services.athlete_model_inference:_VVO2MAX_DURATION_MIN",
+        decides=(
+            "which envelope duration stands in for the velocity at VO₂max, and "
+            "therefore the denominator of every running limiter decision"
+        ),
+        # 1 min is an anaerobic sprint, not an aerobic ceiling: it inflates the
+        # denominator and makes every runner look pace-limited.
+        moved_to="1.0",
+        tests=("tests/test_per_sport_limiter_chain.py",),
+    ),
+    PolicyGuard(
+        target="services.athlete_model_inference:_DURABILITY_RUN_S",
+        decides=(
+            "how long a run must be before its half-split pace counts as "
+            "durability evidence"
+        ),
+        # 0 s makes a 20-minute recovery jog durability evidence, and a jog that
+        # finishes easier than it started reads as a fade.
+        moved_to="0",
+        tests=("tests/test_per_sport_limiter_chain.py",),
+    ),
 )

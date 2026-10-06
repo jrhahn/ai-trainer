@@ -74,6 +74,27 @@ _VO2_INTERCEPT = 7.0
 _LONG_RIDE_S = 9000  # 2.5 h — aerobic endurance / durability evidence
 _DURABILITY_RIDE_S = 5400  # 1.5 h — fatigue-resistance evidence
 
+# The running counterpart, and deliberately shorter (#718). A ride does not ask
+# the tissue for anything until it is long; a run's durability question bites
+# earlier, because every stride is an eccentric contraction and the cost
+# accumulates from the first kilometre. An hour is where a recreational runner's
+# long run sits, and demanding 1.5 h of them would leave this attribute unknown
+# for everyone who is not training for a marathon.
+_DURABILITY_RUN_S = 3600  # 1 h
+
+# Which probed duration stands in for the velocity at VO₂max. vVO₂max is the
+# slowest speed that elicits VO₂max, and time to exhaustion at it is ~6 min
+# (Billat & Koralsztein 1996); 5 min is the nearest duration the run envelope
+# probes (#716's ``RUN_SIGNAL_DURATIONS_MIN``).
+#
+# Five minutes is faster than six, so this **overestimates** vVO₂max, which
+# makes the CS/vVO₂max ratio read lower than it is and biases the running limiter
+# towards "threshold-limited" rather than "ceiling-limited". That is the safer
+# direction by some distance: being wrongly told to work on Critical Speed costs
+# a runner some tempo work, while being wrongly told to work on vVO₂max puts
+# them on a track doing the highest-injury-risk sessions in the sport.
+_VVO2MAX_DURATION_MIN = 5.0
+
 
 def _attr(
     *,
@@ -563,6 +584,150 @@ def _speed_envelope(
     return envelope, len(contributors)
 
 
+def _infer_velocity_at_vo2max(
+    envelope: dict[float, tuple[float, int, str | None]],
+    recent_days: int | None,
+) -> dict:
+    """The aerobic *ceiling* for running, from the short end of the envelope (#718).
+
+    The running analogue of :func:`_infer_map`, and the attribute the running
+    limiter needs that #716 did not produce: Critical Speed says what the athlete
+    can hold, and nothing about how much room there is above it. A runner whose CS
+    sits just under their ceiling and one whose CS is far below it need opposite
+    training, and without this the chain cannot tell them apart.
+
+    Reported at low confidence on purpose. We cannot know a 5-minute effort in
+    training was maximal — the same reservation
+    :func:`_infer_anaerobic_capacity` states for a 1-minute power — and
+    :data:`_VVO2MAX_DURATION_MIN` is a stand-in for a duration the envelope does
+    not probe.
+    """
+    point = envelope.get(_VVO2MAX_DURATION_MIN)
+    if not point or point[0] <= 0:
+        return _attr(
+            score="unknown",
+            confidence=0.1,
+            missing_information=[
+                f"No {_VVO2MAX_DURATION_MIN:g}-minute run effort in the window to "
+                "read the aerobic ceiling from"
+            ],
+            validation_protocol=(
+                "A maximal 5-minute run on a track or flat road; the average speed "
+                "is close to the velocity at VO₂max"
+            ),
+        )
+    speed, count, _best_date = point
+    # Base and cap both sit below :func:`_infer_map`'s 0.4/0.8. It is the same
+    # kind of evidence — a measured point off the envelope — but read at a
+    # substituted duration from an effort nobody verified was maximal, and those
+    # are two reasons to be less sure rather than one. Not lower still: a ceiling
+    # that could never clear the limiter gate would make the running limiter
+    # unreachable, which is a different way of saying nothing.
+    return _attr(
+        estimate=round(speed, 3),
+        unit="m/s",
+        confidence=_confidence(0.3, count, recent_days, cap=0.6),
+        evidence=[
+            f"Best {_VVO2MAX_DURATION_MIN:g}-min run speed "
+            f"{run_model.format_pace(speed)} across {count} run(s), taken as the "
+            "velocity at VO₂max"
+        ],
+        missing_information=[
+            "A 5-minute training effort may not have been maximal, and 5 min is "
+            "shorter than the ~6 min vVO₂max is defined at, so this reads slightly "
+            "fast"
+        ],
+    )
+
+
+def _infer_run_fractional_utilization(
+    critical_speed: float | None, vvo2max: float | None
+) -> dict:
+    """Critical Speed as a fraction of the running aerobic ceiling (#718).
+
+    The running analogue of FTP/MAP, and the number the running limiter turns on.
+    A well-developed Critical Speed sits near 90 % of vVO₂max (Jones &
+    Vanhatalo 2017); far below that there is room to raise CS, and close to the
+    ceiling it is the ceiling that has to move.
+    """
+    if not critical_speed or not vvo2max or vvo2max <= 0:
+        return _attr(
+            score="unknown",
+            confidence=0.1,
+            missing_information=[
+                "Needs both a Critical Speed fit and a 5-minute maximal run effort"
+            ],
+        )
+    # The same 0.45 as the cycling ratio, deliberately: a ratio is no more
+    # trustworthy than the two estimates it divides, and
+    # ``limiter_detection._min_input_confidence`` is what enforces that bound
+    # downstream. Picking a different number here would be claiming the running
+    # ratio is worse than the cycling one for a reason other than its inputs,
+    # which is already priced in through them.
+    return _attr(
+        estimate=round(critical_speed / vvo2max, 3),
+        confidence=0.45,
+        evidence=[
+            f"Critical Speed {run_model.format_pace(critical_speed)} against a "
+            f"{run_model.format_pace(vvo2max)} aerobic ceiling"
+        ],
+        missing_information=[
+            "Bounded by the Critical Speed and aerobic-ceiling estimate confidence"
+        ],
+    )
+
+
+def _infer_run_fatigue_resistance(
+    signals: list[tuple[models.RideMetric, dict]],
+) -> dict:
+    """Whether pace holds through a long run (#718).
+
+    The running analogue of :func:`_infer_fatigue_resistance`, on the half-split
+    speeds #716 began storing. The bands are **tighter** than the cycling ones
+    and that is not a transcription slip: a runner's speed varies far less than a
+    cyclist's power, because there is no coasting and the hills are already taken
+    out by grade adjustment. Reused cycling bands would score every run "high"
+    and the attribute would never say anything.
+    """
+    ratios: list[float] = []
+    for _, sig in signals:
+        if (sig.get("duration_s") or 0) < _DURABILITY_RUN_S:
+            continue
+        first, second = sig.get("first_half_speed"), sig.get("second_half_speed")
+        if (
+            isinstance(first, (int, float))
+            and isinstance(second, (int, float))
+            and first
+        ):
+            ratios.append(second / first)
+    if not ratios:
+        return _attr(
+            score="unknown",
+            confidence=0.1,
+            missing_information=[
+                f"No runs of {_DURABILITY_RUN_S // 60} min or more to compare early "
+                "vs late pace"
+            ],
+        )
+    avg = sum(ratios) / len(ratios)
+    if avg >= 0.99:
+        score = "high"
+    elif avg >= 0.97:
+        score = "above_average"
+    elif avg >= 0.94:
+        score = "moderate"
+    else:
+        score = "fades"
+    return _attr(
+        score=score,
+        confidence=_confidence(0.4, len(ratios), None, cap=0.75),
+        evidence=[
+            f"Second-half vs first-half pace held at {avg * 100:.0f}% across "
+            f"{len(ratios)} long run(s)"
+        ],
+    )
+
+
 def _infer_run_attributes(
     signals: list[tuple[models.RideMetric, dict]],
     recent_days: int | None,
@@ -588,6 +753,19 @@ def _infer_run_attributes(
     envelope, run_count = _speed_envelope(signals)
     points = {minutes: point[0] for minutes, point in envelope.items() if point[0] > 0}
     fit = run_model.critical_speed_from_points(points)
+
+    # The ceiling and the durability score do not depend on the fit, so they are
+    # reported even when Critical Speed is refused (#718). A runner whose pace
+    # collapses in the second half of every long run has a durability limiter
+    # whether or not their envelope can support a CS estimate, and withholding
+    # the whole running model because one attribute of it is unknown is how a
+    # sport ends up invisible to the chain.
+    vvo2max_attr = _infer_velocity_at_vo2max(envelope, recent_days)
+    extra = {
+        "velocity_at_vo2max": vvo2max_attr,
+        "run_fatigue_resistance": _infer_run_fatigue_resistance(signals),
+    }
+
     if fit is None:
         missing = [
             "No maximal run efforts spanning "
@@ -609,6 +787,8 @@ def _infer_run_attributes(
             "critical_speed": unknown,
             "d_prime": dict(unknown),
             "threshold_pace": dict(unknown),
+            "run_fractional_utilization": _infer_run_fractional_utilization(None, None),
+            **extra,
         }
 
     confidence = run_model.critical_speed_confidence(fit, recent_days)
@@ -651,6 +831,10 @@ def _infer_run_attributes(
             ],
             missing_information=missing,
         ),
+        "run_fractional_utilization": _infer_run_fractional_utilization(
+            fit.speed_m_s, vvo2max_attr.get("estimate")
+        ),
+        **extra,
     }
 
 

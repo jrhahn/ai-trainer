@@ -1981,6 +1981,7 @@ async def propose_athlete_hypothesis(
     alternative_explanations: list[str] | None = None,
     observed_at: datetime | None = None,
     max_open: int | None = None,
+    sport: str | None = None,
 ) -> models.AthleteHypothesis | None:
     """Create a hypothesis or strengthen an existing one with fresh evidence.
 
@@ -2041,6 +2042,7 @@ async def propose_athlete_hypothesis(
             ),
             evidence_count=1,
             status="proposed",
+            sport=sport,
             first_proposed_at=now,
             updated_at=now,
         )
@@ -2048,6 +2050,12 @@ async def propose_athlete_hypothesis(
     else:
         existing.evidence_count += 1
         existing.updated_at = now
+        if sport:
+            # Set, never cleared. A caller that does not state a sport is not
+            # asserting the claim has none — the LLM writer never states one —
+            # and letting it blank the field would mean a weekly LLM pass erasing
+            # what the deterministic engine knew (#718).
+            existing.sport = sport
         if rationale:
             existing.rationale = rationale.strip()
         if evidence:
