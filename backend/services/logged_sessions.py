@@ -85,20 +85,36 @@ def session_external_id(date: str, slot: int | None) -> str:
     return f"{date}#{int(slot or 0)}"
 
 
-def asserts_a_session(log: models.WorkoutLog) -> bool:
-    """Whether this log claims a session happened at all.
+def _duration_seconds(log: models.WorkoutLog) -> int:
+    """The session's duration in whole seconds, or ``0`` if it claims none.
 
-    A positive duration is the whole test, and deliberately not a reported
-    effort: an hour in the gym with no effort recorded is still an hour, and the
-    duration rung is there to price it. Requiring an effort would leave the
-    commonest log — saved without touching the RPE control — contributing
-    nothing, which is the bug this module exists to fix.
+    Whole seconds because that is the unit the ladder reads, and the two must not
+    disagree about what counts as a session — see :func:`asserts_a_session`.
     """
     try:
         minutes = float(getattr(log, "actual_duration_minutes", None) or 0)
     except (TypeError, ValueError):
-        return False
-    return minutes > 0
+        return 0
+    return max(0, int(round(minutes * 60)))
+
+
+def asserts_a_session(log: models.WorkoutLog) -> bool:
+    """Whether this log claims a session happened at all.
+
+    A duration the ladder can price is the whole test, and deliberately not a
+    reported effort: an hour in the gym with no effort recorded is still an hour,
+    and the duration rung is there to price it. Requiring an effort would leave
+    the commonest log — saved without touching the RPE control — contributing
+    nothing, which is the bug this module exists to fix.
+
+    Measured in whole seconds rather than "a positive number of minutes", found
+    in review: a quarter of a second is positive minutes but zero seconds, so the
+    two tests disagreed. A log corrected to such a duration was still *wanted*,
+    which kept the retirement rule from removing the row it had already written —
+    so the athlete's correction was ignored and a stale load stood. One test for
+    both, rather than a second rule to patch the first.
+    """
+    return _duration_seconds(log) > 0
 
 
 def is_logged_placeholder(metric: models.RideMetric) -> bool:
@@ -119,7 +135,6 @@ def logged_activity(log: models.WorkoutLog) -> ImportedActivity | None:
     if not date:
         return None
     slot = getattr(log, "slot", 0)
-    minutes = float(getattr(log, "actual_duration_minutes", 0) or 0)
     return ImportedActivity(
         source=LOGGED_SOURCE,
         external_activity_id=session_external_id(date, slot),
@@ -130,7 +145,7 @@ def logged_activity(log: models.WorkoutLog) -> ImportedActivity | None:
         start_datetime=None,
         activity_date=date,
         sport_type=str(getattr(log, "sport_type", "") or "cycling"),
-        duration_seconds=int(round(minutes * 60)),
+        duration_seconds=_duration_seconds(log),
         metadata={"workout_log_slot": int(slot or 0)},
     )
 
@@ -285,6 +300,14 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
     is not visible yet, so the placeholder it supersedes survives and the
     session counts twice until the next sync.
 
+    **It is deliberately not fail-safe at an import.** The import paths let an
+    exception here abort their transaction, because a retirement has to be atomic
+    with the rows that caused it: swallowing the error would commit the new
+    activity *and* keep the placeholder it supersedes, leaving that hour priced
+    twice with nothing left to notice. The workout-log route is the one caller
+    that guards it, for the opposite reason — there the athlete's own log is
+    already written and must still save.
+
     Wired into every path that builds the load chain, for the reason
     ``reported_effort.annotate_from_logs`` gives: a feeder in one of five callers
     is a feeder that reverts. Running it on every import is also what reconciles
@@ -308,10 +331,12 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,
         )
-        if load is None:
-            # The ladder could not price it even from time on task. Recording a
-            # zero would be the assertion that the athlete rested (#579), so the
-            # row is not written at all.
+        if load is None:  # pragma: no cover - see asserts_a_session
+            # Unreachable: a log that reaches here has a duration the ladder can
+            # price, because that is now what ``asserts_a_session`` tests. Kept
+            # because the alternative to this branch is an AttributeError on
+            # ``load.tss`` if the two ever drift again, and because writing a
+            # zero would be the assertion that the athlete rested (#579).
             continue
         was = stored.get(activity.source_key)
         if was is not None and _already_stored(was, activity, load):

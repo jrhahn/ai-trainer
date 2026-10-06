@@ -561,13 +561,17 @@ def test_the_external_id_is_the_session_identity(date, slot, expected):
     [
         (60, True),
         (1, True),
+        # One whole second is the floor, because seconds are what the ladder
+        # prices in. Anything that rounds below it claims no session.
+        (1 / 60, True),
+        (0.004, False),
         (0, False),
         (None, False),
         (-30, False),
         ("not a number", False),
     ],
 )
-def test_only_a_positive_duration_claims_a_session(minutes, claims):
+def test_only_a_duration_the_ladder_can_price_claims_a_session(minutes, claims):
     assert logged_sessions.asserts_a_session(_Log("2026-03-02", minutes=minutes)) is claims
 
 
@@ -578,33 +582,50 @@ def test_a_log_claiming_no_session_becomes_no_activity_and_no_load():
     assert logged_sessions.load_for_log(empty) is None
 
 
-@pytest.mark.asyncio
-async def test_a_duration_that_rounds_to_no_seconds_is_not_written():
-    """The one place the duration test and the ladder disagree.
-
-    ``asserts_a_session`` accepts any positive number of minutes, but a quarter
-    of a second rounds to zero seconds and the ladder then has nothing to price —
-    it returns ``None`` rather than a zero, because a zero is the claim that the
-    athlete rested (#579). So the row is not written at all, instead of being
-    written with no load.
-    """
-    user_id = await _create_user("rounds-to-zero@example.com")
+async def _set_duration(user_id: str, date: str, minutes: float) -> None:
+    """Write a duration the route's integer column could not hold."""
     async with TestSessionLocal() as db:
-        log = models.WorkoutLog(
-            user_id=user_id,
-            date="2026-03-02",
-            slot=0,
-            actual_duration_minutes=0.004,
-            perceived_effort=4,
-            notes="",
-            completed_at="2026-03-02T18:00:00",
-            sport_type=SPORT_STRENGTH,
-        )
-        db.add(log)
+        log = await crud.get_workout_log_by_date(db, user_id, date, 0)
+        assert log is not None
+        log.actual_duration_minutes = minutes
         await db.commit()
 
-    assert logged_sessions.asserts_a_session(log) is True  # the premise
+
+@pytest.mark.asyncio
+async def test_a_duration_that_rounds_to_no_seconds_is_not_written():
+    """Where the duration test and the ladder used to disagree.
+
+    A quarter of a second is a positive number of minutes but zero seconds, and
+    the ladder prices in seconds — it returns ``None`` rather than a zero,
+    because a zero is the claim that the athlete rested (#579). Both now read the
+    same whole seconds, so such a log claims no session and gets no row.
+    """
+    user_id = await _create_user("rounds-to-zero@example.com")
+    await _log_session(user_id, "2026-03-02", effort=4)
+    await _set_duration(user_id, "2026-03-02", 0.004)
+
     assert await _reconcile(user_id) == 0
+    assert await _rows(user_id) == []
+
+
+@pytest.mark.asyncio
+async def test_correcting_a_session_to_nothing_retires_the_row_it_wrote():
+    """Found in review. The athlete's latest account has to win.
+
+    While ``asserts_a_session`` accepted positive *minutes* and the ladder
+    priced in *seconds*, a log corrected to a quarter of a second was still
+    wanted — so the retirement rule left the row alone, the write was skipped for
+    want of a price, and the stale load stood forever. The two tests agreeing is
+    what fixes it; this pins the behaviour the disagreement broke.
+    """
+    user_id = await _create_user("corrected-to-nothing@example.com")
+    await _log_session(user_id, "2026-03-02", effort=4)
+    assert await _reconcile(user_id) == 1
+    assert len(await _rows(user_id)) == 1
+
+    await _set_duration(user_id, "2026-03-02", 0.004)
+
+    assert await _reconcile(user_id) == 1  # the row retired
     assert await _rows(user_id) == []
 
 

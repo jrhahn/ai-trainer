@@ -44,11 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     established for #714, for the same reason: an importer that writes a row
     without reconciling leaves the superseded placeholder in place, and prices
     that hour twice.
-  - **A positive duration is the trigger, not an effort.** An hour in the gym
-    with no RPE recorded is still an hour, and the duration rung is there to
-    price it; requiring an effort would have left the commonest log — saved
-    without touching the RPE control — contributing nothing, which is the bug
-    rather than a cautious version of the fix.
+  - **A duration the ladder can price is the trigger, not an effort.** An hour
+    in the gym with no RPE recorded is still an hour, and the duration rung is
+    there to price it; requiring an effort would have left the commonest log —
+    saved without touching the RPE control — contributing nothing, which is the
+    bug rather than a cautious version of the fix. Measured in whole seconds,
+    because that is the unit the ladder reads: while the trigger tested positive
+    *minutes* and the ladder priced in *seconds*, a log corrected to a quarter of
+    a second was still wanted, so the retirement rule left its row alone and a
+    stale load stood forever. Found in review on PR #746.
   - **Every sport, not only the gym.** A hand-logged ride with no recording is
     the same claim about the same athlete. The gym is the motivating case, not
     the rule.
