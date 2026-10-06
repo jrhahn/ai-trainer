@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     hides the finding.
   - **An unpriced activity makes the week unmeasurable** rather than counting as a
     rest day, which is the #579 confusion that this whole area exists to keep out.
+  - Two fixes from review on PR #748: the statement read its window length from a
+    hardcoded `7`, so a moved `ROLLING_WINDOW_DAYS` would have had the prompt
+    misstate the window it was measuring; and a *baseline* window holding an
+    unpriced activity was still contributing a strain figure, understated by the
+    hole, which drags the baseline down and reports the current week as more of a
+    spike than it was. The #579 argument the current window already made applies to
+    the history it is compared against, so those windows are now skipped.
   - Six policy-guard entries (#600). `BASELINE_WINDOW_DAYS` and
     `ROLLING_WINDOW_DAYS` slipped their first check, because binding a constant as
     a default argument freezes it at import: the register moves the module

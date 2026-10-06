@@ -261,11 +261,40 @@ def test_an_unpriced_activity_makes_the_week_unmeasurable():
     assert not is_monotonous(distribution)
 
 
-def test_an_unpriced_activity_outside_the_window_does_not_matter():
+def test_an_unpriced_activity_outside_the_window_does_not_block_the_flag():
     rows = _rows(FLAT_HARD) + [_Row(TODAY - datetime.timedelta(days=20), None)]
     distribution = load_distribution(rows, TODAY)
 
     assert distribution.unpriced_activities == 0
+    assert is_monotonous(distribution)
+
+
+def test_a_baseline_window_with_an_unpriced_activity_is_skipped():
+    """A hole understates that window's load and so understates its strain.
+
+    Including it drags the baseline down and reports this week as more of a spike
+    than it was — the same #579 argument the current window already makes, applied
+    to the history it is compared against. Found in review on PR #748.
+    """
+    clean = _distribution(FLAT_HARD)
+    holed = load_distribution(
+        _rows(FLAT_HARD) + [_Row(TODAY - datetime.timedelta(days=20), None)], TODAY
+    )
+
+    assert clean.baseline_windows == 4
+    assert holed.baseline_windows == 3
+    assert holed.baseline_strain == pytest.approx(clean.baseline_strain)
+
+
+def test_losing_every_baseline_window_to_holes_removes_the_comparison():
+    """Not enough history is the honest answer, rather than a baseline of one week."""
+    holes = [
+        _Row(TODAY - datetime.timedelta(days=day), None) for day in (10, 17, 24)
+    ]
+    distribution = load_distribution(_rows(FLAT_HARD) + holes, TODAY)
+
+    assert distribution.baseline_windows == 1
+    assert distribution.strain_ratio is None
     assert is_monotonous(distribution)
 
 
@@ -428,6 +457,24 @@ def test_an_uncapped_figure_is_stated_as_a_number():
 
     assert "Monotony 2,4" in statement
     assert "at least" not in statement.split("Monotony")[1].split("\n")[0]
+
+
+def test_the_statement_reads_its_window_length_from_the_data():
+    """Not a literal "7": the prompt would misstate a moved window.
+
+    The constant is in the #600 register, so it *will* be moved — and a statement
+    that says seven while measuring one is the two-readings-of-one-number failure
+    this module already carries a comment about. Found in review on PR #748.
+    """
+    original = training_monotony.ROLLING_WINDOW_DAYS
+    try:
+        training_monotony.ROLLING_WINDOW_DAYS = 5
+        statement = training_monotony.distribution_statement(_distribution(FLAT_HARD))
+    finally:
+        training_monotony.ROLLING_WINDOW_DAYS = original
+
+    assert "the 5 complete days" in statement
+    assert "7 complete days" not in statement
 
 
 def test_the_statement_names_the_window_and_the_rest_days():

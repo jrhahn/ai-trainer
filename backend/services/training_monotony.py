@@ -247,6 +247,13 @@ def _window_series(
     return [totals.get(start + timedelta(days=offset), 0.0) for offset in range(days)]
 
 
+def _window_unpriced(unpriced: Mapping[date, int], start: date, days: int) -> int:
+    """Activities inside the window that never got a price."""
+    return sum(
+        unpriced.get(start + timedelta(days=offset), 0) for offset in range(days)
+    )
+
+
 def load_distribution(
     rows: list[object] | None,
     today: date | str | None,
@@ -298,13 +305,22 @@ def load_distribution(
     # The baseline is every complete window that fits before this one, so the
     # current week is never part of the history it is compared against — a week
     # that is its own baseline can only ever look average.
+    #
+    # An earlier window holding an unpriced activity is skipped rather than
+    # included, for the same reason the current one is reported as unmeasurable: a
+    # missing price is a hole, not a zero, and a window with a hole in it has an
+    # understated load and therefore an understated strain. Including it drags the
+    # baseline down and reports this week as more of a spike than it was. Found in
+    # review on PR #748.
     baseline: list[float] = []
     offset = window_days
     while offset + window_days <= baseline_days:
         earlier_start = start - timedelta(days=offset)
         earlier = _window_series(totals, earlier_start, window_days)
         earlier_load = sum(earlier)
-        if earlier_load > 0:
+        if earlier_load > 0 and not _window_unpriced(
+            unpriced, earlier_start, window_days
+        ):
             earlier_monotony, _ = _monotony(earlier)
             baseline.append(earlier_load * earlier_monotony)
         offset += window_days
@@ -324,11 +340,7 @@ def load_distribution(
         baseline_strain=statistics.fmean(baseline) if baseline else 0.0,
         baseline_windows=len(baseline) + 1,
         rest_days=sum(1 for value in series if value <= 0),
-        unpriced_activities=sum(
-            count
-            for day, count in unpriced.items()
-            if start <= day <= end
-        ),
+        unpriced_activities=_window_unpriced(unpriced, start, window_days),
     )
 
 
@@ -371,7 +383,8 @@ def distribution_statement(distribution: LoadDistribution) -> str:
         else f"{distribution.rest_days} day{'s' if distribution.rest_days > 1 else ''} off"
     )
     lines = [
-        f"Load distribution, the 7 complete days to {distribution.window_end.isoformat()}: "
+        f"Load distribution, the {distribution.window_days} complete days to "
+        f"{distribution.window_end.isoformat()}: "
         f"{round(distribution.weekly_load)} total across every sport, "
         f"{round(distribution.daily_mean)} a day on average, heaviest day "
         f"{round(heaviest)}, {rest}. Monotony {monotony} "
