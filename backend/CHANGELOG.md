@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A session only the athlete recorded now carries load** (#745) —
+  `services/logged_sessions.py`. A workout the athlete logged by hand, which no
+  provider ever imported, contributed **nothing** to fatigue: not to ATL, not to
+  its own sport's CTL. The freshness curve read the day as rest and TSB *rose*
+  across it — the #579 failure, still shipping for exactly the sessions least
+  likely to be recorded on a device.
+
+  The cause was reachability, not arithmetic. The load ladder's bottom two rungs
+  — session-RPE (#712/#714) and time on task — exist for sessions nothing
+  measured, and both are reached by walking `RideMetric` rows. Every path that
+  created one needed an *imported* activity: a Strava or intervals.icu sync, or
+  an uploaded `.fit` file. So the two rungs built for unmeasured sessions could
+  only be reached by a measured one. The athlete who logged twelve sets and
+  RPE 4 got tonnage and e1RM trends (#714) and the interference guards (#715),
+  and zero fatigue.
+
+  - **Through the existing gates, not beside them.** `session_load` prices it and
+    `metrics_service.replay_load_chain` books it, so there is still exactly one
+    place that decides what a session cost and one ledger loop. The module
+    contains no load formula, which is asserted rather than intended.
+  - **Its identity is the session's identity** — `(date, slot)` from #496, as the
+    `external_activity_id` of a new `"logged"` activity source. So re-saving the
+    form corrects the figure instead of appending a second session, and a
+    two-a-day stays two sessions.
+  - **Retired the moment the recording arrives**, matched on date and
+    `training_sport`. The placeholder exists only in the absence of a recording,
+    so the recording is precisely the event that ends it. Where a date holds more
+    logged sessions of one sport than recordings, the recordings pair off against
+    the lower slots first; that can only be wrong about *which* of two same-sport
+    sessions was recorded, never about how many the day held.
+  - **Wired into all five chain callers**, with a structural test that fails on a
+    sixth — the guard `test_every_chain_caller_feeds_the_reported_effort`
+    established for #714, for the same reason: an importer that writes a row
+    without reconciling leaves the superseded placeholder in place, and prices
+    that hour twice.
+  - **A positive duration is the trigger, not an effort.** An hour in the gym
+    with no RPE recorded is still an hour, and the duration rung is there to
+    price it; requiring an effort would have left the commonest log — saved
+    without touching the RPE control — contributing nothing, which is the bug
+    rather than a cautious version of the fix.
+  - **Every sport, not only the gym.** A hand-logged ride with no recording is
+    the same claim about the same athlete. The gym is the motivating case, not
+    the rule.
+  - **No backfill migration.** Running on every import is what reconciles
+    history: a session logged before this existed gets its row the next time
+    anything syncs. Two alembic revisions already import from `services.analysis`
+    and must not be edited; a third such coupling is not worth it.
+
+  Deliberately out: a logged **average power** is not a normalised power, and
+  converting one to the other is a formula this app does not have — so a logged
+  ride prices from heart rate, effort or time, all of which admit to estimating,
+  rather than from a number invented at a new site. Tonnage stays the gym's own
+  currency and is still not convertible to TSS (#714).
+
 - **The limiter / ROI / hypothesis chain reasons per sport** (#718, epic #709 —
   the last issue in it) — `services/limiter_detection.py` now has one rule set
   per sport, each with its own attribute keys, its own limiter identifiers and

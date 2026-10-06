@@ -14,7 +14,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
-from services import metrics_service, reported_effort
+from services import logged_sessions, metrics_service, reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today
 from services.intervals_service import (
@@ -518,6 +518,10 @@ async def run_intervals_import(
                 user = await crud.get_user_by_id(db, user_id)
                 if user is not None:
                     await summary_pipeline.invalidate(db, user)
+                    # After the rows exist, not before: a session the athlete
+                    # logged by hand stops standing in for itself once its
+                    # recording is here (#745).
+                    await logged_sessions.reconcile_logged_sessions(db, user)
             await db.commit()
         logger.info(
             "Intervals.icu history import persisted user=%s imported=%s skipped=%s failed=%s",

@@ -19,7 +19,7 @@ from services.analysis import (
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )
-from services import metrics_service, reported_effort
+from services import logged_sessions, metrics_service, reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
@@ -260,6 +260,11 @@ async def _persist_and_adapt(
         if ride is not None:
             apply_summary_fallback(metric, ride)
         await crud.upsert_ride_metric(db, user.id, **metric)
+
+    # Now that the rows exist, the sessions the athlete logged by hand are
+    # reconciled against them: one of these activities may be the recording of a
+    # session that has been standing in for itself (#745).
+    await logged_sessions.reconcile_logged_sessions(db, user)
 
     if not metrics_chain:
         return 0, 0
