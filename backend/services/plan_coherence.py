@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from schemas import day_slot
+from schemas import day_field, day_slot
 
 # Days that carry no training load, where a repeat is the intended pattern
 # rather than a collision. Two rest days in a row is a taper, not a bug.
@@ -54,14 +54,22 @@ def session_signature(day: dict) -> tuple[str, str, object] | None:
     ``None`` when the day carries no load, or when it is too sparsely specified
     to compare — an absent title or type is not evidence of a duplicate, and
     guessing one would manufacture collisions out of incomplete data.
+
+    Reads both key spellings. Until ai-trainer-ops#29 every reader in this module
+    looked at camelCase alone, which meant a plan written in snake_case produced
+    no signature for any day: duplicate detection returned nothing at all and
+    looked exactly like a clean plan. The detector built to stop the 2026-09-07
+    duplicate was blind to half its possible inputs.
     """
     if not isinstance(day, dict):
         return None
-    workout_type = str(day.get("workoutType") or "").strip().lower()
-    title = str(day.get("title") or "").strip().lower()
+    workout_type = (
+        str(day_field(day, "workoutType", "workout_type", default="")).strip().lower()
+    )
+    title = str(day_field(day, "title", default="")).strip().lower()
     if workout_type in _NON_LOADING_TYPES or not title:
         return None
-    duration = day.get("durationMinutes")
+    duration = day_field(day, "durationMinutes", "duration_minutes")
     if duration in (0, "0"):
         return None
     return (workout_type, title, duration)
@@ -117,9 +125,11 @@ def find_repeated_sessions(
             repeats.append(
                 {
                     "dates": [current.isoformat(), (current + timedelta(days=1)).isoformat()],
-                    "workoutType": day.get("workoutType"),
-                    "title": day.get("title"),
-                    "durationMinutes": day.get("durationMinutes"),
+                    "workoutType": day_field(day, "workoutType", "workout_type"),
+                    "title": day_field(day, "title"),
+                    "durationMinutes": day_field(
+                        day, "durationMinutes", "duration_minutes"
+                    ),
                     "slot": day_slot(day),
                 }
             )
@@ -135,7 +145,10 @@ _STRENGTH_TYPES = frozenset({"strength"})
 def is_strength_day(day: dict) -> bool:
     if not isinstance(day, dict):
         return False
-    return str(day.get("workoutType") or "").strip().lower() in _STRENGTH_TYPES
+    return (
+        str(day_field(day, "workoutType", "workout_type", default="")).strip().lower()
+        in _STRENGTH_TYPES
+    )
 
 
 def find_stacked_strength(
@@ -176,8 +189,8 @@ def find_stacked_strength(
                     (current + timedelta(days=1)).isoformat(),
                 ],
                 "titles": [
-                    by_date[current][0].get("title"),
-                    following[0].get("title"),
+                    day_field(by_date[current][0], "title"),
+                    day_field(following[0], "title"),
                 ],
             }
         )

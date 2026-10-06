@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from services.plan_constraints import (
+    blocked_dates,
     day_violates_constraint,
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
@@ -219,3 +220,112 @@ def test_override_deduplicates_per_date():
     ]
     overrides = describe_constraint_overrides(updates, [_required("2026-07-17")])
     assert len(overrides) == 1
+
+
+# ---------------------------------------------------------------------------
+# blocked_dates, and the stale-twin removal on write (ai-trainer-ops#29, #30)
+# ---------------------------------------------------------------------------
+
+
+def test_blocked_dates_collects_only_no_training_entries():
+    constraints = [
+        _constraint("2026-06-26"),
+        {
+            "constraintType": "required_workout",
+            "constraintDate": "2026-06-27",
+            "requiredWorkout": {"workoutType": "endurance"},
+        },
+    ]
+    assert blocked_dates(constraints) == {"2026-06-26"}
+
+
+def test_blocked_dates_is_empty_without_constraints():
+    assert blocked_dates([]) == set()
+
+
+def test_blocked_dates_ignores_entries_without_a_date():
+    assert blocked_dates([{"constraintType": "no_training"}]) == set()
+
+
+def test_blanking_removes_the_stale_snake_case_twin():
+    """The gate's verdict must be the only thing the day says about itself.
+
+    Leaving ``duration_minutes: 90`` next to the written ``durationMinutes: 0``
+    is what let the module's own reader see 90 and call the blanked day a
+    violation of the constraint it had just enforced.
+    """
+    plan = [{"date": "2026-06-26", "workout_type": "intervals", "duration_minutes": 90}]
+    (out,) = sanitize_plan_for_constraints(plan, [_constraint("2026-06-26")])
+    assert out["workoutType"] == "rest"
+    assert out["durationMinutes"] == 0
+    assert "workout_type" not in out
+    assert "duration_minutes" not in out
+    assert not day_violates_constraint(out, [_constraint("2026-06-26")])
+
+
+def test_coercion_keeps_a_snake_case_session_intact():
+    """``was_rest_or_empty`` read camelCase alone, so this day counted as empty.
+
+    The day is short of the floor, so it *is* coerced and the duration goes up.
+    What must not happen is the rest-day treatment: before the fix this day read
+    as empty and had its title, description and intervals replaced, losing a real
+    planned session to a generic "Required endurance session".
+    """
+    plan = [
+        {
+            "date": "2026-06-26",
+            "workout_type": "endurance",
+            "duration_minutes": 30,
+            "title": "Long ride with the club",
+            "description": "Bakery stop at the halfway point",
+            "intervals": [{"minutes": 30}],
+        }
+    ]
+    constraints = [
+        {
+            "constraintType": "required_workout",
+            "constraintDate": "2026-06-26",
+            "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 60},
+        }
+    ]
+    (out,) = sanitize_plan_for_constraints(plan, constraints)
+    assert out["durationMinutes"] == 60  # raised to the floor
+    assert "duration_minutes" not in out  # and the stale twin is gone
+    assert out["title"] == "Long ride with the club"
+    assert out["description"] == "Bakery stop at the halfway point"
+    assert out["intervals"] == [{"minutes": 30}]
+
+
+def test_coercion_still_labels_a_genuinely_empty_day():
+    """The rest-day treatment is right when the day really is empty."""
+    plan = [{"date": "2026-06-26", "workout_type": "rest", "duration_minutes": 0}]
+    constraints = [
+        {
+            "constraintType": "required_workout",
+            "constraintDate": "2026-06-26",
+            "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 60},
+        }
+    ]
+    (out,) = sanitize_plan_for_constraints(plan, constraints)
+    assert out["title"] == "Required endurance session"
+    assert out["workoutType"] == "endurance"
+    assert out["durationMinutes"] == 60
+    assert "workout_type" not in out
+
+
+def test_a_blocked_day_stays_blocked_across_repeated_passes():
+    """Precedence has to be a property of the gate, not of its first application."""
+    plan = [{"date": "2026-06-26", "workoutType": "endurance", "durationMinutes": 90}]
+    constraints = [
+        _constraint("2026-06-26"),
+        {
+            "constraintType": "required_workout",
+            "constraintDate": "2026-06-26",
+            "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 60},
+        },
+    ]
+    current = plan
+    for _ in range(3):
+        current = sanitize_plan_for_constraints(current, constraints)
+        assert current[0]["workoutType"] == "rest"
+        assert current[0]["durationMinutes"] == 0

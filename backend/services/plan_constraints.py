@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import schemas
 
 # A date may hold more than one session (#496); ``slot`` orders them. Reuse the
@@ -9,22 +11,70 @@ import schemas
 # session a day dict is.
 _slot = schemas.day_slot
 
+# Read every other field through the same canonical reader. It resolves on key
+# presence rather than truthiness, which is what the old
+# ``day.get("durationMinutes") or day.get("duration_minutes")`` idiom got wrong
+# for a legitimately-zero duration (ai-trainer-ops#29).
+_field = schemas.day_field
+
+_CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def _snake(name: str) -> str:
+    return _CAMEL_BOUNDARY.sub("_", name).lower()
+
+
+def _written(day: dict, values: dict) -> dict:
+    """Apply ``values`` to a copy of ``day``, dropping the stale snake_case twins.
+
+    Writing ``workoutType: "rest"`` onto a day that arrived as
+    ``workout_type: "intervals"`` leaves the day asserting two different things
+    about itself, and which one a consumer believes depends on the order it reads
+    them in. Every value here is authoritative — the gate has just decided it —
+    so the other spelling is not a fallback any more, it is stale data.
+    """
+    result = {**day, **values}
+    for name in values:
+        twin = _snake(name)
+        if twin != name:
+            result.pop(twin, None)
+    return result
+
+
+def _day_is_training(day: dict) -> bool:
+    workout_type = str(_field(day, "workoutType", "workout_type", default="")).lower()
+    duration = _field(day, "durationMinutes", "duration_minutes", default=0)
+    return workout_type not in {"", "rest"} or int(duration or 0) > 0
+
+
+def blocked_dates(constraints: list[dict]) -> set[str]:
+    """The dates the athlete declared unavailable.
+
+    Being blocked is a property of the *date*, not of whatever a day currently
+    holds. ``sanitize_plan_for_constraints`` depends on that distinction — see
+    the note there (ai-trainer-ops#30).
+    """
+    return {
+        str(c.get("constraintDate"))
+        for c in constraints
+        if c.get("constraintType") == "no_training" and c.get("constraintDate")
+    }
+
 
 def day_violates_constraint(day: dict, constraints: list[dict]) -> bool:
+    """Whether ``day`` schedules training on a date the athlete blocked.
+
+    A question about a *day as written*, which is what the router needs when it
+    filters requested updates: an update that rests a blocked day is fine and
+    must pass. ``sanitize_plan_for_constraints`` asks the other question — is
+    this date blocked — and the two must not be confused.
+    """
     date_value = day.get("date")
     if not date_value:
         return False
-    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
-    duration = day.get("durationMinutes") or day.get("duration_minutes") or 0
-    is_training = workout_type not in {"", "rest"} or int(duration or 0) > 0
-    if not is_training:
+    if not _day_is_training(day):
         return False
-    for constraint in constraints:
-        if constraint.get("constraintType") != "no_training":
-            continue
-        if constraint.get("constraintDate") == date_value:
-            return True
-    return False
+    return str(date_value) in blocked_dates(constraints)
 
 
 def _required_workout_for_day(day: dict, constraints: list[dict]) -> dict | None:
@@ -44,12 +94,12 @@ def day_satisfies_required_workout(day: dict, spec: dict) -> bool:
     """Whether ``day`` already meets the required workout type and duration floor."""
     required_type = str(spec.get("workoutType") or "").lower()
     if required_type:
-        day_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
+        day_type = str(_field(day, "workoutType", "workout_type", default="")).lower()
         if day_type != required_type:
             return False
     min_minutes = spec.get("minDurationMinutes")
     if min_minutes:
-        duration = day.get("durationMinutes") or day.get("duration_minutes") or 0
+        duration = _field(day, "durationMinutes", "duration_minutes", default=0)
         if int(duration or 0) < int(min_minutes):
             return False
     return True
@@ -64,26 +114,32 @@ def _coerce_day_to_required(day: dict, spec: dict) -> dict:
     """
     required_type = spec.get("workoutType")
     min_minutes = spec.get("minDurationMinutes")
-    new_day = {**day}
-    was_rest_or_empty = str(day.get("workoutType") or "").lower() in {"", "rest"}
+    values: dict = {}
+    # Read both spellings. This was the one reader in the module that looked at
+    # camelCase alone, so a snake_case day holding a real session counted as
+    # empty and had its title, description and intervals overwritten
+    # (ai-trainer-ops#29).
+    was_rest_or_empty = str(
+        _field(day, "workoutType", "workout_type", default="")
+    ).lower() in {"", "rest"}
     if required_type:
-        new_day["workoutType"] = required_type
+        values["workoutType"] = required_type
     if min_minutes:
-        current = day.get("durationMinutes") or day.get("duration_minutes") or 0
-        new_day["durationMinutes"] = max(int(current or 0), int(min_minutes))
+        current = _field(day, "durationMinutes", "duration_minutes", default=0)
+        values["durationMinutes"] = max(int(current or 0), int(min_minutes))
     if spec.get("targetPower") is not None:
-        new_day["targetPower"] = spec.get("targetPower")
+        values["targetPower"] = spec.get("targetPower")
     if was_rest_or_empty:
         label = required_type or "endurance"
-        new_day["title"] = f"Required {label} session"
-        new_day["description"] = (
+        values["title"] = f"Required {label} session"
+        values["description"] = (
             "Protected required session from an athlete availability constraint."
         )
-        new_day["intervals"] = None
-        new_day["workoutPurpose"] = (
+        values["intervals"] = None
+        values["workoutPurpose"] = (
             "Protects a required-session constraint from being dropped by training optimization."
         )
-    return new_day
+    return _written(day, values)
 
 
 def _required_workout_satisfied_dates(
@@ -114,6 +170,14 @@ def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> 
     # gets coerced when none does — the first (lowest-slot) one, so the required
     # workout lands once per day rather than once per session.
     satisfied_dates = _required_workout_satisfied_dates(plan, constraints)
+    # Resolved once, up front, and keyed by date rather than by what a day
+    # currently holds. Asking ``day_violates_constraint`` here instead made the
+    # precedence of no_training over required_workout a property of the *first*
+    # application of this gate: once a day was blanked it no longer looked like
+    # training, so a second pass skipped this branch and the required-workout
+    # coercion below put a session back onto a day the athlete had blocked
+    # (ai-trainer-ops#30). Blocking is a fact about the date.
+    blocked = blocked_dates(constraints)
     coercion_slot: dict[str, int] = {}
     for day in plan:
         date_value = day.get("date")
@@ -125,24 +189,26 @@ def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> 
             coercion_slot[date_value] = slot
     result: list[dict] = []
     for day in plan:
-        if day_violates_constraint(day, constraints):
+        if str(day.get("date") or "") in blocked:
             result.append(
-                {
-                    **day,
-                    "workoutType": "rest",
-                    "title": "Unavailable",
-                    "description": "No training scheduled because of an athlete availability constraint.",
-                    "durationMinutes": 0,
-                    "targetPower": None,
-                    "targetHeartRate": None,
-                    "intervals": None,
-                    "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
-                    "keyFocusPoints": [
-                        "Keep the day free from training",
-                        "Move any missed stimulus to an available day",
-                        "Use the time for recovery or life commitments",
-                    ],
-                }
+                _written(
+                    day,
+                    {
+                        "workoutType": "rest",
+                        "title": "Unavailable",
+                        "description": "No training scheduled because of an athlete availability constraint.",
+                        "durationMinutes": 0,
+                        "targetPower": None,
+                        "targetHeartRate": None,
+                        "intervals": None,
+                        "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
+                        "keyFocusPoints": [
+                            "Keep the day free from training",
+                            "Move any missed stimulus to an available day",
+                            "Use the time for recovery or life commitments",
+                        ],
+                    },
+                )
             )
             continue
         # Positive constraints: ensure a pinned required session is present and
