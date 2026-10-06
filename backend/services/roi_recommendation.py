@@ -366,6 +366,26 @@ _RUN_FALLBACK_EMPHASIS = [
 ]
 
 
+def _sport_of_ranking(limiters: list[dict] | None) -> str:
+    """Which sport a ranking is about when nothing in it cleared the gate.
+
+    The first entry that names a sport, which is the right answer for both shapes
+    the ranking takes here. A sport whose best candidate was *almost* confident
+    enough leads the list, so a runner with a 0,33-confidence pace limiter is
+    recognised as a runner; and when no sport produced a candidate at all, the
+    per-sport ``insufficient_data`` entries still carry their sport.
+
+    Cycling only when the ranking names no sport whatsoever — an empty list, or
+    the one sportless entry for an athlete with no attributes at all. That is the
+    pre-#718 default, and with nothing to go on it stays.
+    """
+    for candidate in limiters or []:
+        candidate_sport = candidate.get("sport")
+        if candidate_sport:
+            return str(candidate_sport)
+    return SPORT_CYCLING
+
+
 def _fallback(reason: str, sport: str = SPORT_CYCLING) -> dict[str, Any]:
     """A neutral recommendation telling the caller to keep its own periodization.
 
@@ -490,7 +510,17 @@ def recommend_training_roi(
     # Which sport this recommendation is actually about. Read off the limiter, not
     # off the argument, so the systems, the modalities and the fallback week can
     # never disagree with the evidence that produced them.
-    for_sport = _SPORT_BY_LIMITER.get(limiter or "", sport or SPORT_CYCLING)
+    #
+    # When there is no limiter there is no limiter to read, and this is the path
+    # that matters most: every production caller passes no ``sport``, so
+    # defaulting to cycling here is how a run-only athlete with weak evidence
+    # ends up being handed VO₂max, threshold and endurance on the bike — the
+    # quiet half of the bug this issue is about, arriving through the branch that
+    # fires when the model knows nothing. So the sport comes from the ranking
+    # instead, which carries it even on its ``insufficient_data`` entries.
+    for_sport = _SPORT_BY_LIMITER.get(
+        limiter or "", sport or _sport_of_ranking(limiters)
+    )
     if limiter is None or limiter not in _GAIN_BY_LIMITER:
         return _fallback(
             "The performance model has no confident limiter yet, so no ROI-based "

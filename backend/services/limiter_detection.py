@@ -467,14 +467,18 @@ def detect_limiters(attributes: dict[str, dict]) -> list[dict]:
     because an ordering that depended on dict iteration would make the persisted
     ranking non-reproducible.
     """
-    candidates: list[dict] = []
+    candidates: list[tuple[int, dict]] = []
     insufficient: list[dict] = []
     for sport, keys, propose, missing in _SPORT_RULES:
         if not _has_signal(attributes, keys):
             continue
         found = propose(attributes)
         if found:
-            candidates.extend(found)
+            # Paired with the order its own rules produced it in, which is the
+            # tie-break below. Rule order is meaningful — a sport proposes its
+            # primary candidate before its durability one — and it is what the
+            # pre-#718 sort preserved by being stable on a confidence-only key.
+            candidates.extend((len(candidates) + i, c) for i, c in enumerate(found))
         else:
             insufficient.append(
                 _limiter(LIMITER_INSUFFICIENT, 0.05, [], [missing], sport=sport)
@@ -497,13 +501,17 @@ def detect_limiters(attributes: dict[str, dict]) -> list[dict]:
             )
         ]
 
-    candidates.sort(
-        key=lambda c: (-c["confidence"], c["sport"] or "", c["limiter"])
-    )
+    # Confidence first, then **rule order** — not the sport and limiter id. An
+    # alphabetical tie-break would reorder two equally confident cycling
+    # candidates ("endurance_durability" before "threshold"), which is a change
+    # to a cycling-only athlete's ranking: the pre-#718 sort was stable on a
+    # confidence-only key, so a tie kept the order the rules produced. Ties are
+    # not rare, because the confidences are rounded to 2 dp before they get here.
+    candidates.sort(key=lambda pair: (-pair[1]["confidence"], pair[0]))
     # The per-sport "nothing conclusive" entries sort after every real candidate
     # whatever their confidence: they are the absence of a finding, and a
     # ``top_limiter`` that could land on one would be reporting a gap as a result.
-    return candidates + insufficient
+    return [c for _, c in candidates] + insufficient
 
 
 def limiters_for_sport(limiters: list[dict] | None, sport: str) -> list[dict]:
@@ -546,8 +554,19 @@ def top_limiter_for_sport(limiters: list[dict] | None, sport: str) -> str | None
     so a multisport athlete gets at most one top limiter per sport they actually
     train, and a sport whose best candidate is weak gets none rather than
     borrowing the other sport's certainty.
+
+    Re-sorts by confidence rather than trusting the order it was handed.
+    :func:`top_limiter` reads ``limiters[0]`` because a freshly detected ranking
+    is sorted by contract, but these lists are also read back out of
+    ``AthletePerformanceModel.limiters`` — stored by an older revision, or
+    re-serialised by something that did not preserve the order — and a silently
+    wrong "top" limiter is the kind of error that reads as a coaching opinion.
     """
-    return top_limiter(limiters_for_sport(limiters, sport))
+    ranked = sorted(
+        limiters_for_sport(limiters, sport),
+        key=lambda c: -float(c.get("confidence") or 0.0),
+    )
+    return top_limiter(ranked)
 
 
 def top_limiter_by_sport(limiters: list[dict] | None) -> dict[str, str]:

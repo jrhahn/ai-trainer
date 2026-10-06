@@ -272,6 +272,72 @@ def test_a_cycling_only_history_reads_exactly_as_before(shape: str):
     assert all(set(c) == {"limiter", "sport", "confidence", "evidence", "counter_evidence"} for c in limiters)
 
 
+def test_equal_confidences_keep_rule_order_rather_than_alphabetical_order():
+    """The tie-break is the one place the new sort could reorder a cyclist.
+
+    The pre-#718 sort was stable on a confidence-only key, so a tie kept the
+    order the rules produced — the primary candidate before the durability one.
+    A ``(-confidence, sport, limiter)`` key would put "endurance_durability"
+    first instead, and ties are not rare because confidences are rounded to 2 dp
+    before they reach the sort.
+
+    The candidate list is substituted through the rules table rather than coaxed
+    out of an attribute map, because a genuine tie is hard to construct and the
+    sort key is the thing under test. No test-only parameter on the production
+    function — the table is the seam #718 built.
+    """
+    tied = [
+        ld._limiter(ld.LIMITER_THRESHOLD, 0.5, ["primary"], []),
+        ld._limiter(ld.LIMITER_DURABILITY, 0.5, ["secondary"], []),
+    ]
+    rules = ((SPORT_CYCLING, ld.CYCLING_ATTRIBUTES, lambda _attrs: tied, "n/a"),)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(ld, "_SPORT_RULES", rules)
+        ranked = ld.detect_limiters(_cycling())
+    assert [c["limiter"] for c in ranked] == [
+        ld.LIMITER_THRESHOLD,
+        ld.LIMITER_DURABILITY,
+    ]
+    assert ld.LIMITER_DURABILITY < ld.LIMITER_THRESHOLD, (
+        "an alphabetical tie-break would have reversed them"
+    )
+
+
+def test_a_model_where_nothing_is_known_names_no_sport():
+    """A documented difference from pre-#718, not an accident.
+
+    A cycling-only model whose attributes all read ``unknown`` used to get the
+    "need FTP, MAP and long-ride data" entry. It now gets the sportless one,
+    because that branch fires when *no* sport has signal — and the old wording
+    told a run-only athlete in exactly the same position to go and measure their
+    FTP. The cycling wording is still used whenever cycling actually has data
+    (see the ``nothing_conclusive`` baseline above).
+    """
+    attrs = {key: _attr(score="unknown", confidence=0.1) for key in ld.CYCLING_ATTRIBUTES}
+    top = ld.detect_limiters(attrs)[0]
+    assert top["limiter"] == ld.LIMITER_INSUFFICIENT
+    assert top["sport"] is None
+    assert "FTP" not in " ".join(top["counter_evidence"])
+
+
+def test_the_top_limiter_for_a_sport_does_not_trust_the_order_it_was_handed():
+    """These lists are also read back out of a stored ``limiters`` column.
+
+    ``top_limiter`` reads ``limiters[0]`` because a freshly detected ranking is
+    sorted by contract; a persisted one re-serialised by something that did not
+    preserve order would otherwise yield a silently wrong "top" limiter, which
+    reads as a coaching opinion.
+    """
+    shuffled = [
+        {"limiter": ld.LIMITER_DURABILITY, "sport": SPORT_CYCLING, "confidence": 0.40},
+        {"limiter": ld.LIMITER_THRESHOLD, "sport": SPORT_CYCLING, "confidence": 0.70},
+    ]
+    assert ld.top_limiter_for_sport(shuffled, SPORT_CYCLING) == ld.LIMITER_THRESHOLD
+    assert ld.top_limiter(shuffled) == ld.LIMITER_DURABILITY, (
+        "top_limiter keeps reading the ranking as given — that is its contract"
+    )
+
+
 def test_the_cycling_evidence_text_is_unchanged():
     """Separate from the ranking, because prose is what the athlete reads."""
     attrs = _cycling(ftp=250, map_w=380, frac=0.66)
@@ -535,24 +601,64 @@ def test_the_utility_board_never_offers_a_bike_for_a_running_limiter():
     assert modalities == {"run"}
 
 
-def test_a_runner_with_no_confident_limiter_gets_a_running_fallback():
+_RUN_ONLY_WEAK = {
+    "critical_speed": _attr(estimate=4.0, unit="m/s", confidence=0.6),
+    "velocity_at_vo2max": _attr(score="unknown", confidence=0.1),
+    "run_fractional_utilization": _attr(score="unknown", confidence=0.1),
+    "run_fatigue_resistance": _attr(score="unknown", confidence=0.1),
+}
+
+
+@pytest.mark.parametrize("sport", [None, SPORT_RUNNING], ids=["default", "explicit"])
+def test_a_runner_with_no_confident_limiter_gets_a_running_fallback(sport):
     """The quiet path: the "neutral" week was a balanced *cycling* week.
 
     It arrives through the branch that fires when the model knows nothing, which
-    is the branch nobody looks at.
+    is the branch nobody looks at — and `sport=None` is the **only** shape
+    production uses (`routers/ai.py`, `schemas.py`, `freshness_allocation.py` all
+    call it that way). An earlier version of this test passed the sport
+    explicitly and so never touched the path that mattered; the parametrisation
+    is there to stop that recurring.
     """
-    attrs = {
-        "critical_speed": _attr(estimate=4.0, unit="m/s", confidence=0.6),
-        "velocity_at_vo2max": _attr(score="unknown", confidence=0.1),
-        "run_fractional_utilization": _attr(score="unknown", confidence=0.1),
-        "run_fatigue_resistance": _attr(score="unknown", confidence=0.1),
-    }
     rec = roi.recommend_training_roi(
-        attrs, ld.detect_limiters(attrs), sport=SPORT_RUNNING
+        _RUN_ONLY_WEAK, ld.detect_limiters(_RUN_ONLY_WEAK), sport=sport
     )
     assert rec["sufficient"] is False
+    assert rec["sport"] == SPORT_RUNNING
     assert all(g["system"].startswith("run_") for g in rec["expected_gain"])
     assert all(e["system"].startswith("run_") for e in rec["weekly_emphasis"])
+
+
+def test_the_fallback_sport_comes_from_the_ranking_not_from_a_default():
+    """Even the per-sport "nothing conclusive" entry names its sport."""
+    limiters = ld.detect_limiters(_RUN_ONLY_WEAK)
+    assert [c["limiter"] for c in limiters] == [ld.LIMITER_INSUFFICIENT]
+    assert limiters[0]["sport"] == SPORT_RUNNING
+    assert roi._sport_of_ranking(limiters) == SPORT_RUNNING
+
+
+def test_a_sport_that_almost_cleared_the_gate_still_names_the_fallback():
+    """A runner with a 0,25-confidence pace limiter is still a runner."""
+    attrs = {
+        "critical_speed": _attr(estimate=3.5, unit="m/s", confidence=0.3),
+        "velocity_at_vo2max": _attr(estimate=4.5, unit="m/s", confidence=0.3),
+        "run_fractional_utilization": _attr(estimate=3.5 / 4.5, confidence=0.3),
+        "run_fatigue_resistance": _attr(score="high", confidence=0.3),
+    }
+    limiters = ld.detect_limiters(attrs)
+    assert limiters[0]["confidence"] < ld.LIKELY_LIMITER_MIN_CONFIDENCE
+    rec = roi.recommend_training_roi(attrs, limiters)
+    assert rec["sufficient"] is False
+    assert rec["sport"] == SPORT_RUNNING
+
+
+@pytest.mark.parametrize(
+    "limiters", [None, [], [{"limiter": "insufficient_data", "sport": None}]]
+)
+def test_a_ranking_that_names_no_sport_still_defaults_to_cycling(limiters):
+    """The pre-#718 default, kept for the case with genuinely nothing to go on."""
+    assert roi._sport_of_ranking(limiters) == SPORT_CYCLING
+    assert roi.recommend_training_roi({}, limiters)["sport"] == SPORT_CYCLING
 
 
 def test_an_existing_caller_passing_no_sport_is_unchanged_for_a_cyclist():

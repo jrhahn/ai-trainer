@@ -55,11 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     convention: each sport's rules are handed its own attribute subset and cannot
     reach the other's keys. Pinned from both directions — no wattage in a running
     limiter, no pace in a cycling one.
-  - **A cycling-only history reads exactly as it did before.** The only
-    difference is the additive `sport` field. Asserted over four differently
-    shaped models (threshold, VO₂max, durability, nothing-conclusive) against the
-    ranking captured by *executing the pre-change module from `origin/develop`*
-    rather than from reading the code.
+  - **A cycling-only history reads as it did before**, with two documented
+    exceptions. Asserted over four differently shaped models (threshold, VO₂max,
+    durability, nothing-conclusive) against the ranking captured by *executing
+    the pre-change module from `origin/develop`* rather than from reading the
+    code — on those four, the only difference is the additive `sport` field. The
+    exceptions: a model where **nothing at all** is known now gets a sportless
+    "no sport carries enough signal" entry instead of the old "need FTP, MAP and
+    long-ride data" one, because that branch fires when no sport has data and the
+    old wording told a run-only athlete to go and measure their FTP; and the
+    ranking's tie-break is now the generation index rather than insertion order,
+    which reproduces the old stable sort but is stated rather than relied upon.
 
   **ROI** gains running systems (`run_threshold`, `run_vo2max`,
   `run_endurance`), named separately because "threshold" in that module has
@@ -97,6 +103,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The ROI fallback handed a run-only athlete a cycling week on the only path
+  production uses** — `sport=None` is how every caller invokes
+  `recommend_training_roi` (`routers/ai.py`, `schemas.py`,
+  `freshness_allocation.py`), and with no confident limiter there is no limiter
+  to read the sport off, so it defaulted to cycling. The sport now comes from the
+  ranking, which carries it even on its per-sport `insufficient_data` entries —
+  so a runner with a near-miss pace limiter, or with nothing conclusive at all,
+  gets a running fallback. Cycling remains the default only when the ranking
+  names no sport whatsoever. This was the half of the bug the first attempt
+  missed: the fix existed but the test asserted it with the sport passed
+  explicitly, so it never exercised the default path.
+- **Equal confidences no longer reorder a cyclist's ranking** — the per-sport
+  sort key briefly included the limiter id, which put `endurance_durability`
+  ahead of `threshold` on a tie. The pre-#718 sort was stable on a
+  confidence-only key, so a tie kept rule order; the tie-break is now the
+  generation index, which reproduces that exactly. Ties are not rare, because
+  confidences are rounded to 2 dp before they reach the sort.
+- **`top_limiter_for_sport` no longer trusts the order it was handed** — it reads
+  the top of a filtered list, and these lists are also read back out of a stored
+  `limiters` column. It now re-sorts by confidence; a silently wrong "top"
+  limiter reads as a coaching opinion.
 - **A hypothesis writer that states no sport no longer erases one** — the field
   is set but never cleared, so the weekly LLM pass (which states no sport) cannot
   blank what the deterministic engine recorded.
