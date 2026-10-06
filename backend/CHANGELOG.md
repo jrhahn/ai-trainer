@@ -9,6 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach can see a week with no easy days in it** (#747) —
+  `services/training_monotony.py`. Every load figure this app computed described
+  the *level* of training and none described its distribution, so an athlete
+  training the same amount every single day and an athlete doing three hard days
+  with four off were nearly indistinguishable — and the one rated slightly
+  fresher was the one with no recovery at all. Measured over twelve weeks of each
+  pattern against the real ledger: flat 7 × 60 gives CTL 51,9 / ATL 60,0 /
+  TSB −8,1; polarised 3 hard + 4 rest gives CTL 61,2 / ATL 67,8 / TSB −6,6. The
+  polarised week carries 19 % more load and reports as fresher by 1,5 TSB. Both
+  statements are arithmetically right and coaching-blind.
+
+  Foster's monotony — mean daily load ÷ its standard deviation over a rolling
+  week, rest days counted as the zeros they are — is now computed from the
+  recorded activities and stated to the coach when the week is both monotonous
+  and loaded. Since #745 that series includes hand-logged sessions, which is why
+  this could not have been built before: a week of rides alternating with gym
+  sessions previously read as three loads and four zeros, i.e. *lower* monotony
+  for the more relentless week.
+
+  - **Monotony is quoted as literature, strain is not.** Monotony is a ratio of
+    two quantities in the same unit, so it is dimensionless and Foster's flag
+    near 2,0 transfers across sports and currencies. Strain — weekly load ×
+    monotony — carries the load unit, so published strain thresholds, which come
+    from session-RPE, do not convert into it; it is reported as a ratio to the
+    athlete's own previous windows and never against a constant. The statement
+    tells the athlete which half of the rule is which, so they can argue with the
+    right one.
+  - **Rolling-average ACWR was deliberately not built**, although #709 named it
+    alongside monotony. `ATL_TIME_CONSTANT_DAYS = 7` against
+    `CTL_TIME_CONSTANT_DAYS = 42` means the ledger is already an exponentially-
+    weighted acute:chronic model, in the parametrisation Williams et al. (2017)
+    prefer to the rolling-average one: `ATL/CTL` is its ratio form and TSB its
+    difference form. A second ratio would answer a question already answered
+    better — 1,16 against 1,11 for the two weeks above, blind to the difference
+    that matters — and would hand the athlete two fatigue verdicts to reconcile.
+  - **Monotony is unbounded, and not only when the deviation is zero.** A flat
+    week divides by zero, but `[60] * 6 + [55]` already computes to 34 and a
+    one-point difference across a flat week to 170. Those are the same numerical
+    instability at different distances, so the figure is capped and says it was,
+    which covers the division by zero as the limit of the behaviour rather than as
+    a special case. The defensive-looking `if sd == 0: return 0` is the one answer
+    that must never be given: it reports the worst week obtainable as the best.
+  - **The window ends yesterday.** An incomplete today enters the series as a low
+    number, raising the deviation and *lowering* monotony — the direction that
+    hides the finding.
+  - **An unpriced activity makes the week unmeasurable** rather than counting as a
+    rest day, which is the #579 confusion that this whole area exists to keep out.
+  - Two fixes from review on PR #748: the statement read its window length from a
+    hardcoded `7`, so a moved `ROLLING_WINDOW_DAYS` would have had the prompt
+    misstate the window it was measuring; and a *baseline* window holding an
+    unpriced activity was still contributing a strain figure, understated by the
+    hole, which drags the baseline down and reports the current week as more of a
+    spike than it was. The #579 argument the current window already made applies to
+    the history it is compared against, so those windows are now skipped.
+  - Six policy-guard entries (#600). `BASELINE_WINDOW_DAYS` and
+    `ROLLING_WINDOW_DAYS` slipped their first check, because binding a constant as
+    a default argument freezes it at import: the register moves the module
+    attribute, so the perturbation could not reach the code and the guards would
+    have reported themselves held while nothing depended on the numbers. Both
+    windows are now read inside the function, pinned by a test.
+
 - **A session only the athlete recorded now carries load** (#745) —
   `services/logged_sessions.py`. A workout the athlete logged by hand, which no
   provider ever imported, contributed **nothing** to fatigue: not to ATL, not to

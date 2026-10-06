@@ -567,4 +567,69 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="0",
         tests=("tests/test_per_sport_limiter_chain.py",),
     ),
+    # --- How evenly the week was loaded (#747) ------------------------------
+    PolicyGuard(
+        target="services.training_monotony:MONOTONY_FLAG",
+        decides=(
+            "how uneven a week has to be before the coach is told anything at "
+            "all — the only threshold in the module that is quoted as literature"
+        ),
+        # 100 is unreachable: a week of seven identical days computes to the cap
+        # of 5, so the audit goes permanently silent and the signal that no other
+        # number in the app carries is lost again.
+        moved_to="100.0",
+        tests=("tests/test_training_monotony.py",),
+    ),
+    PolicyGuard(
+        target="services.training_monotony:MIN_DAILY_MEAN_LOAD",
+        decides=(
+            "the load below which a flat week is a routine rather than a risk — "
+            "the half of the rule carried in this app's own currency"
+        ),
+        # 0 flags every monotonous week regardless of size, so an athlete doing
+        # twenty minutes a day is told their training is relentless.
+        moved_to="0.0",
+        tests=("tests/test_training_monotony.py",),
+    ),
+    PolicyGuard(
+        target="services.training_monotony:MONOTONY_CAP",
+        decides=(
+            "where the quotient stops being a measurement, which is also what a "
+            "zero-deviation week is reported as"
+        ),
+        # 1000 removes the cap in practice and lets a one-point difference across
+        # a flat week reach the coach as "monotony 170".
+        moved_to="1000.0",
+        tests=("tests/test_training_monotony.py",),
+    ),
+    PolicyGuard(
+        target="services.training_monotony:STRAIN_BASELINE_TOLERANCE",
+        decides=(
+            "how close to their own baseline a week's strain may sit and still be "
+            "described as unchanged"
+        ),
+        # 0 means an athlete repeating one week exactly is told their strain is
+        # below their own baseline, on the strength of floating-point error.
+        moved_to="0.0",
+        tests=("tests/test_training_monotony.py",),
+    ),
+    PolicyGuard(
+        target="services.training_monotony:BASELINE_WINDOW_DAYS",
+        decides=(
+            "how much history the athlete's own strain baseline is read from, "
+            "which is the only thing strain is ever compared against"
+        ),
+        # 7 leaves no complete earlier window, so strain loses its comparison and
+        # the one figure that is not quotable as literature goes unqualified.
+        moved_to="7",
+        tests=("tests/test_training_monotony.py",),
+    ),
+    PolicyGuard(
+        target="services.training_monotony:ROLLING_WINDOW_DAYS",
+        decides="the window the whole distribution audit is measured over",
+        # 1 day has no deviation to speak of, so every athlete is maximally
+        # monotonous and the audit degenerates into "did you train yesterday".
+        moved_to="1",
+        tests=("tests/test_training_monotony.py",),
+    ),
 )
