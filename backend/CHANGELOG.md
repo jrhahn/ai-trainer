@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A backup that can actually be restored, rehearsed once end to end**
+  (ai-trainer-ops#13) — `scripts/backup.sh`, `scripts/restore.sh`,
+  `scripts/rehearse-restore.sh`, `backend/scripts/backup_manifest.py`,
+  `backend/scripts/verify_restore.py`, `docs/runbook-restore.md`,
+  `docs/security.md`.
+
+  There was no backup of this deployment at all — no `pg_dump`, no volume
+  snapshot, nothing in the home server's Borg jobs — so the issue's premise
+  ("a backup was restored onto a fresh instance") had nothing to stand on.
+
+  The failure worth engineering against is not a dump that will not load. It is
+  a restore that **succeeds** without the keys: `EncryptedString` catches
+  `InvalidToken`, logs a warning and returns the raw ciphertext as the value, so
+  the app boots clean, `/healthz` is green, and the stored Strava tokens and TOTP
+  secrets are blobs. Since ai-trainer-ops#12 there are five keys to lose rather
+  than one, plus `authelia/users_database.yml`, which holds the actual passwords.
+
+  So a backup is three artefacts, not one: the dump, a GPG-encrypted bundle of
+  `.env` and `authelia/`, and a manifest holding neither. The manifest records a
+  domain-separated `sha256(key)[:16]` fingerprint per purpose and the variable it
+  came from, both read from the application rather than listed in the script —
+  `restore.sh` compares them against the target's keys *before loading anything*
+  and refuses, naming the purpose. `verify_restore.py` then opens every encrypted
+  column, found by walking the mapper registry, and exits non-zero on anything
+  unreadable.
+
+  Rehearsed, not asserted: `rehearse-restore.sh` writes a real secret of every
+  purpose through the ORM against a throwaway Postgres, backs up, destroys the
+  database, **checks that the wrong key is refused**, restores, and compares every
+  secret byte-for-byte. Removing the refusal from `restore.sh` was tested — the
+  drill fails at step 5. Last run 2026-10-07.
+
+  Still missing, and stated in the runbook: nothing schedules this on the live
+  host and nothing ships the artefacts off it, so production still has no
+  backup. That needs a destination decided first.
+
 ### Changed
 
 - **One encryption key per secret type, instead of one for all of them**
