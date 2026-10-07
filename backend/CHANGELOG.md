@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Concurrent signups and deletions against the Authelia store, with real
+  processes** (ai-trainer-ops#14) — `tests/test_authelia_store_concurrency.py`,
+  `docs/multi_replica.md`. Eight spawned processes register (and delete) at
+  the same moment behind a barrier. All of them land and every new account
+  verifies. Mutation-checked: without the `flock`, one of eight signups
+  survives. Threads would not have tested this, because a `flock` taken twice
+  in one process excludes nothing. `docs/multi_replica.md` now says the store
+  is safe across processes and containers on one host, and not across hosts.
 - **Invariants for the day board, over generated athletes**
   (ai-trainer-ops#26) — `tests/test_freshness_allocation_invariants.py`.
   Hypothesis generates motivation models, ROI gains, race counts, heat and
