@@ -319,20 +319,36 @@ step "5. the WRONG keys must be refused"
 # one. This is what tells those two apart.
 wrong_app="${workdir}/wrong"
 mkdir -p "${wrong_app}"
+
+# Two cases, because they fail for different reasons and only one of them is
+# obvious. A wrong *dedicated* key is the case anyone would think to test. A
+# wrong *shared* key is the one that shipped broken: the manifest used to record
+# only the encrypting key, so correct dedicated keys plus a rotated
+# SECRETS_ENCRYPTION_KEY printed "matches" four times and loaded the dump —
+# losing every row written before the #12 split, which is most of them.
+try_refusal() {
+  local label="$1" expect="$2"
+  if APP_DIR="${wrong_app}" RESTORE_SKIP_SECRETS=1 \
+     "${REPO}/scripts/restore.sh" "${manifest}" >/dev/null 2>"${workdir}/refusal"; then
+    fail "restore.sh accepted a .env with ${label}. The fingerprint check is not
+working, and every other result in this drill is meaningless."
+  fi
+  grep -q "${expect}" "${workdir}/refusal" \
+    || fail "restore.sh refused ${label}, but without naming ${expect}:
+$(cat "${workdir}/refusal")"
+  pass "refused ${label}, naming ${expect}"
+  note "$(grep -m1 'different key' "${workdir}/refusal" || true)"
+}
+
 sed -e "s|^TOTP_ENCRYPTION_KEY=.*|TOTP_ENCRYPTION_KEY=$(newkey)|" \
     "${APP_DIR}/.env" > "${wrong_app}/.env"
 chmod 0600 "${wrong_app}/.env"
+try_refusal "a wrong dedicated key" "totp"
 
-if APP_DIR="${wrong_app}" RESTORE_SKIP_SECRETS=1 \
-   "${REPO}/scripts/restore.sh" "${manifest}" >/dev/null 2>"${workdir}/refusal"; then
-  fail "restore.sh accepted a .env with the wrong TOTP key. The fingerprint check
-is not working, and every other result in this drill is meaningless."
-fi
-grep -q 'totp' "${workdir}/refusal" \
-  || fail "restore.sh refused, but without naming the purpose that mismatched:
-$(cat "${workdir}/refusal")"
-pass "refused, naming totp"
-note "$(grep -m1 'different key' "${workdir}/refusal" || true)"
+sed -e "s|^SECRETS_ENCRYPTION_KEY=.*|SECRETS_ENCRYPTION_KEY=$(newkey)|" \
+    "${APP_DIR}/.env" > "${wrong_app}/.env"
+chmod 0600 "${wrong_app}/.env"
+try_refusal "a wrong shared key and correct dedicated ones" "SECRETS_ENCRYPTION_KEY"
 
 # Nothing was loaded by that attempt.
 rows="$(public_tables)"

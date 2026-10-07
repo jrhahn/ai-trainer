@@ -44,12 +44,25 @@ ciphertext and the key should not sit in the same place. A single tarball of
 dump-plus-keys hands both to anyone who can read the backup directory, which is
 strictly worse than not encrypting the columns: it looks protected and is not.
 
-The manifest is what makes the separation survivable. It records a
-**fingerprint** — `sha256(domain + key)[:16]`, which reveals nothing about a
-32-byte random key — of whichever key encrypts each purpose, and the name of the
-variable it came from. `scripts/restore.sh` compares those against the keys on
-the target *before loading anything*, so a mismatch is a refusal naming the
-purpose instead of a clean-looking restore and a support request six weeks later.
+The manifest is what makes the separation survivable. For each purpose it
+records **every key in its decryption chain** — each as a
+`sha256(domain + key)[:16]` fingerprint, which reveals nothing about a 32-byte
+random key, plus the name of the variable it came from. `scripts/restore.sh`
+compares those against the keys on the target *before loading anything*, so a
+mismatch is a refusal naming the purpose and the variable instead of a
+clean-looking restore and a support request six weeks later.
+
+**The whole chain and not just the encrypting key**, which is the difference
+between a check that works and one that looks like it does. `MultiFernet`
+encrypts with the first key and decrypts with any, so rows written before a
+purpose gained a dedicated key are still under `SECRETS_ENCRYPTION_KEY` — and
+right after the ai-trainer-ops#12 split, that is *every existing row*. Checking
+only the dedicated key would print "matches" on a host with a rotated shared key
+and load the dump, losing precisely the data most likely to be in it.
+
+Manifests are versioned for this reason: `restore.sh` refuses a version 1
+manifest, which recorded only the encrypting key, rather than running a check
+that silently drops half its subject.
 
 ### What is in the secrets bundle and why each matters
 

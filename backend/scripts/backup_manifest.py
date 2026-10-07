@@ -51,25 +51,53 @@ def fingerprint(key: str) -> str:
     return digest[:16]
 
 
-def key_fingerprints() -> dict[str, str]:
-    """The fingerprint of whichever key currently *encrypts* each purpose.
+def _variable_holding(key: str, purpose: str) -> str:
+    """Which environment variable supplies *key* for *purpose*.
 
-    The first key of the chain, not all of them, because that is the one a
-    restored row will have been written under. ``MultiFernet`` decrypts with any
-    key in the chain (#12), so a target holding a superset still works — the
-    check below is deliberately "can you open this", not "is your configuration
-    identical to mine".
+    Paired up by value rather than by rebuilding the order of
+    ``encryption_keys_for``, so that method stays the only place deciding which
+    keys a purpose has and in what order. The two cannot disagree if only one of
+    them knows.
 
-    Derived from :data:`SecretPurpose.ALL` rather than listed here, so a fifth
-    secret type cannot be added to the model and silently left out of the
-    backup. That failure has happened once already in this repo, in the shape of
-    a hand-maintained tuple nobody extended (jrhahn/ai-trainer#754).
+    Unambiguous because a dedicated key equal to the shared one is refused at
+    boot — it would validate, encrypt and decrypt while giving no independence at
+    all, so there is a validator for it (#12).
     """
-    fingerprints: dict[str, str] = {}
+    if key and key == settings._dedicated_key(purpose):
+        return _DEDICATED_KEY_FIELDS[purpose].upper()
+    return _shared_key_var()
+
+
+def key_chains() -> dict[str, list[dict[str, str]]]:
+    """Every key that may decrypt each purpose, encrypting key first.
+
+    **The whole chain, not just the encrypting key.** Recording only the first
+    one was a real hole, and the common case rather than an edge: ``MultiFernet``
+    encrypts with the first key and decrypts with any, so rows written before a
+    purpose gained a dedicated key are still under the shared one — which, right
+    after the #12 split, is *every existing row*. A manifest naming only the
+    dedicated key lets a restore onto a host with the right dedicated key and a
+    wrong ``SECRETS_ENCRYPTION_KEY`` print "matches" and proceed, and the legacy
+    rows are then exactly the unopenable ciphertext this mechanism exists to
+    prevent. `verify_restore` would still catch it, but only after the load.
+
+    So the restore check requires *every* key in the chain. That is deliberately
+    strict: the manifest cannot know which keys actually have rows under them
+    without scanning the data, and the asymmetry is not close — a refusal costs
+    an operator one look at a variable, a false pass costs somebody else's
+    credentials permanently.
+
+    An empty list means the purpose was stored as plaintext. Derived from
+    :data:`SecretPurpose.ALL`, so a fifth secret type cannot be added to the
+    model and silently left out of the backup (jrhahn/ai-trainer#754).
+    """
+    chains: dict[str, list[dict[str, str]]] = {}
     for purpose in SecretPurpose.ALL:
-        keys = settings.encryption_keys_for(purpose)
-        fingerprints[purpose] = fingerprint(keys[0]) if keys else PLAINTEXT
-    return fingerprints
+        chains[purpose] = [
+            {"variable": _variable_holding(key, purpose), "fingerprint": fingerprint(key)}
+            for key in settings.encryption_keys_for(purpose)
+        ]
+    return chains
 
 
 def _shared_key_var() -> str:
@@ -88,32 +116,17 @@ def _shared_key_var() -> str:
     )
 
 
-def key_vars() -> dict[str, str]:
-    """Which environment variable fed each purpose's fingerprint.
-
-    Recorded in the manifest so ``scripts/restore.sh`` can check the keys on the
-    target without reimplementing this mapping. The restore runs before the
-    backend container exists — there is no app to ask — and a copy of the
-    purpose-to-variable table in a shell script is exactly the second inventory
-    that goes stale. Writing it down at backup time, from the code, means the
-    manifest explains itself to whatever reads it later.
-    """
-    mapping: dict[str, str] = {}
-    for purpose in SecretPurpose.ALL:
-        if settings._dedicated_key(purpose):
-            mapping[purpose] = _DEDICATED_KEY_FIELDS[purpose].upper()
-        elif settings.encryption_key:
-            mapping[purpose] = _shared_key_var()
-        else:
-            mapping[purpose] = PLAINTEXT
-    return mapping
-
-
 def manifest_fragment() -> dict[str, Any]:
-    """The part of the backup manifest only the application can answer."""
+    """The part of the backup manifest only the application can answer.
+
+    ``key_chains`` carries the variable names as well as the fingerprints so
+    ``scripts/restore.sh`` can check the target's keys without reimplementing the
+    purpose-to-variable mapping. The restore runs before the backend container
+    exists — there is no app to ask — and a copy of that table in a shell script
+    is exactly the second inventory that goes stale.
+    """
     return {
-        "key_fingerprints": key_fingerprints(),
-        "key_vars": key_vars(),
+        "key_chains": key_chains(),
         "purposes": list(SecretPurpose.ALL),
         # How to reproduce the fingerprints above, so the restore script does
         # not carry a second copy of the recipe. sha256(domain + key)[:16].

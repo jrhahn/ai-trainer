@@ -29,8 +29,11 @@ What this suite has to prove:
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -78,8 +81,42 @@ def no_keys(monkeypatch) -> None:
 
 def test_the_manifest_fingerprints_every_purpose(keys):
     fragment = backup_manifest.manifest_fragment()
-    assert set(fragment["key_fingerprints"]) == set(SecretPurpose.ALL)
-    assert set(fragment["key_vars"]) == set(SecretPurpose.ALL)
+    assert set(fragment["key_chains"]) == set(SecretPurpose.ALL)
+
+
+def test_the_manifest_records_the_whole_chain_not_only_the_encrypting_key(keys):
+    """The reviewer's find on #755, and the common case rather than an edge.
+
+    ``MultiFernet`` encrypts with the first key and decrypts with any, so a row
+    written before its purpose gained a dedicated key is still under the shared
+    one — and right after the ai-trainer-ops#12 split that is *every existing
+    row*. A manifest naming only the dedicated key lets a restore onto a host
+    with the right dedicated key and a wrong ``SECRETS_ENCRYPTION_KEY`` print
+    "matches" and load, losing exactly the legacy data the check is for.
+    """
+    chains = backup_manifest.key_chains()
+    for purpose in SecretPurpose.ALL:
+        variables = [link["variable"] for link in chains[purpose]]
+        assert variables == [
+            _DEDICATED_KEY_FIELDS[purpose].upper(),
+            "SECRETS_ENCRYPTION_KEY",
+        ], f"{purpose} does not carry its shared-key fallback"
+
+
+def test_the_chain_order_is_the_one_the_application_decrypts_with(keys):
+    """Encrypting key first, matching ``encryption_keys_for``.
+
+    Order is not cosmetic: ``restore.sh`` labels position 0 "encrypts new rows"
+    and the rest "opens older rows", which is what tells an operator whether a
+    mismatch threatens future writes or existing data.
+    """
+    for purpose in SecretPurpose.ALL:
+        expected = [
+            backup_manifest.fingerprint(key)
+            for key in settings.encryption_keys_for(purpose)
+        ]
+        actual = [link["fingerprint"] for link in backup_manifest.key_chains()[purpose]]
+        assert actual == expected
 
 
 def test_there_is_more_than_one_purpose_to_cover():
@@ -92,24 +129,29 @@ def test_there_is_more_than_one_purpose_to_cover():
     assert len(SecretPurpose.ALL) >= 4
 
 
-def test_every_purpose_names_a_variable_an_operator_can_go_and_look_at(keys):
-    """The manifest's ``key_vars`` has to be a real environment variable.
+def test_every_link_names_a_variable_an_operator_can_go_and_look_at(keys):
+    """Each link's ``variable`` has to be a real environment variable.
 
-    ``restore.sh`` prints it when a purpose fails, and it is the only thing
-    telling the operator which value to fix. A name that is not actually the
-    variable is worse than no name.
+    ``restore.sh`` prints it when a link fails, and it is the only thing telling
+    the operator which value to fix. A name that is not actually the variable is
+    worse than no name.
     """
-    expected = {field.upper() for field in _DEDICATED_KEY_FIELDS.values()}
-    for purpose, variable in backup_manifest.key_vars().items():
-        assert variable in expected, f"{purpose} names {variable}, which is not a key variable"
+    expected = {field.upper() for field in _DEDICATED_KEY_FIELDS.values()} | {
+        "SECRETS_ENCRYPTION_KEY",
+        "STRAVA_ENCRYPTION_KEY",
+    }
+    for purpose, chain in backup_manifest.key_chains().items():
+        for link in chain:
+            assert link["variable"] in expected, (
+                f"{purpose} names {link['variable']}, which is not a key variable"
+            )
 
 
-def test_a_purpose_without_a_dedicated_key_names_the_shared_one(keys, monkeypatch):
+def test_a_purpose_without_a_dedicated_key_has_a_chain_of_one(keys, monkeypatch):
     monkeypatch.setattr(settings, _DEDICATED_KEY_FIELDS[SecretPurpose.TOTP], "")
-    assert backup_manifest.key_vars()[SecretPurpose.TOTP] == "SECRETS_ENCRYPTION_KEY"
-    assert backup_manifest.key_fingerprints()[SecretPurpose.TOTP] == (
-        backup_manifest.fingerprint(keys["shared"])
-    )
+    chain = backup_manifest.key_chains()[SecretPurpose.TOTP]
+    assert [link["variable"] for link in chain] == ["SECRETS_ENCRYPTION_KEY"]
+    assert chain[0]["fingerprint"] == backup_manifest.fingerprint(keys["shared"])
 
 
 def test_a_deployment_on_the_deprecated_name_is_told_the_deprecated_name(monkeypatch):
@@ -125,23 +167,25 @@ def test_a_deployment_on_the_deprecated_name_is_told_the_deprecated_name(monkeyp
     for field in _DEDICATED_KEY_FIELDS.values():
         monkeypatch.setattr(settings, field, "")
 
-    variables = backup_manifest.key_vars()
-    assert set(variables.values()) == {"STRAVA_ENCRYPTION_KEY"}
-    assert backup_manifest.key_fingerprints()[SecretPurpose.STRAVA] == (
+    chains = backup_manifest.key_chains()
+    assert {link["variable"] for chain in chains.values() for link in chain} == {
+        "STRAVA_ENCRYPTION_KEY"
+    }
+    assert chains[SecretPurpose.STRAVA][0]["fingerprint"] == (
         backup_manifest.fingerprint(shared)
     )
 
 
-def test_a_plaintext_deployment_says_so_rather_than_fingerprinting_nothing(no_keys):
+def test_a_plaintext_deployment_has_an_empty_chain_rather_than_a_missing_one(no_keys):
     """No key is a legitimate state to back up, and a distinguishable one.
 
-    It has to be told apart from "this manifest predates that purpose": the
-    first means the columns hold plaintext and restore anywhere, the second
+    An empty chain has to be told apart from a purpose absent from the manifest:
+    the first means the columns hold plaintext and restore anywhere, the second
     means the manifest is too old to be believed about anything.
     """
-    fragment = backup_manifest.manifest_fragment()
-    assert set(fragment["key_fingerprints"].values()) == {backup_manifest.PLAINTEXT}
-    assert set(fragment["key_vars"].values()) == {backup_manifest.PLAINTEXT}
+    chains = backup_manifest.manifest_fragment()["key_chains"]
+    assert set(chains) == set(SecretPurpose.ALL)
+    assert all(chain == [] for chain in chains.values())
 
 
 def test_a_purpose_with_no_key_field_is_a_loud_error(monkeypatch):
@@ -152,7 +196,7 @@ def test_a_purpose_with_no_key_field_is_a_loud_error(monkeypatch):
     """
     monkeypatch.setattr(SecretPurpose, "ALL", (*SecretPurpose.ALL, "sleep_tokens"))
     with pytest.raises(ValueError, match="sleep_tokens"):
-        backup_manifest.key_fingerprints()
+        backup_manifest.key_chains()
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +228,10 @@ def test_two_different_keys_fingerprint_differently(keys):
     If fingerprints collided across keys, ``restore.sh`` would accept last
     month's secrets bundle for this week's dump and report a clean restore.
     """
-    fingerprints = backup_manifest.key_fingerprints()
-    assert len(set(fingerprints.values())) == len(SecretPurpose.ALL)
+    encrypting = {
+        chain[0]["fingerprint"] for chain in backup_manifest.key_chains().values()
+    }
+    assert len(encrypting) == len(SecretPurpose.ALL)
 
 
 def test_the_same_key_fingerprints_the_same_way(keys):
@@ -326,7 +372,7 @@ def test_the_contract_check_is_not_comparing_empty_sets():
     """Anti-vacuity: both regexes have to actually match something."""
     read = _manifest_fields_read()
     written = _manifest_fields_written()
-    assert {"key_fingerprints", "key_vars", "fingerprint_domain"} <= read
+    assert {"key_chains", "fingerprint_domain", "fingerprint_length"} <= read
     assert {"dump_sha256", "alembic_revision", "taken_at"} <= read
     assert {"taken_at", "dump_sha256", "secrets_sha256", "manifest_version"} <= written
 
@@ -349,3 +395,215 @@ def test_the_shell_scripts_parse(script):
 @pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH], ids=lambda p: p.name)
 def test_the_shell_scripts_are_executable(script):
     assert script.stat().st_mode & 0o111, f"{script.name} is not executable"
+
+
+# ---------------------------------------------------------------------------
+# The guard, run as restore.sh runs it
+# ---------------------------------------------------------------------------
+
+
+def _guard_source() -> str:
+    """The exact key check out of ``restore.sh``, not a copy of it.
+
+    Extracted and executed rather than reimplemented, because a copy here would
+    pass while the shipped one was broken — which is the failure mode this whole
+    file is about.
+    """
+    script = RESTORE_SH.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(script) if line == "import hashlib")
+    end = next(i for i, line in enumerate(script) if i > start and line == "PYTHON")
+    return "\n".join(script[start:end])
+
+
+def _run_guard(tmp_path, manifest: dict, env_values: dict[str, str]):
+    """Run the guard against a manifest and a .env; return the CompletedProcess."""
+    manifest_path = tmp_path / "m.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "".join(f"{name}={value}\n" for name, value in env_values.items()),
+        encoding="utf-8",
+    )
+    guard = tmp_path / "guard.py"
+    guard.write_text(_guard_source(), encoding="utf-8")
+    return subprocess.run(
+        # This interpreter rather than a bare "python3": restore.sh resolves it
+        # from PATH on a Debian host, which is not this one.
+        [sys.executable, str(guard)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            **os.environ,
+            "MANIFEST": str(manifest_path),
+            "ENV_FILE": str(env_path),
+        },
+    )
+
+
+def _full_manifest(keys: dict[str, str]) -> dict:
+    fragment = backup_manifest.manifest_fragment()
+    fragment["manifest_version"] = 2
+    return fragment
+
+
+def _env_for(keys: dict[str, str]) -> dict[str, str]:
+    values = {"SECRETS_ENCRYPTION_KEY": keys["shared"]}
+    for purpose, field in _DEDICATED_KEY_FIELDS.items():
+        values[field.upper()] = keys[purpose]
+    return values
+
+
+def test_the_guard_accepts_the_keys_that_wrote_the_dump(tmp_path, keys):
+    result = _run_guard(tmp_path, _full_manifest(keys), _env_for(keys))
+    assert result.returncode == 0, result.stderr
+    assert "matches" in result.stdout
+
+
+def test_the_guard_refuses_a_wrong_dedicated_key_and_names_it(tmp_path, keys):
+    env = _env_for(keys)
+    env["TOTP_ENCRYPTION_KEY"] = _key()
+    result = _run_guard(tmp_path, _full_manifest(keys), env)
+    assert result.returncode == 1
+    assert "totp" in result.stderr
+    assert "TOTP_ENCRYPTION_KEY" in result.stderr
+
+
+def test_the_guard_refuses_a_wrong_shared_key_even_when_every_dedicated_one_is_right(
+    tmp_path, keys
+):
+    """The reviewer's finding, as a test.
+
+    Before this, the manifest recorded only the encrypting key and the guard
+    checked only that, so this exact configuration — correct dedicated keys, a
+    rotated ``SECRETS_ENCRYPTION_KEY`` — printed "matches" for all four purposes
+    and loaded the dump. Every row written before the ai-trainer-ops#12 split is
+    under the shared key, so that is the data most likely to be in a real dump.
+    """
+    env = _env_for(keys)
+    env["SECRETS_ENCRYPTION_KEY"] = _key()
+    result = _run_guard(tmp_path, _full_manifest(keys), env)
+    assert result.returncode == 1
+    assert "SECRETS_ENCRYPTION_KEY" in result.stderr
+    assert "opens older rows" in result.stderr
+
+
+def test_the_guard_refuses_an_absent_key(tmp_path, keys):
+    env = _env_for(keys)
+    del env["TOTP_ENCRYPTION_KEY"]
+    result = _run_guard(tmp_path, _full_manifest(keys), env)
+    assert result.returncode == 1
+    assert "empty or absent" in result.stderr
+
+
+def test_the_guard_does_not_cry_wolf_over_a_plaintext_backup(tmp_path, keys, no_keys):
+    """A backup taken with no keys restores anywhere, and must not be refused."""
+    manifest = _full_manifest(keys)
+    result = _run_guard(tmp_path, manifest, _env_for(keys))
+    assert result.returncode == 0, result.stderr
+    assert "plaintext" in result.stdout
+
+
+def test_the_guard_refuses_a_manifest_too_old_to_describe_the_whole_chain(
+    tmp_path, keys
+):
+    """Version 1 recorded only the encrypting key, so it cannot answer the
+    shared-key question. Refusing beats running a check that silently drops half
+    its subject, because the operator believes it ran."""
+    manifest = _full_manifest(keys)
+    manifest["manifest_version"] = 1
+    result = _run_guard(tmp_path, manifest, _env_for(keys))
+    assert result.returncode == 1
+    assert "version 1" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# The two script bugs the review found
+# ---------------------------------------------------------------------------
+
+
+def test_placing_the_authelia_directory_replaces_it_rather_than_nesting_it(tmp_path):
+    """``cp -a src dst`` copies *into* dst when dst already exists.
+
+    On any ``RESTORE_FORCE=1`` restore that produced
+    ``authelia/authelia/users_database.yml`` and left the **stale** users file
+    exactly where login reads it — a restore reporting success while
+    authenticating against the old passwords. Reproduced before the fix.
+
+    Runs the placement lines out of ``restore.sh`` rather than asserting on its
+    text, so a future rewrite that reintroduces the nesting fails here even if
+    it uses different words.
+    """
+    script = RESTORE_SH.read_text(encoding="utf-8")
+    placement = [
+        line.strip()
+        for line in script.splitlines()
+        if "authelia.restoring" in line or 'rm -rf "${APP_DIR}/authelia"' in line
+    ]
+    assert placement, "no authelia placement found in restore.sh"
+
+    staging = tmp_path / "staging" / "secrets"
+    (staging / "authelia").mkdir(parents=True)
+    (staging / "authelia" / "users_database.yml").write_text("restored\n")
+    app_dir = tmp_path / "app"
+    (app_dir / "authelia").mkdir(parents=True)
+    (app_dir / "authelia" / "users_database.yml").write_text("stale\n")
+
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", "\n".join(placement)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "APP_DIR": str(app_dir),
+            "staging": str(tmp_path / "staging"),
+        },
+    )
+
+    assert not (app_dir / "authelia" / "authelia").exists(), "the directory was nested"
+    assert (app_dir / "authelia" / "users_database.yml").read_text() == "restored\n"
+
+
+@pytest.mark.skipif(
+    shutil.which("gpg") is None, reason="backup.sh encrypts the secrets bundle with gpg"
+)
+def test_a_failed_backup_leaves_no_artefacts_behind(tmp_path):
+    """Run the real script against a Postgres that is not there.
+
+    Behavioural rather than a grep, because the thing worth knowing is what is
+    on disk afterwards. Pruning keys off ``*.manifest.json`` and the manifest is
+    written last, so before the fix an aborted run left a ``.dump`` and a
+    ``.secrets.tar.gz.gpg`` that nothing would ever delete — a nightly job
+    against a stopped Postgres would grow the directory without bound and
+    accumulate copies of every key this deployment has.
+    """
+    app_dir = tmp_path / "app"
+    backup_dir = tmp_path / "backups"
+    app_dir.mkdir()
+    (app_dir / ".env").write_text(
+        "POSTGRES_USER=aitrainer\nPOSTGRES_DB=aitrainer\nSECRETS_ENCRYPTION_KEY=x\n",
+        encoding="utf-8",
+    )
+    passphrase = tmp_path / "pass"
+    passphrase.write_text("not-a-real-passphrase\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SH)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            **os.environ,
+            "APP_DIR": str(app_dir),
+            "BACKUP_DIR": str(backup_dir),
+            "BACKUP_PASSPHRASE_FILE": str(passphrase),
+            # Every compose call fails, so the run dies at pg_dump — after the
+            # secrets bundle has already been written.
+            "COMPOSE_CMD": "false",
+        },
+    )
+
+    assert result.returncode != 0, "the backup should have failed"
+    leftovers = sorted(p.name for p in backup_dir.iterdir())
+    assert leftovers == [], f"a failed run left {leftovers} behind"

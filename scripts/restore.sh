@@ -135,10 +135,24 @@ import os
 import sys
 
 manifest = json.load(open(os.environ["MANIFEST"]))
+
+version = manifest.get("manifest_version", 0)
+if version < 2:
+    # Version 1 recorded only the key that *encrypts* each purpose, not the
+    # whole chain, so it cannot answer the question below about the shared key.
+    # Refusing is the honest move: a check that silently drops half its subject
+    # is worse than no check, because the operator believes it ran.
+    print(
+        f"  this manifest is version {version}; the key check needs 2 or later.\n"
+        "  Take a fresh backup, or restore and then run verify_restore by hand\n"
+        "  knowing it only reports after the load.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 domain = manifest["fingerprint_domain"].encode()
 length = manifest["fingerprint_length"]
-expected = manifest["key_fingerprints"]
-key_vars = manifest["key_vars"]
+chains = manifest["key_chains"]
 
 values = {}
 for raw in open(os.environ["ENV_FILE"], encoding="utf-8"):
@@ -149,28 +163,36 @@ for raw in open(os.environ["ENV_FILE"], encoding="utf-8"):
     values[name.strip()] = value.strip().strip("'\"")
 
 problems = []
-for purpose, want in sorted(expected.items()):
-    variable = key_vars.get(purpose, "plaintext")
-    if want == "plaintext":
-        # The backup was taken with no key for this purpose, so its columns hold
-        # plaintext. A target that *does* have a key is fine: nothing stored is
-        # encrypted, and new writes will be. Not a problem, worth saying.
+for purpose, chain in sorted(chains.items()):
+    if not chain:
+        # Backed up with no key for this purpose, so its columns hold plaintext.
+        # A target that does have a key is fine: nothing stored is encrypted, and
+        # new writes will be. Not a problem, worth saying.
         print(f"  {purpose:<9} was stored as plaintext — nothing to open")
         continue
-    have = values.get(variable, "")
-    if not have:
-        problems.append(
-            f"  {purpose:<9} needs {variable}, which is empty or absent here"
-        )
-        continue
-    got = hashlib.sha256(domain + have.encode()).hexdigest()[:length]
-    if got != want:
-        problems.append(
-            f"  {purpose:<9} {variable} is a different key than the one that "
-            f"encrypted this dump (manifest {want}, this .env {got})"
-        )
-    else:
-        print(f"  {purpose:<9} {variable} matches")
+
+    # Every key in the chain, not only the first. Rows written before a purpose
+    # gained a dedicated key are still under the shared one, and right after the
+    # #12 split that is every existing row — so checking only the dedicated key
+    # would wave through a wrong SECRETS_ENCRYPTION_KEY and lose exactly the
+    # legacy data this guard is for.
+    for position, link in enumerate(chain):
+        variable, want = link["variable"], link["fingerprint"]
+        role = "encrypts new rows" if position == 0 else "opens older rows"
+        have = values.get(variable, "")
+        if not have:
+            problems.append(
+                f"  {purpose:<9} needs {variable} ({role}), which is empty or absent here"
+            )
+            continue
+        got = hashlib.sha256(domain + have.encode()).hexdigest()[:length]
+        if got != want:
+            problems.append(
+                f"  {purpose:<9} {variable} ({role}) is a different key than the "
+                f"one this dump was written with (manifest {want}, this .env {got})"
+            )
+        else:
+            print(f"  {purpose:<9} {variable} matches ({role})")
 
 if problems:
     print("\n".join(problems), file=sys.stderr)
@@ -189,7 +211,21 @@ RESTORE_FORCE=1 if you really mean to overwrite the secrets of a running one."
     # users_database.yml through this bind mount and the mount keeps the host's
     # ownership, so getting this wrong takes down login rather than one route
     # (#682, #684).
-    cp -a "${staging}/secrets/authelia" "${APP_DIR}/authelia"
+    #
+    # Staged next to the target and moved into place, rather than
+    # `cp -a src ${APP_DIR}/authelia`. That form was a bug: when the destination
+    # already exists — which is every RESTORE_FORCE=1 restore — cp copies
+    # *into* it, producing authelia/authelia/users_database.yml and leaving the
+    # stale users file exactly where login reads it. The restore then reports
+    # success while authenticating against the old passwords, which is the same
+    # silent class of failure this whole script is about.
+    #
+    # Copy first, swap second, so a failure leaves the existing directory alone
+    # rather than deleting it and then failing to replace it.
+    rm -rf "${APP_DIR}/authelia.restoring"
+    cp -a "${staging}/secrets/authelia" "${APP_DIR}/authelia.restoring"
+    rm -rf "${APP_DIR}/authelia"
+    mv "${APP_DIR}/authelia.restoring" "${APP_DIR}/authelia"
     note "placed authelia/ — check 'ls -lan ${APP_DIR}/authelia' against APP_UID in .env"
   fi
   note "placed .env"

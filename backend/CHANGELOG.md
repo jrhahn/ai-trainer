@@ -35,11 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   column, found by walking the mapper registry, and exits non-zero on anything
   unreadable.
 
+  The manifest records the **whole decryption chain** per purpose, not only the
+  key that encrypts new rows. `MultiFernet` decrypts with any key in the chain,
+  so rows written before a purpose gained a dedicated key are still under
+  `SECRETS_ENCRYPTION_KEY` — right after the #12 split, every existing row. A
+  first version recorded only the encrypting key, which meant correct dedicated
+  keys plus a rotated shared key printed "matches" and loaded the dump. Manifests
+  are versioned, and `restore.sh` refuses version 1 rather than running a check
+  that cannot see half its subject.
+
   Rehearsed, not asserted: `rehearse-restore.sh` writes a real secret of every
   purpose through the ORM against a throwaway Postgres, backs up, destroys the
-  database, **checks that the wrong key is refused**, restores, and compares every
-  secret byte-for-byte. Removing the refusal from `restore.sh` was tested — the
-  drill fails at step 5. Last run 2026-10-07.
+  database, **checks that the wrong key is refused** — both a wrong dedicated key
+  and a wrong shared one — restores, and compares every secret byte-for-byte.
+  Removing the refusal from `restore.sh` was tested; the drill fails at step 5.
+  Last run 2026-10-07.
 
   Still missing, and stated in the runbook: nothing schedules this on the live
   host and nothing ships the artefacts off it, so production still has no

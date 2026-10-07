@@ -96,7 +96,20 @@ secrets="${BACKUP_DIR}/${stamp}.secrets.tar.gz.gpg"
 manifest="${BACKUP_DIR}/${stamp}.manifest.json"
 
 staging="$(mktemp -d)"
-cleanup() { rm -rf "${staging}"; }
+completed=0
+
+# A failed run leaves nothing behind. Pruning keys off `*.manifest.json`, and the
+# manifest is written last, so an aborted run used to leave a `.dump` and a
+# `.secrets.tar.gz.gpg` that nothing would ever delete: a nightly job against a
+# stopped Postgres would grow the directory without bound, and — worse than the
+# disk — accumulate copies of the secrets bundle there, each a full set of this
+# deployment's keys.
+cleanup() {
+  rm -rf "${staging}"
+  if [ "${completed}" -eq 0 ]; then
+    rm -f "${dump}" "${secrets}" "${manifest}"
+  fi
+}
 trap cleanup EXIT
 
 umask 0077
@@ -184,12 +197,19 @@ fragment.update(
     secrets_sha256=os.environ["SECRETS_SHA"],
     postgres_db=os.environ["MANIFEST_POSTGRES_DB"],
     postgres_user=os.environ["MANIFEST_POSTGRES_USER"],
-    manifest_version=1,
+    # 2 since the manifest records the whole key chain per purpose and not only
+    # the key that encrypts new rows. restore.sh refuses a version 1 manifest
+    # rather than running a check that cannot see the shared key.
+    manifest_version=2,
 )
 json.dump(fragment, sys.stdout, indent=2, sort_keys=True)
 sys.stdout.write("\n")
 ' > "${manifest}"
 chmod 0600 "${manifest}"
+
+# From here the three artefacts are a complete set, so the cleanup trap must
+# stop treating them as the debris of a failed run.
+completed=1
 
 # Pruning is last, so a run that failed anywhere above leaves every older
 # backup in place. Deleting yesterday's good backup as the final step of

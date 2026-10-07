@@ -29,7 +29,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
-from sqlalchemy import text
+from sqlalchemy import Column, Table, Text, select, type_coerce
 
 from config import SecretPurpose, settings
 from database import async_session_maker
@@ -70,15 +70,27 @@ def encrypted_columns() -> list[tuple[str, str, str]]:
     be a second inventory to forget to extend, which is the bug class
     jrhahn/ai-trainer#754 was about.
     """
-    found: list[tuple[str, str, str]] = []
+    return sorted({(table.name, column.name, purpose) for table, column, purpose in _columns()})
+
+
+def _columns() -> list[tuple[Table, Column, str]]:
+    """The same sweep, keeping the SQLAlchemy objects.
+
+    :func:`encrypted_columns` returns names because that is what a report and a
+    test want to compare. The query below wants the objects: selecting a
+    ``Column`` off its ``Table`` means the identifiers are quoted by the dialect
+    instead of formatted into a SQL string, so there is no interpolation to
+    reason about even though these names come from the models and not from input.
+    """
+    found: list[tuple[Table, Column, str]] = []
     for mapper in Base.registry.mappers:
         table = mapper.local_table
         if table is None:
             continue
         for column in table.columns:
             if isinstance(column.type, EncryptedString):
-                found.append((table.name, column.name, column.type.purpose))
-    return sorted(set(found))
+                found.append((table, column, column.type.purpose))
+    return sorted(found, key=lambda item: (item[0].name, item[1].name))
 
 
 def _classify(value: str, purpose: str) -> str:
@@ -103,13 +115,21 @@ async def tally() -> dict[str, Tally]:
     """Classify every stored value, grouped by purpose."""
     tallies: dict[str, Tally] = defaultdict(Tally)
     async with async_session_maker() as session:
-        for table, column, purpose in encrypted_columns():
-            tallies[purpose].columns.append(f"{table}.{column}")
-            # Raw SQL on purpose: reading through the ORM would run the
-            # decryption this script is trying to *observe*, and would hand back
-            # the ciphertext silently on failure.
+        for table, column, purpose in _columns():
+            tallies[purpose].columns.append(f"{table.name}.{column.name}")
+            # ``type_coerce(column, Text)`` and not ``select(column)``, which is
+            # the whole subtlety here. A result processor comes from the type of
+            # the selected expression, so selecting the column itself runs
+            # ``EncryptedString.process_result_value`` — the decryption this
+            # script exists to *observe*. Measured: the same row reads back as
+            # 'PLAINSECRET12345' through the column and as 'gAAAAAB…' through
+            # this, so the naive form would have counted every healthy row as
+            # plaintext and reported a successful restore as an unencrypted one.
+            #
+            # Coercing the type rather than formatting a SQL string keeps the
+            # identifiers quoted by the dialect, and emits no CAST.
             result = await session.execute(
-                text(f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL")  # noqa: S608
+                select(type_coerce(column, Text)).where(column.is_not(None))
             )
             for (value,) in result:
                 if value is None:
