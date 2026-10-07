@@ -12,7 +12,13 @@ import yaml
 from argon2 import PasswordHasher
 
 import auth
-from routers.auth_router import _create_authelia_user, _verify_authelia_credentials
+from services import authelia_store
+from services.authelia_store import (
+    create_user as _create_authelia_user,
+)
+from services.authelia_store import (
+    verify_credentials as _verify_authelia_credentials,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -551,7 +557,7 @@ async def test_login_reports_503_when_the_user_store_cannot_be_read(
             raise PermissionError(13, "Permission denied", str(store))
         return real_open(path, *args, **kwargs)
 
-    monkeypatch.setattr("routers.auth_router.open", _denied, raising=False)
+    monkeypatch.setattr("services.authelia_store.open", _denied, raising=False)
 
     resp = await client.post(
         "/api/v1/auth/login",
@@ -580,3 +586,58 @@ async def test_a_missing_store_is_still_a_plain_auth_failure(
     )
 
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# The careful part of the write, which had no tests of its own until the store
+# moved to a service of its own (ai-trainer-ops#35)
+# ---------------------------------------------------------------------------
+
+
+def test_a_failed_write_leaves_no_temp_file_behind(monkeypatch, tmp_path):
+    """A write that fails must not litter the bind mount it failed on.
+
+    ``mkstemp`` creates the file before anything can go wrong with it, so every
+    failed write leaves a ``users_database_*.tmp`` unless the cleanup runs — in a
+    directory shared with the Authelia container, next to the real store, named
+    closely enough to be mistaken for it. The original is untouched either way,
+    which is the point of writing through a temp file at all.
+    """
+    store = tmp_path / "users_database.yml"
+    _make_users_db(store, {"rider@example.com": {"email": "rider@example.com"}})
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    def _fails(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr("services.authelia_store.yaml.dump", _fails)
+
+    with pytest.raises(authelia_store.StoreUnreadable):
+        authelia_store.create_user("new@example.com", "New", "Str0ng!Pass")
+
+    assert list(tmp_path.glob("users_database_*.tmp")) == []
+    assert "rider@example.com" in yaml.safe_load(store.read_text())["users"]
+
+
+def test_an_original_that_vanished_mid_write_does_not_fail_the_write(tmp_path):
+    """There is no mode to carry over from a file that is no longer there.
+
+    Reachable because ``_carry_over_file_identity`` stats the original *after*
+    the replacement has been written — an operator or the other container moving
+    the store in that window is unlikely but not impossible, and the right
+    answer is to let ``os.replace`` put a file back rather than to abort and
+    leave none.
+
+    What it must not do is widen anything on the way out. There is nothing to
+    copy, so it copies nothing and the replacement keeps the 0600 ``mkstemp``
+    gave it — tighter than the store's usual mode, never wider, which is the
+    safe direction for a file of password hashes.
+    """
+    replacement = tmp_path / "replacement.yml"
+    replacement.write_text("users: {}\n")
+    os.chmod(replacement, 0o600)  # what mkstemp would have left in production
+
+    authelia_store._carry_over_file_identity(tmp_path / "gone.yml", str(replacement))
+
+    assert replacement.exists()
+    assert stat.S_IMODE(replacement.stat().st_mode) == 0o600

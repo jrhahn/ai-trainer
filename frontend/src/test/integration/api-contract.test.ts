@@ -133,7 +133,7 @@ describe('user profile service ↔ backend', () => {
   it('deleteCurrentUser removes the account (subsequent request fails)', async () => {
     const email = uniqueEmail('deleteme')
     const delToken = (await register('Del Rider', email, 'Str0ng!Pass'))!
-    await deleteCurrentUser(delToken)
+    await deleteCurrentUser(delToken, 'Str0ng!Pass')
     await expect(fetchCurrentUser(delToken)).rejects.toThrow()
   })
 })

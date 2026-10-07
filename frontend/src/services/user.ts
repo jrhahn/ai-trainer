@@ -145,8 +145,16 @@ export async function updateCurrentUser(
   return fetchCurrentUser(token)
 }
 
-export async function deleteCurrentUser(token: string): Promise<void> {
-  await apiFetch('/users/me', { token, method: 'DELETE' })
+/**
+ * Delete the account for good.
+ *
+ * The password is required by the backend since ai-trainer-ops#35: a live
+ * session alone used to be enough to destroy an athlete's whole history, while
+ * the neighbouring step-up routes (disabling the second factor, signing out
+ * everywhere) both asked for more.
+ */
+export async function deleteCurrentUser(token: string, password: string): Promise<void> {
+  await apiFetch('/users/me', { token, method: 'DELETE', body: { password } })
 }
 
 export async function fetchTrainingPlan(token: string): Promise<TrainingDay[]> {

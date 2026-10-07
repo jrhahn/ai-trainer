@@ -164,12 +164,13 @@ describe('SettingsPage', () => {
 
   it('calls resetAll and deleteCurrentUser when the reset is confirmed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'prompt').mockReturnValue('Str0ng!Pass')
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
 
     await waitFor(() => {
-      expect(mockDeleteCurrentUser).toHaveBeenCalledWith('tok-123')
+      expect(mockDeleteCurrentUser).toHaveBeenCalledWith('tok-123', 'Str0ng!Pass')
       expect(useAppStore.getState().authToken).toBeNull()
     })
   })
@@ -181,6 +182,56 @@ describe('SettingsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
 
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('does not delete the account when the password prompt is dismissed', async () => {
+    // The confirm is the easy half. Someone who clicks through it and then
+    // cancels at the password has not asked for the account to go
+    // (ai-trainer-ops#35).
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'prompt').mockReturnValue(null)
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+
+    expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
+    expect(useAppStore.getState().authToken).toBe('tok-123')
+  })
+
+  it('keeps the session when the deletion is refused', async () => {
+    // A wrong password comes back as a 401. Clearing the session anyway would
+    // log the athlete out of an account that still exists.
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'prompt').mockReturnValue('wrong')
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockDeleteCurrentUser.mockRejectedValueOnce(new Error('Incorrect password.'))
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalled()
+    })
+    expect(useAppStore.getState().authToken).toBe('tok-123')
+  })
+
+  it('reports a non-Error rejection without showing undefined', async () => {
+    // The fallback half of `e instanceof Error ? e.message : ...`. A rejection
+    // that is not an Error is unlikely, but the alert it produces is the one
+    // the athlete reads after being refused — "undefined" would be worse than
+    // no dialog at all.
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'prompt').mockReturnValue('Str0ng!Pass')
+    const alerted = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockDeleteCurrentUser.mockRejectedValueOnce('not an Error object')
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+
+    await waitFor(() => {
+      expect(alerted).toHaveBeenCalledWith('The account could not be deleted.')
+    })
+    expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
   it('renders the Display Name input with the current user name', () => {

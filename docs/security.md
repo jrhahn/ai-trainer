@@ -84,6 +84,32 @@ malformed header into a well-formed one needs the real pair.
 a successful login (#329). Registration enforces a strength policy that also
 rejects fragments of the user's own name and address.
 
+**A login costs the same whether the address has an account or not**
+(ai-trainer-ops#35). It did not: both password paths wrote `user is None or not
+verify_password(...)`, which skipped the Argon2 verification entirely for an
+unknown address. Argon2 is deliberately expensive, so the short-circuit answered
+in 8 ms against 165 ms — a twentyfold tell, from one request, with no averaging
+needed. `auth.password_matches` now takes `None` for "no such account" and
+spends a verification against a stand-in hash, and the decision lives in that
+one function rather than at each call site, where the next caller would write
+the shortcut again. The Authelia store path had the same gap plus one of its
+own: a `disabled` entry answered fast too, which told an attacker the address
+exists and is switched off.
+
+What is *not* hidden is registration: 409 for a taken address against 200 for a
+free one. Hiding it means accepting the signup and emailing the owner instead,
+which needs the SMTP this deployment does not have (#687) and tells the owner
+something an attacker can then trigger at will. It stays visible and bounded
+instead — `enforce_registration_rate_limit` runs before the lookup, so probing
+costs the same five-per-hour global allowance a real signup does.
+
+**There is no password-reset flow, and no way to change a password.** An athlete
+who forgets theirs has no way back in. That is a product gap waiting on #687,
+not a hardened decision — but it is also why the questions "how random is the
+reset token" and "what invalidates a session on a password change" currently
+have no answer to get wrong. `test_auth_hardening.py` fails the day either route
+appears, so whoever adds one has to answer them.
+
 **Second factor** (#688) is TOTP, implemented in the backend rather than in
 Authelia — see [Why not Authelia's TOTP](#why-not-authelias-totp). Opt-in per
 user. Enrollment stores the secret but leaves the factor **off** until a code
@@ -114,6 +140,20 @@ once — there is no per-device revocation:
 |---|---|
 | `POST /auth/sessions/revoke` | the athlete's "sign out everywhere". Needs the password, like turning the second factor off, and signs the caller out too — it genuinely invalidates the token that made the request. Trusted devices go with it. |
 | `POST /admin/users/{id}/revoke-sessions` | the operator's version, for a leak reported by someone who cannot sign in, or a password changed by hand in `users_database.yml` — which the app's tokens know nothing about. |
+
+**Deleting the account is the third thing that ends a session**, and it needs no
+counter: `get_current_user` loads the user row to authenticate, so the token
+401s by itself once the row is gone. Two things were missing there
+(ai-trainer-ops#35). `DELETE /users/me` took a bare session, while both
+neighbouring step-up routes asked for the password on the argument that locking
+the owner out must cost more than a borrowed unlocked browser — deletion is that
+argument's strongest case. And with header auth on, the password lives in
+`users_database.yml`, which neither deletion route touched; since `POST
+/auth/login` recreates a missing row from a valid credential, the account came
+back on the next sign-in with a fresh token. Both deletion routes now go through
+`services/authelia_store.delete_user`, which exists because the knowledge of
+that file used to live in `auth_router` — a module neither `routers/users.py`
+nor `routers/admin.py` may import, which is precisely why neither called it.
 
 Admin tokens have no user row to count against, so they are bound to the
 credentials instead: the token carries an HMAC over `ADMIN_PASSWORD` and
@@ -157,6 +197,14 @@ Some of these shapes are deliberate rather than obvious:
 - **Registration and admin login are global.** An attacker picks a fresh address
   each time, so a per-email bucket would never fill; and the admin request
   carries a password and nothing else to key on.
+- **Nothing is keyed on the client address.** It arrives through Traefik *and*
+  nginx, so trusting it needs a trusted-proxy hop count nothing in this app
+  establishes — and a limit keyed on a header the caller can set is worse than
+  no limit, because it reads as one. The cost is accepted on both sides: a
+  shared NAT cannot lock its neighbours out of accounts that are not theirs, and
+  an attacker with many addresses gets no extra allowance for them. Pinned by
+  `test_auth_hardening.py`, which reads the limit functions and fails if one
+  starts consulting `request.client` or a forwarded header.
 
 ### Spend controls
 
@@ -474,6 +522,13 @@ a large body cap themselves while reading, and that is the guarantee.
 
 **Registration is open.** Deliberate, and bounded by the proof-of-work and the
 rate limit rather than closed. Email verification (#687) would tighten it.
+
+**An account created before header auth was switched on cannot be used under
+it.** Nothing consults `users.hashed_password` in Authelia mode — the password
+lives in `users_database.yml` and such a row has no entry there — so the account
+can neither log in nor, since the step-up check reads the same store, be deleted
+by its owner. Pre-existing and not something deletion introduced; it belongs
+with #14, which covers the same file conflict from the registration side.
 
 **Proof-of-work is not behavioural.** See the note above on what it does and
 does not buy.

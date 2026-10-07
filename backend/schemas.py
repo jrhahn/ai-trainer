@@ -237,6 +237,21 @@ class SessionRevokeRequest(BaseModel):
     password: str
 
 
+class AccountDeleteRequest(BaseModel):
+    """Deleting the account needs the password, like disabling the second factor.
+
+    It did not, which made a borrowed unlocked browser enough to destroy somebody's
+    training history (ai-trainer-ops#35). The two neighbouring step-up routes —
+    ``/auth/totp/disable`` and ``/auth/sessions/revoke`` — both ask, on the
+    argument that locking the owner out of their own account must cost more than
+    a live session. Deletion is that argument's stronger case, and it is the one
+    route that had no way to make it: ``require_password`` was private to
+    ``auth_router``.
+    """
+
+    password: str
+
+
 class SessionRevokeResponse(CamelModel):
     """What the client needs to know: the session it holds is finished.
 
