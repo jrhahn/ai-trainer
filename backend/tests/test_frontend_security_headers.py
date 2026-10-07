@@ -72,3 +72,17 @@ def test_the_image_is_not_on_an_unmaintained_nginx_branch():
     base = re.search(r"^FROM nginx:(\S+)", FRONTEND_DOCKERFILE.read_text(), re.M)
     assert base is not None
     assert not base.group(1).startswith("1.29")
+
+
+def test_no_location_sets_headers_of_its_own():
+    """nginx's inheritance trap: one ``add_header`` in a location drops them all.
+
+    ``add_header`` is inherited from the server block only by a location that
+    has none of its own. A single cache header added to ``location /`` would
+    silently strip every header above from every page — and every test above
+    would still pass, because they read the server block.
+    """
+    text = NGINX_CONF.read_text()
+    locations = re.findall(r"location\s+[^{]+\{(.*?)\n    \}", text, re.S)
+    assert locations, "anti-vacuity: the config has location blocks"
+    assert all("add_header" not in body for body in locations)
