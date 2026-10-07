@@ -236,7 +236,8 @@ async def token_budget_exceeded_handler(
     window, which is hours to days away, not seconds.
     """
     request_id = getattr(request.state, "request_id", None)
-    logger.warning(
+    # "tokens" here are LLM usage counts, not credentials (ai-trainer-ops#32).
+    logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
         "AI token budget exceeded on %s %s (request_id=%s): %d of %d tokens in %d days",
         request.method,
         request.url.path,
