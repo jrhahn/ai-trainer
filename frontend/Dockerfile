@@ -17,7 +17,10 @@ ENV VITE_AUTHELIA_URL=$VITE_AUTHELIA_URL
 
 RUN npm run build
 
-FROM nginx:1.29-alpine
+# The stable branch. 1.29 stopped receiving updates when 1.30 became stable,
+# and the first trivy run found every one of its 126 findings fixed upstream
+# (ai-trainer-ops#32).
+FROM nginx:1.30-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
