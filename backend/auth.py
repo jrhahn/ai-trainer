@@ -16,6 +16,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
@@ -74,20 +75,21 @@ def validate_jwt_secret() -> None:
             )
 
 
-def warn_if_authelia_proxy_unprotected() -> None:
-    """Warn when Authelia header trust relies solely on network isolation.
+def warn_if_authelia_header_auth_is_off() -> None:
+    """Report at boot that ``Remote-*`` identity headers are being ignored.
 
-    Without AUTHELIA_PROXY_SHARED_SECRET the backend trusts ``Remote-*`` headers
-    on any request that reaches it, so it must be unreachable except through the
-    trusted proxy.  Setting the shared secret adds defense-in-depth that survives
-    a misconfigured network path (see issue #324).
+    Since ai-trainer-ops#34 an empty AUTHELIA_PROXY_SHARED_SECRET disables header
+    authentication rather than loosening it, so this is a statement about what
+    the deployment can do, not a warning about exposure. It is logged because the
+    silent half matters: an operator who switches a forward-auth proxy on and
+    forgets the secret gets 401 everywhere, and this line is what explains it.
     """
     if AUTHELIA_AUTH_ENABLED and not AUTHELIA_PROXY_SHARED_SECRET:
         logger.warning(
             "AUTHELIA_AUTH_ENABLED is set but AUTHELIA_PROXY_SHARED_SECRET is "
-            "empty: Remote-* headers are trusted on any request that reaches the "
-            "backend. Ensure the backend is reachable only through the Authelia "
-            "proxy, or set AUTHELIA_PROXY_SHARED_SECRET for defense-in-depth."
+            "empty: Remote-* identity headers are ignored on every request, so "
+            "only password login works. Set AUTHELIA_PROXY_SHARED_SECRET and "
+            "have the proxy inject it to enable header authentication."
         )
 
 
@@ -305,9 +307,11 @@ async def get_current_user(
     (#704).
 
     The Authelia branch above it authenticates on headers and never looks at a
-    token, so revocation does not reach it. That path is unreachable today (the
-    forward-auth middlewares are attached to no router, #696) and would need
-    its own answer if it ever became live.
+    token, so revocation does not reach it. That path needs a valid
+    proof-of-transit secret since ai-trainer-ops#34, and no router forwards the
+    headers that would use it (#696) — but "no generation to check" is a
+    property of the branch, not of the routing, and it would need its own answer
+    the day a forward-auth proxy is switched on.
     """
     if AUTHELIA_AUTH_ENABLED:
         authelia_user = await _get_or_create_authelia_user(request, db)
@@ -368,29 +372,90 @@ async def get_authelia_user(
     return await _get_or_create_authelia_user(request, db)
 
 
-def _request_from_trusted_proxy(request: Request) -> bool:
-    """Return whether *request* may be trusted to carry Authelia ``Remote-*`` headers.
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+"""The same validator ``schemas`` applies to a registration (ai-trainer-ops#34).
 
-    When AUTHELIA_PROXY_SHARED_SECRET is configured, the trusted reverse proxy
-    injects it as AUTHELIA_PROXY_SECRET_HEADER and overwrites any client-supplied
-    value, so a request reaching the backend by any other path (direct container
-    access, SSRF) will not carry it.  When the secret is unset the check is a
-    no-op and header trust relies solely on network isolation.
+Deliberately the identical type rather than a second pattern. The question the
+header path has to answer is not "is this plausible" but "will this resolve to
+the same account the athlete registered", and two validators that normalise
+differently answer it differently — a header spelling that normalises one way
+here and another way at registration mints a second account instead of finding
+the first.
+"""
+
+
+def _request_from_trusted_proxy(request: Request) -> bool:
+    """Whether *request* proved it transited the proxy allowed to assert identity.
+
+    The trusted reverse proxy injects AUTHELIA_PROXY_SHARED_SECRET as
+    AUTHELIA_PROXY_SECRET_HEADER and *overwrites* any client-supplied value, so a
+    request arriving by any other path — direct container access from inside the
+    Docker network, the frontend's own nginx, SSRF — cannot carry it.
+
+    An unset secret means no, not yes (ai-trainer-ops#34). It used to mean yes,
+    which read as defence in depth and was the opposite: the secret is `optional`
+    in ``deploy/forwarded-vars.yml`` and empty on this deployment, so the backend
+    trusted ``Remote-Email`` on *any* request that reached it. Measured rather
+    than reasoned about: a forged header with no bearer token at all returned 200
+    from ``/api/v1/users/me`` for another athlete's account, and
+    ``/api/v1/auth/session`` minted them a seven-day JWT.
+
+    What stood between that and the internet was two hand-maintained header-strip
+    lists — Traefik's ``backend-strip-remote`` middleware and the frontend
+    nginx's ``proxy_set_header`` block — either of which is one label edit or one
+    proxy upgrade away from not holding. Failing closed makes the backend's own
+    check the boundary and leaves those two as the defence in depth they were
+    always described as.
     """
     if not AUTHELIA_PROXY_SHARED_SECRET:
-        return True
+        return False
     provided = request.headers.get(AUTHELIA_PROXY_SECRET_HEADER)
     return provided is not None and secrets.compare_digest(
         provided, AUTHELIA_PROXY_SHARED_SECRET
     )
 
 
+def _normalised_email(raw: str) -> str | None:
+    """*raw* as a normalised address, or None if it is not one.
+
+    This is the one path that creates an account without anyone's password, and
+    until ai-trainer-ops#34 it was also the only one that skipped ``EmailStr``:
+    whatever bytes arrived in the header became a row. Validating here closes the
+    asymmetry and, because the adapter normalises, stops two spellings of one
+    address from becoming two accounts.
+
+    Takes the value rather than the request so there is one place that decides
+    the header is present — its caller, which has to make that call before the
+    proof-of-transit check anyway. A second emptiness guard here would be a
+    branch no test can reach, and an unexercised branch is one a reader trusts
+    without having seen it run.
+    """
+    try:
+        return _EMAIL_ADAPTER.validate_python(raw)
+    except ValidationError:
+        # The value is somebody's identity, so it stays out of the log; its
+        # length is what tells an operator whether this is a misconfigured proxy
+        # or something probing (#499).
+        logger.warning(
+            "Ignoring Authelia %s header: the value is not an email address "
+            "(%d characters).",
+            AUTHELIA_REMOTE_EMAIL_HEADER,
+            len(raw),
+        )
+        return None
+
+
 async def _get_or_create_authelia_user(
     request: Request,
     db: AsyncSession,
 ) -> models.User | None:
-    email = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
-    if not email:
+    # Presence first, so the proof-of-transit warning below fires only for a
+    # request that actually tried to assert an identity. Checking transit first
+    # would log on every anonymous request instead, which is the same as not
+    # logging: the one case worth seeing — Traefik's strip stopped working —
+    # would arrive buried in its own noise.
+    asserted = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
+    if not asserted:
         return None
 
     if not _request_from_trusted_proxy(request):
@@ -402,13 +467,17 @@ async def _get_or_create_authelia_user(
         )
         return None
 
+    email = _normalised_email(asserted)
+    if email is None:
+        return None
+
     user = await crud.get_user_by_email(db, email)
     if user is not None:
         return user
 
     remote_name = request.headers.get(AUTHELIA_REMOTE_NAME_HEADER)
     remote_user = request.headers.get(AUTHELIA_REMOTE_USER_HEADER)
-    return await crud.create_user(
+    await crud.create_user(
         db,
         email=email,
         name=remote_name or remote_user,
@@ -416,3 +485,9 @@ async def _get_or_create_authelia_user(
         # A random one-way hash ensures no reusable local password exists.
         hashed_password=hash_password(secrets.token_urlsafe(32)),
     )
+    # Re-read rather than return what ``create_user`` built: this is an auth
+    # dependency, so the instance it returns gets serialised by whatever route
+    # asked for it, and a freshly constructed one carries none of its
+    # relationships. The first request of every new Authelia identity used to
+    # end in MissingGreenlet — a 500 on the account-creating path.
+    return await crud.get_user_by_email(db, email)

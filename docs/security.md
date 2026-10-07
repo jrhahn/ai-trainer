@@ -59,6 +59,27 @@ Both files carry comments saying so (#688, #696). Gating the backend behind
 forward-auth is not a one-line change — it returned 400 to every request and
 broke production login once already (#324).
 
+**`Remote-*` identity headers are ignored unless a request proves it transited
+the trusted proxy**, and an unset `AUTHELIA_PROXY_SHARED_SECRET` means ignored,
+not trusted (ai-trainer-ops#34). It used to mean trusted, which read as defence
+in depth and inverted it: the secret is `optional` in
+`deploy/forwarded-vars.yml`, so on this deployment a forged `Remote-Email`
+authenticated as any athlete with no bearer token at all, and
+`/api/v1/auth/session` turned it into a seven-day JWT. What stood in the way was
+two hand-maintained header-strip lists — Traefik's `backend-strip-remote` and
+the frontend nginx's `proxy_set_header` block — either of which is one label
+edit or one proxy upgrade from not holding.
+
+The attack is `backend/tests/test_remote_user_boundary.py`, in three layers that
+have to meet: a real uvicorn driven with raw bytes decides which header shapes
+can arrive, the real app decides what it does with each of them, and
+`compose.yml` plus `frontend/nginx.conf` must delete exactly the names the app
+honours on every route that reaches the backend. The first layer is what makes
+the third finite — uvicorn lower-cases every header name, so "the names the app
+honours" is three strings and a strip list can be checked against it. What no
+test here can reach is the Traefik half: whether a *front* proxy normalises a
+malformed header into a well-formed one needs the real pair.
+
 **Passwords** are Argon2id, with legacy bcrypt hashes upgraded transparently on
 a successful login (#329). Registration enforces a strength policy that also
 rejects fragments of the user's own name and address.
@@ -435,9 +456,12 @@ anything.
 
 **Revocation does not reach the Authelia header path.** `get_current_user`
 authenticates on `Remote-*` headers before it looks at a token, so a session
-arriving that way has no generation to check. Unreachable today — the
-forward-auth middlewares are attached to no router (#696) — and something that
-would need its own answer before that changed.
+arriving that way has no generation to check. It now needs a valid
+proof-of-transit secret, and no router forwards the headers that would use it
+(#696) — but "no generation to check" is a property of the branch rather than of
+the routing, so it still needs its own answer before forward auth is switched on.
+Pinned as a known gap in `test_remote_user_boundary.py` rather than left to be
+rediscovered.
 
 **Rate limits are per process.** Windows live in module memory, so with N
 replicas each key gets N times the allowance. This degrades gracefully for the

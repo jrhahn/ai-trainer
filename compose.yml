@@ -211,14 +211,17 @@ services:
       AUTHELIA_USERS_DB_PATH: ${AUTHELIA_USERS_DB_PATH:-/authelia-config/users_database.yml}
       AUTHELIA_PROXY_SECRET_HEADER: ${AUTHELIA_PROXY_SECRET_HEADER:-X-Authelia-Proxy-Secret}
       # Shared secret the proxy injects (below) to prove a request transited
-      # Traefik. When set, the backend only trusts Remote-* headers on requests
-      # carrying it — defense-in-depth if the backend is ever reachable directly
-      # inside the Docker network (issue #324). Set a strong random value in .env.
+      # Traefik. The backend trusts Remote-* identity headers only on requests
+      # carrying it, and an EMPTY value disables header authentication rather
+      # than falling back to network isolation (ai-trainer-ops#34). Empty is
+      # therefore the correct value for this deployment, which does not use
+      # forward auth; password login does not involve this at all.
       AUTHELIA_PROXY_SHARED_SECRET: ${AUTHELIA_PROXY_SHARED_SECRET:-}
-    # Bind to localhost only: the backend must be reached exclusively through
-    # Traefik (which applies the Authelia forward-auth middleware below). A
-    # public 0.0.0.0 mapping would expose an auth-free path on which clients can
-    # forge Remote-* headers (see issue #324).
+    # Bind to localhost only, so the backend is reachable only through a proxy.
+    # A public 0.0.0.0 mapping would be a route past both header-strip lists
+    # below (issue #324). Defence in depth rather than the boundary: since
+    # ai-trainer-ops#34 a request that has not proved it transited the proxy
+    # cannot assert an identity however it arrives.
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -248,6 +251,15 @@ services:
       # Instead, strip any client-supplied Remote-* identity headers at the proxy
       # so they can never be forged and trusted by the backend (issue #324).
       # An empty customRequestHeaders value removes the header.
+      #
+      # These three names must stay in step with the backend's
+      # AUTHELIA_REMOTE_*_HEADER settings, which is why those are pinned to their
+      # template defaults in deploy/forwarded-vars.yml and why
+      # backend/tests/test_remote_user_boundary.py checks this list against
+      # config.py rather than against a retyped copy. Remote-Groups is stripped
+      # too although nothing reads it — a name Authelia emits is a name worth not
+      # accepting. Traefik deletes case-insensitively, which is what makes three
+      # entries enough: uvicorn hands the app every spelling lower-cased.
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-User=
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Email=
       - traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders.Remote-Name=
@@ -258,7 +270,8 @@ services:
       # silently rather than tighten it — a control that only looked wired.
       # customRequestHeaders overwrites, so a client cannot supply its own
       # value; when the secret is empty the header is removed and the backend
-      # check is a documented no-op.
+      # ignores Remote-* entirely — the no-op used to be the other way round,
+      # which is what ai-trainer-ops#34 found.
       - traefik.http.middlewares.backend-proxy-secret.headers.customRequestHeaders.${AUTHELIA_PROXY_SECRET_HEADER:-X-Authelia-Proxy-Secret}=${AUTHELIA_PROXY_SHARED_SECRET:-}
       - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))

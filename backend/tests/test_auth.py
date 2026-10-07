@@ -82,12 +82,17 @@ async def test_login_wrong_password_returns_401(client):
 @pytest.mark.asyncio
 async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    # The proof-of-transit secret is no longer optional for this path
+    # (ai-trainer-ops#34).
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
     response = await client.get(
         "/api/v1/auth/session",
         headers={
             "Remote-User": "authelia-user",
             "Remote-Name": "Authelia User",
             "Remote-Email": "authelia@example.com",
+            "X-Authelia-Proxy-Secret": "secret-from-proxy",
         },
     )
     assert response.status_code == 200
@@ -242,8 +247,15 @@ async def test_authelia_session_rejected_with_wrong_proxy_secret(client, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_authelia_session_trusts_headers_when_no_secret_configured(client, monkeypatch):
-    """With no proxy secret set, header trust is unchanged (network-isolation only)."""
+async def test_authelia_session_ignores_headers_when_no_secret_configured(client, monkeypatch):
+    """An unconfigured proxy secret disables header auth (ai-trainer-ops#34).
+
+    This assertion used to read 200 and called it "header trust is unchanged
+    (network-isolation only)". The isolation was two hand-maintained header-strip
+    lists in two proxies, and this configuration — the deployed one — meant a
+    forged ``Remote-Email`` minted a session for anyone. The break-attempt is in
+    ``test_remote_user_boundary.py``.
+    """
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
 
@@ -251,25 +263,25 @@ async def test_authelia_session_trusts_headers_when_no_secret_configured(client,
         "/api/v1/auth/session",
         headers={"Remote-Email": "plain@example.com", "Remote-Name": "Plain"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 401
 
 
-def test_warn_if_authelia_proxy_unprotected_logs_when_secret_missing(monkeypatch, caplog):
+def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(monkeypatch, caplog):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
 
     with caplog.at_level("WARNING", logger="auth"):
-        auth.warn_if_authelia_proxy_unprotected()
+        auth.warn_if_authelia_header_auth_is_off()
 
     assert "AUTHELIA_PROXY_SHARED_SECRET is" in caplog.text
 
 
-def test_warn_if_authelia_proxy_unprotected_silent_when_secret_set(monkeypatch, caplog):
+def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(monkeypatch, caplog):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "configured")
 
     with caplog.at_level("WARNING", logger="auth"):
-        auth.warn_if_authelia_proxy_unprotected()
+        auth.warn_if_authelia_header_auth_is_off()
 
     assert "AUTHELIA_PROXY_SHARED_SECRET" not in caplog.text
 
@@ -335,10 +347,18 @@ async def test_get_or_create_authelia_user_returns_existing(monkeypatch):
     async def fake_get(db, email):
         return existing
 
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")  # trust the request
+    # An empty secret now means "ignore the headers", so the request has to carry
+    # the proof of transit to get this far at all (ai-trainer-ops#34).
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
+    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Proxy")
     monkeypatch.setattr(auth.crud, "get_user_by_email", fake_get)
 
-    request = types.SimpleNamespace(headers={auth.AUTHELIA_REMOTE_EMAIL_HEADER: "a@b.com"})
+    request = types.SimpleNamespace(
+        headers={
+            auth.AUTHELIA_REMOTE_EMAIL_HEADER: "a@b.com",
+            "X-Proxy": "secret-from-proxy",
+        }
+    )
     result = await auth._get_or_create_authelia_user(request, db=None)
     assert result is existing
 

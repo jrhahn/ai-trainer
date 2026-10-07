@@ -7,7 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An unconfigured proxy secret no longer means "trust the identity headers"**
+  (ai-trainer-ops#34) — `services`-adjacent `auth.py`, plus `compose.yml`,
+  `frontend/nginx.conf`, `README.md`, `docs/security.md` and
+  `deploy/forwarded-vars.yml`.
+
+  The README described this boundary at length and called the backend's own
+  check belt-and-suspenders. The attack found the opposite. `Remote-*` headers
+  were honoured on any request that reached the backend whenever
+  `AUTHELIA_PROXY_SHARED_SECRET` was empty — and it is `optional` in
+  `deploy/forwarded-vars.yml`, so that is the deployed state. Measured, not
+  reasoned about: a single forged `Remote-Email` with **no bearer token at all**
+  returned 200 and another athlete's full profile from `/api/v1/users/me`, and
+  `/api/v1/auth/session` turned it into a seven-day JWT indistinguishable from a
+  password login. For an address with no account it created one, with no
+  password, captcha or rate limit involved.
+
+  What stood between that and the internet was two hand-maintained header-strip
+  lists — Traefik's `backend-strip-remote` middleware and the frontend nginx's
+  `proxy_set_header` block — either of which is one label edit or one proxy
+  upgrade away from not holding. `_request_from_trusted_proxy` now fails closed,
+  which makes the backend's own check the boundary and returns those two lists to
+  the defence in depth they were always described as. Password login does not
+  touch this; the `Remote-*` path is the one no router forwards to today (#696).
+
+  Two more on the same path. It was the only account-creating path that skipped
+  `EmailStr`, so whatever bytes arrived became a `users.email` — it now validates
+  through the same adapter registration uses, which also stops one address in two
+  spellings from becoming two accounts. And the first request of a new Authelia
+  identity was a 500: `crud.create_user` returns an instance with no
+  relationships loaded, and an auth dependency's return value gets serialised.
+
 ### Added
+
+- **The `Remote-*` boundary is a test rather than a paragraph**
+  (ai-trainer-ops#34) — `tests/test_remote_user_boundary.py`, 74 tests in three
+  layers that have to meet.
+
+  A real uvicorn, driven with hand-written bytes, decides which header shapes can
+  arrive and what they look like on arrival: every case of a name arrives
+  lower-cased, `Remote_Email` stays a distinct header, trailing whitespace in a
+  value survives while leading whitespace does not, and the seven shapes a proxy
+  pair could disagree about — space before the colon, obs-fold continuation, bare
+  LF, NUL, `Transfer-Encoding` with `Content-Length`, two disagreeing
+  `Content-Length`s — are all 400 before the app is invoked. The real app then
+  decides what it does with each shape that can arrive. And `compose.yml` plus
+  `frontend/nginx.conf` must delete exactly the names the app honours, on every
+  router that reaches the backend, with the list read from `config.py` rather than
+  retyped.
+
+  The first layer is what makes the third finite: because uvicorn lower-cases
+  every header name, "the names the app honours" is three strings and a strip
+  list can be checked against them. Each layer's conclusion was verified by
+  mutation — failing open again fails exactly the three forgery tests, dropping
+  the validation fails fourteen, and removing `backend-strip-remote` from one
+  router fails the per-router sweep.
 
 - **The coach can see a week with no easy days in it** (#747) —
   `services/training_monotony.py`. Every load figure this app computed described
