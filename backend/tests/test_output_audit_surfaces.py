@@ -2,7 +2,8 @@
 
 ``ask_trainer`` was wired in #750. This covers the rest of what the athlete
 reads as the coach speaking: the dashboard login summary (from both analysis
-paths and from the refresh), the training-status badge, the next-session
+paths, from the refresh and from processed ride feedback), the
+training-status badge, the next-session
 recommendation, the ride review and the generated insights.
 
 Each case drives the real service function with the LLM replaced by a reply
@@ -81,6 +82,12 @@ async def _login_summary():
     )
 
 
+async def _feedback_summary():
+    return await ai_service.generate_summary_from_ride_feedbacks(
+        [_FakeRide("2026-05-01")], provider="openai"
+    )
+
+
 async def _training_status():
     return await ai_service.generate_training_status(FACTS)
 
@@ -118,6 +125,10 @@ SURFACES = [
     pytest.param(
         "login_summary", _login_summary, {"loginSummary": _LOGIN_SUMMARY},
         id="login-summary-refresh",
+    ),
+    pytest.param(
+        "login_summary", _feedback_summary, {"loginSummary": _LOGIN_SUMMARY},
+        id="pending-feedbacks-summary",
     ),
     pytest.param(
         "training_status",
@@ -194,6 +205,21 @@ async def test_output_the_athlete_never_sees_is_not_counted():
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))):
         assert await _login_summary() == ""
+
+    assert _snapshot("login_summary") == before
+
+
+async def test_the_deterministic_fallback_summary_is_not_counted():
+    """When the model's summary is unusable, code writes one from the rides.
+
+    Nothing at the seam produced it, so there is nothing to audit.
+    """
+    before = _snapshot("login_summary")
+
+    with patch.object(
+        ai_service, "_chat", new=AsyncMock(return_value='{"loginSummary": ""}')
+    ):
+        assert await _feedback_summary()
 
     assert _snapshot("login_summary") == before
 

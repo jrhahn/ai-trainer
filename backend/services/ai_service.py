@@ -546,6 +546,9 @@ async def analyse_strava_activities(
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
+    # No completeness gate here, unlike the refresh paths: the callers store
+    # this summary as it came (routers/ai.py, routers/users.py), so even a
+    # truncated one is shown — and what is shown is what gets audited.
     _audit_prose(
         parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"
     )
@@ -611,6 +614,9 @@ async def analyse_fit_activity(
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
+    # No completeness gate here, unlike the refresh paths: the callers store
+    # this summary as it came (routers/ai.py, routers/users.py), so even a
+    # truncated one is shown — and what is shown is what gets audited.
     _audit_prose(
         parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"
     )
@@ -2211,5 +2217,8 @@ async def generate_summary_from_ride_feedbacks(
     parsed = _parse_ai_json(raw)
     summary = parsed.get("loginSummary") or ""
     if _is_complete_login_summary(summary):
+        _audit_prose(summary, system_prompt, user_msg, surface="login_summary")
         return summary
+    # The fallback is built from the rides by code, not by the model: there is
+    # nothing at the seam to audit, and counting it would dilute the rate.
     return _fallback_login_summary_from_rides(rides)
