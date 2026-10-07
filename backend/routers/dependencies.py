@@ -11,6 +11,11 @@ The auth limits (#682) live here for the same reason: they span
 ``auth_router`` and ``admin``. They are plain functions rather than FastAPI
 dependencies because they key on the request *body* (the email being tried),
 which a dependency would have to parse a second time.
+
+``require_password`` (ai-trainer-ops#35) is here because step-up now spans three
+routers: ``/auth/totp/disable``, ``/auth/sessions/revoke`` and ``DELETE
+/users/me``. While it was private to ``auth_router``, the route that destroys the
+account was the one route that could not reach it.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from fastapi import Depends, HTTPException, status
 import auth
 import models
 from config import settings
+from services import authelia_store
 from services import llm as llm_service
 from services.rate_limit import SlidingWindowLimiter, Window
 
@@ -108,6 +114,54 @@ def consume_ai_allowance(user_id: str) -> None:
         detail="Too many AI requests. Please wait a moment before trying again.",
         headers={"Retry-After": str(max(1, math.ceil(retry_after)))},
     )
+
+
+# ---------------------------------------------------------------------------
+# Credentials: reading the user store, and step-up on a live session
+# ---------------------------------------------------------------------------
+
+
+def verify_store_credentials(email: str, password: str) -> bool:
+    """``authelia_store.verify_credentials``, with the operator case as a 503.
+
+    The mapping lives here and not in the service because the service has no
+    business knowing about HTTP, and it lives in *one* function rather than at
+    each call site because an unreadable store is not a wrong password and must
+    never be answered as one. Before it had a 503 it surfaced as a raw traceback
+    and a 500 on every login (#684, #696): true, and useless.
+    """
+    try:
+        return authelia_store.verify_credentials(email, password)
+    except authelia_store.StoreUnreadable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is temporarily unavailable.",
+        ) from exc
+
+
+def require_password(user: models.User, password: str) -> None:
+    """Re-check *user*'s password, or raise 401.
+
+    Shared by every route that demands the password on top of a live session,
+    because the two branches are the trap: with Authelia as the user store the
+    password is not in ``users.hashed_password`` at all (that column holds a
+    random throwaway, see ``register``), so a route that checked only the column
+    would accept nothing in production, and one that checked only the store would
+    accept nothing in development. Getting that wrong in one route out of several
+    is how step-up auth quietly stops being a check.
+
+    Which is what had happened: this was private to ``auth_router``, so
+    ``DELETE /users/me`` — the one route that cannot be undone — did not call it
+    and took a bare session (ai-trainer-ops#35).
+    """
+    if auth.AUTHELIA_AUTH_ENABLED:
+        valid = verify_store_credentials(user.email, password)
+    else:
+        valid = auth.verify_password(password, user.hashed_password)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password."
+        )
 
 
 # ---------------------------------------------------------------------------

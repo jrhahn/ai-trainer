@@ -1,17 +1,9 @@
 """Authentication routes."""
 
-import contextlib
-import fcntl
 import logging
-import os
 import secrets
-import stat
-import tempfile
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Any
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,95 +18,16 @@ from routers.dependencies import (
     enforce_login_rate_limit,
     enforce_registration_rate_limit,
     enforce_totp_code_rate_limit,
+    require_password,
+    verify_store_credentials,
 )
+from services import authelia_store
 from services import captcha as captcha_service
 from services import totp as totp_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 logger = logging.getLogger(__name__)
-
-
-def _carry_over_file_identity(original: Path, replacement: str) -> None:
-    """Give *replacement* the mode and ownership that *original* has.
-
-    ``os.replace`` swaps in a new inode, so without this an atomic write
-    silently re-owns the file to whoever ran it and resets the mode to
-    ``mkstemp``'s 0600. That is how #684 happened: a registration handled while
-    the backend still ran as root rewrote the store as ``root:root 0600``, and
-    the next deploy — which moved the backend to uid 1001 — could no longer
-    read it. Login and registration both read this file, so the whole auth
-    surface went down until the ownership was restored by hand.
-
-    Ownership is best-effort: ``chown`` needs privilege the container
-    deliberately no longer has, and failing the registration over it would be
-    worse than writing a file the process already owns. The mode is not
-    best-effort — a widened mode on a file of password hashes is a real
-    regression, and the process always owns the temp file, so the call cannot
-    fail for lack of privilege.
-    """
-    try:
-        stat_result = original.stat()
-    except FileNotFoundError:
-        return
-    os.chmod(replacement, stat.S_IMODE(stat_result.st_mode))
-    if (os.geteuid(), os.getegid()) != (stat_result.st_uid, stat_result.st_gid):
-        with contextlib.suppress(PermissionError, OSError):
-            os.chown(replacement, stat_result.st_uid, stat_result.st_gid)
-
-
-def _create_authelia_user(email: str, display_name: str, password: str) -> None:
-    """Append a new user entry to Authelia's file-based users_database.yml."""
-    db_path = Path(auth.AUTHELIA_USERS_DB_PATH)
-    if not db_path.exists():
-        raise RuntimeError(f"Authelia users database not found at {db_path}")
-
-    # Use a separate lock file so the main file is never partially written.
-    lock_path = db_path.with_suffix(".lock")
-    with open(lock_path, "w", encoding="utf-8") as lock_fh:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX)
-        try:
-            with open(db_path, "r", encoding="utf-8") as fh:
-                data: dict[str, Any] = yaml.safe_load(fh) or {}
-            users: dict[str, Any] = data.get("users") or {}
-
-            # Reject if the email is already taken
-            for entry in users.values():
-                if entry.get("email") == email:
-                    raise ValueError("Email already registered")
-
-            # Use email as the username key; also check the key itself
-            if email in users:
-                raise ValueError("Email already registered")
-
-            users[email] = {
-                "disabled": False,
-                "displayname": display_name,
-                "email": email,
-                "password": auth.hash_password(password),
-                "groups": [],
-            }
-            data["users"] = users
-
-            # Write atomically: write to a temp file in the same directory, then
-            # rename over the target.  This ensures Authelia's file-watcher always
-            # sees a complete, valid YAML file and receives a single clean inotify
-            # CREATE event rather than a truncate-then-write sequence that can
-            # cause Authelia to cache an empty user list.
-            tmp_fd, tmp_name = tempfile.mkstemp(
-                dir=db_path.parent, suffix=".tmp", prefix="users_database_"
-            )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_fh:
-                    yaml.dump(data, tmp_fh, default_flow_style=False, allow_unicode=True)
-                _carry_over_file_identity(db_path, tmp_name)
-                os.replace(tmp_name, db_path)
-            except Exception:
-                with contextlib.suppress(FileNotFoundError):
-                    os.unlink(tmp_name)
-                raise
-        finally:
-            fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
 @router.get("/captcha/challenge", response_model=schemas.CaptchaChallengeResponse)
@@ -175,8 +88,8 @@ async def register(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
         try:
-            _create_authelia_user(body.email, body.name, body.password)
-        except ValueError as exc:
+            authelia_store.create_user(body.email, body.name, body.password)
+        except authelia_store.EmailTaken as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
         except RuntimeError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
@@ -210,59 +123,6 @@ async def register(
         user.id, token_generation=user.token_generation
     )
     return schemas.TokenResponse(access_token=token)
-
-
-def _verify_authelia_credentials(email: str, password: str) -> bool:
-    """Verify credentials directly against Authelia's file-based users_database.yml.
-
-    This avoids calling Authelia's /api/firstfactor REST endpoint, which is a
-    browser-session API (requires an existing session cookie) and will reject
-    server-side requests without that context.
-    """
-    db_path = Path(auth.AUTHELIA_USERS_DB_PATH)
-    if not db_path.exists():
-        return False
-
-    try:
-        with open(db_path, "r", encoding="utf-8") as fh:
-            data: dict[str, Any] = yaml.safe_load(fh) or {}
-    except OSError as exc:
-        # Not "wrong password" — the store is there and we cannot read it, which
-        # is an operator problem and must not be reported as a credential one.
-        # It happened twice (#684, #696): the file is shared with the Authelia
-        # container, whose entrypoint chowns it to root, while this process runs
-        # as uid 1001. Before this, it surfaced as a raw traceback and a 500 on
-        # every login — true but useless. The boot-time check in ``auth`` cannot
-        # help either, because the condition appears long after boot, whenever
-        # the other container happens to restart.
-        logger.error(
-            "Cannot read the Authelia user store at %s (uid=%s): %s. "
-            "Login is down for every user until the file is readable by this "
-            "process — check ownership of the bind mount.",
-            db_path,
-            os.getuid(),
-            exc,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is temporarily unavailable.",
-        ) from exc
-
-    users: dict[str, Any] = data.get("users") or {}
-
-    # Users are keyed by username (set to email at registration).
-    # Also support lookup by the email field for flexibility.
-    user_entry: dict[str, Any] | None = None
-    for key, entry in users.items():
-        if key == email or entry.get("email") == email:
-            user_entry = entry
-            break
-
-    if user_entry is None or user_entry.get("disabled", False):
-        return False
-
-    hashed = user_entry.get("password", "")
-    return auth.verify_password(password, hashed)
 
 
 TRUSTED_DEVICE_COOKIE = "tlap_device"
@@ -358,7 +218,7 @@ async def login(
                 detail="Authentication service is not configured.",
             )
 
-        if not _verify_authelia_credentials(body.email, body.password):
+        if not verify_store_credentials(body.email, body.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password.",
@@ -586,27 +446,6 @@ async def totp_confirm(
     return schemas.TotpRecoveryCodesResponse(recovery_codes=codes)
 
 
-def _require_password(user: models.User, password: str) -> None:
-    """Re-check *user*'s password, or raise 401.
-
-    Shared by every route that demands the password on top of a live session,
-    because the two branches are the trap: with Authelia as the user store the
-    password is not in ``users.hashed_password`` at all (that column holds a
-    random throwaway, see ``register``), so a route that checked only the
-    column would accept nothing in production, and one that checked only the
-    store would accept nothing in development. Getting that wrong in one route
-    out of several is how step-up auth quietly stops being a check.
-    """
-    if auth.AUTHELIA_AUTH_ENABLED:
-        valid = _verify_authelia_credentials(user.email, password)
-    else:
-        valid = auth.verify_password(password, user.hashed_password)
-    if not valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password."
-        )
-
-
 @router.post("/totp/disable", status_code=status.HTTP_204_NO_CONTENT)
 async def totp_disable(
     body: schemas.TotpDisableRequest,
@@ -619,7 +458,7 @@ async def totp_disable(
     the second factor exists to provide.
     """
     enforce_login_rate_limit(current_user.email)
-    _require_password(current_user, body.password)
+    require_password(current_user, body.password)
 
     current_user.totp_enabled = False
     current_user.totp_secret = None
@@ -669,7 +508,7 @@ async def revoke_sessions(
     and would stop looking for the problem.
     """
     enforce_login_rate_limit(current_user.email)
-    _require_password(current_user, body.password)
+    require_password(current_user, body.password)
 
     generation = await crud.revoke_user_tokens(db, current_user.id)
     await db.commit()

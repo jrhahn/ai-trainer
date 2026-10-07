@@ -12,7 +12,13 @@ import yaml
 from argon2 import PasswordHasher
 
 import auth
-from routers.auth_router import _create_authelia_user, _verify_authelia_credentials
+from services import authelia_store
+from services.authelia_store import (
+    create_user as _create_authelia_user,
+)
+from services.authelia_store import (
+    verify_credentials as _verify_authelia_credentials,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -551,7 +557,7 @@ async def test_login_reports_503_when_the_user_store_cannot_be_read(
             raise PermissionError(13, "Permission denied", str(store))
         return real_open(path, *args, **kwargs)
 
-    monkeypatch.setattr("routers.auth_router.open", _denied, raising=False)
+    monkeypatch.setattr("services.authelia_store.open", _denied, raising=False)
 
     resp = await client.post(
         "/api/v1/auth/login",
