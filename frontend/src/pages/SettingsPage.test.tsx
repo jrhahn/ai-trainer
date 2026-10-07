@@ -201,6 +201,15 @@ describe('SettingsPage', () => {
     click.mockRestore()
   })
 
+  it('does not request an export without a session', async () => {
+    useAppStore.setState({ authToken: null })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /export my data/i }))
+
+    expect(mockExportAccountData).not.toHaveBeenCalled()
+  })
+
   it('says so when the account export fails', async () => {
     mockExportAccountData.mockRejectedValue(new Error('boom'))
     setup()

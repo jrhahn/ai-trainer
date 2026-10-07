@@ -165,6 +165,22 @@ def test_every_user_id_column_is_a_foreign_key_to_users():
     assert unlinked == []
 
 
+def test_no_table_points_at_users_twice():
+    """``owner_column`` takes a table's one foreign key to ``users``.
+
+    A second one (a ``created_by`` beside the ``user_id``) would leave rows
+    reached only through it out of both the export and the deletion sweep, and
+    nothing else here would notice. When that table arrives, this fails and
+    the walk has to learn which column means "belongs to".
+    """
+    doubled = [
+        table.name
+        for table in Base.metadata.sorted_tables
+        if sum(fk.column.table.name == "users" for fk in table.foreign_keys) > 1
+    ]
+    assert doubled == []
+
+
 def test_every_user_table_is_reached_by_a_delete_cascade():
     """The structural half: fails at import time, before any row is written."""
     cascaded = {
