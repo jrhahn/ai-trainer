@@ -659,11 +659,12 @@ describe('deleteCurrentUser', () => {
   it('calls DELETE on the user endpoint', async () => {
     mockApiFetch.mockResolvedValue(undefined)
 
-    await deleteCurrentUser('tok-123')
+    await deleteCurrentUser('tok-123', 'Str0ng!Pass')
 
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me', {
       token: 'tok-123',
       method: 'DELETE',
+      body: { password: 'Str0ng!Pass' },
     })
   })
 })

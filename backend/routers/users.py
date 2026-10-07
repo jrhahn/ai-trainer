@@ -32,9 +32,12 @@ from database import async_session_maker, get_db
 from routers.dependencies import (
     consume_ai_allowance,
     enforce_ai_rate_limit,
+    enforce_login_rate_limit,
+    require_password,
     set_user_ai_keys,
 )
 from services import ai_service, metrics_service
+from services import authelia_store
 from services import logged_sessions
 from services import reported_effort, strength_model
 from services import assessment_pipeline
@@ -281,9 +284,44 @@ async def update_me(
 
 @router.delete("")
 async def delete_me(
+    body: schemas.AccountDeleteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
+    """Delete the account, its data, and the credential that opens it.
+
+    Two things were missing (ai-trainer-ops#35). The password, because a bare
+    session was enough to destroy an athlete's whole history while the two
+    neighbouring step-up routes both asked for more. And the Authelia entry: with
+    header auth on, the password lives in ``users_database.yml`` and this route
+    only dropped the database row, so ``POST /auth/login`` — which recreates a
+    missing row from a valid credential — brought the account back on the next
+    sign-in. Measured: delete, log in with the same password, 200 and a fresh
+    JWT.
+
+    The credential goes first. A crash between the two then leaves an account
+    nobody can log into, which is the recoverable side; the other order leaves a
+    credential with no account, which is the bug above.
+
+    The issued token needs no revoking: ``get_current_user`` loads the row to
+    authenticate, so it 401s on the next request by itself. That is also why the
+    rate limit is keyed on the email rather than the user — there is no user
+    left to key on by the time it matters.
+    """
+    enforce_login_rate_limit(current_user.email)
+    require_password(current_user, body.password)
+
+    try:
+        authelia_store.delete_user(current_user.email)
+    except RuntimeError as exc:
+        # Reporting an account deleted while its password still works is worse
+        # than failing the request: the athlete stops looking for the problem.
+        logger.error("Refusing to delete %s: %s", current_user.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The account could not be deleted. Please try again later.",
+        ) from exc
+
     await db.delete(current_user)
     await db.flush()
     return {"status": "deleted"}

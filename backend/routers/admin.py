@@ -8,6 +8,7 @@ Requires the ``ADMIN_PASSWORD`` env var to be set.  Exposes:
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timezone
 from typing import Any
@@ -27,9 +28,12 @@ from routers.dependencies import (
     enforce_admin_login_rate_limit,
     enforce_admin_totp_rate_limit,
 )
+from services import authelia_store
 from services import totp as totp_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -269,11 +273,29 @@ async def admin_plan_day_history(
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(auth.require_admin)])
 async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db)) -> None:
-    """Permanently delete a user and all their associated data."""
+    """Permanently delete a user, their data, and the credential that opens it.
+
+    The credential half was missing here as it was on ``DELETE /users/me``: with
+    header auth on, the password lives in ``users_database.yml``, and dropping
+    only the row left a login that recreates the account (ai-trainer-ops#35). An
+    admin who removes an abusive account has to have actually removed it.
+    """
     _admin_enabled()
     user = await db.get(models.User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    try:
+        authelia_store.delete_user(user.email)
+    except RuntimeError as exc:
+        # Better a failed request than an account reported gone whose password
+        # still works.
+        logger.error("Refusing to delete %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The account could not be deleted. Please try again later.",
+        ) from exc
+
     await db.delete(user)
 
 

@@ -217,10 +217,21 @@ export default function SettingsPage() {
 
   const handleReset = async () => {
     if (!authToken) return
-    if (window.confirm('Are you sure? This will delete all your data and training plan.')) {
-      await deleteCurrentUser(authToken)
-      resetAll()
+    // Says "account" and not "data": this deletes the account itself, and the
+    // old wording understated what the button does.
+    if (!window.confirm('Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.')) return
+    // The backend requires the password since ai-trainer-ops#35. A native prompt
+    // matches the rest of this page's dialogs; a proper modal is UI work, not a
+    // reason to leave the gate off.
+    const password = window.prompt('Enter your password to confirm.')
+    if (!password) return
+    try {
+      await deleteCurrentUser(authToken, password)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'The account could not be deleted.')
+      return
     }
+    resetAll()
   }
 
   // Step 1: Save new HR values and retrieve best FTP estimate.

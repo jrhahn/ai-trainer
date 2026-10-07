@@ -25,7 +25,12 @@ async def test_get_update_and_delete_me(client, auth_headers):
     assert update_response.json()["stravaAutoSyncEnabled"] is True
     assert update_response.json()["intervalsAutoSyncEnabled"] is True
 
-    delete_response = await client.delete("/api/v1/users/me", headers=auth_headers)
+    delete_response = await client.request(
+        "DELETE",
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"password": "Str0ng!Pass"},
+    )
     assert delete_response.status_code == 200
     assert delete_response.json()["status"] == "deleted"
 

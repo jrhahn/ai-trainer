@@ -149,8 +149,15 @@ async def test_invalid_token_returns_401(client):
 @pytest.mark.asyncio
 async def test_token_for_deleted_user_returns_401(client, auth_headers):
     """A valid JWT whose user has since been deleted should return 401."""
-    # Delete the user
-    await client.delete("/api/v1/users/me", headers=auth_headers)
+    # Delete the user. The password is part of the request since
+    # ai-trainer-ops#35 — deleting an account is step-up, like turning the
+    # second factor off.
+    await client.request(
+        "DELETE",
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"password": "Str0ng!Pass"},
+    )
 
     # Try to use the now-orphaned token
     response = await client.get("/api/v1/users/me", headers=auth_headers)

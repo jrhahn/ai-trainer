@@ -248,6 +248,12 @@ def verify_credentials(email: str, password: str) -> bool:
     key = _find_entry(users, email)
     entry = users.get(key) if key is not None else None
 
-    if entry is None or entry.get("disabled", False):
-        return False
-    return auth.verify_password(password, entry.get("password", ""))
+    # Resolved to a hash or to None, then checked in one place, so that "no such
+    # user", "disabled" and "entry without a password" all cost what a wrong
+    # password costs. Returning False directly from any of them timed the answer
+    # for the attacker (ai-trainer-ops#35); ``disabled`` is in the list because
+    # "this address exists but is switched off" is also worth not telling them.
+    hashed: str | None = None
+    if entry is not None and not entry.get("disabled", False):
+        hashed = entry.get("password") or None
+    return auth.password_matches(password, hashed)

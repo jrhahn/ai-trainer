@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A login no longer answers faster for an address with no account**
+  (ai-trainer-ops#35) — `auth.py`, `routers/auth_router.py`.
+
+  Both password paths wrote `user is None or not verify_password(...)`, which
+  skipped the Argon2 verification entirely when the address was unknown. Argon2
+  is deliberately expensive, so the shortcut was a plain enumeration oracle:
+  measured on `/auth/login`, 8 ms for an address with no account against 165 ms
+  for a wrong password on a real one. Twentyfold, from a single request, no
+  averaging. `auth.password_matches` now takes `None` for "no such account" and
+  spends the verification anyway, in one function rather than at each call site.
+  The Authelia store path had the same gap plus one of its own — a `disabled`
+  entry also answered fast, which said the address exists and is switched off.
+
+- **Deleting an account now deletes the credential that opens it**
+  (ai-trainer-ops#35) — `routers/users.py`, `routers/admin.py`, new
+  `services/authelia_store.py`.
+
+  With header auth on, the password lives in Authelia's `users_database.yml`.
+  Both deletion routes dropped only the database row, and `POST /auth/login`
+  recreates a missing row from a valid credential — so the account came back on
+  the next sign-in with a fresh token. Measured: delete, log in with the same
+  password, 200 and a seven-day JWT. The store code has moved to a service
+  because that is the cause and not a tidy-up: it lived in `auth_router`, a
+  module neither deletion route may import, so neither could call it.
+
+- **Deleting an account needs the password** (ai-trainer-ops#35) —
+  `routers/users.py`, `schemas.py`, `routers/dependencies.py`,
+  `frontend/src/services/user.ts`, `frontend/src/pages/SettingsPage.tsx`.
+
+  `DELETE /users/me` took a bare session while `/auth/totp/disable` and
+  `/auth/sessions/revoke` both asked for the password, on the argument that
+  locking the owner out must cost more than a borrowed unlocked browser.
+  Deletion is that argument's strongest case and was the one route that could
+  not make it: `require_password` was private to `auth_router`. It now lives in
+  `routers/dependencies.py`, which exists for exactly this. **Breaking:** the
+  route takes a `{"password": ...}` body.
+
+### Added
+
+- **A suite for what an attacker can learn and what a borrowed session can
+  destroy** (ai-trainer-ops#35) — `backend/tests/test_auth_hardening.py`.
+
+  The issue asked six questions; four already had suites
+  (`test_auth_rate_limit.py`, `test_captcha.py`, `test_totp.py`,
+  `test_token_revocation.py`) and this covers the two that had none, plus
+  structural checks so the answers cannot drift: every route that accepts a
+  password or a code consumes a rate-limit allowance, no limit is keyed on the
+  client address, and neither a password-reset nor a password-change route
+  exists — the two questions currently answered by absence, which fail the day
+  that changes.
+
+### Fixed
+
 - **An unconfigured proxy secret no longer means "trust the identity headers"**
   (ai-trainer-ops#34) — `services`-adjacent `auth.py`, plus `compose.yml`,
   `frontend/nginx.conf`, `README.md`, `docs/security.md` and

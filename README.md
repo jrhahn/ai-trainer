@@ -68,9 +68,15 @@ features will only work after you set real values in `.env`.
 Before first deploy, replace the placeholder Authelia user in
 `authelia/users_database.yml` with your real admin account.
 Authelia is the file-backed user store for production registration and login,
-while the app uses its own JWT for API authorization after sign-in. Local Compose keeps
-Authelia notifications in `/data/notification.txt` for password reset and future
+while the app uses its own JWT for API authorization after sign-in. Local Compose
+keeps Authelia notifications in `/data/notification.txt` for future
 identity-verification flows.
+
+There is **no password reset** today, from either side: Authelia's own flow
+needs a notifier this deployment has no working SMTP for (#687), and the app has
+no reset route of its own. A forgotten password currently means editing
+`authelia/users_database.yml` by hand. Worth knowing before inviting anyone who
+is not you (ai-trainer-ops#35).
 
 > **Security note (issue #324, ai-trainer-ops#34):** Authelia is the file-backed
 > **user store** here, not an SSO forward-auth proxy — the backend authenticates

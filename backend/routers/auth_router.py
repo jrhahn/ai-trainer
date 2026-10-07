@@ -236,7 +236,13 @@ async def login(
         return await _complete_login(user, request=request, response=response, db=db)
 
     user = await crud.get_user_by_email_simple(db, body.email)
-    if user is None or not auth.verify_password(body.password, user.hashed_password):
+    # ``password_matches`` and not ``verify_password``: it takes None for "no
+    # such account" and still spends the Argon2 verification, so the reply does
+    # not arrive 20x faster for an address nobody has registered
+    # (ai-trainer-ops#35).
+    if not auth.password_matches(
+        body.password, user.hashed_password if user is not None else None
+    ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     # Transparently upgrade a legacy bcrypt (or outdated) hash to the current
