@@ -72,16 +72,27 @@ while the app uses its own JWT for API authorization after sign-in. Local Compos
 Authelia notifications in `/data/notification.txt` for password reset and future
 identity-verification flows.
 
-> **Security note (issue #324):** Authelia is the file-backed **user store**
-> here, not an SSO forward-auth proxy — the backend authenticates with its own
-> JWT issued by `/api/v1/auth/login` and `/register`. The backend must therefore
-> **not** be gated behind Authelia, and it must never trust inbound
-> `Remote-User`/`Remote-Email`/`Remote-Name` identity headers. Traefik strips
-> those headers on the backend routes (`backend-strip-remote` middleware in
-> `compose.yml`) so a client cannot forge them, and the backend port is bound to
-> `127.0.0.1` so it is only reachable through the proxy. The app also ignores
-> `Remote-*` unless a request carries the `AUTHELIA_PROXY_SHARED_SECRET` (which
-> the proxy never injects) as belt-and-suspenders.
+> **Security note (issue #324, ai-trainer-ops#34):** Authelia is the file-backed
+> **user store** here, not an SSO forward-auth proxy — the backend authenticates
+> with its own JWT issued by `/api/v1/auth/login` and `/register`. The backend
+> must therefore **not** be gated behind Authelia, and it must never trust
+> inbound `Remote-User`/`Remote-Email`/`Remote-Name` identity headers.
+>
+> The backend ignores `Remote-*` unless a request carries
+> `AUTHELIA_PROXY_SHARED_SECRET` in the header the trusted proxy injects — and an
+> **unset** secret means ignore, not trust. That is the boundary. Everything else
+> is defence in depth behind it: Traefik deletes those headers on the backend
+> routes (`backend-strip-remote` in `compose.yml`), the frontend nginx blanks them
+> on its own `/api` proxy, and the backend port binds to `127.0.0.1` so it is
+> only reachable through a proxy at all.
+>
+> This paragraph used to call the secret check belt-and-suspenders and say the
+> proxy never injected it. Both halves were wrong: the proxy has injected it
+> since #682, an empty secret meant *trust the headers*, and the secret is
+> `optional` in `deploy/forwarded-vars.yml` — so on this deployment the two
+> header-strip lists were the only thing between a forged `Remote-Email` and a
+> session token for any account. `backend/tests/test_remote_user_boundary.py` is
+> that attack, and it now runs in CI.
 
 ### Backend (Strava OAuth)
 

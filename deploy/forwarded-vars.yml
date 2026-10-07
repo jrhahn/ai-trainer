@@ -159,8 +159,18 @@ forwarded:
     name: AUTHELIA_PROXY_SHARED_SECRET
     mode: optional
     why: >-
-      Defence in depth for a middleware chain that is currently attached to no
-      router (#688), so empty degrades nothing that is load-bearing today.
+      Still optional, but no longer because it is merely defence in depth — since
+      ai-trainer-ops#34 an empty value *disables* Remote-* header authentication
+      rather than falling back to network isolation. That fallback was the hole:
+      empty meant the backend trusted a forged Remote-Email on any request that
+      reached it, and this entry's own "degrades nothing" was how it read as
+      harmless. Empty is now a safe state rather than a cheap one.
+
+      It stays optional because the forward-auth middlewares are attached to no
+      router (#688) — nothing forwards the headers this secret would authorise,
+      so `required` would fail every deploy for a path nobody uses. The day a
+      forward-auth proxy goes in front of the backend this becomes `required`:
+      without it that deployment answers 401 to everything.
 
   # --- third-party providers ----------------------------------------------
   - var: strava_client_id

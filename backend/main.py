@@ -70,7 +70,7 @@ async def _create_dev_schema() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _auth.validate_jwt_secret()
-    _auth.warn_if_authelia_proxy_unprotected()
+    _auth.warn_if_authelia_header_auth_is_off()
     _auth.warn_if_authelia_user_store_unwritable()
     totp_service.warn_if_admin_secret_unusable()
     # Fail fast if the pipeline dependency graph is not a DAG.
