@@ -360,9 +360,12 @@ an unchanged lockfile would otherwise never surface.
 | `trivy` | both built images, base image included |
 | ZAP baseline | the running frontend image (nginx with its real config) and the backend. Passive only |
 
-**It reports and does not gate.** Every scan exits 0, and its findings go to
-the job summary and an artifact. A gate that is red on day one gets switched
-off. The plan is to work each backlog down and then make that one scan a gate.
+**It reports first and gates second.** A new scan exits 0 and its findings
+go to the job summary and an artifact, because a gate that is red on day one
+gets switched off. Once a scan's backlog is at zero, it becomes a gate.
+**semgrep is a gate.** Mark a false positive in place with
+`# nosemgrep: <rule id>` and give the reason on the line above. Never exclude
+a path or a rule to make it pass. The others still report.
 Tools are pinned by version, and images by tag and digest. Dependabot cannot
 see images referenced in a workflow, so bumping them is manual.
 

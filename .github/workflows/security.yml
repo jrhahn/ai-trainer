@@ -4,11 +4,17 @@ name: Security
 # known-vulnerable dependencies, what the base images bring along, the static
 # classics, and missing headers on what actually ships.
 #
-# REPORT, DO NOT GATE. Every scan here exits 0 whatever it finds, and writes
-# what it found to the job summary and to an artifact. A gate that is red on
-# day one gets switched off — the same rule as the output audit
-# (ai-trainer-ops#28). Work the backlog down from these reports, then turn the
-# scans that have reached zero into gates one at a time.
+# REPORT FIRST, THEN GATE. A scan starts out exiting 0 whatever it finds, and
+# writes what it found to the job summary and to an artifact. A gate that is
+# red on day one gets switched off — the same rule as the output audit
+# (ai-trainer-ops#28). Once a scan's backlog is at zero it becomes a gate, one
+# at a time:
+#
+#   semgrep      gate   (backlog cleared in #762)
+#   pip-audit    report
+#   npm audit    report
+#   trivy        report
+#   ZAP baseline report
 #
 # Tools are pinned: Python tools by version, container images by tag *and*
 # digest. A scanner runs with the checkout and the built images in reach, which
@@ -117,6 +123,9 @@ jobs:
           if-no-files-found: ignore
 
   semgrep:
+    # A GATE: any finding fails the job. A false positive is annotated in place
+    # with `# nosemgrep: <rule id>` and a reason on the line above, never
+    # silenced by excluding a path or a rule.
     name: Static analysis (semgrep)
     runs-on: ubuntu-latest
     steps:
@@ -143,8 +152,9 @@ jobs:
           try:
               report = json.load(open("security-reports/semgrep.json"))
           except (OSError, ValueError):
-              print("## semgrep\n\n_no report written_")
-              raise SystemExit(0)
+              # For a gate, a scan that did not run is not a clean scan.
+              print("## semgrep\n\n_no report written — failing_")
+              raise SystemExit(1)
           results = report.get("results", [])
           by_severity = collections.Counter(r["extra"].get("severity", "?") for r in results)
           by_rule = collections.Counter(r["check_id"] for r in results)
@@ -156,6 +166,9 @@ jobs:
           print("\n| rule | count |\n|---|---|")
           for rule, count in by_rule.most_common(25):
               print(f"| `{rule}` | {count} |")
+          for r in results:
+              print(f"- `{r['path']}:{r['start']['line']}` {r['check_id']}")
+          raise SystemExit(1 if results else 0)
           EOF
 
       - uses: actions/upload-artifact@v7

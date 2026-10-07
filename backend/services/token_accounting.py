@@ -443,7 +443,8 @@ async def flush_deferred_usage(db: AsyncSession) -> None:
         for user_id, source, collected in pending:
             user = await db.get(models.User, user_id)
             if user is None:
-                logger.warning(
+                # "tokens" here are LLM usage counts, not credentials (ai-trainer-ops#32).
+                logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
                     "Cannot bill %d tokens from source=%s: user %s is gone",
                     collected.usage.total,
                     source,
@@ -543,7 +544,8 @@ async def track_llm_usage_detached(
                 async with session_maker() as session:
                     user = await session.get(models.User, user_id)
                     if user is None:
-                        logger.warning(
+                        # "tokens" here are LLM usage counts, not credentials (ai-trainer-ops#32).
+                        logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
                             "Cannot bill %d tokens from source=%s: user %s is gone",
                             usage.total,
                             source,

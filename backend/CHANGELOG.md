@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **semgrep is clean, and is now a gate** (ai-trainer-ops#32) — `main.py`,
+  `services/token_accounting.py`, one Alembic revision,
+  `.github/workflows/security.yml`. The four findings from the first scan were
+  false positives: three "credential disclosure" log lines whose "tokens" are
+  LLM usage counts, and one `sa.text` that renders a module constant. Each one
+  is annotated in place with the exact rule ID and a reason. With the backlog
+  at zero, any new finding fails the Security workflow.
+
 - **No known advisories in the runtime dependencies** (ai-trainer-ops#32) —
   `uv.lock`. The first run of the new Security workflow reported 17 distinct
   advisories in six packages. Each is raised to exactly its first fixed
