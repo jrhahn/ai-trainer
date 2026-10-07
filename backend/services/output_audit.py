@@ -449,9 +449,10 @@ def audit(text: str, context: Any = None) -> list[Finding]:
 def report(text: str, context: Any = None, *, surface: str) -> list[Finding]:
     """Count one piece of coach output's findings without recording the output.
 
-    ``surface`` names which coach output this was ("ask_trainer"), and must stay
-    a bounded set — it is a metric label, and an unbounded one is how a
-    Prometheus instance dies (see ``services/metrics``).
+    ``surface`` names which coach output this was: "ask_trainer",
+    "login_summary", "training_status", "next_session", "ride_review" or
+    "insights". It must stay a bounded set — it is a metric label, and an
+    unbounded one is how a Prometheus instance dies (see ``services/metrics``).
 
     Returns the findings so a test can assert on them. Production callers ignore
     the return value; what they get out of this is the counter and a log line
