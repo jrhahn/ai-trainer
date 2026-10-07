@@ -215,10 +215,20 @@ jobs:
             -e POSTGRES_DB=aitrainer -e POSTGRES_USER=aitrainer \
             -e POSTGRES_PASSWORD=zap-baseline-only \
             "$POSTGRES_IMAGE"
-          for _ in $(seq 1 30); do
-            docker exec db pg_isready -U aitrainer -d aitrainer >/dev/null 2>&1 && break
+          # Over TCP, not the socket: the image's first-boot init runs a
+          # temporary server on the socket only, so a socket check can pass
+          # before db:5432 accepts the backend — and entrypoint.sh does not
+          # retry its migration.
+          db_up=no
+          for _ in $(seq 1 45); do
+            if docker exec db pg_isready -h 127.0.0.1 -U aitrainer -d aitrainer >/dev/null 2>&1; then
+              db_up=yes; break
+            fi
             sleep 2
           done
+          echo "- database came up: **$db_up**" >> "$GITHUB_STEP_SUMMARY"
+          # The published port is what makes localhost:8000 reachable for ZAP,
+          # which runs with --network host rather than on the scan network.
           docker run -d --name backend --network scan -p 8000:8000 \
             -e DATABASE_URL=postgresql+asyncpg://aitrainer:zap-baseline-only@db:5432/aitrainer \
             -e JWT_SECRET=zap-baseline-secret-that-is-at-least-32-bytes \
