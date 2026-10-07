@@ -19,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   badge, the next-session recommendation, the ride review and the generated
   insights now report too, each under its own `surface` label, against the
   prompt *and* the user message they were generated from. Still report-only:
-  nothing returned changes. Output that is never shown (a truncated summary, a rejected badge)
-  is not counted, so it does not dilute the denominator.
+  nothing returned changes. Output that is never shown (a truncated summary, a
+  rejected badge) is not counted, so it does not dilute the denominator.
 
 ### Fixed
 
