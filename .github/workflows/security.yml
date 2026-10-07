@@ -36,6 +36,9 @@ env:
   SEMGREP_VERSION: 1.179.0
   TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
   ZAP_IMAGE: zaproxy/zap-stable:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+  # The database compose.yml runs. The backend image ships asyncpg only, so it
+  # cannot start on SQLite the way the test suite does.
+  POSTGRES_IMAGE: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
 
 jobs:
   dependencies:
@@ -205,19 +208,32 @@ jobs:
 
       - name: Start both images
         run: |
-          # The backend runs on SQLite with throwaway secrets: the scan is of
-          # what the app answers on the wire, not of a deployment.
-          docker run -d --name backend -p 8000:8000 \
-            -e DATABASE_URL=sqlite+aiosqlite:////tmp/zap.db \
+          # Throwaway database and secrets: the scan is of what the app answers
+          # on the wire, not of a deployment.
+          docker network create scan
+          docker run -d --name db --network scan \
+            -e POSTGRES_DB=aitrainer -e POSTGRES_USER=aitrainer \
+            -e POSTGRES_PASSWORD=zap-baseline-only \
+            "$POSTGRES_IMAGE"
+          for _ in $(seq 1 30); do
+            docker exec db pg_isready -U aitrainer -d aitrainer >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker run -d --name backend --network scan -p 8000:8000 \
+            -e DATABASE_URL=postgresql+asyncpg://aitrainer:zap-baseline-only@db:5432/aitrainer \
             -e JWT_SECRET=zap-baseline-secret-that-is-at-least-32-bytes \
             -e APP_ENV=test \
             ai-trainer-backend:scan
           docker run -d --name frontend -p 8080:80 ai-trainer-frontend:scan
+          # A target that never answers is reported, not silently skipped:
+          # "no findings" and "never scanned" must not look alike.
           for target in http://localhost:8000/healthz http://localhost:8080/; do
-            for _ in $(seq 1 30); do
-              curl -fsS -o /dev/null "$target" && break
+            up=no
+            for _ in $(seq 1 45); do
+              if curl -fsS -o /dev/null "$target"; then up=yes; break; fi
               sleep 2
             done
+            echo "- \`$target\` came up: **$up**" >> "$GITHUB_STEP_SUMMARY"
           done
 
       - name: ZAP baseline (passive only)
@@ -229,7 +245,7 @@ jobs:
           # The frontend container is what ships — nginx with this repository's
           # nginx.conf — so its headers are the real ones. The backend is
           # scanned directly; in production Traefik adds to its headers, so a
-          # header missing there may be set one hop out. The report says which.
+          # header reported missing there may still be set one hop out.
           chmod a+w security-reports
           for target in frontend:http://localhost:8080 backend:http://localhost:8000; do
             name="${target%%:*}"
@@ -264,6 +280,7 @@ jobs:
         if: always()
         run: |
           docker logs backend 2>&1 | tail -40 || true
+          docker logs db 2>&1 | tail -10 || true
           docker logs frontend 2>&1 | tail -20 || true
 
       - uses: actions/upload-artifact@v7
