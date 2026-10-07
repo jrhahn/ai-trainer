@@ -925,6 +925,41 @@ def test_traefik_does_not_route_containers_by_default() -> None:
     assert "--providers.docker.exposedbydefault=false" in COMPOSE.read_text()
 
 
+def test_the_boot_guards_are_still_called_by_the_lifespan() -> None:
+    """A guard that is tested and not wired is a control that only looks wired.
+
+    Nothing in the suite runs ``lifespan``, so every call in it is unexercised
+    and deleting one would turn no test red. That is the #682 shape exactly: the
+    proxy secret was read by the backend and injected by nobody for months,
+    because each half was fine on its own.
+
+    Renaming ``warn_if_authelia_proxy_unprotected`` here is how such a call gets
+    lost — the function keeps its tests under the new name and the boot sequence
+    quietly stops calling anything. Checked by AST rather than by substring so
+    that a mention in a comment cannot stand in for a call.
+    """
+    import ast
+
+    source = (REPO_ROOT / "backend" / "main.py").read_text()
+    lifespan = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan"
+    )
+    called = {
+        node.func.attr
+        for node in ast.walk(lifespan)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    for guard in (
+        "validate_jwt_secret",
+        "warn_if_authelia_header_auth_is_off",
+        "warn_if_authelia_user_store_unwritable",
+        "warn_if_admin_secret_unusable",
+    ):
+        assert guard in called, f"lifespan no longer calls {guard}"
+
+
 def test_the_header_names_are_not_tunable_per_deployment() -> None:
     """What makes :data:`TRUSTED_HEADERS` the real list rather than a guess.
 

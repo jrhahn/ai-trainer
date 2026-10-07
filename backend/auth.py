@@ -415,18 +415,21 @@ def _request_from_trusted_proxy(request: Request) -> bool:
     )
 
 
-def _authelia_email(request: Request) -> str | None:
-    """The address the proxy asserts, normalised, or None if it is not an address.
+def _normalised_email(raw: str) -> str | None:
+    """*raw* as a normalised address, or None if it is not one.
 
     This is the one path that creates an account without anyone's password, and
     until ai-trainer-ops#34 it was also the only one that skipped ``EmailStr``:
     whatever bytes arrived in the header became a row. Validating here closes the
     asymmetry and, because the adapter normalises, stops two spellings of one
     address from becoming two accounts.
+
+    Takes the value rather than the request so there is one place that decides
+    the header is present — its caller, which has to make that call before the
+    proof-of-transit check anyway. A second emptiness guard here would be a
+    branch no test can reach, and an unexercised branch is one a reader trusts
+    without having seen it run.
     """
-    raw = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
-    if not raw:
-        return None
     try:
         return _EMAIL_ADAPTER.validate_python(raw)
     except ValidationError:
@@ -451,7 +454,8 @@ async def _get_or_create_authelia_user(
     # would log on every anonymous request instead, which is the same as not
     # logging: the one case worth seeing — Traefik's strip stopped working —
     # would arrive buried in its own noise.
-    if not request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER):
+    asserted = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
+    if not asserted:
         return None
 
     if not _request_from_trusted_proxy(request):
@@ -463,7 +467,7 @@ async def _get_or_create_authelia_user(
         )
         return None
 
-    email = _authelia_email(request)
+    email = _normalised_email(asserted)
     if email is None:
         return None
 
