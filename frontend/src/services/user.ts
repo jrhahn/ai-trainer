@@ -157,6 +157,14 @@ export async function deleteCurrentUser(token: string, password: string): Promis
   await apiFetch('/users/me', { token, method: 'DELETE', body: { password } })
 }
 
+/**
+ * Everything stored about the account, as one JSON document (ai-trainer-ops#6,
+ * GDPR Art. 15 and 20). Credentials are left out by the backend.
+ */
+export async function exportAccountData(token: string): Promise<unknown> {
+  return apiFetch<unknown>('/users/me/export', { token })
+}
+
 export async function fetchTrainingPlan(token: string): Promise<TrainingDay[]> {
   const response = await apiFetch<{ plan: TrainingDay[] }>('/users/me/plan', { token })
   return response.plan

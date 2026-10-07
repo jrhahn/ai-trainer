@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
+import { Save, Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
@@ -25,6 +25,7 @@ import { endSession } from '../services/sessions'
 import {
   deleteCurrentUser,
   estimateFTP,
+  exportAccountData,
   fetchAIKeyStatus,
   updateCurrentUser,
   type AIKeyStatus,
@@ -84,6 +85,7 @@ export default function SettingsPage() {
 
   const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
   const [savedMsg, setSavedMsg] = useState('')
+  const [exportError, setExportError] = useState('')
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const nameInput = nameDraft ?? profileNameInput
 
@@ -212,6 +214,23 @@ export default function SettingsPage() {
       setTimeout(() => setFtpMsg(null), 5000)
     } catch (e) {
       setFtpMsg({ type: 'error', text: e instanceof Error ? e.message : 'Recalculation failed. Please try again.' })
+    }
+  }
+
+  const handleExportAccount = async () => {
+    if (!authToken) return
+    setExportError('')
+    try {
+      const data = await exportAccountData(authToken)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ai-trainer-export-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError('Export failed. Please try again.')
     }
   }
 
@@ -985,6 +1004,22 @@ export default function SettingsPage() {
 
       {/* Editable training location behind the weather forecast (#495) */}
       <HomeLocationSettings />
+
+      {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
+          way to keep a copy sits right above the way to delete everything. */}
+      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+        <h2 className="text-base font-bold text-gray-900 mb-1">Your Data</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.
+        </p>
+        <button
+          onClick={handleExportAccount}
+          className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-100"
+        >
+          <Download size={15} /> Export My Data
+        </button>
+        {exportError && <p className="text-xs text-red-600 mt-2">{exportError}</p>}
+      </div>
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">

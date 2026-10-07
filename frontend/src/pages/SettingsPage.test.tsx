@@ -10,6 +10,7 @@ import type { UserProfile } from '../store/useAppStore'
 const {
   mockUpdateCurrentUser,
   mockDeleteCurrentUser,
+  mockExportAccountData,
   mockEstimateFTP,
   mockUpdateMetrics,
   mockRecalculateAll,
@@ -17,6 +18,7 @@ const {
 } = vi.hoisted(() => ({
   mockUpdateCurrentUser: vi.fn(),
   mockDeleteCurrentUser: vi.fn(),
+  mockExportAccountData: vi.fn(),
   mockEstimateFTP: vi.fn(),
   mockUpdateMetrics: vi.fn(),
   mockRecalculateAll: vi.fn(),
@@ -26,6 +28,7 @@ const {
 vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   deleteCurrentUser: mockDeleteCurrentUser,
+  exportAccountData: mockExportAccountData,
   estimateFTP: mockEstimateFTP,
   fetchAIKeyStatus: vi.fn().mockResolvedValue({ provider: 'openai', hasOpenaiKey: false, hasGeminiKey: false }),
   saveAIKey: vi.fn(),
@@ -173,6 +176,47 @@ describe('SettingsPage', () => {
       expect(mockDeleteCurrentUser).toHaveBeenCalledWith('tok-123', 'Str0ng!Pass')
       expect(useAppStore.getState().authToken).toBeNull()
     })
+  })
+
+  it('downloads the account export as a JSON file (ai-trainer-ops#6)', async () => {
+    mockExportAccountData.mockResolvedValue({ format: 'ai-trainer-account-export', tables: {} })
+    const createObjectURL = vi.fn().mockReturnValue('blob:export')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /export my data/i }))
+
+    await waitFor(() => {
+      expect(mockExportAccountData).toHaveBeenCalledWith('tok-123')
+      expect(click).toHaveBeenCalled()
+    })
+    const anchor = click.mock.contexts[0] as HTMLAnchorElement
+    expect(anchor.download).toMatch(/^ai-trainer-export-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(anchor.href).toBe('blob:export')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:export')
+    expect(screen.queryByText(/export failed/i)).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+    click.mockRestore()
+  })
+
+  it('does not request an export without a session', async () => {
+    useAppStore.setState({ authToken: null })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /export my data/i }))
+
+    expect(mockExportAccountData).not.toHaveBeenCalled()
+  })
+
+  it('says so when the account export fails', async () => {
+    mockExportAccountData.mockRejectedValue(new Error('boom'))
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /export my data/i }))
+
+    expect(await screen.findByText('Export failed. Please try again.')).toBeInTheDocument()
   })
 
   it('does not call deleteCurrentUser when the reset dialog is cancelled', async () => {

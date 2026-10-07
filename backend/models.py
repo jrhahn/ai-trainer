@@ -334,6 +334,26 @@ class User(Base):
         order_by="StravaImportJob.started_at",
     )
 
+    # Append-only logs that are written by ``user_id`` and never navigated from
+    # the user, so nothing ever needed a relationship to them — except deletion
+    # (ai-trainer-ops#6). Without one the ORM does not touch their rows, and
+    # since none of these foreign keys says ``ON DELETE``, PostgreSQL refuses
+    # to delete any account that has ever had a plan change or an LLM call.
+    # ``tests/test_account_data_rights.py`` fails the next table that forgets.
+    plan_day_history: Mapped[list["PlanDayHistory"]] = relationship(
+        cascade="all, delete-orphan"
+    )
+    plan_change_summaries: Mapped[list["PlanChangeSummary"]] = relationship(
+        cascade="all, delete-orphan"
+    )
+    motivation_weight_events: Mapped[list["AthleteMotivationWeightEvent"]] = (
+        relationship(cascade="all, delete-orphan")
+    )
+    uncertainty_events: Mapped[list["AthleteUncertaintyEvent"]] = relationship(
+        cascade="all, delete-orphan"
+    )
+    llm_calls: Mapped[list["LlmCall"]] = relationship(cascade="all, delete-orphan")
+
 
 class TrainingPlan(Base):
     __tablename__ = "training_plans"
