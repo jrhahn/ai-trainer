@@ -346,6 +346,26 @@ bind-mounted `authelia/` directory on the host, because a bind mount keeps the
 host's ownership rather than the image's. The backend checks this at startup and
 logs a warning if it cannot write there.
 
+### Automated scanning
+
+`.github/workflows/security.yml` runs on every pull request, on every push to
+`develop` and weekly. The weekly run is there because a new advisory against
+an unchanged lockfile would otherwise never surface.
+
+| scan | what it reads |
+|---|---|
+| `pip-audit` | the backend's runtime dependencies as `uv.lock` resolves them |
+| `npm audit` | the frontend's dependencies, runtime and dev counted separately |
+| `semgrep` | the Python, TypeScript and React rulesets over `backend/` and `frontend/src/` |
+| `trivy` | both built images, base image included |
+| ZAP baseline | the running frontend image (nginx with its real config) and the backend. Passive only |
+
+**It reports and does not gate.** Every scan exits 0, and its findings go to
+the job summary and an artifact. A gate that is red on day one gets switched
+off. The plan is to work each backlog down and then make that one scan a gate.
+Tools are pinned by version, and images by tag and digest. Dependabot cannot
+see images referenced in a workflow, so bumping them is manual.
+
 ---
 
 ## Decisions worth understanding before changing them

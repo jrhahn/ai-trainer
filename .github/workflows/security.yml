@@ -1,0 +1,274 @@
+name: Security
+
+# The boring class of vulnerability, caught automatically (ai-trainer-ops#32):
+# known-vulnerable dependencies, what the base images bring along, the static
+# classics, and missing headers on what actually ships.
+#
+# REPORT, DO NOT GATE. Every scan here exits 0 whatever it finds, and writes
+# what it found to the job summary and to an artifact. A gate that is red on
+# day one gets switched off — the same rule as the output audit
+# (ai-trainer-ops#28). Work the backlog down from these reports, then turn the
+# scans that have reached zero into gates one at a time.
+#
+# Tools are pinned: Python tools by version, container images by tag *and*
+# digest. A scanner runs with the checkout and the built images in reach, which
+# is exactly where a hijacked tag would want to be (tj-actions/changed-files
+# had every tag rewritten in March 2025). So trivy and ZAP run from images
+# pinned by digest rather than from actions referenced by a movable tag.
+# Dependabot does not see images referenced inside a workflow, so bumping
+# these is manual.
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  schedule:
+    # Weekly, because a new advisory against an unchanged lockfile is the case
+    # neither a PR nor a push would ever surface.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PIP_AUDIT_VERSION: 2.10.1
+  SEMGREP_VERSION: 1.179.0
+  TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+  ZAP_IMAGE: zaproxy/zap-stable:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+
+jobs:
+  dependencies:
+    name: Dependency audit (pip-audit, npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: pip-audit (backend, from the lockfile)
+        working-directory: backend
+        run: |
+          # Audit what uv.lock resolves to, not what happens to be installed:
+          # the lockfile is what the image is built from.
+          uv export --frozen --no-dev --no-hashes --no-emit-project > /tmp/requirements.txt
+          set +e
+          uvx "pip-audit==${PIP_AUDIT_VERSION}" --requirement /tmp/requirements.txt \
+            --disable-pip --no-deps --format markdown --output /tmp/pip-audit.md
+          status=$?
+          set -e
+          {
+            echo "## pip-audit (backend runtime dependencies)"
+            echo
+            echo "exit status: \`$status\` (0 = nothing known)"
+            echo
+            cat /tmp/pip-audit.md 2>/dev/null || echo "_no report written_"
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p ../security-reports && cp /tmp/pip-audit.md ../security-reports/ 2>/dev/null || true
+
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: |
+          # Runtime dependencies are what reaches a browser; dev dependencies
+          # only reach CI and a developer's machine. Both are reported, the
+          # runtime count first because it is the one that matters for users.
+          mkdir -p ../security-reports
+          npm audit --omit=dev --json > ../security-reports/npm-audit-runtime.json || true
+          npm audit --json > ../security-reports/npm-audit-all.json || true
+          summarise() {
+            node -e '
+              const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+              const v = (r.metadata && r.metadata.vulnerabilities) || {};
+              const keys = ["critical", "high", "moderate", "low", "info"];
+              console.log("| " + keys.join(" | ") + " |");
+              console.log("|" + keys.map(() => "---").join("|") + "|");
+              console.log("| " + keys.map(k => v[k] || 0).join(" | ") + " |");
+            ' "$1"
+          }
+          {
+            echo "## npm audit (frontend)"
+            echo
+            echo "### Runtime dependencies"
+            summarise ../security-reports/npm-audit-runtime.json
+            echo
+            echo "### All dependencies, including dev"
+            summarise ../security-reports/npm-audit-all.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-audit
+          path: security-reports/
+          if-no-files-found: ignore
+
+  semgrep:
+    name: Static analysis (semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+
+      - name: semgrep (Python and TypeScript rulesets)
+        run: |
+          mkdir -p security-reports
+          # --metrics=off: this repository is public, but what a scan of it
+          # found is nobody else's business before it is fixed.
+          uvx "semgrep==${SEMGREP_VERSION}" scan \
+            --config p/python --config p/typescript --config p/react \
+            --metrics=off \
+            --exclude 'backend/tests' --exclude 'frontend/src/**/*.test.ts' \
+            --exclude 'frontend/src/**/*.test.tsx' \
+            --json --output security-reports/semgrep.json \
+            backend frontend/src || true
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import collections, json
+          try:
+              report = json.load(open("security-reports/semgrep.json"))
+          except (OSError, ValueError):
+              print("## semgrep\n\n_no report written_")
+              raise SystemExit(0)
+          results = report.get("results", [])
+          by_severity = collections.Counter(r["extra"].get("severity", "?") for r in results)
+          by_rule = collections.Counter(r["check_id"] for r in results)
+          print("## semgrep\n")
+          print(f"{len(results)} findings, {len(report.get('errors', []))} scan errors\n")
+          print("| severity | count |\n|---|---|")
+          for severity, count in by_severity.most_common():
+              print(f"| {severity} | {count} |")
+          print("\n| rule | count |\n|---|---|")
+          for rule, count in by_rule.most_common(25):
+              print(f"| `{rule}` | {count} |")
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: semgrep
+          path: security-reports/
+          if-no-files-found: ignore
+
+  images:
+    name: Images (trivy) and headers (ZAP baseline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the images the deployment ships
+        run: |
+          docker build -t ai-trainer-backend:scan backend
+          docker build -t ai-trainer-frontend:scan frontend
+
+      - name: trivy (both images)
+        run: |
+          mkdir -p security-reports
+          for image in backend frontend; do
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/security-reports:/reports" \
+              "$TRIVY_IMAGE" image --quiet --exit-code 0 \
+              --severity CRITICAL,HIGH,MEDIUM \
+              --format json --output "/reports/trivy-${image}.json" \
+              "ai-trainer-${image}:scan" || true
+          done
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import collections, json
+          print("## trivy\n")
+          for image in ("backend", "frontend"):
+              try:
+                  report = json.load(open(f"security-reports/trivy-{image}.json"))
+              except (OSError, ValueError):
+                  print(f"### {image}\n\n_no report written_\n")
+                  continue
+              counts = collections.Counter()
+              fixable = collections.Counter()
+              for result in report.get("Results") or []:
+                  for vuln in result.get("Vulnerabilities") or []:
+                      counts[vuln["Severity"]] += 1
+                      if vuln.get("FixedVersion"):
+                          fixable[vuln["Severity"]] += 1
+              print(f"### {image}\n")
+              print("| severity | found | fix available |\n|---|---|---|")
+              for severity in ("CRITICAL", "HIGH", "MEDIUM"):
+                  print(f"| {severity} | {counts[severity]} | {fixable[severity]} |")
+              print()
+          EOF
+
+      - name: Start both images
+        run: |
+          # The backend runs on SQLite with throwaway secrets: the scan is of
+          # what the app answers on the wire, not of a deployment.
+          docker run -d --name backend -p 8000:8000 \
+            -e DATABASE_URL=sqlite+aiosqlite:////tmp/zap.db \
+            -e JWT_SECRET=zap-baseline-secret-that-is-at-least-32-bytes \
+            -e APP_ENV=test \
+            ai-trainer-backend:scan
+          docker run -d --name frontend -p 8080:80 ai-trainer-frontend:scan
+          for target in http://localhost:8000/healthz http://localhost:8080/; do
+            for _ in $(seq 1 30); do
+              curl -fsS -o /dev/null "$target" && break
+              sleep 2
+            done
+          done
+
+      - name: ZAP baseline (passive only)
+        run: |
+          # Baseline is passive: it spiders and reads responses, it attacks
+          # nothing. -I keeps warnings from failing the step; the `|| true`
+          # covers the rest, because this job reports and does not gate.
+          #
+          # The frontend container is what ships — nginx with this repository's
+          # nginx.conf — so its headers are the real ones. The backend is
+          # scanned directly; in production Traefik adds to its headers, so a
+          # header missing there may be set one hop out. The report says which.
+          chmod a+w security-reports
+          for target in frontend:http://localhost:8080 backend:http://localhost:8000; do
+            name="${target%%:*}"
+            url="${target#*:}"
+            docker run --rm --network host \
+              -v "$PWD/security-reports:/zap/wrk:rw" \
+              "$ZAP_IMAGE" zap-baseline.py -t "$url" -I \
+              -r "zap-${name}.html" -J "zap-${name}.json" || true
+          done
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          risk = {"3": "High", "2": "Medium", "1": "Low", "0": "Info"}
+          print("## ZAP baseline\n")
+          for name in ("frontend", "backend"):
+              try:
+                  report = json.load(open(f"security-reports/zap-{name}.json"))
+              except (OSError, ValueError):
+                  print(f"### {name}\n\n_no report written_\n")
+                  continue
+              alerts = [a for site in report.get("site", []) for a in site.get("alerts", [])]
+              print(f"### {name}\n")
+              print("| risk | alert | instances |\n|---|---|---|")
+              for alert in sorted(alerts, key=lambda a: -int(a.get("riskcode", 0))):
+                  print(
+                      f"| {risk.get(str(alert.get('riskcode')), '?')} "
+                      f"| {alert.get('alert')} | {len(alert.get('instances', []))} |"
+                  )
+              print()
+          EOF
+
+      - name: Container logs (when a target did not come up)
+        if: always()
+        run: |
+          docker logs backend 2>&1 | tail -40 || true
+          docker logs frontend 2>&1 | tail -20 || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: images-and-headers
+          path: security-reports/
+          if-no-files-found: ignore
