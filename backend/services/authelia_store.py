@@ -142,6 +142,36 @@ def _read_users(db_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     return data, data.get("users") or {}
 
 
+@contextlib.contextmanager
+def _as_store_error(while_doing: str):
+    """Report an unusable store as :class:`StoreUnreadable`, not as a 500.
+
+    ``yaml.YAMLError`` sits next to ``OSError`` on purpose: a store someone
+    hand-edited into invalid YAML is the same operator condition as one this
+    process cannot open, and it is a likelier one — editing this file by hand is
+    how a user gets added and how a forgotten password gets reset, since neither
+    has a route (ai-trainer-ops#35). Without this it surfaced as a bare 500 with
+    a traceback as its only explanation, which is what #684 and #696 both looked
+    like before they had a 503.
+
+    One place rather than three, because the routes that call in have no way to
+    tell these conditions apart and should not have to.
+    """
+    try:
+        yield
+    except (OSError, yaml.YAMLError) as exc:
+        logger.error(
+            "The Authelia user store at %s is unusable (uid=%s) while %s: %s. "
+            "Check the ownership of the bind mount and that the file is valid "
+            "YAML; nothing that reads it can work until it is.",
+            _store_path(),
+            os.getuid(),
+            while_doing,
+            exc,
+        )
+        raise StoreUnreadable("The user store could not be read.") from exc
+
+
 def _find_entry(users: dict[str, Any], email: str) -> str | None:
     """The key whose entry is *email*'s, or None.
 
@@ -162,7 +192,7 @@ def create_user(email: str, display_name: str, password: str) -> None:
     if not db_path.exists():
         raise StoreMissing(f"Authelia users database not found at {db_path}")
 
-    with _locked(db_path):
+    with _as_store_error("creating a user"), _locked(db_path):
         data, users = _read_users(db_path)
         if _find_entry(users, email) is not None:
             raise EmailTaken("Email already registered")
@@ -197,27 +227,17 @@ def delete_user(email: str) -> bool:
     if not db_path.exists():
         raise StoreMissing(f"Authelia users database not found at {db_path}")
 
-    try:
-        with _locked(db_path):
-            data, users = _read_users(db_path)
-            key = _find_entry(users, email)
-            if key is None:
-                # Not an error: an account registered before this deployment
-                # switched to Authelia has no entry here, and its row is still
-                # the thing to delete.
-                return False
-            del users[key]
-            data["users"] = users
-            _write_atomically(db_path, data)
-    except OSError as exc:
-        logger.error(
-            "Cannot remove the Authelia entry for a deleted account at %s (uid=%s): %s. "
-            "Refusing to report the account deleted while its password still works.",
-            db_path,
-            os.getuid(),
-            exc,
-        )
-        raise StoreUnreadable("The user store could not be written.") from exc
+    with _as_store_error("deleting a user"), _locked(db_path):
+        data, users = _read_users(db_path)
+        key = _find_entry(users, email)
+        if key is None:
+            # Not an error: an account registered before this deployment
+            # switched to Authelia has no entry here, and its row is still
+            # the thing to delete.
+            return False
+        del users[key]
+        data["users"] = users
+        _write_atomically(db_path, data)
     return True
 
 
@@ -232,18 +252,8 @@ def verify_credentials(email: str, password: str) -> bool:
     if not db_path.exists():
         return False
 
-    try:
+    with _as_store_error("verifying credentials"):
         _, users = _read_users(db_path)
-    except OSError as exc:
-        logger.error(
-            "Cannot read the Authelia user store at %s (uid=%s): %s. "
-            "Login is down for every user until the file is readable by this "
-            "process — check ownership of the bind mount.",
-            db_path,
-            os.getuid(),
-            exc,
-        )
-        raise StoreUnreadable("Authentication is temporarily unavailable.") from exc
 
     key = _find_entry(users, email)
     entry = users.get(key) if key is not None else None

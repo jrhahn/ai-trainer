@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `routers/dependencies.py`, which exists for exactly this. **Breaking:** the
   route takes a `{"password": ...}` body.
 
+- **A hand-edited store that no longer parses is a 503, not a 500**
+  (ai-trainer-ops#35) — `services/authelia_store.py`.
+
+  `yaml.YAMLError` now maps to `StoreUnreadable` alongside `OSError`, from one
+  place that covers login, registration and deletion. It is the same operator
+  condition as a file this process cannot open, and the likelier one: editing
+  `users_database.yml` by hand is how a user gets added and the only way a
+  forgotten password gets reset, since neither has a route. Raised by the
+  reviewer on #753.
+
 ### Added
 
 - **A suite for what an attacker can learn and what a borrowed session can

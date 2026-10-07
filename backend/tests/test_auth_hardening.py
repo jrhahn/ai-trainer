@@ -460,6 +460,48 @@ async def test_a_store_it_cannot_write_fails_the_deletion_rather_than_faking_it(
     )
 
 
+@pytest.mark.asyncio
+async def test_a_store_that_no_longer_parses_is_an_operator_problem_everywhere(
+    client: AsyncClient, authelia_store_on: Path
+):
+    """Invalid YAML is the same condition as an unopenable file, and likelier.
+
+    Editing ``users_database.yml`` by hand is how a user gets added and the only
+    way a forgotten password gets reset, since neither has a route — so a half
+    saved file is a realistic state, and it used to be a bare 500 with the
+    traceback as its only explanation. Raised from one place in the service, so
+    login, registration and deletion all report it the same way rather than two
+    of them reporting it and the third inheriting a 500.
+    """
+    await client.post(
+        _REGISTER, json={"email": _ATHLETE, "name": "Rider", "password": _PASSWORD}
+    )
+    login = await client.post(_LOGIN, json={"email": _ATHLETE, "password": _PASSWORD})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    authelia_store_on.write_text("users:\n  rider:\n  bad: [unclosed\n")
+
+    deleted = await client.request(
+        "DELETE", _ME, headers=headers, json={"password": _PASSWORD}
+    )
+    signed_in = await client.post(
+        _LOGIN, json={"email": _ATHLETE, "password": _PASSWORD}
+    )
+    signed_up = await client.post(
+        _REGISTER, json={"email": "new@example.com", "name": "N", "password": _PASSWORD}
+    )
+
+    assert [deleted.status_code, signed_in.status_code, signed_up.status_code] == [
+        503,
+        503,
+        503,
+    ], (deleted.text, signed_in.text, signed_up.text)
+    assert signed_in.status_code != 401, (
+        "a file that does not parse is not a wrong password, and saying so sends "
+        "the operator looking at the wrong thing"
+    )
+
+
 def test_removing_an_entry_the_store_never_held_is_not_an_error(
     authelia_store_on: Path,
 ):
