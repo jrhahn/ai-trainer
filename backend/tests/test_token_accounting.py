@@ -324,6 +324,43 @@ async def test_flushing_twice_bills_once():
 
 
 @pytest.mark.asyncio
+async def test_a_flush_for_a_user_deleted_since_is_reported_not_raised(caplog):
+    """The deferral and the flush are a transaction apart, and so is a deletion.
+
+    The account can be gone by the time the usage is written: nothing to bill,
+    so it is a warning, and the rest of the queue still goes through.
+    """
+    leaver_id = await _create_user("accounting-flush-leaver@example.com")
+    stayer_id = await _create_user("accounting-flush-stayer@example.com")
+
+    async with TestSessionLocal() as db:
+        leaver = await db.get(models.User, leaver_id)
+        stayer = await db.get(models.User, stayer_id)
+        for user, total in ((leaver, 50), (stayer, 70)):
+            with pytest.raises(RuntimeError):
+                async with token_accounting.track_llm_usage(db, user, source="api:x"):
+                    _call(
+                        input_tokens=total, output_tokens=0, cached_tokens=0,
+                        total_tokens=total,
+                    )
+                    raise RuntimeError("boom")
+        await db.rollback()
+        async with TestSessionLocal() as other:
+            await other.delete(await other.get(models.User, leaver_id))
+            await other.commit()
+
+        with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+            await token_accounting.flush_deferred_usage(db)
+
+    assert any(
+        f"user {leaver_id} is gone" in record.getMessage() for record in caplog.records
+    )
+    async with TestSessionLocal() as db:
+        stayer = await db.get(models.User, stayer_id)
+    assert stayer.consumed_tokens == 70
+
+
+@pytest.mark.asyncio
 async def test_a_failing_flush_never_masks_the_error_that_caused_it(monkeypatch):
     """The flush runs in a ``finally`` while an exception is in flight."""
     user_id = await _create_user("accounting-flush-fails@example.com")

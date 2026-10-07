@@ -168,7 +168,15 @@ jobs:
               print(f"| `{rule}` | {count} |")
           for r in results:
               print(f"- `{r['path']}:{r['start']['line']}` {r['check_id']}")
-          raise SystemExit(1 if results else 0)
+          # A run can write results: [] and still have failed to apply rules —
+          # a rule-fetch or parse error. Those fail the gate like a finding.
+          # Warn-level errors (a per-file timeout, of which a clean run has a
+          # couple) are listed but do not.
+          errors = report.get("errors", [])
+          fatal = [e for e in errors if e.get("level") == "error"]
+          for e in errors:
+              print(f"- {e.get('level')} {e.get('type')}: {str(e.get('message', ''))[:200]}")
+          raise SystemExit(1 if results or fatal else 0)
           EOF
 
       - uses: actions/upload-artifact@v7
