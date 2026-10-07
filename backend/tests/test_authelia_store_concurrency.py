@@ -21,6 +21,7 @@ filesystem, where ``flock`` is not reliable. ``docs/multi_replica.md`` says so.
 from __future__ import annotations
 
 import multiprocessing
+import sys
 from pathlib import Path
 
 import pytest
@@ -60,13 +61,26 @@ def _register(barrier, path: str, email: str) -> None:
     authelia_store.create_user(email, email.split("@")[0], _PASSWORD)
 
 
+_TAKEN = 3
+
+
+def _register_reporting_taken(barrier, path: str, email: str) -> None:
+    """Like ``_register``, but a lost race is an exit code, not a crash."""
+    _point_at(path)
+    barrier.wait()
+    try:
+        authelia_store.create_user(email, email.split("@")[0], _PASSWORD)
+    except authelia_store.EmailTaken:
+        sys.exit(_TAKEN)
+
+
 def _delete(barrier, path: str, email: str) -> None:
     _point_at(path)
     barrier.wait()
     authelia_store.delete_user(email)
 
 
-def _run_together(store: Path, jobs: list[tuple]) -> None:
+def _run_together(store: Path, jobs: list[tuple], *, expect_success=True) -> list[int]:
     """Start every job behind one barrier, so they hit the store at once."""
     barrier = _spawn.Barrier(len(jobs))
     processes = [
@@ -77,7 +91,10 @@ def _run_together(store: Path, jobs: list[tuple]) -> None:
         process.start()
     for process in processes:
         process.join(timeout=60)
-    assert [p.exitcode for p in processes] == [0] * len(processes)
+    codes = [p.exitcode for p in processes]
+    if expect_success:
+        assert codes == [0] * len(processes)
+    return codes
 
 
 @pytest.fixture
@@ -128,3 +145,22 @@ def test_every_concurrent_signup_can_log_in(store):
     _run_together(store, [(_register, email) for email in emails])
 
     assert all(authelia_store.verify_credentials(e, _PASSWORD) for e in emails)
+
+
+def test_one_address_registered_at_once_is_won_exactly_once(store):
+    """The existence check is inside the lock, so two signups cannot both pass it.
+
+    Outside it, both would read a store without the address and both would
+    write — two entries for one person, or one silently replacing the other's
+    password.
+    """
+    _write_store(store, {})
+
+    codes = _run_together(
+        store,
+        [(_register_reporting_taken, "same@example.com")] * _WRITERS,
+        expect_success=False,
+    )
+
+    assert sorted(codes) == [0] + [_TAKEN] * (_WRITERS - 1)
+    assert list(_users(store)) == ["same@example.com"]
