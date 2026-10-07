@@ -429,6 +429,52 @@ async def test_an_operator_deletion_also_takes_the_credential(
 
 
 @pytest.mark.asyncio
+async def test_an_operator_deletion_refuses_when_the_store_is_not_there(
+    client: AsyncClient, monkeypatch, tmp_path
+):
+    """A missing store is refused, where a missing *entry* is a no-op.
+
+    The difference is whether the absence is trustworthy. An account with no
+    entry in a store this process can read has demonstrably no credential. A
+    store that is not there at all has demonstrated nothing: on this deployment
+    the file is a bind mount, and a mount that failed to come up looks exactly
+    like a file that was never written — while the real one, with the real
+    password hashes, sits intact on the host. Deleting the row then is the bug
+    this suite exists for, with the credential surviving on a volume nobody
+    noticed was detached.
+
+    So it fails, and only the operator route can reach it: self-service deletion
+    checks the password first, and in header-auth mode that check reads the same
+    missing store and 401s before this is asked.
+    """
+    monkeypatch.setattr(settings, "admin_password", "admin-pw-for-this-test")
+    token = await _register(client)
+    user_id = auth.read_access_token(token).user_id
+
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "never.yml"))
+
+    admin = await client.post(
+        "/api/v1/admin/login", json={"password": "admin-pw-for-this-test"}
+    )
+    refused = await client.delete(
+        f"/api/v1/admin/users/{user_id}",
+        headers={"Authorization": f"Bearer {admin.json()['access_token']}"},
+    )
+
+    assert refused.status_code == 503, refused.text
+
+    # Read back outside header-auth mode, so the check that proves the row
+    # survived is not the same missing store that caused the 503.
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    still_there = await client.get(_ME, headers={"Authorization": f"Bearer {token}"})
+    assert still_there.status_code == 200, (
+        "the account is gone after a refused deletion — the 503 promised the "
+        "opposite, and an operator would have stopped looking"
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_store_it_cannot_write_fails_the_deletion_rather_than_faking_it(
     client: AsyncClient, authelia_store_on: Path, monkeypatch
 ):

@@ -215,6 +215,25 @@ describe('SettingsPage', () => {
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
+  it('reports a non-Error rejection without showing undefined', async () => {
+    // The fallback half of `e instanceof Error ? e.message : ...`. A rejection
+    // that is not an Error is unlikely, but the alert it produces is the one
+    // the athlete reads after being refused — "undefined" would be worse than
+    // no dialog at all.
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'prompt').mockReturnValue('Str0ng!Pass')
+    const alerted = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockDeleteCurrentUser.mockRejectedValueOnce('not an Error object')
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+
+    await waitFor(() => {
+      expect(alerted).toHaveBeenCalledWith('The account could not be deleted.')
+    })
+    expect(useAppStore.getState().authToken).toBe('tok-123')
+  })
+
   it('renders the Display Name input with the current user name', () => {
     setup()
     const nameInput = screen.getByPlaceholderText('Your name')
