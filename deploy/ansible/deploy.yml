@@ -58,6 +58,13 @@
         name:
           - ca-certificates
           - curl
+          # scripts/backup.sh encrypts the secrets bundle with gpg and
+          # scripts/restore.sh reads the manifest with jq. Installed here rather
+          # than left to the operator because a backup that cannot run on a
+          # freshly provisioned host is not a backup (ai-trainer-ops#13).
+          - gnupg
+          - jq
+          - rsync
         state: present
         update_cache: true
 
@@ -213,6 +220,78 @@
     - name: Report how many stale containers were removed
       ansible.builtin.debug:
         msg: "Stale compose containers removed: {{ stale_compose_containers.stdout | trim }}"
+
+    # ----------------------------------------------------------------------
+    # Nightly backup (ai-trainer-ops#13)
+    # ----------------------------------------------------------------------
+    # Opt-in on the passphrase file existing, and that is deliberate. The timer
+    # cannot be installed unconditionally: without a passphrase backup.sh
+    # refuses — correctly, since the secrets bundle holds every encryption key
+    # this deployment has — and a unit that fails every night at 03:00 teaches
+    # whoever reads the mail to ignore it. So a host without the passphrase
+    # simply has no timer, which is visible as an absence rather than as noise.
+    #
+    # Create it once, by hand, off this host's own backup target:
+    #   openssl rand -base64 48 > /root/ai-trainer-backup.pass && chmod 0600 "$_"
+    - name: Check whether a backup passphrase has been provisioned
+      ansible.builtin.stat:
+        path: /root/ai-trainer-backup.pass
+      register: backup_passphrase
+
+    - name: Install the nightly backup service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ai-trainer-backup.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Back up ai-trainer (database plus the keys that open it)
+          Documentation=https://github.com/jrhahn/ai-trainer/blob/develop/docs/runbook-restore.md
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=oneshot
+          WorkingDirectory={{ app_dir }}
+          Environment=APP_DIR={{ app_dir }}
+          Environment=BACKUP_PASSPHRASE_FILE=/root/ai-trainer-backup.pass
+          ExecStart={{ app_dir }}/scripts/backup.sh
+      when: backup_passphrase.stat.exists
+
+    - name: Install the nightly backup timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ai-trainer-backup.timer
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Nightly ai-trainer backup
+
+          [Timer]
+          # Before the fetching host collects at 03:30, so each night's copy is
+          # that night's. Persistent so a host that was off at 03:00 still takes
+          # one when it comes back, rather than skipping a day silently.
+          OnCalendar=03:00
+          Persistent=true
+          RandomizedDelaySec=120
+
+          [Install]
+          WantedBy=timers.target
+      when: backup_passphrase.stat.exists
+
+    - name: Enable the nightly backup timer
+      ansible.builtin.systemd_service:
+        name: ai-trainer-backup.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: backup_passphrase.stat.exists
+
+    - name: Report that backups are not configured
+      ansible.builtin.debug:
+        msg: >-
+          No /root/ai-trainer-backup.pass on this host, so no backup timer was
+          installed and THIS DEPLOYMENT IS NOT BEING BACKED UP. See
+          docs/runbook-restore.md.
+      when: not backup_passphrase.stat.exists
 
     - name: Start Docker services
       community.docker.docker_compose_v2:

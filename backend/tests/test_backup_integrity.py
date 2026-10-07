@@ -48,6 +48,7 @@ from scripts import backup_manifest, verify_restore
 REPO = Path(__file__).resolve().parents[2]
 BACKUP_SH = REPO / "scripts" / "backup.sh"
 RESTORE_SH = REPO / "scripts" / "restore.sh"
+SSH_SH = REPO / "scripts" / "backup-over-ssh.sh"
 
 
 def _key() -> str:
@@ -377,7 +378,112 @@ def test_the_contract_check_is_not_comparing_empty_sets():
     assert {"taken_at", "dump_sha256", "secrets_sha256", "manifest_version"} <= written
 
 
-@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH], ids=lambda p: p.name)
+# ---------------------------------------------------------------------------
+# The forced command that limits the fetching host's key
+# ---------------------------------------------------------------------------
+
+
+def _over_ssh(command: str | None, allowed_dir: str = "/var/backups/ai-trainer"):
+    env = {**os.environ, "BACKUP_SSH_ALLOWED_DIR": allowed_dir}
+    if command is None:
+        env.pop("SSH_ORIGINAL_COMMAND", None)
+    else:
+        env["SSH_ORIGINAL_COMMAND"] = command
+    return subprocess.run(
+        ["bash", str(SSH_SH)], capture_output=True, text=True, check=False, env=env
+    )
+
+
+def _refused(result) -> bool:
+    """Whether the wrapper itself rejected the request.
+
+    Checked by its own prefix rather than by exit status: an allowed request
+    ``exec``s rsync, which then fails on its own for want of a real client, so
+    "non-zero" does not distinguish permitted from refused.
+    """
+    return "backup-over-ssh:" in result.stderr
+
+
+def test_the_fetch_key_gets_no_interactive_session():
+    """And is told why, which is the only reason this check exists separately.
+
+    Removing it still refuses — an empty command fails the ``rsync`` check one
+    line later — so the guard earns its place by the message, not the verdict.
+    A mutation run proved the point: deleting the check broke no test until this
+    asserted the wording.
+    """
+    result = _over_ssh(None)
+    assert _refused(result)
+    assert "no interactive session" in result.stderr
+
+
+def test_the_fetch_key_cannot_run_rsync_in_some_other_mode():
+    """``--server`` has to be checked in its own right.
+
+    The positional ``--sender`` test does not imply it: with the ``--server``
+    check gone, ``rsync <anything> --sender …`` is accepted, and ``--daemon`` is
+    among the things ``<anything>`` could be. Also found by mutation.
+    """
+    assert _refused(_over_ssh("rsync --daemon --sender -e.s . /var/backups/ai-trainer/"))
+    assert _refused(_over_ssh("rsync --config=/tmp/x --sender -e.s . /var/backups/ai-trainer/"))
+
+
+def test_the_fetch_key_cannot_run_an_arbitrary_command():
+    assert _refused(_over_ssh("/bin/sh"))
+    assert _refused(_over_ssh("cat /root/ai-trainer-backup.pass"))
+
+
+def test_the_fetch_key_cannot_take_or_delete_a_backup():
+    assert _refused(_over_ssh("/opt/ai-trainer/scripts/backup.sh"))
+    assert _refused(_over_ssh("rm -rf /var/backups/ai-trainer"))
+
+
+def test_the_fetch_key_cannot_write_into_the_backup_directory():
+    """``--server`` without ``--sender`` is rsync receiving, i.e. uploading.
+
+    Permitting it would let the fetching host overwrite or truncate the very
+    artefacts it is there to collect — a way to destroy backups rather than read
+    them, which is the thing a pull architecture is supposed to rule out.
+    """
+    assert _refused(_over_ssh("rsync --server -logDtpre.iLsfxC . /var/backups/ai-trainer/"))
+
+
+def test_the_fetch_key_cannot_read_anything_but_the_backup_directory():
+    """``--sender`` alone would serve any path, and this runs as root."""
+    assert _refused(_over_ssh("rsync --server --sender -logDtpre.iLsfxC . /etc/"))
+    assert _refused(_over_ssh("rsync --server --sender -logDtpre.iLsfxC . /root/"))
+
+
+def test_shell_metacharacters_do_not_get_a_second_command_through():
+    """The command is expanded by word splitting, not evaluated.
+
+    So a `;` arrives as a literal rsync argument rather than as an operator —
+    and the path check then sees the real last argument and refuses.
+    """
+    assert _refused(
+        _over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer/; cat /etc/shadow")
+    )
+
+
+def test_the_fetch_key_may_collect_the_backup_directory():
+    """The permitted case, or the restriction is just a closed door.
+
+    The protocol options in the middle are deliberately not pinned: they encode
+    rsync's negotiated features and change with versions on either side, so a
+    pinned string breaks on upgrade — and a restriction that breaks gets removed.
+    """
+    for options in ("-logDtpre.iLsfxC", "-vlogDtpre.iLsfxC", "-e.LsfxCIvu"):
+        result = _over_ssh(f"rsync --server --sender {options} . /var/backups/ai-trainer/")
+        assert not _refused(result), f"{options} was refused: {result.stderr}"
+
+
+def test_a_trailing_slash_does_not_change_the_verdict(tmp_path):
+    """rsync is asked for the directory with or without one, depending on caller."""
+    assert not _refused(_over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer"))
+    assert not _refused(_over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer/"))
+
+
+@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name)
 def test_the_shell_scripts_parse(script):
     """``bash -n`` on both.
 
@@ -392,7 +498,7 @@ def test_the_shell_scripts_parse(script):
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH], ids=lambda p: p.name)
+@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name)
 def test_the_shell_scripts_are_executable(script):
     assert script.stat().st_mode & 0o111, f"{script.name} is not executable"
 

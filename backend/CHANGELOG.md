@@ -51,9 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Removing the refusal from `restore.sh` was tested; the drill fails at step 5.
   Last run 2026-10-07.
 
-  Still missing, and stated in the runbook: nothing schedules this on the live
-  host and nothing ships the artefacts off it, so production still has no
-  backup. That needs a destination decided first.
+  Scheduled and shipped off-host: a nightly `ai-trainer-backup.timer` installed
+  by the playbook — opt-in on a passphrase file existing, so a host without one
+  gets no timer rather than a unit that fails every night — and the home server
+  collects the artefacts at 03:30 into the Borg job that already goes to a
+  Hetzner Storage Box.
+
+  **Pulled, not pushed.** A host that pushes its own backups needs credentials
+  for the backup store, so whoever takes the production host also reaches the
+  backups of the data it held. The VPS holds no Storage Box credentials; the
+  fetching key's forced command (`scripts/backup-over-ssh.sh`) permits
+  `rsync --server --sender` against the backup directory and nothing else — it
+  cannot take a backup, delete one, write into the directory, or read any other
+  path. The artefacts stay GPG-encrypted in transit and at rest, so the machine
+  holding the Borg credentials cannot read ai-trainer's keys.
+
+  Two manual steps remain before this is live, and the runbook names them: a
+  passphrase on the VPS and a fetch key on the home server.
 
 ### Changed
 
