@@ -39,6 +39,7 @@ import {
   dismissValidationExperiment,
   deleteValidationExperiment,
   deleteCurrentUser,
+  exportAccountData,
   recalculateMetrics,
   estimateFTP,
   uploadFitFile,
@@ -666,6 +667,17 @@ describe('deleteCurrentUser', () => {
       method: 'DELETE',
       body: { password: 'Str0ng!Pass' },
     })
+  })
+})
+
+describe('exportAccountData', () => {
+  it('GETs the whole-account export', async () => {
+    mockApiFetch.mockResolvedValue({ format: 'ai-trainer-account-export' })
+
+    const result = await exportAccountData('tok-123')
+
+    expect(result).toEqual({ format: 'ai-trainer-account-export' })
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/export', { token: 'tok-123' })
   })
 })
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Export My Data" in Settings** (ai-trainer-ops#6) — `SettingsPage.tsx`,
+  `services/user.ts`. Downloads `GET /users/me/export` as
+  `ai-trainer-export-<date>.json`, placed right above the Danger Zone so the
+  way to keep a copy sits next to the way to delete everything.
 - **A failed pace save says so, and stops the spinner** (`src/pages/SettingsPage.tsx`,
   #716) — the two paths the first cut of the card left untested: a rejected
   request now shows "Failed to save threshold pace" with the button enabled

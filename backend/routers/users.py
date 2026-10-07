@@ -21,6 +21,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -36,6 +37,7 @@ from routers.dependencies import (
     require_password,
     set_user_ai_keys,
 )
+from services import account_export
 from services import ai_service, metrics_service
 from services import authelia_store
 from services import logged_sessions
@@ -325,6 +327,28 @@ async def delete_me(
     await db.delete(current_user)
     await db.flush()
     return {"status": "deleted"}
+
+
+@router.get("/export")
+async def export_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> JSONResponse:
+    """Everything stored about the account, as one JSON file (ai-trainer-ops#6).
+
+    Art. 15 asks for access, Art. 20 for a structured, machine-readable format;
+    one file serves both. ``/memory-export`` stays: it is the coaching memory in
+    the shape the settings page shows it, not the account.
+
+    No password step-up, unlike deletion: everything in the file is already
+    readable through this session, and credentials are not in it.
+    """
+    payload = await account_export.export_account(db, current_user)
+    filename = f"ai-trainer-export-{app_today_iso()}.json"
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class PlanDayHistoryEntry(schemas.CamelModel):

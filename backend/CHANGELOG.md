@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deleting an account works in PostgreSQL, and deletes everything**
+  (ai-trainer-ops#6) — `models.py`, `tests/test_account_data_rights.py`.
+
+  Five tables reference `users.id` without an ORM delete cascade and without
+  `ON DELETE`: `plan_day_history`, `plan_change_summary`, `llm_calls`,
+  `athlete_motivation_weight_events`, `athlete_uncertainty_events`. The ORM
+  never touched their rows, so PostgreSQL refused `DELETE /users/me` with a
+  foreign-key violation for any account that had ever had a plan change or an
+  LLM call — which is every account that used the product. SQLite does not
+  enforce foreign keys by default, so the suite never saw it.
+
+  `User` now cascades to all five. The new suite switches SQLite's foreign
+  keys on, seeds one row in **every** table that references `users` (found by
+  walking the schema, not from a list), deletes through the API and asserts no
+  row survives — so the next table that forgets fails here instead of in
+  production. Mutation-checked: without the cascades it fails with exactly the
+  PostgreSQL error.
+
+### Added
+
+- **`GET /users/me/export`: everything stored about the account as one JSON
+  file** (ai-trainer-ops#6, GDPR Art. 15 and 20) — `services/account_export.py`,
+  `routers/users.py`.
+
+  Built from the schema like the deletion test, so a new user table is in the
+  export without anyone remembering it. Credentials are left out: every
+  `EncryptedString` column (provider keys, Strava and intervals.icu tokens, the
+  TOTP secret) and the password, trusted-device and recovery-code hashes.
+
 ### Added
 
 - **A backup that can actually be restored, rehearsed once end to end**
