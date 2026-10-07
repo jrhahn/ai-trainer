@@ -3,8 +3,8 @@
 ``ask_trainer`` was wired in #750. This covers the rest of what the athlete
 reads as the coach speaking: the dashboard login summary (from both analysis
 paths, from the refresh and from processed ride feedback), the
-training-status badge, the next-session
-recommendation, the ride review and the generated insights.
+training-status badge, the next-session recommendation, the ride review and
+the generated insights.
 
 Each case drives the real service function with the LLM replaced by a reply
 that invents a number and asserts a condition, and checks the counters for its
