@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SECRETS_ENCRYPTION_KEY` — which validates and encrypts and gives no
   independence at all.
 
+  The four keys are also forwarded in `compose.yml`'s backend `environment`
+  block, without which they never reach the process — the split would have read
+  as configured on the host while every purpose kept using the shared key. The
+  guard for that existed and was a hand-maintained tuple of two; it now derives
+  the list from `config._DEDICATED_KEY_FIELDS`, so the next purpose is covered
+  without anyone remembering. Found by the reviewer on #754.
+
   **Deliberately not `STRAVA_ENCRYPTION_KEY`**, the name the backlog proposed:
   it is the pre-#613 alias for the *shared* key and is still honoured as one.
   Reusing it would have kept Strava tokens working on a deployment that still

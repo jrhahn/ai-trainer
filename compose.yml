@@ -136,6 +136,18 @@ services:
       # Deprecated name, still forwarded so an existing .env keeps encrypting
       # after an upgrade instead of silently reverting to plaintext (#613).
       STRAVA_ENCRYPTION_KEY: ${STRAVA_ENCRYPTION_KEY:-}
+      # One key per secret type (#12). Each must be listed for the same reason
+      # the shared key above must: a variable absent from this block never
+      # reaches the process, so the split would read as configured on the host
+      # and every purpose would quietly keep using the shared key. Empty is the
+      # intended default — it means "this purpose uses SECRETS_ENCRYPTION_KEY".
+      #
+      # STRAVA_TOKEN_ENCRYPTION_KEY and not STRAVA_ENCRYPTION_KEY: the latter is
+      # the deprecated alias for the shared key, one line above.
+      STRAVA_TOKEN_ENCRYPTION_KEY: ${STRAVA_TOKEN_ENCRYPTION_KEY:-}
+      INTERVALS_ENCRYPTION_KEY: ${INTERVALS_ENCRYPTION_KEY:-}
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

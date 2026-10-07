@@ -393,6 +393,21 @@ def test_copying_the_shared_key_into_a_dedicated_one_is_refused(purpose: str) ->
         Settings(app_env="production", secrets_encryption_key=shared, **{field: shared})
 
 
+def test_a_purpose_with_no_key_field_fails_loudly() -> None:
+    """Silently falling back would be this PR's own bug, one purpose at a time.
+
+    ``SecretPurpose`` and ``_DEDICATED_KEY_FIELDS`` are two lists that have to
+    agree. If a purpose is added to the first and forgotten in the second, the
+    tempting behaviour is to shrug and use the shared key — which is exactly
+    "this secret type was never split", arriving quietly and looking configured.
+    So it raises, and the sweep below is what normally catches it first.
+    """
+    configured = Settings(app_env="production", secrets_encryption_key=_key())
+
+    with pytest.raises(ValueError, match="Unknown secret purpose"):
+        configured.encryption_keys_for("a_purpose_nobody_wired_up")
+
+
 def test_the_legacy_strava_name_is_still_the_shared_key() -> None:
     """The trap this split had to avoid, pinned so a later tidy-up cannot spring it.
 

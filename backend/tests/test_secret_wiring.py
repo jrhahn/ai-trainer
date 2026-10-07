@@ -32,8 +32,26 @@ ENV_EXAMPLE = REPO_ROOT / ".env.example"
 MANIFEST = REPO_ROOT / "deploy" / "forwarded-vars.yml"
 RENDERER = REPO_ROOT / "deploy" / "render_extra_vars.py"
 
+def _encryption_key_vars() -> tuple[str, ...]:
+    """Every per-purpose encryption key, read from the one place that lists them.
+
+    Derived rather than typed out, because typing it out is how the four keys of
+    ai-trainer-ops#12 shipped absent from ``compose.yml``: this guard existed,
+    caught exactly this class of bug, and was a hand-maintained tuple of two
+    that nobody thought to extend. The whole point of the file it guards is that
+    a variable missing from the compose block reads as configured on the host
+    and never reaches the process.
+    """
+    from config import _DEDICATED_KEY_FIELDS
+
+    return tuple(field.upper() for field in _DEDICATED_KEY_FIELDS.values())
+
+
 # Settings the backend cannot be trusted to run without once it leaves dev.
-SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
+SECURITY_CRITICAL_VARS = (
+    "SECRETS_ENCRYPTION_KEY",
+    "APP_ENV",
+) + _encryption_key_vars()
 
 
 def _backend_environment_block() -> str:
