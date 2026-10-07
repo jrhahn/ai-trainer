@@ -85,8 +85,27 @@ compose() {
   ${COMPOSE_CMD} --project-directory "${APP_DIR}" "$@"
 }
 
-# shellcheck disable=SC1091
-set -a; . "${APP_DIR}/.env"; set +a
+# Read one variable out of the Compose env file.
+#
+# Read and not sourced, which is the whole point. `.env` is a Compose env file,
+# not a shell script: Compose accepts a value containing an unmatched quote, and
+# `.` does not. Measured in production rather than reasoned about —
+# ADMIN_PASSWORD held one apostrophe and the first real backup died on
+# `line 32: unexpected EOF while looking for matching '` without taking
+# anything. Nothing here needs the rest of that file, so nothing here should be
+# breakable by the rest of that file.
+#
+# Last occurrence wins, as Compose does with a repeated key. Surrounding quotes
+# are stripped only when balanced, matching the parser the key check in
+# restore.sh already used — that half was right and this half was not.
+env_value() {
+  sed -n "s/^$1=//p" "${APP_DIR}/.env" \
+    | tail -n 1 \
+    | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'
+}
+
+POSTGRES_USER="$(env_value POSTGRES_USER)"
+POSTGRES_DB="$(env_value POSTGRES_DB)"
 POSTGRES_USER="${POSTGRES_USER:-aitrainer}"
 POSTGRES_DB="${POSTGRES_DB:-aitrainer}"
 

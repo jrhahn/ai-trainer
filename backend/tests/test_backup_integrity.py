@@ -671,6 +671,127 @@ def test_placing_the_authelia_directory_replaces_it_rather_than_nesting_it(tmp_p
     assert (app_dir / "authelia" / "users_database.yml").read_text() == "restored\n"
 
 
+@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH], ids=lambda p: p.name)
+def test_neither_script_sources_the_compose_env_file(script):
+    """`.env` is a Compose env file, not a shell script.
+
+    Both scripts used to do `set -a; . "${APP_DIR}/.env"` and both died in
+    production on the same line: `ADMIN_PASSWORD` holds one apostrophe, which
+    Compose accepts and `.` does not —
+
+        /opt/ai-trainer/.env: line 32: unexpected EOF while looking for matching '
+
+    The backup exited 2 without taking anything. A pinned absence rather than a
+    behaviour test because the behaviour test is below; this one stops the
+    convenient one-liner coming back.
+    """
+    text = script.read_text(encoding="utf-8")
+    assert '. "${APP_DIR}/.env"' not in text, "sources .env as shell"
+    assert "env_value POSTGRES_USER" in text, "no safe reader in use"
+
+
+@pytest.mark.skipif(
+    shutil.which("gpg") is None, reason="backup.sh encrypts the secrets bundle with gpg"
+)
+def test_a_value_with_an_unmatched_quote_does_not_stop_the_backup(tmp_path):
+    """The real regression, run rather than asserted about.
+
+    An unrelated variable holding an apostrophe must not affect a backup that
+    only wants POSTGRES_USER and POSTGRES_DB. The run still fails — there is no
+    Postgres here — but it has to fail at `pg_dump`, not at line 32 of a file it
+    was merely reading.
+    """
+    app_dir = tmp_path / "app"
+    backup_dir = tmp_path / "backups"
+    app_dir.mkdir()
+    (app_dir / ".env").write_text(
+        "POSTGRES_USER=aitrainer\n"
+        "POSTGRES_DB=aitrainer\n"
+        # Exactly the shape that broke it.
+        "ADMIN_PASSWORD=hunter2's-secret\n"
+        'TRAEFIK_DASHBOARD_AUTH=user:$2y$05$abc"def\n',
+        encoding="utf-8",
+    )
+    passphrase = tmp_path / "pass"
+    passphrase.write_text("not-a-real-passphrase\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SH)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            **os.environ,
+            "APP_DIR": str(app_dir),
+            "BACKUP_DIR": str(backup_dir),
+            "BACKUP_PASSPHRASE_FILE": str(passphrase),
+            "COMPOSE_CMD": "false",
+        },
+    )
+
+    combined = result.stdout + result.stderr
+    assert "unexpected EOF" not in combined, combined
+    assert "line 32" not in combined
+    # It got as far as the database, which is the whole claim.
+    assert "dumping the database" in combined, combined
+
+
+@pytest.mark.skipif(
+    shutil.which("gpg") is None, reason="backup.sh encrypts the secrets bundle with gpg"
+)
+@pytest.mark.parametrize(
+    ("written", "expected"),
+    [
+        ("aitrainer", "aitrainer"),
+        ("'aitrainer'", "aitrainer"),
+        ('"aitrainer"', "aitrainer"),
+        # Balanced only. A lone quote is part of the value, not a wrapper, and
+        # stripping it would hand pg_dump a different database name than the one
+        # Compose uses — the two disagreeing silently is this repo's recurring
+        # bug shape. Found by mutation: deleting quotes unconditionally passed
+        # every other test here.
+        ("ait'rainer", "ait'rainer"),
+    ],
+    ids=["bare", "single-quoted", "double-quoted", "internal-quote"],
+)
+def test_the_database_name_is_unwrapped_only_when_the_quotes_are_balanced(
+    tmp_path, written, expected
+):
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / ".env").write_text(
+        f"POSTGRES_USER=aitrainer\nPOSTGRES_DB={written}\n", encoding="utf-8"
+    )
+    passphrase = tmp_path / "pass"
+    passphrase.write_text("not-a-real-passphrase\n", encoding="utf-8")
+
+    # A compose stand-in that records what it was asked to run, so the assertion
+    # is on the name actually handed to pg_dump rather than on the parser alone.
+    spy = tmp_path / "compose-spy"
+    log = tmp_path / "compose.log"
+    spy.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{log}"\nexit 1\n')
+    spy.chmod(0o755)
+
+    subprocess.run(
+        ["bash", str(BACKUP_SH)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            **os.environ,
+            "APP_DIR": str(app_dir),
+            "BACKUP_DIR": str(tmp_path / "backups"),
+            "BACKUP_PASSPHRASE_FILE": str(passphrase),
+            "COMPOSE_CMD": str(spy),
+        },
+    )
+
+    calls = log.read_text(encoding="utf-8") if log.exists() else ""
+    assert "pg_dump" in calls, f"never reached pg_dump:\n{calls}"
+    pg_dump_line = next(line for line in calls.splitlines() if "pg_dump" in line)
+    assert pg_dump_line.split()[-1] == expected, pg_dump_line
+
+
 @pytest.mark.skipif(
     shutil.which("gpg") is None, reason="backup.sh encrypts the secrets bundle with gpg"
 )

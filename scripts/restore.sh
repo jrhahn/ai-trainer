@@ -234,8 +234,19 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Load the database
 # ---------------------------------------------------------------------------
-# shellcheck disable=SC1091
-set -a; . "${APP_DIR}/.env"; set +a
+# Read, not sourced — `.env` is a Compose env file and not a shell script, so a
+# value with an unmatched quote is valid there and fatal to `.`. It happened:
+# ADMIN_PASSWORD held one apostrophe and killed the first real backup before it
+# took anything. Getting it wrong here would be worse, since a restore that dies
+# at this line has already placed the new .env over the host's own.
+env_value() {
+  sed -n "s/^$1=//p" "${APP_DIR}/.env" \
+    | tail -n 1 \
+    | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'
+}
+
+POSTGRES_USER="$(env_value POSTGRES_USER)"
+POSTGRES_DB="$(env_value POSTGRES_DB)"
 POSTGRES_USER="${POSTGRES_USER:-aitrainer}"
 POSTGRES_DB="${POSTGRES_DB:-aitrainer}"
 
