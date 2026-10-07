@@ -66,6 +66,11 @@ jobs:
             --disable-pip --no-deps --format markdown --output /tmp/pip-audit.md
           status=$?
           set -e
+          # pip-audit writes no file at all when it finds nothing, and "no
+          # report" must not read the same as "clean".
+          if [ "$status" -eq 0 ] && [ ! -s /tmp/pip-audit.md ]; then
+            echo "No known vulnerabilities found." > /tmp/pip-audit.md
+          fi
           {
             echo "## pip-audit (backend runtime dependencies)"
             echo
