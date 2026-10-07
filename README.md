@@ -11,7 +11,9 @@ Train Like a Pro and your Google Gemini key in about 10 minutes.
 
 **Running your own instance?** [Security model](docs/security.md) covers the
 controls, what has to be configured, and the limitations that are known and
-accepted. Reporting a vulnerability: [SECURITY.md](SECURITY.md).
+accepted. [Backup and restore](docs/runbook-restore.md) is the procedure for
+getting a deployment back, and the record of when it was last rehearsed.
+Reporting a vulnerability: [SECURITY.md](SECURITY.md).
 
 ## License: source available, not open source
 

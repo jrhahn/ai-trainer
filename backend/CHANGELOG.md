@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A backup that can actually be restored, rehearsed once end to end**
+  (ai-trainer-ops#13) — `scripts/backup.sh`, `scripts/restore.sh`,
+  `scripts/rehearse-restore.sh`, `backend/scripts/backup_manifest.py`,
+  `backend/scripts/verify_restore.py`, `docs/runbook-restore.md`,
+  `docs/security.md`.
+
+  There was no backup of this deployment at all — no `pg_dump`, no volume
+  snapshot, nothing in the home server's Borg jobs — so the issue's premise
+  ("a backup was restored onto a fresh instance") had nothing to stand on.
+
+  The failure worth engineering against is not a dump that will not load. It is
+  a restore that **succeeds** without the keys: `EncryptedString` catches
+  `InvalidToken`, logs a warning and returns the raw ciphertext as the value, so
+  the app boots clean, `/healthz` is green, and the stored Strava tokens and TOTP
+  secrets are blobs. Since ai-trainer-ops#12 there are five keys to lose rather
+  than one, plus `authelia/users_database.yml`, which holds the actual passwords.
+
+  So a backup is three artefacts, not one: the dump, a GPG-encrypted bundle of
+  `.env` and `authelia/`, and a manifest holding neither. The manifest records a
+  domain-separated `sha256(key)[:16]` fingerprint per purpose and the variable it
+  came from, both read from the application rather than listed in the script —
+  `restore.sh` compares them against the target's keys *before loading anything*
+  and refuses, naming the purpose. `verify_restore.py` then opens every encrypted
+  column, found by walking the mapper registry, and exits non-zero on anything
+  unreadable.
+
+  The manifest records the **whole decryption chain** per purpose, not only the
+  key that encrypts new rows. `MultiFernet` decrypts with any key in the chain,
+  so rows written before a purpose gained a dedicated key are still under
+  `SECRETS_ENCRYPTION_KEY` — right after the #12 split, every existing row. A
+  first version recorded only the encrypting key, which meant correct dedicated
+  keys plus a rotated shared key printed "matches" and loaded the dump. Manifests
+  are versioned, and `restore.sh` refuses version 1 rather than running a check
+  that cannot see half its subject.
+
+  Rehearsed, not asserted: `rehearse-restore.sh` writes a real secret of every
+  purpose through the ORM against a throwaway Postgres, backs up, destroys the
+  database, **checks that the wrong key is refused** — both a wrong dedicated key
+  and a wrong shared one — restores, and compares every secret byte-for-byte.
+  Removing the refusal from `restore.sh` was tested; the drill fails at step 5.
+  Last run 2026-10-07.
+
+  Scheduled and shipped off-host: a nightly `ai-trainer-backup.timer` installed
+  by the playbook — opt-in on a passphrase file existing, so a host without one
+  gets no timer rather than a unit that fails every night — and the home server
+  collects the artefacts at 03:30 into the Borg job that already goes to a
+  Hetzner Storage Box.
+
+  **Pulled, not pushed.** A host that pushes its own backups needs credentials
+  for the backup store, so whoever takes the production host also reaches the
+  backups of the data it held. The VPS holds no Storage Box credentials; the
+  fetching key's forced command (`scripts/backup-over-ssh.sh`) permits
+  `rsync --server --sender` against the backup directory and nothing else — it
+  cannot take a backup, delete one, write into the directory, or read any other
+  path. The artefacts stay GPG-encrypted in transit and at rest, so the machine
+  holding the Borg credentials cannot read ai-trainer's keys.
+
+  Two manual steps remain before this is live, and the runbook names them: a
+  passphrase on the VPS and a fetch key on the home server.
+
 ### Changed
 
 - **One encryption key per secret type, instead of one for all of them**

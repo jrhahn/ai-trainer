@@ -330,6 +330,15 @@ Two things are refused at boot rather than at the next incident:
 > `SECRETS_ENCRYPTION_KEY` such a deployment never set: plaintext, silently.
 > That is #612, reintroduced by a rename. Hence `STRAVA_TOKEN_ENCRYPTION_KEY`.
 
+**The backup consequence.** Encrypting these columns means a database dump is
+not a backup — it is half of one, and the half that cannot be used alone. There
+are now five keys to lose rather than one, plus `authelia/users_database.yml`,
+which is where the passwords actually live when header auth is on. A restore
+that gets the dump and not the keys *appears to succeed*: the column type logs a
+warning and returns the raw ciphertext, so the app boots clean and hands blobs
+to Strava. See [`runbook-restore.md`](runbook-restore.md), which is both the
+procedure and the record of when it was last rehearsed (ai-trainer-ops#13).
+
 ### Container
 
 The backend runs as a non-root user. `APP_UID` must match the owner of the
