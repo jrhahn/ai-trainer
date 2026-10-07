@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **One encryption key per secret type, instead of one for all of them**
+  (ai-trainer-ops#12) — `config.py`, `models.py`, `.env.example`,
+  `deploy/forwarded-vars.yml`, `deploy/ansible/templates/app.env.j2`,
+  `docs/security.md`, `TODO.md`.
+
+  `SECRETS_ENCRYPTION_KEY` encrypted Strava OAuth tokens, intervals.icu API
+  keys, the athlete's own AI provider keys *and* their TOTP secret, so rotating
+  it was an all-or-nothing operation on every athlete's credentials — and the
+  reason to rotate is usually a suspicion. `EncryptedString` now takes the
+  column's purpose and resolves it through `Settings.encryption_keys_for`:
+  `STRAVA_TOKEN_ENCRYPTION_KEY`, `INTERVALS_ENCRYPTION_KEY`,
+  `AI_KEY_ENCRYPTION_KEY`, `TOTP_ENCRYPTION_KEY`.
+
+  Four purposes, not the three the backlog listed: `totp_secret` became an
+  encrypted column with #688 and that note was never revisited, so the
+  all-or-nothing rotation had quietly grown to include every athlete's second
+  factor.
+
+  Each new key is optional and the shared one stays required, which is what lets
+  this land one secret type at a time. The column type is a `MultiFernet` over
+  `[dedicated, shared]` — encrypts with the first, decrypts with either — so a
+  purpose that gains a key writes new rows under it while old rows stay
+  readable. Retiring the shared key still needs a re-encryption pass, which is
+  the remaining half and is now the backlog item.
+
+  Two configurations are refused at boot: a key Fernet cannot use, named so that
+  it is clear which of five variables is wrong, and a dedicated key copied from
+  `SECRETS_ENCRYPTION_KEY` — which validates and encrypts and gives no
+  independence at all.
+
+  **Deliberately not `STRAVA_ENCRYPTION_KEY`**, the name the backlog proposed:
+  it is the pre-#613 alias for the *shared* key and is still honoured as one.
+  Reusing it would have kept Strava tokens working on a deployment that still
+  sets it and sent intervals, AI and TOTP secrets to a `SECRETS_ENCRYPTION_KEY`
+  that deployment never set — plaintext, silently. That is #612's failure mode,
+  reintroduced by a rename.
+
 ### Fixed
 
 - **A login no longer answers faster for an address with no account**

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -22,6 +22,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
+# The *names* of the purposes only — not ``settings``, which stays a local import
+# inside ``_get_fernet`` because reading a key at class-definition time would
+# freeze whatever the environment held when this module was first imported, and
+# every test that varies a key monkeypatches the singleton.
+from config import SecretPurpose
 from database import Base
 
 logger = logging.getLogger(__name__)
@@ -36,25 +41,47 @@ def _uuid() -> str:
 
 
 class EncryptedString(TypeDecorator):
-    """Transparently encrypts/decrypts string values using Fernet symmetric encryption.
+    """Transparently encrypts a column with the key belonging to its *purpose*.
 
-    When ``SECRETS_ENCRYPTION_KEY`` is not set the value is stored as plaintext,
-    allowing dev/test environments to operate without a key while production
-    always stores ciphertext.
+    One key covered every secret type until #12, so rotating it meant
+    re-encrypting Strava tokens, intervals.icu keys, the athlete's own AI keys
+    and their TOTP secret in a single operation — and the reason to rotate is
+    usually a suspicion, which is the worst moment for an all-or-nothing change
+    to someone else's credentials. A column now says what it holds, and
+    ``Settings.encryption_keys_for`` decides which keys that means.
+
+    ``MultiFernet`` and not ``Fernet``: it encrypts with the first key and
+    decrypts with any of them, so a purpose with a dedicated key configured
+    writes new rows under it while rows written under the shared key stay
+    readable. That is what lets the split land one secret type at a time rather
+    than behind a migration that rewrites four tables at once.
+
+    With no key at all the value is stored as plaintext, so dev and test run
+    without one. Production cannot boot without the shared key.
+
+    *purpose* is a positional argument whose name matches the attribute it sets,
+    which is not decoration: SQLAlchemy builds this type's cache key from its
+    constructor arguments by that name, and the compiled statement a cache entry
+    holds carries the bind processor with it. Named differently, two columns of
+    different purposes would share an entry and one would be encrypted with the
+    other's key. There is a test for it.
     """
 
     impl = Text
     cache_ok = True
 
-    def _get_fernet(self) -> Fernet | None:
+    def __init__(self, purpose: str, *args, **kwargs) -> None:
+        self.purpose = purpose
+        super().__init__(*args, **kwargs)
+
+    def _get_fernet(self) -> MultiFernet | None:
         # Local import avoids circular dependency at module load.
         from config import settings
 
-        key = settings.encryption_key
-        if not key:
+        keys = settings.encryption_keys_for(self.purpose)
+        if not keys:
             return None
-        raw = key.encode() if isinstance(key, str) else key
-        return Fernet(raw)
+        return MultiFernet([Fernet(key.encode()) for key in keys])
 
     def process_bind_param(self, value: str | None, dialect) -> str | None:
         if value is None:
@@ -77,10 +104,17 @@ class EncryptedString(TypeDecorator):
             # and must keep working.  Anything else — a rotated or wrong key —
             # lands here too, and used to pass unnoticed because the except
             # clause swallowed every exception (#612).  Say so.
+            #
+            # Naming the purpose matters more since #12: with four key lists, "a
+            # secret would not decrypt" is not enough to know which variable to
+            # go and look at.
             logger.warning(
-                "Could not decrypt a stored secret; returning the raw value. "
-                "Either it predates SECRETS_ENCRYPTION_KEY, or the key changed "
-                "and previously stored secrets are now unreadable."
+                "Could not decrypt a stored %s secret; returning the raw value. "
+                "Either it predates encryption, or the keys for this purpose "
+                "changed and previously stored values are now unreadable. Keys "
+                "tried: the dedicated one for %s, then SECRETS_ENCRYPTION_KEY.",
+                self.purpose,
+                self.purpose,
             )
             return value
 
@@ -154,8 +188,12 @@ class User(Base):
     memory_updates_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
-    user_openai_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    user_gemini_api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    user_openai_api_key: Mapped[str | None] = mapped_column(
+        EncryptedString(SecretPurpose.AI_KEYS), nullable=True
+    )
+    user_gemini_api_key: Mapped[str | None] = mapped_column(
+        EncryptedString(SecretPurpose.AI_KEYS), nullable=True
+    )
 
     # Second factor (#688). The secret is Fernet-encrypted at rest like the
     # provider keys above — it is equivalent to a password in what it grants.
@@ -163,7 +201,9 @@ class User(Base):
     # `totp_secret` is set at enrollment but `totp_enabled` only once a code
     # has been verified, so a user who cannot scan the QR is never locked out
     # by having started the flow.
-    totp_secret: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    totp_secret: Mapped[str | None] = mapped_column(
+        EncryptedString(SecretPurpose.TOTP), nullable=True
+    )
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     totp_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -1348,8 +1388,12 @@ class StravaToken(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), primary_key=True
     )
-    access_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
-    refresh_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    access_token: Mapped[str] = mapped_column(
+        EncryptedString(SecretPurpose.STRAVA), nullable=False
+    )
+    refresh_token: Mapped[str] = mapped_column(
+        EncryptedString(SecretPurpose.STRAVA), nullable=False
+    )
     expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     athlete_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     athlete_name: Mapped[str] = mapped_column(String(255), default="")
@@ -1363,7 +1407,9 @@ class IntervalsToken(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), primary_key=True
     )
-    api_key: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    api_key: Mapped[str] = mapped_column(
+        EncryptedString(SecretPurpose.INTERVALS), nullable=False
+    )
     athlete_id: Mapped[str] = mapped_column(String(64), default="0", nullable=False)
     athlete_name: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(

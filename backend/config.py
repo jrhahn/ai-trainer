@@ -31,6 +31,42 @@ logger = logging.getLogger(__name__)
 DEV_ENVS = frozenset({"development", "dev", "local", "test", "testing"})
 
 
+class SecretPurpose:
+    """What a stored secret is *for*, which decides which key encrypts it (#12).
+
+    One Fernet key covered all of them, so rotating it meant re-encrypting
+    everything at once — and the reason to rotate is usually a suspicion, which
+    is the worst moment for an all-or-nothing operation on someone else's
+    credentials.
+
+    There are four and not the three the backlog named: ``totp_secret`` became an
+    encrypted column with the second factor (#688), after that note was written.
+    Rotating the shared key today would also lock every athlete out of their
+    authenticator, which is the stated problem one type worse than stated.
+    """
+
+    STRAVA = "strava"
+    INTERVALS = "intervals"
+    AI_KEYS = "ai_keys"
+    TOTP = "totp"
+
+    ALL = (STRAVA, INTERVALS, AI_KEYS, TOTP)
+    """Every purpose, for the sweeps that must not miss one."""
+
+
+_DEDICATED_KEY_FIELDS = {
+    SecretPurpose.STRAVA: "strava_token_encryption_key",
+    SecretPurpose.INTERVALS: "intervals_encryption_key",
+    SecretPurpose.AI_KEYS: "ai_key_encryption_key",
+    SecretPurpose.TOTP: "totp_encryption_key",
+}
+"""Which setting holds each purpose's dedicated key.
+
+A mapping rather than a naming convention, because the Strava one cannot follow
+the convention — see the comment on the fields themselves.
+"""
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -109,11 +145,14 @@ class Settings(BaseSettings):
     # Encryption at rest
     # ------------------------------------------------------------------
     secrets_encryption_key: str = ""
-    """Fernet key encrypting every secret this app stores on a user's behalf.
+    """The fallback Fernet key, used by any purpose with no dedicated one.
 
-    Covers Strava OAuth tokens, intervals.icu API keys and user-supplied AI
-    provider keys.  Read it through :attr:`encryption_key`, never directly, so
-    the deprecated name below keeps working.
+    It encrypted every secret this app stores on a user's behalf until #12 —
+    Strava OAuth tokens, intervals.icu API keys, the athlete's own AI provider
+    keys and their TOTP secret — and still does for whichever of those has no key
+    of its own. Read it through :attr:`encryption_key`, never directly, so the
+    deprecated name below keeps working; read it through
+    :meth:`encryption_keys_for` when encrypting, so the split applies.
 
     Generate with:
         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -131,9 +170,41 @@ class Settings(BaseSettings):
     was about.
     """
 
+    # --- per-purpose keys (#12) ---------------------------------------
+    #
+    # Each is optional. Absent means "use the shared key", so the split lands
+    # one secret type at a time with no re-encryption pass and no deployment
+    # that has to set all four at once.
+    #
+    # None of them is named STRAVA_ENCRYPTION_KEY, which is what the backlog
+    # proposed. That name is taken: it is the pre-#613 alias for the *shared*
+    # key, and reusing it would silently reinterpret any deployment still
+    # setting it. Strava tokens would keep working, and intervals, AI and TOTP
+    # secrets would fall back to SECRETS_ENCRYPTION_KEY — which such a
+    # deployment has no reason to have set — and be written as plaintext. That
+    # is #612's failure mode, reintroduced by a rename, and it is why the Strava
+    # one carries TOKEN in its name.
+
+    strava_token_encryption_key: str = ""
+    """Dedicated key for ``strava_tokens.access_token`` / ``.refresh_token``."""
+
+    intervals_encryption_key: str = ""
+    """Dedicated key for ``intervals_tokens.api_key``."""
+
+    ai_key_encryption_key: str = ""
+    """Dedicated key for the athlete's own ``user_openai_api_key`` / ``user_gemini_api_key``."""
+
+    totp_encryption_key: str = ""
+    """Dedicated key for ``users.totp_secret`` (#688)."""
+
     @property
     def encryption_key(self) -> str:
-        """The active Fernet key, preferring the current name over the old one."""
+        """The shared Fernet key, preferring the current name over the old one.
+
+        Still the fallback for every purpose, and still required in production,
+        because ciphertext written before the split is only readable with it.
+        Retiring it needs a re-encryption pass, not a configuration change.
+        """
         if self.secrets_encryption_key:
             return self.secrets_encryption_key
         if self.strava_encryption_key:
@@ -144,6 +215,28 @@ class Settings(BaseSettings):
             )
             return self.strava_encryption_key
         return ""
+
+    def _dedicated_key(self, purpose: str) -> str:
+        """The key configured for *purpose* alone, or "" if there is none."""
+        try:
+            attribute = _DEDICATED_KEY_FIELDS[purpose]
+        except KeyError:
+            raise ValueError(f"Unknown secret purpose {purpose!r}") from None
+        return getattr(self, attribute)
+
+    def encryption_keys_for(self, purpose: str) -> list[str]:
+        """Every key that may decrypt *purpose*, the one to encrypt with first.
+
+        Order is the whole mechanism. ``MultiFernet`` encrypts with the first key
+        and decrypts with any, so a dedicated key in front of the shared one
+        means new writes move to it while rows written before the split stay
+        readable — which is what lets this land one secret type at a time
+        instead of behind a migration that re-encrypts four tables at once.
+
+        Empty means store plaintext, which only happens in dev: production
+        cannot boot without the shared key.
+        """
+        return [key for key in (self._dedicated_key(purpose), self.encryption_key) if key]
 
     @property
     def is_dev_environment(self) -> bool:
@@ -161,24 +254,59 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _require_a_usable_encryption_key(self) -> "Settings":
-        """A key that is set must be one Fernet can actually use.
+        """Every key that is set must be one Fernet can actually use.
 
-        Generate it with ``Fernet.generate_key()`` (see :data:`_FERNET_KEYGEN`) —
-        44 characters, url-safe base64, 32 bytes decoded. ``token_urlsafe`` and
+        Generate each with ``Fernet.generate_key()`` (see :data:`_FERNET_KEYGEN`)
+        — 44 characters, url-safe base64, 32 bytes decoded. ``token_urlsafe`` and
         ``openssl rand`` produce the wrong length and are rejected here rather
         than on the first request that touches an encrypted column.
+
+        The per-purpose keys are checked too, and by name (#12). A dedicated key
+        that Fernet rejects would otherwise fail on first use — on exactly one
+        column family, in a process that booted fine, while the other three
+        purposes kept working. That is a worse bug than not starting.
         """
-        key = self.encryption_key
-        if not key:
+        # Derived from the one mapping rather than listed again here: a fifth
+        # purpose added to _DEDICATED_KEY_FIELDS and forgotten in a second list
+        # would skip validation entirely, which is the failure this check is for.
+        candidates = [("SECRETS_ENCRYPTION_KEY", self.encryption_key)] + [
+            (field.upper(), getattr(self, field))
+            for field in _DEDICATED_KEY_FIELDS.values()
+        ]
+        for name, key in candidates:
+            if not key:
+                continue
+            try:
+                Fernet(key.encode())
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"{name} is set but is not a valid Fernet key ({exc}). "
+                    "It must be 32 bytes, url-safe base64-encoded — 44 characters. "
+                    "Generate one with: " + _FERNET_KEYGEN
+                ) from exc
+        return self
+
+    @model_validator(mode="after")
+    def _refuse_a_dedicated_key_that_is_also_the_shared_one(self) -> "Settings":
+        """A dedicated key equal to the shared key is a split that did not happen.
+
+        It validates, encrypts, decrypts and reads as done on the dashboard,
+        while rotating either one still takes all four purposes with it. Copying
+        the existing value into the new variable is the obvious wrong move, so it
+        fails at boot rather than at the next incident (#12).
+        """
+        shared = self.encryption_key
+        if not shared:
             return self
-        try:
-            Fernet(key.encode())
-        except (ValueError, TypeError) as exc:
-            raise ValueError(
-                f"SECRETS_ENCRYPTION_KEY is set but is not a valid Fernet key ({exc}). "
-                "It must be 32 bytes, url-safe base64-encoded — 44 characters. "
-                "Generate one with: " + _FERNET_KEYGEN
-            ) from exc
+        for purpose in SecretPurpose.ALL:
+            if self._dedicated_key(purpose) == shared:
+                name = _DEDICATED_KEY_FIELDS[purpose].upper()
+                raise ValueError(
+                    f"{name} is set to the same value as SECRETS_ENCRYPTION_KEY, "
+                    "which gives no independence at all — rotating either still "
+                    "re-encrypts every secret type. Generate a separate key "
+                    "with: " + _FERNET_KEYGEN
+                )
         return self
 
     # ------------------------------------------------------------------

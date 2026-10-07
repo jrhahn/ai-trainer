@@ -190,10 +190,14 @@ def test_production_app_env_reaches_the_boot_guard() -> None:
 class TestEncryptedString:
     """The type itself: ciphertext when keyed, plaintext fallback when not."""
 
-    def _column(self):
+    def _column(self, purpose: str | None = None):
+        from config import SecretPurpose
         from models import EncryptedString
 
-        return EncryptedString()
+        # Any purpose would do for the behaviour below; these tests are about
+        # the type, not the split (#12). Defaults to the one whose column
+        # existed first, so the assertions read the same as they did.
+        return EncryptedString(purpose or SecretPurpose.STRAVA)
 
     def test_stores_ciphertext_when_a_key_is_configured(self, monkeypatch) -> None:
         from config import settings
@@ -214,6 +218,7 @@ class TestEncryptedString:
 
         monkeypatch.setattr(settings, "secrets_encryption_key", "")
         monkeypatch.setattr(settings, "strava_encryption_key", "")
+        monkeypatch.setattr(settings, "strava_token_encryption_key", "")
 
         assert self._column().process_bind_param("secret", None) == "secret"
 
@@ -312,7 +317,7 @@ class TestDeprecatedKeyName:
         assert settings.encryption_key == settings.strava_encryption_key
 
     def test_legacy_name_still_encrypts(self, monkeypatch) -> None:
-        from config import settings
+        from config import SecretPurpose, settings
         from models import EncryptedString
 
         monkeypatch.setattr(settings, "secrets_encryption_key", "")
@@ -320,7 +325,11 @@ class TestDeprecatedKeyName:
             settings, "strava_encryption_key", Fernet.generate_key().decode()
         )
 
-        assert EncryptedString().process_bind_param("secret", None).startswith("gAAAAA")
+        assert (
+            EncryptedString(SecretPurpose.STRAVA)
+            .process_bind_param("secret", None)
+            .startswith("gAAAAA")
+        )
 
     def test_using_the_legacy_name_is_reported(self, caplog) -> None:
         from config import Settings

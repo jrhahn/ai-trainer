@@ -2,11 +2,18 @@
 
 ## Security
 
-- **Separate encryption key per secret type** — `SECRETS_ENCRYPTION_KEY` (renamed from
-  `STRAVA_ENCRYPTION_KEY` in #613) is the single Fernet key used to encrypt Strava OAuth
-  tokens, Intervals.icu API keys, *and* user-supplied AI provider keys.  Key rotation
-  therefore requires re-encrypting all three in one operation.  Consider splitting into
-  per-purpose keys (`STRAVA_ENCRYPTION_KEY`, `INTERVALS_ENCRYPTION_KEY`,
-  `AI_KEY_ENCRYPTION_KEY`) so each can be rotated independently without touching the
-  others.  `SECRETS_ENCRYPTION_KEY` then stays as the fallback for any purpose that has
-  no dedicated key, so the split can land one secret type at a time.
+- **Re-encrypt a purpose's rows, so the shared key can be retired** — the per-purpose
+  split landed in ai-trainer-ops#12 (`STRAVA_TOKEN_ENCRYPTION_KEY`,
+  `INTERVALS_ENCRYPTION_KEY`, `AI_KEY_ENCRYPTION_KEY`, `TOTP_ENCRYPTION_KEY`, with
+  `SECRETS_ENCRYPTION_KEY` as the fallback). Rotation of a dedicated key needs nothing
+  more: keep the old key in the chain and writes move forward on their own.
+
+  Retiring the shared key does. Rows move to a dedicated key only as they are next
+  written, which is every refresh for a Strava token and effectively never for a TOTP
+  secret — written once at enrollment. So `SECRETS_ENCRYPTION_KEY` stays required until
+  something walks a purpose's columns and rewrites them. `MultiFernet.rotate` is the
+  tool; the care is that it rewrites credentials in bulk and a mistake destroys them.
+
+  Note for whoever writes it: the backlog said three secret types and there were four.
+  `totp_secret` became an encrypted column with #688 and this note was not revisited.
+  `test_secret_key_split.py` now fails if a fifth appears without a purpose.

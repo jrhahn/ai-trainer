@@ -138,6 +138,46 @@ forwarded:
       compose's `${VAR:-change-this-...}` substituted the placeholder committed
       to this public repository.
 
+  # One key per secret type (#12). Optional by design: absent means the purpose
+  # uses secrets_encryption_key above, which is what lets the split land one
+  # secret type at a time. That also means a forgotten one is not a silent
+  # plaintext regression — it is a purpose still sharing the key it always
+  # shared, which is the state this deployment is in today.
+  - var: strava_token_encryption_key
+    from: secret
+    name: STRAVA_TOKEN_ENCRYPTION_KEY
+    mode: optional
+    why: >-
+      Not STRAVA_ENCRYPTION_KEY: that name is the pre-#613 alias for the shared
+      key, listed further down as read-only-inside-a-default. Reusing it would
+      keep Strava tokens working and quietly send intervals, AI and TOTP secrets
+      to a SECRETS_ENCRYPTION_KEY such a deployment never set — plaintext, which
+      is #612 reintroduced by a rename.
+
+  - var: intervals_encryption_key
+    from: secret
+    name: INTERVALS_ENCRYPTION_KEY
+    mode: optional
+    why: Empty means intervals.icu API keys keep using the shared key.
+
+  - var: ai_key_encryption_key
+    from: secret
+    name: AI_KEY_ENCRYPTION_KEY
+    mode: optional
+    why: >-
+      Empty means the athlete's own provider keys keep using the shared key.
+      These are the ones that cost money if they leak (#693).
+
+  - var: totp_encryption_key
+    from: secret
+    name: TOTP_ENCRYPTION_KEY
+    mode: optional
+    why: >-
+      Empty means TOTP secrets keep using the shared key. This purpose is the
+      reason the backlog's count of three was wrong: totp_secret became an
+      encrypted column with #688, so rotating the shared key today also locks
+      every athlete out of their authenticator.
+
   - var: authelia_storage_encryption_key
     from: secret
     name: AUTHELIA_STORAGE_ENCRYPTION_KEY
