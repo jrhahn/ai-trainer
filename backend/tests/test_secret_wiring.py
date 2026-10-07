@@ -32,8 +32,26 @@ ENV_EXAMPLE = REPO_ROOT / ".env.example"
 MANIFEST = REPO_ROOT / "deploy" / "forwarded-vars.yml"
 RENDERER = REPO_ROOT / "deploy" / "render_extra_vars.py"
 
+def _encryption_key_vars() -> tuple[str, ...]:
+    """Every per-purpose encryption key, read from the one place that lists them.
+
+    Derived rather than typed out, because typing it out is how the four keys of
+    ai-trainer-ops#12 shipped absent from ``compose.yml``: this guard existed,
+    caught exactly this class of bug, and was a hand-maintained tuple of two
+    that nobody thought to extend. The whole point of the file it guards is that
+    a variable missing from the compose block reads as configured on the host
+    and never reaches the process.
+    """
+    from config import _DEDICATED_KEY_FIELDS
+
+    return tuple(field.upper() for field in _DEDICATED_KEY_FIELDS.values())
+
+
 # Settings the backend cannot be trusted to run without once it leaves dev.
-SECURITY_CRITICAL_VARS = ("SECRETS_ENCRYPTION_KEY", "APP_ENV")
+SECURITY_CRITICAL_VARS = (
+    "SECRETS_ENCRYPTION_KEY",
+    "APP_ENV",
+) + _encryption_key_vars()
 
 
 def _backend_environment_block() -> str:
@@ -190,10 +208,14 @@ def test_production_app_env_reaches_the_boot_guard() -> None:
 class TestEncryptedString:
     """The type itself: ciphertext when keyed, plaintext fallback when not."""
 
-    def _column(self):
+    def _column(self, purpose: str | None = None):
+        from config import SecretPurpose
         from models import EncryptedString
 
-        return EncryptedString()
+        # Any purpose would do for the behaviour below; these tests are about
+        # the type, not the split (#12). Defaults to the one whose column
+        # existed first, so the assertions read the same as they did.
+        return EncryptedString(purpose or SecretPurpose.STRAVA)
 
     def test_stores_ciphertext_when_a_key_is_configured(self, monkeypatch) -> None:
         from config import settings
@@ -214,6 +236,7 @@ class TestEncryptedString:
 
         monkeypatch.setattr(settings, "secrets_encryption_key", "")
         monkeypatch.setattr(settings, "strava_encryption_key", "")
+        monkeypatch.setattr(settings, "strava_token_encryption_key", "")
 
         assert self._column().process_bind_param("secret", None) == "secret"
 
@@ -312,7 +335,7 @@ class TestDeprecatedKeyName:
         assert settings.encryption_key == settings.strava_encryption_key
 
     def test_legacy_name_still_encrypts(self, monkeypatch) -> None:
-        from config import settings
+        from config import SecretPurpose, settings
         from models import EncryptedString
 
         monkeypatch.setattr(settings, "secrets_encryption_key", "")
@@ -320,7 +343,11 @@ class TestDeprecatedKeyName:
             settings, "strava_encryption_key", Fernet.generate_key().decode()
         )
 
-        assert EncryptedString().process_bind_param("secret", None).startswith("gAAAAA")
+        assert (
+            EncryptedString(SecretPurpose.STRAVA)
+            .process_bind_param("secret", None)
+            .startswith("gAAAAA")
+        )
 
     def test_using_the_legacy_name_is_reported(self, caplog) -> None:
         from config import Settings

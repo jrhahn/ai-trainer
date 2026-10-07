@@ -280,13 +280,55 @@ host.
 
 ### At rest
 
-`SECRETS_ENCRYPTION_KEY` is a Fernet key encrypting every secret stored on a
-user's behalf: Strava tokens, intervals.icu keys, user AI keys, and TOTP
-secrets. The backend **refuses to boot** without it outside development, and
-validates that it is a usable Fernet key rather than discovering that on the
-first request (#612/#613).
+Every secret stored on an athlete's behalf is Fernet-encrypted in its column,
+and since ai-trainer-ops#12 **each kind has its own key**:
 
-Rotating it makes every stored token unreadable — users have to reconnect.
+| Purpose | Columns | Key |
+|---|---|---|
+| Strava OAuth | `strava_tokens.access_token`, `.refresh_token` | `STRAVA_TOKEN_ENCRYPTION_KEY` |
+| intervals.icu | `intervals_tokens.api_key` | `INTERVALS_ENCRYPTION_KEY` |
+| The athlete's own AI keys | `users.user_openai_api_key`, `.user_gemini_api_key` | `AI_KEY_ENCRYPTION_KEY` |
+| Second factor | `users.totp_secret` | `TOTP_ENCRYPTION_KEY` |
+| any of the above, unset | — | `SECRETS_ENCRYPTION_KEY` |
+
+One key covered all four, so rotating it was an all-or-nothing operation on
+every athlete's credentials at once — and the reason to rotate is usually a
+suspicion, which is the worst moment for that. Worse than the backlog recorded:
+it listed three purposes, written before `totp_secret` became an encrypted
+column with #688, so a rotation would also have locked every athlete out of
+their authenticator.
+
+**The shared key is still required and is still the fallback.** Absent, a
+dedicated key means "this purpose uses the shared one", which is what lets the
+split land one secret type at a time — no migration, no deploy that has to set
+four keys together. The column type is a `MultiFernet` built from
+`[dedicated, shared]`: it encrypts with the first and decrypts with either, so
+a purpose that gains a key writes new rows under it while old rows stay
+readable, and moves across as rows are rewritten.
+
+That last part is uneven, and it is why the shared key cannot be retired by
+configuration. A Strava token is rewritten on every refresh; a TOTP secret is
+written once at enrollment and never again. Retiring `SECRETS_ENCRYPTION_KEY`
+needs a re-encryption pass that does not exist yet.
+
+Rotation of a dedicated key does *not* need one: prepend the new key and keep
+the old in the chain, and both old and new rows read while writes move forward.
+
+Two things are refused at boot rather than at the next incident:
+
+- a key Fernet cannot use — and **named**, because a dedicated key that failed
+  on first use would break one column family in a process that started cleanly
+  while the other three purposes kept working;
+- a dedicated key set to the same value as `SECRETS_ENCRYPTION_KEY`. It
+  validates, encrypts, decrypts and shows a configured key on the dashboard,
+  while rotating either value still takes every secret type with it.
+
+> **Not `STRAVA_ENCRYPTION_KEY`.** That name is the pre-#613 alias for the
+> *shared* key and is still honoured as one. Using it for the Strava purpose —
+> as the backlog proposed — would have kept Strava tokens working on a
+> deployment that still sets it, and sent intervals, AI and TOTP secrets to a
+> `SECRETS_ENCRYPTION_KEY` such a deployment never set: plaintext, silently.
+> That is #612, reintroduced by a rename. Hence `STRAVA_TOKEN_ENCRYPTION_KEY`.
 
 ### Container
 
