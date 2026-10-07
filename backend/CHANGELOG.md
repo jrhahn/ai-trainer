@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **No known advisories in the runtime dependencies** (ai-trainer-ops#32) —
+  `uv.lock`. The first run of the new Security workflow reported 17 distinct
+  advisories in six packages. Each is raised to exactly its first fixed
+  version and no further, so the change stays as small as the fix:
+  `starlette` 1.0.0 → 1.3.1, `urllib3` 2.6.3 → 2.8.0, `anyio` 4.13.0 →
+  4.14.2, `pyasn1` 0.6.3 → 0.6.4, `mako` 1.3.10 → 1.3.12, `click` 8.3.2 →
+  8.3.3. `pip-audit` over the lockfile is now clean.
+
 ### Changed
 
 - **The output audit covers every prose surface, not only the chat**
