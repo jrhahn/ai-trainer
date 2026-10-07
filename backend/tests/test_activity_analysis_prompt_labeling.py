@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 
 from services import prompts
+from services.untrusted_text import CLOSE, OPEN
 
 TZ = "Europe/Berlin"
 
@@ -76,7 +77,12 @@ def test_raw_dump_drops_bare_power_fields():
     assert '"max_watts"' not in dump
     # Non-power context is still handed over.
     assert '"average_heartrate": 145' in dump
-    assert '"name": "Darmstadt loop"' in dump
+    # The name is the athlete's own text, so it arrives marked as data rather
+    # than bare (ai-trainer-ops#33); the timestamp and the sport enum do not,
+    # because this app and Strava write those.
+    assert f'"name": "{OPEN}Darmstadt loop{CLOSE}"' in dump
+    assert '"sport_type": "cycling"' in dump
+    assert '"start_date": "2026-07-25T08:00:00Z"' in dump
 
 
 def test_prompt_instructs_labeled_only_citation():
