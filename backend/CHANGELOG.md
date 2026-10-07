@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The output audit covers every prose surface, not only the chat**
+  (ai-trainer-ops#28) — `services/ai_service.py`,
+  `tests/test_output_audit_surfaces.py`.
+
+  #750 wired number provenance and the forbidden-claims check into
+  `ask_trainer` only. The login summary (from the Strava analysis, the FIT
+  analysis and the refresh), the training-status badge, the next-session
+  recommendation, the ride review and the generated insights now report too,
+  each under its own `surface` label, against the prompt *and* the user
+  message they were generated from. Still report-only: nothing returned
+  changes. Output that is never shown (a truncated summary, a rejected badge)
+  is not counted, so it does not dilute the denominator.
+
 ### Fixed
 
 - **Deleting an account works in PostgreSQL, and deletes everything**

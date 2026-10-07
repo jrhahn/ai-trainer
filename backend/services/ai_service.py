@@ -269,6 +269,22 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
+def _audit_prose(text: object, system_prompt: str, user_msg: str, *, surface: str) -> None:
+    """Report one athlete-facing text through the output audit (ai-trainer-ops#28).
+
+    ``ask_trainer`` was wired first; these are the other surfaces the athlete
+    reads as the coach speaking. The context is the prompt and the user message
+    as sent: both are the deterministic model's numbers rendered for the model
+    to read, which is what a number in the reply must trace back to.
+
+    Report-only, like ``ask_trainer``: nothing here changes what is returned.
+    Empty or non-text output is not counted — it is never shown, and counting it
+    would inflate the denominator the findings are read against.
+    """
+    if isinstance(text, str) and text.strip():
+        output_audit.report(text, [system_prompt, user_msg], surface=surface)
+
+
 def _is_complete_login_summary(text: str) -> bool:
     """Return True when *text* looks like a complete login summary.
 
@@ -530,6 +546,9 @@ async def analyse_strava_activities(
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
+    _audit_prose(
+        parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"
+    )
     return parsed
 
 
@@ -592,6 +611,9 @@ async def analyse_fit_activity(
     if computed_hr_zones is not None:
         parsed["hrZones"] = computed_hr_zones
 
+    _audit_prose(
+        parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"
+    )
     return parsed
 
 
@@ -1169,6 +1191,14 @@ async def generate_athlete_insights(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_INSIGHTS:
             break
+    # The facts that survived normalisation are what the athlete sees as
+    # observations; the dropped ones are never shown, so they are not audited.
+    _audit_prose(
+        "\n".join(candidate["fact"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="insights",
+    )
     return candidates
 
 
@@ -2011,7 +2041,10 @@ async def generate_login_summary(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     summary = parsed.get("loginSummary") or ""
-    return summary if _is_complete_login_summary(summary) else ""
+    if not _is_complete_login_summary(summary):
+        return ""
+    _audit_prose(summary, system_prompt, user_msg, surface="login_summary")
+    return summary
 
 
 async def generate_training_status(
@@ -2049,6 +2082,9 @@ async def generate_training_status(
     tone = str(parsed.get("tone") or "").strip().lower()
     if tone not in TRAINING_STATUS_TONES:
         tone = "steady"
+    _audit_prose(
+        f"{label}. {rationale}", system_prompt, user_msg, surface="training_status"
+    )
     return label, tone, rationale
 
 
@@ -2078,7 +2114,9 @@ async def batch_review_rides(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
     )
     parsed = _parse_ai_json(raw)
-    return parsed.get("review") or ""
+    review = parsed.get("review") or ""
+    _audit_prose(review, system_prompt, user_msg, surface="ride_review")
+    return review
 
 
 async def recommend_next_session(
@@ -2125,6 +2163,21 @@ async def recommend_next_session(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
     )
     parsed = _parse_ai_json(raw)
+    # One audit for the pair: both are shown together as one recommendation, and
+    # counting them apart would double the denominator for this surface.
+    _audit_prose(
+        "\n".join(
+            part
+            for part in (
+                parsed.get("response"),
+                parsed.get("next_session_recommendation"),
+            )
+            if isinstance(part, str)
+        ),
+        system_prompt,
+        user_msg,
+        surface="next_session",
+    )
     return {
         "response": parsed.get("response", ""),
         "next_session_recommendation": parsed.get("next_session_recommendation", ""),
