@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Image on the maintained nginx branch, and the headers the first ZAP run
+  asked for** (ai-trainer-ops#32) — `Dockerfile`, `nginx.conf`,
+  `backend/tests/test_frontend_security_headers.py`. `nginx:1.29-alpine` →
+  `1.30-alpine`: 1.29 no longer receives fixes, and trivy found 126 findings
+  in it, every one fixed upstream. Adds `Cross-Origin-Opener-Policy` and
+  `Cross-Origin-Resource-Policy` (`same-origin`), a `Permissions-Policy`
+  switching off camera, microphone, location, payment and device APIs, and
+  `server_tokens off`. Deliberately no `Cross-Origin-Embedder-Policy`; the
+  reason is in `nginx.conf`. The headers are now pinned by a test, because
+  nothing else fails when one is dropped.
+
 ### Added
 
 - **"Export My Data" in Settings** (ai-trainer-ops#6) — `SettingsPage.tsx`,
