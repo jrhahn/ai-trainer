@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Invariants for the day board, over generated athletes**
+  (ai-trainer-ops#26) — `tests/test_freshness_allocation_invariants.py`.
+  Hypothesis generates motivation models, ROI gains, race counts, heat and
+  heat tolerance, and checks eleven prohibitions the module's own docstring
+  promises. Every score is the base minus the two named deductions. A
+  session is never charged for the freshness it serves. A mild day charges
+  nothing for heat and does not depend on tolerance. Heat costs are ordered
+  by tolerance, and the board is pure. The cold-start guard ("a default
+  athlete gets the key session first") is pinned in the scope where it
+  actually holds: no learned weights, no gain information and no heat. On a
+  hot day, a default athlete's board leads with recovery instead. That is
+  left open on the issue as a question, not pinned.
+
 ### Security
 
 - **semgrep is clean, and is now a gate** (ai-trainer-ops#32) — `main.py`,
