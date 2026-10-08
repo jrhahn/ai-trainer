@@ -183,6 +183,18 @@ def test_the_default_still_clamps_after_that_fix():
     assert untrusted_text._TRUNCATION_MARK in rendered
 
 
+@pytest.mark.parametrize("limit", [1, 3, 6, 7, 50])
+def test_clamping_never_returns_more_than_its_limit(limit):
+    """Raised as a nit in review, fixed because it is a trap.
+
+    Below the length of the truncation marker there is no room to say "cut" and
+    still fit, and the old code returned the marker alone — longer than the
+    limit it was given. Nothing passes such a value today; a function that can
+    exceed its own bound is still wrong for whoever passes the first small one.
+    """
+    assert len(untrusted_text._clamp("y" * 100, limit)) <= limit
+
+
 def test_structural_values_are_left_alone():
     """Keys this app owns are neither marked nor clamped.
 

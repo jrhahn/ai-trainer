@@ -109,10 +109,19 @@ faking.
 
 
 def _clamp(text: str, limit: int) -> str:
-    """*text* shortened to *limit* characters, visibly. ``limit <= 0`` disables."""
+    """*text* shortened to *limit* characters, visibly. ``limit <= 0`` disables.
+
+    Never returns more than *limit*. Below the length of the marker there is no
+    room to say "cut" and still fit, so the text is simply truncated — raised in
+    review on #772. Unreachable from here, since the only limits passed are 0
+    and 1,000, but a function that can exceed its own bound is a trap for
+    whoever passes the first small one.
+    """
     if limit <= 0 or len(text) <= limit:
         return text
-    return text[: max(0, limit - len(_TRUNCATION_MARK))] + _TRUNCATION_MARK
+    if limit <= len(_TRUNCATION_MARK):
+        return text[:limit]
+    return text[: limit - len(_TRUNCATION_MARK)] + _TRUNCATION_MARK
 
 
 def mark(text: object, *, empty: str = "", limit: int = -1) -> str:
