@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An athlete cannot choose how large a coach prompt is**
+  (ai-trainer-ops#33) — `services/untrusted_text.py`, `services/rag.py`,
+  `tests/test_prompt_size_bound.py`.
+
+  The cost half of the prompt-injection issue, which #751 left open. Nothing
+  bounded the length of an activity `name` or `description` on the way into a
+  prompt, and `enforce_token_budget` checks what was *already* spent before a
+  call — so the first oversized request goes through in full. Measured on
+  `analyse_activities_user`: a normal batch renders ~4,500 tokens, while 60
+  activities with 50,000 characters per field rendered **~2,254,000**. Roughly
+  250x, in one request, from two fields typed on Strava.
+
+  `mark` and `mark_values` now clamp each untrusted leaf to
+  `MAX_FREE_TEXT_CHARS` (1,000) with a visible `…[cut]` marker — silent
+  truncation would let the coach reason from a fragment without knowing it is
+  one. Clamped in the traversal that already decides which leaves are
+  athlete-written, rather than at 29 call sites, with the default on: bounding
+  only the JSON dump left `activity_power_metrics_block` rendering the name at
+  full length and carrying a hostile batch to 3,002,591 characters by itself.
+
+  The result is a prompt whose size no longer depends on the athlete's text at
+  all — 5,000 and 50,000 characters per field now render identically. Worst case
+  for 60 activities: 194,873 characters (~48,700 tokens), from 9,016,853.
+
+  `services/rag` opts out with `limit=0`, because a retrieved passage is this
+  project's own curated text and long by design; clamping it would cut the
+  evidence the coach reasons from to fix an input problem that does not live
+  there. The opt-out is pinned by a test so it cannot be removed as an oversight.
+
+  Who ultimately pays for a large prompt is #9's question and is not answered
+  here. Whether the cap can be breached at all is a property of this layer, and
+  it could be.
+
 - **A missing AI key is a 402 the athlete can act on, never a 500**
   (ai-trainer-ops#41) — `services/llm.py`, `tests/test_missing_ai_key.py`.
 
