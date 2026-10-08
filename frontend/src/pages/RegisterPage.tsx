@@ -110,6 +110,7 @@ export default function RegisterPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input
               type="text"
+              autoComplete="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -121,6 +122,7 @@ export default function RegisterPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -136,6 +138,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                autoComplete="new-password"
                 placeholder="Strong password"
                 minLength={8}
                 required
@@ -169,6 +172,7 @@ export default function RegisterPage() {
                 className={`w-full border rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 ${
                   showMismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
+                autoComplete="new-password"
                 placeholder="Repeat your password"
                 minLength={8}
                 required

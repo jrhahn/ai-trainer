@@ -45,6 +45,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The sign-in form comes first on a phone, and password managers can read it**
+  (ai-trainer-ops#44, items 2 and 3) — `src/components/AuthShell.tsx`,
+  `src/pages/LoginPage.tsx`, `src/pages/RegisterPage.tsx`, `e2e/layout.spec.ts`.
+
+  Measured at 390×844: the marketing panel came first and is 595 px tall, so
+  the email field began at **y=780** — a returning athlete scrolled almost a
+  full screen before every sign-in. The form is now first *in the document*,
+  with `lg:order-*` restoring the two-column arrangement on wide screens.
+
+  Ordering it visually alone was the first attempt and would have been a worse
+  bug than the one it fixed: `order-*` leaves tab order and the screen-reader
+  reading order where they were, so it would have helped everyone except the
+  people least able to scroll past a panel, while making the visual and reading
+  orders disagree (WCAG 2.4.3, 1.3.2). Caught in review.
+
+  `autocomplete` was missing on every password field. Password managers and
+  passkeys work worse without it and Chrome warns in the console. Login gets
+  `email` / `current-password`, registration `name` / `email` and
+  `new-password` on both fields — `current-password` there would make a manager
+  offer the saved entry instead of generating a new one.
+
+  Items 1 (password composition rules, NIST) and 4 (the "Forgot password?"
+  link) need decisions and are answered on the issue instead.
+
 - **The landing page no longer scrolls sideways on a phone**
   (ai-trainer-ops#51.3) — `src/pages/LandingPage.tsx`, `e2e/layout.spec.ts`.
 
