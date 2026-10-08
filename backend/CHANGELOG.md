@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A stub AI provider, locked out of production twice**
+  (ai-trainer-ops#46) — `config.py`, `services/llm.py`,
+  `tests/test_stub_provider.py`, `.env.example`.
+
+  Four pieces of work were each blocked on having no way to make the model
+  answer deterministically: the end-to-end suite that has to reach a dashboard
+  with a plan on it (#46), a judge in CI (#28), a scenario suite (#18), and the
+  layout defects that only appear behind an onboarded account (#51). None of
+  them can carry a real provider key.
+
+  `AI_STUB_PROVIDER=true` makes `get_provider` return a `StubProvider` that
+  answers from its arguments. What it returns is driven by the **task** the
+  provider was built for — `get_provider(name, task=…)` already carries it —
+  and not by the text of the prompt, which is the version that rots: a reworded
+  system message would silently change the answer. `TASK_PLAN` yields a
+  fortnight of days that satisfy `PlanDay`; a `response_schema` yields the
+  smallest instance of itself, so any caller that says what shape it wants is
+  served without the stub knowing about it; anything else JSON yields `{}`,
+  which is honest about being empty rather than inventing a shape.
+
+  **Two locks, because the failure mode is silent.** A live instance serving the
+  stub would mean athletes reading placeholder text in the coach's voice and
+  following a plan built by a loop, with nothing saying so. `Settings` refuses
+  to *construct* with the flag set outside a development environment — a boot
+  refusal, since a process that will not start gets noticed in minutes and one
+  that answers plausibly does not — and `llm.stub_is_active` re-checks the
+  environment at the point of use, for a flag assigned to a live object.
+
+  Everything it writes carries `[stub]`, and the prose deliberately says nothing
+  about training: plausible advice is a thing someone eventually screenshots,
+  quotes or trusts.
+
+  Chosen *before* the key checks, since its whole use is a deployment with no
+  key at all. Proven through `generate_training_plan` rather than only in
+  isolation — a stub nothing consumes is just a class.
+
 ### Fixed
 
 - **An athlete cannot choose how large a coach prompt is**

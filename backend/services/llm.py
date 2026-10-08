@@ -25,10 +25,12 @@ code edits (e.g. ``OPENAI_COACH_MODEL=gpt-4o``).
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol, runtime_checkable
 
 import models
@@ -443,6 +445,171 @@ class GeminiProvider:
         return await self._run(contents, system, json_mode, response_schema)
 
 
+# ---------------------------------------------------------------------------
+# The stub, for tests and drills
+# ---------------------------------------------------------------------------
+
+STUB_MARKER = "[stub]"
+"""Every piece of prose the stub produces carries this.
+
+So that a reply which escapes a test harness is recognisable on sight, and so a
+screenshot or a log line cannot be mistaken for something the coach said.
+"""
+
+_STUB_PLAN_DAYS = 14
+"""One fortnight, matching what the real plan prompt asks for."""
+
+
+class StubProvider:
+    """An :class:`LLMProvider` that answers from its arguments, never a model.
+
+    Four things need one and none of them can have a real provider
+    (ai-trainer-ops#46, #28, #18, #51): an end-to-end run that has to reach a
+    dashboard with a plan on it, a judge in CI, a scenario suite, and the layout
+    defects that only appear behind an onboarded account. Each was separately
+    blocked on "there is no way to make the model answer deterministically", and
+    building it once deliberately is better than three times in a hurry.
+
+    What it answers, and why it can know
+    ------------------------------------
+    The provider is constructed per *task* — ``get_provider(name, task=...)``
+    already carries ``TASK_PLAN``, ``TASK_COACH`` and the rest — so it is told
+    what is being asked of it without having to guess from the prompt. Guessing
+    from prompt text is the version of this that rots: a reworded system prompt
+    would silently change what the stub returns, and the test that depended on
+    it would fail somewhere unrelated.
+
+    * ``TASK_PLAN`` in JSON mode → ``{"plan": [...]}`` with a fortnight of days
+      that satisfy :class:`schemas.PlanDay`. This is the one shape a caller
+      cannot work without: ``_generate_plan_days`` validates every entry and
+      retries on failure, so an empty or malformed plan means no plan at all.
+    * a ``response_schema`` → the smallest instance that satisfies it, built
+      from the schema rather than written down. Any caller that says what shape
+      it wants is served without this class knowing anything about it.
+    * any other JSON request → ``{}``. Honest about being empty rather than
+      inventing a shape; the caller gets no insights rather than wrong ones.
+    * prose → one short marked sentence.
+
+    What it deliberately is not
+    ---------------------------
+    It is not a fake coach. The prose says nothing about training, because a
+    stub that produced plausible advice would be a thing someone eventually
+    screenshots, quotes, or trusts. Structurally valid and semantically empty is
+    the whole intent.
+    """
+
+    def __init__(self, model: str = "stub", task: str = TASK_COACH) -> None:
+        self._model = model
+        self._task = task
+
+    # -- the protocol -------------------------------------------------------
+
+    async def chat(
+        self,
+        system: str,
+        user: str,
+        json_mode: bool = False,
+        response_schema: dict | None = None,
+    ) -> str:
+        return self._answer(json_mode, response_schema)
+
+    async def chat_history(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+        response_schema: dict | None = None,
+    ) -> str:
+        return self._answer(json_mode, response_schema)
+
+    # -- how it decides -----------------------------------------------------
+
+    def _answer(self, json_mode: bool, response_schema: dict | None) -> str:
+        if not json_mode and response_schema is None:
+            return f"{STUB_MARKER} No model was called."
+        if response_schema is not None:
+            return json.dumps(_instance_of(response_schema))
+        if self._task == TASK_PLAN:
+            return json.dumps({"plan": _stub_plan_days()})
+        return "{}"
+
+
+def _stub_plan_days() -> list[dict]:
+    """A fortnight starting today, alternating easy and rest.
+
+    Dates are generated rather than fixed: a plan whose days are in the past is
+    rejected downstream, so a hard-coded fortnight would work until the day it
+    quietly stopped. Everything else is constant, because a test asserting on
+    plan *content* would be asserting on this function.
+    """
+    today = datetime.now(timezone.utc).date()
+    days: list[dict] = []
+    for offset in range(_STUB_PLAN_DAYS):
+        rest = offset % 3 == 2
+        days.append(
+            {
+                "date": (today + timedelta(days=offset)).isoformat(),
+                "workoutType": "rest" if rest else "endurance",
+                "title": f"{STUB_MARKER} Rest" if rest else f"{STUB_MARKER} Easy ride",
+                "description": f"{STUB_MARKER} Placeholder session, no model was called.",
+                "durationMinutes": 0 if rest else 60,
+            }
+        )
+    return days
+
+
+def _instance_of(schema: dict) -> Any:
+    """The smallest value satisfying *schema*.
+
+    Gemini's schema dialect, so the type names are upper case. Only ``required``
+    properties are filled: an object carrying every optional field would hand
+    callers data the real model usually omits, and a test written against that
+    would pass here and fail in production.
+
+    Arrays get one element rather than none. An empty list is a valid instance
+    and a useless fixture — the branch that handles "there is something" is the
+    one worth exercising, and a caller wanting none can assert on the count.
+    """
+    kind = str(schema.get("type", "STRING")).upper()
+    if kind == "OBJECT":
+        required = schema.get("required") or []
+        properties = schema.get("properties") or {}
+        return {name: _instance_of(properties.get(name, {})) for name in required}
+    if kind == "ARRAY":
+        return [_instance_of(schema.get("items") or {})]
+    if kind in ("INTEGER", "NUMBER"):
+        return 0
+    if kind == "BOOLEAN":
+        return False
+    enum = schema.get("enum")
+    if enum:
+        return enum[0]
+    return STUB_MARKER
+
+
+def stub_is_active() -> bool:
+    """Whether canned answers are in use, with the environment checked again.
+
+    ``Settings`` already refuses to construct with the flag set outside a dev
+    environment, so this is the second of two locks rather than the only one.
+    It exists because the flag is a boolean someone could set on a live
+    ``Settings`` object — a test using ``monkeypatch.setattr`` does exactly
+    that — and the consequence of getting this wrong is an athlete being
+    coached by a placeholder without anything saying so.
+    """
+    if not settings.ai_stub_provider:
+        return False
+    if not settings.is_dev_environment:
+        logger.error(
+            "AI_STUB_PROVIDER is set but APP_ENV is %r, which is not a development "
+            "environment. Refusing to serve canned answers; a real provider will be "
+            "used. This should have been caught at startup — see config.Settings.",
+            settings.app_env,
+        )
+        return False
+    return True
+
+
 def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
     """Return an ``LLMProvider`` for *name* configured for *task*.
 
@@ -451,7 +618,15 @@ def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
     ``settings.allow_admin_ai_key_fallback`` is False an
     :class:`AIKeyNotConfiguredError` is raised.  Outside a BYOK context the
     global settings keys are used unchanged (existing behaviour).
+
+    The stub comes first when it is active (ai-trainer-ops#46). Before the key
+    checks on purpose: its whole use is a deployment with no key at all, and a
+    harness that had to invent one to reach the stub would be configuring the
+    thing it is replacing.
     """
+    if stub_is_active():
+        return StubProvider(task=task)
+
     ctx = _user_ai_keys.get()
     if ctx is not _BYOK_INACTIVE:
         user_key = ctx.get(name) if isinstance(ctx, dict) else None
