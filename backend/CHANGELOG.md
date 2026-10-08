@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Calibration of the coach's predictions, measured on what it actually
+  said** (ai-trainer-ops#27) — `services/calibration.py`,
+  `scripts/calibration_report.py`, `models.py`, `crud.py`, migration
+  `20261008_000001`. Adds a reliability table (stated confidence in 0.1
+  buckets against how often each bucket came true), the Brier score and the
+  expected calibration error.
+
+  This needed a new column. Evaluation nudges `confidence` by ±0.2 on the
+  outcome, so every hit is stored higher and every miss lower. Binning the
+  stored value would have shown a perfectly calibrated coach as perfectly
+  separating, and a test pins exactly that case. `stated_confidence` is
+  written once, when the prediction is made, and left alone by refreshes,
+  evaluations and athlete edits. No backfill: reversing the nudge is not exact
+  once the value has been clamped or edited. The report can show those older
+  rows as a separately labelled estimate, never mixed into the measurement.
 - **Concurrent signups and deletions against the Authelia store, with real
   processes** (ai-trainer-ops#14) — `tests/test_authelia_store_concurrency.py`,
   `docs/multi_replica.md`. Eight spawned processes register (and delete) at

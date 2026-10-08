@@ -2968,6 +2968,9 @@ async def record_athlete_prediction(
             horizon=horizon.strip(),
             category=normalized_category,
             confidence=resolved_confidence,
+            # Written here and nowhere else: a refresh of a pending duplicate,
+            # an evaluation and an athlete's edit all leave it alone (#27).
+            stated_confidence=resolved_confidence,
             status="pending",
             created_at=now,
             updated_at=now,
