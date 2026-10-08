@@ -164,11 +164,24 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      # playwright.config.ts starts the backend and a production build of the
-      # frontend itself, so there is nothing to orchestrate here.
-      - name: Run the smoke test
+      # Each config starts its own backend and its own production build of the
+      # frontend, so there is nothing to orchestrate here.
+      #
+      # Two stacks, and they cannot be one (ai-trainer-ops#46). The keyless one
+      # has no provider key, which is the only way the #41 dead end is
+      # reproducible in a browser; the stubbed one turns AI_STUB_PROVIDER on so
+      # a dashboard with a plan can be reached at all. The stub is chosen before
+      # the key checks, so a single process cannot serve both.
+      #
+      # Run as separate steps rather than `test:e2e:all`, so the job's log says
+      # which stack failed without anyone opening the report.
+      - name: Smoke test — no AI key configured
         working-directory: frontend
         run: npm run test:e2e
+
+      - name: Smoke test — stubbed provider
+        working-directory: frontend
+        run: npm run test:e2e:stub
 
       - name: Upload the report when it fails
         if: failure()

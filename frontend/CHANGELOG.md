@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Two end-to-end stacks, so the dashboard is reachable at last**
+  (ai-trainer-ops#46) — `e2e/stack.ts`, `playwright.config.ts`,
+  `playwright.stub.config.ts`, `e2e/stubbed/dashboard.spec.ts`.
+
+  The backend has to be in two mutually exclusive states and no process can be
+  in both: **keyless**, with no provider key and no fallback, which is the only
+  way the #41 dead end is reproducible in a browser; and **stubbed**, with
+  `AI_STUB_PROVIDER=true`, so plan generation succeeds and a dashboard can be
+  reached. The stub is chosen *before* the key checks, so turning it on in one
+  config would have silently deleted the other scenario.
+
+  Two configs rather than two projects, because a project selects a browser and
+  a viewport, not a server — and `VITE_BACKEND_URL` is baked in at build time,
+  so each stack needs its own preview as well as its own backend. Both share
+  `e2e/stack.ts`: everything except the ports and four variables is identical,
+  and the identical parts are the ones that took measuring to get right.
+
+  New specs: onboarding finishes, the dashboard shows a session, the account
+  survives a reload, and the dashboard does not scroll sideways at 390 px —
+  the last of these being a defect class from #51 that nobody could measure
+  before, because it lives behind an onboarded account.
+
+  They assert the *shape* of the journey and never the plan's content, which is
+  `[stub]` text by construction; a test reading it would be a test of
+  `llm._stub_plan_days`.
+
+  Each stack builds into its own `dist-<name>/`. Both used to build into
+  `dist/`, so two running at once had the second build overwrite the first and
+  the keyless preview would serve a bundle pointing at the stubbed backend —
+  its 402 assertions silently testing nothing. CI never hit it because its steps
+  are sequential. Found in review, and pinned by a unit test over the two
+  configs, since the thing that was wrong was a claim in a comment.
+
 - **An end-to-end smoke test for the path a stranger takes**
   (ai-trainer-ops#46) — `playwright.config.ts`, `e2e/stranger-path.spec.ts`,
   a required `E2E Smoke` CI job.
