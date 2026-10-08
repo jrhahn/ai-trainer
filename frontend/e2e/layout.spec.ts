@@ -54,17 +54,20 @@ for (const path of PUBLIC_PAGES) {
 }
 
 /**
- * The sign-in form has to be reachable without scrolling on a phone
- * (ai-trainer-ops#44.3).
+ * On a phone the sign-in form comes before the marketing panel — on screen and
+ * in the document (ai-trainer-ops#44.3).
  *
- * Measured before the fix at 390x844: the marketing panel is 595 px tall and
- * came first, so the email field started at y=780 — a returning athlete
- * scrolled almost a full screen before every sign-in. Asserted against the
- * viewport rather than a pixel constant, so the test says what it means:
- * the first field is on the first screen.
+ * Measured before the fix at 390x844: the panel is 595 px tall and came first,
+ * so the email field started at y=780 and a returning athlete scrolled almost a
+ * full screen before every sign-in.
+ *
+ * Two assertions, and both are needed. Position alone passed the first fix,
+ * which moved the form with `order-*` and left it second in the document, so
+ * tab order and the screen reader still met the panel first. Document order
+ * alone would not notice a layout that paints them the other way round.
  */
 for (const path of ['/login', '/register']) {
-  test(`${path} puts the form on the first screen`, async ({ page }, testInfo) => {
+  test(`${path} puts the form before the marketing panel, on screen and in the document`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390', 'about the narrow layout')
     await page.goto(path)
 
