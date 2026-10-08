@@ -12,6 +12,7 @@ const {
   mockGetStravaActivities,
   mockGetStravaAuthUrl,
   mockDisconnectStrava,
+  mockGetIntervalsActivities,
 } = vi.hoisted(() => ({
   mockGenerateTrainingPlan: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
@@ -20,6 +21,7 @@ const {
   mockGetStravaActivities: vi.fn(),
   mockGetStravaAuthUrl: vi.fn(),
   mockDisconnectStrava: vi.fn(),
+  mockGetIntervalsActivities: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
@@ -30,6 +32,12 @@ vi.mock('../services/ai', () => ({
 vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   saveTrainingPlan: mockSaveTrainingPlan,
+}))
+
+vi.mock('../services/intervals', () => ({
+  getIntervalsActivities: mockGetIntervalsActivities,
+  saveIntervalsConnection: vi.fn(),
+  disconnectIntervals: vi.fn(),
 }))
 
 vi.mock('../services/strava', () => ({
@@ -66,6 +74,7 @@ beforeEach(() => {
   mockGetStravaActivities.mockResolvedValue([])
   mockGetStravaAuthUrl.mockResolvedValue('https://strava.test/auth')
   mockDisconnectStrava.mockResolvedValue(undefined)
+  mockGetIntervalsActivities.mockResolvedValue([])
 })
 
 describe('OnboardingPage', () => {
@@ -403,6 +412,132 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       const profileArg = mockUpdateCurrentUser.mock.calls[0][1]
       expect(profileArg.restingHeartRate).toBeUndefined()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // intervals.icu first (ai-trainer-ops#20)
+  // ---------------------------------------------------------------------------
+
+  const intervalsRides = Array.from({ length: 9 }, (_, idx) => ({
+    id: 900 + idx,
+    name: `Ride ${idx + 1}`,
+    type: 'Ride',
+    distance: 40000,
+    moving_time: 3600,
+    elapsed_time: 3700,
+    total_elevation_gain: 400,
+    start_date: `2026-04-${String(10 - idx).padStart(2, '0')}T08:00:00Z`,
+  }))
+
+  const goToAssessment = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+  }
+
+  it('offers intervals.icu before Strava on step 4', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    await goToAssessment(userEvent.setup())
+
+    const intervals = screen.getByText('Connect intervals.icu')
+    const strava = screen.getByText('Connect with Strava')
+    expect(
+      intervals.compareDocumentPosition(strava) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('shows the intervals.icu connection and waits for it before continuing', async () => {
+    setupStore({ stravaConnection: null, intervalsConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByText('Connect intervals.icu'))
+
+    expect(screen.getByText(/Connect intervals.icu to continue/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  })
+
+  it('preselects intervals.icu for an athlete who already connected it', async () => {
+    setupStore({
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    await goToAssessment(userEvent.setup())
+
+    expect(screen.getByRole('button', { name: 'Analyse & Generate Plan' })).toBeEnabled()
+  })
+
+  it('analyses the last 7 intervals.icu rides without touching Strava', async () => {
+    mockGetIntervalsActivities.mockResolvedValue(intervalsRides)
+    mockAnalyseStravaActivities.mockResolvedValue({
+      assessment: { estimatedFTP: 270, riderType: 'allrounder', notes: '' },
+      planUpdates: [],
+    })
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+
+    await waitFor(() => {
+      expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
+    })
+    expect(mockGetStravaActivities).not.toHaveBeenCalled()
+    expect(mockAnalyseStravaActivities.mock.calls[0][0]).toHaveLength(7)
+    expect(mockAnalyseStravaActivities.mock.calls[0][4]).toBe('intervals')
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      isOnboarded: true,
+      intervalsAnalysisComplete: true,
+      stravaAnalysisComplete: false,
+    })
+    expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true)
+  })
+
+  it('does not claim an analysis when intervals.icu has no rides yet', async () => {
+    mockGetIntervalsActivities.mockResolvedValue([])
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+
+    await waitFor(() => {
+      expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
+    })
+    expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      intervalsAnalysisComplete: false,
+    })
+  })
+
+  it('offers the analysis as soon as the intervals.icu connection arrives', async () => {
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: null,
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    await user.click(screen.getByText('Connect intervals.icu'))
+    // IntervalsConnect saves the key in-page and writes the connection to the
+    // store; no redirect, so no saved progress to restore.
+    useAppStore.setState({ intervalsConnection: { athleteId: '0', athleteName: 'Alex' } })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Analyse & Generate Plan' })).toBeEnabled()
     })
   })
 })

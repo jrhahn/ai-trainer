@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **intervals.icu is the first way in, Strava the convenience**
+  (ai-trainer-ops#20) — `OnboardingPage.tsx`, `SettingsPage.tsx`,
+  `AuthShell.tsx`. Onboarding's assessment step offers "Connect intervals.icu"
+  first. It connects in place with the API key (no OAuth redirect), analyses
+  the last seven rides with `source: "intervals"` and marks
+  `intervalsAnalysisComplete` rather than the Strava flag. It is preselected
+  for an athlete who already connected it. Settings lists intervals.icu above
+  Strava, and the sign-in page says rides sync from "intervals.icu or Strava".
+
 ### Security
 
 - **Image on the maintained nginx branch, and the headers the first ZAP run

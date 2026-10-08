@@ -579,6 +579,16 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
+  it('lists intervals.icu before Strava among the data sources (ai-trainer-ops#20)', () => {
+    setup()
+
+    const intervals = screen.getByText('Intervals.icu')
+    const strava = screen.getByText('Strava')
+    expect(
+      intervals.compareDocumentPosition(strava) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it('renders source-agnostic data source settings', () => {
     setup()
 

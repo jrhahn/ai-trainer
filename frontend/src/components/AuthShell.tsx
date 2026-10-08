@@ -12,7 +12,7 @@ type AuthShellProps = {
 
 const highlights = [
   { label: 'Coaching built on your season', icon: MessageCircle },
-  { label: 'Rides sync from Strava', icon: RefreshCw },
+  { label: 'Rides sync from intervals.icu or Strava', icon: RefreshCw },
   { label: 'Your Gemini key, no subscription', icon: KeyRound },
 ]
 
