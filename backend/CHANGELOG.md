@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A blank name is refused instead of stored** (ai-trainer-ops#40) —
+  `schemas.UpdateProfileRequest`. Onboarding sent `name: ""` and this endpoint
+  stored it over the name given at registration, so every account that
+  finished onboarding lost its name. Absent still means unchanged. A present
+  name is trimmed, and a blank one or an explicit `null` answers 422. The
+  column is nullable, so `null` was a second way to erase it.
+
 ### Added
 
 - **Request smuggling through the real proxy pair** (ai-trainer-ops#34) —

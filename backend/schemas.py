@@ -382,6 +382,26 @@ class UpdateProfileRequest(CamelModel):
     last_intervals_activity_id: Optional[int] = None
     intervals_auto_sync_enabled: Optional[bool] = None
 
+    @field_validator("name")
+    @classmethod
+    def name_is_not_blank(cls, v: Optional[str]) -> Optional[str]:
+        """Absent means unchanged; present means a name (ai-trainer-ops#40).
+
+        Onboarding used to send the empty string it had copied before the
+        profile loaded, and this field stored it over the name given at
+        registration. Every account that finished onboarding lost its name.
+        A blank name is never what anybody meant to save, and neither is an
+        explicit ``null``: the column is nullable, so it erased the name the
+        same way. The validator only runs on a value the client actually sent —
+        an absent field keeps its default without coming through here.
+        """
+        if v is None:
+            raise ValueError("name must not be null")
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
     @field_validator("training_goal")
     @classmethod
     def supported_training_goal(cls, value: Optional[str]) -> Optional[str]:

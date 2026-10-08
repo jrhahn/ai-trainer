@@ -60,8 +60,6 @@ function clearOnboardingProgress(): void {
 }
 
 type FormData = {
-  name: string
-  email: string
   trainingGoal: UserProfile['trainingGoal']
   raceDate: string
   raceDescription: string
@@ -121,8 +119,6 @@ export default function OnboardingPage() {
   const defaultForm = (): FormData => {
     const trainingGoal = defaultTrainingGoal()
     return {
-      name: userProfile?.name ?? '',
-      email: userProfile?.email ?? '',
       trainingGoal,
       raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',
       raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
@@ -229,8 +225,14 @@ export default function OnboardingPage() {
 
     const isRacePrep = form.trainingGoal === 'race'
     const profile: UserProfile = {
-      name: form.name,
-      email: form.email,
+      // Read from the loaded profile, never from the form: the form used to
+      // copy them at mount, before the profile had arrived, and then wrote the
+      // empty copy back over the name given at registration
+      // (ai-trainer-ops#40). Onboarding asks for neither, so it sends neither.
+      // At click time, not render time: the profile may have arrived since
+      // this render, and the store must not be handed an emptier one.
+      name: useAppStore.getState().userProfile?.name ?? '',
+      email: useAppStore.getState().userProfile?.email ?? '',
       bikeType: userProfile?.bikeType ?? 'road',
       trainingGoal: isRacePrep ? 'race' : 'general_fitness',
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
@@ -282,8 +284,11 @@ export default function OnboardingPage() {
         }
       }
 
+      // Name and email are not onboarding's to write (ai-trainer-ops#40).
       await updateCurrentUser(authToken, {
         ...profileForPlan,
+        name: undefined,
+        email: undefined,
         isOnboarded: true,
         stravaAnalysisComplete,
         intervalsAnalysisComplete,
@@ -362,7 +367,7 @@ export default function OnboardingPage() {
                 <Dumbbell size={32} className="text-amber-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Welcome, {form.name || 'athlete'}! 👋
+                Welcome, {userProfile?.name?.trim() || 'athlete'}! 👋
               </h2>
               <p className="text-gray-500 mb-4 text-sm leading-relaxed">
                 We want to set up your first <span className="font-semibold text-gray-700">14-day cycling training plan</span>.
@@ -628,8 +633,8 @@ export default function OnboardingPage() {
                   const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
                   return (
                     [
-                      ['Name', form.name],
-                      ['Email', form.email],
+                      ['Name', userProfile?.name ?? ''],
+                      ['Email', userProfile?.email ?? ''],
                       ['Goal', form.trainingGoal.replace('_', ' ')],
                       ['Assessment', form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
                       ...(form.raceDate ? [['Race Date', form.raceDate]] : []),

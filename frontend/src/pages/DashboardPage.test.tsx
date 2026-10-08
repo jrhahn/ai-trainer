@@ -192,6 +192,26 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — recent rides', () => {
+  it('greets by first name', () => {
+    setupStore({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+    renderDashboard()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good (morning|afternoon|evening), Anna! /)
+  })
+
+  it('greets without a comma before the profile has loaded', () => {
+    setupStore({ userProfile: null })
+    renderDashboard()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good (morning|afternoon|evening)! /)
+  })
+
+  it.each(['', '   '])('greets without a dangling comma when the name is %j (ai-trainer-ops#40)', (name) => {
+    setupStore({ userProfile: { ...baseProfile, name } })
+    renderDashboard()
+    const heading = screen.getByRole('heading', { level: 1 }).textContent ?? ''
+    expect(heading).toMatch(/^Good (morning|afternoon|evening)! /)
+    expect(heading).not.toContain(',')
+  })
+
   it('renders a ride from yesterday inside the 3-day window', async () => {
     setupStore({
       rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'Morning Ride' })],

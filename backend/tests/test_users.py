@@ -945,3 +945,51 @@ async def test_ftp_plausibility_warning_uses_recorded_map(client, auth_headers):
 
     cleared = await client.get("/api/v1/users/me", headers=auth_headers)
     assert cleared.json()["ftpPlausibilityWarning"] is None
+
+
+# ---------------------------------------------------------------------------
+# A blank name is never saved (ai-trainer-ops#40)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+async def test_a_blank_name_is_refused_and_the_registered_one_kept(
+    client, auth_headers, blank
+):
+    response = await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"name": blank, "isOnboarded": True}
+    )
+    assert response.status_code == 422
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["name"] == "Test Rider"
+
+
+async def test_an_update_without_a_name_leaves_the_name_alone(client, auth_headers):
+    """What onboarding sends now: its answers, and no name at all."""
+    response = await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"isOnboarded": True, "fitnessLevel": "intermediate"},
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Test Rider"
+
+
+async def test_a_name_is_stored_trimmed(client, auth_headers):
+    response = await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"name": "  Anna Test "}
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Anna Test"
+
+
+async def test_an_explicit_null_name_is_refused_too(client, auth_headers):
+    """The nullable column made ``null`` a second way to erase the name."""
+    response = await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"name": None}
+    )
+    assert response.status_code == 422
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["name"] == "Test Rider"
