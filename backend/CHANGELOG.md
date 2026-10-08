@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Request smuggling through the real proxy pair** (ai-trainer-ops#34) —
+  `tests/test_proxy_pair_smuggling.py`, `.github/workflows/ci.yml`. The
+  production Traefik image (version read from `compose.yml`) runs in front of
+  the pinned uvicorn, and the strip middleware is built from the
+  `compose.yml` labels rather than copied. Raw bytes cover well-formed and
+  malformed identity headers (case variants, repeats, space before the colon,
+  obs-fold, bare LF, NUL, CR, tab) and four framings that desync a pair
+  (CL.TE, TE.CL, two Content-Lengths, an obfuscated Transfer-Encoding). The
+  assertion is about the app: it never handled more requests than the client
+  got answers to, and no request carried the victim in a stripped header.
+  Mutation-checked: without the middleware, 9 of 18 fail. It skips locally
+  without Docker and is required in CI.
 - **Calibration of the coach's predictions, measured on what it actually
   said** (ai-trainer-ops#27) — `services/calibration.py`,
   `scripts/calibration_report.py`, `models.py`, `crud.py`, migration

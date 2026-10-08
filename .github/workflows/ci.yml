@@ -60,6 +60,10 @@ jobs:
       BACKEND_URL: http://localhost:8000
       OPENAI_API_KEY: ci-openai-key
       GEMINI_API_KEY: ci-gemini-key
+      # tests/test_proxy_pair_smuggling.py runs the production Traefik image in
+      # front of uvicorn (ai-trainer-ops#34). Locally it skips without Docker;
+      # here a missing Docker must fail it rather than skip it silently.
+      REQUIRE_PROXY_PAIR: '1'
 
     steps:
       - uses: actions/checkout@v7
