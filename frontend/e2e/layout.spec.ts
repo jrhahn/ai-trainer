@@ -68,11 +68,19 @@ for (const path of ['/login', '/register']) {
     test.skip(testInfo.project.name !== 'mobile-390', 'about the narrow layout')
     await page.goto(path)
 
-    const { formTop, panelTop, viewportHeight } = await page.evaluate(() => {
+    const { formTop, panelTop, viewportHeight, domOrderIsFormFirst } = await page.evaluate(() => {
       const form = document.querySelector('form') as HTMLElement
-      // The marketing panel is the dark section; the form sits in the white one.
-      const panel = document.querySelector('section.relative') as HTMLElement
+      // By test id, not by `section.relative`: a styling class is not a
+      // contract, and a layout change that dropped it would fail this test with
+      // a null dereference rather than a statement about the layout.
+      const panel = document.querySelector('[data-testid="auth-marketing-panel"]') as HTMLElement
+      const formPanel = document.querySelector('[data-testid="auth-form-panel"]') as HTMLElement
       return {
+        // Visual order is `order-*`; this is the order a keyboard and a screen
+        // reader get, and the two must agree on a phone (WCAG 2.4.3, 1.3.2).
+        domOrderIsFormFirst: Boolean(
+          formPanel.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING
+        ),
         formTop: Math.round(form.getBoundingClientRect().top + window.scrollY),
         panelTop: Math.round(panel.getBoundingClientRect().top + window.scrollY),
         viewportHeight: window.innerHeight,
@@ -89,13 +97,19 @@ for (const path of ['/login', '/register']) {
       `${path}: form at ${formTop}px, marketing panel at ${panelTop}px, ` +
         `viewport ${viewportHeight}px — the form should come first`
     ).toBeLessThan(panelTop)
+
+    expect(
+      domOrderIsFormFirst,
+      `${path}: the form is painted first but still comes second in the document, ` +
+        'so tab order and the screen reader disagree with what is on screen'
+    ).toBe(true)
   })
 }
 
 /** Password managers, passkeys and Chrome's own warning all key off these. */
 const EXPECTED_AUTOCOMPLETE: Record<string, Record<string, string>> = {
   '/login': { 'input[type="email"]': 'email', 'input[type="password"]': 'current-password' },
-  '/register': { 'input[type="email"]': 'email' },
+  '/register': { 'input[type="email"]': 'email', 'input[type="text"]': 'name' },
 }
 
 for (const [path, fields] of Object.entries(EXPECTED_AUTOCOMPLETE)) {
