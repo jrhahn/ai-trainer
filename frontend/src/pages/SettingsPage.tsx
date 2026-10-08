@@ -835,8 +835,15 @@ export default function SettingsPage() {
                 It is a deployment detail no athlete can act on, and on a local
                 install it read "the backend at http://localhost:8000" — which
                 tells a cyclist nothing and makes the product look unfinished.
-                What is left is the half that changes what someone does. */}
-            Your keys are stored encrypted and never leave this server. Strava may require a
+
+                "at rest" and not "never leave this server", which is what this
+                said for one commit until review caught it. The keys do leave:
+                the intervals.icu key goes to intervals.icu, the Strava token to
+                Strava, the athlete's own provider key to OpenAI or Gemini on
+                every call. A privacy sentence on a settings page is something
+                an athlete relies on, so it may only claim what
+                `EncryptedString` actually provides. */}
+            Your keys are stored encrypted at rest. Strava may require a
             paid Strava subscription for Standard Tier API access; FIT upload stays available
             either way.
           </p>

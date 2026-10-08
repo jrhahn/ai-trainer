@@ -110,7 +110,7 @@ export default function IntervalsConnect() {
           />
         </label>
         <label className="block text-xs font-semibold text-gray-700">
-          Athlete ID <span className="font-normal text-gray-500">(optional)</span>
+          Athlete ID
           <input
             type="text"
             value={athleteId}

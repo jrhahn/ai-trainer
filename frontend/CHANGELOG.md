@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changes what someone does (Strava's subscription requirement, FIT upload as
   the alternative) stays.
 
+  What replaces it says "stored encrypted at rest", and only that. For one
+  commit it said the keys "never leave this server", which is false — the
+  intervals.icu key goes to intervals.icu, the Strava token to Strava, and the
+  athlete's own provider key to OpenAI or Gemini on every call. A privacy
+  sentence on a settings page is something an athlete relies on, so it is now
+  pinned by a test that also fails on the stronger wording.
+
   The intervals.icu "Athlete ID" field was prefilled with `0`, which is the
   backend's word for "the athlete this key belongs to" — the right default, and
   a number no athlete can know. The field now starts blank and says

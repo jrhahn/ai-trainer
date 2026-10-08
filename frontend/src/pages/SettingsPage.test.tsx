@@ -752,6 +752,20 @@ describe('SettingsPage', () => {
     ).toBeInTheDocument()
     expect(useAppStore.getState().stravaAutoSyncEnabled).toBe(true)
   })
+  it('claims only the encryption it actually has', () => {
+    // A privacy sentence on a settings page is something an athlete relies on.
+    // For one commit this said the keys "never leave this server", which is
+    // false — intervals.icu, Strava and the AI provider each receive one. The
+    // claim may only be what `EncryptedString` provides, and nothing covered
+    // this text until review pointed that out.
+    setup()
+
+    expect(screen.getByText(/stored encrypted at rest/i)).toBeInTheDocument()
+    expect(screen.queryByText(/never leave/i)).toBeNull()
+    // And the deployment detail stays gone.
+    expect(screen.queryByText(/localhost:8000/)).toBeNull()
+  })
+
   it('marks intervals.icu as the active source when both are connected (ai-trainer-ops#49)', () => {
     // The copy has to say which source is read, or "Connected" on both while
     // only one is synced reads as a bug.
