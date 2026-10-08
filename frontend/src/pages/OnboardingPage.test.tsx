@@ -610,4 +610,36 @@ describe('OnboardingPage', () => {
     expect(screen.getByText('Anna Test')).toBeInTheDocument()
     expect(screen.getByText('alex@example.com')).toBeInTheDocument()
   })
+
+  it('keeps the name in the store when the profile arrives between render and click', async () => {
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: '' } })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    // The profile lands after the last render, just before the click.
+    useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
+    expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
+  })
+
+  it('welcomes an athlete whose profile has not loaded yet', () => {
+    setupStore({ stravaConnection: null, userProfile: null })
+    render(<OnboardingPage />)
+    expect(screen.getByText(/Welcome, athlete!/)).toBeInTheDocument()
+  })
+
+  it('still finishes onboarding without a loaded profile, sending no name', async () => {
+    setupStore({ stravaConnection: null, userProfile: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1))
+    expect(mockUpdateCurrentUser.mock.calls[0][1].name).toBeUndefined()
+  })
 })

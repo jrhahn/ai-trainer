@@ -198,6 +198,12 @@ describe('DashboardPage — recent rides', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good (morning|afternoon|evening), Anna! /)
   })
 
+  it('greets without a comma before the profile has loaded', () => {
+    setupStore({ userProfile: null })
+    renderDashboard()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good (morning|afternoon|evening)! /)
+  })
+
   it.each(['', '   '])('greets without a dangling comma when the name is %j (ai-trainer-ops#40)', (name) => {
     setupStore({ userProfile: { ...baseProfile, name } })
     renderDashboard()

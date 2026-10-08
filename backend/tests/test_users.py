@@ -982,3 +982,14 @@ async def test_a_name_is_stored_trimmed(client, auth_headers):
     )
     assert response.status_code == 200
     assert response.json()["name"] == "Anna Test"
+
+
+async def test_an_explicit_null_name_is_refused_too(client, auth_headers):
+    """The nullable column made ``null`` a second way to erase the name."""
+    response = await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"name": None}
+    )
+    assert response.status_code == 422
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["name"] == "Test Rider"

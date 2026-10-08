@@ -229,8 +229,10 @@ export default function OnboardingPage() {
       // copy them at mount, before the profile had arrived, and then wrote the
       // empty copy back over the name given at registration
       // (ai-trainer-ops#40). Onboarding asks for neither, so it sends neither.
-      name: userProfile?.name ?? '',
-      email: userProfile?.email ?? '',
+      // At click time, not render time: the profile may have arrived since
+      // this render, and the store must not be handed an emptier one.
+      name: useAppStore.getState().userProfile?.name ?? '',
+      email: useAppStore.getState().userProfile?.email ?? '',
       bikeType: userProfile?.bikeType ?? 'road',
       trainingGoal: isRacePrep ? 'race' : 'general_fitness',
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,

@@ -390,10 +390,13 @@ class UpdateProfileRequest(CamelModel):
         Onboarding used to send the empty string it had copied before the
         profile loaded, and this field stored it over the name given at
         registration. Every account that finished onboarding lost its name.
-        A blank name is never what anybody meant to save.
+        A blank name is never what anybody meant to save, and neither is an
+        explicit ``null``: the column is nullable, so it erased the name the
+        same way. The validator only runs on a value the client actually sent —
+        an absent field keeps its default without coming through here.
         """
         if v is None:
-            return v
+            raise ValueError("name must not be null")
         stripped = v.strip()
         if not stripped:
             raise ValueError("name must not be blank")
