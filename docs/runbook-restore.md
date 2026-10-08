@@ -5,10 +5,10 @@
 > type. Re-run it after any change to the backup scripts or any new encrypted
 > column, and update this date.
 
-> **Two manual steps stand between this and a running backup** — a passphrase on
-> the VPS and a fetch key on the home server. Until both are done, nothing is
-> scheduled and this deployment is not being backed up. See
-> [Setting it up](#setting-it-up).
+> **Live since 2026-10-08.** The chain ran unattended for the first time that
+> night: backup on the VPS, fetch at 03:30, both Borg jobs, Storage Box. What is
+> *not* yet rehearsed is a restore starting from a Borg archive — see
+> [What is still not covered](#what-is-still-not-covered).
 
 ## The thing that actually goes wrong
 
@@ -217,6 +217,19 @@ noticed would be a restore.
 
 ### Setting it up
 
+**Already done for this deployment on 2026-10-08.** Kept because it is what a
+second instance needs, and because knowing where each secret lives is half of a
+restore. Verified in production at the time, not just configured:
+
+| Refused by the fetching key | Message |
+|---|---|
+| opening a shell | `not an rsync invocation` |
+| running `backup.sh` | `not an rsync invocation` |
+| reading `/root/` | `asked for /root/, which is not the backup directory` |
+| writing into the backup directory | `rsync without --sender: this key cannot write` |
+
+Collecting the artefacts works, and the dump's SHA-256 matched the manifest.
+
 One-time, and only the first two need doing by hand:
 
 1. **On the VPS**, create the passphrase for the secrets bundle and keep a copy
@@ -263,5 +276,18 @@ One-time, and only the first two need doing by hand:
 - **The Compose stack, TLS and the UI.** Log in by hand after a restore.
 - **A restore from the Storage Box end to end.** The drill backs up and restores
   locally; nobody has yet pulled a Borg archive back down and restored from it.
-  That is the obvious next rehearsal, and it needs the above running first so
-  there is an archive to pull.
+  There is now an archive to pull, so this is the next rehearsal and the one
+  thing between "backups run" and "backups are known to work". It needs two
+  passphrases that are deliberately not on the machines involved — the Borg
+  repokey and the secrets bundle's — which is the point of them and also the
+  step most likely to be discovered missing at the worst moment.
+
+### One failure mode worth knowing before it happens
+
+`.failed` in a Borg archive name is **not** an error. NixOS's borgbackup module
+writes every archive as `<name>.failed` and renames it only after `borg create`
+succeeds, so an archive still carrying the suffix is one that did not finish —
+transactional naming, the same shape as the `os.replace` in `backup.sh`. The
+`--stats` output during a run therefore always shows the suffixed name, which
+reads alarming in the journal and means nothing. Cost half an hour of looking
+for a problem that was not there.
