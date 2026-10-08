@@ -577,4 +577,37 @@ describe('OnboardingPage', () => {
 
     expect(screen.getByText(label)).toBeInTheDocument()
   })
+
+  // ---------------------------------------------------------------------------
+  // The name given at registration survives onboarding (ai-trainer-ops#40)
+  // ---------------------------------------------------------------------------
+
+  it('never sends a name or email, even when the profile arrives after mount', async () => {
+    // The original race: the form copied name and email at mount, before the
+    // profile had loaded, and wrote the empty copy back on generate.
+    setupStore({ stravaConnection: null, userProfile: null })
+    render(<OnboardingPage />)
+    useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1))
+    const payload = mockUpdateCurrentUser.mock.calls[0][1]
+    expect(payload.name).toBeUndefined()
+    expect(payload.email).toBeUndefined()
+    expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
+  })
+
+  it('shows the registered name and email in the summary', async () => {
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: 'Anna Test' } })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText('Anna Test')).toBeInTheDocument()
+    expect(screen.getByText('alex@example.com')).toBeInTheDocument()
+  })
 })

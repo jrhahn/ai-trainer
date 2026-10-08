@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Onboarding no longer erases the registered name** (ai-trainer-ops#40) —
+  `OnboardingPage.tsx`, `DashboardPage.tsx`. The form copied name and email at
+  mount, before the profile had loaded, showed the empty copies in the
+  summary and sent them back on "Generate", so the dashboard greeted
+  "Good morning, !". Onboarding now reads both from the loaded profile and
+  sends neither. The greeting drops the comma when there is no name.
+
 ### Changed
 
 - **intervals.icu is the first way in, Strava the convenience**

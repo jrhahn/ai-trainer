@@ -696,6 +696,8 @@ export default function DashboardPage() {
   // keep sync running so analysis status updates remain active
   useStravaSync()
 
+  const firstName = userProfile?.name?.trim().split(/\s+/)[0] ?? ''
+
   const greeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return 'Good morning'
@@ -872,7 +874,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          {greeting()}, {userProfile?.name?.split(' ')[0] ?? 'Athlete'}! 👋
+          {/* No name means no comma: "Good morning!", not "Good morning, !" (ai-trainer-ops#40). */}
+          {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`} 👋
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
