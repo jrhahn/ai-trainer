@@ -263,10 +263,10 @@ def test_the_server_refuses_the_shapes_a_proxy_pair_could_disagree_about(
     have stripped it. uvicorn answers 400 and never invokes the app, so the
     desync has no second half here regardless of how Traefik reads it.
 
-    What this does *not* establish is the Traefik side: a front proxy that
-    normalises one of these into a well-formed ``Remote-Email`` would hand
-    uvicorn something clean. That needs the real pair, and it is the part of
-    ai-trainer-ops#34 that stays open.
+    The Traefik side — whether a front proxy normalises one of these into a
+    well-formed ``Remote-Email`` and hands uvicorn something clean — needs the
+    real pair. ``test_proxy_pair_smuggling.py`` runs it, with the production
+    Traefik image in CI.
     """
     status, arrived = wire.send(header_block)
     assert status.startswith("HTTP/1.1 400"), f"{attack} was accepted: {status}"
