@@ -579,6 +579,16 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Processed activities: 4 / 10 (40%) · 2 imported')).toBeInTheDocument()
   })
 
+  it('lists intervals.icu before Strava among the data sources (ai-trainer-ops#20)', () => {
+    setup()
+
+    const intervals = screen.getByText('Intervals.icu')
+    const strava = screen.getByText('Strava')
+    expect(
+      intervals.compareDocumentPosition(strava) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it('renders source-agnostic data source settings', () => {
     setup()
 
@@ -635,6 +645,19 @@ describe('SettingsPage', () => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { intervalsAutoSyncEnabled: false })
     })
     expect(useAppStore.getState().intervalsAutoSyncEnabled).toBe(false)
+  })
+
+  it('puts the Intervals.icu toggle back and says so when saving it fails', async () => {
+    useAppStore.setState({ intervalsAutoSyncEnabled: true })
+    mockUpdateCurrentUser.mockRejectedValueOnce(new Error('offline'))
+    setup()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i }))
+
+    expect(
+      await screen.findByText('Could not save Intervals.icu sync setting. Please try again.'),
+    ).toBeInTheDocument()
+    expect(useAppStore.getState().intervalsAutoSyncEnabled).toBe(true)
   })
 
   it('shows the completed Strava import report with skipped activities', () => {

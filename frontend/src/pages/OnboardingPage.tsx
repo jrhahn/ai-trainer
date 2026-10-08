@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Bike, Target, Loader2, CheckCircle, Dumbbell, Link } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
+import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
+import { getIntervalsActivities } from '../services/intervals'
 import { getStravaActivities } from '../services/strava'
 import { saveTrainingPlan, updateCurrentUser } from '../services/user'
 
@@ -63,7 +65,9 @@ type FormData = {
   trainingGoal: UserProfile['trainingGoal']
   raceDate: string
   raceDescription: string
-  assessmentMethod: 'strava' | 'manual'
+  // intervals.icu first (ai-trainer-ops#20): it is where this audience already
+  // keeps its data, and it carries none of Strava's API-terms risk.
+  assessmentMethod: 'intervals' | 'strava' | 'manual'
   followsTrainingPlan: boolean
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
@@ -79,20 +83,24 @@ export default function OnboardingPage() {
     userProfile,
     authToken,
     stravaConnection,
+    intervalsConnection,
     setUserProfile,
     setTrainingPlan,
     setRiderAssessment,
     setStravaAnalysisComplete,
+    setIntervalsAnalysisComplete,
     setOnboarded,
   } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       authToken: s.authToken,
       stravaConnection: s.stravaConnection,
+      intervalsConnection: s.intervalsConnection,
       setUserProfile: s.setUserProfile,
       setTrainingPlan: s.setTrainingPlan,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
+      setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
       setOnboarded: s.setOnboarded,
     }))
   )
@@ -101,8 +109,10 @@ export default function OnboardingPage() {
     const hasManualMetrics = Boolean(
       userProfile?.currentFTP || userProfile?.maxHeartRate
     )
-    if (hasManualMetrics || !stravaConnection) return 'manual'
-    return 'strava'
+    if (hasManualMetrics) return 'manual'
+    if (intervalsConnection) return 'intervals'
+    if (stravaConnection) return 'strava'
+    return 'manual'
   }
 
   const defaultTrainingGoal = (): FormData['trainingGoal'] =>
@@ -180,6 +190,7 @@ export default function OnboardingPage() {
   const canNext = () => {
     if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
     if (step === 4 && form.assessmentMethod === 'strava') return Boolean(stravaConnection)
+    if (step === 4 && form.assessmentMethod === 'intervals') return Boolean(intervalsConnection)
     return true
   }
 
@@ -233,9 +244,21 @@ export default function OnboardingPage() {
     try {
       let profileForPlan = profile
       let stravaAnalysisComplete = false
+      let intervalsAnalysisComplete = false
 
-      if (form.assessmentMethod === 'strava' && stravaConnection) {
-        const activities = await getStravaActivities(authToken)
+      // The same seven-ride analysis whichever service the rides come from; the
+      // backend reads `source` to know which activity identity it is looking at.
+      const source =
+        form.assessmentMethod === 'intervals' && intervalsConnection
+          ? 'intervals'
+          : form.assessmentMethod === 'strava' && stravaConnection
+            ? 'strava'
+            : null
+      if (source) {
+        const activities =
+          source === 'intervals'
+            ? await getIntervalsActivities(authToken)
+            : await getStravaActivities(authToken)
         const recentActivities = activities.slice(0, 7)
         if (recentActivities.length > 0) {
           const analyseResult = await analyseStravaActivities(
@@ -243,6 +266,7 @@ export default function OnboardingPage() {
             authToken,
             resolvedMaxHR,
             profile.currentFTP,
+            source,
           )
           riderAssessment = analyseResult.assessment
           profileForPlan = {
@@ -250,7 +274,11 @@ export default function OnboardingPage() {
             currentFTP: profile.currentFTP,
             maxHeartRate: profile.maxHeartRate,
           }
-          stravaAnalysisComplete = true
+          if (source === 'intervals') {
+            intervalsAnalysisComplete = true
+          } else {
+            stravaAnalysisComplete = true
+          }
         }
       }
 
@@ -258,6 +286,7 @@ export default function OnboardingPage() {
         ...profileForPlan,
         isOnboarded: true,
         stravaAnalysisComplete,
+        intervalsAnalysisComplete,
       })
       const plan = await generateTrainingPlan(authToken)
       await saveTrainingPlan(authToken, plan)
@@ -265,6 +294,7 @@ export default function OnboardingPage() {
         setRiderAssessment(riderAssessment)
       }
       setStravaAnalysisComplete(stravaAnalysisComplete)
+      setIntervalsAnalysisComplete(intervalsAnalysisComplete)
       setUserProfile(profileForPlan)
       setTrainingPlan(plan)
       clearOnboardingProgress()
@@ -276,8 +306,12 @@ export default function OnboardingPage() {
     }
   }
 
+  const connectedForAnalysis =
+    (form.assessmentMethod === 'intervals' && Boolean(intervalsConnection)) ||
+    (form.assessmentMethod === 'strava' && Boolean(stravaConnection))
+
   const handleContinue = () => {
-    if (step === 4 && form.assessmentMethod === 'strava' && stravaConnection) {
+    if (step === 4 && connectedForAnalysis) {
       void handleGenerate()
     } else {
       setStep(step + 1)
@@ -482,9 +516,30 @@ export default function OnboardingPage() {
                 <>
                   <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
                   <p className="text-sm text-gray-500 mb-4">
-                    Connect Strava for automatic analysis of your last 7 rides, or use the parameters you just entered.
+                    Connect intervals.icu or Strava for automatic analysis of your last 7 rides, or use the parameters you just entered.
                   </p>
                   <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => update('assessmentMethod', 'intervals')}
+                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
+                        form.assessmentMethod === 'intervals'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-900">Connect intervals.icu</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Recommended. Analyses your last 7 rides with your intervals.icu API key.
+                          </p>
+                        </div>
+                        {form.assessmentMethod === 'intervals' && (
+                          <CheckCircle size={16} className="text-amber-500 shrink-0" />
+                        )}
+                      </div>
+                    </button>
                     <button
                       type="button"
                       onClick={() => update('assessmentMethod', 'strava')}
@@ -528,6 +583,17 @@ export default function OnboardingPage() {
                       </div>
                     </button>
                   </div>
+                  {form.assessmentMethod === 'intervals' && (
+                    <div className="mt-4 space-y-3">
+                      <IntervalsConnect />
+                      {!intervalsConnection && (
+                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                          <Link size={14} className="shrink-0" />
+                          Connect intervals.icu to continue with automatic activity analysis.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {form.assessmentMethod === 'strava' && (
                     <div className="mt-4 space-y-3">
                       <StravaConnect onBeforeConnect={persistMetricsBeforeStravaConnect} />
@@ -565,7 +631,7 @@ export default function OnboardingPage() {
                       ['Name', form.name],
                       ['Email', form.email],
                       ['Goal', form.trainingGoal.replace('_', ' ')],
-                      ['Assessment', form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
+                      ['Assessment', form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
                       ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
                       ['Fitness Level', form.fitnessLevel],
                       ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
@@ -622,7 +688,7 @@ export default function OnboardingPage() {
                 disabled={!canNext()}
                 className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
-                {step === 4 && form.assessmentMethod === 'strava' && stravaConnection
+                {step === 4 && connectedForAnalysis
                   ? 'Analyse & Generate Plan'
                   : 'Continue'}
               </button>
