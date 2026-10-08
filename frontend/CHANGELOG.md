@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An end-to-end smoke test for the path a stranger takes**
+  (ai-trainer-ops#46) — `playwright.config.ts`, `e2e/stranger-path.spec.ts`,
+  a required `E2E Smoke` CI job.
+
+  Two bugs that broke registration for *every* new athlete — onboarding
+  overwriting the name (#40) and the BYOK dead end (#41) — got through because
+  nothing tested the only journey that matters on day one. There are unit tests
+  per page and a contract suite per endpoint, and the gap sat between them.
+
+  Three specs at 1366 px and 390 px, against a real backend and a real
+  production build, failing on any unexpected console error. It does not assert
+  that a plan was *generated*: the backend runs with no usable AI key, which is
+  the state a fresh deployment is in and the state the dead end lived in, so
+  generation answers 402 by design. A generated plan needs a stub provider —
+  deliberately not added in passing.
+
+  Writing it found four things, all of which the suite now guards:
+
+  - `@example.invalid` cannot register. `.invalid` is reserved by RFC 2606 and
+    `email-validator` refuses special-use domains — correct, and a fixture
+    address that cannot register is a fixture that tests nothing.
+  - `vite preview` binds to `localhost`, which resolves to `::1`, so an IPv4
+    health check is refused while the server is up. `--host 127.0.0.1` now says
+    which one.
+  - The global registration cap of 5/hour (#753) stops the suite on its sixth
+    athlete. Raised for the test backend only, rather than sharing one account
+    between specs and making each depend on the others' order.
+  - After the 402 and a reload, onboarding correctly resumes at step 5 rather
+    than at the greeting — the first version of the spec asserted the greeting
+    and was wrong about the app, not the other way round.
+
+  Mutation check, as the issue asks: reintroducing the name bug turns the job
+  red.
+
 ### Changed
 
 - **intervals.icu is the active source when both are connected**

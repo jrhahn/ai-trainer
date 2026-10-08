@@ -13,7 +13,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
-    exclude: ['**/node_modules/**', 'src/test/integration/**'],
+    // `e2e/**` is Playwright's, and vitest's default include matches
+    // `*.spec.ts` anywhere — so without this it loads the smoke test and dies
+    // on "Playwright Test did not expect test.describe() to be called here".
+    // Verified both ways: removing this line makes `vitest run e2e` fail with
+    // exactly that.
+    exclude: ['**/node_modules/**', 'src/test/integration/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
