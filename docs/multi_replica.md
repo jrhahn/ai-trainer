@@ -66,6 +66,16 @@ replica count:
   the DB.
 - **All persistent data** — users, tokens, plans, ride metrics, etc. live in
   Postgres.
+- **The Authelia user store** (`users_database.yml`) — every registration and
+  deletion is a read-modify-write of one YAML file, serialised by an exclusive
+  `flock` on a lock file beside it (`services/authelia_store._locked`). That
+  holds across processes and across containers **on one host**, which share
+  the file through the bind mount. `tests/test_authelia_store_concurrency.py`
+  runs eight real processes against it at once. Without the lock, one of the
+  eight signups survives. With it, all eight are written and every one can log
+  in (ai-trainer-ops#14). It does **not** hold for replicas on different hosts
+  sharing the file over a network filesystem, where `flock` is not reliable.
+  Going multi-host means moving the user store off a file.
 
 ## Mitigations applied for single-replica (issue #326)
 
