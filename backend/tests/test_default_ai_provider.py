@@ -117,3 +117,23 @@ def test_the_downgrade_changes_nothing(engine):
     before = _providers(engine)
     _run(engine, "downgrade")
     assert _providers(engine) == before
+
+
+async def test_a_legacy_account_without_a_provider_reads_as_gemini(
+    client: AsyncClient, auth_headers
+):
+    """The ``or <default>`` fallbacks in the users router say Gemini too.
+
+    The column is NOT NULL, so the case that can occur is an empty string.
+    """
+    from sqlalchemy import update
+
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as db:
+        await db.execute(update(models.User).values(ai_provider=""))
+        await db.commit()
+
+    status = await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)
+    assert status.status_code == 200
+    assert status.json()["provider"] == "gemini"
