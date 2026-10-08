@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A missing AI key is a 402 the athlete can act on, never a 500**
+  (ai-trainer-ops#41) — `services/llm.py`, `tests/test_missing_ai_key.py`.
+
+  `_get_provider_global` returned a `GeminiProvider` **with no key** when
+  neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` was set — the state a fresh
+  deployment is in — after logging a warning. The SDK then raised
+  `ValueError("No API key was provided")` from inside `genai.Client`, which is
+  not an `AIKeyNotConfiguredError`, so it escaped every handler.
+
+  That is worse than an ordinary 500. An exception raised past the handlers is
+  caught by Starlette's `ServerErrorMiddleware`, which sits *outside*
+  `CORSMiddleware`, so the response carries no CORS headers and the browser
+  reports "Failed to fetch" without ever exposing the status code. The athlete
+  is told nothing, the client cannot tell it from the network being down, and
+  the only explanation is a log line the operator reads.
+
+  It now raises `AIKeyNotConfiguredError`, which the existing handler turns into
+  a 402 that keeps its CORS headers. The operator gets a distinct `logger.error`
+  naming both empty variables and the fallback setting; the athlete gets a
+  message they can act on, and it is true — with admin fallback on, a user's own
+  key is still preferred over the global one, which is pinned by a test so the
+  advice cannot start lying.
+
+  The test that already existed patched `get_provider` to raise, so it proved
+  the handler and said nothing about the condition. That is how this got
+  through, and the new tests clear the keys and let resolution run for real.
+
 - **New accounts default to Gemini, and accounts that never chose OpenAI move
   to it** (ai-trainer-ops#42) — `models.py`, `schemas.py`, migration
   `20261008_000002`. The default was `openai`, although the deployment runs

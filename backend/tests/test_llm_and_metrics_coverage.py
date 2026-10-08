@@ -65,16 +65,25 @@ def test_get_provider_falls_back_to_openai_when_only_openai_key_set(monkeypatch)
     assert isinstance(provider, llm.OpenAIProvider)
 
 
-def test_get_provider_returns_gemini_when_no_keys(monkeypatch):
-    """When neither key is set, returns GeminiProvider with a warning log."""
+def test_get_provider_raises_when_no_keys(monkeypatch):
+    """When neither key is set, refuse rather than hand back a keyless provider.
+
+    This test used to assert the opposite — that a `GeminiProvider` came back
+    with a warning logged — and that was the bug (ai-trainer-ops#41), not the
+    contract. The keyless provider raised `ValueError` from inside the SDK on
+    first use, which is not an `AIKeyNotConfiguredError`, so it escaped the
+    handlers as a 500 with no CORS headers and reached the browser as
+    "Failed to fetch". Updated rather than deleted, so the inverted expectation
+    stays pinned. See tests/test_missing_ai_key.py for the route-level case.
+    """
     from config import settings
     import services.llm as llm
 
     monkeypatch.setattr(settings, "gemini_api_key", None)
     monkeypatch.setattr(settings, "openai_api_key", None)
 
-    provider = llm.get_provider("gemini")
-    assert isinstance(provider, llm.GeminiProvider)
+    with pytest.raises(llm.AIKeyNotConfiguredError, match="API key"):
+        llm.get_provider("gemini")
 
 
 # ---------------------------------------------------------------------------

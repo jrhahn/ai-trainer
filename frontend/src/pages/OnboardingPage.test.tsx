@@ -105,17 +105,19 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       // Strava analysis must NOT run when there is no Strava connection
       expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
-      // Profile update, plan generation and plan save must all run
-      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+      // Two updates now, not one: the profile, then `isOnboarded` once a plan
+      // exists (ai-trainer-ops#41).
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2)
       expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
       expect(mockSaveTrainingPlan).toHaveBeenCalledTimes(1)
     })
 
-    // updateCurrentUser must mark the user as onboarded with stravaAnalysisComplete=false
+    // The profile goes first and must not claim onboarding yet.
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
-      isOnboarded: true,
       stravaAnalysisComplete: false,
     })
+    expect(mockUpdateCurrentUser.mock.calls[0][1].isOnboarded).toBeUndefined()
+    expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
 
     // saveTrainingPlan must receive the plan returned by generateTrainingPlan
     expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
@@ -137,14 +139,14 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
     await waitFor(() => {
-      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2)
     })
 
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
       currentFTP: 275,
       maxHeartRate: 189,
-      isOnboarded: true,
     })
+    expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
     expect(useAppStore.getState().userProfile?.currentFTP).toBe(275)
     expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(189)
   })
@@ -165,6 +167,68 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       expect(screen.getByText('AI service unavailable')).toBeInTheDocument()
     })
+  })
+
+  it('does not mark the account onboarded when the plan cannot be generated', async () => {
+    // The dead end from ai-trainer-ops#41. `isOnboarded: true` used to be sent
+    // with the profile, before the plan was generated, so a 402 for a missing AI
+    // key — the ordinary case in BYOK-only mode — left the account onboarded
+    // with no plan. The error showed here and the local flag stayed false, so it
+    // looked recoverable; a reload read `isOnboarded` from the server and landed
+    // on the dashboard saying "No session planned for today", with nothing
+    // anywhere naming the cause.
+    mockGenerateTrainingPlan.mockRejectedValue(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.'),
+    )
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/add your key in Settings/)).toBeInTheDocument()
+    })
+
+    // The profile was written, and that is fine — it is the athlete's own data.
+    expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+    // What must not have happened is the onboarding flag.
+    for (const call of mockUpdateCurrentUser.mock.calls) {
+      expect(call[1].isOnboarded).toBeUndefined()
+    }
+    // No plan was saved either, so server and client agree: not onboarded.
+    expect(mockSaveTrainingPlan).not.toHaveBeenCalled()
+    expect(useAppStore.getState().isOnboarded).toBe(false)
+  })
+
+  it('does not mark the account onboarded when saving the plan fails', async () => {
+    // The same ordering question one step later: the plan generated but did not
+    // persist, so the server still has no plan and must not say onboarded.
+    mockSaveTrainingPlan.mockRejectedValue(new Error('Could not save the plan.'))
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Could not save the plan.')).toBeInTheDocument()
+    })
+
+    for (const call of mockUpdateCurrentUser.mock.calls) {
+      expect(call[1].isOnboarded).toBeUndefined()
+    }
+    expect(useAppStore.getState().isOnboarded).toBe(false)
   })
 
   it('shows fitness inputs on the Training Inputs step', async () => {
@@ -213,7 +277,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
     await waitFor(() => {
-      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2)
     })
 
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
@@ -266,14 +330,14 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       expect(mockAnalyseStravaActivities).toHaveBeenCalledTimes(1)
       expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
-      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+      expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2)
     })
 
     expect(mockAnalyseStravaActivities.mock.calls[0][0]).toHaveLength(7)
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
-      isOnboarded: true,
       stravaAnalysisComplete: true,
     })
+    expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
   })
 
   it('shows the Connect Strava option on step 4', async () => {
@@ -495,10 +559,10 @@ describe('OnboardingPage', () => {
     expect(mockAnalyseStravaActivities.mock.calls[0][0]).toHaveLength(7)
     expect(mockAnalyseStravaActivities.mock.calls[0][4]).toBe('intervals')
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
-      isOnboarded: true,
       intervalsAnalysisComplete: true,
       stravaAnalysisComplete: false,
     })
+    expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true)
   })
 
@@ -593,7 +657,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
-    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2))
     const payload = mockUpdateCurrentUser.mock.calls[0][1]
     expect(payload.name).toBeUndefined()
     expect(payload.email).toBeUndefined()
@@ -639,7 +703,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
-    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2))
     expect(mockUpdateCurrentUser.mock.calls[0][1].name).toBeUndefined()
   })
 })
