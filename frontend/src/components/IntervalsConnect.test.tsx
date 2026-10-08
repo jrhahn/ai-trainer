@@ -55,6 +55,28 @@ describe('IntervalsConnect', () => {
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(false)
   })
 
+  it('still sends 0 when the athlete leaves the ID blank', async () => {
+    // The field used to be prefilled with `0` — the backend's word for "the
+    // athlete this key belongs to", and a number no athlete can know
+    // (ai-trainer-ops#50). It starts blank now, and `0` is still what goes to
+    // the server, so this is a change to what the form *claims* and not to what
+    // it does. Pinned, because a refactor that quietly started sending an empty
+    // athlete id would connect the account to nothing.
+    render(<IntervalsConnect />)
+
+    await userEvent.type(screen.getByLabelText(/API Key/i), 'secret-key')
+    expect(screen.getByLabelText(/Athlete ID/i)).toHaveValue('')
+    await userEvent.click(screen.getByRole('button', { name: /Connect Intervals\.icu/i }))
+
+    await waitFor(() => {
+      expect(mockSaveIntervalsConnection).toHaveBeenCalledWith('tok-123', {
+        apiKey: 'secret-key',
+        athleteId: '0',
+        athleteName: '',
+      })
+    })
+  })
+
   it('shows connected state and disconnects Intervals.icu', async () => {
     useAppStore.setState({
       intervalsConnection: {

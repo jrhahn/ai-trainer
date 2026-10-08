@@ -45,6 +45,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Settings stops showing developer detail to athletes** (ai-trainer-ops#50,
+  the "developer leaks" half) — `src/pages/SettingsPage.tsx`,
+  `src/components/IntervalsConnect.tsx`.
+
+  The Data Sources box printed the backend's own URL — on a local install,
+  literally "the backend at http://localhost:8000". It tells a cyclist nothing
+  and makes the product look unfinished. The half of that paragraph that
+  changes what someone does (Strava's subscription requirement, FIT upload as
+  the alternative) stays.
+
+  The intervals.icu "Athlete ID" field was prefilled with `0`, which is the
+  backend's word for "the athlete this key belongs to" — the right default, and
+  a number no athlete can know. The field now starts blank and says
+  "Leave blank for your own account"; `0` is still what gets sent, pinned by a
+  test, so this changes what the form claims rather than what it does.
+
+  The grouping and ordering the rest of #50 asks for is a design pass and is
+  not here.
+
 - **The sign-in form comes first on a phone, and password managers can read it**
   (ai-trainer-ops#44, items 2 and 3) — `src/components/AuthShell.tsx`,
   `src/pages/LoginPage.tsx`, `src/pages/RegisterPage.tsx`, `e2e/layout.spec.ts`.
