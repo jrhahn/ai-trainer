@@ -540,4 +540,41 @@ describe('OnboardingPage', () => {
       expect(screen.getByRole('button', { name: 'Analyse & Generate Plan' })).toBeEnabled()
     })
   })
+
+  it('keeps the metrics the athlete entered ahead of a connected intervals.icu', async () => {
+    // The same rule the Strava default always had: typed-in FTP or max HR is a
+    // stated choice, a connection is only an offer.
+    setupStore({
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: 250 },
+    })
+    render(<OnboardingPage />)
+    await goToAssessment(userEvent.setup())
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Analyse & Generate Plan' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['intervals', 'intervals.icu (last 7 rides)'],
+    ['strava', 'Strava (last 7 rides)'],
+    ['manual', 'Manual'],
+  ])('names the %s assessment in the summary after a reload', (method, label) => {
+    sessionStorage.setItem(
+      'ai_trainer_onboarding_progress',
+      JSON.stringify({
+        step: 5,
+        trainingGoal: 'general_fitness',
+        raceDate: '',
+        raceDescription: '',
+        assessmentMethod: method,
+        followsTrainingPlan: false,
+        fitnessLevel: 'intermediate',
+      }),
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(screen.getByText(label)).toBeInTheDocument()
+  })
 })

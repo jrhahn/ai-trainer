@@ -647,6 +647,19 @@ describe('SettingsPage', () => {
     expect(useAppStore.getState().intervalsAutoSyncEnabled).toBe(false)
   })
 
+  it('puts the Intervals.icu toggle back and says so when saving it fails', async () => {
+    useAppStore.setState({ intervalsAutoSyncEnabled: true })
+    mockUpdateCurrentUser.mockRejectedValueOnce(new Error('offline'))
+    setup()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i }))
+
+    expect(
+      await screen.findByText('Could not save Intervals.icu sync setting. Please try again.'),
+    ).toBeInTheDocument()
+    expect(useAppStore.getState().intervalsAutoSyncEnabled).toBe(true)
+  })
+
   it('shows the completed Strava import report with skipped activities', () => {
     mockImportProgress.mockReturnValue({
       jobId: 'job-1',
