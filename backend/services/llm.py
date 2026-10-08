@@ -561,8 +561,13 @@ def _stub_plan_days() -> list[dict]:
 def _instance_of(schema: dict) -> Any:
     """The smallest value satisfying *schema*.
 
-    Gemini's schema dialect, so the type names are upper case. Only ``required``
-    properties are filled: an object carrying every optional field would hand
+    Gemini's schema dialect only: flat ``type`` plus ``properties``/``items``,
+    which is what every schema in ``services/`` uses. ``anyOf`` and ``oneOf`` are
+    followed into their first branch; ``$ref`` is not resolved and falls through
+    to the marker string, which is visible rather than wrong. Raised in review —
+    worth stating so nobody assumes full JSON Schema and debugs the silence.
+
+    Only ``required`` properties are filled: an object carrying every optional field would hand
     callers data the real model usually omits, and a test written against that
     would pass here and fail in production.
 
@@ -570,6 +575,11 @@ def _instance_of(schema: dict) -> Any:
     and a useless fixture — the branch that handles "there is something" is the
     one worth exercising, and a caller wanting none can assert on the count.
     """
+    for branch_key in ("anyOf", "oneOf"):
+        branches = schema.get(branch_key)
+        if branches:
+            return _instance_of(branches[0])
+
     kind = str(schema.get("type", "STRING")).upper()
     if kind == "OBJECT":
         required = schema.get("required") or []

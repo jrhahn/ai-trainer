@@ -302,7 +302,25 @@ class Settings(BaseSettings):
         is the failure this check exists to make impossible; a deployment that
         will not start gets noticed in minutes.
         """
-        if self.ai_stub_provider and not self.is_dev_environment:
+        if not self.ai_stub_provider:
+            return self
+
+        # APP_ENV must be stated, not inherited from the default. It defaults to
+        # "development", so an instance that sets AI_STUB_PROVIDER and forgets
+        # APP_ENV would pass this check while believing it was in production --
+        # and the only thing left protecting it would be compose.yml not
+        # forwarding the flag. Raised in review, and right: a lock that depends
+        # on another lock is one lock. Turning the stub on is a deliberate act,
+        # so saying which environment you are in is a fair thing to require.
+        if "app_env" not in self.model_fields_set:
+            raise ValueError(
+                "AI_STUB_PROVIDER is set but APP_ENV is not. The stub answers "
+                "every model call with canned text, so the environment has to be "
+                f"stated rather than defaulted: set APP_ENV to one of "
+                f"{sorted(DEV_ENVS)}, or unset AI_STUB_PROVIDER."
+            )
+
+        if not self.is_dev_environment:
             raise ValueError(
                 "AI_STUB_PROVIDER is set but APP_ENV is "
                 f"{self.app_env!r}. The stub answers every model call with "

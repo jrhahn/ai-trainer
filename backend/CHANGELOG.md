@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   key at all. Proven through `generate_training_plan` rather than only in
   isolation — a stub nothing consumes is just a class.
 
+  `APP_ENV` must be *stated* when the flag is on, not left to its
+  `"development"` default: an instance that set the flag and forgot `APP_ENV`
+  would otherwise pass the boot lock while believing it was in production, and
+  a lock that depends on another lock is one lock. Found in review.
+
 ### Fixed
 
 - **An athlete cannot choose how large a coach prompt is**

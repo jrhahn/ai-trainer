@@ -80,6 +80,18 @@ def test_every_development_environment_may_use_it(app_env):
     ).ai_stub_provider
 
 
+def test_the_environment_must_be_stated_not_defaulted():
+    """`APP_ENV` defaults to "development", so forgetting it is not consent.
+
+    Raised in review. An instance that sets `AI_STUB_PROVIDER` and omits
+    `APP_ENV` would otherwise pass the check below while believing it was in
+    production, leaving `compose.yml` not forwarding the flag as the only thing
+    protecting it — and a lock that depends on another lock is one lock.
+    """
+    with pytest.raises(ValueError, match="APP_ENV is not"):
+        Settings(**_settings_kwargs(ai_stub_provider=True))
+
+
 def test_it_is_off_without_anyone_doing_anything():
     """Default False, in production, with no mention of the flag."""
     assert not Settings(**_settings_kwargs(app_env="production")).ai_stub_provider
@@ -202,6 +214,18 @@ def test_an_array_gets_one_element_rather_than_none():
     assert llm_service._instance_of({"type": "ARRAY", "items": {"type": "STRING"}}) == [
         llm_service.STUB_MARKER
     ]
+
+
+@pytest.mark.parametrize("branch_key", ["anyOf", "oneOf"])
+def test_a_union_follows_its_first_branch(branch_key):
+    """Enough to not return a string where an object was asked for.
+
+    `$ref` stays unresolved on purpose and falls through to the marker, which is
+    visible in the output rather than quietly wrong — no caller in `services/`
+    uses either today, and the docstring says so.
+    """
+    schema = {branch_key: [{"type": "INTEGER"}, {"type": "STRING"}]}
+    assert llm_service._instance_of(schema) == 0
 
 
 @pytest.mark.parametrize(
