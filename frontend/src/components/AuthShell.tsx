@@ -20,7 +20,13 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
   return (
     <main className="min-h-screen bg-[#0f1116] text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-8 px-5 py-8 sm:px-8 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.8fr)] lg:items-center lg:gap-12">
-        <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#12141b] p-6 shadow-2xl sm:p-8">
+        {/* The form first on anything narrower than lg (ai-trainer-ops#44.3).
+            Measured at 390x844: the marketing panel is 595 px tall, so the
+            email field started at y=780 — a returning athlete scrolled almost a
+            full screen before every sign-in. The explicit orders restore the
+            left/right arrangement at lg, where the grid puts them side by side
+            and the panel costs nothing. */}
+        <section className="relative order-2 overflow-hidden rounded-2xl border border-white/10 bg-[#12141b] p-6 shadow-2xl sm:p-8 lg:order-1">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(40rem_24rem_at_10%_-10%,rgba(245,158,11,0.2),transparent_60%),radial-gradient(32rem_22rem_at_95%_20%,rgba(20,184,166,0.14),transparent_62%)]" />
           <div className="relative">
             <Link to="/" className="mb-10 inline-flex items-center gap-2">
@@ -54,7 +60,7 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8">
+        <section className="order-1 rounded-2xl border border-slate-200 bg-white p-6 text-gray-900 shadow-2xl sm:p-8 lg:order-2">
           {children}
         </section>
       </div>

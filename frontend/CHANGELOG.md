@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The sign-in form is reachable without scrolling on a phone, and password
+  managers can read it** (ai-trainer-ops#44, items 2 and 3) —
+  `src/components/AuthShell.tsx`, `src/pages/LoginPage.tsx`,
+  `src/pages/RegisterPage.tsx`, `e2e/layout.spec.ts`.
+
+  Measured at 390×844: the marketing panel came first and is 595 px tall, so
+  the email field began at **y=780** — a returning athlete scrolled almost a
+  full screen before every sign-in. The form now comes first below `lg`; the
+  two-column arrangement at `lg` is unchanged, verified by measuring both.
+
+  `autocomplete` was missing on every password field. Password managers and
+  passkeys work worse without it and Chrome warns in the console. Login gets
+  `email` / `current-password`, registration `name` / `email` and
+  `new-password` on both fields — `current-password` there would make a manager
+  offer the saved entry instead of generating a new one.
+
+  Items 1 (password composition rules, NIST) and 4 (the "Forgot password?"
+  link) need decisions and are answered on the issue instead.
+
 - **An end-to-end smoke test for the path a stranger takes**
   (ai-trainer-ops#46) — `playwright.config.ts`, `e2e/stranger-path.spec.ts`,
   a required `E2E Smoke` CI job.
