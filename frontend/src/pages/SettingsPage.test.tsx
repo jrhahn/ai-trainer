@@ -752,4 +752,49 @@ describe('SettingsPage', () => {
     ).toBeInTheDocument()
     expect(useAppStore.getState().stravaAutoSyncEnabled).toBe(true)
   })
+  it('marks intervals.icu as the active source when both are connected (ai-trainer-ops#49)', () => {
+    // The copy has to say which source is read, or "Connected" on both while
+    // only one is synced reads as a bug.
+    useAppStore.setState({
+      stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' },
+      intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice Intervals' },
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+    })
+    setup()
+
+    expect(screen.getAllByText('Active source')).toHaveLength(1)
+    expect(
+      screen.getByText(/Intervals\.icu is the primary source/)
+    ).toBeInTheDocument()
+  })
+
+  it('marks Strava as the active source when intervals.icu sync is off', () => {
+    useAppStore.setState({
+      stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' },
+      intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice Intervals' },
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: false,
+    })
+    setup()
+
+    expect(screen.getAllByText('Active source')).toHaveLength(1)
+    // The explanation belongs to the intervals-is-active case only; saying it
+    // here would be false.
+    expect(screen.queryByText(/Intervals\.icu is the primary source/)).toBeNull()
+  })
+
+  it('marks no source as active when neither syncs', () => {
+    // Anti-vacuity for the two above: a badge rendered unconditionally would
+    // satisfy both.
+    useAppStore.setState({
+      stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' },
+      intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice Intervals' },
+      stravaAutoSyncEnabled: false,
+      intervalsAutoSyncEnabled: false,
+    })
+    setup()
+
+    expect(screen.queryByText('Active source')).toBeNull()
+  })
 })

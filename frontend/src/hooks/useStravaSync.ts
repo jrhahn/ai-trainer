@@ -10,7 +10,7 @@ import { useMetricsPipeline } from './useMetricsPipeline'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
-type ActivitySource = 'strava' | 'intervals'
+export type ActivitySource = 'strava' | 'intervals'
 
 /**
  * Pick the sync-cursor id for the newest of `activities` for a given source.
@@ -30,6 +30,32 @@ function newestCursorId(activities: StravaActivity[], source: ActivitySource): n
     return newest.id
   }
   return Math.max(...activities.map((a) => a.id))
+}
+
+/** Which connected source the app actually reads from (ai-trainer-ops#49).
+ *
+ * intervals.icu wins when both are connected and syncing, answering #39 Q5: it
+ * is the primary source and Strava the convenience one, because intervals
+ * carries the training data this coach reasons from — power curves, load, the
+ * athlete's own notes — where Strava is a social feed that happens to expose
+ * rides.
+ *
+ * Exported, and used by Settings as well as by the sync hook, so the sentence
+ * the athlete reads about which source is active cannot disagree with the
+ * source actually being read. Two copies of this precedence is the obvious way
+ * for that to drift, and the drift would be invisible — Settings claiming one
+ * thing while the sync does another is exactly the class of defect that takes
+ * months to notice.
+ */
+export function resolveActiveSource(state: {
+  intervalsConnection: unknown
+  intervalsAutoSyncEnabled: boolean
+  stravaConnection: unknown
+  stravaAutoSyncEnabled: boolean
+}): ActivitySource | null {
+  if (state.intervalsConnection && state.intervalsAutoSyncEnabled) return 'intervals'
+  if (state.stravaConnection && state.stravaAutoSyncEnabled) return 'strava'
+  return null
 }
 
 export type AnalysisStatus = 'idle' | 'analysing' | 'done' | 'error'
@@ -90,11 +116,12 @@ export function useStravaSync(): UseStravaSyncResult {
   // Guard: prevents double-triggering when React batches setState calls from
   // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
-  const activeSource: ActivitySource | null = stravaConnection && stravaAutoSyncEnabled
-    ? 'strava'
-    : intervalsConnection && intervalsAutoSyncEnabled
-      ? 'intervals'
-      : null
+  const activeSource = resolveActiveSource({
+    intervalsConnection,
+    intervalsAutoSyncEnabled,
+    stravaConnection,
+    stravaAutoSyncEnabled,
+  })
   const activeAnalysisComplete = activeSource === 'intervals' ? intervalsAnalysisComplete : stravaAnalysisComplete
   const activeLastActivityId = activeSource === 'intervals' ? lastIntervalsActivityId : lastStravaActivityId
 
