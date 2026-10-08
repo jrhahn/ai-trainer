@@ -38,6 +38,7 @@ export interface StackOptions {
 }
 
 export function defineStack(options: StackOptions): PlaywrightTestConfig {
+  const outDir = `dist-${options.name}`
   const backendUrl = `http://127.0.0.1:${options.backendPort}`
   const frontendUrl = `http://127.0.0.1:${options.frontendPort}`
 
@@ -121,8 +122,18 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
         // out the full timeout and reported the frontend as never started.
         //
         // `VITE_BACKEND_URL` is baked in at build time, which is the whole
-        // reason each stack needs a preview of its own rather than sharing one.
-        command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${options.frontendPort} --strictPort`,
+        // reason each stack needs a preview of its own rather than sharing one
+        // — and why each needs its own `outDir`. Both used to build into
+        // `dist/`, so two stacks running at once had the second build overwrite
+        // the first: the keyless preview would then serve a bundle pointing at
+        // the stubbed backend, and its 402 assertions would quietly stop
+        // testing anything. CI never hit it because its steps are sequential,
+        // which is the kind of latent trap that waits for the first person to
+        // open two terminals. Raised in review.
+        command:
+          `npm run build -- --outDir ${outDir} && ` +
+          `npm run preview -- --outDir ${outDir} --host 127.0.0.1 ` +
+          `--port ${options.frontendPort} --strictPort`,
         url: frontendUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,

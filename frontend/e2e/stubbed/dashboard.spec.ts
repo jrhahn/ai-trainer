@@ -98,6 +98,7 @@ test.describe('a stranger finishes onboarding', () => {
   })
 
   test('still knows the athlete after a reload', async ({ page }) => {
+    const errors = watchConsole(page)
     // The state the dead end used to leave behind was only visible after a
     // reload: server says onboarded, client has no plan. Now that onboarding
     // can finish, the same reload should show a finished account — and the name
@@ -116,6 +117,10 @@ test.describe('a stranger finishes onboarding', () => {
 
     await waitForPopulatedDashboard(page, athlete)
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
+
+    // After the reload especially: this is where the #41 failure surfaced, and
+    // a rehydration that throws would otherwise show up only as a slower test.
+    expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
 
   test('the dashboard does not scroll sideways', async ({ page }) => {

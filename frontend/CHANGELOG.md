@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[stub]` text by construction; a test reading it would be a test of
   `llm._stub_plan_days`.
 
+  Each stack builds into its own `dist-<name>/`. Both used to build into
+  `dist/`, so two running at once had the second build overwrite the first and
+  the keyless preview would serve a bundle pointing at the stubbed backend —
+  its 402 assertions silently testing nothing. CI never hit it because its steps
+  are sequential. Found in review, and pinned by a unit test over the two
+  configs, since the thing that was wrong was a claim in a comment.
+
 - **An end-to-end smoke test for the path a stranger takes**
   (ai-trainer-ops#46) — `playwright.config.ts`, `e2e/stranger-path.spec.ts`,
   a required `E2E Smoke` CI job.
