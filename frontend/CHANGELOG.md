@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **intervals.icu is the active source when both are connected**
+  (ai-trainer-ops#49, answering #39 Q5) — `src/hooks/useStravaSync.ts`,
+  `src/pages/SettingsPage.tsx`.
+
+  `useStravaSync` preferred Strava whenever both connections had auto-sync on,
+  so an athlete with both was coached from the social feed rather than from the
+  training data. One expression decided it.
+
+  The precedence now lives in an exported `resolveActiveSource`, which Settings
+  uses as well. Recomputing it in the page would let the sentence an athlete
+  reads about where their data comes from disagree with where it actually comes
+  from — invisible drift, and the kind nobody notices for months.
+
+  Settings marks the active source and, when intervals is active with Strava
+  still connected, says why the other one is idle. "Connected" on both while
+  only one syncs otherwise reads as a bug.
+
+  Existing athletes with both connections have `intervalsAnalysisComplete=false`,
+  so the flip triggers one analysis on intervals data. A test pins that this
+  respects the #664 guard and does **not** regenerate an existing plan —
+  otherwise everyone with both sources would have had their plan rewritten on
+  the first load after this shipped.
+
 ### Fixed
 
 - **Onboarding no longer marks the account onboarded without a plan**

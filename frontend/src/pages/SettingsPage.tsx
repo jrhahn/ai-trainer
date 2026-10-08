@@ -17,6 +17,7 @@ import IntervalsConnect from '../components/IntervalsConnect'
 import SetupGuideLink from '../components/SetupGuideLink'
 import { SETUP_GUIDE_SECTIONS } from '../utils/links'
 import { formatPaceFromSeconds, parsePaceToSeconds } from '../utils/pace'
+import { resolveActiveSource } from '../hooks/useStravaSync'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
@@ -109,6 +110,16 @@ export default function SettingsPage() {
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [hrWorking, setHrWorking] = useState(false)
+  // Which source is actually being read, from the same function the sync hook
+  // uses (ai-trainer-ops#49). Recomputing the precedence here would let this
+  // sentence and the sync disagree, and an athlete told the wrong thing about
+  // where their data comes from has no way to find out otherwise.
+  const activeSource = resolveActiveSource({
+    intervalsConnection,
+    intervalsAutoSyncEnabled,
+    stravaConnection,
+    stravaAutoSyncEnabled,
+  })
   const [stravaSyncMsg, setStravaSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stravaSyncSaving, setStravaSyncSaving] = useState(false)
   const [intervalsSyncMsg, setIntervalsSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -839,11 +850,18 @@ export default function SettingsPage() {
                   Direct activity import using your Intervals.icu API key and athlete ID.
                 </p>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {intervalsConnection ? 'Connected' : 'Not connected'}
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {intervalsConnection ? 'Connected' : 'Not connected'}
+                </span>
+                {activeSource === 'intervals' && (
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    Active source
+                  </span>
+                )}
+              </div>
             </div>
             <IntervalsConnect />
             <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
@@ -886,12 +904,29 @@ export default function SettingsPage() {
                   OAuth-based automatic import for connected Strava accounts.
                 </p>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {stravaConnection ? 'Connected' : 'Not connected'}
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {stravaConnection ? 'Connected' : 'Not connected'}
+                </span>
+                {activeSource === 'strava' && (
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    Active source
+                  </span>
+                )}
+              </div>
             </div>
+            {/* Said once, where an athlete with both connections will look for
+                it: the badge above says which one is read, and this says why
+                the other one is not (ai-trainer-ops#49). Without it, "Connected"
+                on both and syncing from one reads as a bug. */}
+            {activeSource === 'intervals' && stravaConnection && (
+              <p className="text-xs text-gray-500">
+                Intervals.icu is the primary source, so activities are read from there.
+                Strava stays connected and is used if you turn off Intervals.icu sync.
+              </p>
+            )}
             <StravaConnect />
             <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
               <span>Automatic sync: {stravaAutoSyncEnabled ? 'On' : 'Off'}</span>

@@ -611,4 +611,108 @@ describe('useStravaSync', () => {
     expect(mockGetIntervalsActivities).not.toHaveBeenCalled()
     expect(mockGetNewIntervalsActivities).not.toHaveBeenCalled()
   })
+  // ---------------------------------------------------------------------------
+  // Source precedence (ai-trainer-ops#49, answering #39 Q5)
+  // ---------------------------------------------------------------------------
+
+  it('reads from intervals.icu when both sources are connected and syncing', async () => {
+    // The whole change. An athlete with both connections was being read from
+    // Strava, and nothing but the order of one expression decided it.
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      intervalsAnalysisComplete: true,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockGetIntervalsActivities).toHaveBeenCalledWith('tok'))
+    expect(mockGetStravaActivities).not.toHaveBeenCalled()
+  })
+
+  it('falls back to Strava when intervals.icu sync is off', async () => {
+    // The fallback has to survive the flip, or athletes who turned intervals
+    // sync off lose their data source entirely.
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
+      intervalsAutoSyncEnabled: false,
+      stravaAnalysisComplete: true,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockGetStravaActivities).toHaveBeenCalledWith('tok'))
+    expect(mockGetIntervalsActivities).not.toHaveBeenCalled()
+  })
+
+  it('analyses the new source as intervals, not as strava', async () => {
+    // The source argument decides which cursor and which completion flag the
+    // backend writes. Reading intervals activities and labelling them strava
+    // would advance the wrong cursor and re-import everything next time.
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      intervalsAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(
+        mockActivities,
+        'tok',
+        undefined,
+        undefined,
+        'intervals'
+      )
+    })
+  })
+
+  it('does not regenerate an existing plan when the switch triggers the first intervals analysis', async () => {
+    // The acceptance criterion with teeth. Existing athletes with both
+    // connections have intervalsAnalysisComplete=false, so the flip triggers one
+    // analysis on intervals data — and that analysis must respect the #664
+    // guard, or everyone with both sources gets their plan rewritten on the
+    // first load after this ships.
+    const existingPlan = [
+      {
+        date: '2026-09-09',
+        workoutType: 'strength' as const,
+        title: 'Core and Upper Body Strength',
+        description: 'Agreed with the athlete in chat.',
+        durationMinutes: 45,
+      },
+    ]
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: true,
+      intervalsAnalysisComplete: false,
+      trainingPlan: existingPlan,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(mockAnalyseStravaActivities).toHaveBeenCalled()
+      expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
+    })
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+  })
 })
