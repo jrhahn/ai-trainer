@@ -36,7 +36,9 @@ async def build(reconstructed: bool) -> str:
                     "Reconstructed (estimate, older rows)",
                     calibration.reliability(pairs),
                 )
-                + f"\n\n{skipped} rows skipped: the nudge may have been clamped."
+                + f"\n\n{skipped} rows skipped: the nudge may have been clamped. "
+                "Rows an athlete edited cannot be told apart and are included, "
+                "which is why this is an estimate."
             )
     return "\n\n".join(sections)
 
