@@ -7,22 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **The landing page no longer scrolls sideways on a phone**
-  (ai-trainer-ops#51.3) — `src/pages/LandingPage.tsx`, `e2e/layout.spec.ts`.
-
-  Measured at 390 px: `scrollWidth` 399 against `clientWidth` 390. The header
-  held three items that all carried `shrink-0`, so nothing could give and the
-  overflow went to the page — which a phone visitor meets before anything else.
-  The wordmark is the one element that can degrade gracefully, so it truncates
-  instead; a slightly clipped brand beats a page that slides under the thumb.
-
-  A new `e2e/layout.spec.ts` asserts `scrollWidth <= clientWidth` on every page
-  a signed-out visitor can reach, at both widths, and names the widest element
-  in the failure message — "399 > 390" alone is a failure someone has to
-  reproduce before they can act on it.
-
 ### Added
 
 - **An end-to-end smoke test for the path a stranger takes**
@@ -58,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Mutation check, as the issue asks: reintroducing the name bug turns the job
   red.
+
+### Fixed
+
+- **The landing page no longer scrolls sideways on a phone**
+  (ai-trainer-ops#51.3) — `src/pages/LandingPage.tsx`, `e2e/layout.spec.ts`.
+
+  Measured at 390 px: `scrollWidth` 399 against `clientWidth` 390. The header
+  held three items that all carried `shrink-0`, so nothing could give and the
+  overflow went to the page — which a phone visitor meets before anything else.
+  The wordmark is the one element that can degrade gracefully, so it truncates
+  instead; a slightly clipped brand beats a page that slides under the thumb.
+
+  A new `e2e/layout.spec.ts` asserts `scrollWidth <= clientWidth` on every page
+  a signed-out visitor can reach, at both widths, and names the widest element
+  in the failure message — "399 > 390" alone is a failure someone has to
+  reproduce before they can act on it.
 
 ### Changed
 
