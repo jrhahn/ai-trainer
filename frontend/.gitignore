@@ -1,0 +1,5 @@
+# Playwright (ai-trainer-ops#46)
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e-test.db

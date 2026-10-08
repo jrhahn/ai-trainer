@@ -43,6 +43,7 @@ backend/.venv
 backend/pytest.db
 backend/ci-test.db
 backend/integration-test.db
+backend/e2e-test.db
 backend/.coverage
 backend/coverage.xml
 backend/coverage_test*.db
