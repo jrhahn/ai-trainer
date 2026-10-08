@@ -159,6 +159,30 @@ def test_the_metrics_block_clamps_the_activity_name_too():
     assert "R" * 2_000 not in block
 
 
+@pytest.mark.parametrize("limit", [0, 5_000], ids=["off", "raised"])
+def test_the_limit_parameter_does_what_its_docstring_says(limit):
+    """Found in review, and the contract was the broken part.
+
+    ``mark_values`` clamped the value *and* called ``mark`` without a limit, so
+    ``mark`` applied its own default on top: ``limit=0`` ("off") and
+    ``limit=5000`` both came out at 1,000. No caller passed one, so nothing was
+    wrong in production — but the parameter is public and its docstring promised
+    otherwise, and a documented knob that does something else is worse than no
+    knob. There is one clamp on the path now.
+    """
+    long = "x" * 5_000
+    rendered = untrusted_text.marked_json({"description": long}, limit=limit)
+
+    assert long in rendered
+    assert untrusted_text._TRUNCATION_MARK not in rendered
+
+
+def test_the_default_still_clamps_after_that_fix():
+    """Anti-vacuity for the pair above: they pass if nothing ever clamps."""
+    rendered = untrusted_text.marked_json({"description": "x" * 5_000})
+    assert untrusted_text._TRUNCATION_MARK in rendered
+
+
 def test_structural_values_are_left_alone():
     """Keys this app owns are neither marked nor clamped.
 

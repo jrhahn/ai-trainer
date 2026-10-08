@@ -85,11 +85,11 @@ batch                   prompt          approx tokens
 ======================  ==============  ==============
 
 So roughly 250x a normal prompt in a single request, from two fields the athlete
-types on Strava. At 1,000 the same hostile batch renders ~120k chars (~30k
-tokens): still about seven times a normal prompt, because the activity *count*
-is bounded elsewhere and this only bounds each field. The point is that it is
-bounded and predictable at all, which is what makes the budget check mean
-something.
+types on Strava. With the bound in place the same batches render 98,093 and
+194,873 characters (~24,500 and ~48,700 tokens) — and, more to the point,
+*identically* at 5,000 and at 50,000 characters per field. What is left scales
+with the activity count, which this app chooses, rather than with anything an
+athlete types. That is what makes the budget check mean something.
 
 1,000 and not tighter because it has to not clip legitimate prose: the longest
 plan or workout description this app writes is 88 characters, and an athlete
@@ -125,11 +125,11 @@ def mark(text: object, *, empty: str = "", limit: int = -1) -> str:
     string the app itself wrote.
 
     ``limit`` clamps the value to :data:`MAX_FREE_TEXT_CHARS` by default, and
-    the default is the point (ai-trainer-ops#33). Of the call sites, all but two
-    pass an athlete-written field, and the two that do not are
+    the default is the point (ai-trainer-ops#33). Of the 29 call sites, 27 pass
+    an athlete-written field; the two that do not are
     ``services/rag``'s knowledge chunks — this project's own text, long by
     design, which pass ``limit=0`` and say why. Defaulting the other way would
-    mean 27 call sites each having to remember a bound, and the two that mattered
+    mean 29 call sites each having to remember a bound, and the two that mattered
     most were the ones nobody had thought about: the activity name in
     ``activity_power_metrics_block`` rendered at full length and carried a
     hostile batch to three million characters on its own, after the JSON dump
@@ -253,7 +253,14 @@ def mark_values(
     if isinstance(value, str) and key not in STRUCTURAL_KEYS:
         # ``empty=value`` keeps a blank string blank rather than turning it into
         # an empty pair of markers, which would read as a field that was there.
-        return mark(_clamp(value, limit), empty=value)
+        #
+        # The limit is handed to ``mark`` rather than applied here, so there is
+        # exactly one clamp on the path. Clamping here *and* letting ``mark``
+        # apply its own default clamped twice, which made ``limit=0`` ("off")
+        # and ``limit=5000`` both behave as 1,000 — a public parameter whose
+        # docstring did not describe it. No caller passed one, so nothing was
+        # wrong in production; the contract was.
+        return mark(value, empty=value, limit=limit)
     return value
 
 

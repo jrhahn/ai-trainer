@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   here. Whether the cap can be breached at all is a property of this layer, and
   it could be.
 
+  Found in review: `mark_values` clamped the value *and* called `mark` without a
+  limit, so `mark` applied its own default on top — `limit=0` ("off") and
+  `limit=5000` both behaved as 1,000. No caller passed one, so nothing was wrong
+  in production, but the parameter is public and its docstring promised
+  otherwise. There is one clamp on the path now, and the contract is pinned.
+
 - **A missing AI key is a 402 the athlete can act on, never a 500**
   (ai-trainer-ops#41) — `services/llm.py`, `tests/test_missing_ai_key.py`.
 
