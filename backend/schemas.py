@@ -329,7 +329,7 @@ class UserResponse(CamelModel):
     runs when it is confident enough — this field only ever holds what the
     athlete said."""
     fitness_level: Optional[str] = None
-    ai_provider: str = "openai"
+    ai_provider: str = "gemini"
     consumed_tokens: int = 0
     ftp_plausibility_warning: Optional[str] = None
     """Advisory message when ``current_ftp`` is implausible against the

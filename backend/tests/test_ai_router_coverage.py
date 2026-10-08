@@ -2,7 +2,6 @@
 
 Exercises endpoints and helpers that are missing from the base test_ai.py suite:
 - _next_race_date_from_events (pure helper)
-- _provider / _default_provider (unit)
 - readiness_score endpoint
 - review_new_rides endpoint
 - refresh_knowledge endpoint

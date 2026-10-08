@@ -476,7 +476,7 @@ const dataState = {
   intervalsAnalysisComplete: false,
   lastIntervalsActivityId: null as number | null,
   intervalsAutoSyncEnabled: true,
-  aiProvider: 'openai' as AiProvider,
+  aiProvider: 'gemini' as AiProvider,
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
   coachMemory: '',

@@ -86,23 +86,6 @@ def _ride_metric_log_sample(
     ]
 
 
-def _default_provider() -> str:
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
-
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider or "openai"
-    if stored == "gemini" and (user.user_gemini_api_key or settings.gemini_api_key):
-        return "gemini"
-    if stored == "openai" and (user.user_openai_api_key or settings.openai_api_key):
-        return "openai"
-    return _default_provider()
-
-
 async def _backfill_ride_weather_bg(user_id: str, access_token: str | None) -> None:
     """Background weather backfill so dashboard hydration reads stored data immediately."""
     try:
@@ -1579,7 +1562,7 @@ async def get_ai_key_status(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AIKeyStatusSchema:
     return schemas.AIKeyStatusSchema(
-        provider=current_user.ai_provider or "openai",
+        provider=current_user.ai_provider or "gemini",
         has_openai_key=bool(current_user.user_openai_api_key),
         has_gemini_key=bool(current_user.user_gemini_api_key),
         openai_model=settings.openai_coach_model,
@@ -2220,7 +2203,7 @@ async def _analyse_fit_import(
     current_user: models.User,
     parsed: _ParsedFitActivity,
 ) -> dict | None:
-    provider = current_user.ai_provider or "openai"
+    provider = current_user.ai_provider or "gemini"
     async with track_llm_usage(db, current_user, source="api:analyse-fit-import"):
         try:
             ai_result = await ai_service.analyse_fit_activity(

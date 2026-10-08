@@ -153,7 +153,11 @@ class User(Base):
     # their run history fills in when it is confident enough.
     threshold_pace_seconds_per_km: Mapped[float | None] = mapped_column(Float)
     fitness_level: Mapped[str | None] = mapped_column(String(50))
-    ai_provider: Mapped[str] = mapped_column(String(20), default="openai")
+    # Gemini, the provider this deployment runs and every athlete-facing text
+    # names (ai-trainer-ops#42). An "openai" default sent new accounts to a
+    # provider with no server key, and in BYOK-only mode told them to add an
+    # OpenAI key nobody had asked them for.
+    ai_provider: Mapped[str] = mapped_column(String(20), default="gemini")
     consumed_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     # The same tokens split by how they bill. Input and output differ by ~6× and
     # cached input costs a tenth of input, so the total alone cannot be turned

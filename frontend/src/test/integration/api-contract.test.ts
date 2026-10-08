@@ -99,7 +99,8 @@ describe('user profile service ↔ backend', () => {
     expect(data.stravaAnalysisComplete).toBe(false)
     expect(data.riderAssessment).toBeNull()
     expect(data.stravaConnection).toBeNull()
-    expect(data.aiProvider).toBe('openai')
+    // Gemini since ai-trainer-ops#42: the provider the deployment runs.
+    expect(data.aiProvider).toBe('gemini')
   })
 
   it('updateCurrentUser persists camelCase profile fields', async () => {
