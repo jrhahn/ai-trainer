@@ -32,6 +32,8 @@ from services import authelia_store
 
 _PASSWORD = "Str0ng!Pass"
 _WRITERS = 8
+# Exit code of a child that lost a same-address race (EmailTaken).
+_TAKEN = 3
 
 # Spawn, not fork: pytest's process is multi-threaded by the time a test runs,
 # and a forked child can inherit a lock some other thread was holding and hang
@@ -59,9 +61,6 @@ def _register(barrier, path: str, email: str) -> None:
     _point_at(path)
     barrier.wait()
     authelia_store.create_user(email, email.split("@")[0], _PASSWORD)
-
-
-_TAKEN = 3
 
 
 def _register_reporting_taken(barrier, path: str, email: str) -> None:
@@ -151,8 +150,9 @@ def test_one_address_registered_at_once_is_won_exactly_once(store):
     """The existence check is inside the lock, so two signups cannot both pass it.
 
     Outside it, both would read a store without the address and both would
-    write — two entries for one person, or one silently replacing the other's
-    password.
+    write. The store is a mapping keyed by address, so the later write
+    silently replaces the earlier one's password while both callers are told
+    "registered".
     """
     _write_store(store, {})
 
