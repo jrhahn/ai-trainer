@@ -287,6 +287,50 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _refuse_the_stub_provider_outside_development(self) -> "Settings":
+        """``AI_STUB_PROVIDER`` may only be on in a development environment.
+
+        The stub answers every model call from its own arguments
+        (``services/llm.StubProvider``). In a test harness that is the point; on
+        a live instance it would mean athletes receiving placeholder text in the
+        coach's voice, with a plan built from a loop rather than from their
+        training — and nothing in the UI saying so. There is no amount of that
+        which is acceptable, so it is a boot refusal rather than a warning.
+
+        Refusing to start is the severe option and the right one here. The
+        alternative is a process that comes up and serves canned coaching, which
+        is the failure this check exists to make impossible; a deployment that
+        will not start gets noticed in minutes.
+        """
+        if not self.ai_stub_provider:
+            return self
+
+        # APP_ENV must be stated, not inherited from the default. It defaults to
+        # "development", so an instance that sets AI_STUB_PROVIDER and forgets
+        # APP_ENV would pass this check while believing it was in production --
+        # and the only thing left protecting it would be compose.yml not
+        # forwarding the flag. Raised in review, and right: a lock that depends
+        # on another lock is one lock. Turning the stub on is a deliberate act,
+        # so saying which environment you are in is a fair thing to require.
+        if "app_env" not in self.model_fields_set:
+            raise ValueError(
+                "AI_STUB_PROVIDER is set but APP_ENV is not. The stub answers "
+                "every model call with canned text, so the environment has to be "
+                f"stated rather than defaulted: set APP_ENV to one of "
+                f"{sorted(DEV_ENVS)}, or unset AI_STUB_PROVIDER."
+            )
+
+        if not self.is_dev_environment:
+            raise ValueError(
+                "AI_STUB_PROVIDER is set but APP_ENV is "
+                f"{self.app_env!r}. The stub answers every model call with "
+                "canned text and must never run where an athlete can see it. "
+                f"Set APP_ENV to one of {sorted(DEV_ENVS)}, or unset "
+                "AI_STUB_PROVIDER."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _refuse_a_dedicated_key_that_is_also_the_shared_one(self) -> "Settings":
         """A dedicated key equal to the shared key is a split that did not happen.
 
@@ -323,6 +367,24 @@ class Settings(BaseSettings):
     signs up spends the owner's money, which is half of #676.  It is left True
     so a single-user install keeps working out of the box, but a public
     deployment should set it explicitly — ``compose.yml`` now does.
+    """
+
+    ai_stub_provider: bool = False
+    """Answer every model call from a stub instead of a provider
+    (ai-trainer-ops#46).
+
+    For the end-to-end suite, a scenario suite and CI judges: four separate
+    pieces of work were each blocked on having no way to make the model answer
+    deterministically, and none of them can carry a real key.
+
+    Two locks, because the failure mode is an athlete being coached by a
+    placeholder with nothing saying so. ``Settings`` refuses to construct with
+    this on outside a development environment (see
+    :meth:`_refuse_the_stub_provider_outside_development`), and
+    ``llm.stub_is_active`` checks the environment again at the point of use, for
+    the case where something has set the attribute on a live object.
+
+    Default False, so it is on only where someone wrote it down.
     """
 
     # ------------------------------------------------------------------
