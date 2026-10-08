@@ -216,12 +216,18 @@ def pair(tmp_path_factory):
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     argv, container = command
-    proxy = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    # A file, not a pipe: nothing drains a pipe while the proxy runs, and a
+    # first `docker pull` writes enough progress to fill one and block.
+    log_path = config_dir / "traefik.log"
+    log = open(log_path, "wb")
+    proxy = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=log)
     try:
         if not _wait_for(front_port, seconds=90):
             proxy.terminate()
-            _, err = proxy.communicate(timeout=10)
-            pytest.fail(f"Traefik did not come up: {err.decode(errors='replace')[-2000:]}")
+            proxy.wait(timeout=10)
+            log.flush()
+            tail = log_path.read_bytes()[-2000:].decode(errors="replace")
+            pytest.fail(f"Traefik did not come up: {tail}")
         yield Pair(front_port)
     finally:
         if container:
@@ -233,6 +239,7 @@ def pair(tmp_path_factory):
             proxy.kill()
         server.should_exit = True
         thread.join(timeout=5)
+        log.close()
 
 
 class Pair:
@@ -256,7 +263,7 @@ class Pair:
                 pass
         # A smuggled request is processed on Traefik's pooled upstream
         # connection, possibly after our socket closed; give it a moment.
-        time.sleep(0.3)
+        time.sleep(0.5)
         return b"".join(chunks), _SEEN[before:]
 
 
@@ -387,7 +394,12 @@ def test_no_second_request_is_smuggled_past_the_proxy(pair, attack, framing, bod
     while the app sees two, so the app may never have handled more requests
     than the client got answers to, and none of them may carry the victim.
     """
-    response, seen = pair.send(_request(framing, path="/api/v1/ping", body=body))
+    # These keep the connection open, so reading ends on idle rather than on
+    # close — and an undercounted answer would read as smuggling. A loaded
+    # runner gets a generous wait rather than a false alarm.
+    response, seen = pair.send(
+        _request(framing, path="/api/v1/ping", body=body), settle=3.0
+    )
     answered = response.count(b"HTTP/1.1 ")
     assert len(seen) <= answered, (
         f"{attack}: the app handled {len(seen)} requests, the client got "
