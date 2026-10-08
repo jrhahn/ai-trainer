@@ -213,9 +213,17 @@ async def retrieve_cycling_context(
             # again on every matching question, and spliced into the coach
             # prompt with the same standing as the instructions. Marked as data
             # (#680) — both the title and the body, since both are ingested.
+            # `limit=0` opts out of the length bound that `mark` applies by
+            # default (ai-trainer-ops#33). That bound exists for athlete-written
+            # fields, which are short when honest; a retrieved passage is this
+            # project's own curated text and long on purpose, and clamping it to
+            # 1,000 characters would cut the evidence the coach is meant to
+            # reason from — degrading grounding to fix an input problem that does
+            # not live here. The chunk count and size are bounded upstream by
+            # retrieval, not by an athlete.
             context_parts.append(
-                f"[Source: {untrusted_text.mark(title)}]\n"
-                f"{untrusted_text.mark(content)}"
+                f"[Source: {untrusted_text.mark(title, limit=0)}]\n"
+                f"{untrusted_text.mark(content, limit=0)}"
             )
             source: dict[str, Any] = {"title": title, "sourceType": source_type}
             if doi:

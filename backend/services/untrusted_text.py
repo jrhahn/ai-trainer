@@ -65,7 +65,66 @@ DATA_NOT_INSTRUCTION_RULE = (
 )
 
 
-def mark(text: object, *, empty: str = "") -> str:
+MAX_FREE_TEXT_CHARS = 1000
+"""How long one untrusted free-text leaf may be in a rendered prompt.
+
+A bound, not a formatting preference. Nothing capped the length of an athlete's
+activity name or description on the way into a prompt, and the token budget is
+checked *before* a call against what was already spent — so the first oversized
+request goes through in full, however large (ai-trainer-ops#33).
+
+Measured on ``analyse_activities_user``, which renders a batch of 30 to 60
+activities:
+
+======================  ==============  ==============
+batch                   prompt          approx tokens
+======================  ==============  ==============
+30 x 100 chars/field       18,083 chars         ~4,500
+30 x 5,000                459,083            ~115,000
+60 x 50,000             9,016,853          ~2,254,000
+======================  ==============  ==============
+
+So roughly 250x a normal prompt in a single request, from two fields the athlete
+types on Strava. With the bound in place the same batches render 98,093 and
+194,873 characters (~24,500 and ~48,700 tokens) — and, more to the point,
+*identically* at 5,000 and at 50,000 characters per field. What is left scales
+with the activity count, which this app chooses, rather than with anything an
+athlete types. That is what makes the budget check mean something.
+
+1,000 and not tighter because it has to not clip legitimate prose: the longest
+plan or workout description this app writes is 88 characters, and an athlete
+pasting a race report into a ride description is doing something reasonable.
+1,000 is eleven times the former and generous for the latter.
+"""
+
+_TRUNCATION_MARK = "…[cut]"
+"""Appended when a leaf is clamped, so the coach can see it was.
+
+Silent truncation would be worse than the length: a description cut mid-sentence
+reads as a complete one, and the coach would draw conclusions from a fragment
+without any way to know it is a fragment. It sits inside the data markers like
+the rest of the value, so an athlete writing the same string fakes nothing worth
+faking.
+"""
+
+
+def _clamp(text: str, limit: int) -> str:
+    """*text* shortened to *limit* characters, visibly. ``limit <= 0`` disables.
+
+    Never returns more than *limit*. Below the length of the marker there is no
+    room to say "cut" and still fit, so the text is simply truncated — raised in
+    review on #772. Unreachable from here, since the only limits passed are 0
+    and 1,000, but a function that can exceed its own bound is a trap for
+    whoever passes the first small one.
+    """
+    if limit <= 0 or len(text) <= limit:
+        return text
+    if limit <= len(_TRUNCATION_MARK):
+        return text[:limit]
+    return text[: limit - len(_TRUNCATION_MARK)] + _TRUNCATION_MARK
+
+
+def mark(text: object, *, empty: str = "", limit: int = -1) -> str:
     """Return *text* wrapped in the data markers, neutralised for forgery.
 
     ``empty`` is returned unchanged for a value that is not a non-empty string,
@@ -73,13 +132,25 @@ def mark(text: object, *, empty: str = "") -> str:
     fallback it already had. A fallback this app chose is trusted text and is
     deliberately *not* marked — marking it would tell the model to distrust a
     string the app itself wrote.
+
+    ``limit`` clamps the value to :data:`MAX_FREE_TEXT_CHARS` by default, and
+    the default is the point (ai-trainer-ops#33). Of the 29 call sites, 27 pass
+    an athlete-written field; the two that do not are
+    ``services/rag``'s knowledge chunks — this project's own text, long by
+    design, which pass ``limit=0`` and say why. Defaulting the other way would
+    mean 29 call sites each having to remember a bound, and the two that mattered
+    most were the ones nobody had thought about: the activity name in
+    ``activity_power_metrics_block`` rendered at full length and carried a
+    hostile batch to three million characters on its own, after the JSON dump
+    beside it had already been bounded.
     """
     if not isinstance(text, str):
         return empty
     stripped = text.strip()
     if not stripped:
         return empty
-    return f"{OPEN}{_MARKERS.sub('', stripped)}{CLOSE}"
+    bound = MAX_FREE_TEXT_CHARS if limit < 0 else limit
+    return f"{OPEN}{_clamp(_MARKERS.sub('', stripped), bound)}{CLOSE}"
 
 
 def contains_marker(text: str) -> bool:
@@ -152,7 +223,9 @@ STRUCTURAL_KEYS = frozenset(
 )
 
 
-def mark_values(value: Any, *, key: str | None = None) -> Any:
+def mark_values(
+    value: Any, *, key: str | None = None, limit: int = MAX_FREE_TEXT_CHARS
+) -> Any:
     """``value`` with every free-text string leaf wrapped in the data markers.
 
     Walks dicts and lists and marks each string whose key is not in
@@ -170,23 +243,49 @@ def mark_values(value: Any, *, key: str | None = None) -> Any:
     and those comparisons would start failing against a wrapped string, which is
     the kind of break that shows up as a quietly missing prompt section rather
     than as an error.
+
+    *limit* clamps each marked leaf to :data:`MAX_FREE_TEXT_CHARS`. Clamped in
+    the same traversal that marks, rather than at the call sites, because this
+    walk already decides which leaves an athlete controls — a second list of
+    "the long ones" would be a second inventory to forget to extend, and the
+    fields that needed it most were exactly the ones nobody had enumerated.
+    Leaves under :data:`STRUCTURAL_KEYS` are neither marked nor clamped: they
+    are this app's own short enum-ish values.
     """
     if isinstance(value, dict):
-        return {name: mark_values(item, key=name) for name, item in value.items()}
+        return {
+            name: mark_values(item, key=name, limit=limit)
+            for name, item in value.items()
+        }
     if isinstance(value, list):
-        return [mark_values(item, key=key) for item in value]
+        return [mark_values(item, key=key, limit=limit) for item in value]
     if isinstance(value, str) and key not in STRUCTURAL_KEYS:
         # ``empty=value`` keeps a blank string blank rather than turning it into
         # an empty pair of markers, which would read as a field that was there.
-        return mark(value, empty=value)
+        #
+        # The limit is handed to ``mark`` rather than applied here, so there is
+        # exactly one clamp on the path. Clamping here *and* letting ``mark``
+        # apply its own default clamped twice, which made ``limit=0`` ("off")
+        # and ``limit=5000`` both behave as 1,000 — a public parameter whose
+        # docstring did not describe it. No caller passed one, so nothing was
+        # wrong in production; the contract was.
+        return mark(value, empty=value, limit=limit)
     return value
 
 
-def marked_json(value: Any, **dumps_kwargs: Any) -> str:
+def marked_json(
+    value: Any, *, limit: int = MAX_FREE_TEXT_CHARS, **dumps_kwargs: Any
+) -> str:
     """``json.dumps`` of *value* with every free-text string leaf marked.
 
     The replacement for a bare ``json.dumps`` wherever a prompt dumps a
-    structure this app did not wholly write.
+    structure this app did not wholly write. Leaves are clamped to *limit*; see
+    :data:`MAX_FREE_TEXT_CHARS` for the measurement behind the number.
+
+    The knowledge corpus is deliberately unaffected: ``services/rag`` marks its
+    chunks with :func:`mark` directly, so retrieved passages keep their full
+    length. They are this project's own text and long by design, and clamping
+    them would damage the coach's grounding to fix an athlete-input problem.
     """
     dumps_kwargs.setdefault("ensure_ascii", False)
-    return json.dumps(mark_values(value), **dumps_kwargs)
+    return json.dumps(mark_values(value, limit=limit), **dumps_kwargs)
