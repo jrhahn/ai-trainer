@@ -107,7 +107,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     intervalsAnalysisComplete: user.intervalsAnalysisComplete ?? false,
     lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
     intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled ?? true,
-    aiProvider: user.aiProvider ?? 'openai',
+    aiProvider: user.aiProvider ?? 'gemini',
     ftpPlausibilityWarning: user.ftpPlausibilityWarning ?? null,
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,

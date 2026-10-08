@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Gemini is the default provider in the client too** (ai-trainer-ops#42) —
+  `useAppStore.ts`, `services/user.ts`, to match the backend.
 - **Onboarding no longer erases the registered name** (ai-trainer-ops#40) —
   `OnboardingPage.tsx`, `DashboardPage.tsx`. The form copied name and email at
   mount, before the profile had loaded, showed the empty copies in the

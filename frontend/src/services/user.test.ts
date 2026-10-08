@@ -78,6 +78,21 @@ beforeEach(() => {
 })
 
 describe('fetchCurrentUser', () => {
+  it('defaults a missing provider to Gemini, the one the deployment runs (ai-trainer-ops#42)', async () => {
+    mockApiFetch.mockResolvedValue({
+      id: 'user-1',
+      email: 'alice@example.com',
+      name: 'Alice',
+      isOnboarded: false,
+      riderAssessment: null,
+      stravaConnection: null,
+    })
+
+    const result = await fetchCurrentUser('tok-123')
+
+    expect(result.aiProvider).toBe('gemini')
+  })
+
   it('maps backend response fields to the frontend profile shape', async () => {
     mockApiFetch.mockResolvedValue({
       id: 'user-1',

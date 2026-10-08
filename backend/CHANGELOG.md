@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **New accounts default to Gemini, and accounts that never chose OpenAI move
+  to it** (ai-trainer-ops#42) — `models.py`, `schemas.py`, migration
+  `20261008_000002`. The default was `openai`, although the deployment runs
+  Gemini and every text tells the athlete to bring a Gemini key. In BYOK-only
+  mode a new athlete's first plan therefore failed with "No openai API key
+  configured". The migration moves `openai` rows with no OpenAI key of their
+  own to `gemini`. A saved OpenAI key is a choice, so those rows keep OpenAI.
+  Requests that work today are unaffected, because `resolve_user_provider`
+  already preferred a usable Gemini.
 - **A blank name is refused instead of stored** (ai-trainer-ops#40) —
   `schemas.UpdateProfileRequest`. Onboarding sent `name: ""` and this endpoint
   stored it over the name given at registration, so every account that
