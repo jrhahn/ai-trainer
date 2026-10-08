@@ -475,7 +475,24 @@ def get_provider(name: str, task: str = TASK_COACH) -> LLMProvider:
 
 
 def _get_provider_global(name: str, task: str) -> LLMProvider:
-    """Return a provider using the global (backend-owner) settings keys."""
+    """Return a provider using the global (backend-owner) settings keys.
+
+    Raises :class:`AIKeyNotConfiguredError` when there is no key at all, rather
+    than handing back a provider with none (ai-trainer-ops#41).
+
+    Returning a keyless ``GeminiProvider`` was not a harmless fallback. The SDK
+    then raises ``ValueError("No API key was provided")`` from inside
+    ``genai.Client``, which is not an ``AIKeyNotConfiguredError``, so it escapes
+    every handler and becomes a 500 — and a 500 raised past the handlers leaves
+    Starlette's ``ServerErrorMiddleware``, which sits *outside* ``CORSMiddleware``,
+    so the response carries no CORS headers and the browser reports
+    "Failed to fetch". The athlete is told nothing, the status code is invisible
+    to the client, and the warning that would have explained it is in a log only
+    the operator can read.
+
+    Raised and not logged-and-continued, because there is no useful work left to
+    do: every caller is about to make a model call that cannot succeed.
+    """
     if name == "gemini" and settings.gemini_api_key:
         return GeminiProvider(model=_resolve_model("gemini", task), task=task)
     if name == "openai" and settings.openai_api_key:
@@ -484,8 +501,23 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
         return GeminiProvider(model=_resolve_model("gemini", task), task=task)
     if settings.openai_api_key:
         return OpenAIProvider(model=_resolve_model("openai", task), task=task)
-    logger.warning("No AI provider API key configured; defaulting to GeminiProvider")
-    return GeminiProvider(model=_resolve_model("gemini", task), task=task)
+
+    # Two different people can fix this and the message has to serve both. The
+    # operator set no global key, which the log says in those words; the athlete
+    # can still get moving by supplying their own, because with admin fallback
+    # on a user key is preferred over the global one anyway. So the user-facing
+    # half names the action available to whoever is reading it.
+    logger.error(
+        "No AI provider API key is configured on this deployment: both "
+        "GEMINI_API_KEY and OPENAI_API_KEY are empty, and admin-key fallback is "
+        "%s. Every AI route will answer 402 until one is set or the athlete "
+        "supplies their own key.",
+        "on" if settings.allow_admin_ai_key_fallback else "off",
+    )
+    raise AIKeyNotConfiguredError(
+        f"No {name} API key configured. "
+        "Please add your key in Settings → AI Provider."
+    )
 
 
 def resolve_user_provider(user: models.User) -> str:

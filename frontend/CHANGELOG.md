@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Onboarding no longer marks the account onboarded without a plan**
+  (ai-trainer-ops#41) — `src/pages/OnboardingPage.tsx`.
+
+  `handleGenerate` sent `isOnboarded: true` with the profile, *before*
+  generating the plan. A failing generation — a 402 for a missing AI key is the
+  ordinary case in BYOK-only mode — therefore left the account marked onboarded
+  on the server with no plan. The error appeared in onboarding and the local
+  flag stayed false, so it looked survivable; a reload read `isOnboarded` from
+  the server, landed on the dashboard saying "No session planned for today",
+  and nothing anywhere named the cause.
+
+  The profile is written first, `isOnboarded` only after the plan exists on the
+  server. Failing before that keeps the athlete in onboarding, where the message
+  is. Also covered: a plan that generates but fails to save, which is the same
+  question one step later.
+
+  Five existing tests pinned the old single-call ordering and now pin the new
+  two-call one, rather than losing the assertion.
+
 - **Gemini is the default provider in the client too** (ai-trainer-ops#42) —
   `useAppStore.ts`, `services/user.ts`, to match the backend.
 - **Onboarding no longer erases the registered name** (ai-trainer-ops#40) —

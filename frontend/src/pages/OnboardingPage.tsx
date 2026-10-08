@@ -284,17 +284,29 @@ export default function OnboardingPage() {
         }
       }
 
-      // Name and email are not onboarding's to write (ai-trainer-ops#40).
+      // The profile first, without `isOnboarded` — name and email are not
+      // onboarding's to write (ai-trainer-ops#40).
       await updateCurrentUser(authToken, {
         ...profileForPlan,
         name: undefined,
         email: undefined,
-        isOnboarded: true,
         stravaAnalysisComplete,
         intervalsAnalysisComplete,
       })
       const plan = await generateTrainingPlan(authToken)
       await saveTrainingPlan(authToken, plan)
+
+      // `isOnboarded` last, and only once a plan exists on the server
+      // (ai-trainer-ops#41). It used to go out with the profile above, so a
+      // failing plan generation — a 402 for a missing AI key is the ordinary
+      // case in BYOK-only mode — left the account marked onboarded with no
+      // plan. The error was shown here and the local flag stayed false, so it
+      // looked survivable; a reload then read `isOnboarded` from the server and
+      // landed on the dashboard saying "No session planned for today", with
+      // nothing anywhere naming the cause. Failing before this line instead
+      // keeps the athlete in onboarding, where the message is.
+      await updateCurrentUser(authToken, { isOnboarded: true })
+
       if (riderAssessment) {
         setRiderAssessment(riderAssessment)
       }
