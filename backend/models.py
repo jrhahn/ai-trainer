@@ -1261,6 +1261,14 @@ class AthletePrediction(Base):
     # The coach's confidence in the prediction; rises on a correct call and falls
     # on a wrong one when the prediction is evaluated.
     confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # The confidence the coach stated when it made the call, and never changed
+    # afterwards (ai-trainer-ops#27). ``confidence`` above cannot answer "is a
+    # 0.6 right 60% of the time": evaluation moves it by the outcome itself, so
+    # every hit is stored higher and every miss lower, and a reliability
+    # diagram over it separates perfectly whatever the coach originally said.
+    # The athlete may edit it too. NULL means the row predates this column —
+    # the original value is not recoverable without assuming nobody edited it.
+    stated_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     # pending (awaiting outcome) -> correct | incorrect.
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
