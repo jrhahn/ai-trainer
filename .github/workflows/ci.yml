@@ -148,9 +148,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # Cached by browser revision: a ~120 MB download on every run is most of
-      # this job's wall clock, and the revision only moves when @playwright/test
-      # does.
+      # Keyed on the lockfile, not on the browser revision Playwright wants:
+      # the revision is not available before `npm ci`, and a lockfile change is
+      # the only thing that can move it. So any dependency bump misses the cache
+      # and re-downloads ~120 MB — safe, and slower than it needs to be. The
+      # install step runs either way and re-validates whatever was restored.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4

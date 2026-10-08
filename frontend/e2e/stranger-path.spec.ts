@@ -90,7 +90,7 @@ async function register(page: Page, athlete: ReturnType<typeof newAthlete>) {
 }
 
 test.describe('a stranger registers and reaches a usable app', () => {
-  test('onboarding keeps the name the athlete registered with', async ({ page }) => {
+  test('onboarding greets the athlete by the name they registered with', async ({ page }) => {
     // Regression guard for ai-trainer-ops#40. Onboarding used to send the name
     // field back to the server from a form that had copied it before the
     // profile loaded, so the athlete's name was replaced by an empty string.
@@ -99,11 +99,13 @@ test.describe('a stranger registers and reaches a usable app', () => {
 
     await register(page, athlete)
 
-    // Onboarding is where registration lands.
-    await expect(page.getByText(/^Welcome,/).first()).toBeVisible({ timeout: 30_000 })
-
-    // The greeting has to carry the registered name, not a blank.
-    await expect(page.getByText(new RegExp(athlete.name.split(' ')[0], 'i')).first()).toBeVisible()
+    // Onboarding is where registration lands, and the greeting carries the name
+    // rather than the 'athlete' fallback. Asserted as one anchored string:
+    // `/Alex/i` matched any text on the page containing those letters, which is
+    // a greeting assertion that would have survived losing the greeting.
+    await expect(
+      page.getByText(`Welcome, ${athlete.name}!`, { exact: false }).first()
+    ).toBeVisible({ timeout: 30_000 })
 
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
