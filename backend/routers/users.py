@@ -86,23 +86,6 @@ def _ride_metric_log_sample(
     ]
 
 
-def _default_provider() -> str:
-    if settings.gemini_api_key:
-        return "gemini"
-    if settings.openai_api_key:
-        return "openai"
-    return "gemini"
-
-
-def _provider(user: models.User) -> str:
-    stored = user.ai_provider or "gemini"
-    if stored == "gemini" and (user.user_gemini_api_key or settings.gemini_api_key):
-        return "gemini"
-    if stored == "openai" and (user.user_openai_api_key or settings.openai_api_key):
-        return "openai"
-    return _default_provider()
-
-
 async def _backfill_ride_weather_bg(user_id: str, access_token: str | None) -> None:
     """Background weather backfill so dashboard hydration reads stored data immediately."""
     try:
