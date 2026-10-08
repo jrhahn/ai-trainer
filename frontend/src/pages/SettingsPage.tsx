@@ -21,7 +21,6 @@ import { resolveActiveSource } from '../hooks/useStravaSync'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
 import type { AiProvider } from '../store/useAppStore'
-import { BACKEND_URL } from '../services/api'
 import { endSession } from '../services/sessions'
 import {
   deleteCurrentUser,
@@ -832,10 +831,21 @@ export default function SettingsPage() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
           <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700">
-            Connection secrets are handled by the backend at{' '}
-            <code className="font-mono bg-blue-100 px-1 rounded">{BACKEND_URL}</code>.
-            Strava may require a paid Strava subscription for Standard Tier API access; FIT upload
-            remains available when automatic provider access is not the right fit.
+            {/* The backend's URL used to be printed here (ai-trainer-ops#50).
+                It is a deployment detail no athlete can act on, and on a local
+                install it read "the backend at http://localhost:8000" — which
+                tells a cyclist nothing and makes the product look unfinished.
+
+                "at rest" and not "never leave this server", which is what this
+                said for one commit until review caught it. The keys do leave:
+                the intervals.icu key goes to intervals.icu, the Strava token to
+                Strava, the athlete's own provider key to OpenAI or Gemini on
+                every call. A privacy sentence on a settings page is something
+                an athlete relies on, so it may only claim what
+                `EncryptedString` actually provides. */}
+            Your keys are stored encrypted at rest. Strava may require a
+            paid Strava subscription for Standard Tier API access; FIT upload stays available
+            either way.
           </p>
         </div>
 

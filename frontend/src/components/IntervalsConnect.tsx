@@ -10,7 +10,11 @@ export default function IntervalsConnect() {
   const setIntervalsAnalysisComplete = useAppStore((s) => s.setIntervalsAnalysisComplete)
 
   const [apiKey, setApiKey] = useState('')
-  const [athleteId, setAthleteId] = useState(intervalsConnection?.athleteId ?? '0')
+  // Blank, not '0' (ai-trainer-ops#50). '0' is the backend's word for "the
+  // athlete this key belongs to", which is the right default and a number no
+  // athlete has any way to know. It is still what gets sent; the field just
+  // stops asserting it as though the reader chose it.
+  const [athleteId, setAthleteId] = useState(intervalsConnection?.athleteId ?? '')
   const [athleteName, setAthleteName] = useState(intervalsConnection?.athleteName ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -112,7 +116,7 @@ export default function IntervalsConnect() {
             value={athleteId}
             onChange={(e) => setAthleteId(e.target.value)}
             className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            placeholder="0"
+            placeholder="Leave blank for your own account"
           />
         </label>
       </div>
