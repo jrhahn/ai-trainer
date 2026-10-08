@@ -68,11 +68,17 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen bg-[#0f1116] text-white">
       <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 py-5 sm:px-8">
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-[#0f1116]">
+        {/* `min-w-0` + `truncate`, not `shrink-0` (ai-trainer-ops#51.3). The
+            header held three items that all refused to shrink, and at 390 px
+            they needed 399 — so the whole landing page scrolled sideways, which
+            is the first thing a phone visitor meets. The wordmark is the one
+            element that can give; a slightly clipped brand beats a page that
+            slides under the thumb. */}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-[#0f1116]">
             <Bike size={20} aria-hidden="true" />
           </span>
-          <span className="whitespace-nowrap text-base font-bold sm:text-lg">Train Like a Pro</span>
+          <span className="truncate text-base font-bold sm:text-lg">Train Like a Pro</span>
         </span>
         <nav className="ml-auto flex shrink-0 items-center gap-3 sm:gap-5">
           <a
