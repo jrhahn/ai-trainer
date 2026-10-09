@@ -655,12 +655,27 @@ async def update_manual_activity(
     Same slot, so the load row it produced is corrected rather than joined by
     a second one — re-saving a log is how #745 already corrects a figure.
     Only the unplanned range, for the reason deletion is.
+
+    **A field nobody sent is a field nobody corrected.** The upsert replaces the
+    whole row, so a body without ``averageHeartRate`` would blank a heart rate
+    the entry was created with — and because that figure feeds ``load_for_log``,
+    fixing a typo in the note would quietly re-price the session. Omission is
+    therefore read as "leave it", while an explicit ``null`` still clears it;
+    ``model_fields_set`` is what tells the two apart.
     """
-    if not logged_sessions.is_unplanned_slot(slot) or (
+    existing = (
         await crud.get_workout_log_by_date(db, current_user.id, date, slot)
-    ) is None:
+        if logged_sessions.is_unplanned_slot(slot)
+        else None
+    )
+    if existing is None:
         raise HTTPException(status_code=404, detail="No such entered activity.")
     sport = schemas.normalise_plan_sport(body.sport)
+    heart_rate = (
+        body.average_heart_rate
+        if "average_heart_rate" in body.model_fields_set
+        else existing.average_heart_rate
+    )
     await crud.upsert_workout_log(
         db,
         current_user.id,
@@ -668,7 +683,7 @@ async def update_manual_activity(
         slot=slot,
         actual_duration_minutes=body.duration_minutes,
         average_power=None,
-        average_heart_rate=body.average_heart_rate,
+        average_heart_rate=heart_rate,
         peak_power=None,
         perceived_effort=body.perceived_effort,
         notes=body.notes,

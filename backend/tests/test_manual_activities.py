@@ -292,3 +292,62 @@ async def test_a_correction_is_validated_like_an_entry(client: AsyncClient, auth
         json=_correction(perceivedEffort=9),
     )
     assert response.status_code == 422
+
+
+async def test_a_correction_keeps_a_heart_rate_it_was_not_asked_to_change(
+    client: AsyncClient, auth_headers
+):
+    """A field nobody sent is a field nobody corrected.
+
+    The upsert replaces the whole row, so without this the UI — which offers no
+    heart-rate control — would blank the figure of an entry created through the
+    API with one. That figure feeds ``load_for_log``, so fixing a typo in the
+    note would quietly re-price the session. Found in review on PR #795.
+    """
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(averageHeartRate=142))
+    ).json()
+    assert [log.average_heart_rate for log in await _logs()] == [142]
+
+    response = await client.put(
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
+        json=_correction(notes="Fixed the typo."),
+    )
+
+    assert response.status_code == 200, response.text
+    logs = await _logs()
+    assert [log.average_heart_rate for log in logs] == [142]
+    assert logs[0].notes == "Fixed the typo."
+
+
+async def test_a_correction_can_still_clear_the_heart_rate_on_purpose(
+    client: AsyncClient, auth_headers
+):
+    """Omission means "leave it"; an explicit null still means "remove it"."""
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(averageHeartRate=142))
+    ).json()
+
+    await client.put(
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
+        json=_correction(averageHeartRate=None),
+    )
+
+    assert [log.average_heart_rate for log in await _logs()] == [None]
+
+
+async def test_an_entry_cannot_be_corrected_through_another_day(
+    client: AsyncClient, auth_headers
+):
+    """The slot alone is not the identity; the day is the other half (#496)."""
+    created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
+    other_day = (date.today() - timedelta(days=4)).isoformat()
+
+    response = await client.put(
+        f"{URL}/{other_day}/{created['slot']}", headers=auth_headers, json=_correction()
+    )
+
+    assert response.status_code == 404
+    assert [log.date for log in await _logs()] == [created["date"]]
