@@ -5,6 +5,7 @@ import FitFileUpload from './FitFileUpload'
 import { useAppStore } from '../store/useAppStore'
 import {
   addManualActivity,
+  updateManualActivity,
   fetchMetricsHistory,
   fetchRideMetricsHistory,
   type ManualActivityInput,
@@ -27,23 +28,43 @@ const SPORTS: { value: ManualActivityInput['sport']; label: string; Icon: typeof
   { value: 'strength', label: 'Strength', Icon: Dumbbell },
 ]
 
+/** An entered activity being corrected rather than a new one being entered. */
+export interface EditedActivity {
+  date: string
+  slot: number
+  sport: ManualActivityInput['sport']
+  durationMinutes: number
+  perceivedEffort: EffortLevel
+  notes: string
+}
+
 export default function AddActivityDialog({
   open,
   onClose,
+  editing = null,
 }: {
   open: boolean
   onClose: () => void
+  /** Set to correct an existing entry (#47): same form, prefilled, day fixed. */
+  editing?: EditedActivity | null
 }) {
   const authToken = useAppStore((s) => s.authToken)
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
   const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
 
   const today = formatLocalDate(new Date())
-  const [date, setDate] = useState(today)
-  const [sport, setSport] = useState<ManualActivityInput['sport']>('cycling')
-  const [minutes, setMinutes] = useState('')
-  const [effort, setEffort] = useState<EffortLevel>(3)
-  const [notes, setNotes] = useState('')
+  // One rule: while correcting, every field starts at what was entered;
+  // otherwise at the defaults. Deliberately `editing ? … : …` rather than
+  // `editing?.x ?? default` — the fields of `EditedActivity` are required, so a
+  // `??` here would be dead code that silently covers for a caller passing
+  // nothing, which is exactly the guard the caller is supposed to provide.
+  const [date, setDate] = useState(editing ? editing.date : today)
+  const [sport, setSport] = useState<ManualActivityInput['sport']>(
+    editing ? editing.sport : 'cycling'
+  )
+  const [minutes, setMinutes] = useState(editing ? String(editing.durationMinutes) : '')
+  const [effort, setEffort] = useState<EffortLevel>(editing ? editing.perceivedEffort : 3)
+  const [notes, setNotes] = useState(editing ? editing.notes : '')
   // Enter it by hand, or bring the file the device recorded (ai-trainer-ops#48):
   // one entry point for "something happened that the app does not know about".
   const [mode, setMode] = useState<'enter' | 'upload'>('enter')
@@ -74,13 +95,12 @@ export default function AddActivityDialog({
     setSaving(true)
     setError('')
     try {
-      await addManualActivity(authToken, {
-        date,
-        sport,
-        durationMinutes: duration,
-        perceivedEffort: effort,
-        notes: notes.trim(),
-      })
+      const fields = { sport, durationMinutes: duration, perceivedEffort: effort, notes: notes.trim() }
+      if (editing) {
+        await updateManualActivity(authToken, editing.date, editing.slot, fields)
+      } else {
+        await addManualActivity(authToken, { date, ...fields })
+      }
       // The entry is a session in the load chain now; show it, and the
       // fatigue it added, without waiting for the next full reload.
       const [rides, metrics] = await Promise.all([
@@ -98,7 +118,8 @@ export default function AddActivityDialog({
   }
 
   return (
-    <Modal open={open} onClose={close} title="Add activity">
+    <Modal open={open} onClose={close} title={editing ? 'Edit activity' : 'Add activity'}>
+      {!editing && (
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1" role="tablist">
         {(
           [
@@ -120,7 +141,8 @@ export default function AddActivityDialog({
           </button>
         ))}
       </div>
-      {mode === 'upload' ? (
+      )}
+      {mode === 'upload' && !editing ? (
         <FitFileUpload embedded />
       ) : (
       <form
@@ -139,6 +161,7 @@ export default function AddActivityDialog({
             type="date"
             value={date}
             max={today}
+            disabled={Boolean(editing)}
             onChange={(e) => setDate(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
@@ -247,7 +270,7 @@ export default function AddActivityDialog({
             disabled={!canSave || saving}
             className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save activity'}
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Save activity'}
           </button>
         </div>
       </form>

@@ -129,6 +129,8 @@ export interface WorkoutFeedback {
   perceivedEffort: 1 | 2 | 3 | 4 | 5
   notes: string
   completedAt: string
+  /** The sport the session was logged in; the server always says (#714). */
+  sport?: string
 }
 
 export interface TrainingDay {

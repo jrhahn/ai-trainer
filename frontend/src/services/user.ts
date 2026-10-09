@@ -1065,6 +1065,20 @@ export async function addManualActivity(
   })
 }
 
+/** A correction to an entered activity; the day and slot are its identity. */
+export async function updateManualActivity(
+  token: string,
+  date: string,
+  slot: number,
+  activity: Omit<ManualActivityInput, 'date'>
+): Promise<ManualActivityCreated> {
+  return apiFetch<ManualActivityCreated>(`/users/me/activities/${date}/${slot}`, {
+    token,
+    method: 'PUT',
+    body: activity,
+  })
+}
+
 export async function deleteManualActivity(
   token: string,
   date: string,

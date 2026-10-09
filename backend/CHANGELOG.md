@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **An entered activity can be corrected** (ai-trainer-ops#47) —
+  `PUT /users/me/activities/{date}/{slot}`. Sport, minutes, effort and note
+  are corrected in place, so its load row is corrected rather than joined by
+  a second one. Only the unplanned range, like deletion. `GET /workouts` now
+  says which sport each log was in, so the edit form can open in it.
+  A field the request omits is left alone rather than blanked: the UI offers no
+  heart-rate control, so a full replace would have erased the figure of an entry
+  created through the API with one — and since it feeds `load_for_log`, fixing a
+  typo in the note would have re-priced the session. An explicit `null` still
+  clears it. Found in review on PR #795.
 - **An upload result says which day it belongs to** (ai-trainer-ops#48) —
   `schemas.FitUploadFileResult.activity_date`, so the result can link to it.
 - **A Garmin "Export Original" .zip uploads like the .fit inside it, and a

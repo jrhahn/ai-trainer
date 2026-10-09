@@ -231,3 +231,123 @@ def test_the_schema_names_the_logged_source():
     from services import logged_sessions
 
     assert schemas.LOGGED_ACTIVITY_SOURCE == logged_sessions.LOGGED_SOURCE
+
+
+# ---------------------------------------------------------------------------
+# Editing an entry
+# ---------------------------------------------------------------------------
+
+
+def _correction(**overrides) -> dict:
+    return {"sport": "running", "durationMinutes": 60, "perceivedEffort": 4, "notes": "Longer than I said.", **overrides}
+
+
+async def test_an_entry_is_corrected_in_place(client: AsyncClient, auth_headers):
+    created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
+
+    response = await client.put(
+        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers, json=_correction()
+    )
+
+    assert response.status_code == 200, response.text
+    logs = await _logs()
+    assert len(logs) == 1
+    assert (logs[0].actual_duration_minutes, logs[0].perceived_effort) == (60, 4)
+    rows = await _metrics()
+    assert len(rows) == 1, "a correction must not add a second session"
+    assert rows[0].duration_seconds == 3600
+
+
+async def test_the_sport_can_be_corrected_too(client: AsyncClient, auth_headers):
+    created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
+    await client.put(
+        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers,
+        json=_correction(sport="strength"),
+    )
+    assert [m.sport_type for m in await _metrics()] == [SPORT_STRENGTH]
+
+
+async def test_the_workouts_listing_says_which_sport_an_entry_was(client: AsyncClient, auth_headers):
+    created = (await client.post(URL, headers=auth_headers, json=_entry(sport="strength"))).json()
+    listing = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()
+    assert listing[f"{created['date']}#{created['slot']}"]["sport"] == SPORT_STRENGTH
+
+
+async def test_only_an_entered_activity_can_be_edited_here(client: AsyncClient, auth_headers):
+    day = (date.today() - timedelta(days=1)).isoformat()
+    await client.post(
+        f"/api/v1/users/me/workouts/{day}",
+        headers=auth_headers,
+        json={"feedback": {"actualDurationMinutes": 60, "perceivedEffort": 3,
+                           "notes": "", "completedAt": f"{day}T08:00:00"}},
+    )
+    assert (await client.put(f"{URL}/{day}/0", headers=auth_headers, json=_correction())).status_code == 404
+    assert (await client.put(f"{URL}/{day}/100", headers=auth_headers, json=_correction())).status_code == 404
+
+
+async def test_a_correction_is_validated_like_an_entry(client: AsyncClient, auth_headers):
+    created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
+    response = await client.put(
+        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers,
+        json=_correction(perceivedEffort=9),
+    )
+    assert response.status_code == 422
+
+
+async def test_a_correction_keeps_a_heart_rate_it_was_not_asked_to_change(
+    client: AsyncClient, auth_headers
+):
+    """A field nobody sent is a field nobody corrected.
+
+    The upsert replaces the whole row, so without this the UI — which offers no
+    heart-rate control — would blank the figure of an entry created through the
+    API with one. That figure feeds ``load_for_log``, so fixing a typo in the
+    note would quietly re-price the session. Found in review on PR #795.
+    """
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(averageHeartRate=142))
+    ).json()
+    assert [log.average_heart_rate for log in await _logs()] == [142]
+
+    response = await client.put(
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
+        json=_correction(notes="Fixed the typo."),
+    )
+
+    assert response.status_code == 200, response.text
+    logs = await _logs()
+    assert [log.average_heart_rate for log in logs] == [142]
+    assert logs[0].notes == "Fixed the typo."
+
+
+async def test_a_correction_can_still_clear_the_heart_rate_on_purpose(
+    client: AsyncClient, auth_headers
+):
+    """Omission means "leave it"; an explicit null still means "remove it"."""
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(averageHeartRate=142))
+    ).json()
+
+    await client.put(
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
+        json=_correction(averageHeartRate=None),
+    )
+
+    assert [log.average_heart_rate for log in await _logs()] == [None]
+
+
+async def test_an_entry_cannot_be_corrected_through_another_day(
+    client: AsyncClient, auth_headers
+):
+    """The slot alone is not the identity; the day is the other half (#496)."""
+    created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
+    other_day = (date.today() - timedelta(days=4)).isoformat()
+
+    response = await client.put(
+        f"{URL}/{other_day}/{created['slot']}", headers=auth_headers, json=_correction()
+    )
+
+    assert response.status_code == 404
+    assert [log.date for log in await _logs()] == [created["date"]]

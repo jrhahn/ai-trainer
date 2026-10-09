@@ -478,6 +478,17 @@ class ManualActivityRequest(CamelModel):
     notes: str = Field(default="", max_length=2000)
 
 
+class ManualActivityUpdate(CamelModel):
+    """A correction to an entered activity (#47). The day is its identity, so
+    moving one to another day is a delete and a new entry."""
+
+    sport: str
+    duration_minutes: int = Field(ge=1, le=24 * 60)
+    perceived_effort: int = Field(ge=1, le=5)
+    average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    notes: str = Field(default="", max_length=2000)
+
+
 class ManualActivityResponse(CamelModel):
     date: str
     slot: int

@@ -41,6 +41,7 @@ import {
   deleteCurrentUser,
   addManualActivity,
   deleteManualActivity,
+  updateManualActivity,
   exportAccountData,
   recalculateMetrics,
   estimateFTP,
@@ -1187,6 +1188,15 @@ describe('manual activities (ai-trainer-ops#47)', () => {
     mockApiFetch.mockResolvedValue(undefined)
     await deleteManualActivity('tok', '2026-10-08', 101)
     expect(mockApiFetch).toHaveBeenCalledWith('/users/me/activities/2026-10-08/101', { token: 'tok', method: 'DELETE' })
+  })
+})
+
+describe('updateManualActivity (ai-trainer-ops#47)', () => {
+  it('PUTs the correction to the entry\'s own date and slot', async () => {
+    mockApiFetch.mockResolvedValue({ date: '2026-10-08', slot: 100, sport: 'running' })
+    const fields = { sport: 'running' as const, durationMinutes: 50, perceivedEffort: 4 as const, notes: '' }
+    await updateManualActivity('tok', '2026-10-08', 100, fields)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/activities/2026-10-08/100', { token: 'tok', method: 'PUT', body: fields })
   })
 })
 
