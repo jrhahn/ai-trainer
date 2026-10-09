@@ -203,7 +203,7 @@ export default function SettingsPage() {
       return
     }
     const confirmed = window.confirm(
-      '⚠️ Recalculate TSS, ATL, CTL for stored activities?\n\n' +
+      'Recalculate TSS, ATL, CTL for stored activities?\n\n' +
         'This will overwrite all historical training stress values using ' +
         (parsed ? `${parsed} W` : 'your current FTP') +
         ' as the reference. This operation cannot be reversed.\n\nContinue?'
@@ -341,7 +341,7 @@ export default function SettingsPage() {
       return
     }
     const confirmed = window.confirm(
-      '⚠️ Recalculate TSS, ATL, CTL for stored activities?\n\n' +
+      'Recalculate TSS, ATL, CTL for stored activities?\n\n' +
         `This will overwrite all historical training stress values using ${parsed} W as the reference. ` +
         'This operation cannot be reversed.\n\nContinue?'
     )

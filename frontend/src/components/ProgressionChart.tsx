@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { TrendingUp, RefreshCw } from 'lucide-react'
+import { BarChart3, HeartPulse, RefreshCw, TrendingUp, Zap } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useQueryClient } from '@tanstack/react-query'
@@ -233,7 +233,10 @@ export default function ProgressionChart() {
       {/* FTP chart */}
       {ftpData.length >= 2 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">⚡ FTP History (W)</p>
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <Zap size={13} className="shrink-0 text-purple-600" aria-hidden="true" />
+            FTP History (W)
+          </p>
           <LineChart
             data={ftpData}
             labels={ftpLabels}
@@ -247,7 +250,10 @@ export default function ProgressionChart() {
       {/* Threshold HR chart */}
       {thrHrData.length >= 2 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">❤️ Threshold HR History (bpm)</p>
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <HeartPulse size={13} className="shrink-0 text-red-500" aria-hidden="true" />
+            Threshold HR History (bpm)
+          </p>
           <LineChart
             data={thrHrData}
             labels={thrHrLabels}
@@ -261,7 +267,10 @@ export default function ProgressionChart() {
       {/* CTL / ATL / TSB chart */}
       {ctlData.length >= 2 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">📊 Training Load (CTL / ATL / TSB)</p>
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <BarChart3 size={13} className="shrink-0 text-gray-500" aria-hidden="true" />
+            Training Load (CTL / ATL / TSB)
+          </p>
           <div className="flex items-center gap-4 mb-1">
             <span className="flex items-center gap-1 text-xs text-blue-600">
               <span className="inline-block w-4 h-0.5 bg-blue-500" /> CTL

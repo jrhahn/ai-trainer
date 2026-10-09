@@ -21,16 +21,10 @@ import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
+import { sessionIcon } from '../utils/sessionIcon'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
-import {
-  PLAN_SPORT_CYCLING,
-  PLAN_SPORT_RUNNING,
-  PLAN_SPORT_STRENGTH,
-  isCyclingSession,
-  planSport,
-  planSportLabel,
-} from '../utils/planSport'
+import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import WeatherBadge from './WeatherBadge'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
@@ -41,45 +35,6 @@ const typeColors: Record<TrainingDay['workoutType'], string> = {
   race: 'bg-purple-50 text-purple-700 border-purple-200',
   recovery: 'bg-green-50 text-green-700 border-green-200',
   strength: 'bg-teal-50 text-teal-700 border-teal-200',
-}
-
-const typeEmoji: Record<TrainingDay['workoutType'], string> = {
-  rest: '😴',
-  endurance: '🚴',
-  intervals: '⚡',
-  tempo: '🔥',
-  race: '🏆',
-  recovery: '💚',
-  strength: '💪',
-}
-
-const sportEmoji: Record<string, string> = {
-  [PLAN_SPORT_CYCLING]: '🚴',
-  [PLAN_SPORT_RUNNING]: '🏃',
-  [PLAN_SPORT_STRENGTH]: '💪',
-}
-
-/** What to draw for a session in a sport we have no icon for.
- *
- * A stopwatch, deliberately: duration is all such a session reliably is, and it
- * names no sport. Falling back to the workout type's own emoji would put a
- * bicycle on a planned swim, which is the exact confusion `sessionEmoji` exists
- * to remove. Reachable through a stored sport outside `PLANNABLE_SPORTS` — the
- * persist gate keeps an athlete's own edit rather than relabelling it as cycling.
- */
-const UNKNOWN_SPORT_EMOJI = '⏱️'
-
-/** The emoji for one session, which the sport decides when the type cannot (#710).
- *
- * `endurance` and `strength` name a sport rather than an intent, so a planned run
- * showed the athlete a bicycle. Every other type — rest, intervals, tempo, race,
- * recovery — describes what the session is *for* in any sport, and keeps its own.
- */
-function sessionEmoji(session: TrainingDay): string {
-  if (session.workoutType === 'endurance' || session.workoutType === 'strength') {
-    return sportEmoji[planSport(session)] ?? UNKNOWN_SPORT_EMOJI
-  }
-  return typeEmoji[session.workoutType]
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -457,9 +412,14 @@ export default function TrainingCalendar({
                         return (
                           <div key={sessionKey(session)} className="mb-0.5 last:mb-0">
                             <div className="flex items-center gap-1">
-                              <span className="text-base leading-none">
-                                {sessionEmoji(session)}
-                              </span>
+                              {(() => {
+                                // `aria-hidden`: the cell's label already names
+                                // the day, and the session's own title sits
+                                // beside this. An icon that announced itself
+                                // would say "bicycle" into the middle of it.
+                                const Icon = sessionIcon(session)
+                                return <Icon size={14} className="shrink-0" aria-hidden="true" />
+                              })()}
                               {label && (
                                 <span className="text-[9px] font-bold uppercase opacity-70">
                                   {label}

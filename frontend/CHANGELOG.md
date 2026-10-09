@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Emoji replaced by lucide icons across the interface** (ai-trainer-ops#51.7)
+  — `src/utils/sessionIcon.ts` (new), `src/components/TrainingCalendar.tsx`,
+  `src/components/TrainingLoadChart.tsx`, `src/components/ProgressionChart.tsx`,
+  `src/components/RaceReadinessCard.tsx`, `src/components/Layout.tsx`,
+  `src/pages/DashboardPage.tsx`, `src/pages/OnboardingPage.tsx`,
+  `src/pages/AdminPage.tsx`, `src/pages/SettingsPage.tsx`, `src/App.tsx`.
+
+  34 emoji, in 10 files. They rendered as empty boxes in the test browser, which
+  has no emoji font, and on a real device they render as whatever the platform
+  decides — a different drawing per phone, beside the lucide set used for
+  everything else.
+
+  Three of them were carrying meaning that nothing else carried:
+
+  * The leg-freshness picker was 🟢🟡🔴 — colour and nothing but colour, so it
+    said nothing at all to a red-green colourblind athlete. It is now a battery
+    at three levels, which says the same thing by how full it is (WCAG 1.4.1).
+  * The training-load chart headings were 🔵🟠🟢 keyed to `#3b82f6`, `#f97316`
+    and `#22c55e` lines — pairs of unrelated colours with similar names, set in
+    two places. The swatch and the line now read the same constant, so they
+    cannot drift.
+  * The calendar kept its own table of session-type emoji, so one Thursday could
+    be 🔥 there and a gauge in the week strip. Both now come from
+    `sessionTypeStyle`.
+
+  The two waving hands are gone rather than translated: there is no lucide icon
+  that reads as a greeting, and a greeting by name needs no decoration. The two
+  `⚠️` live inside `window.confirm` strings, where a React icon cannot go, so
+  the glyph is dropped and the dialog's own chrome is left to say that this is a
+  decision.
+
+  `sessionIcon` moved out of `TrainingCalendar` into `utils/`, because the #710
+  rule — draw the *sport* for `endurance` and `strength`, which name a sport
+  rather than an intent, so a planned run is not shown a bicycle — was being
+  tested by searching a calendar cell's text for "🏃". That worked only while
+  the glyph was the implementation. It is now asserted on the rule itself, and
+  the old text assertions would have been equally satisfied by a cell that drew
+  nothing at all.
+
+  Guarded by an E2E spec that walks every text node from registration to the
+  month calendar and fails on any codepoint in the emoji blocks, paired with a
+  positive check that the calendar still draws three distinguishable icons for
+  ride, lift and rest — "no emoji" being perfectly true of a blank page.
+
 ### Added
 
 - **Two end-to-end stacks, so the dashboard is reachable at last**
