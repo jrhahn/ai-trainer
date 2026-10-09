@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Onboarding asks for a Gemini key when one is needed** (ai-trainer-ops#41) —
+  `src/pages/OnboardingPage.tsx`, `src/services/user.ts`,
+  `src/pages/OnboardingPage.test.tsx`, `e2e/keyless/key-step.spec.ts`.
+
+  On a BYOK-only deployment — the mode the landing page promises — a new athlete
+  answered every question, pressed "Generate My 14-Day Training Plan", and got a
+  402 naming a Settings page that cannot be reached until onboarding finishes.
+  The wizard now has a step for the key, with a link to Google's two-minute
+  guide and a **Test key** button that checks it against the provider without
+  storing it.
+
+  Conditional on the deployment, from the backend's new `keyRequired`: six steps
+  in BYOK-only mode, five when the server provides the model. Both halves are
+  covered end to end, one in each E2E stack — a step that is *always* shown and
+  a step that is *never* shown each satisfy exactly one of them.
+
+  Three details that are the difference between a step and a fix:
+
+  * **Save decides, not the status code.** `PUT /users/me/ai-key` answers with a
+    fresh `keyRequired`, and a 200 that still says a key is required keeps the
+    athlete on the step. Trusting the 200 would put them back on "Generate" with
+    the same 402.
+  * **Continue cannot walk past it**, and the "Analyse & Generate Plan" shortcut
+    from the assessment step is withheld while a key is missing — otherwise a
+    Strava-connected athlete skips the one screen that can help.
+  * **A 402 still routes here**, if the status probe failed or the deployment
+    changed mode mid-session, with the message reworded on the way: "add your key
+    in Settings → AI Provider" is right on the summary and wrong when read above
+    the very form asking for it.
+
+  Step ids are not renumbered. The id is persisted in `sessionStorage` so the
+  Strava redirect does not lose a half-finished onboarding, so the key step is
+  numbered 6 and shown fifth; the number on screen comes from the order, not the
+  id.
+
+### Changed
+
+- **`OnboardingPage` gained 17 tests, and the ai-trainer-ops#40 guard moved
+  stacks.**
+
+  The keyless E2E spec asserted that the registered name came back from the
+  server after the profile write — the only form of that check which can catch
+  #40. In BYOK-only mode onboarding now stops at the key step, one step before
+  the profile is written, so there is no round trip left in that flow to
+  observe. It moved to the stubbed stack, which completes onboarding, as an
+  anchored greeting: the full name is only on screen at desktop width, and that
+  spec also runs at 390 px.
+
 ### Changed
 
 - **Emoji replaced by lucide icons across the interface** (ai-trainer-ops#51.7)

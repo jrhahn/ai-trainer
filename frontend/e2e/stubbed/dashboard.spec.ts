@@ -118,6 +118,40 @@ test.describe('a stranger finishes onboarding', () => {
     await waitForPopulatedDashboard(page, athlete)
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
 
+    // ai-trainer-ops#40, in the only place it is still catchable. Onboarding
+    // used to copy `name` into its form at mount — before the profile had
+    // arrived — and write the empty copy back, so the athlete registered as
+    // "Robin Stub" and became "athlete". Only a name that comes back from the
+    // server *after* `updateCurrentUser`, which is what this reload reads,
+    // proves the field survived.
+    //
+    // Through the greeting, anchored, and not by looking for the full name:
+    // "Robin Stub" is only on screen at desktop width, so the first version of
+    // this assertion passed at 1366 px and failed at 390.
+    //
+    // Anchored because `waitForPopulatedDashboard` above already matches the
+    // heading on "Robin" unanchored, which is enough to catch the overwrite as
+    // the issue originally described it — and that exact mutation is no longer
+    // reachable anyway: the backend now rejects a blank `name`, so writing one
+    // fails validation rather than reaching the dashboard. Measured, when
+    // trying to mutation-check this line.
+    //
+    // What the anchored form adds is the overwrite that *is* still reachable: a
+    // different, valid name. Mutating the profile write to "Robinson Stubbs"
+    // satisfies the helper's `/robin/i` and fails here —
+    // `Good morning, Robinson!` against `Good morning, Robin!`.
+    const greeting = await page
+      .getByRole('heading', { level: 1 })
+      .first()
+      .innerText()
+    expect(greeting, 'the registered name should survive the profile write').toMatch(
+      new RegExp(`^Good (morning|afternoon|evening), ${athlete.name.split(' ')[0]}!$`)
+    )
+
+    // This assertion moved here from `e2e/keyless/stranger-path.spec.ts`, which
+    // can no longer reach a profile write at all: in BYOK-only mode onboarding
+    // stops at the key step (ai-trainer-ops#41).
+
     // After the reload especially: this is where the #41 failure surfaced, and
     // a rehydration that throws would otherwise show up only as a slower test.
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
@@ -190,5 +224,38 @@ test.describe('a stranger finishes onboarding', () => {
 
     // And the landmark survived, which is why it was hidden rather than deleted.
     await expect(page.getByRole('heading', { name: /coach timeline/i })).toHaveCount(1)
+  })
+
+  test('is never asked for an API key', async ({ page }) => {
+    // The other half of ai-trainer-ops#41's conditional step. This stack needs
+    // no key — the stub stands in for the model — so the step must not appear,
+    // and the wizard must still be five steps long.
+    //
+    // Worth its own test rather than a line in the walk above: a step that is
+    // *always* shown and a step that is *never* shown each satisfy exactly one
+    // of this and its companion in `e2e/keyless/key-step.spec.ts`.
+    const athlete = newAthlete()
+
+    await page.goto('/register')
+    await page.getByPlaceholder('Your name').fill(athlete.name)
+    await page.getByPlaceholder('you@example.com').fill(athlete.email)
+    await page.getByPlaceholder('Strong password').fill(athlete.password)
+    await page.getByPlaceholder('Repeat your password').fill(athlete.password)
+    await page.getByRole('button', { name: 'Create Account' }).click()
+    await expect(page.getByText(`Welcome, ${athlete.name}!`).first()).toBeVisible({
+      timeout: 30_000,
+    })
+
+    await expect(page.getByText('Step 1 of 5')).toBeVisible()
+
+    for (let step = 0; step < 4; step++) {
+      await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
+      await page.getByRole('button', { name: /^continue$/i }).first().click()
+    }
+
+    // Straight to the summary, where Generate does work here.
+    await expect(page.getByText('Ready to Go!')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
+    await expect(page.getByText('Step 5 of 5')).toBeVisible()
   })
 })
