@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Log a session from the dashboard card** (ai-trainer-ops#52) —
+  `SessionHero.tsx`, `DashboardPage.tsx`, `hooks/useLogPlannedSession.ts`. The
+  card for today (or a past day) gets **Log it**, or "Log AM / PM" on a
+  two-a-day. It opens the same form as the day view, and the card says "Done"
+  afterwards. It is not offered for rest days, sessions still to come, or
+  sessions already done. Before, logging was "Show more" → calendar → day →
+  "Log Completed Workout". The save path (store, server, coach rating on the
+  session's own slot) moved from `WorkoutPage` into a shared hook, so the two
+  entry points cannot drift apart. Covered by a browser test.
 - **"Add activity" on the dashboard** (ai-trainer-ops#47) —
   `AddActivityDialog.tsx`, `DashboardPage.tsx`, `utils/enteredActivity.ts`. It
   asks for five things: the day, the sport (Ride / Run / Strength), minutes,

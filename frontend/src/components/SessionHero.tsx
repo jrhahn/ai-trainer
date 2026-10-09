@@ -121,6 +121,7 @@ export default function SessionHero({
   sessions,
   date,
   doneKeys,
+  onLog,
 }: {
   sessions: TrainingDay[]
   /** The selected day, needed even when the plan has nothing for it — an empty
@@ -129,6 +130,10 @@ export default function SessionHero({
   /** Session keys already ridden.  Per session rather than per date: one ride
    *  on a two-a-day must not mark both done (see utils/sessionCompletion). */
   doneKeys: Set<string>
+  /** Log a session from here rather than three clicks deep (ai-trainer-ops#52).
+   *  Offered only where logging makes sense: not done yet, not a rest day, and
+   *  not in the future. */
+  onLog?: (session: TrainingDay) => void
 }) {
   const forecast = useAppStore(useShallow((s) => s.weatherForecast[date]))
   const isToday = date === formatLocalDate(new Date())
@@ -173,6 +178,19 @@ export default function SessionHero({
               isDone={doneKeys.has(sessionKey(session))}
               forecast={index === 0 ? forecast : undefined}
             />
+            {onLog &&
+              !doneKeys.has(sessionKey(session)) &&
+              session.workoutType !== 'rest' &&
+              date <= formatLocalDate(new Date()) && (
+                <button
+                  type="button"
+                  onClick={() => onLog(session)}
+                  className="mt-4 flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
+                >
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  {sessions.length > 1 ? `Log ${sessionLabel(session, sessions.length)}` : 'Log it'}
+                </button>
+              )}
           </div>
         ))}
       </div>

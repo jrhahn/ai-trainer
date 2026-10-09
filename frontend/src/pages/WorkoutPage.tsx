@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, Bot, Loader2, History, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import { effortLabel } from '../utils/effort'
@@ -10,13 +10,13 @@ import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import WorkoutDetails from '../components/WorkoutDetails'
-import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
-import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog, fetchPlanHistory } from '../services/user'
+import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
+import { fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import { describeEntry, sourceLabel } from '../utils/planHistory'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
-import type { WorkoutFeedback, TrainingDay, StravaActivity } from '../store/useAppStore'
+import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
 
 const typeColors: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -26,18 +26,6 @@ const typeColors: Record<string, string> = {
   race: 'bg-purple-100 text-purple-700',
   recovery: 'bg-green-100 text-green-700',
   strength: 'bg-teal-100 text-teal-700',
-}
-
-function stravaActivityType(activity: StravaActivity): string {
-  return (activity.sport_type || activity.type || '').toLowerCase()
-}
-
-function plannedWorkoutMatchesActivity(day: TrainingDay, activity: StravaActivity): boolean {
-  const type = stravaActivityType(activity)
-  if (day.workoutType === 'strength') {
-    return type.includes('weight') || type.includes('strength') || type.includes('workout')
-  }
-  return type === 'cycling' || type.includes('ride')
 }
 
 function ChangeHistorySection({
@@ -171,15 +159,10 @@ export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { authToken, trainingPlan, logWorkout, userProfile, updateTrainingDay, setTrainingPlan, rideMetricsHistory } = useAppStore(
+  const { authToken, trainingPlan, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       trainingPlan: s.trainingPlan,
-      logWorkout: s.logWorkout,
-      userProfile: s.userProfile,
-      updateTrainingDay: s.updateTrainingDay,
-      setTrainingPlan: s.setTrainingPlan,
       rideMetricsHistory: s.rideMetricsHistory,
     }))
   )
@@ -214,35 +197,7 @@ export default function WorkoutPage() {
     enabled: showHistory && !!authToken && !!date,
   })
 
-  const rateWorkoutMutation = useMutation({
-    mutationFn: ({ dayWithFeedback }: { dayWithFeedback: TrainingDay }) => {
-      // Try to find a Strava activity that matches this workout date so the
-      // backend can fetch its streams for precise planned-vs-actual analysis.
-      const cachedActivities =
-        queryClient.getQueryData<StravaActivity[]>(['stravaActivities', authToken]) ?? []
-      const matchingActivity = cachedActivities.find((a) =>
-        (a.start_date_local || a.start_date).startsWith(dayWithFeedback.date) &&
-        plannedWorkoutMatchesActivity(dayWithFeedback, a)
-      )
-      return rateCompletedWorkout(dayWithFeedback, authToken!, matchingActivity?.id)
-    },
-    onSuccess: async (rating: WorkoutRatingResult) => {
-      if (rating.feedback) {
-        const slot = sessionSlot(day!)
-        updateTrainingDay(day!.date, { coachFeedback: rating.feedback }, slot)
-        const latestPlan = await fetchTrainingPlan(authToken!)
-        // Only the reviewed session picks up the coach note — on a two-a-day the
-        // other session keeps its own feedback (#496).
-        const withFeedback = latestPlan.map((d) =>
-          d.date === day!.date && sessionSlot(d) === slot
-            ? { ...d, coachFeedback: rating.feedback }
-            : d
-        )
-        setTrainingPlan(withFeedback)
-        await saveTrainingPlan(authToken!, withFeedback)
-      }
-    },
-  })
+  const { logSession, isRating, rating } = useLogPlannedSession()
 
   if (!day) {
     // The day fell out of the rolling plan window (e.g. a completed past day),
@@ -283,22 +238,8 @@ export default function WorkoutPage() {
   }
 
   const handleFeedback = async (feedback: WorkoutFeedback) => {
-    const slot = sessionSlot(day)
-    logWorkout(day.date, feedback, slot)
     setShowForm(false)
-
-    if (authToken) {
-      try {
-        await saveWorkoutLog(authToken, day.date, feedback, slot)
-      } catch {
-        // keep optimistic local state even if the network fails
-      }
-    }
-
-    if (authToken && userProfile) {
-      const dayWithFeedback = { ...day, completed: true, feedback }
-      rateWorkoutMutation.mutate({ dayWithFeedback })
-    }
+    await logSession(day, feedback)
   }
 
   return (
@@ -373,27 +314,27 @@ export default function WorkoutPage() {
               <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
             )}
             {/* Coach rating */}
-            {rateWorkoutMutation.isPending && (
+            {isRating && (
               <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
                 <Loader2 size={13} className="animate-spin" />
                 Coach is reviewing your session…
               </div>
             )}
-            {!rateWorkoutMutation.isPending && day.coachFeedback && (
+            {!isRating && day.coachFeedback && (
               <div className="mt-3 border-t border-green-200 pt-3">
                 <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
                   <Bot size={12} /> Coach's Feedback
                 </p>
                 <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
-                {rateWorkoutMutation.data?.followUpQuestion && (
+                {rating?.followUpQuestion && (
                   <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
                     <p className="text-xs font-semibold text-amber-800 mb-1">Coach wants to know:</p>
                     <p className="text-xs text-amber-700 leading-relaxed italic">
-                      {rateWorkoutMutation.data.followUpQuestion}
+                      {rating.followUpQuestion}
                     </p>
-                    {rateWorkoutMutation.data.suggestedFeedbackTags.length > 0 && (
+                    {rating.suggestedFeedbackTags.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {rateWorkoutMutation.data.suggestedFeedbackTags.map((tag) => (
+                        {rating.suggestedFeedbackTags.map((tag) => (
                           <span
                             key={tag}
                             className="inline-block text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 capitalize"
