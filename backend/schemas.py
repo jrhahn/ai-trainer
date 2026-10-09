@@ -62,8 +62,8 @@ THRESHOLD_PACE_MIN_SECONDS_PER_KM = 120.0
 THRESHOLD_PACE_MAX_SECONDS_PER_KM = 900.0
 
 
-
 logger = logging.getLogger(__name__)
+
 
 def _to_camel(name: str) -> str:
     parts = name.split("_")
@@ -2095,8 +2095,6 @@ _DURATION_ALIAS_KEYS = frozenset(
 )
 
 
-
-
 def drop_stale_snake_twins(data: Any) -> Any:
     """Strip the snake_case twin of any modelled field also spelled camelCase.
 
@@ -2157,6 +2155,7 @@ def canonical_plan_day(day: dict) -> dict:
         # the one-spelling guarantee does not quietly exclude the days that
         # need it most (review on PR #796).
         return drop_stale_snake_twins(day)
+
 
 def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     """Apply a partial per-day ``update`` onto a canonical ``day``.
