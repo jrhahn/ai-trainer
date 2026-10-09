@@ -201,3 +201,54 @@ async def test_more_members_than_a_batch_is_refused(client: AsyncClient, auth_he
     body = await _upload(client, auth_headers, ("many.zip", archive))
 
     assert "more than 2" in body["files"][0]["message"]
+
+
+def _with_member_header(archive: bytes, *, flag_bits: int | None = None, method: int | None = None) -> bytes:
+    """Rewrite the member's local and central headers: the stdlib cannot write
+    an encrypted zip, nor one in a compression method it lacks."""
+    data = bytearray(archive)
+    for signature, flag_offset, method_offset in ((b"PK\x03\x04", 6, 8), (b"PK\x01\x02", 8, 10)):
+        at = data.find(signature)
+        if flag_bits is not None:
+            current = int.from_bytes(data[at + flag_offset:at + flag_offset + 2], "little")
+            data[at + flag_offset:at + flag_offset + 2] = (current | flag_bits).to_bytes(2, "little")
+        if method is not None:
+            data[at + method_offset:at + method_offset + 2] = method.to_bytes(2, "little")
+    return bytes(data)
+
+
+async def test_a_password_protected_zip_says_so(client: AsyncClient, auth_headers):
+    archive = _with_member_header(_zip({"ride.fit": b"ride-a"}), flag_bits=0x1)
+    body = await _upload(client, auth_headers, ("locked.zip", archive))
+
+    assert body["files"][0]["status"] == "failed"
+    assert "password-protected" in body["files"][0]["message"]
+
+
+async def test_a_compression_method_zipfile_lacks_fails_that_file_only(
+    client: AsyncClient, auth_headers
+):
+    archive = _with_member_header(_zip({"ride.fit": b"ride-a"}), method=99)
+    body = await _upload(client, auth_headers, ("odd.zip", archive), ("next.fit", b"ride-b"))
+
+    assert [f["status"] for f in body["files"]] == ["failed", "imported"]
+    assert "damaged" in body["files"][0]["message"]
+
+
+async def test_a_file_that_yields_nothing_spends_no_ai_call(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """Only an attempted import costs one. A broken zip in front of two rides
+    leaves the request's own charge for the first ride, so both fit in a
+    burst of two."""
+    monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
+    monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
+
+    body = await _upload(
+        client, auth_headers,
+        ("broken.zip", b"not a zip"), ("a.fit", b"ride-a"), ("b.fit", b"ride-b"),
+    )
+
+    assert [f["status"] for f in body["files"]] == ["failed", "imported", "imported"]
+

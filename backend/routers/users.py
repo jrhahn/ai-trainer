@@ -2541,6 +2541,10 @@ def _fit_payloads_from_zip(zip_name: str, raw: bytes) -> list[tuple[str, bytes]]
         payloads: list[tuple[str, bytes]] = []
         unpacked = 0
         for info in members:
+            if info.flag_bits & 0x1:
+                raise ValueError(
+                    f"{zip_name} is password-protected. Export it again without a password."
+                )
             if info.file_size > limit:
                 raise ValueError(f"{info.filename} in {zip_name} is larger than the limit")
             try:
@@ -2548,10 +2552,18 @@ def _fit_payloads_from_zip(zip_name: str, raw: bytes) -> list[tuple[str, bytes]]
                     # Bounded by the cap, not the declared size: the header is
                     # the zip's own claim, and a bomb lies in it.
                     data = member.read(limit + 1)
-            except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
+            except (
+                zipfile.BadZipFile,
+                zlib.error,
+                EOFError,
+                RuntimeError,
+                NotImplementedError,
+            ) as exc:
                 # A member whose stream disagrees with its header — a corrupt
-                # export, or one edited to under-declare its size — is this
-                # file's failure, never the request's.
+                # export, or one edited to under-declare its size — or one this
+                # runtime cannot open (an encryption the flag check missed, a
+                # compression method zipfile lacks) is this file's failure,
+                # never the request's.
                 raise ValueError(f"{info.filename} in {zip_name} is damaged") from exc
             unpacked += len(data)
             if len(data) > limit or unpacked > total_cap:
