@@ -66,6 +66,44 @@ beforeEach(() => {
 })
 
 describe('WorkoutPage', () => {
+  it('shows what was done on a day the plan does not cover (ai-trainer-ops#47)', () => {
+    const unplanned = '2099-01-02'
+    mockFetchPlanHistory.mockResolvedValue([])
+    useAppStore.setState({
+      authToken: 'tok',
+      trainingPlan: [mockDay],
+      rideMetricsHistory: [
+        {
+          stravaActivityId: 9,
+          activityDate: unplanned,
+          sportType: 'running',
+          activitySource: 'logged',
+          externalActivityId: `${unplanned}#100`,
+          durationSeconds: 2400,
+        },
+      ],
+    })
+
+    renderWorkoutPage(unplanned)
+
+    expect(screen.getByText('What you did this day')).toBeInTheDocument()
+    expect(screen.getByText('Entered by you')).toBeInTheDocument()
+  })
+
+  it('shows what was done alongside a planned session', () => {
+    useAppStore.setState({
+      authToken: 'tok',
+      trainingPlan: [mockDay],
+      rideMetricsHistory: [
+        { stravaActivityId: 10, activityDate: TODAY, sportType: 'Ride', activityName: 'Lunch Ride', durationSeconds: 3600 },
+      ],
+    })
+
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText('Lunch Ride')).toBeInTheDocument()
+  })
+
   it('shows the change history for a date outside the current plan window', async () => {
     // A completed/past day gets pruned from the rolling plan window, but its
     // history still exists — the page must surface it, not dead-end (#357).

@@ -6,6 +6,7 @@
  */
 
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Upload, CheckCircle, AlertCircle, CircleSlash, FileWarning } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchMetricsHistory, fetchRideMetricsHistory, uploadFitFiles } from '../services/user'
@@ -152,6 +153,14 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
         <p className="truncate font-medium text-gray-800">{file.filename}</p>
         <p className="text-gray-500">{detail || file.message}</p>
       </div>
+      {file.status !== 'failed' && file.activityDate && (
+        <Link
+          to={`/workout/${file.activityDate}`}
+          className="shrink-0 font-semibold text-blue-600 hover:underline"
+        >
+          Open day
+        </Link>
+      )}
     </div>
   )
 }

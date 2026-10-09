@@ -10,6 +10,7 @@ import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import WorkoutDetails from '../components/WorkoutDetails'
+import DayActivities from '../components/DayActivities'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import { fetchPlanHistory } from '../services/user'
 import type { PlanDayHistoryEntry } from '../services/user'
@@ -227,6 +228,8 @@ export default function WorkoutPage() {
           </p>
         </div>
 
+        {date && <DayActivities date={date} />}
+
         <ChangeHistorySection
           expanded={showHistory}
           onToggle={() => setShowHistory((v) => !v)}
@@ -384,6 +387,8 @@ export default function WorkoutPage() {
           ))}
         </div>
       )}
+
+      {date && <DayActivities date={date} />}
 
       {/* Change history — "why did this workout change?" (#357) */}
       <ChangeHistorySection

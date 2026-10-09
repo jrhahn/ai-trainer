@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **An upload result says which day it belongs to** (ai-trainer-ops#48) —
+  `schemas.FitUploadFileResult.activity_date`, so the result can link to it.
 - **A Garmin "Export Original" .zip uploads like the .fit inside it, and a
   GPX/TCX says what to do instead** (ai-trainer-ops#48) —
   `routers/users.py`, `tests/test_fit_upload_formats.py`. Every `.fit` in a

@@ -2237,6 +2237,8 @@ class FitUploadFileResult(CamelModel):
     status: Literal["imported", "skipped", "failed"]
     message: str
     activity_id: Optional[str] = None
+    # The day the activity happened, so the result can link to it (#48).
+    activity_date: Optional[str] = None
     sport_type: Optional[str] = None
     duration_minutes: Optional[int] = None
     average_power: Optional[int] = None

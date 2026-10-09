@@ -88,6 +88,8 @@ async def test_a_garmin_export_zip_imports_its_fit(client: AsyncClient, auth_hea
 
     assert body["imported"] == 1
     assert body["files"][0]["filename"] == "activity_1.zip › activity_1.fit"
+    # The day it happened, so the result can link there.
+    assert body["files"][0]["activityDate"].startswith("2026-")
 
 
 async def test_every_fit_in_a_zip_is_its_own_import(client: AsyncClient, auth_headers):
@@ -251,4 +253,17 @@ async def test_a_file_that_yields_nothing_spends_no_ai_call(
     )
 
     assert [f["status"] for f in body["files"]] == ["failed", "imported", "imported"]
+
+
+async def test_a_skipped_file_still_names_its_day(client: AsyncClient, auth_headers):
+    """Both skip paths — a duplicate within the batch, and one already
+    imported before — say which day, so their result can link there too."""
+    first = await _upload(client, auth_headers, ("a.fit", b"ride-a"), ("again.fit", b"ride-a"))
+    later = await _upload(client, auth_headers, ("a-later.fit", b"ride-a"))
+
+    day = first["files"][0]["activityDate"]
+    assert first["files"][1]["status"] == "skipped"
+    assert first["files"][1]["activityDate"] == day
+    assert later["files"][0]["status"] == "skipped"
+    assert later["files"][0]["activityDate"] == day
 
