@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkbox, then asks Settings what the account holds — the assertion
   ai-trainer-ops#43 says nobody can make today, and the one that would have
   caught #40. The values are deliberately not the placeholders (250 / 185), so a
-  field that ignored the typing cannot read as a pass.
+  field that ignored the typing cannot read as a pass. It walks to Settings
+  through the nav rather than by URL, because a full load of any non-root route
+  bounces to the dashboard — a real defect the spec found, filed as
+  ai-trainer-ops#57.
 - **Screenshots and reports from every E2E run, not only the failures**
   (ai-trainer-ops#46) — `e2e/stack.ts`, `.github/workflows/ci.yml`. `screenshot`
   is `on` and the artefact uploads on `!cancelled()`, so the product can be

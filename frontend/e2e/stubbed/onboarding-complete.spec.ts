@@ -103,6 +103,31 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
 }
 
+/** Walk to Settings the way the athlete does, through the nav.
+ *
+ * Deliberately *not* `page.goto('/settings')`. A full load of any non-root
+ * route bounces to the dashboard: `App.tsx` decides the route tree from
+ * `authToken`, which is empty on the first render because the persisted store
+ * rehydrates asynchronously, so `path="*"` fires `<Navigate to="/" replace>` and
+ * replaces the URL before the token arrives. Bookmarking `/settings` or
+ * `/workout/:date` therefore cannot work. That is a real defect and this spec
+ * found it — it is written up separately rather than asserted here, because this
+ * spec is about whether onboarding's answers reach the account, and a spec that
+ * fails for a second reason tells you about neither.
+ */
+async function openSettings(page: Page) {
+  const link = page.getByRole('link', { name: 'Settings' }).first()
+  // Below 768px the sidebar is `hidden md:flex` and the nav lives in a drawer
+  // that is only in the DOM while it is open, so the same walk needs one more
+  // tap at 390px than at 1366px. Asking whether the link is there is what keeps
+  // one helper working at both widths.
+  if (!(await link.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Toggle menu' }).click()
+  }
+  await link.click()
+  await expect(page.getByLabel('Display Name')).toBeVisible({ timeout: 30_000 })
+}
+
 async function waitForPopulatedDashboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
   const firstName = athlete.name.split(' ')[0]
   await expect(
@@ -121,7 +146,7 @@ test.describe('onboarding with everything filled in', () => {
     await onboardThoroughly(page, athlete)
     await waitForPopulatedDashboard(page, athlete)
 
-    await page.goto('/settings')
+    await openSettings(page)
 
     // Name and email, the pair ai-trainer-ops#46 asks for and #40 broke: the
     // summary step used to show them empty, and onboarding used to clear the
@@ -144,14 +169,19 @@ test.describe('onboarding with everything filled in', () => {
 
     await onboardThoroughly(page, athlete)
     await waitForPopulatedDashboard(page, athlete)
-    await page.goto('/settings')
+    await openSettings(page)
     await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp)
 
+    // A full browser reload, which throws away everything the tab held. The
+    // reload lands on the dashboard rather than back on Settings — see
+    // `openSettings` — so the walk is repeated, and what is being asserted is
+    // that the figures come back from the account and not from the page.
     await page.reload()
+    await waitForPopulatedDashboard(page, athlete)
+    await openSettings(page)
 
-    await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp, {
-      timeout: 30_000,
-    })
+    await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp)
+    await expect(page.getByLabel('Max Heart Rate (bpm)')).toHaveValue(ANSWERS.maxHeartRate)
     await expect(page.getByText(`Signed in as ${athlete.email}`)).toBeVisible()
   })
 })
