@@ -108,26 +108,47 @@ export default function WeekStrip({
               >
                 {weekday.slice(0, 2)}
               </span>
-              {/* One dot per session, so a two-a-day is visible at a glance
-                  rather than only in the label below (#645). */}
+              {/* One icon per session, so a two-a-day is visible at a glance
+                  rather than only in the label below (#645) — and so the type
+                  is not carried by colour alone (ai-trainer-ops#51.4, WCAG
+                  1.4.1). An endurance day and a race used to be a green dot and
+                  a red dot: to an athlete who cannot tell those apart, the same
+                  dot. The icons are `aria-hidden`; the chip's own label already
+                  names every session on the day. */}
               <span className="mt-1.5 flex items-center gap-0.5">
                 {styles.length === 0 ? (
                   <span className="h-2 w-2 rounded-full bg-slate-200" />
                 ) : (
-                  styles.map((s, i) => (
-                    <span key={i} className={`h-2 w-2 rounded-full ${s.dot}`} />
+                  styles.map(({ Icon, iconColor }, i) => (
+                    <Icon key={i} size={13} className={iconColor} aria-hidden="true" />
                   ))
                 )}
               </span>
-              {/* Seven columns leave ~40px on a phone, which "Endurance" overruns
-                  into its neighbour. Clip it there and spell it out from sm up.
-                  Two session names never fit, so say how many instead. */}
-              <span className="mt-1.5 w-full truncate px-0.5 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">
-                {sessions.length === 0
-                  ? '—'
-                  : sessions.length === 1
-                    ? styles[0].label
-                    : `${sessions.length} sessions`}
+              {/* Seven columns leave 36 px on a phone and "Endurance" needs 58,
+                  so three chips in a row each read "Endur…", cut in the same
+                  place (ai-trainer-ops#51.4). The short name fits whole, the
+                  icon above carries the type, and the full word is in the
+                  chip's label either way. From sm up there is room for the real
+                  word, so it is used.
+
+                  No `truncate`: it is what hid the problem for this long. If a
+                  name ever outgrows its column again, it should break the
+                  layout visibly in a test rather than quietly lose its ending. */}
+              <span className="mt-1.5 w-full px-0.5 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">
+                {sessions.length === 0 ? (
+                  '—'
+                ) : sessions.length === 1 ? (
+                  <>
+                    <span className="sm:hidden">{styles[0].short}</span>
+                    <span className="hidden sm:inline">{styles[0].label}</span>
+                  </>
+                ) : (
+                  <>
+                    {/* Two names never fit, so say how many instead. */}
+                    <span className="sm:hidden">{sessions.length}×</span>
+                    <span className="hidden sm:inline">{sessions.length} sessions</span>
+                  </>
+                )}
               </span>
               {sessions.length > 0 && sessions.every((s) => s.completed) && (
                 <Check size={12} className="mt-1 text-emerald-500" aria-hidden="true" />
