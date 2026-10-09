@@ -285,11 +285,45 @@ describe('WorkoutPage', () => {
     await waitFor(() => {
       expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok-123')
       // Must save with fresh backend plan, not the stale local snapshot
+      // The fresh plan's own fields, plus the note — and since #52 the log
+      // this client just saved, which the server's plan does not carry (the
+      // server drops `completed`/`feedback` from a PUT, so sending them is
+      // only about the local copy).
       expect(mockSaveTrainingPlan).toHaveBeenCalledWith('tok-123', [
-        { ...freshBackendPlan[0], coachFeedback: 'Great effort today!' },
+        expect.objectContaining({ ...freshBackendPlan[0], coachFeedback: 'Great effort today!' }),
         otherDay,
       ])
     })
+  })
+
+  it("shows the coach's follow-up question and suggested tags after logging", async () => {
+    useAppStore.setState({
+      authToken: 'tok-123',
+      trainingPlan: [mockDay],
+      userProfile: {
+        name: 'Alice',
+        email: 'alice@example.com',
+        bikeType: 'road',
+        trainingGoal: 'general_fitness',
+        followsTrainingPlan: true,
+        fitnessLevel: 'intermediate',
+      },
+    })
+    mockRateCompletedWorkout.mockResolvedValue({
+      feedback: 'Good ride.',
+      needsAthleteFeedback: true,
+      followUpQuestion: 'Did the last interval feel harder than the first?',
+      suggestedFeedbackTags: ['legs_heavy', 'felt_strong'],
+    })
+    mockFetchTrainingPlan.mockResolvedValue([mockDay])
+
+    renderWorkoutPage(TODAY)
+    await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+
+    expect(await screen.findByText('Did the last interval feel harder than the first?')).toBeInTheDocument()
+    expect(screen.getByText('legs heavy')).toBeInTheDocument()
+    expect(screen.getByText('felt strong')).toBeInTheDocument()
   })
 
   it('loads the change history for the day when expanded, marking blocked attempts', async () => {

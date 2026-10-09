@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import DashboardPage from './DashboardPage'
 import {
   buildMatchCoachPrompt,
@@ -26,7 +27,11 @@ const {
   mockDeleteManualActivity,
   mockFetchRides,
   mockFetchMetrics,
+  mockSaveWorkoutLog,
+  mockRateCompletedWorkout,
 } = vi.hoisted(() => ({
+  mockSaveWorkoutLog: vi.fn(),
+  mockRateCompletedWorkout: vi.fn(),
   mockDeleteManualActivity: vi.fn(),
   mockFetchRides: vi.fn(),
   mockFetchMetrics: vi.fn(),
@@ -41,6 +46,7 @@ vi.mock('../services/ai', () => ({
   processPendingFeedbacks: mockProcessPendingFeedbacks,
   refreshLoginSummary: mockRefreshLoginSummary,
   refreshTrainingStatus: mockRefreshTrainingStatus,
+  rateCompletedWorkout: mockRateCompletedWorkout,
 }))
 
 vi.mock('../services/user', () => ({
@@ -49,6 +55,9 @@ vi.mock('../services/user', () => ({
   fetchRideMetricsHistory: mockFetchRides,
   fetchMetricsHistory: mockFetchMetrics,
   addManualActivity: vi.fn(),
+  saveWorkoutLog: mockSaveWorkoutLog,
+  fetchTrainingPlan: vi.fn().mockResolvedValue([]),
+  saveTrainingPlan: vi.fn(),
 }))
 
 vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
@@ -175,10 +184,15 @@ function assessmentWithStatus(
 }
 
 function renderDashboard() {
+  // The dashboard logs sessions through a mutation now (#52), as it would in
+  // the app, where main.tsx provides the client.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <DashboardPage />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
@@ -1744,3 +1758,52 @@ describe('DashboardPage — entered activities', () => {
     expect(screen.queryByRole('button', { name: /Delete the/ })).not.toBeInTheDocument()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Logging from the session card (ai-trainer-ops#52)
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — log from the session card', () => {
+  const today = formatLocalDate(new Date())
+  const session = {
+    date: today,
+    workoutType: 'endurance',
+    title: 'Endurance Ride',
+    description: 'Steady.',
+    durationMinutes: 60,
+  } as TrainingDay
+
+  beforeEach(() => {
+    mockSaveWorkoutLog.mockResolvedValue(undefined)
+    mockRateCompletedWorkout.mockResolvedValue({ feedback: '' })
+  })
+
+  it('logs today\'s session in one tap plus the form, and marks it done', async () => {
+    setupStore({ trainingPlan: [session] })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log it' }))
+    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+
+    await waitFor(() =>
+      expect(mockSaveWorkoutLog).toHaveBeenCalledWith(
+        'test-token', today, expect.objectContaining({ actualDurationMinutes: 60 }), 0
+      )
+    )
+    expect(useAppStore.getState().trainingPlan[0].completed).toBe(true)
+    await waitFor(() => expect(mockRateCompletedWorkout).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Log it' })).not.toBeInTheDocument()
+  })
+
+  it('closes the form without logging on cancel', async () => {
+    setupStore({ trainingPlan: [session] })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log it' }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(mockSaveWorkoutLog).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Log it' })).toBeInTheDocument()
+  })
+})
+

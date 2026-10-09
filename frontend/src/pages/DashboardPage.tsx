@@ -18,6 +18,8 @@ import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
 import AddActivityDialog from '../components/AddActivityDialog'
+import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
@@ -680,6 +682,9 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [addActivityOpen, setAddActivityOpen] = useState(false)
+  // The session being logged from the card, if any (ai-trainer-ops#52).
+  const [loggingSession, setLoggingSession] = useState<TrainingDay | null>(null)
+  const { logSession } = useLogPlannedSession()
   // Which day the hero is showing.  Owned here rather than in the strip because
   // the hero is the thing that renders it, and the two are siblings (#634).
   // Lazy, not `today`: that is declared further down this component.
@@ -927,7 +932,19 @@ export default function DashboardPage() {
         sessions={selectedSessions}
         date={selectedDate}
         doneKeys={selectedDoneKeys}
+        onLog={setLoggingSession}
       />
+      {loggingSession && (
+        <WorkoutFeedbackForm
+          day={loggingSession}
+          onCancel={() => setLoggingSession(null)}
+          onSubmit={(feedback) => {
+            const session = loggingSession
+            setLoggingSession(null)
+            void logSession(session, feedback)
+          }}
+        />
+      )}
 
       <SeasonCountdown />
 

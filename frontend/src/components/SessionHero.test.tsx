@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { addDays } from 'date-fns'
 import SessionHero from './SessionHero'
 import type { TrainingDay } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { sessionKey } from '../utils/planSessions'
 
 const TODAY = formatLocalDate(new Date())
 const TOMORROW = formatLocalDate(addDays(new Date(), 1))
@@ -189,5 +191,65 @@ describe('SessionHero', () => {
     renderHero({ day: day({ workoutType: 'endurance' }) })
 
     expect(screen.queryByText('Cycling')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Log it from the card (ai-trainer-ops#52)
+// ---------------------------------------------------------------------------
+
+describe('SessionHero — Log it', () => {
+  const YESTERDAY = formatLocalDate(addDays(new Date(), -1))
+
+  function renderWithLog(sessions: TrainingDay[], date: string, done: string[] = []) {
+    const onLog = vi.fn()
+    render(
+      <MemoryRouter>
+        <SessionHero sessions={sessions} date={date} doneKeys={new Set(done)} onLog={onLog} />
+      </MemoryRouter>
+    )
+    return onLog
+  }
+
+  it("offers to log today's session and hands it over", async () => {
+    const session = day()
+    const onLog = renderWithLog([session], TODAY)
+    await userEvent.click(screen.getByRole('button', { name: 'Log it' }))
+    expect(onLog).toHaveBeenCalledWith(session)
+  })
+
+  it('offers it for a past day too, which is when a session gets logged late', () => {
+    renderWithLog([day({ date: YESTERDAY })], YESTERDAY)
+    expect(screen.getByRole('button', { name: 'Log it' })).toBeInTheDocument()
+  })
+
+  it('does not offer it for a session already done', () => {
+    const session = day()
+    renderWithLog([session], TODAY, [sessionKey(session)])
+    expect(screen.queryByRole('button', { name: /^Log/ })).not.toBeInTheDocument()
+  })
+
+  it('does not offer it on a rest day', () => {
+    renderWithLog([day({ workoutType: 'rest', durationMinutes: 0 })], TODAY)
+    expect(screen.queryByRole('button', { name: /^Log/ })).not.toBeInTheDocument()
+  })
+
+  it('does not offer it for a session still to come', () => {
+    renderWithLog([day({ date: TOMORROW })], TOMORROW)
+    expect(screen.queryByRole('button', { name: /^Log/ })).not.toBeInTheDocument()
+  })
+
+  it('names which session on a two-a-day', () => {
+    renderWithLog(
+      [day({ slot: 0, timeOfDay: 'am' }), day({ slot: 1, timeOfDay: 'pm', workoutType: 'strength' })],
+      TODAY
+    )
+    expect(screen.getByRole('button', { name: 'Log AM' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Log PM' })).toBeInTheDocument()
+  })
+
+  it('offers nothing where no one asked it to', () => {
+    renderHero()
+    expect(screen.queryByRole('button', { name: /^Log/ })).not.toBeInTheDocument()
   })
 })
