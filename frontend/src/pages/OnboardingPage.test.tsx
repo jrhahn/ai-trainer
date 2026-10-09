@@ -1172,6 +1172,49 @@ describe('the probe and the 402, in both orders', () => {
     expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
   })
 
+  it('ignores a probe that lands after a key was saved', async () => {
+    // The re-review's second minor point, and the reason the ref is now *set*
+    // on a successful save rather than cleared. `PUT /users/me/ai-key`
+    // recomputes `keyRequired` server-side, so its answer is the same kind of
+    // thing as the 402 — proof, pointing the other way. A probe resolving with
+    // a stale `true` afterwards left the header reading "Step 6 of 6" behind a
+    // step the athlete had already finished.
+    let settle: (value: unknown) => void = () => {}
+    mockFetchAIKeyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    mockGenerateTrainingPlan.mockRejectedValueOnce(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    mockSaveAIKey.mockResolvedValue({ keyRequired: false })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+
+    // Only now does the probe answer, with what it saw before any of this.
+    await act(async () => {
+      settle({ keyRequired: true })
+    })
+
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+    expect(screen.queryByText('Step 6 of 6')).not.toBeInTheDocument()
+  })
+
   it('reaches the summary after a 402 once a key is actually saved', async () => {
     // The full loop the issue describes, closed: fail, get asked, supply, carry
     // on. Also the only observable consequence of the proof being spent on a

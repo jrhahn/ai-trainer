@@ -194,15 +194,24 @@ export default function OnboardingPage() {
   // difference between "no key is needed" and "we have not asked yet" matters
   // for a resumed session and for the generate shortcut below. Raised in review.
   const [keyStatusKnown, setKeyStatusKnown] = useState(false)
-  // A 402 from the server is *proof* a key is needed; the probe is only a
-  // forecast. Once we have the proof, a probe still in flight must not overrule
-  // it — it would set `keyRequired` back to false and the redirect effect below
-  // would carry the athlete off the key step and onto a summary whose Generate
-  // button is about to 402 again. Only a very slow probe can lose that race,
-  // and losing it reinstates the loop this whole change removes. Raised in
-  // re-review. A ref, not state: nothing renders from it, and it has to be
-  // readable by a promise that resolves after the render it was created in.
-  const keyRequirementProven = useRef(false)
+  // Whether the server has told us directly, rather than been asked in advance.
+  //
+  // Two things count: a 402 from `generateTrainingPlan`, which is proof a key
+  // is needed, and the `keyRequired` that `PUT /users/me/ai-key` recomputes,
+  // which is proof one is not. The on-mount probe is a forecast, and once we
+  // hold either kind of proof a forecast still in flight must not overrule it.
+  //
+  // Both directions were raised in review. The 402 one reinstates the loop this
+  // change removes: the probe resolves `false`, the redirect effect fires, and
+  // the athlete is carried off the key step onto a summary about to 402 again.
+  // The save one is milder — a stale `true` landing after a successful save
+  // leaves the header reading "Step 6 of 6" behind a key step the athlete has
+  // already finished — and the first version of this invited it, by *clearing*
+  // the ref on save as though a save were less authoritative than a failure.
+  //
+  // A ref, not state: nothing renders from it, and it has to be readable by a
+  // promise that resolves after the render it was created in.
+  const keyStateIsAuthoritative = useRef(false)
   const [keyInput, setKeyInput] = useState('')
   const [keyTesting, setKeyTesting] = useState(false)
   const [keySaving, setKeySaving] = useState(false)
@@ -254,8 +263,8 @@ export default function OnboardingPage() {
     fetchAIKeyStatus(authToken)
       .then((status) => {
         if (cancelled) return
-        // Never downgrade a proven requirement to a forecast.
-        if (!keyRequirementProven.current) setKeyRequired(Boolean(status.keyRequired))
+        // Never let a forecast overwrite what the server has already said.
+        if (!keyStateIsAuthoritative.current) setKeyRequired(Boolean(status.keyRequired))
         setKeyStatusKnown(true)
       })
       .catch(() => {
@@ -438,7 +447,7 @@ export default function OnboardingPage() {
       // ai-trainer-ops#41. Matched on the backend's own wording, which is
       // pinned by a test on both sides.
       if (/api key configured/i.test(message)) {
-        keyRequirementProven.current = true
+        keyStateIsAuthoritative.current = true
         setKeyRequired(true)
         // Reworded for where they are about to land. The backend's message says
         // "add your key in Settings → AI Provider", which is right when it is
@@ -492,10 +501,11 @@ export default function OnboardingPage() {
         setKeyError('Saved, but this deployment still cannot reach a model with it.')
         return
       }
-      // The proof is spent: the backend has just confirmed this account can
-      // reach a model. Left set, a later probe could not correct a stale
-      // requirement at all.
-      keyRequirementProven.current = false
+      // Set, not cleared. The backend has just recomputed `keyRequired` for
+      // this account and said no key is needed — which is the same kind of
+      // answer as the 402, pointing the other way. Clearing it here let a probe
+      // that was still in flight resolve with a stale `true` afterwards.
+      keyStateIsAuthoritative.current = true
       setKeyRequired(false)
       setKeyInput('')
       setKeyTested(false)
