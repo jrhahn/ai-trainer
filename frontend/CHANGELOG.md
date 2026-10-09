@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     in Settings → AI Provider" is right on the summary and wrong when read above
     the very form asking for it.
 
+  A resumed session is handled too, which the review caught: `step` comes back
+  from `sessionStorage`, so the key step's id can reappear on a load where
+  nothing yet knows whether a key is needed. The step counts as part of the
+  order while the athlete is standing on it — otherwise the header read "Step 1
+  of 5" over the key form and Back led nowhere — and once the probe settles on
+  "not required" the athlete is moved to the summary rather than left with a
+  form for a credential they do not need. A failed probe counts as settled, so
+  nobody is parked there; a BYOK athlete is bounced back by the 402.
+
   Step ids are not renumbered. The id is persisted in `sessionStorage` so the
   Strava redirect does not lose a half-finished onboarding, so the key step is
   numbered 6 and shown fifth; the number on screen comes from the order, not the

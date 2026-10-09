@@ -189,6 +189,11 @@ export default function OnboardingPage() {
   // the athlete to the key step anyway, so a failed probe costs a detour rather
   // than the dead end.
   const [keyRequired, setKeyRequired] = useState(false)
+  // Whether the probe has answered yet. `keyRequired` starts false, which is
+  // the right default to *render* but not something to make decisions on: the
+  // difference between "no key is needed" and "we have not asked yet" matters
+  // for a resumed session and for the generate shortcut below. Raised in review.
+  const [keyStatusKnown, setKeyStatusKnown] = useState(false)
   const [keyInput, setKeyInput] = useState('')
   const [keyTesting, setKeyTesting] = useState(false)
   const [keySaving, setKeySaving] = useState(false)
@@ -239,12 +244,20 @@ export default function OnboardingPage() {
     let cancelled = false
     fetchAIKeyStatus(authToken)
       .then((status) => {
-        if (!cancelled) setKeyRequired(Boolean(status.keyRequired))
+        if (cancelled) return
+        setKeyRequired(Boolean(status.keyRequired))
+        setKeyStatusKnown(true)
       })
       .catch(() => {
         // Deliberately silent. Nothing the athlete can do about it, and the
         // generate path recovers on its own; a banner here would be noise on
         // the welcome screen of a flow that still works.
+        //
+        // Counted as "known" all the same, so a failed probe does not leave a
+        // resumed session parked on the key step forever. The cost is a BYOK
+        // athlete being sent to the summary and bounced back by the 402 — a
+        // detour that heals itself, against a screen with no way off it.
+        if (!cancelled) setKeyStatusKnown(true)
       })
     return () => {
       cancelled = true
@@ -480,10 +493,16 @@ export default function OnboardingPage() {
     }
   }
 
-  const steps = stepsFor(keyRequired)
-  // A step saved before this release, or saved while the key was still needed
-  // and no longer is, may not be in the current order. Clamp rather than show a
-  // blank card with "Step 0 of 5" on it.
+  // `|| step === STEP_AI_KEY`: the key step counts as part of the order
+  // whenever the athlete is standing on it, even before the probe has answered.
+  // `step` is restored from `sessionStorage`, so a reload during the key step
+  // lands here with `keyRequired` still false for a moment — and without this
+  // the step was not in the list, so the header read "Step 1 of 5" over the key
+  // form and Back had nowhere to go. Raised in review; my `position` clamp
+  // below had only straightened the label.
+  const steps = stepsFor(keyRequired || step === STEP_AI_KEY)
+  // Still clamped, for a step id that is in neither list — a session saved by a
+  // build that numbered things differently.
   const position = steps.indexOf(step) >= 0 ? steps.indexOf(step) + 1 : 1
   const atLastStep = step === STEP_SUMMARY
 
@@ -492,12 +511,30 @@ export default function OnboardingPage() {
     if (next !== undefined) setStep(next)
   }
 
+  // A resumed session that no longer needs a key does not stay on the key step.
+  //
+  // Reachable two ways: a hosted athlete whose `sessionStorage` holds a step 6
+  // from a 402 reroute on a deployment that has since been given a global key,
+  // and an athlete who added a key in another tab. Without this they are shown
+  // a form for a credential they do not need, with Continue disabled and Back
+  // leading nowhere — Save was the only way out. Raised in review.
+  useEffect(() => {
+    if (keyStatusKnown && !keyRequired && step === STEP_AI_KEY) {
+      setStep(STEP_SUMMARY)
+    }
+  }, [keyStatusKnown, keyRequired, step])
+
   const handleContinue = () => {
     // A connected athlete generates straight from the assessment step — but not
     // past the key step. Generating here with no usable key is the 402 that
     // ai-trainer-ops#41 is about, and it would skip the one screen that can fix
     // it.
-    if (step === STEP_ASSESSMENT && connectedForAnalysis && !keyRequired) {
+    // `keyStatusKnown` closes the race the review noted as minor: until the
+    // probe answers, `keyRequired` is false, so a quick Strava-connected
+    // athlete could still take the shortcut and collect a 402. The fallback
+    // recovers from it, but waiting for one request is cheaper than a detour
+    // through a failed plan generation.
+    if (step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired) {
       void handleGenerate()
     } else {
       goToStep(1)
@@ -1009,7 +1046,7 @@ export default function OnboardingPage() {
                 disabled={!canNext()}
                 className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
-                {step === STEP_ASSESSMENT && connectedForAnalysis && !keyRequired
+                {step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired
                   ? 'Analyse & Generate Plan'
                   : 'Continue'}
               </button>

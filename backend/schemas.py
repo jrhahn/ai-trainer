@@ -1360,10 +1360,22 @@ class AIKeyStatusSchema(CamelModel):
     has_gemini_key: bool
     openai_model: str
     gemini_model: str
+    """The model each provider actually runs, so the UI stops guessing (#691).
+
+    The settings page used to hard-code these as display hints, in two places
+    that disagreed with each other ("Gemini 2.0 Flash" and "Gemini 2.5 Flash")
+    and with the backend, which has been on ``gemini-3.5-flash-lite`` since
+    #511. A copy of a config value drifts from it; serving the value does not.
+
+    This is the *coach* model specifically. Tasks are configured separately
+    (classify, plan, coach, feedback), but the coach is the one the athlete
+    converses with, so it is the honest answer to "what runs if I pick this".
+    """
+
     key_required: bool = False
     """Whether this athlete must supply a key before any AI call can succeed.
 
-    The three booleans above describe the *account*; this one describes whether
+    The three booleans at the top describe the *account*; this one describes whether
     the account can actually be used, which also depends on the deployment —
     whether admin-key fallback is on, and whether the owner set a global key.
     Without it a client cannot tell "you have no key, and you need one" from
@@ -1375,17 +1387,6 @@ class AIKeyStatusSchema(CamelModel):
     Defaulted to ``False`` so an older client parsing a newer response keeps
     working, and so the field being absent never reads as "go and ask for a
     key".
-    """
-    """The model each provider actually runs, so the UI stops guessing (#691).
-
-    The settings page used to hard-code these as display hints, in two places
-    that disagreed with each other ("Gemini 2.0 Flash" and "Gemini 2.5 Flash")
-    and with the backend, which has been on ``gemini-3.5-flash-lite`` since
-    #511. A copy of a config value drifts from it; serving the value does not.
-
-    This is the *coach* model specifically. Tasks are configured separately
-    (classify, plan, coach, feedback), but the coach is the one the athlete
-    converses with, so it is the honest answer to "what runs if I pick this".
     """
 
 
