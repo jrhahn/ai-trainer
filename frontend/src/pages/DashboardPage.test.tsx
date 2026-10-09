@@ -25,6 +25,7 @@ const {
   mockSetRideLegs,
   mockUseImportProgress,
   mockDeleteManualActivity,
+  mockFetchWorkoutLogs,
   mockFetchRides,
   mockFetchMetrics,
   mockSaveWorkoutLog,
@@ -33,6 +34,7 @@ const {
   mockSaveWorkoutLog: vi.fn(),
   mockRateCompletedWorkout: vi.fn(),
   mockDeleteManualActivity: vi.fn(),
+  mockFetchWorkoutLogs: vi.fn(),
   mockFetchRides: vi.fn(),
   mockFetchMetrics: vi.fn(),
   mockProcessPendingFeedbacks: vi.fn(),
@@ -52,6 +54,8 @@ vi.mock('../services/ai', () => ({
 vi.mock('../services/user', () => ({
   setRideLegs: mockSetRideLegs,
   deleteManualActivity: mockDeleteManualActivity,
+  fetchWorkoutLogs: mockFetchWorkoutLogs,
+  updateManualActivity: vi.fn(),
   fetchRideMetricsHistory: mockFetchRides,
   fetchMetricsHistory: mockFetchMetrics,
   addManualActivity: vi.fn(),
@@ -1727,6 +1731,49 @@ describe('DashboardPage — entered activities', () => {
 
     await waitFor(() => expect(mockDeleteManualActivity).toHaveBeenCalledWith('test-token', day, 100))
     await waitFor(() => expect(useAppStore.getState().rideMetricsHistory).toEqual([]))
+  })
+
+  it('opens an entered activity for editing with what was entered', async () => {
+    mockFetchWorkoutLogs.mockResolvedValue({
+      [`${day}#100`]: { actualDurationMinutes: 45, perceivedEffort: 4, notes: 'hills', completedAt: '', sport: 'running' },
+    })
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Edit activity' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Duration (minutes)')).toHaveValue(45)
+    expect(screen.getByLabelText(/Notes/)).toHaveValue('hills')
+    expect(screen.getByRole('button', { name: /Run/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens an entry in an unknown sport as a ride rather than failing', async () => {
+    mockFetchWorkoutLogs.mockResolvedValue({
+      [`${day}#100`]: { actualDurationMinutes: 30, perceivedEffort: 2, notes: '', completedAt: '', sport: 'yoga' },
+    })
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+    expect(await screen.findByRole('button', { name: /Ride/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('says so when the entry is gone by the time it is opened', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('This activity could not be found any more.'))
+  })
+
+  it('falls back to a generic message when opening fails oddly', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockFetchWorkoutLogs.mockRejectedValue('boom')
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('The activity could not be opened.'))
   })
 
   it('keeps the activity when the deletion is not confirmed', async () => {

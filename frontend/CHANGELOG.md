@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,
+  `DashboardPage.tsx`. A pencil next to "Entered by you" opens the same form,
+  filled in with what was entered and with the day fixed. Moving an entry to
+  another day is a delete and a new entry.
 - **The day view shows what you did, not only what was planned**
   (ai-trainer-ops#47, #48) — `DayActivities.tsx`, `WorkoutPage.tsx`. Recorded,
   uploaded and entered activities appear under "What you did this day", on a

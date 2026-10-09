@@ -492,6 +492,9 @@ async def get_workouts(
             "notes": log.notes,
             "completedAt": log.completed_at,
             "slot": log.slot or 0,
+            # So an entered activity can be edited in the sport it was entered
+            # in (#47); every logged session carries one since #714.
+            "sport": log.sport_type,
         }
         # Keyed by session (#496): the first session keeps the bare date so every
         # existing client keeps reading exactly what it read before, and only the
@@ -637,6 +640,47 @@ async def add_manual_activity(
         duration_minutes=body.duration_minutes,
     )
     return schemas.ManualActivityResponse(date=body.date, slot=slot, sport=sport)
+
+
+@router.put("/activities/{date}/{slot}", response_model=schemas.ManualActivityResponse)
+async def update_manual_activity(
+    date: str,
+    slot: int,
+    body: schemas.ManualActivityUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ManualActivityResponse:
+    """Correct an entered activity in place (#47).
+
+    Same slot, so the load row it produced is corrected rather than joined by
+    a second one — re-saving a log is how #745 already corrects a figure.
+    Only the unplanned range, for the reason deletion is.
+    """
+    if not logged_sessions.is_unplanned_slot(slot) or (
+        await crud.get_workout_log_by_date(db, current_user.id, date, slot)
+    ) is None:
+        raise HTTPException(status_code=404, detail="No such entered activity.")
+    sport = schemas.normalise_plan_sport(body.sport)
+    await crud.upsert_workout_log(
+        db,
+        current_user.id,
+        date,
+        slot=slot,
+        actual_duration_minutes=body.duration_minutes,
+        average_power=None,
+        average_heart_rate=body.average_heart_rate,
+        peak_power=None,
+        perceived_effort=body.perceived_effort,
+        notes=body.notes,
+        completed_at=f"{date}T12:00:00",
+        sport_type=sport,
+    )
+    await _price_logged_session(
+        db, current_user, date=date, sport=sport,
+        perceived_effort=body.perceived_effort,
+        duration_minutes=body.duration_minutes,
+    )
+    return schemas.ManualActivityResponse(date=date, slot=slot, sport=sport)
 
 
 @router.delete("/activities/{date}/{slot}", status_code=status.HTTP_204_NO_CONTENT)

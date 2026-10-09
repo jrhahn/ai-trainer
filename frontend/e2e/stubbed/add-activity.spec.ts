@@ -70,6 +70,15 @@ test('two runs entered on one day are two activities, and one can go again', asy
   await expect(page.getByText('Done', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/was Recovery/)).toHaveCount(0)
 
+  // Correct one of them: the duration changes in place, no third entry.
+  await page.getByRole('button', { name: /edit the running you entered/i }).first().click()
+  await expect(page.getByRole('heading', { name: 'Edit activity' })).toBeVisible()
+  await page.getByLabel('Duration (minutes)').fill('75')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('heading', { name: 'Edit activity' })).toHaveCount(0)
+  await expect(page.getByText('1h 15m')).toBeVisible()
+  await expect(entries).toHaveCount(2)
+
   page.once('dialog', (dialog) => void dialog.accept())
   await page.getByRole('button', { name: /delete the running you entered/i }).first().click()
   await expect(entries).toHaveCount(1)

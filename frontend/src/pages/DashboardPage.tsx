@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Plus, Trash2 } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -17,7 +17,7 @@ import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
-import AddActivityDialog from '../components/AddActivityDialog'
+import AddActivityDialog, { type EditedActivity } from '../components/AddActivityDialog'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
@@ -26,7 +26,7 @@ import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
-import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, setRideLegs } from '../services/user'
+import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, fetchWorkoutLogs, setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 
@@ -682,6 +682,7 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [addActivityOpen, setAddActivityOpen] = useState(false)
+  const [editingActivity, setEditingActivity] = useState<EditedActivity | null>(null)
   // The session being logged from the card, if any (ai-trainer-ops#52).
   const [loggingSession, setLoggingSession] = useState<TrainingDay | null>(null)
   const { logSession } = useLogPlannedSession()
@@ -815,6 +816,29 @@ export default function DashboardPage() {
 
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
   const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
+  /** Open an entered activity for correction, with what was entered (#47). The
+   *  effort and the note live on the log, not on the load row, so they are read
+   *  from there. */
+  const editEnteredActivity = async (ride: RideMetricPoint) => {
+    const slot = enteredActivitySlot(ride)
+    if (!authToken || slot == null) return
+    try {
+      const log = (await fetchWorkoutLogs(authToken))[`${ride.activityDate}#${slot}`]
+      if (!log) throw new Error('This activity could not be found any more.')
+      const sport = (['cycling', 'running', 'strength'] as const).find((s) => s === log.sport) ?? 'cycling'
+      setEditingActivity({
+        date: ride.activityDate,
+        slot,
+        sport,
+        durationMinutes: log.actualDurationMinutes,
+        perceivedEffort: log.perceivedEffort,
+        notes: log.notes ?? '',
+      })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'The activity could not be opened.')
+    }
+  }
+
   const removeEnteredActivity = async (ride: RideMetricPoint) => {
     const slot = enteredActivitySlot(ride)
     if (!authToken || slot == null) return
@@ -962,6 +986,14 @@ export default function DashboardPage() {
         </button>
       </div>
       <AddActivityDialog open={addActivityOpen} onClose={() => setAddActivityOpen(false)} />
+      {editingActivity && (
+        <AddActivityDialog
+          key={`${editingActivity.date}#${editingActivity.slot}`}
+          open
+          editing={editingActivity}
+          onClose={() => setEditingActivity(null)}
+        />
+      )}
 
       {/* The week is the daily read; the month is a question asked occasionally,
           so it opens over the page instead of sitting under it (#621). */}
@@ -1122,6 +1154,16 @@ export default function DashboardPage() {
                         <Clock size={11} />
                         {formatDuration(ride.durationSeconds)}
                       </span>
+                    )}
+                    {enteredActivitySlot(ride) != null && (
+                      <button
+                        type="button"
+                        onClick={() => void editEnteredActivity(ride)}
+                        aria-label={`Edit the ${ride.sportType} you entered on ${ride.activityDate}`}
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+                      >
+                        <Pencil size={13} aria-hidden="true" />
+                      </button>
                     )}
                     {enteredActivitySlot(ride) != null && (
                       <button
