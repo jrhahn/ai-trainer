@@ -78,6 +78,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Coach Timeline" is said once where it can be seen** (ai-trainer-ops#51.6)
+  — `src/pages/DashboardPage.tsx`.
+
+  The words appeared twice a hand's width apart: the section label, and the
+  card's own title inside `AIChat`. The label is now `sr-only` rather than
+  deleted — the card's title is a `<span>`, so the `<h2>` is the only landmark
+  a screen reader can navigate to, and the section holds the training-status
+  summary as well as the card. Removing it would have taken away the one
+  structural handle on that region to fix something only sighted readers see.
+
+  Asserted by area, not by Playwright's visibility: `sr-only` hides with
+  `clip`, so the element keeps a 1×1 box and both `toBeVisible()` and
+  `innerText` still find it. Neither would have noticed the fix.
+
 - **Settings stops showing developer detail to athletes** (ai-trainer-ops#50,
   the "developer leaks" half) — `src/pages/SettingsPage.tsx`,
   `src/components/IntervalsConnect.tsx`.

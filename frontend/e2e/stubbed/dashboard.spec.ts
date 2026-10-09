@@ -160,4 +160,35 @@ test.describe('a stranger finishes onboarding', () => {
         `<${widest.tag} class="${widest.className}"> reaching ${widest.right}px`
     ).toBeLessThanOrEqual(clientWidth)
   })
+
+  test('says "Coach Timeline" once where a sighted reader can see it', async ({ page }) => {
+    // ai-trainer-ops#51.6. The section label and the card's own title carried
+    // the same words a hand's width apart.
+    //
+    // Measured by area, not by Playwright's visibility: `sr-only` hides with
+    // `clip`, leaving a 1x1 box, so `toBeVisible()` still says yes and
+    // `innerText` still includes the text. Neither would have noticed the fix.
+    // What a sighted reader experiences is whether the words occupy space.
+    const athlete = newAthlete()
+    await onboard(page, athlete)
+    await waitForPopulatedDashboard(page, athlete)
+
+    const visibleCount = await page.evaluate(() => {
+      const wanted = 'coach timeline'
+      let count = 0
+      for (const element of Array.from(document.querySelectorAll('*'))) {
+        // Leaf-ish only: every ancestor also "contains" the text.
+        if (element.children.length > 0) continue
+        if ((element.textContent || '').trim().toLowerCase() !== wanted) continue
+        const box = element.getBoundingClientRect()
+        if (box.width > 10 && box.height > 10) count += 1
+      }
+      return count
+    })
+
+    expect(visibleCount, 'the words should occupy space exactly once').toBe(1)
+
+    // And the landmark survived, which is why it was hidden rather than deleted.
+    await expect(page.getByRole('heading', { name: /coach timeline/i })).toHaveCount(1)
+  })
 })
