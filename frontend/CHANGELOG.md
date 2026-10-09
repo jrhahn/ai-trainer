@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Upload from "Add activity", by drop or pick, .fit or .zip**
+  (ai-trainer-ops#48) — `AddActivityDialog.tsx`, `FitFileUpload.tsx`. The
+  dialog offers "Enter it" or "Upload a file". The upload takes drag-and-drop,
+  accepts `.zip` and lets `.gpx`/`.tcx` be picked so the server can explain
+  what to export instead. What was imported appears on the dashboard
+  straight away instead of after a reload.
 - **Log a session from the dashboard card** (ai-trainer-ops#52) —
   `SessionHero.tsx`, `DashboardPage.tsx`, `hooks/useLogPlannedSession.ts`. The
   card for today (or a past day) gets **Log it**, or "Log AM / PM" on a

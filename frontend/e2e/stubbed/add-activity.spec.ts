@@ -80,3 +80,21 @@ test('two runs entered on one day are two activities, and one can go again', asy
 
   expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
 })
+
+test('a GPX export is refused with the way forward, inside the same dialog (ai-trainer-ops#48)', async ({ page }) => {
+  const errors = watchConsole(page)
+  await onboard(page, newAthlete())
+
+  await page.getByRole('button', { name: /add activity/i }).click()
+  await page.getByRole('tab', { name: 'Upload a file' }).click()
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'morning-ride.gpx',
+    mimeType: 'application/gpx+xml',
+    buffer: Buffer.from('<?xml version="1.0"?><gpx version="1.1"></gpx>'),
+  })
+
+  await expect(page.getByText('0 imported')).toBeVisible()
+  await expect(page.getByText(/GPX and TCX exports don.t carry what the coach needs/)).toBeVisible()
+  expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
+})
+
