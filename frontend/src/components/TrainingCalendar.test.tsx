@@ -715,9 +715,13 @@ describe('TrainingCalendar', () => {
       )
 
       const cell = screen.getByLabelText(`Calendar day ${date}`)
-      expect(cell.textContent).toContain('🏃')
-      expect(cell.textContent).not.toContain('🚴')
-      // Named as well as drawn: an emoji is ambiguous at this size.
+      // By the icon in the cell, not by a glyph in its text: since
+      // ai-trainer-ops#51.7 there is no glyph, and `textContent` would be
+      // equally empty of "🚴" on a cell that drew nothing at all. The rule
+      // itself is covered in `utils/sessionIcon.test.ts`; this is the wiring.
+      expect(cell.querySelector('.lucide-footprints')).not.toBeNull()
+      expect(cell.querySelector('.lucide-bike')).toBeNull()
+      // Named as well as drawn: an icon is ambiguous at this size.
       expect(screen.getByText('Running')).toBeInTheDocument()
     })
 
@@ -732,7 +736,7 @@ describe('TrainingCalendar', () => {
       )
 
       const cell = screen.getByLabelText(`Calendar day ${date}`)
-      expect(cell.textContent).toContain('🚴')
+      expect(cell.querySelector('.lucide-bike')).not.toBeNull()
       expect(screen.queryByText('Cycling')).not.toBeInTheDocument()
     })
 
@@ -752,12 +756,15 @@ describe('TrainingCalendar', () => {
       )
 
       const cell = screen.getByLabelText(`Calendar day ${date}`)
-      expect(cell.textContent).not.toContain('🚴')
+      expect(cell.querySelector('.lucide-bike')).toBeNull()
+      // Positively too: "no bicycle" is also true of a cell that drew nothing.
+      expect(cell.querySelector('.lucide-timer')).not.toBeNull()
       expect(screen.getByText('Swim')).toBeInTheDocument()
     })
 
     it('keeps a workout type that means the same in every sport', () => {
-      // "intervals" is a purpose, not a sport: a run with intervals is still ⚡.
+      // "intervals" is a purpose, not a sport: a run with intervals is still
+      // drawn as intervals, with the same icon the week strip uses.
       const date = monthDate(0, 17)
       useAppStore.setState({
         trainingPlan: [{ ...makeDay(date, 'intervals'), sport: 'running' }],
@@ -769,7 +776,9 @@ describe('TrainingCalendar', () => {
         </MemoryRouter>
       )
 
-      expect(screen.getByLabelText(`Calendar day ${date}`).textContent).toContain('⚡')
+      const cell = screen.getByLabelText(`Calendar day ${date}`)
+      expect(cell.querySelector('.lucide-zap')).not.toBeNull()
+      expect(cell.querySelector('.lucide-footprints'), 'the sport overrode a purpose').toBeNull()
     })
   })
 })

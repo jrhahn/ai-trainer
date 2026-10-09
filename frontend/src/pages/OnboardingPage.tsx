@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bike, Target, Loader2, CheckCircle, Dumbbell, Link } from 'lucide-react'
+import {
+  Bike,
+  CheckCircle,
+  CheckCircle2,
+  Dumbbell,
+  Link,
+  Loader2,
+  Target,
+  Trophy,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
 import IntervalsConnect from '../components/IntervalsConnect'
@@ -335,9 +345,19 @@ export default function OnboardingPage() {
     }
   }
 
-  const goals: { value: UserProfile['trainingGoal']; label: string; desc: string; emoji: string }[] = [
-    { value: 'race', label: 'Race Prep', desc: 'Be ready for a specific race', emoji: '🏆' },
-    { value: 'general_fitness', label: 'General Fitness', desc: 'Stay fit and healthy', emoji: '💪' },
+  const goals: {
+    value: UserProfile['trainingGoal']
+    label: string
+    desc: string
+    Icon: LucideIcon
+  }[] = [
+    { value: 'race', label: 'Race Prep', desc: 'Be ready for a specific race', Icon: Trophy },
+    {
+      value: 'general_fitness',
+      label: 'General Fitness',
+      desc: 'Stay fit and healthy',
+      Icon: Dumbbell,
+    },
   ]
 
   const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
@@ -379,16 +399,33 @@ export default function OnboardingPage() {
                 <Dumbbell size={32} className="text-amber-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Welcome, {userProfile?.name?.trim() || 'athlete'}! 👋
+                {/* No waving hand (ai-trainer-ops#51.7) — and this heading
+                    already has a 32 px dumbbell directly above it. */}
+                Welcome, {userProfile?.name?.trim() || 'athlete'}!
               </h2>
               <p className="text-gray-500 mb-4 text-sm leading-relaxed">
                 We want to set up your first <span className="font-semibold text-gray-700">14-day cycling training plan</span>.
                 We just need a few quick inputs.
               </p>
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 text-left space-y-1">
-                <p>✅ A few short questions</p>
-                <p>✅ Takes about 3 minutes</p>
-                <p>✅ You can update details later anytime</p>
+                {/* Three ticks that were ✅, which is a green box in a browser
+                    with no emoji font (ai-trainer-ops#51.7). `aria-hidden`:
+                    read aloud, "white heavy check mark" three times adds
+                    nothing to three plain statements. */}
+                {[
+                  'A few short questions',
+                  'Takes about 3 minutes',
+                  'You can update details later anytime',
+                ].map((promise) => (
+                  <p key={promise} className="flex items-start gap-1.5">
+                    <CheckCircle2
+                      size={14}
+                      className="mt-0.5 shrink-0 text-amber-600"
+                      aria-hidden="true"
+                    />
+                    {promise}
+                  </p>
+                ))}
               </div>
             </div>
           )}
@@ -410,7 +447,8 @@ export default function OnboardingPage() {
                         : 'border-gray-200 hover:border-amber-300'
                     }`}
                   >
-                    <span className="text-2xl">{g.emoji}</span>
+                    {/* `aria-hidden`: the goal's name is right beside it. */}
+                    <g.Icon size={24} className="shrink-0 text-amber-500" aria-hidden="true" />
                     <div>
                       <div className="font-semibold text-sm text-gray-900">{g.label}</div>
                       <div className="text-xs text-gray-500">{g.desc}</div>

@@ -205,7 +205,9 @@ export default function Layout() {
             onClick={() => setToast(null)}
             className="ml-2 text-gray-400 hover:text-white text-xs"
             aria-label="Dismiss"
-          >✕</button>
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
         </div>
       )}
     </div>

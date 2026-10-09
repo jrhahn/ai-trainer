@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Target, TrendingUp, Zap, Calendar, Info } from 'lucide-react'
+import { Calendar, Flag, Info, Target, TrendingUp, Zap } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
 import type { ReadinessScore } from '../services/ai'
@@ -124,7 +124,8 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
           )}
           {data.daysUntilRace === 0 && data.raceDate && (
             <div className="mt-1 inline-flex items-center gap-1 bg-green-100 text-green-800 rounded-full px-2 py-0.5 text-xs font-semibold">
-              🏁 Race day!
+              <Flag size={12} className="shrink-0" aria-hidden="true" />
+              Race day!
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { Bot, Clock } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -32,11 +32,18 @@ const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
 
-// Quick leg-freshness ratings tappable directly on each activity card.
+/** Quick leg-freshness ratings tappable directly on each activity card.
+ *
+ * A battery rather than a traffic light (ai-trainer-ops#51.7). The three
+ * circles were 🟢🟡🔴, which carried the whole meaning in colour — nothing at
+ * all to a red-green colourblind athlete, and three empty boxes in a browser
+ * with no emoji font. A battery says the same thing by how full it is, and the
+ * colour is then a second channel rather than the only one (WCAG 1.4.1).
+ */
 const LEG_FEELINGS = [
-  { value: 'fresh', emoji: '🟢', label: 'Fresh' },
-  { value: 'normal', emoji: '🟡', label: 'Normal' },
-  { value: 'heavy', emoji: '🔴', label: 'Heavy' },
+  { value: 'fresh', Icon: BatteryFull, color: 'text-emerald-600', label: 'Fresh' },
+  { value: 'normal', Icon: BatteryMedium, color: 'text-amber-600', label: 'Normal' },
+  { value: 'heavy', Icon: BatteryLow, color: 'text-red-600', label: 'Heavy' },
 ] as const
 
 export function formatDuration(seconds: number | undefined): string {
@@ -875,7 +882,11 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
           {/* No name means no comma: "Good morning!", not "Good morning, !" (ai-trainer-ops#40). */}
-          {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`} 👋
+          {/* No waving hand (ai-trainer-ops#51.7). It was one of the emoji
+              the issue names, and there is no lucide icon that reads as a
+              greeting — `Hand` is a hand, not a wave. A greeting by name needs
+              no decoration, so it is dropped rather than translated. */}
+          {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`}
         </h1>
         <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
       </div>
@@ -1095,13 +1106,21 @@ export default function DashboardPage() {
                               title={`Legs: ${feel.label}`}
                               aria-label={`Legs felt ${feel.label}`}
                               aria-pressed={active}
-                              className={`text-xs leading-none px-1.5 py-1 rounded transition-all ${
+                              className={`rounded px-1.5 py-1 leading-none transition-all ${
                                 active
                                   ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
                                   : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
                               }`}
                             >
-                              {feel.emoji}
+                              {/* White on the amber chosen state, where the
+                                  feeling's own colour would not be legible.
+                                  `aria-hidden`: the button is already labelled
+                                  "Legs felt Fresh". */}
+                              <feel.Icon
+                                size={14}
+                                className={active ? 'text-white' : feel.color}
+                                aria-hidden="true"
+                              />
                             </button>
                           )
                         })}

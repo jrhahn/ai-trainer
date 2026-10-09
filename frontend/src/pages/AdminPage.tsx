@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Shield, Loader2, LogOut, Users, Zap, Activity, Trash2 } from 'lucide-react'
+import { Activity, Check, Hourglass, Loader2, LogOut, Shield, Trash2, Users, Zap } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
 
 // ---------------------------------------------------------------------------
@@ -417,7 +417,24 @@ export default function AdminPage() {
                     <td className="px-3 py-2.5 text-gray-700 font-medium">{fmt(u.consumedTokens)}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${u.stravaConnected ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
-                        {u.stravaConnected ? (u.stravaAnalysisComplete ? '✓ synced' : '⧗ pending') : 'none'}
+                        {/* Glyphs the browser might not have, replaced with
+                            icons (ai-trainer-ops#51.7). `aria-hidden`: the word
+                            beside each one already says which state it is. */}
+                        {u.stravaConnected ? (
+                          u.stravaAnalysisComplete ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Check size={11} aria-hidden="true" />
+                              synced
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <Hourglass size={11} aria-hidden="true" />
+                              pending
+                            </span>
+                          )
+                        ) : (
+                          'none'
+                        )}
                       </span>
                     </td>
                     <td className="px-3 py-2.5">

@@ -1,9 +1,40 @@
-import { Activity } from 'lucide-react'
+import { Activity, Zap } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { LineChart } from './charts/LineChart'
+
+/** One colour per series, for the line and for the key beside its heading.
+ *
+ * Hoisted out of the JSX because the headings used to be labelled with coloured
+ * circle emoji — 🔵 against a `#3b82f6` line, 🟠 against `#f97316`
+ * (ai-trainer-ops#51.7). Those are two unrelated colours that happen to have
+ * similar names, set in two places, and the emoji one is whatever the reader's
+ * font decides. Now the swatch cannot be a different colour from its line,
+ * because it is the same string.
+ */
+const SERIES_COLORS = {
+  ctl: '#3b82f6',
+  atl: '#f97316',
+  tsb: '#22c55e',
+  tss: '#8b5cf6',
+} as const
+
+/** The key beside a chart's heading: a dot in the line's own colour.
+ *
+ * `aria-hidden`, and the heading says the series' name in words right after it
+ * — the colour is a second channel, never the only one (WCAG 1.4.1).
+ */
+function SeriesKey({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ backgroundColor: color }}
+      aria-hidden="true"
+    />
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Public component
@@ -128,13 +159,14 @@ export default function TrainingLoadChart() {
       {/* CTL chart */}
       {hasCtl && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">
-            🔵 Fitness — CTL (Chronic Training Load, 42-day avg)
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <SeriesKey color={SERIES_COLORS.ctl} />
+            Fitness — CTL (Chronic Training Load, 42-day avg)
           </p>
           <LineChart
             data={ctlData}
             labels={labels}
-            color="#3b82f6"
+            color={SERIES_COLORS.ctl}
             height={72}
             yLabel="CTL"
           />
@@ -144,13 +176,14 @@ export default function TrainingLoadChart() {
       {/* ATL chart */}
       {hasAtl && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">
-            🟠 Fatigue — ATL (Acute Training Load, 7-day avg)
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <SeriesKey color={SERIES_COLORS.atl} />
+            Fatigue — ATL (Acute Training Load, 7-day avg)
           </p>
           <LineChart
             data={atlData}
             labels={labels}
-            color="#f97316"
+            color={SERIES_COLORS.atl}
             height={72}
             yLabel="ATL"
           />
@@ -160,13 +193,14 @@ export default function TrainingLoadChart() {
       {/* TSB chart */}
       {hasTsb && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">
-            🟢 Form — TSB (Training Stress Balance = CTL − ATL)
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <SeriesKey color={SERIES_COLORS.tsb} />
+            Form — TSB (Training Stress Balance = CTL − ATL)
           </p>
           <LineChart
             data={tsbData}
             labels={labels}
-            color="#22c55e"
+            color={SERIES_COLORS.tsb}
             height={72}
             yLabel="TSB"
             zeroLine
@@ -177,15 +211,16 @@ export default function TrainingLoadChart() {
       {/* TSS chart */}
       {hasTss && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+            <Zap size={13} className="shrink-0" style={{ color: SERIES_COLORS.tss }} aria-hidden="true" />
             {hasEstimatedLoad
-              ? '⚡ Training load per activity (some estimated)'
-              : '⚡ Daily TSS (Training Stress Score per activity)'}
+              ? 'Training load per activity (some estimated)'
+              : 'Daily TSS (Training Stress Score per activity)'}
           </p>
           <LineChart
             data={tssData}
             labels={tssLabels}
-            color="#8b5cf6"
+            color={SERIES_COLORS.tss}
             height={72}
             yLabel={hasEstimatedLoad ? 'Load per activity' : 'TSS per activity'}
           />

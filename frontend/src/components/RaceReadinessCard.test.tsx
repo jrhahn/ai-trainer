@@ -83,7 +83,11 @@ describe('RaceReadinessCard', () => {
       makeScore({ daysUntilRace: 0, raceDate: '2024-06-01' })
     )
     renderCard()
-    expect(await screen.findByText('🏁 Race day!')).toBeInTheDocument()
+    // The chequered flag is a lucide icon since ai-trainer-ops#51.7, so the
+    // words are their own node and the glyph is no longer part of the text.
+    const badge = await screen.findByText('Race day!')
+    expect(badge).toBeInTheDocument()
+    expect(badge.parentElement?.querySelector('.lucide-flag')).not.toBeNull()
   })
 
   it('renders the projection block when a projected score is provided', async () => {
