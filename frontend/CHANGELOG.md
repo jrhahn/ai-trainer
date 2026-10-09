@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Log Completed Workout". The save path (store, server, coach rating on the
   session's own slot) moved from `WorkoutPage` into a shared hook, so the two
   entry points cannot drift apart. Covered by a browser test.
+
+### Fixed
+
+- **A hand-logged session no longer un-logs itself when the coach replies**
+  (ai-trainer-ops#52) — `hooks/useLogPlannedSession.ts`. After the coach's
+  rating, the plan was re-read from the server and applied as-is. The server
+  only marks a day `completed` through ride matching, so the log the athlete
+  had just saved disappeared from the screen until the next reload: the day
+  view lost "Your Workout Log", the coach's note and its follow-up question,
+  and the dashboard would have offered "Log it" again. Completion and
+  feedback known to this client are kept now. The follow-up question had no
+  test, and its first one failed on `develop` too.
 - **"Add activity" on the dashboard** (ai-trainer-ops#47) —
   `AddActivityDialog.tsx`, `DashboardPage.tsx`, `utils/enteredActivity.ts`. It
   asks for five things: the day, the sport (Ride / Run / Strength), minutes,

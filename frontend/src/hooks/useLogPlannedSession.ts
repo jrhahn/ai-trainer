@@ -4,7 +4,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog } from '../services/user'
-import { sessionSlot } from '../utils/planSessions'
+import { sessionKey, sessionSlot } from '../utils/planSessions'
 
 function stravaActivityType(activity: StravaActivity): string {
   return (activity.sport_type || activity.type || '').toLowerCase()
@@ -60,11 +60,23 @@ export function useLogPlannedSession() {
       const slot = sessionSlot(dayWithFeedback)
       updateTrainingDay(dayWithFeedback.date, { coachFeedback: rating.feedback }, slot)
       const latestPlan = await fetchTrainingPlan(authToken!)
-      const withFeedback = latestPlan.map((d) =>
-        d.date === dayWithFeedback.date && sessionSlot(d) === slot
-          ? { ...d, coachFeedback: rating.feedback }
-          : d
+      // The server's plan does not carry a hand-logged session's completion:
+      // only ride matching writes `completed` there. Taken as-is it wiped the
+      // log the athlete had just saved — the card offered "Log it" again and
+      // the coach's note and follow-up question vanished until a reload. So
+      // completion and feedback come from what this client knows.
+      const known = new Map(
+        useAppStore.getState().trainingPlan.map((d) => [sessionKey(d), d])
       )
+      const withFeedback = latestPlan.map((d) => {
+        const local = known.get(sessionKey(d))
+        const kept = local?.completed
+          ? { ...d, completed: true, feedback: local.feedback ?? d.feedback }
+          : d
+        return d.date === dayWithFeedback.date && sessionSlot(d) === slot
+          ? { ...kept, completed: true, feedback: dayWithFeedback.feedback, coachFeedback: rating.feedback }
+          : kept
+      })
       setTrainingPlan(withFeedback)
       await saveTrainingPlan(authToken!, withFeedback)
     },
