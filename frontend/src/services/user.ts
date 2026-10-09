@@ -1262,6 +1262,8 @@ export interface FitUploadFileResult {
   status: 'imported' | 'skipped' | 'failed'
   message: string
   activityId?: string
+  /** The day it happened, so the result can link there (#48). */
+  activityDate?: string
   sportType?: string
   durationMinutes?: number
   averagePower?: number

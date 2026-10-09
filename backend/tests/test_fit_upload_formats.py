@@ -88,6 +88,8 @@ async def test_a_garmin_export_zip_imports_its_fit(client: AsyncClient, auth_hea
 
     assert body["imported"] == 1
     assert body["files"][0]["filename"] == "activity_1.zip › activity_1.fit"
+    # The day it happened, so the result can link there.
+    assert body["files"][0]["activityDate"].startswith("2026-")
 
 
 async def test_every_fit_in_a_zip_is_its_own_import(client: AsyncClient, auth_headers):

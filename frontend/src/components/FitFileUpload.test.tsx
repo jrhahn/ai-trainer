@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import FitFileUpload from './FitFileUpload'
 import type { FitBulkUploadResponse } from '../services/user'
 
@@ -169,6 +170,35 @@ describe('FitFileUpload', () => {
     render(<FitFileUpload />)
     fireEvent.drop(screen.getByText('Choose or drop .fit / .zip files'), { dataTransfer: { files: [] } })
     expect(mockUploadFitFiles).not.toHaveBeenCalled()
+  })
+
+  it('links an imported file to the day it happened', async () => {
+    mockUploadFitFiles.mockResolvedValue(
+      response({ files: [{ filename: 'ride.fit', status: 'imported', message: 'ok', activityDate: '2026-10-07' }] })
+    )
+    const { container } = render(
+      <MemoryRouter>
+        <FitFileUpload />
+      </MemoryRouter>
+    )
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, makeFile())
+
+    expect(await screen.findByRole('link', { name: 'Open day' })).toHaveAttribute('href', '/workout/2026-10-07')
+  })
+
+  it('offers no day for a file that failed', async () => {
+    mockUploadFitFiles.mockResolvedValue(
+      response({ imported: 0, failed: 1, files: [{ filename: 'x.fit', status: 'failed', message: 'bad', activityDate: '2026-10-07' }] })
+    )
+    const { container } = render(
+      <MemoryRouter>
+        <FitFileUpload />
+      </MemoryRouter>
+    )
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, makeFile())
+
+    await screen.findByText('0 imported')
+    expect(screen.queryByRole('link', { name: 'Open day' })).not.toBeInTheDocument()
   })
 })
 

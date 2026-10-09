@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The day view shows what you did, not only what was planned**
+  (ai-trainer-ops#47, #48) — `DayActivities.tsx`, `WorkoutPage.tsx`. Recorded,
+  uploaded and entered activities appear under "What you did this day", on a
+  planned day and on a day the plan never covered. Before, a ride on a rest
+  day or a run entered with "Add activity" appeared nowhere on the day it
+  happened.
+- **"Open day" on every imported file** (ai-trainer-ops#48) —
+  `FitFileUpload.tsx`. A failed file offers no day.
 - **Upload from "Add activity", by drop or pick, .fit or .zip**
   (ai-trainer-ops#48) — `AddActivityDialog.tsx`, `FitFileUpload.tsx`. The
   dialog offers "Enter it" or "Upload a file". The upload takes drag-and-drop,
