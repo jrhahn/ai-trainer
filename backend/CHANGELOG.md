@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A Garmin "Export Original" .zip uploads like the .fit inside it, and a
+  GPX/TCX says what to do instead** (ai-trainer-ops#48) —
+  `routers/users.py`, `tests/test_fit_upload_formats.py`. Every `.fit` in a
+  zip is its own import and pays its own AI call. Sizes are checked against
+  what the zip *unpacks* to: per member, in total (5× the file limit) and in
+  member count. The read is bounded by the limit rather than by the header,
+  which is the zip's own claim. A member whose stream disagrees with its
+  header is that file's failure, not a 500. GPX and TCX carry no power
+  stream or device summary, so they are refused with the way forward
+  ("Export Original", or "Add activity") instead of "Only .fit files".
 - **Enter a session that no plan day and no recording covers**
   (ai-trainer-ops#47) — `POST /users/me/activities`,
   `DELETE /users/me/activities/{date}/{slot}`, `services/logged_sessions.py`.

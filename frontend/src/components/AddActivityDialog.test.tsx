@@ -12,6 +12,7 @@ const { mockAdd, mockRides, mockMetrics } = vi.hoisted(() => ({
 }))
 
 vi.mock('../services/user', () => ({
+  uploadFitFiles: vi.fn(),
   addManualActivity: mockAdd,
   fetchRideMetricsHistory: mockRides,
   fetchMetricsHistory: mockMetrics,
@@ -114,4 +115,16 @@ describe('AddActivityDialog (ai-trainer-ops#47)', () => {
     await user.click(screen.getByRole('button', { name: 'Save activity' }))
     expect(mockAdd).not.toHaveBeenCalled()
   })
+
+  it('offers the file upload as the other way in (ai-trainer-ops#48)', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('tab', { name: 'Upload a file' }))
+
+    expect(screen.getByText('Choose or drop .fit / .zip files')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Duration (minutes)')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Enter it' }))
+    expect(screen.getByLabelText('Duration (minutes)')).toBeInTheDocument()
+  })
 })
+

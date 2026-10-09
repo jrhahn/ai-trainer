@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Bike, Dumbbell, Footprints } from 'lucide-react'
 import Modal from './Modal'
+import FitFileUpload from './FitFileUpload'
 import { useAppStore } from '../store/useAppStore'
 import {
   addManualActivity,
@@ -43,6 +44,9 @@ export default function AddActivityDialog({
   const [minutes, setMinutes] = useState('')
   const [effort, setEffort] = useState<EffortLevel>(3)
   const [notes, setNotes] = useState('')
+  // Enter it by hand, or bring the file the device recorded (ai-trainer-ops#48):
+  // one entry point for "something happened that the app does not know about".
+  const [mode, setMode] = useState<'enter' | 'upload'>('enter')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -57,6 +61,7 @@ export default function AddActivityDialog({
     setEffort(3)
     setNotes('')
     setError('')
+    setMode('enter')
   }
 
   const close = () => {
@@ -94,6 +99,30 @@ export default function AddActivityDialog({
 
   return (
     <Modal open={open} onClose={close} title="Add activity">
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1" role="tablist">
+        {(
+          [
+            ['enter', 'Enter it'],
+            ['upload', 'Upload a file'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={mode === value}
+            onClick={() => setMode(value)}
+            className={`rounded-lg py-1.5 text-sm font-semibold transition-colors ${
+              mode === value ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'upload' ? (
+        <FitFileUpload embedded />
+      ) : (
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -222,6 +251,7 @@ export default function AddActivityDialog({
           </button>
         </div>
       </form>
+      )}
     </Modal>
   )
 }

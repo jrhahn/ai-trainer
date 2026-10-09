@@ -8,7 +8,7 @@
 import { useRef, useState } from 'react'
 import { Upload, CheckCircle, AlertCircle, CircleSlash, FileWarning } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { uploadFitFiles } from '../services/user'
+import { fetchMetricsHistory, fetchRideMetricsHistory, uploadFitFiles } from '../services/user'
 import type { FitBulkUploadResponse, FitUploadFileResult } from '../services/user'
 
 interface FitFileUploadProps {
@@ -17,14 +17,16 @@ interface FitFileUploadProps {
 
 export default function FitFileUpload({ embedded = false }: FitFileUploadProps) {
   const authToken = useAppStore((s) => s.authToken)
+  const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
+  const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
+  const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [result, setResult] = useState<FitBulkUploadResponse | null>(null)
   const [error, setError] = useState('')
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? [])
-    if (!files.length || !authToken) return
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length || !authToken || status === 'uploading') return
     setStatus('uploading')
     setError('')
     setResult(null)
@@ -32,6 +34,16 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
       const res = await uploadFitFiles(authToken, files)
       setResult(res)
       setStatus('success')
+      // What was imported is on the dashboard now, not after the next reload
+      // (ai-trainer-ops#48). Best-effort: the import itself already succeeded.
+      if (res.imported > 0) {
+        const [rides, metrics] = await Promise.all([
+          fetchRideMetricsHistory(authToken),
+          fetchMetricsHistory(authToken),
+        ]).catch(() => [null, null] as const)
+        if (rides) setRideMetricsHistory(rides)
+        if (metrics) setMetricsHistory(metrics)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
       setStatus('error')
@@ -40,32 +52,48 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
     }
   }
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    uploadFiles(Array.from(e.target.files ?? []))
+
   return (
     <div className={embedded ? '' : 'bg-white rounded-xl shadow-xs border border-gray-100 p-4'}>
       <div className="flex items-center gap-2 mb-3">
         <Upload size={16} className="text-blue-500" />
-        <h3 className="text-sm font-bold text-gray-800">Upload .fit Files</h3>
+        <h3 className="text-sm font-bold text-gray-800">Upload files</h3>
         <span className="ml-auto text-xs text-gray-400">Garmin · Wahoo · Zwift</span>
       </div>
 
       <p className="text-xs text-gray-500 mb-3">
-        Import workouts directly from .fit files — no Strava account required.
-        Supports cycling, running, and other sports.
+        A .fit file from your device, or the .zip Garmin Connect gives you with
+        “Export Original”. Cycling, running and other sports.
       </p>
 
-      <label className={`
+      <label
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragging(false)
+          void uploadFiles(Array.from(e.dataTransfer.files))
+        }}
+        className={`
         flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg border-2 border-dashed cursor-pointer
         text-sm font-medium transition-colors
         ${status === 'uploading'
           ? 'border-blue-200 text-blue-400 bg-blue-50 cursor-not-allowed'
-          : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}
+          : dragging
+            ? 'border-blue-400 text-blue-600 bg-blue-50'
+            : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}
       `}>
         <Upload size={14} />
-        {status === 'uploading' ? 'Uploading…' : 'Choose .fit files'}
+        {status === 'uploading' ? 'Uploading…' : 'Choose or drop .fit / .zip files'}
         <input
           ref={inputRef}
           type="file"
-          accept=".fit"
+          accept=".fit,.zip,.gpx,.tcx"
           multiple
           className="sr-only"
           disabled={status === 'uploading'}

@@ -5,6 +5,8 @@ import io
 import json
 import logging
 import re
+import zipfile
+import zlib
 from dataclasses import dataclass
 from datetime import date as date_type, datetime, timedelta, timezone
 from typing import Any
@@ -2487,6 +2489,89 @@ def _fit_file_parser_or_503() -> Any:
 _UPLOAD_CHUNK_BYTES = 256 * 1024
 
 
+# Formats an athlete exports and that this app cannot price (ai-trainer-ops#48).
+# Refused with a way forward rather than "only .fit": a GPX or TCX carries a
+# track and maybe heart rate, never the power stream or the device's own
+# summary the load model reads, and pretending otherwise would book a guess as
+# a measurement.
+_EXPORT_FORMATS_WITHOUT_LOAD = (".gpx", ".tcx")
+_UNSUPPORTED_EXPORT_MESSAGE = (
+    "GPX and TCX exports don't carry what the coach needs. Upload the original "
+    ".fit instead (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export "
+    "Original), or enter the session with “Add activity”."
+)
+
+
+# What one zip may unpack to in total, in single-file limits. A FIT file is
+# typically well under 1 MB, so five times the 10 MB file limit is generous for
+# any honest export and keeps a hostile one from costing hundreds of MB.
+_ZIP_UNPACKED_FILES_WORTH = 5
+
+
+def _fit_payloads_from_zip(zip_name: str, raw: bytes) -> list[tuple[str, bytes]]:
+    """The ``.fit`` files inside an uploaded ``.zip`` — Garmin's "Export Original".
+
+    A zip is a promise about compressed size only, so everything here is
+    capped against what it *unpacks* to, before reading: each member against
+    the single-file limit, the whole archive against the batch, and the member
+    count against the bulk file limit. A zip bomb is refused by its declared
+    sizes and, for one that lies about them, by the bounded read.
+    """
+    limit = settings.fit_upload_max_bytes
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"{zip_name} is not a readable .zip file") from exc
+    with archive:
+        members = [
+            info
+            for info in archive.infolist()
+            if not info.is_dir() and info.filename.lower().endswith(".fit")
+        ]
+        if not members:
+            raise ValueError(f"{zip_name} contains no .fit file")
+        if len(members) > settings.fit_upload_bulk_max_files:
+            raise ValueError(
+                f"{zip_name} holds more than {settings.fit_upload_bulk_max_files} "
+                ".fit files. Please split it."
+            )
+        total_cap = limit * _ZIP_UNPACKED_FILES_WORTH
+        if sum(info.file_size for info in members) > total_cap:
+            raise ValueError(f"{zip_name} unpacks to more than the upload limit")
+        payloads: list[tuple[str, bytes]] = []
+        unpacked = 0
+        for info in members:
+            if info.flag_bits & 0x1:
+                raise ValueError(
+                    f"{zip_name} is password-protected. Export it again without a password."
+                )
+            if info.file_size > limit:
+                raise ValueError(f"{info.filename} in {zip_name} is larger than the limit")
+            try:
+                with archive.open(info) as member:
+                    # Bounded by the cap, not the declared size: the header is
+                    # the zip's own claim, and a bomb lies in it.
+                    data = member.read(limit + 1)
+            except (
+                zipfile.BadZipFile,
+                zlib.error,
+                EOFError,
+                RuntimeError,
+                NotImplementedError,
+            ) as exc:
+                # A member whose stream disagrees with its header — a corrupt
+                # export, or one edited to under-declare its size — or one this
+                # runtime cannot open (an encryption the flag check missed, a
+                # compression method zipfile lacks) is this file's failure,
+                # never the request's.
+                raise ValueError(f"{info.filename} in {zip_name} is damaged") from exc
+            unpacked += len(data)
+            if len(data) > limit or unpacked > total_cap:
+                raise ValueError(f"{zip_name} unpacks to more than the upload limit")
+            payloads.append((f"{zip_name} › {info.filename.rsplit('/', 1)[-1]}", data))
+        return payloads
+
+
 async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
     """Read *file* into memory, refusing anything over the configured cap.
 
@@ -2563,6 +2648,12 @@ async def upload_fit_file(
     )
 
 
+
+_RATE_LIMITED_PARTWAY = (
+    "Not imported: AI rate limit reached partway through the batch. Retry these "
+    "files shortly."
+)
+
 @router.post(
     "/upload-fit/bulk",
     response_model=schemas.FitBulkUploadResponse,
@@ -2594,67 +2685,71 @@ async def upload_fit_files_bulk(
     results: list[schemas.FitUploadFileResult] = []
     seen_source_ids: set[int] = set()
 
+    def failed(name: str, message: str) -> schemas.FitUploadFileResult:
+        return schemas.FitUploadFileResult(filename=name, status="failed", message=message)
+
+    # The route dependency charged the request once, which covers the first
+    # payload. Every further one is another LLM call, so it pays for itself —
+    # otherwise the batch size would be a way to buy AI calls at a flat rate of
+    # one. A zip's members count one by one, for the same reason. Limiting
+    # stops the batch rather than failing it: what was already imported stays
+    # imported, and the response says which files were not attempted.
+    first_payload = True
+    rate_limited = False
+
     for index, file in enumerate(files):
         filename = file.filename or "unnamed"
-
-        # The route dependency charged the request once, which covers the first
-        # file. Each further file is another LLM call, so it pays for itself —
-        # otherwise the batch size would be a way to buy AI calls at a flat
-        # rate of one. Limiting stops the batch rather than failing it: the
-        # files already imported stay imported, and the response says which
-        # ones were not attempted.
-        if index > 0:
-            try:
-                consume_ai_allowance(current_user.id)
-            except HTTPException as exc:
-                if exc.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
-                    raise
-                results.extend(
-                    schemas.FitUploadFileResult(
-                        filename=remaining.filename or "unnamed",
-                        status="failed",
-                        message=(
-                            "Not imported: AI rate limit reached partway through "
-                            "the batch. Retry these files shortly."
-                        ),
-                    )
-                    for remaining in files[index:]
-                )
-                break
-
-        if not filename.lower().endswith(".fit"):
-            results.append(
-                schemas.FitUploadFileResult(
-                    filename=filename,
-                    status="failed",
-                    message="Only .fit files are accepted",
-                )
-            )
+        if rate_limited:
+            results.append(failed(filename, _RATE_LIMITED_PARTWAY))
+            continue
+        lowered = filename.lower()
+        if lowered.endswith(_EXPORT_FORMATS_WITHOUT_LOAD):
+            results.append(failed(filename, _UNSUPPORTED_EXPORT_MESSAGE))
+            continue
+        if not lowered.endswith((".fit", ".zip")):
+            results.append(failed(filename, "Only .fit files, or a .zip of them, are accepted"))
             continue
 
         try:
             # One oversized file fails its own entry rather than the batch —
             # the same treatment an unparseable file already gets.
             raw = await _read_upload_capped(file, filename)
-            parsed = _parse_fit_activity(raw, filename, FitFile)
-            result = await _store_fit_import(
-                db, current_user, filename, parsed, seen_source_ids
+            payloads = (
+                _fit_payloads_from_zip(filename, raw)
+                if lowered.endswith(".zip")
+                else [(filename, raw)]
             )
         except HTTPException as exc:
             if exc.status_code != status.HTTP_413_CONTENT_TOO_LARGE:
                 raise
-            result = schemas.FitUploadFileResult(
-                filename=filename,
-                status="failed",
-                message=str(exc.detail),
-            )
+            results.append(failed(filename, str(exc.detail)))
+            continue
         except ValueError as exc:
-            result = schemas.FitUploadFileResult(
-                filename=filename,
-                status="failed",
-                message=str(exc),
-            )
-        results.append(result)
+            results.append(failed(filename, str(exc)))
+            continue
+
+        for name, data in payloads:
+            if rate_limited:
+                results.append(failed(name, _RATE_LIMITED_PARTWAY))
+                continue
+            if not first_payload:
+                try:
+                    consume_ai_allowance(current_user.id)
+                except HTTPException as exc:
+                    if exc.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+                        raise
+                    rate_limited = True
+                    results.append(failed(name, _RATE_LIMITED_PARTWAY))
+                    continue
+            first_payload = False
+            try:
+                parsed = _parse_fit_activity(data, name, FitFile)
+                result = await _store_fit_import(
+                    db, current_user, name, parsed, seen_source_ids
+                )
+            except ValueError as exc:
+                result = failed(name, str(exc))
+            results.append(result)
 
     imported = sum(1 for result in results if result.status == "imported")
     skipped = sum(1 for result in results if result.status == "skipped")
