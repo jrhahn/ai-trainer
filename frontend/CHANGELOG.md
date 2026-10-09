@@ -78,6 +78,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A long word no longer breaks the layout on a phone** (ai-trainer-ops#51.4,
+  #51.5) — `src/components/WeekStrip.tsx`,
+  `src/components/WorkoutFeedbackForm.tsx`, `src/utils/sessionType.ts`,
+  `src/utils/effort.ts`, `src/pages/WorkoutPage.tsx`.
+
+  Two reports, one defect in two places: a label sized by its own text inside a
+  column that does not grow.
+
+  *The week strip.* Seven columns leave 36 px at 390 px and "Endurance" is laid
+  out at 58, so three chips in a row read "Endur…", each cut in the same place.
+  Each session type now carries a short name that fits whole and an icon, and
+  the full word returns from `sm` up. The icon replaces the coloured dot, which
+  also ends a colour-only distinction (WCAG 1.4.1): an endurance day and a race
+  were a green dot and a red dot — the same dot, to an athlete who cannot tell
+  those apart. `truncate` is gone on purpose; it is what hid this for so long.
+
+  *The effort scale.* Reported as "Moderate overflows its button", and the
+  measurement said otherwise: on `flex-1`, which sizes to content, "Moderate"
+  made its own button 59 px against the others' 55 and the row came to 311 px
+  inside a 310 px dialog. The strength wording is far worse — "Controlled" and
+  "Challenging" gave widths of 40, 74, 85, 40, 40, one button more than twice
+  another. The dialog is `max-w-md`, so five words never fit at any screen
+  width; this was never a mobile bug. The buttons now hold the number alone on a
+  fixed five-column grid, and the word is said three ways instead: the current
+  choice in full beside the field label, the two ends of the scale underneath,
+  and every level in its own button's accessible name, with `aria-pressed` for
+  which one is chosen.
+
+  *And the scale was written out twice* — `WorkoutFeedbackForm` had the strength
+  wording, `WorkoutPage` had a copy without it, so a strength session logged at
+  2 read "Controlled" in the picker and "Moderate" in the log one screen later.
+  Now one `utils/effort.ts`.
+
+  Measured in the browser at 390 and 1366 px, both wordings: five buttons of 56
+  px each, row exactly 310 px in a 310 px container, nothing clipped. The E2E
+  assertions use a `Range` over the text rather than `scrollWidth`, which only
+  differs from `clientWidth` when something clips and so would have missed plain
+  overflow. Mutation-checked in four directions.
+
 - **"Coach Timeline" is said once where it can be seen** (ai-trainer-ops#51.6)
   — `src/pages/DashboardPage.tsx`.
 

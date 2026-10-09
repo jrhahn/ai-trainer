@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/shallow'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import { effortLabel } from '../utils/effort'
 import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
@@ -300,10 +301,6 @@ export default function WorkoutPage() {
     }
   }
 
-  const effortLabels: Record<number, string> = {
-    1: 'Easy', 2: 'Moderate', 3: 'Hard', 4: 'Very Hard', 5: 'Max',
-  }
-
   return (
     <div className="space-y-6 max-w-2xl">
       <button
@@ -363,7 +360,14 @@ export default function WorkoutPage() {
               {day.feedback.averagePower && <div>Avg Power: {day.feedback.averagePower}W</div>}
               {day.feedback.averageHeartRate && <div>Avg HR: {day.feedback.averageHeartRate} bpm</div>}
               {day.feedback.peakPower && <div>Peak Power: {day.feedback.peakPower}W</div>}
-              <div>Effort: {day.feedback.perceivedEffort}/5 ({effortLabels[day.feedback.perceivedEffort]})</div>
+              {/* `effortLabel`, not a second copy of the scale: this page had its
+                  own table without the strength wording, so a strength session
+                  logged at 2 was "Controlled" in the form and "Moderate" here,
+                  one screen later (ai-trainer-ops#51.5). */}
+              <div>
+                Effort: {day.feedback.perceivedEffort}/5 (
+                {effortLabel(day, day.feedback.perceivedEffort)})
+              </div>
             </div>
             {day.feedback.notes && (
               <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>

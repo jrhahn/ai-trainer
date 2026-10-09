@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The stub plan contains a strength day** (ai-trainer-ops#51.5) —
+  `services/llm.py`, `tests/test_stub_provider.py`.
+
+  The fortnight cycled ride, rest; it now cycles ride, lift, rest. The frontend
+  words a strength session's effort scale differently — "Controlled",
+  "Challenging" rather than "Moderate", "Hard" — and those are the longest
+  labels in the app, so they are what a narrow layout breaks on first. While the
+  stub produced only rides and rest days that form could not be opened in the
+  browser suite at all, and two defects sat behind it: a row of buttons whose
+  widths ran 40, 74, 85, 40, 40, and a log screen that renamed the level the
+  athlete had just chosen.
+
 ### Added
 
 - **A stub AI provider, locked out of production twice**

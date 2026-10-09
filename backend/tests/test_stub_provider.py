@@ -166,6 +166,31 @@ async def test_a_plan_request_yields_days_that_validate(stub_on):
     assert [schemas.PlanDay.model_validate(day) for day in days]
 
 
+async def test_the_plan_contains_a_strength_day(stub_on):
+    """Otherwise a whole screen is unreachable in the browser suite.
+
+    The frontend words a strength session's effort scale differently —
+    "Controlled", "Challenging" rather than "Moderate", "Hard" — and those are
+    the longest labels in the app, so they are what a narrow layout breaks on
+    first (ai-trainer-ops#51.5). While the stub produced only rides and rest
+    days, no E2E test could open that form at all, and the mismatch between the
+    picker and the log shown right afterwards sat there unnoticed.
+
+    Asserting on the types present rather than on the cycle: the point is that a
+    lift day is reachable, not which day of the fortnight it lands on.
+    """
+    provider = llm_service.get_provider("gemini", task=llm_service.TASK_PLAN)
+    days = json.loads(await provider.chat("system", "user", json_mode=True))["plan"]
+
+    types = {day["workoutType"] for day in days}
+    # Not *only* strength, which would be a different stub with the same gap.
+    assert types >= {"endurance", "strength", "rest"}, f"types in the stub plan: {types}"
+
+    # A lift day with no minutes on it reads as a rest day downstream.
+    lifts = [day for day in days if day["workoutType"] == "strength"]
+    assert all(day["durationMinutes"] > 0 for day in lifts)
+
+
 async def test_the_plan_starts_today_rather_than_on_a_fixed_date(stub_on):
     """A hard-coded fortnight works until the day it quietly stops.
 

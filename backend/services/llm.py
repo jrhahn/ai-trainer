@@ -534,8 +534,23 @@ class StubProvider:
         return "{}"
 
 
+# The repeating shape of the stub fortnight: ride, lift, rest.
+#
+# Strength is in here on purpose (ai-trainer-ops#51.5). The frontend words a
+# strength session's effort scale differently — "Controlled", "Challenging"
+# instead of "Moderate", "Hard" — and those are the longest labels in the app,
+# so they are what a layout breaks on first. A stub that only ever produced
+# endurance and rest could not reach that screen at all, which is how the
+# mismatch between the picker and the log afterwards went unnoticed.
+_STUB_CYCLE: tuple[tuple[str, str, int], ...] = (
+    ("endurance", "Easy ride", 60),
+    ("strength", "Gym session", 45),
+    ("rest", "Rest", 0),
+)
+
+
 def _stub_plan_days() -> list[dict]:
-    """A fortnight starting today, alternating easy and rest.
+    """A fortnight starting today, cycling ride, lift, rest.
 
     Dates are generated rather than fixed: a plan whose days are in the past is
     rejected downstream, so a hard-coded fortnight would work until the day it
@@ -545,14 +560,14 @@ def _stub_plan_days() -> list[dict]:
     today = datetime.now(timezone.utc).date()
     days: list[dict] = []
     for offset in range(_STUB_PLAN_DAYS):
-        rest = offset % 3 == 2
+        workout_type, title, minutes = _STUB_CYCLE[offset % len(_STUB_CYCLE)]
         days.append(
             {
                 "date": (today + timedelta(days=offset)).isoformat(),
-                "workoutType": "rest" if rest else "endurance",
-                "title": f"{STUB_MARKER} Rest" if rest else f"{STUB_MARKER} Easy ride",
+                "workoutType": workout_type,
+                "title": f"{STUB_MARKER} {title}",
                 "description": f"{STUB_MARKER} Placeholder session, no model was called.",
-                "durationMinutes": 0 if rest else 60,
+                "durationMinutes": minutes,
             }
         )
     return days
