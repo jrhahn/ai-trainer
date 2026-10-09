@@ -4,10 +4,10 @@ version = "0.87.0"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi==0.142.1",
+    "fastapi==0.142.2",
     "httpx==0.28.1",
     "email-validator>=2.2.0",
-    "python-dotenv==1.2.3",
+    "python-dotenv==1.2.4",
     "uvicorn[standard]==0.54.0",
     # database
     "sqlalchemy[asyncio]>=2.0.0",
