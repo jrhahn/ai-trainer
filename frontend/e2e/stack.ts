@@ -72,7 +72,14 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
     retries: 0,
-    reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
+    // Per-stack report and artefact folders. Both stacks run as two steps of
+    // one CI job, and the default folders are shared — so the second run
+    // overwrote the first's report, and whichever stack you wanted to look at
+    // was the one that had been deleted (ai-trainer-ops#46).
+    reporter: process.env.CI
+      ? [['list'], ['html', { open: 'never', outputFolder: `playwright-report-${options.name}` }]]
+      : [['list']],
+    outputDir: `test-results-${options.name}`,
     timeout: 90_000,
     expect: { timeout: 15_000 },
 
@@ -86,7 +93,12 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
         ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
         : {}),
       trace: 'retain-on-failure',
-      screenshot: 'only-on-failure',
+      // Every test, not only the failures. The point of the artefact is to be
+      // able to *look at the product* after a green run — which is what
+      // ai-trainer-ops#46 asks for, and what nobody can do from a report that
+      // only exists when something broke. Traces stay failure-only: they are
+      // an order of magnitude larger and only useful when debugging one.
+      screenshot: 'on',
       video: 'off',
     },
 

@@ -507,6 +507,7 @@ export default function SettingsPage() {
             <input
               type="text"
               value={nameInput}
+              aria-label="Display Name"
               onChange={(e) => setNameDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void saveName()}
               placeholder="Your name"
@@ -636,6 +637,7 @@ export default function SettingsPage() {
               type="number"
               min={1}
               value={ftpInput}
+              aria-label="Current FTP (watts)"
               onChange={(e) => setFtpDraft(e.target.value)}
               placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
               className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -715,6 +717,7 @@ export default function SettingsPage() {
               type="number"
               min={1}
               value={maxHrInput}
+              aria-label="Max Heart Rate (bpm)"
               onChange={(e) => setMaxHrDraft(e.target.value)}
               placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"

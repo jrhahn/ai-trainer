@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The profile inputs in Settings had no accessible name** (ai-trainer-ops#46) —
+  `SettingsPage.tsx`. Display Name, Current FTP and Max Heart Rate each have a
+  visible `<label>` that sits *beside* the input and carries no `htmlFor`, so
+  nothing associated the two: a screen reader announced three unnamed boxes. The
+  existing unit tests had been reaching for `getByPlaceholderText` and
+  `getByDisplayValue` within a section to find them, which was the smell. They
+  now carry `aria-label`, and are addressed by name in both the unit tests and
+  the browser spec.
+
+### Added
+
+- **A browser spec for onboarding with every field filled in**
+  (ai-trainer-ops#46) — `e2e/stubbed/onboarding-complete.spec.ts`. The existing
+  stubbed specs walk onboarding by pressing Continue four times, which is the
+  stranger who answers nothing: every answer could be discarded on the way and
+  they would all still pass. This one types a race goal and date, a fitness
+  level, an FTP of 237, a max heart rate of 191 and the structured-plan
+  checkbox, then asks Settings what the account holds — the assertion
+  ai-trainer-ops#43 says nobody can make today, and the one that would have
+  caught #40. The values are deliberately not the placeholders (250 / 185), so a
+  field that ignored the typing cannot read as a pass.
+- **Screenshots and reports from every E2E run, not only the failures**
+  (ai-trainer-ops#46) — `e2e/stack.ts`, `.github/workflows/ci.yml`. `screenshot`
+  is `on` and the artefact uploads on `!cancelled()`, so the product can be
+  looked at after a green run. Traces stay failure-only, being far larger.
+  Both stacks also get their **own** report and output folders: they run as two
+  steps of one job and previously shared the default ones, so the second run
+  deleted the first's report and whichever stack you wanted was the one that was
+  gone.
+
 ### Added
 
 - **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,
