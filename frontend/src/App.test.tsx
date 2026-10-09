@@ -15,6 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import { useAppStore } from './store/useAppStore'
 
 const mockFetch = vi.fn()
 
@@ -42,6 +43,11 @@ vi.mock('./hooks/useImportProgress', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   window.sessionStorage.clear()
+  // The store is a module singleton, so one test's session would otherwise be
+  // the next test's starting point — and the signed-out tests below would be
+  // testing a signed-in app.
+  useAppStore.setState({ authToken: null, isOnboarded: false, isLoadingUserData: false })
+  window.history.pushState({}, '', '/')
   mockFetch.mockResolvedValue({
     ok: false,
     status: 401,
@@ -77,5 +83,51 @@ describe('App, signed out', () => {
     // flash this test is about.
     expect(screen.queryByText(/Authelia/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Checking your secure session/i)).not.toBeInTheDocument()
+  })
+})
+
+
+describe('App, signed in but not yet told whose session this is (ai-trainer-ops#57)', () => {
+  it('keeps the requested URL instead of answering before it can', () => {
+    // A load that never settles, which is the whole window this is about: the
+    // token is read synchronously at start-up but `isOnboarded` is not
+    // persisted, so for as long as the profile is in flight the app holds a
+    // session it knows nothing about.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+    useAppStore.setState({ authToken: 'tok-deep-link' })
+
+    render(<App />)
+
+    // Synchronously, with no `waitFor`: the redirect this prevents happened
+    // *during* render, so a retrying assertion would simply wait past it and
+    // then read the URL the bug had already replaced.
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('does not strand the athlete there when the load fails', () => {
+    // The gate has to lift on an answer of *either* kind. A failed profile load
+    // still settles the question — the store signs the session out or raises
+    // `dataLoadWarning` — and leaving it unresolved would hold a blank page for
+    // as long as the backend stayed unreachable.
+    mockFetch.mockRejectedValue(new Error('backend unreachable'))
+    window.history.pushState({}, '', '/settings')
+    useAppStore.setState({ authToken: 'tok-doomed' })
+
+    render(<App />)
+
+    return waitFor(() => {
+      expect(window.location.pathname).not.toBe('/settings')
+    })
+  })
+
+  it('still sends a visitor with no session to the landing page at once', () => {
+    // The other side of the gate: with no token there is nothing to find out,
+    // so it must not cost a visitor a blank frame.
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+
+    expect(window.location.pathname).toBe('/')
   })
 })

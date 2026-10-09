@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
@@ -29,9 +29,42 @@ export default function App() {
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
 
+  // Whether the server has yet said *who this session is*. A stored token is
+  // read synchronously at start-up, but `isOnboarded` is not persisted and
+  // starts `false`, so on the first render of a full page load the app holds a
+  // session it knows nothing about — and the route tree below used to answer
+  // anyway (ai-trainer-ops#57).
+  //
+  // What that cost: loading `/settings` directly took the `!isOnboarded` branch,
+  // whose only route is `/onboarding`, so `path="*"` replaced the URL; the
+  // profile then arrived, the authenticated tree mounted, `/onboarding` was not
+  // in it, and `path="*"` replaced the URL again — landing on the dashboard. Two
+  // redirects, neither an authorisation decision, and the athlete's bookmark
+  // thrown away by the first one. The loading screen did not hide it either: it
+  // is an overlay drawn *beside* `<Routes>`, not instead of it, so all of this
+  // happened behind "Loading your training data…".
+  //
+  // So: "not loaded yet" is its own state and the router is not asked until it
+  // is over. It starts as "known" for a visitor with no token, because there is
+  // nothing to find out about them.
+  const [profileChecked, setProfileChecked] = useState(!authToken)
+
   useEffect(() => {
-    if (authToken) {
-      void loadUserData()
+    if (!authToken) {
+      setProfileChecked(true)
+      return
+    }
+    setProfileChecked(false)
+    let cancelled = false
+    // `.finally`, not `.then`: a failed load still answers the question — the
+    // store falls back to signed-out or raises `dataLoadWarning`, and either way
+    // the router may decide. Leaving this unresolved would hold the athlete on a
+    // blank page for as long as the backend stayed unreachable.
+    void loadUserData().finally(() => {
+      if (!cancelled) setProfileChecked(true)
+    })
+    return () => {
+      cancelled = true
     }
   }, [authToken, loadUserData])
 
@@ -78,7 +111,18 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/admin" element={<AdminPage />} />
 
-        {!authToken ? (
+        {authToken && !profileChecked ? (
+          // Deliberately no element and, above all, no `<Navigate>`: the URL has
+          // to survive until there is something to decide with. The overlay below
+          // is what the athlete sees meanwhile.
+          //
+          // `authToken &&` is redundant and kept for the reader: `profileChecked`
+          // starts as `!authToken` and is only ever set false while a token
+          // exists, so the second half already implies the first. Dropping it
+          // fails no test — it says what this branch *means* rather than
+          // narrowing it.
+          <Route path="*" element={null} />
+        ) : !authToken ? (
           <>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
