@@ -112,3 +112,25 @@ describe('nextUnfinishedSession', () => {
     expect(nextUnfinishedSession([], new Set())).toBeUndefined()
   })
 })
+
+describe('loggedSessionKeys and entered activities (ai-trainer-ops#47)', () => {
+  const date = '2026-10-09'
+  const ride: TrainingDay = { date, workoutType: 'endurance', title: 'Ride', durationMinutes: 60 } as TrainingDay
+
+  it('does not let an activity entered with "Add activity" tick the planned session', () => {
+    const entered = {
+      stravaActivityId: 1, activityDate: date, sportType: 'running',
+      activitySource: 'logged', externalActivityId: `${date}#100`,
+    } as RideMetricPoint
+    expect(loggedSessionKeys([ride], [entered], date).size).toBe(0)
+  })
+
+  it('still lets the planned session\'s own log tick it', () => {
+    const ownLog = {
+      stravaActivityId: 2, activityDate: date, sportType: 'cycling',
+      activitySource: 'logged', externalActivityId: `${date}#0`,
+    } as RideMetricPoint
+    expect(loggedSessionKeys([ride], [ownLog], date).size).toBe(1)
+  })
+})
+

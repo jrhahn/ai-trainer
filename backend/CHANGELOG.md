@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Enter a session that no plan day and no recording covers**
+  (ai-trainer-ops#47) — `POST /users/me/activities`,
+  `DELETE /users/me/activities/{date}/{slot}`, `services/logged_sessions.py`.
+  You can now enter a ride on a rest day, a run when a ride was planned, a
+  second session, or a day the plan never covered. Each entry goes through
+  the same path as a logged planned session: the reported effort re-prices
+  anything recorded, and a load row is written where nothing was. Entries
+  take slots from 100 up, so a later plan never reads one as feedback on a
+  session of its own. Future days are refused, with one day of slack for
+  time zones.
+
+### Fixed
+
+- **Two hand-logged sessions of one sport on one day were one session, three
+  times over** — `crud.py`. Logged sessions carry no start time and share a
+  name, so three separate near-duplicate checks merged them: the importer
+  overwrote the first load row with the second, the history query showed
+  one, and the dashboard showed one. This hit planned same-sport two-a-days
+  as well. Rows of an exact-identity source (`logged`) are now compared by
+  id only. A browser test caught the third check after the first two were
+  fixed.
+- **An entered activity no longer ticks the planned session or asks what it
+  was** — `services/ride_matching.py`, `schemas.py`. A run entered on a ride
+  day marked the ride "Done", for the dashboard and for the coach, and
+  opened "What was this session? Recovery / Tempo / …" about itself.
 - **The AI key status says whether a key is *required*, not just absent**
   (ai-trainer-ops#41) — `services/llm.py`, `schemas.py`, `routers/users.py`,
   `tests/test_key_required.py`.

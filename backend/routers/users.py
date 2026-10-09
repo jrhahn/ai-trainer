@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import (
@@ -561,39 +561,146 @@ async def save_workout(
         )
 
     # Logging effort is new evidence about what the session cost, so the session
-    # is re-priced now rather than at the next import (#714). Only ever upwards
-    # through the ladder, and only into fatigue and its own sport's fitness —
-    # never cycling's (#713).
+    # is re-priced now rather than at the next import (#714) — only ever upwards
+    # through the ladder, and only into fatigue and its own sport's fitness,
+    # never cycling's (#713). And where nothing imported the session at all,
+    # the log is the only record it ever had, so it becomes a session in the
+    # load chain in its own right (#745).
+    await _price_logged_session(
+        db, current_user, date=date, sport=sport,
+        perceived_effort=feedback.perceived_effort,
+        duration_minutes=feedback.actual_duration_minutes,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post(
+    "/activities",
+    response_model=schemas.ManualActivityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_manual_activity(
+    body: schemas.ManualActivityRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ManualActivityResponse:
+    """Enter a session that no plan day and no recording covers (#47).
+
+    It goes through the same two steps a logged planned session does: the
+    reported effort re-prices anything already recorded that day, and the log
+    becomes a load row of its own where nothing was recorded (#745). An athlete
+    with no device and no intervals.icu therefore still has a fatigue curve.
+    """
     try:
-        await reported_effort.apply_reported_effort(
-            db,
-            current_user,
-            date=date,
-            perceived_effort=feedback.perceived_effort,
-            sport_type=sport,
-            duration_minutes=feedback.actual_duration_minutes,
-        )
-    except Exception:  # noqa: BLE001 - the log itself must still save
-        logger.warning(
-            "Could not re-price session %s for user %s from reported effort",
-            date,
-            current_user.id,
-            exc_info=True,
+        day = date_type.fromisoformat(body.date)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="date must be a real calendar date",
+        ) from exc
+    # One day of slack: the server's "today" and the athlete's are a time zone
+    # apart, and refusing a session done this evening would be the worse error.
+    if day > date_type.fromisoformat(app_today_iso()) + timedelta(days=1):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="An activity cannot be in the future.",
         )
 
-    # And where nothing imported the session at all, the log is the only record
-    # it ever had, so it becomes a session in the load chain in its own right
-    # (#745). Separately guarded from the re-price above: the two answer
-    # different questions and one failing must not skip the other.
+    sport = schemas.normalise_plan_sport(body.sport)
+    taken = [
+        log.slot or 0
+        for log in await crud.get_workout_logs(db, current_user.id)
+        if log.date == body.date and logged_sessions.is_unplanned_slot(log.slot or 0)
+    ]
+    slot = max(taken, default=logged_sessions.UNPLANNED_SLOT_BASE - 1) + 1
+
+    await crud.upsert_workout_log(
+        db,
+        current_user.id,
+        body.date,
+        slot=slot,
+        actual_duration_minutes=body.duration_minutes,
+        average_power=None,
+        average_heart_rate=body.average_heart_rate,
+        peak_power=None,
+        perceived_effort=body.perceived_effort,
+        notes=body.notes,
+        completed_at=f"{body.date}T12:00:00",
+        sport_type=sport,
+    )
+    await _price_logged_session(
+        db, current_user, date=body.date, sport=sport,
+        perceived_effort=body.perceived_effort,
+        duration_minutes=body.duration_minutes,
+    )
+    return schemas.ManualActivityResponse(date=body.date, slot=slot, sport=sport)
+
+
+@router.delete("/activities/{date}/{slot}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_manual_activity(
+    date: str,
+    slot: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    """Remove a session entered by hand, and the load row it produced (#47).
+
+    Only unplanned sessions: a planned session's log is feedback on a plan
+    day, and deleting it here would leave the day looking skipped.
+    """
+    if not logged_sessions.is_unplanned_slot(slot) or not await crud.delete_workout_log(
+        db, current_user.id, date, slot
+    ):
+        raise HTTPException(status_code=404, detail="No such entered activity.")
     try:
         await logged_sessions.reconcile_logged_sessions(db, current_user)
-    except Exception:  # noqa: BLE001 - the log itself must still save
+    except Exception:  # noqa: BLE001 - the deletion itself stands
         logger.warning(
             "Could not reconcile logged sessions for user %s", current_user.id,
             exc_info=True,
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    return {"status": "ok"}
+
+async def _price_logged_session(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    date: str,
+    sport: str,
+    perceived_effort: int,
+    duration_minutes: int,
+) -> None:
+    """Re-price what was recorded, and give an unrecorded session its own row.
+
+    The two steps every logged session takes (#714, #745), separately guarded:
+    they answer different questions, and one failing must not skip the other —
+    nor cost the athlete the log they just saved.
+    """
+    try:
+        await reported_effort.apply_reported_effort(
+            db,
+            user,
+            date=date,
+            perceived_effort=perceived_effort,
+            sport_type=sport,
+            duration_minutes=duration_minutes,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Could not re-price session %s for user %s from reported effort",
+            date,
+            user.id,
+            exc_info=True,
+        )
+    try:
+        await logged_sessions.reconcile_logged_sessions(db, user)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Could not reconcile logged sessions for user %s", user.id,
+            exc_info=True,
+        )
 
 
 async def _planned_sport_for_session(

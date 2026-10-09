@@ -67,10 +67,25 @@ _ATHLETE_MEMORY_DECAYABLE_STATUSES = ("active", "stale")
 _ATHLETE_MEMORY_REVIVABLE_STATUSES = ("stale", "archived", "needs_validation")
 
 
+# Activity sources whose external id is the session's whole identity, so
+# that two different ids from one of them are two different sessions. Kept as
+# a literal rather than imported to avoid crud depending on services; a test
+# pins it against ``logged_sessions.LOGGED_SOURCE``.
+EXACT_IDENTITY_SOURCES: frozenset[str] = frozenset({"logged"})
+
+
 def _ride_metrics_are_near_duplicates(
     ride: models.RideMetric,
     other: models.RideMetric,
 ) -> bool:
+    # Two rows of one exact-identity source are the same session only if they
+    # carry the same id — and then the SQL ranking has already collapsed them.
+    # Different ids are different sessions, however alike they look (#47).
+    if (
+        ride.activity_source in EXACT_IDENTITY_SOURCES
+        and ride.activity_source == other.activity_source
+    ):
+        return False
     return are_near_duplicate_activities(
         activity_date=ride.activity_date,
         sport_type=ride.sport_type,
@@ -491,6 +506,25 @@ async def get_workout_logs(db: AsyncSession, user_id: str) -> list[models.Workou
         select(models.WorkoutLog).where(models.WorkoutLog.user_id == user_id)
     )
     return list(result)
+
+
+async def delete_workout_log(
+    db: AsyncSession, user_id: str, date: str, slot: int
+) -> bool:
+    """Delete one session's log and its strength sets; report whether it existed."""
+    log = await get_workout_log_by_date(db, user_id, date, slot)
+    if log is None:
+        return False
+    await db.execute(
+        delete(models.StrengthSet).where(
+            models.StrengthSet.user_id == user_id,
+            models.StrengthSet.date == date,
+            models.StrengthSet.slot == slot,
+        )
+    )
+    await db.delete(log)
+    await db.flush()
+    return True
 
 
 async def get_workout_log_by_date(
@@ -4440,6 +4474,17 @@ async def get_near_duplicate_ride_metric(
             and exclude_external_activity_id is not None
             and ride.activity_source == exclude_activity_source
             and ride.external_activity_id == exclude_external_activity_id
+        ):
+            continue
+        # A source whose ids *are* the session's identity never has near
+        # duplicates within itself. Two hand-logged sessions carry no start time
+        # and one shared name, so the fuzzy match below took a second run on the
+        # same day for the first and overwrote it — one session of fatigue where
+        # the athlete did two (ai-trainer-ops#47). Matching a logged session
+        # against a *recording* stays, which is how a recording retires it.
+        if (
+            exclude_activity_source in EXACT_IDENTITY_SOURCES
+            and ride.activity_source == exclude_activity_source
         ):
             continue
         if are_near_duplicate_activities(
