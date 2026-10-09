@@ -81,3 +81,91 @@ def test_normalization_is_idempotent():
     once = _dump(raw)
     twice = _dump(once)
     assert once == twice
+
+
+# ---------------------------------------------------------------------------
+# One spelling per field (ai-trainer-ops#38)
+# ---------------------------------------------------------------------------
+
+
+def test_a_day_spelling_a_field_twice_keeps_only_the_camel_one():
+    """``extra="allow"`` used to let the losing spelling through as an extra.
+
+    A snake_case spelling of a *modelled* field is not unmodelled data — it is a
+    second name for a field this model owns, and when both are present only one
+    can win. Pydantic resolves that to the alias, so the other survived saying
+    something the day no longer meant, and which one a consumer believed
+    depended on the order it read them in. That is the defect #29 found in three
+    separate modules, and the reason it kept being findable.
+    """
+    out = _dump(
+        {
+            "date": "2026-07-18",
+            "workoutType": "rest",
+            "workout_type": "endurance",
+            "durationMinutes": 0,
+            "duration_minutes": 90,
+        }
+    )
+
+    assert out["workoutType"] == "rest"
+    assert out["durationMinutes"] == 0
+    assert "workout_type" not in out
+    assert "duration_minutes" not in out
+
+
+def test_camel_wins_because_that_is_what_already_won():
+    """Keeping the alias removes a stale key and changes no value.
+
+    If this ever flips, every stored plan written through a day that carried both
+    spellings changes meaning with no diff to show for it.
+    """
+    out = _dump({"date": "2026-07-18", "workoutType": "intervals", "workout_type": "rest"})
+    assert out["workoutType"] == "intervals"
+
+
+def test_a_single_snake_case_spelling_is_still_read():
+    """Leniency on input is the other half of the promise and must not regress."""
+    out = _dump({"date": "2026-07-18", "workout_type": "endurance", "duration_minutes": 75})
+    assert (out["workoutType"], out["durationMinutes"]) == ("endurance", 75)
+    assert "workout_type" not in out
+
+
+def test_an_unmodelled_snake_case_key_survives_a_day_that_has_twins():
+    """Only twins of modelled fields go. ``planner_note`` is stored data.
+
+    The twin has to be present in the same day, or the drop never runs and the
+    test proves nothing — found by mutating the filter to discard every
+    snake_case key, which this test survived while there was no twin to trigger
+    it.
+    """
+    out = _dump(
+        {
+            "date": "2026-07-18",
+            "planner_note": "keep me",
+            "workoutType": "rest",
+            "workout_type": "endurance",
+        }
+    )
+
+    assert out["planner_note"] == "keep me"
+    assert "workout_type" not in out
+
+
+def test_an_unmodelled_snake_case_key_survives_a_day_without_twins():
+    out = _dump({"date": "2026-07-18", "planner_note": "keep me", "workout_type": "rest"})
+    assert out["planner_note"] == "keep me"
+
+
+def test_a_non_dict_passes_through_the_canonicaliser_unchanged():
+    """One malformed day must never abort a whole plan write (#422 follow-up)."""
+    from schemas import canonical_plan_day
+
+    assert canonical_plan_day("not a day") == "not a day"
+
+
+def test_the_canonicaliser_survives_a_day_it_cannot_validate():
+    from schemas import canonical_plan_day
+
+    bad = {"date": {"nested": "not a string"}}
+    assert canonical_plan_day(bad) == bad

@@ -10,6 +10,8 @@ import re
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
 
+import logging
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -60,6 +62,9 @@ RESTING_HR_MAX_BPM = 120
 THRESHOLD_PACE_MIN_SECONDS_PER_KM = 120.0
 THRESHOLD_PACE_MAX_SECONDS_PER_KM = 900.0
 
+
+
+logger = logging.getLogger(__name__)
 
 def _to_camel(name: str) -> str:
     parts = name.split("_")
@@ -1936,6 +1941,45 @@ class PlanDay(CamelModel):
     # overwrites; see services/plan_pipeline.py. Clients cannot set this.
     source: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_stale_snake_twins(cls, data: Any) -> Any:
+        """Remove the snake_case twin of a modelled field the day also spells camel.
+
+        ``extra="allow"`` is what keeps unmodelled keys from being silently
+        dropped, and it has to stay. But a snake_case spelling of a *modelled*
+        field is not unmodelled data — it is a second name for a field this model
+        already owns, and when both names are present only one of them can win.
+        Pydantic resolves that to the alias (camelCase), which this keeps; the
+        other key then survives as an "extra" saying something the day no longer
+        means. ``{"workoutType": "rest", "workout_type": "endurance"}`` validated
+        and dumped straight back out as ``workoutType="rest"`` *and*
+        ``workout_type="endurance"``, so which one a consumer believed depended on
+        the order it read them in (ai-trainer-ops#29, #38).
+
+        That is why ``_to_canonical_day`` was not canonical for the one input
+        shape where canonicalisation matters most. Dropping the twin here fixes it
+        for every writer at once rather than at each gate that remembers to.
+        Camel precedence is deliberately *today's* resolution, so this removes a
+        stale key and changes no value.
+
+        Only exact snake_case twins of modelled fields are dropped. A key that is
+        merely snake_case (``planner_note``) is unmodelled data and survives.
+        """
+        if not isinstance(data, dict):
+            return data
+        stale = [
+            name
+            for name, field in cls.model_fields.items()
+            if name in data
+            and (alias := field.alias) is not None
+            and alias != name
+            and alias in data
+        ]
+        if not stale:
+            return data
+        return {k: v for k, v in data.items() if k not in stale}
+
     @field_validator("target_power", "target_heart_rate", mode="before")
     @classmethod
     def _coerce_ranges(cls, value: Any) -> Any:
@@ -2063,6 +2107,36 @@ _DURATION_ALIAS_KEYS = frozenset(
     {"durationMinutes", "durationMinMinutes", "durationMaxMinutes"}
 )
 
+
+
+
+def canonical_plan_day(day: dict) -> dict:
+    """Validate + normalise one plan day through :class:`PlanDay`.
+
+    The single canonicaliser. It guarantees a coherent duration (scalar vs
+    min/max window), holds at most one spelling of every modelled field, and —
+    because ``PlanDay`` uses ``extra="allow"`` — preserves any unmodelled key
+    rather than dropping it. A day that fails validation (rare malformed
+    legacy/LLM data) passes through unchanged and is logged, so one bad day
+    never aborts a whole plan write (#422 follow-up).
+
+    It lives here rather than in ``plan_pipeline`` so the constraint gate can
+    reach it too: ``services.plan_constraints`` must not import the pipeline,
+    and a second copy of this would be a second answer to "what is canonical"
+    (ai-trainer-ops#38).
+    """
+    if not isinstance(day, dict):
+        return day
+    try:
+        return PlanDay.model_validate(day).model_dump(
+            by_alias=True, exclude_none=True, mode="json"
+        )
+    except Exception:  # noqa: BLE001 — never let one bad day block a write
+        logger.warning(
+            "plan day failed PlanDay validation; passing through unchanged",
+            exc_info=True,
+        )
+        return day
 
 def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     """Apply a partial per-day ``update`` onto a canonical ``day``.

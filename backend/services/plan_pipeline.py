@@ -984,26 +984,14 @@ def _revert_new_run_overload(
 
 
 def _to_canonical_day(day: dict) -> dict:
-    """Validate + normalize one day through the canonical ``PlanDay`` model.
+    """This module's name for :func:`schemas.canonical_plan_day`.
 
-    This is the persist gate: it guarantees a coherent duration (scalar vs
-    min/max window) and, because ``PlanDay`` uses ``extra="allow"``, preserves
-    any unmodelled key rather than dropping it. A day that fails validation
-    (rare malformed legacy/LLM data) passes through unchanged and is logged,
-    so one bad day never aborts a whole plan write (#422 follow-up).
+    The implementation moved to ``schemas`` so the constraint gate could reach
+    it without importing the pipeline (ai-trainer-ops#38). The name is kept
+    because this is the persist gate's vocabulary and its call sites read better
+    for it.
     """
-    if not isinstance(day, dict):
-        return day
-    try:
-        return schemas.PlanDay.model_validate(day).model_dump(
-            by_alias=True, exclude_none=True, mode="json"
-        )
-    except Exception:  # noqa: BLE001 — never let one bad day block a write
-        logger.warning(
-            "plan day failed PlanDay validation; passing through unchanged",
-            exc_info=True,
-        )
-        return day
+    return schemas.canonical_plan_day(day)
 
 
 async def _enforce_and_persist(

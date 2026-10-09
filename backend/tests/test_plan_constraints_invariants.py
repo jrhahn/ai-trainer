@@ -38,7 +38,9 @@ from datetime import date, timedelta
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import schemas
 from services.plan_constraints import (
+    blocked_dates,
     day_satisfies_required_workout,
     day_violates_constraint,
     sanitize_plan_for_constraints,
@@ -67,12 +69,19 @@ def _identity(day: dict) -> tuple[str, int]:
 
 
 @st.composite
-def days(draw, *, camel: bool | None = None) -> dict:
+def days(draw, *, camel: bool | None = None, twins: bool = False) -> dict:
     """One plan session.
 
     ``camel`` fixes the key spelling; left as ``None`` it is drawn, so a single
     generated plan can mix spellings the way a plan assembled from an LLM write
     and a stored day does.
+
+    ``twins`` writes *both* spellings of the same field, with values drawn
+    independently so they may disagree. That is the shape this generator could
+    not produce before ai-trainer-ops#38, and it is the only one in which the
+    defect class is still alive: a day carrying one spelling canonicalises
+    cleanly, while a day carrying two keeps the loser as an "extra" that says
+    something the day no longer means.
     """
     use_camel = draw(st.booleans()) if camel is None else camel
     workout_type = draw(st.sampled_from(WORKOUT_TYPES))
@@ -89,16 +98,40 @@ def days(draw, *, camel: bool | None = None) -> dict:
     else:
         day["workout_type"] = workout_type
         day["duration_minutes"] = duration
+    if twins:
+        day["workoutType"] = workout_type
+        day["durationMinutes"] = duration
+        day["workout_type"] = draw(st.sampled_from(WORKOUT_TYPES))
+        day["duration_minutes"] = draw(st.integers(min_value=0, max_value=400))
     # ``PlanDay`` sets ``extra="allow"`` precisely so unmodelled keys survive a
     # round trip. The gate is upstream of that model and must not drop them either.
     if draw(st.booleans()):
         day["plannerNote"] = "carried through"
+    # A snake_case key that is *not* a modelled field. The twin drop must tell
+    # the two apart: ``workout_type`` is a second name for a field the model
+    # owns, ``planner_note`` is stored data nobody modelled. A filter that went
+    # by the underscore rather than by the field list would pass every test
+    # above and lose this.
+    if draw(st.booleans()):
+        day["planner_note"] = "also carried through"
     return day
 
 
 @st.composite
-def plans(draw, *, camel: bool | None = None) -> list[dict]:
-    return draw(st.lists(days(camel=camel), min_size=0, max_size=8))
+def plans(draw, *, camel: bool | None = None, twins: bool = False) -> list[dict]:
+    return draw(st.lists(days(camel=camel, twins=twins), min_size=0, max_size=8))
+
+
+def _snake_twins(day: dict) -> list[str]:
+    """Modelled fields this day spells in both camelCase and snake_case."""
+    return [
+        name
+        for name, field in schemas.PlanDay.model_fields.items()
+        if name in day
+        and field.alias
+        and field.alias != name
+        and field.alias in day
+    ]
 
 
 @st.composite
@@ -216,17 +249,27 @@ def test_unmodelled_keys_survive(plan, constraints):
     for before, after in zip(plan, result):
         if "plannerNote" in before:
             assert after.get("plannerNote") == before["plannerNote"]
+        if "planner_note" in before:
+            assert after.get("planner_note") == before["planner_note"]
 
 
 @_SETTINGS
 @given(plan=plans(), constraints=constraint_lists())
-def test_days_on_unconstrained_dates_are_returned_untouched(plan, constraints):
-    """No constraint on a date means hands off — the gate must not over-reach."""
+def test_days_on_unconstrained_dates_keep_their_content(plan, constraints):
+    """No constraint on a date means hands off — the gate must not over-reach.
+
+    "Hands off" is about content, not representation. Since ai-trainer-ops#38 the
+    gate returns canonical days, so an unconstrained day can come back spelled
+    differently from how it arrived; what it must not come back as is a day that
+    *says* something else. Comparing against the canonicalised input is what
+    separates those two, and it is still a real assertion: a gate that blanked an
+    unconstrained day, or coerced one it should not have, fails it.
+    """
     constrained = {c["constraintDate"] for c in constraints}
     result = sanitize_plan_for_constraints(plan, constraints)
     for before, after in zip(plan, result):
         if str(before.get("date") or "") not in constrained:
-            assert after == before
+            assert after == schemas.canonical_plan_day(before)
 
 
 # --------------------------------------------------------------------------
@@ -298,6 +341,50 @@ def test_a_sanitised_day_does_not_contradict_itself(day, constraints):
         assert str(out["workoutType"]).lower() == str(out["workout_type"]).lower(), (
             f"day says two different things about itself: {out}"
         )
+
+
+@_SETTINGS
+@given(plan=plans(twins=True), constraints=constraint_lists())
+def test_the_output_holds_at_most_one_spelling_of_every_field(plan, constraints):
+    """The property ai-trainer-ops#38 exists for, and the reason #29 was possible.
+
+    Stronger than ``test_a_sanitised_day_does_not_contradict_itself``, and the
+    difference is the whole point. *Agreement* between two spellings was
+    maintained by this module remembering to drop each twin it wrote — a rule
+    three modules had already forgotten when #29 found them, and one a future
+    writer can forget again. *Absence* is maintained by construction, so there
+    is nothing left to forget.
+
+    Asserted over every modelled field rather than over ``workoutType`` alone,
+    because the next twin will be on whichever field someone adds next.
+    """
+    for day in plan:
+        assert _snake_twins(day), "generator no longer produces the shape under test"
+
+    result = sanitize_plan_for_constraints(plan, constraints)
+
+    for day in result:
+        assert not _snake_twins(day), f"day carries two spellings of one field: {day}"
+
+
+@_SETTINGS
+@given(day=days(twins=True), constraints=constraint_lists())
+def test_the_surviving_spelling_is_the_camel_one(day, constraints):
+    """Which of the two wins is not arbitrary, and must not drift.
+
+    camelCase is what Pydantic's alias resolution already chose before the twin
+    was dropped, so keeping it removes a stale key without changing a single
+    value. If this ever flips, every stored plan written through a day that
+    carried both spellings changes meaning silently.
+    """
+    expected = str(day["workoutType"]).lower()
+    (out,) = sanitize_plan_for_constraints([day], constraints)
+    if str(day.get("date") or "") not in blocked_dates(constraints) and not any(
+        c.get("constraintType") == "required_workout"
+        and c.get("constraintDate") == day.get("date")
+        for c in constraints
+    ):
+        assert str(out.get("workoutType", "")).lower() == expected
 
 
 @_SETTINGS

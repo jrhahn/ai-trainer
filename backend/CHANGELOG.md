@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A plan day can no longer say two different things about itself**
+  (ai-trainer-ops#38) — `schemas.PlanDay`, `services/plan_constraints.py`.
+  `extra="allow"` exists so an unmodelled key is never silently dropped, but a
+  snake_case spelling of a *modelled* field is not unmodelled data — it is a
+  second name for a field the model already owns. With both present only one can
+  win; Pydantic resolves that to the alias, and the loser survived as an "extra"
+  saying something the day no longer meant. Measured before the fix:
+
+  | day arrives as | `workoutType` out | stale twin |
+  |---|---|---|
+  | snake only | `endurance` | dropped |
+  | camel only | `endurance` | dropped |
+  | both, agreeing | `endurance` | **survives** |
+  | both, disagreeing (`workoutType=rest`, `workout_type=endurance`) | `rest` | **survives, saying `endurance`** |
+
+  So `_to_canonical_day` — the pipeline's own canonicaliser, which every plan
+  write already passes through — was not canonical for the one input shape where
+  canonicalisation matters. That is why #29 kept being findable: it was found in
+  three separate modules, and in `plan_coherence` in *every* reader since the
+  module was written.
+
+  - **Fixed at the model, not at each gate.** `PlanDay` now drops the snake_case
+    twin of any modelled field the day also spells in camelCase, so every writer
+    is fixed at once. camelCase wins because that is what Pydantic's alias
+    resolution already chose — the stale key goes and no value changes.
+  - **The constraint gate returns canonical days**, on every path including the
+    no-constraint one. Its output now holds *at most one spelling per modelled
+    field* rather than two that happen to agree. The difference is the point:
+    agreement was maintained by the module remembering to drop each twin it
+    wrote, which is a rule a writer can forget; absence is maintained by
+    construction.
+  - **The dual-spelling readers stay**, because they are still reachable:
+    `day_violates_constraint` is called on raw days by the pipeline and
+    `filter_plan_updates_for_constraints` on raw updates from the router.
+  - `schemas.canonical_plan_day` is now the single canonicaliser;
+    `plan_pipeline._to_canonical_day` delegates to it, so the gate can reach it
+    without importing the pipeline.
+  - The property generator could not previously produce a day carrying *both*
+    spellings, which is the only shape in which the defect was still alive. It
+    can now, and `test_the_output_holds_at_most_one_spelling_of_every_field`
+    asserts the acceptance property over every modelled field.
+
 ### Added
 
 - **An entered activity can be corrected** (ai-trainer-ops#47) —
