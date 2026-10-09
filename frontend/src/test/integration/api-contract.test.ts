@@ -23,6 +23,7 @@
  *   GET  /users/me/coach-memory  via fetchCoachMemory()
  *   PUT  /users/me/coach-memory  via saveCoachMemoryRemote()
  *   DELETE /users/me          via deleteCurrentUser()
+ *   GET  /users/me/ai-key/status via fetchAIKeyStatus()
  */
 
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -30,6 +31,7 @@ import { login, register } from '../../services/auth'
 import {
   clearChatHistoryRemote,
   deleteCurrentUser,
+  fetchAIKeyStatus,
   fetchChatHistory,
   fetchCoachMemory,
   fetchCurrentUser,
@@ -344,5 +346,33 @@ describe('coach memory service ↔ backend', () => {
     await saveCoachMemoryRemote(token, 'Updated: prefers evening rides now.')
     const memory = await fetchCoachMemory(token)
     expect(memory).toBe('Updated: prefers evening rides now.')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// AI key status (ai-trainer-ops#41)
+// ---------------------------------------------------------------------------
+
+describe('ai key status ↔ backend', () => {
+  it('answers whether this athlete has to bring a key', async () => {
+    // A contract test rather than a unit one, because the field is the whole
+    // reason onboarding knows which steps to show, and the two ways of getting
+    // it wrong are both silent: a missing field reads as "hosted" and restores
+    // the dead end, a wrongly-true one asks a hosted athlete for a key they do
+    // not need.
+    //
+    // The *value* is asserted as a boolean, not as true or false: it depends on
+    // this deployment's `ALLOW_ADMIN_AI_KEY_FALLBACK` and global keys, so
+    // pinning either answer would pin the test harness's configuration rather
+    // than the contract. The value's correctness is covered in
+    // `backend/tests/test_key_required.py`, against every combination.
+    const token = await register('Key Rider', uniqueEmail('aikey'), 'Str0ng!Pass')
+    const status = await fetchAIKeyStatus(token!)
+
+    expect(typeof status.keyRequired).toBe('boolean')
+    // A fresh account has no key of its own either way.
+    expect(status.hasGeminiKey).toBe(false)
+    expect(status.hasOpenaiKey).toBe(false)
+    expect(status.provider).toBeTruthy()
   })
 })

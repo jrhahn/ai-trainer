@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
+  AlertTriangle,
   Bike,
   CheckCircle,
   CheckCircle2,
@@ -17,9 +18,42 @@ import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { getIntervalsActivities } from '../services/intervals'
 import { getStravaActivities } from '../services/strava'
-import { saveTrainingPlan, updateCurrentUser } from '../services/user'
+import {
+  fetchAIKeyStatus,
+  saveAIKey,
+  saveTrainingPlan,
+  testAIKey,
+  updateCurrentUser,
+} from '../services/user'
 
-const TOTAL_STEPS = 5
+/** The assessment step, from which a connected athlete generates directly. */
+const STEP_ASSESSMENT = 4
+/** "Ready to Go!" — the summary, and the only step that generates a plan. */
+const STEP_SUMMARY = 5
+/**
+ * Ask for a Gemini key (ai-trainer-ops#41). Numbered *after* the summary even
+ * though it is shown *before* it.
+ *
+ * The id is persisted in `sessionStorage` so the Strava OAuth redirect does not
+ * lose a half-finished onboarding. Renumbering the summary to 6 to make room
+ * would send every session saved before this release to whichever screen now
+ * holds its old number — in this case the key step, which a hosted athlete must
+ * never see. Ids are internal; the number on screen comes from the order below.
+ */
+const STEP_AI_KEY = 6
+
+/** The steps in the order they are shown, which depends on the deployment.
+ *
+ * In BYOK-only mode the key step sits between the assessment and the summary:
+ * after the questions, so nothing is asked for before the athlete knows what
+ * they are getting, and before the summary, so "Generate" is never a button
+ * that cannot work. On a hosted deployment it is not in the list at all.
+ */
+function stepsFor(keyRequired: boolean): number[] {
+  return keyRequired
+    ? [1, 2, 3, STEP_ASSESSMENT, STEP_AI_KEY, STEP_SUMMARY]
+    : [1, 2, 3, STEP_ASSESSMENT, STEP_SUMMARY]
+}
 const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
 
 // Only non-sensitive fields are persisted across the OAuth redirect.
@@ -143,6 +177,51 @@ export default function OnboardingPage() {
   // Restore progress saved before the Strava OAuth redirect (if any).
   const savedProgress = readOnboardingProgress()
   const [step, setStep] = useState(savedProgress?.step ?? 1)
+
+  // Whether this athlete has to bring their own key, answered by the backend
+  // rather than guessed from `hasGeminiKey` — the client cannot see whether
+  // admin-key fallback is on or whether the owner set a global key
+  // (ai-trainer-ops#41).
+  //
+  // `false` until the answer arrives, so a hosted athlete is never shown a step
+  // that then vanishes. If the request fails it stays `false` and onboarding
+  // behaves as it did before: the 402 from "Generate" is caught below and sends
+  // the athlete to the key step anyway, so a failed probe costs a detour rather
+  // than the dead end.
+  const [keyRequired, setKeyRequired] = useState(false)
+  // Whether the probe has answered yet. `keyRequired` starts false, which is
+  // the right default to *render* but not something to make decisions on: the
+  // difference between "no key is needed" and "we have not asked yet" matters
+  // for a resumed session and for the generate shortcut below. Raised in review.
+  const [keyStatusKnown, setKeyStatusKnown] = useState(false)
+  // Whether the server has told us directly, rather than been asked in advance.
+  //
+  // Two things count: a 402 from `generateTrainingPlan`, which is proof a key
+  // is needed, and the `keyRequired` that `PUT /users/me/ai-key` recomputes,
+  // which is proof one is not. The on-mount probe is a forecast, and once we
+  // hold either kind of proof a forecast still in flight must not overrule it.
+  //
+  // Both directions were raised in review. The 402 one reinstates the loop this
+  // change removes: the probe resolves `false`, the redirect effect fires, and
+  // the athlete is carried off the key step onto a summary about to 402 again.
+  // The save one is milder — a stale `true` landing after a successful save
+  // leaves the header reading "Step 6 of 6" behind a key step the athlete has
+  // already finished — and the first version of this invited it, by *clearing*
+  // the ref on save as though a save were less authoritative than a failure.
+  //
+  // A ref, not state: nothing renders from it, and it has to be readable by a
+  // promise that resolves after the render it was created in.
+  const keyStateIsAuthoritative = useRef(false)
+  const [keyInput, setKeyInput] = useState('')
+  const [keyTesting, setKeyTesting] = useState(false)
+  const [keySaving, setKeySaving] = useState(false)
+  const [keyError, setKeyError] = useState('')
+  const [keyTested, setKeyTested] = useState(false)
+  // Why the athlete is suddenly on this step, when they got here by pressing
+  // "Generate" rather than by walking the wizard. Without it the redirect below
+  // swaps the summary — and the error that explained it — for a form asking
+  // for a credential, with nothing connecting the two.
+  const [keyPrompt, setKeyPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<FormData>(() => {
@@ -178,6 +257,32 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stravaConnection, step, form.assessmentMethod])
 
+  useEffect(() => {
+    if (!authToken) return
+    let cancelled = false
+    fetchAIKeyStatus(authToken)
+      .then((status) => {
+        if (cancelled) return
+        // Never let a forecast overwrite what the server has already said.
+        if (!keyStateIsAuthoritative.current) setKeyRequired(Boolean(status.keyRequired))
+        setKeyStatusKnown(true)
+      })
+      .catch(() => {
+        // Deliberately silent. Nothing the athlete can do about it, and the
+        // generate path recovers on its own; a banner here would be noise on
+        // the welcome screen of a flow that still works.
+        //
+        // Counted as "known" all the same, so a failed probe does not leave a
+        // resumed session parked on the key step forever. The cost is a BYOK
+        // athlete being sent to the summary and bounced back by the 402 — a
+        // detour that heals itself, against a screen with no way off it.
+        if (!cancelled) setKeyStatusKnown(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken])
+
   // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
   useEffect(() => {
     saveOnboardingProgress(step, form)
@@ -195,8 +300,14 @@ export default function OnboardingPage() {
 
   const canNext = () => {
     if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
-    if (step === 4 && form.assessmentMethod === 'strava') return Boolean(stravaConnection)
-    if (step === 4 && form.assessmentMethod === 'intervals') return Boolean(intervalsConnection)
+    if (step === STEP_ASSESSMENT && form.assessmentMethod === 'strava')
+      return Boolean(stravaConnection)
+    if (step === STEP_ASSESSMENT && form.assessmentMethod === 'intervals')
+      return Boolean(intervalsConnection)
+    // The key step advances through its own Save button, which is what writes
+    // the key. A Continue that moved on without saving would hand the athlete
+    // the same 402 one screen later.
+    if (step === STEP_AI_KEY) return false
     return true
   }
 
@@ -327,7 +438,27 @@ export default function OnboardingPage() {
       clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate plan.')
+      const message = e instanceof Error ? e.message : 'Failed to generate plan.'
+      setError(message)
+      // The safety net under the probe. If `fetchAIKeyStatus` failed, or the
+      // deployment changed mode mid-session, the first *proof* that a key is
+      // needed is this 402 — and leaving the athlete on a summary page with a
+      // message naming a Settings screen they cannot reach is the whole of
+      // ai-trainer-ops#41. Matched on the backend's own wording, which is
+      // pinned by a test on both sides.
+      if (/api key configured/i.test(message)) {
+        keyStateIsAuthoritative.current = true
+        setKeyRequired(true)
+        // Reworded for where they are about to land. The backend's message says
+        // "add your key in Settings → AI Provider", which is right when it is
+        // read on the summary and wrong when it is read above the very form it
+        // is asking for.
+        setError('')
+        setKeyPrompt(
+          'Your coach needs a model before it can write a plan. Add your Gemini key below and we will carry on from here.'
+        )
+        setStep(STEP_AI_KEY)
+      }
     } finally {
       setLoading(false)
     }
@@ -337,11 +468,101 @@ export default function OnboardingPage() {
     (form.assessmentMethod === 'intervals' && Boolean(intervalsConnection)) ||
     (form.assessmentMethod === 'strava' && Boolean(stravaConnection))
 
+  /** Check a key against the provider without storing it. */
+  const handleTestKey = async () => {
+    if (!authToken) return
+    setKeyTesting(true)
+    setKeyError('')
+    setKeyTested(false)
+    try {
+      await testAIKey(authToken, 'gemini', keyInput.trim())
+      setKeyTested(true)
+    } catch (e) {
+      setKeyError(e instanceof Error ? e.message : 'Could not check the key.')
+    } finally {
+      setKeyTesting(false)
+    }
+  }
+
+  /** Store the key, then move on — but only if the backend agrees it is enough.
+   *
+   * `PUT /users/me/ai-key` answers with a fresh `keyRequired`, so a key that was
+   * accepted for a provider this deployment cannot reach does not advance the
+   * flow. Trusting a 200 here would put the athlete back on "Generate" with the
+   * same 402, which is the loop ai-trainer-ops#41 describes.
+   */
+  const handleSaveKey = async () => {
+    if (!authToken) return
+    setKeySaving(true)
+    setKeyError('')
+    try {
+      const status = await saveAIKey(authToken, 'gemini', keyInput.trim())
+      if (status.keyRequired) {
+        setKeyError('Saved, but this deployment still cannot reach a model with it.')
+        return
+      }
+      // Set, not cleared. The backend has just recomputed `keyRequired` for
+      // this account and said no key is needed — which is the same kind of
+      // answer as the 402, pointing the other way. Clearing it here let a probe
+      // that was still in flight resolve with a stale `true` afterwards.
+      keyStateIsAuthoritative.current = true
+      setKeyRequired(false)
+      setKeyInput('')
+      setKeyTested(false)
+      setKeyPrompt('')
+      setStep(STEP_SUMMARY)
+    } catch (e) {
+      setKeyError(e instanceof Error ? e.message : 'Could not save the key.')
+    } finally {
+      setKeySaving(false)
+    }
+  }
+
+  // `|| step === STEP_AI_KEY`: the key step counts as part of the order
+  // whenever the athlete is standing on it, even before the probe has answered.
+  // `step` is restored from `sessionStorage`, so a reload during the key step
+  // lands here with `keyRequired` still false for a moment — and without this
+  // the step was not in the list, so the header read "Step 1 of 5" over the key
+  // form and Back had nowhere to go. Raised in review; my `position` clamp
+  // below had only straightened the label.
+  const steps = stepsFor(keyRequired || step === STEP_AI_KEY)
+  // Still clamped, for a step id that is in neither list — a session saved by a
+  // build that numbered things differently.
+  const position = steps.indexOf(step) >= 0 ? steps.indexOf(step) + 1 : 1
+  const atLastStep = step === STEP_SUMMARY
+
+  const goToStep = (offset: number) => {
+    const next = steps[position - 1 + offset]
+    if (next !== undefined) setStep(next)
+  }
+
+  // A resumed session that no longer needs a key does not stay on the key step.
+  //
+  // Reachable two ways: a hosted athlete whose `sessionStorage` holds a step 6
+  // from a 402 reroute on a deployment that has since been given a global key,
+  // and an athlete who added a key in another tab. Without this they are shown
+  // a form for a credential they do not need, with Continue disabled and Back
+  // leading nowhere — Save was the only way out. Raised in review.
+  useEffect(() => {
+    if (keyStatusKnown && !keyRequired && step === STEP_AI_KEY) {
+      setStep(STEP_SUMMARY)
+    }
+  }, [keyStatusKnown, keyRequired, step])
+
   const handleContinue = () => {
-    if (step === 4 && connectedForAnalysis) {
+    // A connected athlete generates straight from the assessment step — but not
+    // past the key step. Generating here with no usable key is the 402 that
+    // ai-trainer-ops#41 is about, and it would skip the one screen that can fix
+    // it.
+    // `keyStatusKnown` closes the race the review noted as minor: until the
+    // probe answers, `keyRequired` is false, so a quick Strava-connected
+    // athlete could still take the shortcut and collect a 402. The fallback
+    // recovers from it, but waiting for one request is cheaper than a detour
+    // through a failed plan generation.
+    if (step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired) {
       void handleGenerate()
     } else {
-      setStep(step + 1)
+      goToStep(1)
     }
   }
 
@@ -379,13 +600,18 @@ export default function OnboardingPage() {
           </div>
           <div className="mb-2">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>Step {step} of {TOTAL_STEPS}</span>
-              <span>{Math.round((step / TOTAL_STEPS) * 100)}%</span>
+              {/* Position in the order, not the step's id: the key step is
+                  numbered 6 and shown fifth, and on a hosted deployment it is
+                  not shown at all. */}
+              <span>
+                Step {position} of {steps.length}
+              </span>
+              <span>{Math.round((position / steps.length) * 100)}%</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
+                style={{ width: `${(position / steps.length) * 100}%` }}
               />
             </div>
           </div>
@@ -671,7 +897,109 @@ export default function OnboardingPage() {
           )}
 
           {/* Step 5: Summary */}
-          {step === 5 && (
+          {/* The key step (ai-trainer-ops#41). Only reachable when the backend
+              says this athlete must supply a key, so the copy can state that
+              plainly instead of hedging. */}
+          {step === STEP_AI_KEY && (
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Add your Gemini key</h2>
+              {keyPrompt && (
+                <p className="mb-3 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  {keyPrompt}
+                </p>
+              )}
+              <p className="text-sm text-gray-500 mb-4">
+                This deployment does not provide a model, so your coach runs on your own Google
+                Gemini key. It stays on this server, encrypted at rest, and is used only for your
+                own plans and chats.
+              </p>
+
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-600 hover:text-amber-700"
+              >
+                <Link size={14} aria-hidden="true" />
+                Get a key — it takes about two minutes
+              </a>
+
+              <label
+                htmlFor="onboarding-ai-key"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                Gemini API key
+              </label>
+              <input
+                id="onboarding-ai-key"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={keyInput}
+                onChange={(e) => {
+                  setKeyInput(e.target.value)
+                  // A key that was tested and then edited has not been tested.
+                  setKeyTested(false)
+                  setKeyError('')
+                }}
+                placeholder="AIza…"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500"
+              />
+
+              {keyError && (
+                <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  {keyError}
+                </p>
+              )}
+              {keyTested && !keyError && (
+                <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-700">
+                  <CheckCircle size={14} className="shrink-0" aria-hidden="true" />
+                  The key works.
+                </p>
+              )}
+
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleTestKey()}
+                  disabled={!keyInput.trim() || keyTesting || keySaving}
+                  className="flex-1 rounded-xl border border-gray-300 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {keyTesting ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                      Testing…
+                    </span>
+                  ) : (
+                    'Test key'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveKey()}
+                  disabled={!keyInput.trim() || keyTesting || keySaving}
+                  className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                >
+                  {keySaving ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                      Saving…
+                    </span>
+                  ) : (
+                    'Save and continue'
+                  )}
+                </button>
+              </div>
+
+              <p className="mt-3 text-xs text-gray-400">
+                You can change or remove it later under Settings → AI Provider.
+              </p>
+            </div>
+          )}
+
+          {step === STEP_SUMMARY && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
               <p className="text-sm text-gray-500 mb-4">
@@ -728,11 +1056,11 @@ export default function OnboardingPage() {
           )}
 
           {/* Navigation */}
-          {step < TOTAL_STEPS && !(step === 4 && loading) && (
+          {!atLastStep && !(step === STEP_ASSESSMENT && loading) && (
             <div className="flex gap-3 mt-8">
-              {step > 1 && (
+              {position > 1 && (
                 <button
-                  onClick={() => setStep(step - 1)}
+                  onClick={() => goToStep(-1)}
                   className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
                 >
                   Back
@@ -743,15 +1071,15 @@ export default function OnboardingPage() {
                 disabled={!canNext()}
                 className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
-                {step === 4 && connectedForAnalysis
+                {step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired
                   ? 'Analyse & Generate Plan'
                   : 'Continue'}
               </button>
             </div>
           )}
-          {step === TOTAL_STEPS && step > 1 && !loading && (
+          {atLastStep && position > 1 && !loading && (
             <button
-              onClick={() => setStep(step - 1)}
+              onClick={() => goToStep(-1)}
               className="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 py-1"
             >
               ← Back

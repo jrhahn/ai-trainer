@@ -4,7 +4,8 @@
  * Two bugs broke registration for every new athlete and neither was caught:
  *
  * * onboarding overwrote the name the athlete registered with (#40), and
- * * in BYOK-only mode onboarding ended on step 5 with no way forward (#41).
+ * * in BYOK-only mode onboarding ended on step 5 with no way forward (#41) —
+ *   it now asks for the key as a step of its own, which is what is checked.
  *
  * Both are about what the browser shows after a sequence of requests, which is
  * the one thing a component test cannot see. Both are checked here.
@@ -110,48 +111,62 @@ test.describe('a stranger registers and reaches a usable app', () => {
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
 
-  test('the BYOK dead end is named, and onboarding does not claim to be finished', async ({
+  test('the BYOK requirement is asked for, and onboarding does not claim to be finished', async ({
     page,
   }) => {
-    // Regression guard for ai-trainer-ops#41, both halves. With no usable AI
-    // key the plan cannot be generated — the athlete must be *told*, and must
-    // not be left marked onboarded with no plan, because a reload would then
-    // land on an empty dashboard with nothing naming the cause.
+    // Regression guard for ai-trainer-ops#41, both halves — and the assertions
+    // moved when the fix landed, which is worth spelling out.
+    //
+    // This test used to walk to the summary, press "Generate", and check that
+    // the 402 was *named* rather than appearing as "Failed to fetch". That was
+    // the best available outcome while the athlete had nowhere to go: the one
+    // thing it could ask for was a message. Onboarding now asks for the key as
+    // a step before the summary, so "Generate" is never reached and there is no
+    // 402 to name. Asserting the old message would mean asserting that the dead
+    // end is still there.
+    //
+    // What has not changed is the second half: the account must not be left
+    // marked onboarded with no plan, because a reload would then land on an
+    // empty dashboard with nothing naming the cause. That is still the reload
+    // below.
     const errors = watchConsole(page)
     const athlete = newAthlete()
 
     await register(page, athlete)
     await expect(page.getByText(/^Welcome,/).first()).toBeVisible({ timeout: 30_000 })
 
-    // Walk to the end of onboarding.
+    // Walk the questions. There are six steps in this mode, not five.
     for (let step = 0; step < 4; step++) {
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
-    await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
 
-    // Told, in words an athlete can act on, rather than "Failed to fetch".
-    await expect(page.getByText(/api key/i).first()).toBeVisible({ timeout: 30_000 })
+    // Asked for, in a form the athlete can fill — not told after the fact.
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible({
+      timeout: 30_000,
+    })
+    await expect(page.getByText('Ready to Go!')).toHaveCount(0)
 
-    // And still in onboarding after a reload, which is where the message is.
-    // The reload is the whole point: before #41 the server had already been told
-    // `isOnboarded: true`, so this landed on a dashboard with no plan and
-    // nothing naming the cause. Onboarding progress is restored from
-    // sessionStorage, so the athlete returns to the last step rather than to the
-    // greeting — asserting the step-1 greeting here was wrong, and the run said
-    // so.
+    // And still in onboarding after a reload. Progress is restored from
+    // sessionStorage, so the athlete returns to the step they were on rather
+    // than to the greeting — asserting the step-1 greeting here was wrong once
+    // before, and the run said so.
     await page.reload()
-    await expect(
-      page.getByRole('button', { name: /generate my 14-day training plan/i })
-    ).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible({
+      timeout: 30_000,
+    })
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
 
-    // And the name survived the profile write. This is where ai-trainer-ops#40
-    // is actually catchable: the greeting in the first test is read from the
-    // store before onboarding writes anything, so only a name that came back
-    // from the server *after* `updateCurrentUser` proves the field was not
-    // overwritten. The issue asks for exactly this mutation to turn the job
-    // red, and nothing else here would.
-    await expect(page.getByText(athlete.name, { exact: true }).first()).toBeVisible()
+    // The ai-trainer-ops#40 assertion that used to live here — the registered
+    // name coming back from the server *after* `updateCurrentUser`, which is
+    // the only form of it that can catch the overwrite — has moved to
+    // `e2e/stubbed/dashboard.spec.ts`.
+    //
+    // It had to. In this mode onboarding now stops at the key step, and the
+    // profile write happens in `handleGenerate`, one step further on. There is
+    // no profile round trip left in this flow to observe, so an assertion here
+    // would be checking a name that never left the browser. The stubbed stack
+    // completes onboarding, so the same check runs there with a real write and
+    // a reload behind it.
 
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -13,6 +13,9 @@ const {
   mockGetStravaAuthUrl,
   mockDisconnectStrava,
   mockGetIntervalsActivities,
+  mockFetchAIKeyStatus,
+  mockSaveAIKey,
+  mockTestAIKey,
 } = vi.hoisted(() => ({
   mockGenerateTrainingPlan: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
@@ -22,6 +25,9 @@ const {
   mockGetStravaAuthUrl: vi.fn(),
   mockDisconnectStrava: vi.fn(),
   mockGetIntervalsActivities: vi.fn(),
+  mockFetchAIKeyStatus: vi.fn(),
+  mockSaveAIKey: vi.fn(),
+  mockTestAIKey: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
@@ -32,6 +38,9 @@ vi.mock('../services/ai', () => ({
 vi.mock('../services/user', () => ({
   updateCurrentUser: mockUpdateCurrentUser,
   saveTrainingPlan: mockSaveTrainingPlan,
+  fetchAIKeyStatus: mockFetchAIKeyStatus,
+  saveAIKey: mockSaveAIKey,
+  testAIKey: mockTestAIKey,
 }))
 
 vi.mock('../services/intervals', () => ({
@@ -75,6 +84,14 @@ beforeEach(() => {
   mockGetStravaAuthUrl.mockResolvedValue('https://strava.test/auth')
   mockDisconnectStrava.mockResolvedValue(undefined)
   mockGetIntervalsActivities.mockResolvedValue([])
+  // A hosted deployment by default, so the tests written before the key step
+  // keep the five-step flow they were written against (ai-trainer-ops#41).
+  mockFetchAIKeyStatus.mockResolvedValue({
+    provider: 'gemini',
+    hasOpenaiKey: false,
+    hasGeminiKey: false,
+    keyRequired: false,
+  })
 })
 
 describe('OnboardingPage', () => {
@@ -191,9 +208,16 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
+    // The athlete is now taken to the key step rather than left on the summary
+    // with a message naming a Settings page they cannot reach — the other half
+    // of ai-trainer-ops#41. The backend's own wording is replaced on the way,
+    // because "add your key in Settings → AI Provider" read above the very form
+    // asking for that key is worse than saying nothing.
     await waitFor(() => {
-      expect(screen.getByText(/add your key in Settings/)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
     })
+    expect(screen.getByText(/needs a model before it can write a plan/i)).toBeInTheDocument()
+    expect(screen.queryByText(/add your key in Settings/)).not.toBeInTheDocument()
 
     // The profile was written, and that is fine — it is the athlete's own data.
     expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
@@ -705,5 +729,523 @@ describe('OnboardingPage', () => {
 
     await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2))
     expect(mockUpdateCurrentUser.mock.calls[0][1].name).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The conditional key step (ai-trainer-ops#41)
+// ---------------------------------------------------------------------------
+
+/** Walk the four question steps, which is where the order diverges. */
+async function walkTheQuestions(user: ReturnType<typeof userEvent.setup>) {
+  for (let i = 0; i < 4; i++) {
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+  }
+}
+
+describe('the step order follows the deployment', () => {
+  it('has five steps when the server provides the model', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(await screen.findByText('Step 1 of 5')).toBeInTheDocument()
+  })
+
+  it('has six when the athlete has to bring a key', async () => {
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
+  })
+
+  it('never asks a hosted athlete for a key', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 5')
+
+    await walkTheQuestions(user)
+
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
+  })
+
+  it('puts the key step between the questions and the summary', async () => {
+    // Before the summary, so "Generate" is never a button that cannot work;
+    // after the questions, so nothing is asked for before the athlete knows
+    // what they are getting.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 6')
+
+    await walkTheQuestions(user)
+
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
+    // Fifth of six: the id is 6, the position is 5.
+    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+  })
+
+  it('treats a backend that does not know the field as hosted', async () => {
+    // An older backend. Asking for a key nobody needs is a worse failure than
+    // the one this fixes.
+    mockFetchAIKeyStatus.mockResolvedValue({
+      provider: 'gemini',
+      hasOpenaiKey: false,
+      hasGeminiKey: false,
+    })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(await screen.findByText('Step 1 of 5')).toBeInTheDocument()
+  })
+
+  it('carries on quietly when the status request fails outright', async () => {
+    mockFetchAIKeyStatus.mockRejectedValue(new Error('network unreachable'))
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 5')
+
+    await walkTheQuestions(user)
+
+    // No banner on the welcome screen of a flow that still works, and the
+    // generate path recovers on its own.
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByText(/network unreachable/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('the key step', () => {
+  async function reachKeyStep() {
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 6')
+    await walkTheQuestions(user)
+    await screen.findByRole('heading', { name: /add your gemini key/i })
+    return user
+  }
+
+  it('links to the guide and offers both buttons', async () => {
+    await reachKeyStep()
+
+    const link = screen.getByRole('link', { name: /get a key/i })
+    expect(link).toHaveAttribute('href', 'https://aistudio.google.com/apikey')
+    // A new tab without handing over the opener.
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
+    expect(screen.getByRole('button', { name: /test key/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save and continue/i })).toBeInTheDocument()
+  })
+
+  it('keeps both buttons out of reach until something is typed', async () => {
+    await reachKeyStep()
+
+    expect(screen.getByRole('button', { name: /test key/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /save and continue/i })).toBeDisabled()
+  })
+
+  it('does not show the key in plain text', async () => {
+    const user = await reachKeyStep()
+    const field = screen.getByLabelText(/gemini api key/i)
+
+    await user.type(field, 'AIzaSecret')
+
+    expect(field).toHaveAttribute('type', 'password')
+    expect(field).toHaveAttribute('autocomplete', 'off')
+  })
+
+  it('says so when the key works, without storing it', async () => {
+    const user = await reachKeyStep()
+    mockTestAIKey.mockResolvedValue({ ok: true })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /test key/i }))
+
+    expect(await screen.findByText('The key works.')).toBeInTheDocument()
+    expect(mockTestAIKey).toHaveBeenCalledWith('token-123', 'gemini', 'AIzaGood')
+    expect(mockSaveAIKey).not.toHaveBeenCalled()
+    // Still here: a test is not a commitment.
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+  })
+
+  it("shows the provider's own complaint about a bad key", async () => {
+    const user = await reachKeyStep()
+    mockTestAIKey.mockRejectedValue(new Error('Key validation failed.'))
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaBad')
+    await user.click(screen.getByRole('button', { name: /test key/i }))
+
+    expect(await screen.findByText('Key validation failed.')).toBeInTheDocument()
+    expect(screen.queryByText('The key works.')).not.toBeInTheDocument()
+  })
+
+  it('forgets that a key was tested once it is edited', async () => {
+    // Otherwise "The key works." stays on screen above a different key.
+    const user = await reachKeyStep()
+    mockTestAIKey.mockResolvedValue({ ok: true })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /test key/i }))
+    await screen.findByText('The key works.')
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'X')
+
+    expect(screen.queryByText('The key works.')).not.toBeInTheDocument()
+  })
+
+  it('saves the key and moves to the summary', async () => {
+    const user = await reachKeyStep()
+    mockSaveAIKey.mockResolvedValue({ keyRequired: false })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+    expect(mockSaveAIKey).toHaveBeenCalledWith('token-123', 'gemini', 'AIzaGood')
+    // And the count drops back, because nothing is required any more.
+    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+  })
+
+  it('stays put when the backend stores the key and still cannot use it', async () => {
+    // A 200 is not the answer. The endpoint recomputes `keyRequired`, and
+    // advancing on the status code alone would put the athlete back on
+    // "Generate" with the same 402 — the loop ai-trainer-ops#41 describes.
+    const user = await reachKeyStep()
+    mockSaveAIKey.mockResolvedValue({ keyRequired: true })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaWrongProvider')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+
+    expect(await screen.findByText(/still cannot reach a model with it/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
+  })
+
+  it('does not let Continue walk past it', async () => {
+    // The step advances through Save, which is what writes the key. A Continue
+    // that moved on without saving would hand over the same 402 one screen on.
+    await reachKeyStep()
+
+    for (const button of screen.queryAllByRole('button', { name: 'Continue' })) {
+      expect(button).toBeDisabled()
+    }
+  })
+
+  it('does not offer "Analyse & Generate Plan" while a key is still missing', async () => {
+    // A connected athlete generates straight from the assessment step. That
+    // shortcut has to stop at the key step too, or it skips the one screen that
+    // can fix the 402.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({
+      stravaConnection: { athleteId: 1, athleteName: 'Alex' },
+    } as never)
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 6')
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(
+      screen.queryByRole('button', { name: /analyse & generate plan/i })
+    ).not.toBeInTheDocument()
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+  })
+})
+
+describe('when generation fails for want of a key', () => {
+  it('leaves an unrelated failure on the summary, where the retry is', async () => {
+    // Only a missing key is answered by the key step. Redirecting on every
+    // error would send someone whose model timed out to a page asking for a
+    // credential they already have.
+    mockGenerateTrainingPlan.mockRejectedValue(new Error('The model timed out.'))
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 5')
+    await walkTheQuestions(user)
+
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    expect(await screen.findByText('The model timed out.')).toBeInTheDocument()
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('resuming on the key step', () => {
+  // `step` is restored from `sessionStorage` so the Strava OAuth redirect does
+  // not lose a half-finished onboarding. That means the key step's id can come
+  // back on a load where nothing yet knows whether a key is needed — the path
+  // the review found, and which my `position` clamp had only half covered.
+
+  /** Exactly what `saveOnboardingProgress` writes, with the athlete on step 6.
+   *
+   * The key and the field list are copied from the component on purpose: a
+   * fixture that is merely *plausible* restores nothing, the page starts at step
+   * 1, and every test below passes while measuring the wrong thing. The first
+   * version of this helper used a made-up key and did exactly that.
+   */
+  function resumeAtKeyStep() {
+    sessionStorage.setItem(
+      'ai_trainer_onboarding_progress',
+      JSON.stringify({
+        step: 6,
+        trainingGoal: 'general_fitness',
+        raceDate: '',
+        raceDescription: '',
+        assessmentMethod: 'manual',
+        followsTrainingPlan: false,
+        fitnessLevel: 'intermediate',
+      })
+    )
+  }
+
+  it('restores the step at all', () => {
+    // The guard under the fixture above. If the key or the shape is wrong the
+    // page simply starts at step 1, and "not on the key step" is then true for
+    // a reason that has nothing to do with what is being tested.
+    resumeAtKeyStep()
+    mockFetchAIKeyStatus.mockReturnValue(new Promise(() => {}))
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument()
+  })
+
+  it('leaves the key step when the deployment turns out not to need one', async () => {
+    // A hosted athlete with a stale step 6 — from a 402 reroute on a deployment
+    // that has since been given a global key, or a key added in another tab.
+    // Before this they were shown a form for a credential they did not need,
+    // with Continue disabled and Back leading nowhere: Save was the only way
+    // out.
+    resumeAtKeyStep()
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: false })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+  })
+
+  it('stays on the key step when one really is needed', async () => {
+    // The other half. A redirect that fired on `keyRequired`'s initial `false`
+    // would throw a BYOK athlete straight back at the summary.
+    resumeAtKeyStep()
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(
+      await screen.findByRole('heading', { name: /add your gemini key/i })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+  })
+
+  it('counts the resumed step correctly, and offers a way back', async () => {
+    // Without the key step in the order the header read "Step 1 of 5" over the
+    // key form, and Back had nothing to go back to.
+    resumeAtKeyStep()
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    await screen.findByRole('heading', { name: /add your gemini key/i })
+
+    expect(screen.queryByText('Step 1 of 5')).not.toBeInTheDocument()
+    const back = screen.getByRole('button', { name: 'Back' })
+    expect(back).toBeEnabled()
+
+    await userEvent.setup().click(back)
+
+    // The assessment step, which is what precedes it.
+    expect(screen.getByText('Step 4 of 6')).toBeInTheDocument()
+  })
+
+  it('does not park a resumed session there when the probe fails', async () => {
+    // A failed probe counts as "known", so the athlete is sent on rather than
+    // left on a screen with no way off it. If a key really is needed the 402
+    // from Generate brings them straight back.
+    resumeAtKeyStep()
+    mockFetchAIKeyStatus.mockRejectedValue(new Error('network'))
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+  })
+
+  it('withholds the generate shortcut until the key question is answered', async () => {
+    // The race the review called minor. Until the probe answers, `keyRequired`
+    // is false, so a quick Strava-connected athlete could take the shortcut and
+    // collect a 402.
+    let settle: (value: unknown) => void = () => {}
+    mockFetchAIKeyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    setupStore({ stravaConnection: { athleteId: 1, athleteName: 'Alex' } } as never)
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    // On the assessment step, connected, and the shortcut is not offered yet.
+    expect(
+      screen.queryByRole('button', { name: /analyse & generate plan/i })
+    ).not.toBeInTheDocument()
+
+    settle({ keyRequired: false })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /analyse & generate plan/i })).toBeInTheDocument()
+    })
+  })
+})
+
+describe('the probe and the 402, in both orders', () => {
+  // The re-review's finding, and its own request: cover both orderings. A 402
+  // is proof that a key is needed; the probe is a forecast. If the forecast
+  // lands second it must not overrule the proof.
+
+  it('keeps the athlete on the key step when the probe answers after the 402', async () => {
+    let settle: (value: unknown) => void = () => {}
+    mockFetchAIKeyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    mockGenerateTrainingPlan.mockRejectedValue(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    // Walk to the summary while the probe is still in flight, and fail there.
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    // Now the forecast arrives, and disagrees.
+    //
+    // Inside `act`, which is the whole difference between this test working and
+    // not: the first version called `settle` and asserted immediately, which
+    // passes before React has processed the resolution at all. Both mutations
+    // survived it. `act` flushes the promise and the state updates it causes,
+    // so what follows is read after the race has been run.
+    await act(async () => {
+      settle({ keyRequired: false })
+    })
+
+    // It loses. Without the ref the redirect effect carried the athlete off to
+    // a summary whose Generate button was about to 402 again.
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
+  })
+
+  it('still lets the probe decide when it answers first', async () => {
+    // The other order: no proof yet, so the forecast is all there is.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 6')
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+  })
+
+  it('ignores a probe that lands after a key was saved', async () => {
+    // The re-review's second minor point, and the reason the ref is now *set*
+    // on a successful save rather than cleared. `PUT /users/me/ai-key`
+    // recomputes `keyRequired` server-side, so its answer is the same kind of
+    // thing as the 402 — proof, pointing the other way. A probe resolving with
+    // a stale `true` afterwards left the header reading "Step 6 of 6" behind a
+    // step the athlete had already finished.
+    let settle: (value: unknown) => void = () => {}
+    mockFetchAIKeyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    mockGenerateTrainingPlan.mockRejectedValueOnce(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    mockSaveAIKey.mockResolvedValue({ keyRequired: false })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+
+    // Only now does the probe answer, with what it saw before any of this.
+    await act(async () => {
+      settle({ keyRequired: true })
+    })
+
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+    expect(screen.queryByText('Step 6 of 6')).not.toBeInTheDocument()
+  })
+
+  it('reaches the summary after a 402 once a key is actually saved', async () => {
+    // The full loop the issue describes, closed: fail, get asked, supply, carry
+    // on. Also the only observable consequence of the proof being spent on a
+    // successful save — the redirect effect must not fight `setStep` here.
+    //
+    // It does *not* cover the ref being cleared. The probe runs once, on mount,
+    // so after a save there is no later probe left to be corrected by; clearing
+    // it is insurance against a second probe that does not exist yet, and
+    // mutating the line away changes nothing observable. Said plainly rather
+    // than left as a test that looks like it covers it.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: false })
+    mockGenerateTrainingPlan.mockRejectedValueOnce(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    mockSaveAIKey.mockResolvedValue({ keyRequired: false })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 5')
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
   })
 })

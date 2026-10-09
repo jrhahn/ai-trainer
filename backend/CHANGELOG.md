@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The AI key status says whether a key is *required*, not just absent**
+  (ai-trainer-ops#41) — `services/llm.py`, `schemas.py`, `routers/users.py`,
+  `tests/test_key_required.py`.
+
+  `GET /users/me/ai-key/status` described the account — "this athlete has no
+  Gemini key" — and nothing in the API described the deployment. So a client
+  could not tell "you have no key and you need one" from "you have no key and
+  the server has one for you", and onboarding had no way to decide whether to
+  ask. It found out by pressing Generate and reading a 402.
+
+  `keyRequired` answers it in advance. `llm.user_must_supply_own_key` shares
+  `_provider_usable` with `resolve_user_provider`, and therefore with
+  `get_provider`, rather than restating the rule: a status that said "no key
+  needed" while `get_provider` raised would move the dead end one screen later
+  and make it look like a bug in the plan generator. Every test asserts both
+  halves together.
+
+  `PUT /users/me/ai-key` recomputes it too, so a key stored for a provider this
+  deployment cannot reach does not read as success.
+
+  The stub counts as usable, for the same reason it is chosen first in
+  `get_provider`: a harness told to go and fetch a key would be configuring the
+  thing the stub stands in for.
+
 ### Changed
 
 - **The stub plan contains a strength day** (ai-trainer-ops#51.5) —

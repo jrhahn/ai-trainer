@@ -1372,6 +1372,23 @@ class AIKeyStatusSchema(CamelModel):
     converses with, so it is the honest answer to "what runs if I pick this".
     """
 
+    key_required: bool = False
+    """Whether this athlete must supply a key before any AI call can succeed.
+
+    The three booleans at the top describe the *account*; this one describes whether
+    the account can actually be used, which also depends on the deployment —
+    whether admin-key fallback is on, and whether the owner set a global key.
+    Without it a client cannot tell "you have no key, and you need one" from
+    "you have no key, and the server has one for you" (ai-trainer-ops#41).
+
+    Computed by ``llm_service.user_must_supply_own_key``, which shares its rule
+    with ``get_provider``, so this field and the 402 cannot disagree.
+
+    Defaulted to ``False`` so an older client parsing a newer response keeps
+    working, and so the field being absent never reads as "go and ask for a
+    key".
+    """
+
 
 class AIKeySaveRequest(CamelModel):
     provider: str

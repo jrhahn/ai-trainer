@@ -720,6 +720,47 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
     )
 
 
+def _provider_usable(user_key: str | None, global_key: str) -> bool:
+    """Whether one provider can be called for a user holding *user_key*.
+
+    Their own key always works. The backend owner's key only counts when
+    fallback is switched on — that setting is the whole difference between
+    "BYOK-only" and "hosted", and reading it here is what keeps the two modes
+    one code path instead of two.
+    """
+    if user_key:
+        return True
+    return bool(settings.allow_admin_ai_key_fallback and global_key)
+
+
+def user_must_supply_own_key(user: models.User) -> bool:
+    """Whether *user* has to add a key before any AI call can succeed.
+
+    Extracted so the onboarding flow can ask the question before walking into
+    it (ai-trainer-ops#41). A new account in BYOK-only mode reached the last
+    step of onboarding, pressed "Generate", and got a 402 naming a Settings
+    page it could not navigate to — because the answer to "will this work" was
+    only discoverable by trying.
+
+    It shares ``_provider_usable`` with :func:`resolve_user_provider` and
+    therefore with :func:`get_provider` rather than restating the rule. A status
+    endpoint that said "no key needed" while ``get_provider`` raised would be
+    worse than no endpoint at all: it would move the dead end one screen later
+    and make it look like a bug in the plan generator.
+
+    The stub counts as usable for the same reason it is chosen first in
+    ``get_provider``: its entire purpose is a deployment with no key, so a
+    harness that was told to go and fetch one would be configuring the thing it
+    is standing in for.
+    """
+    if stub_is_active():
+        return False
+    return not (
+        _provider_usable(user.user_gemini_api_key, settings.gemini_api_key)
+        or _provider_usable(user.user_openai_api_key, settings.openai_api_key)
+    )
+
+
 def resolve_user_provider(user: models.User) -> str:
     """Return the AI provider name to use for *user*.
 
@@ -730,14 +771,8 @@ def resolve_user_provider(user: models.User) -> str:
     only at the global keys, so in BYOK-only mode a user with their own key was
     routed to the wrong provider and got an "unknown key" error (#448).
     """
-
-    def _usable(user_key: str | None, global_key: str) -> bool:
-        if user_key:
-            return True
-        return bool(settings.allow_admin_ai_key_fallback and global_key)
-
-    gemini_usable = _usable(user.user_gemini_api_key, settings.gemini_api_key)
-    openai_usable = _usable(user.user_openai_api_key, settings.openai_api_key)
+    gemini_usable = _provider_usable(user.user_gemini_api_key, settings.gemini_api_key)
+    openai_usable = _provider_usable(user.user_openai_api_key, settings.openai_api_key)
 
     stored = user.ai_provider
     if stored == "gemini" and gemini_usable:

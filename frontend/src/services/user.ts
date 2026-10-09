@@ -978,6 +978,22 @@ export interface AIKeyStatus {
    */
   openaiModel?: string
   geminiModel?: string
+  /**
+   * Whether this athlete must supply a key before any AI call can succeed
+   * (ai-trainer-ops#41).
+   *
+   * The two `has*Key` flags describe the account; this describes whether the
+   * account can be *used*, which also depends on the deployment — whether
+   * admin-key fallback is on, and whether the owner set a global key. Without
+   * it the client cannot tell "you have no key and you need one" from "you have
+   * no key and the server has one for you", which is how onboarding used to
+   * walk all the way to its last step and fail there.
+   *
+   * Optional, and absent means not required: an older backend does not know the
+   * field, and asking a hosted athlete for a key they do not need is a worse
+   * failure than the one this fixes.
+   */
+  keyRequired?: boolean
 }
 
 export async function fetchAIKeyStatus(token: string): Promise<AIKeyStatus> {

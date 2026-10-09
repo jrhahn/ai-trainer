@@ -1567,6 +1567,7 @@ async def get_ai_key_status(
         has_gemini_key=bool(current_user.user_gemini_api_key),
         openai_model=settings.openai_coach_model,
         gemini_model=settings.gemini_coach_model,
+        key_required=llm_service.user_must_supply_own_key(current_user),
     )
 
 
@@ -1587,12 +1588,16 @@ async def save_ai_key(
         )
     current_user.ai_provider = body.provider
     await db.commit()
+    # Recomputed rather than assumed False: the key just saved may be for a
+    # provider this deployment cannot reach, and the caller is about to decide
+    # whether onboarding may continue.
     return schemas.AIKeyStatusSchema(
         provider=current_user.ai_provider,
         has_openai_key=bool(current_user.user_openai_api_key),
         has_gemini_key=bool(current_user.user_gemini_api_key),
         openai_model=settings.openai_coach_model,
         gemini_model=settings.gemini_coach_model,
+        key_required=llm_service.user_must_supply_own_key(current_user),
     )
 
 
