@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     in Settings → AI Provider" is right on the summary and wrong when read above
     the very form asking for it.
 
+  A 402 outranks the probe. The probe is a forecast and the server's 402 is
+  proof, so a probe still in flight when the reroute happens cannot set
+  `keyRequired` back to false — which would have carried the athlete off the key
+  step and onto a summary about to 402 again, reinstating the loop. Raised in
+  re-review, with tests for both orderings.
+
   A resumed session is handled too, which the review caught: `step` comes back
   from `sessionStorage`, so the key step's id can reappear on a load where
   nothing yet knows whether a key is needed. The step counts as part of the

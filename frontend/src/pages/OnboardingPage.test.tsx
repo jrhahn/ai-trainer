@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -1109,5 +1109,100 @@ describe('resuming on the key step', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse & generate plan/i })).toBeInTheDocument()
     })
+  })
+})
+
+describe('the probe and the 402, in both orders', () => {
+  // The re-review's finding, and its own request: cover both orderings. A 402
+  // is proof that a key is needed; the probe is a forecast. If the forecast
+  // lands second it must not overrule the proof.
+
+  it('keeps the athlete on the key step when the probe answers after the 402', async () => {
+    let settle: (value: unknown) => void = () => {}
+    mockFetchAIKeyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    mockGenerateTrainingPlan.mockRejectedValue(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    // Walk to the summary while the probe is still in flight, and fail there.
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    // Now the forecast arrives, and disagrees.
+    //
+    // Inside `act`, which is the whole difference between this test working and
+    // not: the first version called `settle` and asserted immediately, which
+    // passes before React has processed the resolution at all. Both mutations
+    // survived it. `act` flushes the promise and the state updates it causes,
+    // so what follows is read after the race has been run.
+    await act(async () => {
+      settle({ keyRequired: false })
+    })
+
+    // It loses. Without the ref the redirect effect carried the athlete off to
+    // a summary whose Generate button was about to 402 again.
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
+  })
+
+  it('still lets the probe decide when it answers first', async () => {
+    // The other order: no proof yet, so the forecast is all there is.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 6')
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+  })
+
+  it('reaches the summary after a 402 once a key is actually saved', async () => {
+    // The full loop the issue describes, closed: fail, get asked, supply, carry
+    // on. Also the only observable consequence of the proof being spent on a
+    // successful save — the redirect effect must not fight `setStep` here.
+    //
+    // It does *not* cover the ref being cleared. The probe runs once, on mount,
+    // so after a save there is no later probe left to be corrected by; clearing
+    // it is insurance against a second probe that does not exist yet, and
+    // mutating the line away changes nothing observable. Said plainly rather
+    // than left as a test that looks like it covers it.
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: false })
+    mockGenerateTrainingPlan.mockRejectedValueOnce(
+      new Error('No gemini API key configured. Please add your key in Settings → AI Provider.')
+    )
+    mockSaveAIKey.mockResolvedValue({ keyRequired: false })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Step 1 of 5')
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/gemini api key/i), 'AIzaGood')
+    await user.click(screen.getByRole('button', { name: /save and continue/i }))
+
+    expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
   })
 })
