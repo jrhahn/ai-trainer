@@ -930,7 +930,20 @@ export default function DashboardPage() {
           pinned coach entry, then plan updates, recommendations and chat interleave
           in the feed below (#418). Takes up the majority of the remaining space. */}
       <div className="flex flex-col">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coach Timeline</h2>
+        {/* `sr-only`, not deleted (ai-trainer-ops#51.6). The words appeared
+            twice, a hand's width apart: here as the section label, and again as
+            the card's own title inside `AIChat`.
+
+            Hidden rather than removed because the card's title is a `<span>`,
+            so this `<h2>` is the only landmark a screen reader can navigate to
+            — and the section holds more than the card, the training-status
+            summary sits above it. Deleting the heading would take away the one
+            structural handle on that whole region to fix something only sighted
+            readers can see.
+
+            `AIChat` keeps its title: it is also used on the day view, where it
+            is the only thing naming the card. */}
+        <h2 className="sr-only">Coach Timeline</h2>
 
         {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
           <div
