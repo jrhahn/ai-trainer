@@ -663,11 +663,9 @@ async def update_manual_activity(
     therefore read as "leave it", while an explicit ``null`` still clears it;
     ``model_fields_set`` is what tells the two apart.
     """
-    existing = (
-        await crud.get_workout_log_by_date(db, current_user.id, date, slot)
-        if logged_sessions.is_unplanned_slot(slot)
-        else None
-    )
+    if not logged_sessions.is_unplanned_slot(slot):
+        raise HTTPException(status_code=404, detail="No such entered activity.")
+    existing = await crud.get_workout_log_by_date(db, current_user.id, date, slot)
     if existing is None:
         raise HTTPException(status_code=404, detail="No such entered activity.")
     sport = schemas.normalise_plan_sport(body.sport)

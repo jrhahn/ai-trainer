@@ -988,6 +988,11 @@ export default function DashboardPage() {
       <AddActivityDialog open={addActivityOpen} onClose={() => setAddActivityOpen(false)} />
       {editingActivity && (
         <AddActivityDialog
+          /* Closing clears `editingActivity`, so this block unmounts and the
+             next entry's form is a fresh mount — that, not this key, is what
+             keeps one entry's values out of another's form, and the cancel test
+             pins it. The key is kept only so the guarantee survives a refactor
+             that renders the dialog unconditionally. */
           key={`${editingActivity.date}#${editingActivity.slot}`}
           open
           editing={editingActivity}

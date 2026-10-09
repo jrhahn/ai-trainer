@@ -1776,6 +1776,42 @@ describe('DashboardPage — entered activities', () => {
     await waitFor(() => expect(alert).toHaveBeenCalledWith('The activity could not be opened.'))
   })
 
+  it('clears the edited entry on cancel, so the next one opens on its own values', async () => {
+    // The form is prefilled from state held here, so a cancel that left the
+    // state behind would show the first entry's values over the second's.
+    mockFetchWorkoutLogs.mockImplementation(async () => ({
+      [`${day}#100`]: { actualDurationMinutes: 45, perceivedEffort: 4, notes: 'hills', completedAt: '', sport: 'running' },
+      [`${day}#101`]: { actualDurationMinutes: 20, perceivedEffort: 1, notes: 'spin', completedAt: '', sport: 'cycling' },
+    }))
+    // Two different sports, so each pencil is addressable by its own label
+    // rather than by the order the list happens to render in.
+    setupStore({
+      rideMetricsHistory: [entered(100), entered(101, { sportType: 'cycling' })],
+    })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+    expect(await screen.findByLabelText('Duration (minutes)')).toHaveValue(45)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Edit activity' })).not.toBeInTheDocument()
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /Edit the cycling you entered/ }))
+    expect(await screen.findByLabelText('Duration (minutes)')).toHaveValue(20)
+  })
+
+  it('does nothing on the pencil without a token', async () => {
+    setupStore({ rideMetricsHistory: [entered(100)], authToken: null })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: /Edit the running you entered/ }))
+
+    expect(mockFetchWorkoutLogs).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Edit activity' })).not.toBeInTheDocument()
+  })
+
   it('keeps the activity when the deletion is not confirmed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     setupStore({ rideMetricsHistory: [entered(100)] })
