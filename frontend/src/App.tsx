@@ -47,21 +47,29 @@ export default function App() {
   // So: "not loaded yet" is its own state and the router is not asked until it
   // is over. It starts as "known" for a visitor with no token, because there is
   // nothing to find out about them.
-  const [profileChecked, setProfileChecked] = useState(!authToken)
+  // Which token has been looked up, rather than a boolean for whether some
+  // token has. Derived, so there is no render in which a *new* token looks
+  // already-checked: a boolean reset inside the effect is still `true` for the
+  // one render in which `authToken` changed from null to a value, which is
+  // exactly a fresh sign-in — and that render would take the not-onboarded
+  // branch and replace the URL before the effect could hold it. Found in review
+  // on PR #798.
+  const [checkedToken, setCheckedToken] = useState<string | null>(null)
+  const profileChecked = !authToken || checkedToken === authToken
 
   useEffect(() => {
-    if (!authToken) {
-      setProfileChecked(true)
-      return
-    }
-    setProfileChecked(false)
+    if (!authToken) return
     let cancelled = false
-    // `.finally`, not `.then`: a failed load still answers the question — the
-    // store falls back to signed-out or raises `dataLoadWarning`, and either way
-    // the router may decide. Leaving this unresolved would hold the athlete on a
-    // blank page for as long as the backend stayed unreachable.
+    // `.finally` rather than `.then`, though the two are equivalent today:
+    // `loadUserData` catches everything and returns, so it does not reject, and
+    // no test can tell the two apart — the review on PR #798 asked and the
+    // answer is that it cannot. Kept because the thing that must hold is "an
+    // attempt has been made", not "an attempt succeeded": the day that function
+    // grows a path that throws, `.then` would hold the athlete on a blank page
+    // for as long as the backend stayed unreachable, and nothing would point
+    // here.
     void loadUserData().finally(() => {
-      if (!cancelled) setProfileChecked(true)
+      if (!cancelled) setCheckedToken(authToken)
     })
     return () => {
       cancelled = true
@@ -111,16 +119,16 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/admin" element={<AdminPage />} />
 
-        {authToken && !profileChecked ? (
+        {!profileChecked ? (
           // Deliberately no element and, above all, no `<Navigate>`: the URL has
           // to survive until there is something to decide with. The overlay below
           // is what the athlete sees meanwhile.
           //
-          // `authToken &&` is redundant and kept for the reader: `profileChecked`
-          // starts as `!authToken` and is only ever set false while a token
-          // exists, so the second half already implies the first. Dropping it
-          // fails no test — it says what this branch *means* rather than
-          // narrowing it.
+          // No `authToken &&` guard: `profileChecked` is derived from the token
+          // itself, so a signed-out visitor is "checked" by definition and
+          // cannot land here — not even for the one render after a logout that
+          // interrupted a load, which an `isLoading`-style boolean would have
+          // spent on a blank page.
           <Route path="*" element={null} />
         ) : !authToken ? (
           <>

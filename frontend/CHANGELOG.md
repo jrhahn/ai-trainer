@@ -82,6 +82,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deleted the first's report and whichever stack you wanted was the one that was
   gone.
 
+  The state is **which token has been looked up**, not a boolean for whether one
+  has. A boolean reset inside the effect is still `true` for the one render in
+  which the token changed from absent to present — which is exactly a fresh
+  sign-in, and that render took the not-onboarded branch and replaced the URL
+  before the effect could hold it. Deriving it also removes the mirror case: once
+  a token has been looked up, signing out leaves a stale token on one side of the
+  comparison, which a bare equality check would have answered by rendering
+  nothing to someone who should see the landing page. Both found in review on
+  PR #798, and both now pinned by tests.
+
 ### Added
 
 - **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,
