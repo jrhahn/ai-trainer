@@ -388,9 +388,9 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Change history — "why did this workout change?" (#357) */}
       {date && <DayActivities date={date} />}
 
+      {/* Change history — "why did this workout change?" (#357) */}
       <ChangeHistorySection
         expanded={showHistory}
         onToggle={() => setShowHistory((v) => !v)}
