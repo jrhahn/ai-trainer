@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `schemas.canonical_plan_day` is now the single canonicaliser;
     `plan_pipeline._to_canonical_day` delegates to it, so the gate can reach it
     without importing the pipeline.
+  - **Including the validation-failure path.** A day too malformed to validate
+    passes through unchanged so one bad day never aborts a plan write, and it
+    used to pass through with both spellings — so "at most one spelling" was true
+    only of days that validate, which is the "holds unless someone forgot" shape
+    this entry is about removing. Which spelling stays does not depend on
+    validation succeeding, so both paths now share one stripper. Found in review
+    on PR #796.
   - The property generator could not previously produce a day carrying *both*
     spellings, which is the only shape in which the defect was still alive. It
     can now, and `test_the_output_holds_at_most_one_spelling_of_every_field`

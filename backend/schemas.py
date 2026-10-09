@@ -6,11 +6,10 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
-
-import logging
 
 from pydantic import (
     BaseModel,
@@ -1943,7 +1942,7 @@ class PlanDay(CamelModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _drop_stale_snake_twins(cls, data: Any) -> Any:
+    def _drop_stale_snake_twins_validator(cls, data: Any) -> Any:
         """Remove the snake_case twin of a modelled field the day also spells camel.
 
         ``extra="allow"`` is what keeps unmodelled keys from being silently
@@ -1966,19 +1965,7 @@ class PlanDay(CamelModel):
         Only exact snake_case twins of modelled fields are dropped. A key that is
         merely snake_case (``planner_note``) is unmodelled data and survives.
         """
-        if not isinstance(data, dict):
-            return data
-        stale = [
-            name
-            for name, field in cls.model_fields.items()
-            if name in data
-            and (alias := field.alias) is not None
-            and alias != name
-            and alias in data
-        ]
-        if not stale:
-            return data
-        return {k: v for k, v in data.items() if k not in stale}
+        return drop_stale_snake_twins(data)
 
     @field_validator("target_power", "target_heart_rate", mode="before")
     @classmethod
@@ -2110,6 +2097,36 @@ _DURATION_ALIAS_KEYS = frozenset(
 
 
 
+def drop_stale_snake_twins(data: Any) -> Any:
+    """Strip the snake_case twin of any modelled field also spelled camelCase.
+
+    Shared by :meth:`PlanDay._drop_stale_snake_twins_validator` and by
+    :func:`canonical_plan_day`'s fallback, because the guarantee "the output
+    holds at most one spelling of every modelled field" has to survive the one
+    path where validation does *not* run. Found in review on PR #796: without
+    this, a day malformed enough to fail ``PlanDay`` came back with both
+    spellings intact, and the claim was true only of days that validate — which
+    is precisely the kind of "holds unless someone forgot" rule
+    ai-trainer-ops#38 exists to remove.
+
+    Deciding which spelling stays does not depend on validation succeeding, so
+    there is no reason for the two paths to disagree.
+    """
+    if not isinstance(data, dict):
+        return data
+    stale = [
+        name
+        for name, field in PlanDay.model_fields.items()
+        if name in data
+        and (alias := field.alias) is not None
+        and alias != name
+        and alias in data
+    ]
+    if not stale:
+        return data
+    return {k: v for k, v in data.items() if k not in stale}
+
+
 def canonical_plan_day(day: dict) -> dict:
     """Validate + normalise one plan day through :class:`PlanDay`.
 
@@ -2136,7 +2153,10 @@ def canonical_plan_day(day: dict) -> dict:
             "plan day failed PlanDay validation; passing through unchanged",
             exc_info=True,
         )
-        return day
+        # Unchanged except for the stale twins, which are dropped here too so
+        # the one-spelling guarantee does not quietly exclude the days that
+        # need it most (review on PR #796).
+        return drop_stale_snake_twins(day)
 
 def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     """Apply a partial per-day ``update`` onto a canonical ``day``.

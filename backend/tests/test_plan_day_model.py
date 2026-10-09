@@ -169,3 +169,29 @@ def test_the_canonicaliser_survives_a_day_it_cannot_validate():
 
     bad = {"date": {"nested": "not a string"}}
     assert canonical_plan_day(bad) == bad
+
+
+def test_a_day_too_malformed_to_validate_still_loses_its_twins():
+    """The one-spelling guarantee must not exclude the days that need it most.
+
+    A day that fails validation passes through unchanged, so without this it
+    came back carrying both spellings and the guarantee held only for days that
+    validate — exactly the "true unless someone forgot" shape ai-trainer-ops#38
+    exists to remove. Which spelling stays does not depend on validation
+    succeeding. Found in review on PR #796.
+    """
+    from schemas import canonical_plan_day
+
+    bad = {
+        "date": {"nested": "not a string"},
+        "workoutType": "rest",
+        "workout_type": "endurance",
+        "planner_note": "keep me",
+    }
+
+    out = canonical_plan_day(bad)
+
+    assert out["workoutType"] == "rest"
+    assert "workout_type" not in out
+    assert out["planner_note"] == "keep me"
+    assert out["date"] == bad["date"], "the day is otherwise untouched"
