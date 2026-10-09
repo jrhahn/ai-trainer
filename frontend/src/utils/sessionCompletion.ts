@@ -1,5 +1,6 @@
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { sessionKey, sessionSlot } from './planSessions'
+import { isEnteredActivity } from './enteredActivity'
 
 /**
  * Which of a date's sessions count as ridden (#645).
@@ -32,7 +33,12 @@ export function loggedSessionKeys(
     if (session.completed) done.add(sessionKey(session))
   }
 
-  const ridesOnDate = rides.filter((ride) => ride.activityDate === date)
+  // An activity entered with "Add activity" is, by the athlete's own account,
+  // *not* the planned session — they had "Log Completed Workout" for that. It
+  // must not tick the session, by match or by the single-session fallback (#47).
+  const ridesOnDate = rides.filter(
+    (ride) => ride.activityDate === date && !isEnteredActivity(ride)
+  )
   if (ridesOnDate.length === 0) return done
 
   for (const ride of ridesOnDate) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -13,16 +13,18 @@ import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionHero from '../components/SessionHero'
 import { sessionAtSlot, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
+import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
+import AddActivityDialog from '../components/AddActivityDialog'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
-import { setRideLegs } from '../services/user'
+import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 
@@ -242,6 +244,14 @@ function dedupeRideMetricsByActivity(rides: RideMetricPoint[]): RideMetricPoint[
   const unique: RideMetricPoint[] = []
   for (const ride of rides) {
     const identityKey = rideActivityKey(ride)
+    // A hand-entered session carries no start time and a shared name, so the
+    // fuzzy checks below would take two runs on one day for one. Its id is
+    // its whole identity (ai-trainer-ops#47).
+    if (ride.activitySource === LOGGED_SOURCE) {
+      if (!seen.has(identityKey)) unique.push(ride)
+      seen.add(identityKey)
+      continue
+    }
     const visibleKey = rideVisibleFingerprint(ride)
     const duplicateIndex = unique.findIndex((existing) =>
       areNearDuplicateRides(ride, existing)
@@ -669,6 +679,7 @@ export default function DashboardPage() {
   const statusTriggeredRef = useRef(false)
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [addActivityOpen, setAddActivityOpen] = useState(false)
   // Which day the hero is showing.  Owned here rather than in the strip because
   // the hero is the thing that renders it, and the two are siblings (#634).
   // Lazy, not `today`: that is declared further down this component.
@@ -796,6 +807,25 @@ export default function DashboardPage() {
   )
 
   const latestRecentRide = recentRides[0] ?? null
+
+  const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
+  const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
+  const removeEnteredActivity = async (ride: RideMetricPoint) => {
+    const slot = enteredActivitySlot(ride)
+    if (!authToken || slot == null) return
+    if (!window.confirm('Delete this activity? Its training load goes with it.')) return
+    try {
+      await deleteManualActivity(authToken, ride.activityDate, slot)
+      const [rides, metrics] = await Promise.all([
+        fetchRideMetricsHistory(authToken),
+        fetchMetricsHistory(authToken),
+      ])
+      setRideMetricsHistory(rides)
+      setMetricsHistory(metrics)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'The activity could not be deleted.')
+    }
+  }
   const latestRideActivityKey = latestRecentRide ? rideActivityKey(latestRecentRide) : ''
   const latestRideActivityId = latestRecentRide ? rideActivityRefreshId(latestRecentRide) : null
   const latestRideSummaryKey = latestRideActivityKey
@@ -900,6 +930,21 @@ export default function DashboardPage() {
       />
 
       <SeasonCountdown />
+
+      {/* Anything the plan and the sync do not know about: a ride on a rest
+          day, a run instead of the ride, a day the plan never covered (#47).
+          Shown with or without a plan — the athlete without one needs it most. */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setAddActivityOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+        >
+          <Plus size={15} aria-hidden="true" />
+          Add activity
+        </button>
+      </div>
+      <AddActivityDialog open={addActivityOpen} onClose={() => setAddActivityOpen(false)} />
 
       {/* The week is the daily read; the month is a question asked occasionally,
           so it opens over the page instead of sitting under it (#621). */}
@@ -1016,7 +1061,7 @@ export default function DashboardPage() {
           truncating their names. */}
       {recentRides.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent rides</h2>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent activities</h2>
           <div className="space-y-1.5">
             {recentRides.map((ride) => {
               const plan = planForRide(ride, trainingPlan)
@@ -1042,7 +1087,9 @@ export default function DashboardPage() {
                       {ride.sportType.toLowerCase().replace(/_/g, ' ')}
                     </span>
                     <span className="text-xs text-gray-700 font-medium flex-1 truncate">
-                      {ride.activityName ?? 'Activity'}
+                      {enteredActivitySlot(ride) != null
+                        ? 'Entered by you'
+                        : (ride.activityName ?? 'Activity')}
                     </span>
                     {ride.weatherTemperatureC != null && (
                       <span
@@ -1058,6 +1105,16 @@ export default function DashboardPage() {
                         <Clock size={11} />
                         {formatDuration(ride.durationSeconds)}
                       </span>
+                    )}
+                    {enteredActivitySlot(ride) != null && (
+                      <button
+                        type="button"
+                        onClick={() => void removeEnteredActivity(ride)}
+                        aria-label={`Delete the ${ride.sportType} you entered on ${ride.activityDate}`}
+                        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
+                      >
+                        <Trash2 size={13} aria-hidden="true" />
+                      </button>
                     )}
                     {isNew(ride) && (
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">

@@ -23,7 +23,13 @@ const {
   mockRefreshTrainingStatus,
   mockSetRideLegs,
   mockUseImportProgress,
+  mockDeleteManualActivity,
+  mockFetchRides,
+  mockFetchMetrics,
 } = vi.hoisted(() => ({
+  mockDeleteManualActivity: vi.fn(),
+  mockFetchRides: vi.fn(),
+  mockFetchMetrics: vi.fn(),
   mockProcessPendingFeedbacks: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
   mockRefreshTrainingStatus: vi.fn(),
@@ -39,6 +45,10 @@ vi.mock('../services/ai', () => ({
 
 vi.mock('../services/user', () => ({
   setRideLegs: mockSetRideLegs,
+  deleteManualActivity: mockDeleteManualActivity,
+  fetchRideMetricsHistory: mockFetchRides,
+  fetchMetricsHistory: mockFetchMetrics,
+  addManualActivity: vi.fn(),
 }))
 
 vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
@@ -188,7 +198,7 @@ beforeEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// Recent rides section
+// Recent activities section
 // ---------------------------------------------------------------------------
 
 describe('DashboardPage — recent rides', () => {
@@ -772,24 +782,24 @@ describe('DashboardPage — Activities section layout', () => {
     // the old link check: the plan reached the dashboard *and* is readable there.
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Endurance') }))
     expect(await screen.findByRole('heading', { name: 'Easy Z2' })).toBeInTheDocument()
-    // ...and no empty "Recent rides" shell above it.
-    expect(screen.queryByText('Recent rides')).not.toBeInTheDocument()
+    // ...and no empty "Recent activities" shell above it.
+    expect(screen.queryByText('Recent activities')).not.toBeInTheDocument()
   })
 
   it('renders nothing when there are no rides and no plan', async () => {
     setupStore({ rideMetricsHistory: [], trainingPlan: [] })
     renderDashboard()
     await waitFor(() => {
-      expect(screen.queryByText('Recent rides')).not.toBeInTheDocument()
+      expect(screen.queryByText('Recent activities')).not.toBeInTheDocument()
     })
   })
 
-  it('shows the recent-rides header when rides exist', async () => {
+  it('shows the recent-activities header when activities exist', async () => {
     setupStore({
       rideMetricsHistory: [makeRide({ activityDate: yesterday })],
     })
     renderDashboard()
-    expect(await screen.findByText('Recent rides')).toBeInTheDocument()
+    expect(await screen.findByText('Recent activities')).toBeInTheDocument()
   })
 })
 
@@ -1653,5 +1663,84 @@ describe("DashboardPage — Today's status strip", () => {
     expect(screen.queryByText(/^Today:/)).not.toBeInTheDocument()
     expect(screen.queryByText(/^Tomorrow:/)).not.toBeInTheDocument()
     expect(screen.queryByText('On track')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Activities the athlete enters by hand (ai-trainer-ops#47)
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — entered activities', () => {
+  const day = formatLocalDate(new Date())
+
+  function entered(slot: number, overrides: Partial<RideMetricPoint> = {}): RideMetricPoint {
+    return makeRide({
+      activityDate: day,
+      sportType: 'running',
+      activityName: 'Logged session',
+      activitySource: 'logged',
+      externalActivityId: `${day}#${slot}`,
+      durationSeconds: 2700,
+      ...overrides,
+    })
+  }
+
+  beforeEach(() => {
+    mockFetchRides.mockResolvedValue([])
+    mockFetchMetrics.mockResolvedValue([])
+    mockDeleteManualActivity.mockResolvedValue(undefined)
+  })
+
+  it('offers "Add activity" even without a plan', async () => {
+    setupStore({ trainingPlan: [] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Add activity/ }))
+    expect(screen.getByRole('heading', { name: 'Add activity' })).toBeInTheDocument()
+  })
+
+  it('shows two runs entered on one day as two activities', () => {
+    setupStore({ rideMetricsHistory: [entered(100), entered(101)] })
+    renderDashboard()
+    expect(screen.getAllByText('Entered by you')).toHaveLength(2)
+  })
+
+  it('deletes an entered activity and refreshes the list', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: /Delete the running you entered/ }))
+
+    await waitFor(() => expect(mockDeleteManualActivity).toHaveBeenCalledWith('test-token', day, 100))
+    await waitFor(() => expect(useAppStore.getState().rideMetricsHistory).toEqual([]))
+  })
+
+  it('keeps the activity when the deletion is not confirmed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Delete the running you entered/ }))
+    expect(mockDeleteManualActivity).not.toHaveBeenCalled()
+  })
+
+  it('says so when the deletion fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockDeleteManualActivity.mockRejectedValueOnce(new Error('No such entered activity.'))
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Delete the running you entered/ }))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('No such entered activity.'))
+  })
+
+  it('offers no delete for a recording or a planned session\'s log', () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: day, activityName: 'Morning Ride' }),
+        entered(0, { externalActivityId: `${day}#0` }),
+      ],
+    })
+    renderDashboard()
+    expect(screen.queryByRole('button', { name: /Delete the/ })).not.toBeInTheDocument()
   })
 })

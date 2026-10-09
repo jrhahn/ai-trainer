@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Add activity" on the dashboard** (ai-trainer-ops#47) —
+  `AddActivityDialog.tsx`, `DashboardPage.tsx`, `utils/enteredActivity.ts`. It
+  asks for five things: the day, the sport (Ride / Run / Strength), minutes,
+  effort 1–5 and an optional note. It is shown with or without a plan.
+  Entries appear under "Recent activities" (renamed from "Recent rides") as
+  "Entered by you", with a delete button, and never tick a planned session.
+  The dashboard no longer merges two entries on one day. A browser test in the
+  stubbed E2E stack covers the whole loop.
 - **Onboarding asks for a Gemini key when one is needed** (ai-trainer-ops#41) —
   `src/pages/OnboardingPage.tsx`, `src/services/user.ts`,
   `src/pages/OnboardingPage.test.tsx`, `e2e/keyless/key-step.spec.ts`.

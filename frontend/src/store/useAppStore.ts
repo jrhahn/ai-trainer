@@ -276,6 +276,8 @@ export interface AthleteMetricSnapshot {
 export interface RideMetricPoint {
   stravaActivityId: number
   externalActivityId?: string | null
+  /** Where the row came from; `logged` is a session the athlete entered (#47). */
+  activitySource?: string | null
   activityName?: string | null
   activityStartDatetime?: string | null
   activityDate: string

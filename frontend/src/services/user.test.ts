@@ -39,6 +39,8 @@ import {
   dismissValidationExperiment,
   deleteValidationExperiment,
   deleteCurrentUser,
+  addManualActivity,
+  deleteManualActivity,
   exportAccountData,
   recalculateMetrics,
   estimateFTP,
@@ -1169,3 +1171,22 @@ describe('athlete inquiries (#506)', () => {
     })
   })
 })
+
+describe('manual activities (ai-trainer-ops#47)', () => {
+  it('POSTs an entered activity', async () => {
+    mockApiFetch.mockResolvedValue({ date: '2026-10-08', slot: 100, sport: 'running' })
+    const entry = { date: '2026-10-08', sport: 'running' as const, durationMinutes: 45, perceivedEffort: 3 as const, notes: '' }
+
+    const result = await addManualActivity('tok', entry)
+
+    expect(result.slot).toBe(100)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/activities', { token: 'tok', method: 'POST', body: entry })
+  })
+
+  it('DELETEs one entered activity by date and slot', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    await deleteManualActivity('tok', '2026-10-08', 101)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/activities/2026-10-08/101', { token: 'tok', method: 'DELETE' })
+  })
+})
+

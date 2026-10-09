@@ -19,7 +19,7 @@ import crud
 import models
 from auth import hash_password
 from services import logged_sessions, metrics_service
-from services.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
+from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from services.training_load import (
     LOAD_SOURCE_DURATION,
     LOAD_SOURCE_HEART_RATE,
@@ -302,6 +302,29 @@ async def test_a_two_a_day_keeps_both_sessions():
     rows = await _rows(user_id)
     assert len(rows) == 2
     assert {r.sport_type for r in rows} == {SPORT_STRENGTH, SPORT_CYCLING}
+
+
+@pytest.mark.asyncio
+async def test_a_two_a_day_in_one_sport_keeps_both_sessions():
+    """Two runs on one day are two sessions, not one near-duplicate.
+
+    Logged sessions share a name and carry no start time, so the importer's
+    fuzzy match used to take the second for the first and overwrite it
+    (ai-trainer-ops#47). Different sports never collided, which is why the
+    test above did not see it.
+    """
+    user_id = await _create_user("two-runs@example.com")
+    await _log_session(user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=0)
+    await _log_session(user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=1)
+
+    await _reconcile(user_id)
+    rows = await _rows(user_id)
+    assert len(rows) == 2
+    assert all(r.sport_type == SPORT_RUNNING for r in rows)
+
+
+def test_the_exact_identity_sources_name_the_logged_source():
+    assert logged_sessions.LOGGED_SOURCE in crud.EXACT_IDENTITY_SOURCES
 
 
 @pytest.mark.asyncio

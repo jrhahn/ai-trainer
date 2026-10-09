@@ -1039,6 +1039,40 @@ export async function fetchMetricsHistory(token: string): Promise<AthleteMetricS
   return response.snapshots
 }
 
+/** A session entered by hand, outside any plan day (ai-trainer-ops#47). */
+export interface ManualActivityInput {
+  date: string
+  sport: 'cycling' | 'running' | 'strength'
+  durationMinutes: number
+  perceivedEffort: 1 | 2 | 3 | 4 | 5
+  notes?: string
+}
+
+export interface ManualActivityCreated {
+  date: string
+  slot: number
+  sport: string
+}
+
+export async function addManualActivity(
+  token: string,
+  activity: ManualActivityInput
+): Promise<ManualActivityCreated> {
+  return apiFetch<ManualActivityCreated>('/users/me/activities', {
+    token,
+    method: 'POST',
+    body: activity,
+  })
+}
+
+export async function deleteManualActivity(
+  token: string,
+  date: string,
+  slot: number
+): Promise<void> {
+  await apiFetch(`/users/me/activities/${date}/${slot}`, { token, method: 'DELETE' })
+}
+
 export async function fetchRideMetricsHistory(token: string): Promise<RideMetricPoint[]> {
   const response = await apiFetch<{ rides: RideMetricPoint[] }>(
     '/users/me/ride-metrics-history',

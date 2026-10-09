@@ -117,6 +117,31 @@ def asserts_a_session(log: models.WorkoutLog) -> bool:
     return _duration_seconds(log) > 0
 
 
+# Sessions entered outside any plan day live in a slot range of their own
+# (ai-trainer-ops#47). A planned session's slot is its position on the plan day
+# (0, 1, … for a two-a-day). If an entered ride took slot 1 and the next plan put
+# a second session on that day, the plan would read the athlete's ride as
+# feedback on a session they never saw. No plan writes a day with a hundred.
+UNPLANNED_SLOT_BASE = 100
+
+
+def is_unplanned_slot(slot: int | None) -> bool:
+    return int(slot or 0) >= UNPLANNED_SLOT_BASE
+
+
+def is_unplanned_entry(metric: models.RideMetric) -> bool:
+    """A load row for a session the athlete entered as *not* the plan's (#47).
+
+    It must never be matched to a plan session: the athlete chose "Add
+    activity" over "Log Completed Workout", which is the statement that this
+    was something else.
+    """
+    if not is_logged_placeholder(metric):
+        return False
+    _, _, slot = str(getattr(metric, "external_activity_id", "") or "").partition("#")
+    return slot.isdigit() and is_unplanned_slot(int(slot))
+
+
 def is_logged_placeholder(metric: models.RideMetric) -> bool:
     """Whether this row stands in for a session nobody recorded."""
     return getattr(metric, "activity_source", None) == LOGGED_SOURCE

@@ -14,6 +14,7 @@ import models
 import schemas
 from services import ai_service
 from services import coach_summary
+from services import logged_sessions
 from services.activity_identity import (
     SPORT_CYCLING,
     activities_form_one_session,
@@ -640,7 +641,13 @@ async def apply_ride_plan_matches(
         plan_day = day_sessions[0] if day_sessions else None
         display_sessions = display_sessions_by_date.get(activity_date, [])
         display_plan_day = display_sessions[0] if display_sessions else None
-        date_rides = await crud.get_ride_metrics_by_date(db, user_id, activity_date)
+        # A session the athlete entered as *not* the plan's is never matched
+        # to it (#47) — a run entered on a ride day must not tick the ride.
+        date_rides = [
+            ride
+            for ride in await crud.get_ride_metrics_by_date(db, user_id, activity_date)
+            if not logged_sessions.is_unplanned_entry(ride)
+        ]
         if not date_rides:
             continue
 

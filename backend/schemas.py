@@ -460,6 +460,30 @@ class WorkoutFeedbackSchema(CamelModel):
     completed_at: str
 
 
+class ManualActivityRequest(CamelModel):
+    """A session the athlete did and enters by hand (ai-trainer-ops#47).
+
+    Not tied to a plan day: a ride on a rest day, a run when a ride was planned,
+    a second session, a day the plan never covered. The same fields as the log
+    of a planned session minus everything that needs a device (power), because
+    the athlete without a recording is exactly who this is for.
+    """
+
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    sport: str
+    duration_minutes: int = Field(ge=1, le=24 * 60)
+    # The same 1–5 scale the log form uses and the load ladder reads (#712).
+    perceived_effort: int = Field(ge=1, le=5)
+    average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    notes: str = Field(default="", max_length=2000)
+
+
+class ManualActivityResponse(CamelModel):
+    date: str
+    slot: int
+    sport: str
+
+
 class StrengthSetSchema(CamelModel):
     """One set of one exercise, as performed (#714).
 
@@ -2233,6 +2257,11 @@ class FitBulkUploadResponse(CamelModel):
 # ---------------------------------------------------------------------------
 
 
+# ``logged_sessions.LOGGED_SOURCE``; a literal because schemas must not import
+# services that import schemas. Pinned equal by a test.
+LOGGED_ACTIVITY_SOURCE = "logged"
+
+
 class RideMetricSchema(CamelModel):
     strava_activity_id: int
     activity_source: str = "strava"
@@ -2285,6 +2314,11 @@ class RideMetricSchema(CamelModel):
         copy of it in TypeScript would drift from the one the prompts and the
         persistence gate use.
         """
+        # A session the athlete logged by hand has no streams for a classifier
+        # to be unsure about — and they already said what it was, by entering
+        # it (#47). Asking "Recovery? Tempo? VO2max?" about it is noise.
+        if self.activity_source == LOGGED_ACTIVITY_SOURCE:
+            return False
         return ride_purpose_question.question_is_open(
             ride_purpose=self.ride_purpose,
             classification_confidence=self.classification_confidence,
