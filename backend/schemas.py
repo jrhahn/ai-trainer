@@ -6,6 +6,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
@@ -59,6 +60,9 @@ RESTING_HR_MAX_BPM = 120
 # per mile pasted into a per-kilometre field.
 THRESHOLD_PACE_MIN_SECONDS_PER_KM = 120.0
 THRESHOLD_PACE_MAX_SECONDS_PER_KM = 900.0
+
+
+logger = logging.getLogger(__name__)
 
 
 def _to_camel(name: str) -> str:
@@ -1936,6 +1940,33 @@ class PlanDay(CamelModel):
     # overwrites; see services/plan_pipeline.py. Clients cannot set this.
     source: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_stale_snake_twins_validator(cls, data: Any) -> Any:
+        """Remove the snake_case twin of a modelled field the day also spells camel.
+
+        ``extra="allow"`` is what keeps unmodelled keys from being silently
+        dropped, and it has to stay. But a snake_case spelling of a *modelled*
+        field is not unmodelled data — it is a second name for a field this model
+        already owns, and when both names are present only one of them can win.
+        Pydantic resolves that to the alias (camelCase), which this keeps; the
+        other key then survives as an "extra" saying something the day no longer
+        means. ``{"workoutType": "rest", "workout_type": "endurance"}`` validated
+        and dumped straight back out as ``workoutType="rest"`` *and*
+        ``workout_type="endurance"``, so which one a consumer believed depended on
+        the order it read them in (ai-trainer-ops#29, #38).
+
+        That is why ``_to_canonical_day`` was not canonical for the one input
+        shape where canonicalisation matters most. Dropping the twin here fixes it
+        for every writer at once rather than at each gate that remembers to.
+        Camel precedence is deliberately *today's* resolution, so this removes a
+        stale key and changes no value.
+
+        Only exact snake_case twins of modelled fields are dropped. A key that is
+        merely snake_case (``planner_note``) is unmodelled data and survives.
+        """
+        return drop_stale_snake_twins(data)
+
     @field_validator("target_power", "target_heart_rate", mode="before")
     @classmethod
     def _coerce_ranges(cls, value: Any) -> Any:
@@ -2062,6 +2093,68 @@ TrainingDaySchema = PlanDay
 _DURATION_ALIAS_KEYS = frozenset(
     {"durationMinutes", "durationMinMinutes", "durationMaxMinutes"}
 )
+
+
+def drop_stale_snake_twins(data: Any) -> Any:
+    """Strip the snake_case twin of any modelled field also spelled camelCase.
+
+    Shared by :meth:`PlanDay._drop_stale_snake_twins_validator` and by
+    :func:`canonical_plan_day`'s fallback, because the guarantee "the output
+    holds at most one spelling of every modelled field" has to survive the one
+    path where validation does *not* run. Found in review on PR #796: without
+    this, a day malformed enough to fail ``PlanDay`` came back with both
+    spellings intact, and the claim was true only of days that validate — which
+    is precisely the kind of "holds unless someone forgot" rule
+    ai-trainer-ops#38 exists to remove.
+
+    Deciding which spelling stays does not depend on validation succeeding, so
+    there is no reason for the two paths to disagree.
+    """
+    if not isinstance(data, dict):
+        return data
+    stale = [
+        name
+        for name, field in PlanDay.model_fields.items()
+        if name in data
+        and (alias := field.alias) is not None
+        and alias != name
+        and alias in data
+    ]
+    if not stale:
+        return data
+    return {k: v for k, v in data.items() if k not in stale}
+
+
+def canonical_plan_day(day: dict) -> dict:
+    """Validate + normalise one plan day through :class:`PlanDay`.
+
+    The single canonicaliser. It guarantees a coherent duration (scalar vs
+    min/max window), holds at most one spelling of every modelled field, and —
+    because ``PlanDay`` uses ``extra="allow"`` — preserves any unmodelled key
+    rather than dropping it. A day that fails validation (rare malformed
+    legacy/LLM data) passes through unchanged and is logged, so one bad day
+    never aborts a whole plan write (#422 follow-up).
+
+    It lives here rather than in ``plan_pipeline`` so the constraint gate can
+    reach it too: ``services.plan_constraints`` must not import the pipeline,
+    and a second copy of this would be a second answer to "what is canonical"
+    (ai-trainer-ops#38).
+    """
+    if not isinstance(day, dict):
+        return day
+    try:
+        return PlanDay.model_validate(day).model_dump(
+            by_alias=True, exclude_none=True, mode="json"
+        )
+    except Exception:  # noqa: BLE001 — never let one bad day block a write
+        logger.warning(
+            "plan day failed PlanDay validation; passing through unchanged",
+            exc_info=True,
+        )
+        # Unchanged except for the stale twins, which are dropped here too so
+        # the one-spelling guarantee does not quietly exclude the days that
+        # need it most (review on PR #796).
+        return drop_stale_snake_twins(day)
 
 
 def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import schemas
 from services.plan_constraints import (
     blocked_dates,
     day_violates_constraint,
@@ -78,14 +79,28 @@ def test_sanitize_converts_violating_day_to_rest():
 
 
 def test_sanitize_preserves_non_violating_days():
+    """A day on an unconstrained date keeps its content.
+
+    Compared canonically, because the gate now normalises every day it returns
+    (ai-trainer-ops#38): "untouched" is a statement about what the day *says*,
+    not about which spelling it arrived in.
+    """
     plan = [_day("2026-06-25"), _day("2026-06-27")]
     result = sanitize_plan_for_constraints(plan, [_constraint("2026-06-26")])
-    assert result == plan
+    assert result == [schemas.canonical_plan_day(day) for day in plan]
 
 
 def test_sanitize_empty_constraints_returns_plan_unchanged():
+    """No constraints means no *decision* — but the output is still canonical.
+
+    This used to assert ``is plan``, which pinned an optimisation rather than a
+    behaviour. The gate canonicalises on every path on purpose: an output shape
+    that depended on whether the athlete happens to have a constraint is exactly
+    the conditional invariant that let #29 happen in the first place.
+    """
     plan = [_day("2026-06-26")]
-    assert sanitize_plan_for_constraints(plan, []) is plan
+    result = sanitize_plan_for_constraints(plan, [])
+    assert result == [schemas.canonical_plan_day(day) for day in plan]
 
 
 def test_sanitize_preserves_date_field_on_rest_day():
@@ -161,7 +176,7 @@ def test_sanitize_leaves_satisfying_required_day_untouched():
         "title": "Long ride",
     }
     result = sanitize_plan_for_constraints([day], [_required("2026-07-04")])
-    assert result[0] == day
+    assert result[0] == schemas.canonical_plan_day(day)
 
 
 def test_no_training_takes_precedence_over_required_on_same_day():

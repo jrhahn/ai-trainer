@@ -164,8 +164,28 @@ def _required_workout_satisfied_dates(
 
 
 def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> list[dict]:
+    """Apply the athlete's hard constraints, returning canonical days.
+
+    Every day comes back through :func:`schemas.canonical_plan_day`, so the
+    output holds **at most one spelling of each modelled field** — not two that
+    happen to agree (ai-trainer-ops#38). The distinction is the point: agreement
+    was maintained by this module remembering to drop each twin it wrote, which
+    is a rule a future writer can forget and which #29 found three modules had
+    already forgotten. Absence is maintained by construction.
+
+    This is not a second opinion about what a day means. ``PlanDay`` is the
+    persist gate the pipeline already routes every write through, before and
+    after this function; canonicalising here only means the gate's own output
+    satisfies the property for *any* caller, including the property tests and a
+    future one that forgets to canonicalise first.
+
+    The dual-spelling readers above stay, and are still reachable:
+    ``day_violates_constraint`` is called on raw days by the pipeline
+    (``_preserve_today``, the commitment filter) and
+    ``filter_plan_updates_for_constraints`` on raw updates from the router.
+    """
     if not constraints:
-        return plan
+        return [schemas.canonical_plan_day(day) for day in plan]
     # Which dates already have a qualifying session, and which session on a date
     # gets coerced when none does — the first (lowest-slot) one, so the required
     # workout lands once per day rather than once per session.
@@ -224,7 +244,7 @@ def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> 
             result.append(_coerce_day_to_required(day, spec))
         else:
             result.append(day)
-    return result
+    return [schemas.canonical_plan_day(day) for day in result]
 
 
 def filter_plan_updates_for_constraints(
