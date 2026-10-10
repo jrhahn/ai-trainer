@@ -33,8 +33,23 @@ def test_an_unknown_model_is_not_guessed_at():
     assert cost_report.cost_of(usage) is None
 
     text = cost_report.render_markdown([usage], 30)
-    assert "_No priced, attributed calls in this window._" in text
     assert "- `gpt-4o`: 1,000,000 input, 0 output tokens" in text
+
+
+def test_a_user_with_only_unpriced_calls_is_still_active():
+    usages = [
+        Usage("byok", "api:ask-trainer", "gpt-4o", 1, 1_000_000, 0),
+        Usage("coach", "api:ask-trainer", COACH, 1, 0, 400_000),  # $1.00
+    ]
+
+    text = cost_report.render_markdown(usages, 30)
+
+    assert "2 active users. Median **$0.5000**, mean $0.5000" in text
+    assert "1 of them made calls on an unpriced model" in text
+
+
+def test_an_empty_window_says_so():
+    assert "_No attributed calls in this window._" in cost_report.render_markdown([], 30)
 
 
 def test_median_and_most_expensive_user_are_split_by_bucket():

@@ -105,6 +105,7 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
     per_user: dict[str, dict[str, float]] = defaultdict(lambda: dict.fromkeys(BUCKETS, 0.0))
     per_source: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0, 0.0])
     unpriced: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    understated: set[str] = set()
     unattributed = 0.0
     for usage in usages:
         cost = cost_of(usage)
@@ -112,19 +113,25 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
         row[0] += usage.calls
         row[1] += usage.input_tokens
         row[2] += usage.output_tokens
+        if usage.user_id is not None:
+            # Touched even for an unpriced call: such a user is active, and
+            # leaving them out would shrink the denominator instead.
+            split = per_user[usage.user_id]
         if cost is None:
             unpriced[usage.model][0] += usage.input_tokens
             unpriced[usage.model][1] += usage.output_tokens
+            if usage.user_id is not None:
+                understated.add(usage.user_id)
             continue
         row[3] += cost
         if usage.user_id is None:
             unattributed += cost
         else:
-            per_user[usage.user_id][bucket_of(usage.source)] += cost
+            split[bucket_of(usage.source)] += cost
 
     lines = [f"## LLM cost per active user, last {days} days", ""]
     if not per_user:
-        lines.append("_No priced, attributed calls in this window._")
+        lines.append("_No attributed calls in this window._")
     else:
         totals = {user: sum(split.values()) for user, split in per_user.items()}
         top = max(totals, key=totals.__getitem__)
@@ -133,6 +140,13 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
             f"{n} active users. Median **${statistics.median(totals.values()):.4f}**, "
             f"mean ${sum(totals.values()) / n:.4f}, "
             f"most expensive **${totals[top]:.4f}**.",
+        ]
+        if understated:
+            lines.append(
+                f"{len(understated)} of them made calls on an unpriced model, "
+                "so their cost is understated (see below)."
+            )
+        lines += [
             "",
             "| | mean per active user | most expensive user |",
             "|---|---|---|",
