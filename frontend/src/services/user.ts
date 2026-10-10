@@ -889,9 +889,11 @@ export interface AthletePredictionsResult {
 }
 
 export async function fetchAthletePredictions(
-  token: string
+  token: string,
+  { includeResolved = false }: { includeResolved?: boolean } = {}
 ): Promise<AthletePredictionsResult> {
-  return apiFetch<AthletePredictionsResult>('/users/me/predictions', { token })
+  const query = includeResolved ? '?includeResolved=true' : ''
+  return apiFetch<AthletePredictionsResult>(`/users/me/predictions${query}`, { token })
 }
 
 export async function updateAthletePrediction(

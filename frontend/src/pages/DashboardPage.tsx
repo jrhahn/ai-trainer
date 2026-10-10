@@ -25,6 +25,7 @@ import { WeatherIcon } from '../components/WeatherBadge'
 import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
+import PredictionScoreboard from '../components/PredictionScoreboard'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
 import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, fetchWorkoutLogs, setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
@@ -1265,6 +1266,10 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* How often the coach's checkable predictions came true, misses
+          included (ai-trainer-ops#16). Renders nothing until one is scored. */}
+      <PredictionScoreboard />
 
       {/* Everything below here is expert mode, gathered in one place so turning
           it on adds a block at the bottom rather than pushing the coach down. */}

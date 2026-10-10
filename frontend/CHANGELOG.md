@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The coach's track record on the dashboard** (ai-trainer-ops#16) —
+  `PredictionScoreboard.tsx`, `DashboardPage.tsx`. "Your coach made 7 checkable
+  predictions about you. 5 came true (71%)." Below that, the predictions it got
+  wrong sit behind a native `<details>`, each with what was expected and what
+  happened instead. The misses are the point: a hit rate nobody can check is a
+  claim. The card renders nothing until a prediction has been scored. It shows
+  no confidence figure, because what `confidence` means is still open
+  (ai-trainer-ops#39 Q4), and a hit rate means the same under either answer.
+  `fetchAthletePredictions` takes `includeResolved`; before this the client
+  only ever asked for pending predictions.
+
 ### Fixed
 
 - **Settings card headings sit one level below their section** (ai-trainer-ops#60) —
