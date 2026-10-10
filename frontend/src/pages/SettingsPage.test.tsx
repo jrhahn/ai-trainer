@@ -910,6 +910,41 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     expect(screen.queryByRole('button', { name: /Confirm & Recalculate/ })).toBeNull()
   })
 
+  it('estimates max heart rate from age and saves the estimate', async () => {
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 35'), '5')
+    expect(screen.queryByText(/Estimated Max HR/)).toBeNull()
+    await userEvent.type(screen.getByPlaceholderText('e.g. 35'), '0')
+    expect(screen.getByText('Estimated Max HR: 170 bpm')).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText(/default: 60/), '52')
+    await userEvent.click(screen.getByRole('button', { name: 'Save heart rate' }))
+
+    await waitFor(() =>
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', {
+        maxHeartRate: 170,
+        restingHeartRate: 52,
+      })
+    )
+  })
+
+  it('recalculates with an FTP corrected in the confirm panel', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+    const confirmInput = await screen.findByDisplayValue('248')
+    await userEvent.clear(confirmInput)
+    await userEvent.type(confirmInput, '255')
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/ }))
+
+    await waitFor(() => expect(mockUpdateMetrics).toHaveBeenCalledWith({ currentFTP: 255 }))
+    confirmSpy.mockRestore()
+  })
+
   it('saves heart rate without estimating FTP outside Expert mode', async () => {
     setup()
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import MotivationModelSettings from './MotivationModelSettings'
@@ -246,6 +246,23 @@ describe('MotivationModelSettings', () => {
       expect(mockUpdate).toHaveBeenCalled()
     })
     expect(mockUpdate.mock.calls[0][1].constraints).toEqual([])
+  })
+
+  it('saves a weight moved on its slider', async () => {
+    renderComponent()
+
+    const slider = await screen.findByLabelText('Enjoyment weight')
+    fireEvent.change(slider, { target: { value: '60' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'test-token',
+        expect.objectContaining({
+          utilityWeights: expect.objectContaining({ enjoyment: 0.6 }),
+        })
+      )
+    )
   })
 
   it('pins a weight so learning leaves it alone', async () => {
