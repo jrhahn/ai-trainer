@@ -479,6 +479,10 @@ class ManualActivityRequest(CamelModel):
     # The same 1–5 scale the log form uses and the load ladder reads (#712).
     perceived_effort: int = Field(ge=1, le=5)
     average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    # Optional, and only meaningful for the sports that cover ground. Kilometres
+    # because that is what the athlete types; stored as given, never derived from
+    # a pace. 1000 km is a bound on typos, not on ambition.
+    distance_km: Optional[float] = Field(default=None, gt=0, le=1000)
     notes: str = Field(default="", max_length=2000)
 
 
@@ -490,6 +494,10 @@ class ManualActivityUpdate(CamelModel):
     duration_minutes: int = Field(ge=1, le=24 * 60)
     perceived_effort: int = Field(ge=1, le=5)
     average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    # Optional, and only meaningful for the sports that cover ground. Kilometres
+    # because that is what the athlete types; stored as given, never derived from
+    # a pace. 1000 km is a bound on typos, not on ambition.
+    distance_km: Optional[float] = Field(default=None, gt=0, le=1000)
     notes: str = Field(default="", max_length=2000)
 
 

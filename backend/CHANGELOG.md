@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An entered activity can say how far it went** (ai-trainer-ops#47) —
+  `workout_logs.distance_km` (migration `20261010_000001`), accepted by
+  `POST`/`PUT /users/me/activities` and reported by `GET /users/me/workouts`.
+  Optional, kilometres, and only meaningful for the sports that cover ground.
+
+  **Nullable with no backfill, because "they did not say" is not 0 km.** A
+  strength session has no distance at all, and a run left blank must not read as
+  a run of zero kilometres — that is the #579 confusion (absence treated as a
+  measured zero) in another column. The `PUT` leaves an omitted distance alone
+  and clears it only on an explicit `null`, the same rule the heart rate got
+  after review found it being blanked (PR #795). `crud.upsert_workout_log` takes
+  a `_KEEP` sentinel rather than defaulting to `None`: three of its four callers
+  predate the column and would otherwise have wiped a distance each time they
+  re-saved a log.
+
+  - **An entered run's distance reaches the running exposure.** Weekly mileage
+    is read from `RideMetric.perf_signals["distance_m"]`, which is built from a
+    *stream* — so an athlete who enters their runs by hand had **no running
+    exposure at all**, and the durability ceiling (#717) handed them beginner
+    figures however much they ran. That is the #745 failure one layer along: a
+    measurement the app needs, unreachable for the athlete without a device.
+    `logged_sessions.run_exposure_signals` writes a minimal envelope, marked as
+    a run so `run_model.is_run_signals` keeps the cycling inference engine out of
+    it (#711).
+  - **It does not price the session, and that is load-bearing.**
+    `run_model.mean_gap_speed` will divide this distance by this duration, and
+    the pace rung would then treat a raw average pace as a grade-adjusted one —
+    the conversion #745 refused when it declined to offer a logged *average
+    power* to the power rung. It is safe only because the pace rung is consulted
+    for rows already priced by pace and a logged session is priced by sRPE or
+    duration; `test_an_entered_distance_never_reprices_the_session` is what keeps
+    that true.
+  - **No `speed_curve`.** One distance and one duration are a point, not an
+    envelope, and Critical Speed needs a curve. An athlete who enters runs gets
+    mileage, not a CS estimate, which is the honest result.
+
 ### Fixed
 
 - **A plan day can no longer say two different things about itself**

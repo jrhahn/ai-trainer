@@ -468,6 +468,11 @@ class WorkoutLog(Base):
     average_heart_rate: Mapped[int | None] = mapped_column(Integer)
     peak_power: Mapped[int | None] = mapped_column(Integer)
     perceived_effort: Mapped[int] = mapped_column(Integer, nullable=False)
+    # How far the session went, when the athlete said (ai-trainer-ops#47).
+    # Nullable because "they did not say" is not 0 km: a strength session has no
+    # distance at all, and a run left blank must not read as a run of zero
+    # kilometres, which is the #579 confusion in another column.
+    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     completed_at: Mapped[str] = mapped_column(String(50), nullable=False)
     sport_type: Mapped[str] = mapped_column(

@@ -74,6 +74,10 @@ describe('AddActivityDialog (ai-trainer-ops#47)', () => {
       durationMinutes: 45,
       perceivedEffort: 4,
       notes: 'hills',
+      // Explicitly null rather than omitted: the athlete left it blank for a
+      // sport that *has* a distance, which is "none", not "say nothing"
+      // (ai-trainer-ops#47).
+      distanceKm: null,
     })
     expect(useAppStore.getState().rideMetricsHistory).toHaveLength(1)
     expect(mockMetrics).toHaveBeenCalled()
@@ -129,6 +133,42 @@ describe('AddActivityDialog (ai-trainer-ops#47)', () => {
     expect(screen.getByLabelText('Duration (minutes)')).toBeInTheDocument()
   })
 
+  it('offers no distance for a strength session, and sends no key for one', async () => {
+    // A gym session has no distance, and offering the field invites a number
+    // that means nothing — the strength model reads sets, reps and load (#714).
+    // Omitting the key rather than sending null also means a sport correction
+    // cannot blank a distance the entry still has (ai-trainer-ops#47).
+    mockAdd.mockResolvedValue({ date: today, slot: 100, sport: 'strength' })
+    render(<AddActivityDialog open onClose={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: /Strength/ }))
+
+    expect(screen.queryByLabelText(/Distance/)).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Duration (minutes)'), '50')
+    await user.click(screen.getByRole('button', { name: /^3 of 5/ }))
+    await user.click(screen.getByRole('button', { name: 'Save activity' }))
+
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled())
+    expect(mockAdd.mock.calls[0][1]).not.toHaveProperty('distanceKm')
+  })
+
+  it('sends the distance the athlete typed for a run', async () => {
+    mockAdd.mockResolvedValue({ date: today, slot: 100, sport: 'running' })
+    render(<AddActivityDialog open onClose={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: /Run/ }))
+    await user.type(screen.getByLabelText('Duration (minutes)'), '45')
+    await user.type(screen.getByLabelText(/Distance/), '10.5')
+    await user.click(screen.getByRole('button', { name: /^3 of 5/ }))
+    await user.click(screen.getByRole('button', { name: 'Save activity' }))
+
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled())
+    expect(mockAdd.mock.calls[0][1]).toMatchObject({ distanceKm: 10.5 })
+  })
+
   it('corrects an entry in place: prefilled, the day fixed, no upload', async () => {
     mockUpdate.mockResolvedValue({ date: '2026-10-05', slot: 101, sport: 'running' })
     const onClose = vi.fn()
@@ -136,7 +176,15 @@ describe('AddActivityDialog (ai-trainer-ops#47)', () => {
       <AddActivityDialog
         open
         onClose={onClose}
-        editing={{ date: '2026-10-05', slot: 101, sport: 'running', durationMinutes: 40, perceivedEffort: 2, notes: 'easy' }}
+        editing={{
+          date: '2026-10-05',
+          slot: 101,
+          sport: 'running',
+          durationMinutes: 40,
+          perceivedEffort: 2,
+          distanceKm: '8.2',
+          notes: 'easy',
+        }}
       />
     )
     const user = userEvent.setup()
@@ -152,8 +200,15 @@ describe('AddActivityDialog (ai-trainer-ops#47)', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+    // The prefilled distance comes back unchanged, which is what makes a
+    // correction to the duration leave the distance alone.
+    expect(screen.getByLabelText(/Distance/)).toHaveValue(8.2)
     expect(mockUpdate).toHaveBeenCalledWith('tok', '2026-10-05', 101, {
-      sport: 'running', durationMinutes: 55, perceivedEffort: 2, notes: 'easy',
+      sport: 'running',
+      durationMinutes: 55,
+      perceivedEffort: 2,
+      notes: 'easy',
+      distanceKm: 8.2,
     })
     expect(mockAdd).not.toHaveBeenCalled()
   })

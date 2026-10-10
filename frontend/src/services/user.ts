@@ -1045,6 +1045,10 @@ export interface ManualActivityInput {
   sport: 'cycling' | 'running' | 'strength'
   durationMinutes: number
   perceivedEffort: 1 | 2 | 3 | 4 | 5
+  /** Optional, and only offered for the sports that cover ground
+   *  (ai-trainer-ops#47). `null` clears a stored one; omitting the key leaves it
+   *  alone, which is what the backend's `model_fields_set` check distinguishes. */
+  distanceKm?: number | null
   notes?: string
 }
 

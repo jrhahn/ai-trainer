@@ -832,6 +832,9 @@ export default function DashboardPage() {
         sport,
         durationMinutes: log.actualDurationMinutes,
         perceivedEffort: log.perceivedEffort,
+        // Empty for a session nobody measured, so the field comes back blank
+        // rather than claiming 0 km (ai-trainer-ops#47).
+        distanceKm: log.distanceKm != null ? String(log.distanceKm) : '',
         notes: log.notes ?? '',
       })
     } catch (e) {

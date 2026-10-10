@@ -544,6 +544,11 @@ async def get_workout_log_by_date(
     )
 
 
+# "Say nothing about this field", as distinct from "set it to None". Only
+# ``distance_km`` needs it today; see :func:`upsert_workout_log`.
+_KEEP: Any = object()
+
+
 async def upsert_workout_log(
     db: AsyncSession,
     user_id: str,
@@ -558,8 +563,22 @@ async def upsert_workout_log(
     completed_at: str,
     sport_type: str = "cycling",
     slot: int = 0,
+    distance_km: Any = _KEEP,
 ) -> models.WorkoutLog:
-    """Create or update a WorkoutLog for one user/date/session and flush (#496)."""
+    """Create or update a WorkoutLog for one user/date/session and flush (#496).
+
+    Every other field here is a straight replace, which is right: the callers
+    that pass them always know all of them. ``distance_km`` is not, and defaults
+    to the ``_KEEP`` sentinel instead of to ``None`` — three of the four callers
+    predate the column and say nothing about distance, and with a ``None``
+    default each of them would silently blank a distance the athlete had entered.
+    That is the same shape as the heart-rate loss review found on PR #795, so it
+    is closed here rather than left to depend on planned and unplanned slots
+    never colliding.
+
+    ``None`` passed explicitly still clears it, which is what an athlete emptying
+    the field means.
+    """
     existing = await get_workout_log_by_date(db, user_id, date, slot)
     if existing is None:
         existing = models.WorkoutLog(
@@ -574,6 +593,7 @@ async def upsert_workout_log(
             notes=notes,
             completed_at=completed_at,
             sport_type=sport_type,
+            distance_km=None if distance_km is _KEEP else distance_km,
         )
         db.add(existing)
     else:
@@ -585,6 +605,8 @@ async def upsert_workout_log(
         existing.notes = notes
         existing.completed_at = completed_at
         existing.sport_type = sport_type
+        if distance_km is not _KEEP:
+            existing.distance_km = distance_km
     await db.flush()
     return existing
 
