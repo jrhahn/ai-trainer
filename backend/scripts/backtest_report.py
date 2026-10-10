@@ -40,6 +40,9 @@ from services import athlete_model_inference as ami
 
 # Enough history to fill the earlier window as well as today's.
 _HISTORY_LIMIT = 2000
+# An attribute compared for fewer athletes than this is not printed: a row of
+# one is that athlete's own number, which an aggregate report must not show.
+MIN_ATHLETES = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +98,11 @@ def render_markdown(points: Iterable[Point], weeks: int, athletes: int) -> str:
         "| later value inside earlier range |",
         "|---|---|---|---|---|",
     ]
+    hidden = []
     for name, group in sorted(by_attribute.items()):
+        if len(group) < MIN_ATHLETES:
+            hidden.append(name)
+            continue
         changes = [(p.earlier - p.later) / p.later * 100 for p in group]
         ranged = [p for p in group if p.low is not None and p.high is not None]
         inside = sum(p.low <= p.later <= p.high for p in ranged)
@@ -104,6 +111,11 @@ def render_markdown(points: Iterable[Point], weeks: int, athletes: int) -> str:
             f"| {name} | {len(group)} | {statistics.median(abs(c) for c in changes):.1f}% "
             f"| {statistics.fmean(changes):+.1f}% | {coverage} |"
         )
+    if hidden:
+        lines += [
+            "",
+            f"Not shown, fewer than {MIN_ATHLETES} athletes: {', '.join(hidden)}.",
+        ]
     lines += [
         "",
         "Signed change is earlier minus later, as a share of later: negative means "

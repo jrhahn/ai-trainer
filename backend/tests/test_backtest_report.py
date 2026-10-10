@@ -46,14 +46,18 @@ def test_the_report_states_change_and_range_coverage():
         Point("ftp", 240, 300, 230, 280),  # -20%, outside its range
         Point("ftp", 300, 300, 290, 310),  # 0%, inside
         Point("ftp", 330, 300, None, None),  # +10%, no range
-        Point("critical_speed", 4.0, 4.0, None, None),
+        *[Point("critical_speed", 4.0, 4.0, None, None)] * 3,
+        Point("map", 350, 340, None, None),
     ]
 
     text = backtest_report.render_markdown(points, 6, 3)
 
     assert "3 athletes with ride metrics." in text
     assert "| ftp | 3 | 10.0% | -3.3% | 1/2 |" in text
-    assert "| critical_speed | 1 | 0.0% | +0.0% | no range stated |" in text
+    assert "| critical_speed | 3 | 0.0% | +0.0% | no range stated |" in text
+    # One athlete's row would be that athlete's own number.
+    assert "| map |" not in text
+    assert "Not shown, fewer than 3 athletes: map." in text
 
 
 def test_an_empty_backtest_says_so():
@@ -63,30 +67,35 @@ def test_an_empty_backtest_says_so():
 
 async def test_the_earlier_estimate_does_not_see_later_rides(monkeypatch):
     async with TestSessionLocal() as db:
-        user = await crud.create_user(
-            db,
-            email="backtest@example.com",
-            name="B",
-            hashed_password=hash_password("pw"),
-        )
-        # A 30-minute effort at 250 W in July, and one at 300 W last week.
+        # Three athletes with a 30-minute effort at 250 W in July and one at
+        # 300 W last week, and a fourth who only started last week, so has
+        # nothing before the cut-off and must be left out.
         rides = ((1, "2026-07-20", 250), (2, "2026-10-03", 300))
-        for activity_id, day, watts in rides:
-            await crud.upsert_ride_metric(
+        for n in range(4):
+            user = await crud.create_user(
                 db,
-                user.id,
-                strava_activity_id=activity_id,
-                activity_date=day,
-                perf_signals=compute_ride_performance_signals(
-                    _stream(1800, watts, watts, 150, 152)
-                ),
+                email=f"backtest-{n}@example.com",
+                name="B",
+                hashed_password=hash_password("pw"),
             )
+            for activity_id, day, watts in rides[1:] if n == 3 else rides:
+                await crud.upsert_ride_metric(
+                    db,
+                    user.id,
+                    strava_activity_id=activity_id,
+                    activity_date=day,
+                    perf_signals=compute_ride_performance_signals(
+                        _stream(1800, watts, watts, 150, 152)
+                    ),
+                )
         await db.commit()
     monkeypatch.setattr(backtest_report, "async_session_maker", TestSessionLocal)
 
     text = await backtest_report.build(6, now=NOW)
 
     ftp_row = next(line for line in text.splitlines() if line.startswith("| ftp |"))
+    assert "4 athletes with ride metrics." in text
+    assert ftp_row.startswith("| ftp | 3 |")
     signed = float(ftp_row.split("|")[4].strip().rstrip("%"))
     # 250 W against 300 W is about a sixth lower (the estimate rounds); had the
     # earlier estimate seen last week's ride, the change would be 0.
