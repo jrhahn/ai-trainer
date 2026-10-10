@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings in five sections, with expert controls behind Expert mode**
+  (ai-trainer-ops#50) — `SettingsPage.tsx`, `MotivationModelSettings.tsx`. The
+  page was seventeen cards in one column, about 7,200 px tall, in the order they
+  were built. It now has five sections, Profile, Activities, Coach & AI, Account
+  & security and Your data, with a side nav from `lg` and a sticky strip of tabs
+  below that. The nav uses plain anchors.
+
+  Without Expert mode the page no longer shows: the AI model picker (the key
+  card has its own provider choice, so the page asked twice), "Recalculate TSS /
+  ATL / CTL", the heart-rate FTP estimate that leads into the same
+  recalculation, the sync cursors, the learned motivation weights, conversation
+  import, and the long-term and performance athlete models. All of it is back
+  with Expert mode on. Saving heart rate without Expert mode is a plain save.
+
+  The rule for saving, which the page now follows throughout: a switch applies
+  at once, typed values save with the Save button of their card. Display name
+  moved to Profile; email and Sign Out stay in Account & security. Docs now say
+  "Settings → Activities".
+
 ### Added
 
 - **"Distance (km)" when entering an activity** (ai-trainer-ops#47) —

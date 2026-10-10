@@ -35,7 +35,7 @@ Du brauchst zwei Angaben aus intervals.icu: einen **API Key** und deine **Athlet
 1. Öffne in intervals.icu die **Settings** (dein Name, oben rechts) und scroll zu **Developer Settings**.
 2. Kopiere den **API Key**.
 3. Notiere dir an derselben Stelle deine **Athlete ID** — sie sieht aus wie `i123456`.
-4. Öffne in Train Like a Pro **Settings → Data Sources**.
+4. Öffne in Train Like a Pro **Settings → Activities**.
 5. Füge den API Key bei **API Key** ein, trage deine Athlete ID bei **Athlete ID** ein und klick auf **Connect Intervals.icu**.
    - Lass bei **Athlete ID** die `0` stehen, falls du deine nicht findest — das bedeutet „die Athletin/der Athlet zu diesem Key" und funktioniert genauso.
    - **Athlete Name** ist optional.
@@ -73,7 +73,7 @@ Der Key wird verschlüsselt gespeichert und verlässt die App nie wieder.
 | Nach dem Verbinden erscheinen keine Fahrten | Prüf zuerst, ob die Fahrt in intervals.icu liegt. Train Like a Pro sieht nur, was intervals.icu hat. |
 | „Could not save the Intervals.icu connection" | Der API Key ist falsch oder wurde mit Leerzeichen kopiert. Kopier ihn erneut aus den **Developer Settings**. |
 | Der Coach antwortet mit einem Fehler | Dein Gemini-Key fehlt, ist abgelaufen oder das Kontingent ist aufgebraucht. Teste ihn erneut unter **Settings → AI Provider**. |
-| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatic sync** unter **Settings → Data Sources** an ist. |
+| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatic sync** unter **Settings → Activities** an ist. |
 
 ---
 

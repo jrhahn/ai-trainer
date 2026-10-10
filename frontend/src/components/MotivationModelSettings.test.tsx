@@ -13,9 +13,13 @@ vi.mock('../services/user', () => ({
   updateMotivationModel: mockUpdate,
 }))
 
+// The learned weights are expert-only (ai-trainer-ops#50); most tests here are
+// about them, so they run in Expert mode unless a test says otherwise.
+const store = vi.hoisted(() => ({ isExpertMode: true }))
+
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; isExpertMode: boolean }) => unknown) =>
+    selector({ authToken: 'test-token', isExpertMode: store.isExpertMode }),
 }))
 
 function makeEntry(overrides: Partial<MotivationEntry> = {}): MotivationEntry {
@@ -70,6 +74,7 @@ function renderComponent() {
 describe('MotivationModelSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    store.isExpertMode = true
     mockFetch.mockResolvedValue(makeModel())
     mockUpdate.mockImplementation(async () => makeModel())
   })
@@ -130,6 +135,19 @@ describe('MotivationModelSettings', () => {
       expect(screen.getByText('45%')).toBeInTheDocument()
     })
     expect(screen.getByLabelText('Enjoyment weight')).toHaveValue('45')
+  })
+
+  it('keeps the learned weights behind Expert mode, and the objectives in front', async () => {
+    store.isExpertMode = false
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Primary objective')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Balance')).toBeNull()
+    expect(screen.queryByLabelText('Enjoyment weight')).toBeNull()
+    expect(screen.queryByText(/MTB · 85%/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
   it('shows what was learned about how the athlete likes to ride', async () => {

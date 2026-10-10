@@ -152,6 +152,9 @@ function EntryRow({
 
 export default function MotivationModelSettings() {
   const authToken = useAppStore((s) => s.authToken)
+  // The objectives are the short form every athlete needs; the weights the
+  // coach learned behind them are model internals (ai-trainer-ops#50).
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
   const queryClient = useQueryClient()
 
   const { data, isLoading, isError } = useQuery({
@@ -367,76 +370,80 @@ export default function MotivationModelSettings() {
         {renderEntries('constraints', 'Constraint', 'Add constraint')}
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-700">Balance</h3>
-        <p className="mb-3 text-xs text-gray-500">
-          How much each of these counts when the coach picks between two sessions.
-          Pin one to fix it — the coach will keep learning the rest around it.
-          Percentages are re-balanced to 100% when you save.
-        </p>
-        <div className="space-y-2.5">
-          {COMPONENTS.map((component) => {
-            const pinned = draft.pinnedWeights.includes(component)
-            const value = draft.utilityWeights[component] ?? 0
-            return (
-              <div key={component} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => togglePin(component)}
-                  aria-label={`${pinned ? 'Unpin' : 'Pin'} ${COMPONENT_LABELS[component]}`}
-                  aria-pressed={pinned}
-                  className={pinned ? 'text-amber-600' : 'text-gray-300 hover:text-gray-500'}
-                >
-                  {pinned ? <Lock size={12} /> : <Unlock size={12} />}
-                </button>
-                <span className="w-24 shrink-0 text-xs text-gray-600">
-                  {COMPONENT_LABELS[component]}
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(value * 100)}
-                  aria-label={`${COMPONENT_LABELS[component]} weight`}
-                  onChange={(event) =>
-                    setWeight(component, Number(event.target.value) / 100)
-                  }
-                  className="h-1 flex-1 accent-amber-500"
-                />
-                <span className="w-9 shrink-0 text-right text-xs tabular-nums text-gray-500">
-                  {formatPercent(value)}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {isExpertMode && (
+        <>
+          <div className="border-t border-gray-100 pt-4">
+            <h3 className="mb-1 text-sm font-semibold text-gray-700">Balance</h3>
+            <p className="mb-3 text-xs text-gray-500">
+              How much each of these counts when the coach picks between two sessions.
+              Pin one to fix it — the coach will keep learning the rest around it.
+              Percentages are re-balanced to 100% when you save.
+            </p>
+            <div className="space-y-2.5">
+              {COMPONENTS.map((component) => {
+                const pinned = draft.pinnedWeights.includes(component)
+                const value = draft.utilityWeights[component] ?? 0
+                return (
+                  <div key={component} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => togglePin(component)}
+                      aria-label={`${pinned ? 'Unpin' : 'Pin'} ${COMPONENT_LABELS[component]}`}
+                      aria-pressed={pinned}
+                      className={pinned ? 'text-amber-600' : 'text-gray-300 hover:text-gray-500'}
+                    >
+                      {pinned ? <Lock size={12} /> : <Unlock size={12} />}
+                    </button>
+                    <span className="w-24 shrink-0 text-xs text-gray-600">
+                      {COMPONENT_LABELS[component]}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Math.round(value * 100)}
+                      aria-label={`${COMPONENT_LABELS[component]} weight`}
+                      onChange={(event) =>
+                        setWeight(component, Number(event.target.value) / 100)
+                      }
+                      className="h-1 flex-1 accent-amber-500"
+                    />
+                    <span className="w-9 shrink-0 text-right text-xs tabular-nums text-gray-500">
+                      {formatPercent(value)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
 
-      {/* The balance moves on its own, so it owes the athlete an account of
-          itself — right underneath the numbers it explains (#566). */}
-      <MotivationWeightHistory componentLabels={COMPONENT_LABELS} />
+          {/* The balance moves on its own, so it owes the athlete an account of
+              itself — right underneath the numbers it explains (#566). */}
+          <MotivationWeightHistory componentLabels={COMPONENT_LABELS} />
 
-      {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
-        <div className="border-t border-gray-100 pt-4">
-          <h3 className="mb-1 text-sm font-semibold text-gray-700">
-            How you like to ride
-          </h3>
-          <p className="mb-2 text-xs text-gray-500">
-            Learned from what you actually ride, not from what was planned. The
-            coach uses it to pick between two sessions that would train you
-            equally well.
-          </p>
-          <ul className="flex flex-wrap gap-1.5">
-            {Object.entries(draft.modalityAffinity).map(([modality, affinity]) => (
-              <li
-                key={modality}
-                className="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600"
-              >
-                {MODALITY_LABELS[modality] ?? modality} · {formatPercent(affinity)}
-              </li>
-            ))}
-          </ul>
-        </div>
+          {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
+            <div className="border-t border-gray-100 pt-4">
+              <h3 className="mb-1 text-sm font-semibold text-gray-700">
+                How you like to ride
+              </h3>
+              <p className="mb-2 text-xs text-gray-500">
+                Learned from what you actually ride, not from what was planned. The
+                coach uses it to pick between two sessions that would train you
+                equally well.
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {Object.entries(draft.modalityAffinity).map(([modality, affinity]) => (
+                  <li
+                    key={modality}
+                    className="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600"
+                  >
+                    {MODALITY_LABELS[modality] ?? modality} · {formatPercent(affinity)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex items-center gap-3 border-t border-gray-100 pt-4">

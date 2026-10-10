@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -33,6 +33,63 @@ import {
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
 import { useImportProgress } from '../hooks/useImportProgress'
 
+// Five sections and nothing else without Expert mode (ai-trainer-ops#50). The
+// page used to be seventeen cards in one 7,200 px column, ordered by when each
+// was built: the display name sat below a provider picker, and an irreversible
+// "Recalculate TSS / ATL / CTL" stood between an athlete and their upload.
+const SECTIONS = [
+  { id: 'profile', title: 'Profile' },
+  { id: 'activities', title: 'Activities' },
+  { id: 'coach', title: 'Coach & AI' },
+  { id: 'account', title: 'Account & security' },
+  { id: 'data', title: 'Your data' },
+] as const
+
+type SectionId = (typeof SECTIONS)[number]['id']
+
+const sectionAnchor = (id: SectionId) => `settings-${id}`
+
+/** Side nav from `lg`, a scrolling strip of tabs above that. Plain anchors:
+ *  the browser already scrolls to them and keeps them in the history. */
+function SectionNav() {
+  return (
+    <nav
+      aria-label="Settings sections"
+      className="sticky top-14 z-10 -mx-4 mb-6 overflow-x-auto bg-gray-100 px-4 py-2 md:top-0 lg:top-8 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:overflow-visible lg:p-0"
+    >
+      <ul className="flex gap-1 lg:flex-col">
+        {SECTIONS.map((section) => (
+          <li key={section.id}>
+            <a
+              href={`#${sectionAnchor(section.id)}`}
+              className="block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-white hover:text-gray-900"
+            >
+              {section.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+function Section({ id, children }: { id: SectionId; children: ReactNode }) {
+  const title = SECTIONS.find((section) => section.id === id)!.title
+  return (
+    <section
+      id={sectionAnchor(id)}
+      aria-labelledby={`${sectionAnchor(id)}-heading`}
+      // Clears the fixed mobile header plus the sticky tab strip on a jump.
+      className="space-y-4 scroll-mt-28 md:scroll-mt-16 lg:scroll-mt-8"
+    >
+      <h2 id={`${sectionAnchor(id)}-heading`} className="text-lg font-bold text-gray-900">
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
 export default function SettingsPage() {
   const {
     authToken,
@@ -44,6 +101,7 @@ export default function SettingsPage() {
     lastIntervalsActivityId,
     intervalsAutoSyncEnabled,
     aiProvider,
+    isExpertMode,
     ftpPlausibilityWarning,
     setAiProvider,
     setUserProfile,
@@ -64,6 +122,7 @@ export default function SettingsPage() {
       lastIntervalsActivityId: s.lastIntervalsActivityId,
       intervalsAutoSyncEnabled: s.intervalsAutoSyncEnabled,
       aiProvider: s.aiProvider,
+      isExpertMode: s.isExpertMode,
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
       setFtpPlausibilityWarning: s.setFtpPlausibilityWarning,
@@ -308,6 +367,14 @@ export default function SettingsPage() {
       setMaxHrDraft(null)
       setRestingHrDraft(null)
       setAgeInput('')
+      // The estimate exists to feed "Confirm & Recalculate", which rewrites
+      // history and is expert-only (ai-trainer-ops#50). Without Expert mode a
+      // save is a save.
+      if (!isExpertMode) {
+        setHrMsg({ type: 'success', text: 'Heart rate values saved.' })
+        setTimeout(() => setHrMsg(null), 3000)
+        return
+      }
       const result = await estimateFTP(authToken, {
         maxHeartRate: resolvedMaxHr,
         restingHeartRate: parsedRestingHr,
@@ -428,10 +495,10 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your AI provider, account, and integrations</p>
+        <p className="text-sm text-gray-500 mt-0.5">Your profile, where your activities come from, the coach, and your account</p>
       </div>
 
       {savedMsg && (
@@ -440,356 +507,128 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* AI Provider */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">AI Provider</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Choose which server-side model powers your training plan and coach chat.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          {providers.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              onClick={() => setSelectedProvider(p.value)}
-              className={`flex flex-col items-start px-4 py-3 rounded-xl border-2 text-left transition-all ${
-                selectedProvider === p.value
-                  ? 'border-amber-500 bg-amber-50'
-                  : 'border-gray-200 hover:border-amber-300'
-              }`}
-            >
-              <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-              <span className="text-xs text-gray-500 font-mono">{p.hint ?? '—'}</span>
-            </button>
-          ))}
-        </div>
-
-        {/*
-          This used to warn that "the browser no longer stores or sends provider
-          API keys". That predates BYOK and is now the opposite of true — the
-          "Your AI Provider Key" section at the bottom of this page sends one.
-          Read in order, the page told you there was nothing to enter and then
-          offered the field 470 lines later, which is exactly how long it took
-          someone to give up looking for it.
-        */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-          <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-700">
-            This picks the model only. Requests run on the server's key by default —
-            to have them billed to your own account instead, add a key under{' '}
-            <a href="#your-ai-provider-key" className="font-semibold underline">
-              Your AI Provider Key
-            </a>{' '}
-            further down this page.
-          </p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={saveAI}
-            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
-          >
-            <Save size={15} /> Save
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
-        <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
-
-        <div className="mb-4">
-          <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
-            <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              id="settings-display-name"
-              value={nameInput}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void saveName()}
-              placeholder="Your name"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-            <button
-              onClick={() => void saveName()}
-              disabled={!nameInput.trim() || nameInput.trim() === (userProfile?.name ?? '')}
-              className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-            >
-              <Save size={15} /> Save
-            </button>
-          </div>
-        </div>
-
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
-        >
-          <LogOut size={15} /> Sign Out
-        </button>
-      </div>
-
-      {/* Ending sessions elsewhere (#704). Immediately after the Account card
-          on purpose: this is where someone looks when they want to be signed
-          out, and the first person to go looking for it clicked "Sign Out"
-          above instead. */}
-      <SessionSettings />
-
-      {/* Running threshold pace — what FTP is to the bike (#716). */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          The pace you could hold for about an hour. Runs are scored against it (rTSS) instead of
-          being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
-          we estimate it from your own maximal efforts — and say so rather than guess when there
-          are not enough of them.
-          {userProfile?.thresholdPaceSecondsPerKm != null && (
-            <span className="ml-1 font-medium text-gray-700">
-              Current threshold pace:{' '}
-              <span className="text-purple-700">{profilePaceInput} /km</span>
-            </span>
-          )}
-        </p>
-
-        {paceMsg && (
-          <div
-            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-              paceMsg.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}
-          >
-            {paceMsg.text}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <Footprints size={14} />
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              aria-label="Running threshold pace"
-              value={paceInput}
-              onChange={(e) => setPaceDraft(e.target.value)}
-              placeholder="e.g. 4:10"
-              className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-              min/km
-            </span>
-          </div>
-          <button
-            onClick={() => void saveThresholdPace()}
-            disabled={paceSaving || !paceInput.trim() || paceInput.trim() === profilePaceInput}
-            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-          >
-            <Save size={15} /> {paceSaving ? 'Saving…' : 'Save pace'}
-          </button>
-        </div>
-      </div>
-
-      {/* FTP Management */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">FTP Management</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Override your current FTP value and optionally recalculate all historical training-stress metrics
-          (TSS, ATL, CTL, TSB) using the new value.
-          {userProfile?.currentFTP != null && (
-            <span className="ml-1 font-medium text-gray-700">
-              Current FTP: <span className="text-purple-700">{userProfile.currentFTP} W</span>
-            </span>
-          )}
-        </p>
-
-        {ftpMsg && (
-          <div
-            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-              ftpMsg.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}
-          >
-            {ftpMsg.text}
-          </div>
-        )}
-
-        {/* Advisory only — the athlete's FTP is never overridden. */}
-        {ftpPlausibilityWarning && (
-          <div
-            role="alert"
-            className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
-          >
-            {ftpPlausibilityWarning}
-          </div>
-        )}
-
-        <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <Zap size={14} />
-            </span>
-            <input
-              type="number"
-              min={1}
-              /* `aria-label` rather than a `<label htmlFor>` like the two
-                 fields above, because this one has no visible label to bind
-                 to — the section heading and a placeholder are all it had, so
-                 a screen reader announced an unnamed number box
-                 (ai-trainer-ops#46). */
-              aria-label="Current FTP (watts)"
-              value={ftpInput}
-              onChange={(e) => setFtpDraft(e.target.value)}
-              placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
-              className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
-          </div>
-          <button
-            onClick={() => void saveFTP()}
-            disabled={ftpSaving || !ftpInput.trim() || ftpInput.trim() === profileFtpInput}
-            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-          >
-            <Save size={15} /> {ftpSaving ? 'Saving…' : 'Save FTP'}
-          </button>
-        </div>
-
-        <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs text-gray-500 mb-3">
-            <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
-            TSB for stored activities using the FTP entered above (or your current FTP if no value is
-            entered). FTP estimates derived automatically from activity data are shown in the Athlete
-            Progression chart on your dashboard.
-          </p>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
-            <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-yellow-700">
-              This operation <strong>cannot be reversed</strong>. All historical training-stress values
-              will be overwritten. A confirmation dialog will appear before any data is changed.
-            </p>
-          </div>
-          <button
-            onClick={() => void handleRecalculate()}
-            disabled={isPipelinePending}
-            className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
-          >
-            <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
-            {isPipelinePending ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
-          </button>
-        </div>
-      </div>
-
-      {/* Heart Rate Settings */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
-        <p className="text-xs text-gray-500 mb-1">
-          Max HR and resting HR are used for HR-based FTP estimation and training zones.
-        </p>
-        {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null) && (
-          <p className="text-xs text-gray-500 mb-4">
-            Current:{' '}
-            {userProfile.maxHeartRate != null && (
-              <span className="font-medium text-gray-700 mr-2">Max HR: <span className="text-red-600">{userProfile.maxHeartRate} bpm</span></span>
-            )}
-            {userProfile.restingHeartRate != null && (
-              <span className="font-medium text-gray-700 mr-2">Resting HR: <span className="text-blue-600">{userProfile.restingHeartRate} bpm</span></span>
-            )}
-          </p>
-        )}
-
-        {hrMsg && (
-          <div
-            className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-              hrMsg.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}
-          >
-            {hrMsg.text}
-          </div>
-        )}
-
-        <div className="space-y-3 mb-4">
-          <div>
-            <label htmlFor="settings-max-hr" className="block text-xs font-semibold text-gray-700 mb-1">
-              <span className="flex items-center gap-1"><Heart size={13} /> Max Heart Rate (bpm)</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              id="settings-max-hr"
-              value={maxHrInput}
-              onChange={(e) => setMaxHrDraft(e.target.value)}
-              placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-            {!maxHrInput && (
-              <div className="mt-2">
-                <label className="block text-xs text-gray-500 mb-1">
-                  Or enter your age to estimate Max HR (220 − age):
-                </label>
+      <div className="lg:flex lg:items-start lg:gap-8">
+        <SectionNav />
+        <div className="min-w-0 max-w-2xl flex-1 space-y-10">
+        <Section id="profile">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Name</h2>
+            <div>
+              <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
+                <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
+              </label>
+              <div className="flex gap-2">
                 <input
-                  type="number"
-                  min={1}
-                  value={ageInput}
-                  onChange={(e) => setAgeInput(e.target.value)}
-                  placeholder="e.g. 35"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  type="text"
+                  id="settings-display-name"
+                  value={nameInput}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && void saveName()}
+                  placeholder="Your name"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
-                {ageInput && (() => {
-                  const parsedAge = parseInt(ageInput, 10)
-                  const est = Number.isFinite(parsedAge) && parsedAge >= 10
-                    ? Math.max(100, 220 - parsedAge)
-                    : undefined
-                  return est !== undefined ? (
-                    <p className="text-xs text-amber-700 mt-1">
-                      Estimated Max HR: {est} bpm
-                    </p>
-                  ) : null
-                })()}
+                <button
+                  onClick={() => void saveName()}
+                  disabled={!nameInput.trim() || nameInput.trim() === (userProfile?.name ?? '')}
+                  className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+                >
+                  <Save size={15} /> Save
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Running threshold pace — what FTP is to the bike (#716). */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              The pace you could hold for about an hour. Runs are scored against it instead of
+              being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
+              we estimate it from your own maximal efforts — and say so rather than guess when there
+              are not enough of them.
+              {userProfile?.thresholdPaceSecondsPerKm != null && (
+                <span className="ml-1 font-medium text-gray-700">
+                  Current threshold pace:{' '}
+                  <span className="text-purple-700">{profilePaceInput} /km</span>
+                </span>
+              )}
+            </p>
+
+            {paceMsg && (
+              <div
+                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+                  paceMsg.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}
+              >
+                {paceMsg.text}
               </div>
             )}
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              <span className="flex items-center gap-1"><Heart size={13} /> Resting Heart Rate (bpm)</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={restingHrInput}
-              onChange={(e) => setRestingHrDraft(e.target.value)}
-              placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-          </div>
-        </div>
 
-        <button
-          onClick={() => void handleSaveHR()}
-          disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim())}
-          className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-        >
-          <Heart size={15} className={hrWorking ? 'animate-pulse' : ''} />
-          {hrWorking ? 'Saving…' : 'Save & Estimate FTP'}
-        </button>
-
-        {/* Step 2: FTP confirmation panel */}
-        {ftpEstimate !== null && (
-          <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
-            <p className="text-sm font-semibold text-gray-800">
-              Step 2 — Confirm FTP before rebuilding metrics
-            </p>
-            <p className="text-xs text-gray-600">
-              Based on your activity history, your estimated FTP is{' '}
-              <strong className="text-purple-700">{ftpEstimate} W</strong>. You can adjust this value
-              before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).
-            </p>
             <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <Footprints size={14} />
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Running threshold pace"
+                  value={paceInput}
+                  onChange={(e) => setPaceDraft(e.target.value)}
+                  placeholder="e.g. 4:10"
+                  className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                  min/km
+                </span>
+              </div>
+              <button
+                onClick={() => void saveThresholdPace()}
+                disabled={paceSaving || !paceInput.trim() || paceInput.trim() === profilePaceInput}
+                className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+              >
+                <Save size={15} /> {paceSaving ? 'Saving…' : 'Save pace'}
+              </button>
+            </div>
+          </div>
+
+          {/* FTP Management */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">FTP</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              The power you could hold for about an hour. Rides are scored against it.
+              {userProfile?.currentFTP != null && (
+                <span className="ml-1 font-medium text-gray-700">
+                  Current FTP: <span className="text-purple-700">{userProfile.currentFTP} W</span>
+                </span>
+              )}
+            </p>
+
+            {ftpMsg && (
+              <div
+                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+                  ftpMsg.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}
+              >
+                {ftpMsg.text}
+              </div>
+            )}
+
+            {/* Advisory only — the athlete's FTP is never overridden. */}
+            {ftpPlausibilityWarning && (
+              <div
+                role="alert"
+                className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
+              >
+                {ftpPlausibilityWarning}
+              </div>
+            )}
+
+            <div className="flex gap-2 mb-4">
               <div className="relative flex-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <Zap size={14} />
@@ -797,297 +636,560 @@ export default function SettingsPage() {
                 <input
                   type="number"
                   min={1}
-                  value={ftpConfirmInput}
-                  onChange={(e) => setFtpConfirmInput(e.target.value)}
+                  /* `aria-label` rather than a `<label htmlFor>` like the two
+                     fields above, because this one has no visible label to bind
+                     to — the section heading and a placeholder are all it had, so
+                     a screen reader announced an unnamed number box
+                     (ai-trainer-ops#46). */
+                  aria-label="Current FTP (watts)"
+                  value={ftpInput}
+                  onChange={(e) => setFtpDraft(e.target.value)}
+                  placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
                   className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
               </div>
               <button
-                onClick={() => void handleConfirmFTP()}
-                disabled={isPipelinePending || !ftpConfirmInput.trim()}
-                className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                onClick={() => void saveFTP()}
+                disabled={ftpSaving || !ftpInput.trim() || ftpInput.trim() === profileFtpInput}
+                className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
               >
-                <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
-                {isPipelinePending ? 'Recalculating…' : 'Confirm & Recalculate'}
+                <Save size={15} /> {ftpSaving ? 'Saving…' : 'Save FTP'}
               </button>
             </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
-              <AlertTriangle size={14} className="text-yellow-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-yellow-700">
-                This will overwrite all historical training-stress values and <strong>cannot be reversed</strong>.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Data Sources */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
-        <p className="text-xs text-gray-500 mb-2">
-          Choose how AI Trainer imports your training history. Automatic sources are convenient,
-          while FIT files keep the original workout data directly in your hands.
-        </p>
-        <p className="mb-4">
-          <SetupGuideLink
-            href={SETUP_GUIDE_SECTIONS.intervals}
-            label="How to connect Strava via intervals.icu"
-          />
-        </p>
-
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-          <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-700">
-            {/* The backend's URL used to be printed here (ai-trainer-ops#50).
-                It is a deployment detail no athlete can act on, and on a local
-                install it read "the backend at http://localhost:8000" — which
-                tells a cyclist nothing and makes the product look unfinished.
-
-                "at rest" and not "never leave this server", which is what this
-                said for one commit until review caught it. The keys do leave:
-                the intervals.icu key goes to intervals.icu, the Strava token to
-                Strava, the athlete's own provider key to OpenAI or Gemini on
-                every call. A privacy sentence on a settings page is something
-                an athlete relies on, so it may only claim what
-                `EncryptedString` actually provides. */}
-            Your keys are stored encrypted at rest. Strava may require a
-            paid Strava subscription for Standard Tier API access; FIT upload stays available
-            either way.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {/* intervals.icu first (ai-trainer-ops#20): the primary path, with
-              Strava as a convenience on top. */}
-          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Direct activity import using your Intervals.icu API key and athlete ID.
+            {isExpertMode && (
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs text-gray-500 mb-3">
+                  <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
+                  TSB for stored activities using the FTP entered above (or your current FTP if no value is
+                  entered). FTP estimates derived automatically from activity data are shown in the Athlete
+                  Progression chart on your dashboard.
                 </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {intervalsConnection ? 'Connected' : 'Not connected'}
-                </span>
-                {activeSource === 'intervals' && (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                    Active source
-                  </span>
-                )}
-              </div>
-            </div>
-            <IntervalsConnect />
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span>Automatic sync: {intervalsAutoSyncEnabled ? 'On' : 'Off'}</span>
-              <span className="text-gray-300">·</span>
-              <span>Last sync cursor: {lastIntervalsActivityId ?? 'none yet'}</span>
-            </div>
-            <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Intervals.icu</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.
-                </p>
-                {intervalsSyncMsg && (
-                  <p className={`text-xs mt-2 ${intervalsSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
-                    {intervalsSyncMsg.text}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
+                  <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-yellow-700">
+                    This operation <strong>cannot be reversed</strong>. All historical training-stress values
+                    will be overwritten. A confirmation dialog will appear before any data is changed.
                   </p>
-                )}
+                </div>
+                <button
+                  onClick={() => void handleRecalculate()}
+                  disabled={isPipelinePending}
+                  className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                >
+                  <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
+                  {isPipelinePending ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
+                </button>
               </div>
-              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={intervalsAutoSyncEnabled}
-                  disabled={intervalsSyncSaving}
-                  aria-label="Turn on automatic sync with Intervals.icu"
-                  onChange={(e) => void handleIntervalsAutoSyncChange(e.target.checked)}
-                />
-                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
-                <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
-              </label>
-            </div>
+            )}
           </div>
 
-          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Strava</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  OAuth-based automatic import for connected Strava accounts.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {stravaConnection ? 'Connected' : 'Not connected'}
-                </span>
-                {activeSource === 'strava' && (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                    Active source
-                  </span>
+          {/* Heart Rate Settings */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
+            <p className="text-xs text-gray-500 mb-1">
+              Max HR and resting HR are used for HR-based FTP estimation and training zones.
+            </p>
+            {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null) && (
+              <p className="text-xs text-gray-500 mb-4">
+                Current:{' '}
+                {userProfile.maxHeartRate != null && (
+                  <span className="font-medium text-gray-700 mr-2">Max HR: <span className="text-red-600">{userProfile.maxHeartRate} bpm</span></span>
                 )}
-              </div>
-            </div>
-            {/* Said once, where an athlete with both connections will look for
-                it: the badge above says which one is read, and this says why
-                the other one is not (ai-trainer-ops#49). Without it, "Connected"
-                on both and syncing from one reads as a bug. */}
-            {activeSource === 'intervals' && stravaConnection && (
-              <p className="text-xs text-gray-500">
-                Intervals.icu is the primary source, so activities are read from there.
-                Strava stays connected and is used if you turn off Intervals.icu sync.
+                {userProfile.restingHeartRate != null && (
+                  <span className="font-medium text-gray-700 mr-2">Resting HR: <span className="text-blue-600">{userProfile.restingHeartRate} bpm</span></span>
+                )}
               </p>
             )}
-            <StravaConnect />
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span>Automatic sync: {stravaAutoSyncEnabled ? 'On' : 'Off'}</span>
-              <span className="text-gray-300">·</span>
-              <span>Last sync cursor: {lastStravaActivityId ?? 'none yet'}</span>
-            </div>
-            <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Strava</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  When enabled, AI Trainer checks for new Strava activities while the app is open.
-                </p>
-                {stravaSyncMsg && (
-                  <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
-                    {stravaSyncMsg.text}
-                  </p>
-                )}
+
+            {hrMsg && (
+              <div
+                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+                  hrMsg.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}
+              >
+                {hrMsg.text}
               </div>
-              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+            )}
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label htmlFor="settings-max-hr" className="block text-xs font-semibold text-gray-700 mb-1">
+                  <span className="flex items-center gap-1"><Heart size={13} /> Max Heart Rate (bpm)</span>
+                </label>
                 <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={stravaAutoSyncEnabled}
-                  disabled={stravaSyncSaving}
-                  aria-label="Turn on automatic sync with Strava"
-                  onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
+                  type="number"
+                  min={1}
+                  id="settings-max-hr"
+                  value={maxHrInput}
+                  onChange={(e) => setMaxHrDraft(e.target.value)}
+                  placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
-                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
-                <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
-              </label>
-            </div>
-          </div>
-
-          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                  <Upload size={15} className="text-blue-500" />
-                  FIT files
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.
-                </p>
-              </div>
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                Manual
-              </span>
-            </div>
-            <FitFileUpload embedded />
-          </div>
-        </div>
-
-        {importProgress.status !== 'idle' && (
-          <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Activity Analysis</p>
-            {importProgress.status === 'running' && (() => {
-              const pct = importProgress.total > 0
-                ? Math.round((importProgress.processed / importProgress.total) * 100)
-                : null
-              return (
-                <>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                    <div
-                      className="bg-amber-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: pct !== null ? `${pct}%` : '10%' }}
+                {!maxHrInput && (
+                  <div className="mt-2">
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Or enter your age to estimate Max HR (220 − age):
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={ageInput}
+                      onChange={(e) => setAgeInput(e.target.value)}
+                      placeholder="e.g. 35"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                     />
+                    {ageInput && (() => {
+                      const parsedAge = parseInt(ageInput, 10)
+                      const est = Number.isFinite(parsedAge) && parsedAge >= 10
+                        ? Math.max(100, 220 - parsedAge)
+                        : undefined
+                      return est !== undefined ? (
+                        <p className="text-xs text-amber-700 mt-1">
+                          Estimated Max HR: {est} bpm
+                        </p>
+                      ) : null
+                    })()}
                   </div>
-                  <p className="text-xs text-gray-500">
-                    {pct !== null
-                      ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%) · ${importProgress.imported} imported`
-                      : 'Fetching activity list…'}
-                  </p>
-                </>
-              )
-            })()}
-            {importProgress.status === 'done' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-700">
-                  {importProgress.imported} imported, {importProgress.skipped} skipped
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <span className="flex items-center gap-1"><Heart size={13} /> Resting Heart Rate (bpm)</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={restingHrInput}
+                  onChange={(e) => setRestingHrDraft(e.target.value)}
+                  placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => void handleSaveHR()}
+              disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim())}
+              className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+            >
+              <Heart size={15} className={hrWorking ? 'animate-pulse' : ''} />
+              {hrWorking ? 'Saving…' : isExpertMode ? 'Save & Estimate FTP' : 'Save heart rate'}
+            </button>
+
+            {/* Step 2: FTP confirmation panel */}
+            {ftpEstimate !== null && (
+              <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-gray-800">
+                  Step 2 — Confirm FTP before rebuilding metrics
                 </p>
-                <StravaImportSummary progress={importProgress} compact />
+                <p className="text-xs text-gray-600">
+                  Based on your activity history, your estimated FTP is{' '}
+                  <strong className="text-purple-700">{ftpEstimate} W</strong>. You can adjust this value
+                  before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).
+                </p>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      <Zap size={14} />
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={ftpConfirmInput}
+                      onChange={(e) => setFtpConfirmInput(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
+                  </div>
+                  <button
+                    onClick={() => void handleConfirmFTP()}
+                    disabled={isPipelinePending || !ftpConfirmInput.trim()}
+                    className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
+                    {isPipelinePending ? 'Recalculating…' : 'Confirm & Recalculate'}
+                  </button>
+                </div>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
+                  <AlertTriangle size={14} className="text-yellow-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-yellow-700">
+                    This will overwrite all historical training-stress values and <strong>cannot be reversed</strong>.
+                  </p>
+                </div>
               </div>
             )}
-            {importProgress.status === 'error' && (
-              <p className="text-xs text-red-600">Import failed: {importProgress.error || 'unknown error'}</p>
+          </div>
+
+          {/* Editable training location behind the weather forecast (#495) */}
+          <HomeLocationSettings />
+        </Section>
+
+        <Section id="activities">
+          {/* Data Sources */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
+            <p className="text-xs text-gray-500 mb-2">
+              Choose how AI Trainer imports your training history. Automatic sources are convenient,
+              while FIT files keep the original workout data directly in your hands.
+            </p>
+            <p className="mb-4">
+              <SetupGuideLink
+                href={SETUP_GUIDE_SECTIONS.intervals}
+                label="How to connect Strava via intervals.icu"
+              />
+            </p>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
+              <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                {/* The backend's URL used to be printed here (ai-trainer-ops#50).
+                    It is a deployment detail no athlete can act on, and on a local
+                    install it read "the backend at http://localhost:8000" — which
+                    tells a cyclist nothing and makes the product look unfinished.
+
+                    "at rest" and not "never leave this server", which is what this
+                    said for one commit until review caught it. The keys do leave:
+                    the intervals.icu key goes to intervals.icu, the Strava token to
+                    Strava, the athlete's own provider key to OpenAI or Gemini on
+                    every call. A privacy sentence on a settings page is something
+                    an athlete relies on, so it may only claim what
+                    `EncryptedString` actually provides. */}
+                Your keys are stored encrypted at rest. Strava may require a
+                paid Strava subscription for Standard Tier API access; FIT upload stays available
+                either way.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* intervals.icu first (ai-trainer-ops#20): the primary path, with
+                  Strava as a convenience on top. */}
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Direct activity import using your Intervals.icu API key and athlete ID.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {intervalsConnection ? 'Connected' : 'Not connected'}
+                    </span>
+                    {activeSource === 'intervals' && (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        Active source
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <IntervalsConnect />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                  <span>Automatic sync: {intervalsAutoSyncEnabled ? 'On' : 'Off'}</span>
+                  {isExpertMode && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <span>Last sync cursor: {lastIntervalsActivityId ?? 'none yet'}</span>
+                    </>
+                  )}
+                </div>
+                <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Intervals.icu</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.
+                    </p>
+                    {intervalsSyncMsg && (
+                      <p className={`text-xs mt-2 ${intervalsSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                        {intervalsSyncMsg.text}
+                      </p>
+                    )}
+                  </div>
+                  <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={intervalsAutoSyncEnabled}
+                      disabled={intervalsSyncSaving}
+                      aria-label="Turn on automatic sync with Intervals.icu"
+                      onChange={(e) => void handleIntervalsAutoSyncChange(e.target.checked)}
+                    />
+                    <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+                    <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Strava</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      OAuth-based automatic import for connected Strava accounts.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {stravaConnection ? 'Connected' : 'Not connected'}
+                    </span>
+                    {activeSource === 'strava' && (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        Active source
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Said once, where an athlete with both connections will look for
+                    it: the badge above says which one is read, and this says why
+                    the other one is not (ai-trainer-ops#49). Without it, "Connected"
+                    on both and syncing from one reads as a bug. */}
+                {activeSource === 'intervals' && stravaConnection && (
+                  <p className="text-xs text-gray-500">
+                    Intervals.icu is the primary source, so activities are read from there.
+                    Strava stays connected and is used if you turn off Intervals.icu sync.
+                  </p>
+                )}
+                <StravaConnect />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                  <span>Automatic sync: {stravaAutoSyncEnabled ? 'On' : 'Off'}</span>
+                  {isExpertMode && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <span>Last sync cursor: {lastStravaActivityId ?? 'none yet'}</span>
+                    </>
+                  )}
+                </div>
+                <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Turn on automatic sync with Strava</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      When enabled, AI Trainer checks for new Strava activities while the app is open.
+                    </p>
+                    {stravaSyncMsg && (
+                      <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                        {stravaSyncMsg.text}
+                      </p>
+                    )}
+                  </div>
+                  <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={stravaAutoSyncEnabled}
+                      disabled={stravaSyncSaving}
+                      aria-label="Turn on automatic sync with Strava"
+                      onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
+                    />
+                    <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+                    <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                      <Upload size={15} className="text-blue-500" />
+                      FIT files
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    Manual
+                  </span>
+                </div>
+                <FitFileUpload embedded />
+              </div>
+            </div>
+
+            {importProgress.status !== 'idle' && (
+              <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Strava Activity Analysis</p>
+                {importProgress.status === 'running' && (() => {
+                  const pct = importProgress.total > 0
+                    ? Math.round((importProgress.processed / importProgress.total) * 100)
+                    : null
+                  return (
+                    <>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                        <div
+                          className="bg-amber-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: pct !== null ? `${pct}%` : '10%' }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {pct !== null
+                          ? `Processed activities: ${importProgress.processed} / ${importProgress.total} (${pct}%) · ${importProgress.imported} imported`
+                          : 'Fetching activity list…'}
+                      </p>
+                    </>
+                  )
+                })()}
+                {importProgress.status === 'done' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700">
+                      {importProgress.imported} imported, {importProgress.skipped} skipped
+                    </p>
+                    <StravaImportSummary progress={importProgress} compact />
+                  </div>
+                )}
+                {importProgress.status === 'error' && (
+                  <p className="text-xs text-red-600">Import failed: {importProgress.error || 'unknown error'}</p>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </Section>
 
-      {/* Per-user AI API key (BYOK) */}
-      <AIKeySettings />
+        <Section id="coach">
+          {/* Per-user AI API key (BYOK) */}
+          <AIKeySettings />
 
-      <TotpSettings />
+          {isExpertMode && (
+            <>
+              {/* AI Provider */}
+              <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+                <h2 className="text-base font-bold text-gray-900 mb-1">AI Provider</h2>
+                <p className="text-xs text-gray-500 mb-4">
+                  Choose which server-side model powers your training plan and coach chat.
+                </p>
 
-      {/* Import historical coach conversations */}
-      <ConversationImportSettings />
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {providers.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setSelectedProvider(p.value)}
+                      className={`flex flex-col items-start px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                        selectedProvider === p.value
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <span className="font-semibold text-sm text-gray-900">{p.label}</span>
+                      <span className="text-xs text-gray-500 font-mono">{p.hint ?? '—'}</span>
+                    </button>
+                  ))}
+                </div>
 
-      {/* What the athlete trains FOR (#562/#567). Ahead of the learned traits
-          on purpose: everything below describes the athlete, this decides what
-          all of it is in service of. */}
-      <MotivationModelSettings />
+                {/*
+                  This used to warn that "the browser no longer stores or sends provider
+                  API keys". That predates BYOK and is now the opposite of true — the
+                  "Your AI Provider Key" section at the bottom of this page sends one.
+                  Read in order, the page told you there was nothing to enter and then
+                  offered the field 470 lines later, which is exactly how long it took
+                  someone to give up looking for it.
+                */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
+                  <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-700">
+                    This picks the model only. Requests run on the server's key by default —
+                    to have them billed to your own account instead, add a key under{' '}
+                    <a href="#your-ai-provider-key" className="font-semibold underline">
+                      Your AI Provider Key
+                    </a>{' '}
+                    above.
+                  </p>
+                </div>
 
-      {/* Learned athlete traits */}
-      <AthleteTraitsSettings />
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={saveAI}
+                    className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
+                  >
+                    <Save size={15} /> Save
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
-      {/* Long-term structured athlete model (#384) */}
-      <AthleteModelSettings />
+          {/* What the athlete trains FOR (#562/#567). Ahead of the learned traits
+              on purpose: everything below describes the athlete, this decides what
+              all of it is in service of. */}
+          <MotivationModelSettings />
 
-      {/* Deterministic performance model, limiter & hypotheses (#481) */}
-      <AthletePerformanceModelCard className="mt-6" />
+          {/* Learned athlete traits */}
+          <AthleteTraitsSettings />
 
-      {/* Editable training location behind the weather forecast (#495) */}
-      <HomeLocationSettings />
+          {isExpertMode && (
+            <>
+              {/* Import historical coach conversations */}
+              <ConversationImportSettings />
 
-      {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
-          way to keep a copy sits right above the way to delete everything. */}
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <h2 className="text-base font-bold text-gray-900 mb-1">Your Data</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.
-        </p>
-        <button
-          onClick={handleExportAccount}
-          className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-100"
-        >
-          <Download size={15} /> Export My Data
-        </button>
-        {exportError && <p className="text-xs text-red-600 mt-2">{exportError}</p>}
-      </div>
+              {/* Long-term structured athlete model (#384) */}
+              <AthleteModelSettings />
 
-      {/* Danger zone */}
-      <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">
-        <h2 className="text-base font-bold text-red-600 mb-1">Danger Zone</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Permanently delete all your data and start over from scratch.
-        </p>
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
-        >
-          <Trash2 size={15} /> Reset All Data
-        </button>
+              {/* Deterministic performance model, limiter & hypotheses (#481) */}
+              <AthletePerformanceModelCard />
+            </>
+          )}
+        </Section>
+
+        <Section id="account">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
+            <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              <LogOut size={15} /> Sign Out
+            </button>
+          </div>
+
+          {/* Ending sessions elsewhere (#704). Immediately after the Account card
+              on purpose: this is where someone looks when they want to be signed
+              out, and the first person to go looking for it clicked "Sign Out"
+              above instead. */}
+          <SessionSettings />
+
+          <TotpSettings />
+        </Section>
+
+        <Section id="data">
+          {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
+              way to keep a copy sits right above the way to delete everything. */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Your Data</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.
+            </p>
+            <button
+              onClick={handleExportAccount}
+              className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-100"
+            >
+              <Download size={15} /> Export My Data
+            </button>
+            {exportError && <p className="text-xs text-red-600 mt-2">{exportError}</p>}
+          </div>
+
+          {/* Danger zone */}
+          <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">
+            <h2 className="text-base font-bold text-red-600 mb-1">Danger Zone</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Permanently delete all your data and start over from scratch.
+            </p>
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
+            >
+              <Trash2 size={15} /> Reset All Data
+            </button>
+          </div>
+        </Section>
+        </div>
       </div>
     </div>
   )
