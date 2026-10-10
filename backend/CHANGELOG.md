@@ -87,6 +87,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The backtest report prints no empty table** (ai-trainer-ops#27) —
+  `scripts/backtest_report.py`. When every attribute fell under the
+  3-athlete minimum, as in the first weekly run on production, it printed a
+  table header with no rows under it and an explanation of a column nobody
+  could see. Now it lists the hidden attributes only.
+
 - **A plan day can no longer say two different things about itself**
   (ai-trainer-ops#38) — `schemas.PlanDay`, `services/plan_constraints.py`.
   `extra="allow"` exists so an unmodelled key is never silently dropped, but a

@@ -93,11 +93,7 @@ def render_markdown(points: Iterable[Point], weeks: int, athletes: int) -> str:
     if not by_attribute:
         lines.append("_No attribute had an estimate at both times._")
         return "\n".join(lines)
-    lines += [
-        "| attribute | athletes | median abs. change | mean signed change "
-        "| later value inside earlier range |",
-        "|---|---|---|---|---|",
-    ]
+    rows = []
     hidden = []
     for name, group in sorted(by_attribute.items()):
         if len(group) < MIN_ATHLETES:
@@ -110,20 +106,30 @@ def render_markdown(points: Iterable[Point], weeks: int, athletes: int) -> str:
             coverage = f"{inside}/{len(ranged)}"
         else:
             coverage = f"fewer than {MIN_ATHLETES} ranges stated"
-        lines.append(
+        rows.append(
             f"| {name} | {len(group)} | {statistics.median(abs(c) for c in changes):.1f}% "
             f"| {statistics.fmean(changes):+.1f}% | {coverage} |"
         )
+    # No header without rows: the first production run printed an empty table
+    # when every attribute fell under MIN_ATHLETES.
+    if rows:
+        lines += [
+            "| attribute | athletes | median abs. change | mean signed change "
+            "| later value inside earlier range |",
+            "|---|---|---|---|---|",
+            *rows,
+        ]
     if hidden:
         lines += [
             "",
             f"Not shown, fewer than {MIN_ATHLETES} athletes: {', '.join(hidden)}.",
         ]
-    lines += [
-        "",
-        "Signed change is earlier minus later, as a share of later: negative means "
-        "the earlier estimate was lower than what the model says now.",
-    ]
+    if rows:
+        lines += [
+            "",
+            "Signed change is earlier minus later, as a share of later: negative means "
+            "the earlier estimate was lower than what the model says now.",
+        ]
     return "\n".join(lines)
 
 
