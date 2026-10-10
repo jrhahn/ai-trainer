@@ -93,14 +93,18 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   // Step 1 is the greeting.
   await continueButton(page).click()
 
-  // Exact option labels rather than alternation regexes, and every choice
-  // asserts that it took. A `/race/i`-style locator can drift onto a different
-  // control when copy changes and the test still passes, which is the one way
-  // these steps could lie (found in review on PR #797).
+  // Plain strings rather than alternation regexes, and no `.first()`. The name
+  // of each of these buttons is its whole card — label plus description — so the
+  // match is a substring, and a substring that hit two cards used to be resolved
+  // silently by taking the first. Playwright's strict mode now turns that into a
+  // failure instead, which is the only way this step can tell us it has drifted
+  // onto the wrong control. Each choice then asserts its own pressed state, so a
+  // click that landed somewhere unexpected fails here rather than three steps
+  // later (both points from reviews on PR #797).
   const choose = async (name: string) => {
     const option = page.getByRole('button', { name, exact: false })
-    await option.first().click()
-    await expect(option.first()).toHaveAttribute('aria-pressed', 'true')
+    await option.click()
+    await expect(option).toHaveAttribute('aria-pressed', 'true')
   }
 
   // Step 2 — the race goal, which is the branch that reveals the date fields.
@@ -116,7 +120,11 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await choose('Intermediate')
   await page.getByPlaceholder('e.g. 250').fill(ANSWERS.ftp)
   await page.getByPlaceholder('e.g. 185').fill(ANSWERS.maxHeartRate)
-  const followsPlan = page.getByRole('checkbox').first()
+  // By name, not by position: the last unscoped locator in this spec. It is
+  // wrapped in its own label, so it has one.
+  const followsPlan = page.getByRole('checkbox', {
+    name: /structured training plan/i,
+  })
   await followsPlan.check()
   await expect(followsPlan).toBeChecked()
   await continueButton(page).click()
