@@ -183,15 +183,23 @@ jobs:
         working-directory: frontend
         run: npm run test:e2e:stub
 
-      - name: Upload the report when it fails
-        if: failure()
+      # Always, not only on failure (ai-trainer-ops#46). A report that exists
+      # only when something broke cannot be used to look at what the product
+      # currently does, which is the other half of what these specs are for.
+      # `!cancelled()` rather than `always()`: a cancelled run has nothing
+      # worth keeping and the upload would just slow the cancel down.
+      - name: Upload the Playwright reports and screenshots
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: |
-            frontend/playwright-report/
-            frontend/test-results/
+            frontend/playwright-report-keyless/
+            frontend/playwright-report-stubbed/
+            frontend/test-results-keyless/
+            frontend/test-results-stubbed/
           retention-days: 7
+          if-no-files-found: warn
 
   integration:
     name: Integration Tests (Frontend ↔ Backend)

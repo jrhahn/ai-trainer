@@ -278,6 +278,34 @@ describe('SettingsPage', () => {
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
+  // Each of these three inputs has a visible <label> that sits *beside* it and
+  // carries no htmlFor, so nothing associated the two: a screen reader
+  // announced an unnamed text box, and the tests above had to reach for
+  // `getByPlaceholderText` and `getByDisplayValue` within a section to find
+  // them at all. That workaround is the smell. Addressing them by their
+  // accessible name is both the accessible behaviour and what the browser spec
+  // in `e2e/stubbed/onboarding-complete.spec.ts` uses (ai-trainer-ops#46).
+  it('names the profile inputs so they can be addressed the way a screen reader does', () => {
+    useAppStore.setState({
+      userProfile: { ...baseProfile, currentFTP: 237, maxHeartRate: 191 },
+    })
+
+    setup()
+
+    expect(screen.getByLabelText('Display Name')).toHaveValue('Alice')
+    // Numbers, not strings: both are `type="number"`, so jsdom reports the
+    // value as a number. (Playwright's `toHaveValue` is the opposite and always
+    // gives a string, which is why the browser spec compares to '237'.)
+    expect(screen.getByLabelText('Current FTP (watts)')).toHaveValue(237)
+    expect(screen.getByLabelText('Max Heart Rate (bpm)')).toHaveValue(191)
+  })
+
+  it('says which account is signed in, which the summary step never could (#40)', () => {
+    setup()
+
+    expect(screen.getByText(`Signed in as ${baseProfile.email}.`)).toBeInTheDocument()
+  })
+
   it('renders the Display Name input with the current user name', () => {
     setup()
     const nameInput = screen.getByPlaceholderText('Your name')

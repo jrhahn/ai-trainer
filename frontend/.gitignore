@@ -1,6 +1,12 @@
 # Playwright (ai-trainer-ops#46)
 /test-results/
 /playwright-report/
+# Per-stack, so two stacks in one job cannot overwrite each other's
+# report (ai-trainer-ops#46).
+/test-results-keyless/
+/test-results-stubbed/
+/playwright-report-keyless/
+/playwright-report-stubbed/
 /blob-report/
 /dist-keyless/
 /dist-stubbed/

@@ -666,6 +666,13 @@ export default function OnboardingPage() {
                   <button
                     key={g.value}
                     type="button"
+                    // The tick beside the chosen option is the only thing that
+                    // said which one it was, so the choice was invisible to a
+                    // screen reader and unassertable in a test — the same
+                    // colour-only problem #51.7 fixed on the leg-freshness
+                    // indicator. The effort scale already does this
+                    // (ai-trainer-ops#46).
+                    aria-pressed={form.trainingGoal === g.value}
                     onClick={() => selectTrainingGoal(g.value)}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
                       form.trainingGoal === g.value
@@ -726,6 +733,7 @@ export default function OnboardingPage() {
                       <button
                         key={l.value}
                         type="button"
+                        aria-pressed={form.fitnessLevel === l.value}
                         onClick={() => update('fitnessLevel', l.value)}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-all ${
                           form.fitnessLevel === l.value
@@ -802,6 +810,7 @@ export default function OnboardingPage() {
                   <div className="space-y-3">
                     <button
                       type="button"
+                      aria-pressed={form.assessmentMethod === 'intervals'}
                       onClick={() => update('assessmentMethod', 'intervals')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'intervals'
@@ -823,6 +832,7 @@ export default function OnboardingPage() {
                     </button>
                     <button
                       type="button"
+                      aria-pressed={form.assessmentMethod === 'strava'}
                       onClick={() => update('assessmentMethod', 'strava')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'strava'
@@ -844,6 +854,7 @@ export default function OnboardingPage() {
                     </button>
                     <button
                       type="button"
+                      aria-pressed={form.assessmentMethod === 'manual'}
                       onClick={() => update('assessmentMethod', 'manual')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'manual'

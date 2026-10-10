@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The profile inputs in Settings had no accessible name** (ai-trainer-ops#46) —
+  `SettingsPage.tsx`. Display Name, Current FTP and Max Heart Rate each had a
+  visible `<label>` sitting *beside* the input with no `htmlFor`, so nothing
+  associated the two: a screen reader announced three unnamed boxes. The existing
+  unit tests had been reaching for `getByPlaceholderText` and
+  `getByDisplayValue` within a section to find them, which was the smell.
+
+  Display Name and Max Heart Rate now use `htmlFor`/`id`, which fixes the name,
+  makes the label a click target and keeps the two from drifting apart — a review
+  on PR #797 pointed out that `aria-label` alone does only the first. Current FTP
+  keeps an `aria-label`, because it has no visible label to bind to: a section
+  heading and a placeholder were all it ever had.
+
+### Added
+
+- **A browser spec for onboarding with every field filled in**
+  (ai-trainer-ops#46) — `e2e/stubbed/onboarding-complete.spec.ts`. The existing
+  stubbed specs walk onboarding by pressing Continue four times, which is the
+  stranger who answers nothing: every answer could be discarded on the way and
+  they would all still pass. This one types a race goal and date, a fitness
+  level, an FTP of 237, a max heart rate of 191 and the structured-plan
+  checkbox, then asks Settings what the account holds — the assertion
+  ai-trainer-ops#43 says nobody can make today, and the one that would have
+  caught #40. The values are deliberately not the placeholders (250 / 185), so a
+  field that ignored the typing cannot read as a pass. The race date and
+  description are read back from the dashboard's season countdown. It walks to
+  Settings through the nav rather than by URL, because a full load of any
+  non-root route bounces to the dashboard — a real defect the spec found, filed
+  as ai-trainer-ops#57.
+
+  What it does **not** read back, stated because a review on PR #797 found the
+  docstring claiming otherwise: nothing in the app displays `fitnessLevel`,
+  `followsTrainingPlan` or `assessmentMethod`, so those are entered and
+  unverified. Instead every choice now asserts its own `aria-pressed` right
+  after the click, so a locator that drifts onto the wrong control fails rather
+  than passing quietly.
+
+- **The onboarding choices say which one is chosen** (ai-trainer-ops#46) —
+  `OnboardingPage.tsx`. The training goal, the fitness level and the three
+  assessment sources conveyed their selection with a tick and a border colour
+  only, so a screen reader announced several identical-sounding buttons with no
+  indication of state. They now carry `aria-pressed`, like the effort scale
+  already did — the same colour-only problem #51.7 fixed on the leg-freshness
+  indicator.
+- **Screenshots and reports from every E2E run, not only the failures**
+  (ai-trainer-ops#46) — `e2e/stack.ts`, `.github/workflows/ci.yml`. `screenshot`
+  is `on` and the artefact uploads on `!cancelled()`, so the product can be
+  looked at after a green run. Traces stay failure-only, being far larger.
+  Both stacks also get their **own** report and output folders: they run as two
+  steps of one job and previously shared the default ones, so the second run
+  deleted the first's report and whichever stack you wanted was the one that was
+  gone.
+
 ### Added
 
 - **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,

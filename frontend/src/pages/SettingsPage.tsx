@@ -500,12 +500,13 @@ export default function SettingsPage() {
         <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
 
         <div className="mb-4">
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
+          <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
             <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
           </label>
           <div className="flex gap-2">
             <input
               type="text"
+              id="settings-display-name"
               value={nameInput}
               onChange={(e) => setNameDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void saveName()}
@@ -635,6 +636,12 @@ export default function SettingsPage() {
             <input
               type="number"
               min={1}
+              /* `aria-label` rather than a `<label htmlFor>` like the two
+                 fields above, because this one has no visible label to bind
+                 to — the section heading and a placeholder are all it had, so
+                 a screen reader announced an unnamed number box
+                 (ai-trainer-ops#46). */
+              aria-label="Current FTP (watts)"
               value={ftpInput}
               onChange={(e) => setFtpDraft(e.target.value)}
               placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
@@ -708,12 +715,13 @@ export default function SettingsPage() {
 
         <div className="space-y-3 mb-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
+            <label htmlFor="settings-max-hr" className="block text-xs font-semibold text-gray-700 mb-1">
               <span className="flex items-center gap-1"><Heart size={13} /> Max Heart Rate (bpm)</span>
             </label>
             <input
               type="number"
               min={1}
+              id="settings-max-hr"
               value={maxHrInput}
               onChange={(e) => setMaxHrDraft(e.target.value)}
               placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
