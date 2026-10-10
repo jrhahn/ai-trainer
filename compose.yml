@@ -299,7 +299,9 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+        # `-`, not `:-`: an empty value is meaningful (same origin, see
+        # app.env.j2) and must not fall back to localhost.
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL-http://localhost:8000}
         VITE_AUTHELIA_URL: ${VITE_AUTHELIA_URL:-}
     restart: unless-stopped
     depends_on:

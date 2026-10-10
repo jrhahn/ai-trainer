@@ -1,3 +1,5 @@
+// Empty in production: the API is then called on the page's own origin, so
+// every domain the app is served on works (ai-trainer-ops#45).
 export const BACKEND_URL =
   (import.meta.env.VITE_BACKEND_URL as string | undefined ?? 'http://localhost:8000').replace(/\/$/, '')
 
