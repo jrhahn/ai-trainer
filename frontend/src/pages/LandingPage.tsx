@@ -34,7 +34,7 @@ export const pillars = [
 export const steps = [
   {
     title: 'Connect once',
-    body: 'intervals.icu pulls your rides straight from Strava, and we read them from there. Prefer to stay off both? Upload a FIT file instead.',
+    body: 'intervals.icu pulls your rides straight from Strava, and we read them from there. Prefer to stay off both? Upload a FIT file or enter your sessions yourself.',
   },
   {
     title: 'Set the target',
@@ -54,7 +54,7 @@ export const openSourceFacts = [
   },
   {
     icon: GithubMark,
-    title: 'AGPL-3.0, all of it',
+    title: 'Source available, all of it',
     body: 'Every line is public. If you disagree with how the coach decided your rest day, go and read the function that decided it.',
   },
   {
@@ -107,7 +107,7 @@ export default function LandingPage() {
         <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] lg:items-center lg:pt-20">
           <div>
             <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-amber-300">
-              Open source · Free to run
+              Source available · Free to run
             </p>
             <h1 className="max-w-[15ch] text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.5rem]">
               Coaching that keeps up with your week.
@@ -181,7 +181,7 @@ export default function LandingPage() {
               >
                 Setup guide
               </a>{' '}
-              — Strava, intervals.icu and your Gemini key, step by step.
+              — intervals.icu, Strava and your Gemini key, step by step.
             </p>
           </div>
 
@@ -238,7 +238,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-white/5">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:px-8">
-          <span>Train Like a Pro — open-source cycling coaching, AGPL-3.0.</span>
+          <span>Train Like a Pro — source-available cycling coaching, FSL-1.1-ALv2.</span>
           <a
             href={SETUP_GUIDE_URL}
             target="_blank"
