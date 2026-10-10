@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The app works on every domain it is served on** (ai-trainer-ops#45) —
+  `services/api.ts`, `deploy/ansible/templates/app.env.j2`, `compose.yml`.
+  Production baked one domain into the bundle as the API address, so on the
+  second domain every API call was cross-site and CSP `connect-src 'self'`
+  blocked it. `VITE_BACKEND_URL` now renders empty, and the client calls
+  `/api/v1` on the page's own origin. This is also what lets the session
+  cookie from #45 work on both domains. Local development is unchanged: an unset
+  variable still means `http://localhost:8000`.
+
 - **Settings card headings sit one level below their section** (ai-trainer-ops#60) —
   `SettingsPage.tsx`, `AIKeySettings`, `AthleteTraitsSettings`,
   `ConversationImportSettings`, `MotivationModelSettings`, `SessionSettings`,

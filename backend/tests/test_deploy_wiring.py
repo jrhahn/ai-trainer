@@ -472,3 +472,16 @@ def test_the_real_manifest_declares_a_reason_for_every_entry(manifest: dict):
     for entry in manifest["forwarded"] + manifest["workflow_only"]:
         name = entry.get("var") or entry["name"]
         assert len(entry["why"].strip()) > 20, f"{name} needs a real reason, not {entry['why']!r}"
+
+
+def test_the_frontend_calls_the_api_on_its_own_origin():
+    """Production serves the app on several domains (ai-trainer-ops#45).
+
+    A fixed VITE_BACKEND_URL makes every other domain cross-site: CSP
+    `connect-src 'self'` blocks its API calls, and a SameSite session cookie
+    would not be sent. Empty means same origin, and compose must pass the empty
+    value through rather than fall back to localhost (`:-` would).
+    """
+    assert "VITE_BACKEND_URL={{ vite_backend_url | default('') }}" in TEMPLATE.read_text()
+    compose = (REPO / "compose.yml").read_text()
+    assert "VITE_BACKEND_URL: ${VITE_BACKEND_URL-http://localhost:8000}" in compose
