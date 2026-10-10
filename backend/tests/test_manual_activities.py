@@ -523,3 +523,43 @@ async def test_an_implausible_distance_is_refused(client: AsyncClient, auth_head
     response = await client.post(URL, headers=auth_headers, json=_entry(distanceKm=bad))
 
     assert response.status_code == 422
+
+
+async def test_correcting_a_run_to_strength_keeps_the_distance_for_a_change_back(
+    client: AsyncClient, auth_headers
+):
+    """A sport change does not throw the distance away, and that is deliberate.
+
+    The dialog offers no distance for a strength session, so a correction to
+    strength sends no distance key, and the "omission means leave it" rule keeps
+    the stored one. Raised in review on PR #799 as worth pinning rather than
+    leaving to be inferred.
+
+    It is the right way round: the common case is an athlete who picked the wrong
+    sport, and getting their distance back when they fix it is kinder than making
+    them retype it. Nothing reads it meanwhile — the running envelope is built
+    only for runs, so the strength row carries no mileage.
+    """
+    from services import run_durability
+
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(distanceKm=9.0))
+    ).json()
+    url = f"{URL}/{created['date']}/{created['slot']}"
+    unchanged = dict(durationMinutes=45, perceivedEffort=3)
+
+    await client.put(
+        url, headers=auth_headers, json=_correction(sport="strength", **unchanged)
+    )
+
+    assert [log.distance_km for log in await _logs()] == [9.0], "kept on the log"
+    (row,) = await _metrics()
+    assert row.perf_signals is None, "but no mileage while it is a strength session"
+
+    # And it comes back when the sport does.
+    await client.put(
+        url, headers=auth_headers, json=_correction(sport="running", **unchanged)
+    )
+
+    (row,) = await _metrics()
+    assert run_durability.activity_run_distance_km(row) == 9.0

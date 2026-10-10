@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **No `speed_curve`.** One distance and one duration are a point, not an
     envelope, and Critical Speed needs a curve. An athlete who enters runs gets
     mileage, not a CS estimate, which is the honest result.
+  - **Correcting a run to a strength session keeps the distance**, so it comes
+    back if the sport is corrected again. The common case is an athlete who
+    picked the wrong sport, and nothing reads the figure meanwhile — the running
+    envelope is built only for runs. Raised in review on PR #799 as worth pinning
+    rather than leaving to be inferred.
 
 ### Fixed
 

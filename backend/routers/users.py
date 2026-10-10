@@ -678,10 +678,14 @@ async def update_manual_activity(
         if "average_heart_rate" in body.model_fields_set
         else existing.average_heart_rate
     )
-    # Same rule as the heart rate, and for the same reason: the dialog sends a
-    # distance only for the sports that have one, so a correction to a strength
-    # session must not blank the distance of... nothing, while a correction to a
-    # run that omitted the field must not blank the run's.
+    # Same rule as the heart rate, and for the same reason. The dialog sends a
+    # distance only for the sports that have one, so an omitted key has to mean
+    # "leave it": otherwise correcting a run's note, which sends no distance
+    # because the form was not asked about one, would delete the distance the
+    # athlete entered. Correcting a run *to* a strength session therefore leaves
+    # the stored distance in place — see
+    # `test_correcting_a_run_to_strength_keeps_the_distance_for_a_change_back`,
+    # which is where that choice is written down.
     distance = (
         body.distance_km
         if "distance_km" in body.model_fields_set
