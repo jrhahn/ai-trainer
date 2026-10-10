@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
@@ -29,9 +29,77 @@ export default function App() {
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
 
+  // Whether the server has yet said *who this session is*. A stored token is
+  // read synchronously at start-up, but `isOnboarded` is not persisted and
+  // starts `false`, so on the first render of a full page load the app holds a
+  // session it knows nothing about — and the route tree below used to answer
+  // anyway (ai-trainer-ops#57).
+  //
+  // What that cost: loading `/settings` directly took the `!isOnboarded` branch,
+  // whose only route is `/onboarding`, so `path="*"` replaced the URL; the
+  // profile then arrived, the authenticated tree mounted, `/onboarding` was not
+  // in it, and `path="*"` replaced the URL again — landing on the dashboard. Two
+  // redirects, neither an authorisation decision, and the athlete's bookmark
+  // thrown away by the first one. The loading screen did not hide it either: it
+  // is an overlay drawn *beside* `<Routes>`, not instead of it, so all of this
+  // happened behind "Loading your training data…".
+  //
+  // So: "not loaded yet" is its own state and the router is not asked until it
+  // is over. It starts as "known" for a visitor with no token, because there is
+  // nothing to find out about them.
+  // Which token has been looked up, rather than a boolean for whether some
+  // token has. Derived, so there is no render in which a *new* token looks
+  // already-checked: a boolean reset inside the effect is still `true` for the
+  // one render in which `authToken` changed from null to a value, which is
+  // exactly a fresh sign-in — and that render would take the not-onboarded
+  // branch and replace the URL before the effect could hold it. Found in review
+  // on PR #798.
+  const [checkedToken, setCheckedToken] = useState<string | null>(null)
+  // Three conditions, and the third is not redundant. `loadUserData` dedupes
+  // concurrent loads for one token and the skipped caller gets an immediate
+  // `undefined` (#458) — and on the *real* sign-in path the login page starts
+  // the load first, so App's call is always the deduped one. Its `.finally`
+  // therefore fires at once and marks the token checked while the profile is
+  // still in flight, with `isOnboarded` still false: the redirect this gate
+  // exists to prevent, on every fresh sign-in. `!isLoadingUserData` is what
+  // closes that, and it cannot stand alone either — on the first render of a
+  // full page load no load has started yet, so only `checkedToken` knows.
+  // Found in review on PR #798.
+  const profileChecked =
+    !authToken || (checkedToken === authToken && !isLoadingUserData)
+
+  // A warning for whoever adds the first mid-session reload: because
+  // `isLoadingUserData` is part of the condition, the gate *re-holds* every time
+  // a load starts again, and a re-hold unmounts the authenticated tree. Today
+  // that is harmless — the only callers of `loadUserData` are this effect and
+  // the three sign-in pages, so it never runs except at sign-in. A "refresh my
+  // data" button calling it would blank whatever page the athlete was on.
+  // If that day comes, ai-trainer-ops#58 is the fix: once a deduped call
+  // resolves with the real load, `checkedToken` alone is enough and this term
+  // can go.
+
   useEffect(() => {
-    if (authToken) {
-      void loadUserData()
+    if (!authToken) {
+      // Not strictly needed — `!authToken` already reports "checked" — but a
+      // stale token left here would re-open the original hole if a sign-out and
+      // sign-in ever produced the same token string.
+      setCheckedToken(null)
+      return
+    }
+    let cancelled = false
+    // `.finally` rather than `.then`, though the two are equivalent today:
+    // `loadUserData` catches everything and returns, so it does not reject, and
+    // no test can tell the two apart — the review on PR #798 asked and the
+    // answer is that it cannot. Kept because the thing that must hold is "an
+    // attempt has been made", not "an attempt succeeded": the day that function
+    // grows a path that throws, `.then` would hold the athlete on a blank page
+    // for as long as the backend stayed unreachable, and nothing would point
+    // here.
+    void loadUserData().finally(() => {
+      if (!cancelled) setCheckedToken(authToken)
+    })
+    return () => {
+      cancelled = true
     }
   }, [authToken, loadUserData])
 
@@ -78,7 +146,18 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/admin" element={<AdminPage />} />
 
-        {!authToken ? (
+        {!profileChecked ? (
+          // Deliberately no element and, above all, no `<Navigate>`: the URL has
+          // to survive until there is something to decide with. The overlay below
+          // is what the athlete sees meanwhile.
+          //
+          // No `authToken &&` guard: `profileChecked` is derived from the token
+          // itself, so a signed-out visitor is "checked" by definition and
+          // cannot land here — not even for the one render after a logout that
+          // interrupted a load, which an `isLoading`-style boolean would have
+          // spent on a blank page.
+          <Route path="*" element={null} />
+        ) : !authToken ? (
           <>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />

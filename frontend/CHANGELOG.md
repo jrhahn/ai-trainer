@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A link to anything but the dashboard now opens that thing**
+  (ai-trainer-ops#57) — `App.tsx`. Loading `/settings` or `/workout/:date`
+  directly — a bookmark, a shared link, a reload — landed on the dashboard. Not
+  an authorisation failure: the JWT is read synchronously from `sessionStorage`
+  at start-up, but `isOnboarded` is **not** persisted and starts `false`, so on
+  the first render of a full page load the app held a session it knew nothing
+  about and the router answered anyway. The not-onboarded branch's `path="*"`
+  replaced the URL, the profile then arrived, `/onboarding` was not in the
+  authenticated tree, and `path="*"` replaced it again. Two redirects, neither a
+  decision about access, and the requested URL discarded by the first one.
+
+  The loading screen did not hide it: `showOverlay` is drawn *beside* `<Routes>`
+  rather than instead of it, so all of this happened behind "Loading your
+  training data…", which is why it never looked like a routing problem.
+
+  One of #797's own browser specs had to change with it: its reload test walked
+  back through the dashboard after reloading Settings, because that is where a
+  reload used to land. The spec beside it had found this defect and that one had
+  quietly encoded it. It now asserts that a reload of Settings *stays* on
+  Settings, and the `TODO(ai-trainer-ops#57)` workaround in its `openSettings`
+  helper is gone with the bug.
+
+  "Not loaded yet" is now its own state and the router is not asked until it is
+  over — the same confusion #41 had when `isOnboarded` was written before the
+  plan existed. A visitor with no token is "known" from the first render, so
+  nothing costs them a blank frame. Found by the browser spec added for
+  ai-trainer-ops#46, which tried to reach Settings by URL.
 - **The profile inputs in Settings had no accessible name** (ai-trainer-ops#46) —
   `SettingsPage.tsx`. Display Name, Current FTP and Max Heart Rate each had a
   visible `<label>` sitting *beside* the input with no `htmlFor`, so nothing
@@ -61,6 +88,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   steps of one job and previously shared the default ones, so the second run
   deleted the first's report and whichever stack you wanted was the one that was
   gone.
+
+  The state is **which token has been looked up**, not a boolean for whether one
+  has. A boolean reset inside the effect is still `true` for the one render in
+  which the token changed from absent to present — which is exactly a fresh
+  sign-in, and that render took the not-onboarded branch and replaced the URL
+  before the effect could hold it. Deriving it also removes the mirror case: once
+  a token has been looked up, signing out leaves a stale token on one side of the
+  comparison, which a bare equality check would have answered by rendering
+  nothing to someone who should see the landing page. Both found in review on
+  PR #798, and both now pinned by tests.
+
+  And the gate waits for the load to have **settled**, not merely to have been
+  attempted. `loadUserData` dedupes concurrent loads for one token and hands the
+  skipped caller an immediate `undefined` (#458) — and on the real sign-in path
+  the login page starts the load first, so App's call is always the deduped one.
+  Marking the token checked on that signal alone lifted the gate while the
+  profile was still in flight, with `isOnboarded` still `false`: the redirect
+  this change exists to prevent, on every fresh sign-in. Also found in review on
+  PR #798. The first version of the test for it passed against the bug, because
+  it asserted before the `.finally` microtask had run.
 
 ### Added
 

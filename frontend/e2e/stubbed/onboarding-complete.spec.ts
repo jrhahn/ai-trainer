@@ -138,32 +138,16 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
 }
 
-/** Walk to Settings the way the athlete does, through the nav.
+/** Open Settings.
  *
- * Deliberately *not* `page.goto('/settings')`. A full load of any non-root
- * route bounces to the dashboard: `App.tsx` decides the route tree from
- * `authToken`, which is empty on the first render because the persisted store
- * rehydrates asynchronously, so `path="*"` fires `<Navigate to="/" replace>` and
- * replaces the URL before the token arrives. Bookmarking `/settings` or
- * `/workout/:date` therefore cannot work. That is a real defect and this spec
- * found it — it is written up separately rather than asserted here, because this
- * spec is about whether onboarding's answers reach the account, and a spec that
- * fails for a second reason tells you about neither.
- *
- * TODO(ai-trainer-ops#57): once the deep-link fix is in, this can go back to a
- * plain `page.goto('/settings')`. Left as a marker so the workaround does not
- * outlive the bug it works around.
+ * This walked through the nav, with a `TODO(ai-trainer-ops#57)` on it, because a
+ * full load of any non-root route used to bounce to the dashboard — a defect
+ * this spec found and #798 fixed. The workaround is gone with the bug: a plain
+ * navigation is what an athlete's bookmark does, and `deep-link.spec.ts` is what
+ * proves it works.
  */
 async function openSettings(page: Page) {
-  const link = page.getByRole('link', { name: 'Settings' }).first()
-  // Below 768px the sidebar is `hidden md:flex` and the nav lives in a drawer
-  // that is only in the DOM while it is open, so the same walk needs one more
-  // tap at 390px than at 1366px. Asking whether the link is there is what keeps
-  // one helper working at both widths.
-  if (!(await link.isVisible().catch(() => false))) {
-    await page.getByRole('button', { name: 'Toggle menu' }).click()
-  }
-  await link.click()
+  await page.goto('/settings')
   await expect(page.getByLabel('Display Name')).toBeVisible({ timeout: 30_000 })
 }
 
@@ -224,15 +208,19 @@ test.describe('onboarding with everything filled in', () => {
     await openSettings(page)
     await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp)
 
-    // A full browser reload, which throws away everything the tab held. The
-    // reload lands on the dashboard rather than back on Settings — see
-    // `openSettings` — so the walk is repeated, and what is being asserted is
-    // that the figures come back from the account and not from the page.
+    // A full browser reload, which throws away everything the tab held, and
+    // **stays on Settings** — which is the point and was not true when this test
+    // was written. It used to walk back through the dashboard, because a reload
+    // of any non-root route bounced there; the test had quietly encoded the very
+    // defect the spec beside it had found (ai-trainer-ops#57, fixed in #798).
+    // Asserting the page we are on is therefore part of the assertion, not
+    // decoration.
     await page.reload()
-    await waitForPopulatedDashboard(page, athlete)
-    await openSettings(page)
 
-    await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp)
+    await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp, {
+      timeout: 30_000,
+    })
+    expect(new URL(page.url()).pathname).toBe('/settings')
     await expect(page.getByLabel('Max Heart Rate (bpm)')).toHaveValue(ANSWERS.maxHeartRate)
     await expect(page.getByText(`Signed in as ${athlete.email}`)).toBeVisible()
 

@@ -13,8 +13,9 @@
  * pointless for as long as it did.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import { useAppStore } from './store/useAppStore'
 
 const mockFetch = vi.fn()
 
@@ -42,6 +43,11 @@ vi.mock('./hooks/useImportProgress', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   window.sessionStorage.clear()
+  // The store is a module singleton, so one test's session would otherwise be
+  // the next test's starting point — and the signed-out tests below would be
+  // testing a signed-in app.
+  useAppStore.setState({ authToken: null, isOnboarded: false, isLoadingUserData: false })
+  window.history.pushState({}, '', '/')
   mockFetch.mockResolvedValue({
     ok: false,
     status: 401,
@@ -77,5 +83,151 @@ describe('App, signed out', () => {
     // flash this test is about.
     expect(screen.queryByText(/Authelia/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Checking your secure session/i)).not.toBeInTheDocument()
+  })
+})
+
+
+describe('App, signed in but not yet told whose session this is (ai-trainer-ops#57)', () => {
+  it('keeps the requested URL instead of answering before it can', () => {
+    // A load that never settles, which is the whole window this is about: the
+    // token is read synchronously at start-up but `isOnboarded` is not
+    // persisted, so for as long as the profile is in flight the app holds a
+    // session it knows nothing about.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+    useAppStore.setState({ authToken: 'tok-deep-link' })
+
+    render(<App />)
+
+    // Synchronously, with no `waitFor`: the redirect this prevents happened
+    // *during* render, so a retrying assertion would simply wait past it and
+    // then read the URL the bug had already replaced.
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('does not strand the athlete there when the load fails', () => {
+    // The gate has to lift on an answer of *either* kind. A failed profile load
+    // still settles the question — the store signs the session out or raises
+    // `dataLoadWarning` — and leaving it unresolved would hold a blank page for
+    // as long as the backend stayed unreachable.
+    mockFetch.mockRejectedValue(new Error('backend unreachable'))
+    window.history.pushState({}, '', '/settings')
+    useAppStore.setState({ authToken: 'tok-doomed' })
+
+    render(<App />)
+
+    return waitFor(() => {
+      expect(window.location.pathname).not.toBe('/settings')
+    })
+  })
+
+  it('holds the URL from the very first render after a sign-in, not one later', async () => {
+    // The window a boolean would have left open: `authToken` goes null → value
+    // while the "have we checked?" flag is still true, so that one render takes
+    // the not-onboarded branch and replaces the URL before any effect can hold
+    // it. Deriving the state from *which* token was checked closes it. Found in
+    // review on PR #798.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+    // Signed out to begin with, so the landing page is correct here.
+    expect(window.location.pathname).toBe('/')
+
+    window.history.pushState({}, '', '/settings')
+    await act(async () => {
+      useAppStore.setState({ authToken: 'tok-fresh-login' })
+    })
+
+    // Still /settings: the sign-in must not cost the athlete the page they
+    // asked for, which is also what a `from`-style redirect target depends on.
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('holds the URL on the real sign-in path, where the load is already running', async () => {
+    // The sign-in pages call `loadUserData(token)` themselves, and that sets
+    // the token and `isLoadingUserData` before its first await. App's own call
+    // then hits the dedupe guard and returns immediately, so its `.finally`
+    // fires while the profile is still in flight. Marking the token checked on
+    // that signal alone lifted the gate with `isOnboarded` still false — the
+    // redirect this whole change exists to prevent, on every fresh sign-in.
+    // Found in review on PR #798.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+
+    await act(async () => {
+      // Exactly what LoginPage/RegisterPage/AuthCallbackPage do.
+      void useAppStore.getState().loadUserData('tok-via-login-page')
+    })
+
+    render(<App />)
+
+    // Let App's own (deduped) call resolve and its `.finally` run. Asserting
+    // before this flushes reads the URL *before* the hole can open, which is
+    // how the first version of this test passed against the bug.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('does not blank the page after a logout that follows a completed load', async () => {
+    // The case `!authToken ||` exists for, and the one a `checkedToken ===
+    // authToken` comparison alone gets wrong: once a token *has* been looked up,
+    // signing out leaves a stale token on one side of that comparison and `null`
+    // on the other, so the gate would hold shut and render nothing to someone
+    // who should be looking at the landing page.
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      json: async () => ({ detail: 'nope' }),
+    })
+    useAppStore.setState({ authToken: 'tok-looked-up' })
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+    // Let the lookup finish, so the token counts as checked.
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      useAppStore.setState({ authToken: null })
+    })
+
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it('does not blank the page for the render after a logout mid-load', async () => {
+    // The other end of the same transition. With a boolean, `authToken` is null
+    // while the flag is still false for one render, so the held branch would
+    // render nothing to someone who should be looking at the landing page.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    useAppStore.setState({ authToken: 'tok-interrupted' })
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+    expect(window.location.pathname).toBe('/settings')
+
+    await act(async () => {
+      useAppStore.setState({ authToken: null })
+    })
+
+    // Signed out is an answer, so the router may act on it immediately.
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it('still sends a visitor with no session to the landing page at once', () => {
+    // The other side of the gate: with no token there is nothing to find out,
+    // so it must not cost a visitor a blank frame.
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+
+    expect(window.location.pathname).toBe('/')
   })
 })
