@@ -148,12 +148,15 @@ def _sign_in(
 
 
 def _start_cookie_session(
-    user: models.User, response: Response
+    user: models.User, response: Response, *, session_id: str | None = None
 ) -> schemas.SessionResponse:
+    """Set the session cookie; a renewal passes the session id it keeps."""
+    session_id = session_id or secrets.token_urlsafe(16)
     token = auth.create_access_token(
         user.id,
         token_generation=user.token_generation,
         lifetime=timedelta(days=auth.SESSION_DAYS),
+        session_id=session_id,
     )
     # Same flags as the trusted-device cookie below, for the same reasons:
     # HttpOnly always, Secure wherever the site is HTTPS.
@@ -166,7 +169,7 @@ def _start_cookie_session(
         samesite="lax",
         path="/",
     )
-    return schemas.SessionResponse(csrf_token=auth.csrf_token_for(token))
+    return schemas.SessionResponse(csrf_token=auth.csrf_token_for(session_id))
 
 
 TRUSTED_DEVICE_COOKIE = "tlap_device"
@@ -428,7 +431,8 @@ async def resume_session(
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
         return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
-    return _start_cookie_session(user, response)
+    claims = auth.read_access_token(request.cookies[auth.SESSION_COOKIE])
+    return _start_cookie_session(user, response, session_id=claims.session_id)
 
 
 def _end_cookie_session(response: Response) -> Response:

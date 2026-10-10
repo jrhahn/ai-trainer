@@ -224,6 +224,12 @@ def password_needs_rehash(hashed: str) -> bool:
 GENERATION_CLAIM = "gen"
 """Which generation of the account's sessions this token belongs to (#704)."""
 
+SESSION_ID_CLAIM = "sid"
+"""Which cookie session this token belongs to (ai-trainer-ops#45).
+
+Kept when /auth/resume renews the cookie, so the CSRF token derived from it
+stays valid in every tab until the next sign-in."""
+
 ADMIN_CREDENTIAL_CLAIM = "cred"
 """Which admin credentials this token was issued against (#704)."""
 
@@ -252,6 +258,7 @@ class AccessTokenClaims:
 
     user_id: str
     token_generation: int
+    session_id: str | None = None
 
 
 def _decode(token: str) -> dict:
@@ -273,6 +280,7 @@ def create_access_token(
     *,
     token_generation: int = 0,
     lifetime: timedelta | None = None,
+    session_id: str | None = None,
 ) -> str:
     """Mint an access token for *user_id*, stamped with its session generation.
 
@@ -285,19 +293,24 @@ def create_access_token(
         lifetime or timedelta(minutes=JWT_EXPIRE_MINUTES)
     )
     payload = {"sub": user_id, "exp": expire, GENERATION_CLAIM: token_generation}
+    if session_id is not None:
+        payload[SESSION_ID_CLAIM] = session_id
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def csrf_token_for(session_token: str) -> str:
-    """The CSRF token that goes with one session cookie (ai-trainer-ops#45).
+def csrf_token_for(session_id: str) -> str:
+    """The CSRF token that goes with one cookie session (ai-trainer-ops#45).
 
-    Derived rather than stored: an HMAC of the cookie's value, so it changes
-    whenever the session does and needs no table. The client gets it in the
-    body of the response that set the cookie, and from /auth/resume.
+    Derived rather than stored: an HMAC of the session id, so it needs no
+    table. Of the session id and not of the cookie's value, because renewal
+    replaces the cookie in every tab at once while each tab keeps the CSRF
+    token it was given; a token tied to the cookie would break the writes of
+    every tab but the one that renewed it (found in review on PR #808). A new
+    sign-in starts a new session id, and with it a new token.
     """
     digest = hmac.new(
         JWT_SECRET.encode("utf-8"),
-        b"csrf\x00" + session_token.encode("utf-8"),
+        b"csrf\x00" + session_id.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
     return digest[:32]
@@ -361,7 +374,12 @@ def read_access_token(token: str) -> AccessTokenClaims:
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
-    return AccessTokenClaims(user_id=user_id, token_generation=generation)
+    session_id = payload.get(SESSION_ID_CLAIM)
+    return AccessTokenClaims(
+        user_id=user_id,
+        token_generation=generation,
+        session_id=session_id if isinstance(session_id, str) else None,
+    )
 
 
 def decode_token(token: str) -> str:
@@ -413,13 +431,17 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
             )
-        if request.method not in _SAFE_METHODS and not hmac.compare_digest(
-            request.headers.get(CSRF_HEADER, ""), csrf_token_for(token)
+    claims = read_access_token(token)
+    if credentials is None and request.method not in _SAFE_METHODS:
+        # A cookie without a session id was not minted as a cookie session,
+        # so no CSRF token can match it.
+        expected = csrf_token_for(claims.session_id) if claims.session_id else ""
+        if not expected or not hmac.compare_digest(
+            request.headers.get(CSRF_HEADER, ""), expected
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail=CSRF_REJECTED_DETAIL
             )
-    claims = read_access_token(token)
     user = await crud.get_user_by_id(db, claims.user_id)
     if user is None:
         raise HTTPException(

@@ -135,8 +135,10 @@ trusted-device cookie).
 `Lax` rather than `Strict` so that a link from an email or another app arrives
 signed in. Lax already withholds the cookie from cross-site POSTs; on top of
 that, every state-changing request the cookie authenticates must carry
-`X-CSRF-Token`, an HMAC of the cookie's value that the client receives in the
-body of the sign-in and resume responses and keeps in memory only.
+`X-CSRF-Token`, an HMAC of the session id inside the cookie, which the client
+receives in the body of the sign-in and resume responses and keeps in memory
+only. The session id survives renewal, so a resume in one tab does not
+invalidate the token another tab holds; a new sign-in gets a new one.
 `get_current_user` checks it, so every authenticated route is covered. A
 cross-site page can neither read the token (CORS) nor send the header without a
 preflight the allowlist refuses.

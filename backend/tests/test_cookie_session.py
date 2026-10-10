@@ -120,8 +120,8 @@ async def test_resume_renews_the_cookie_and_hands_back_the_csrf_token(browser):
     await _sign_up(browser)
     response = await browser.get("/api/v1/auth/resume")
     assert response.status_code == 200
-    csrf = response.json()["csrfToken"]
-    assert csrf == auth.csrf_token_for(browser.cookies[auth.SESSION_COOKIE])
+    claims = auth.read_access_token(browser.cookies[auth.SESSION_COOKIE])
+    assert response.json()["csrfToken"] == auth.csrf_token_for(claims.session_id)
     assert _session_cookie_header(response)
 
 
@@ -181,3 +181,55 @@ async def test_a_bearer_header_wins_over_the_cookie_and_needs_no_csrf(browser):
     assert response.status_code == 200
     # The cookie's account was not the one revoked.
     assert (await browser.get(PROBE)).status_code == 200
+
+
+async def test_a_renewal_in_another_tab_leaves_this_tab_able_to_write(
+    browser, monkeypatch
+):
+    # Tab A signed in and holds its CSRF token; tab B opens and resumes, which
+    # replaces the cookie for both. A's next write must still go through.
+    # Found in review on PR #808.
+    tab_a_csrf = await _sign_up(browser)
+    first = browser.cookies[auth.SESSION_COOKIE]
+    # A renewal within the same second would mint the identical JWT and hide
+    # the bug; a different expiry makes the new cookie really new.
+    monkeypatch.setattr(auth, "SESSION_DAYS", auth.SESSION_DAYS - 1)
+    tab_b = await browser.get("/api/v1/auth/resume")
+    assert browser.cookies[auth.SESSION_COOKIE] != first
+    assert tab_b.json()["csrfToken"] == tab_a_csrf
+
+    response = await browser.post(
+        "/api/v1/auth/sessions/revoke",
+        json={"password": PASSWORD},
+        headers={auth.CSRF_HEADER: tab_a_csrf},
+    )
+    assert response.status_code == 200, response.text
+
+
+async def test_a_new_sign_in_gets_a_new_csrf_token(browser):
+    first = await _sign_up(browser)
+    second = (
+        await browser.post(
+            "/api/v1/auth/login",
+            json={"email": "rider@example.com", "password": PASSWORD},
+            headers=COOKIE_MODE,
+        )
+    ).json()["csrfToken"]
+    assert second != first
+
+
+async def test_a_cookie_without_a_session_id_cannot_write(browser):
+    # A bearer token planted as the cookie was never a cookie session, so there
+    # is no CSRF token that matches it.
+    token = (
+        await browser.post(
+            "/api/v1/auth/register",
+            json={"name": "Rider", "email": "rider@example.com", "password": PASSWORD},
+        )
+    ).json()["access_token"]
+    response = await browser.post(
+        "/api/v1/auth/sessions/revoke",
+        json={"password": PASSWORD},
+        headers={"Cookie": f"{auth.SESSION_COOKIE}={token}", auth.CSRF_HEADER: ""},
+    )
+    assert response.status_code == 403

@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tlap_session` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` outside dev, 30 days)
   and a `csrfToken` in the body instead of an `access_token`, so no script can read
   the session. `get_current_user` accepts the cookie when there is no
-  `Authorization` header, and requires `X-CSRF-Token` (an HMAC of the cookie) on
+  `Authorization` header, and requires `X-CSRF-Token` (an HMAC of the session id, which survives renewal, so a
+  second tab does not break the first) on
   every state-changing request the cookie authenticates. `GET /auth/resume`
   tells the app whether the browser holds a session, hands the CSRF token back
   after a reload, and renews the cookie, so the 30 days count from the last visit;
