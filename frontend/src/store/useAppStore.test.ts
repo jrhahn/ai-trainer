@@ -385,6 +385,116 @@ describe('logout', () => {
   })
 })
 
+describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
+  it('makes a deduped call wait for the load it joined', async () => {
+    let resolveUser!: (value: unknown) => void
+    mockFetchCurrentUser.mockReturnValue(new Promise((resolve) => { resolveUser = resolve }))
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    // What a sign-in page and App's effect do at the same moment.
+    const first = useAppStore.getState().loadUserData('tok-shared')
+    let secondSettled = false
+    const second = useAppStore.getState().loadUserData('tok-shared').then(() => { secondSettled = true })
+
+    // Still one load, and the joiner is still waiting on it.
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(mockFetchCurrentUser).toHaveBeenCalledTimes(1)
+    expect(secondSettled).toBe(false)
+
+    resolveUser({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    await second
+
+    // By the time the joiner continues, the store is filled.
+    expect(useAppStore.getState().userProfile?.email).toBe('alice@example.com')
+    expect(useAppStore.getState().isOnboarded).toBe(true)
+    await first
+  })
+
+  it('does nothing without a token', async () => {
+    await useAppStore.getState().loadUserData()
+
+    expect(mockFetchCurrentUser).not.toHaveBeenCalled()
+    expect(useAppStore.getState().isLoadingUserData).toBe(false)
+  })
+
+  it('does not write a load back over a logout, and keeps the next load deduped', async () => {
+    let resolveOld!: (value: unknown) => void
+    mockFetchCurrentUser.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve }))
+    mockFetchCurrentUser.mockReturnValue(new Promise(() => {}))
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    const old = useAppStore.getState().loadUserData('tok-old')
+    useAppStore.getState().logout()
+    void useAppStore.getState().loadUserData('tok-new')
+
+    resolveOld({ profile: { name: 'Stale', email: 'stale@example.com' }, isOnboarded: true })
+    await old
+
+    // The old session's profile is not resurrected (#454)...
+    expect(useAppStore.getState().authToken).toBe('tok-new')
+    expect(useAppStore.getState().userProfile).toBeNull()
+    // ...and its settling did not drop the new load: a joiner still waits.
+    let joinerSettled = false
+    void useAppStore.getState().loadUserData('tok-new').then(() => { joinerSettled = true })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(joinerSettled).toBe(false)
+    expect(mockFetchCurrentUser).toHaveBeenCalledTimes(2)
+  })
+
+  it('names every secondary request that failed and falls back to empty data', async () => {
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    for (const mock of [
+      mockFetchTrainingPlan,
+      mockFetchWorkoutLogs,
+      mockFetchChatHistory,
+      mockFetchCoachMemory,
+      mockFetchRaceEvents,
+      mockFetchMetricsHistory,
+      mockFetchRideMetricsHistory,
+    ]) {
+      mock.mockRejectedValue(new Error('Network error'))
+    }
+
+    await useAppStore.getState().loadUserData('token-123')
+
+    const state = useAppStore.getState()
+    expect(state.dataLoadWarning).toBe(
+      'Some data failed to load (training plan, workout logs, chat history, coach memory, race events, fitness metrics, ride history). Refresh the page to retry.'
+    )
+    expect(state.trainingPlan).toEqual([])
+    expect(state.workoutLogs).toEqual({})
+    expect(state.raceEvents).toEqual([])
+    expect(state.metricsHistory).toEqual([])
+    expect(state.rideMetricsHistory).toEqual([])
+  })
+})
+
 describe('loadUserData auth handling', () => {
   it('clears the session on an auth error from the user endpoint', async () => {
     mockFetchCurrentUser.mockRejectedValue(new Error('Token expired'))

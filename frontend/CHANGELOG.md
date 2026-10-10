@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Signing in waits for the profile before it navigates**
+  (ai-trainer-ops#58) — `store/useAppStore.ts`, `App.tsx`. `loadUserData`
+  dedupes concurrent loads for one token (#458), but the skipped caller got an
+  immediate `undefined`, so `await loadUserData(token)` could mean "loaded" or
+  "somebody else started loading". The login, register and auth-callback pages
+  await it and then navigate, and whichever of them lost the race with App's own
+  call navigated on an empty store. A deduped call now resolves with the load it
+  joined. App's sign-in gate no longer needs `!isLoadingUserData` to cover that
+  window, so it is gone — and with it the gate re-holding, and unmounting the
+  page, whenever a later reload starts.
+
 - **A link to anything but the dashboard now opens that thing**
   (ai-trainer-ops#57) — `App.tsx`. Loading `/settings` or `/workout/:date`
   directly — a bookmark, a shared link, a reload — landed on the dashboard. Not

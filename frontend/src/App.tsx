@@ -55,28 +55,15 @@ export default function App() {
   // branch and replace the URL before the effect could hold it. Found in review
   // on PR #798.
   const [checkedToken, setCheckedToken] = useState<string | null>(null)
-  // Three conditions, and the third is not redundant. `loadUserData` dedupes
-  // concurrent loads for one token and the skipped caller gets an immediate
-  // `undefined` (#458) — and on the *real* sign-in path the login page starts
-  // the load first, so App's call is always the deduped one. Its `.finally`
-  // therefore fires at once and marks the token checked while the profile is
-  // still in flight, with `isOnboarded` still false: the redirect this gate
-  // exists to prevent, on every fresh sign-in. `!isLoadingUserData` is what
-  // closes that, and it cannot stand alone either — on the first render of a
-  // full page load no load has started yet, so only `checkedToken` knows.
-  // Found in review on PR #798.
-  const profileChecked =
-    !authToken || (checkedToken === authToken && !isLoadingUserData)
-
-  // A warning for whoever adds the first mid-session reload: because
-  // `isLoadingUserData` is part of the condition, the gate *re-holds* every time
-  // a load starts again, and a re-hold unmounts the authenticated tree. Today
-  // that is harmless — the only callers of `loadUserData` are this effect and
-  // the three sign-in pages, so it never runs except at sign-in. A "refresh my
-  // data" button calling it would blank whatever page the athlete was on.
-  // If that day comes, ai-trainer-ops#58 is the fix: once a deduped call
-  // resolves with the real load, `checkedToken` alone is enough and this term
-  // can go.
+  // On the *real* sign-in path the login page starts the load first, so App's
+  // call is always the deduped one (#458). That is safe only because a deduped
+  // call resolves with the load it joined (ai-trainer-ops#58): when it returned
+  // at once, its `.finally` marked the token checked while the profile was still
+  // in flight, with `isOnboarded` still false — the redirect this gate exists to
+  // prevent, on every fresh sign-in (found in review on PR #798). The gate is
+  // deliberately not also tied to `isLoadingUserData`: that would re-hold it,
+  // and unmount the authenticated tree, every time a later reload started.
+  const profileChecked = !authToken || checkedToken === authToken
 
   useEffect(() => {
     if (!authToken) {
