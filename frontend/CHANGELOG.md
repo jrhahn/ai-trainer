@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (ai-trainer-ops#50) — `SettingsPage.tsx`, `MotivationModelSettings.tsx`. The
   page was seventeen cards in one column, about 7,200 px tall, in the order they
   were built. It now has five sections, Profile, Activities, Coach & AI, Account
-  & security and Your data, with a side nav from `lg` and a sticky strip of tabs
+  & security and Your data, with a side nav from `lg` and sticky tabs that wrap
   below that. The nav uses plain anchors.
 
   Without Expert mode the page no longer shows: the AI model picker (the key

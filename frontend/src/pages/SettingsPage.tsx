@@ -49,15 +49,19 @@ type SectionId = (typeof SECTIONS)[number]['id']
 
 const sectionAnchor = (id: SectionId) => `settings-${id}`
 
-/** Side nav from `lg`, a scrolling strip of tabs above that. Plain anchors:
- *  the browser already scrolls to them and keeps them in the history. */
+/** Side nav from `lg`, tabs that wrap above that. Plain anchors: the browser
+ *  already scrolls to them and keeps them in the history.
+ *
+ *  Wrapping and not a sideways-scrolling strip: a scroll container still
+ *  counts its content toward the page's minimum width, so the strip made the
+ *  whole page 551 px wide at 390 (seen in the #803 screenshots). */
 function SectionNav() {
   return (
     <nav
       aria-label="Settings sections"
-      className="sticky top-14 z-10 -mx-4 mb-6 overflow-x-auto bg-gray-100 px-4 py-2 md:top-0 lg:top-8 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:overflow-visible lg:p-0"
+      className="sticky top-14 z-10 -mx-4 mb-6 bg-gray-100 px-4 py-2 md:top-0 lg:top-8 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:p-0"
     >
-      <ul className="flex gap-1 lg:flex-col">
+      <ul className="flex flex-wrap gap-1 lg:flex-col">
         {SECTIONS.map((section) => (
           <li key={section.id}>
             <a

@@ -1,9 +1,11 @@
 /**
  * Settings in five sections, with expert controls hidden (ai-trainer-ops#50).
  *
- * The jsdom tests in `SettingsPage.test.tsx` prove the structure. This spec is
- * here for the two screenshots the issue asks for, at 390 and 1366 px, which
- * land in the Playwright report artifact of every run.
+ * The jsdom tests in `SettingsPage.test.tsx` prove the structure. This spec
+ * adds what only a browser shows: that the page does not scroll sideways on a
+ * phone, and that the section nav really scrolls to its section. It also
+ * attaches a full-page screenshot per project (390 and 1366 px) to the
+ * Playwright report artifact, which the issue asks for.
  */
 
 import { expect, test, type Page } from '@playwright/test'
@@ -37,35 +39,53 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
   ).toBeVisible({ timeout: 60_000 })
 }
 
-for (const viewport of [
-  { width: 390, height: 844 },
-  { width: 1366, height: 900 },
-]) {
-  test(`Settings has five sections and no expert controls at ${viewport.width} px`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize(viewport)
-    await onboard(page, newAthlete())
-    await page.goto('/settings')
+test('Settings has five sections, no expert controls, and no sideways scroll', async ({
+  page,
+}, testInfo) => {
+  await onboard(page, newAthlete())
+  await page.goto('/settings')
 
-    const nav = page.getByRole('navigation', { name: 'Settings sections' })
-    await expect(nav.getByRole('link')).toHaveText([
-      'Profile',
-      'Activities',
-      'Coach & AI',
-      'Account & security',
-      'Your data',
-    ])
-    await expect(page.getByRole('button', { name: /Recalculate/ })).toHaveCount(0)
+  const nav = page.getByRole('navigation', { name: 'Settings sections' })
+  await expect(nav.getByRole('link')).toHaveText([
+    'Profile',
+    'Activities',
+    'Coach & AI',
+    'Account & security',
+    'Your data',
+  ])
+  await expect(page.getByRole('button', { name: /Recalculate/ })).toHaveCount(0)
 
-    // The section nav takes the athlete to the section, not just the URL.
-    await nav.getByRole('link', { name: 'Your data' }).click()
-    await expect(page.getByRole('heading', { name: 'Your data', exact: true })).toBeInViewport()
-
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await testInfo.attach(`settings-${viewport.width}px`, {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
-    })
+  // Same measurement as keyless/layout.spec.ts, naming the culprit on failure.
+  const { scrollWidth, clientWidth, widest } = await page.evaluate(() => {
+    let widest = { tag: '', className: '', right: 0 }
+    for (const element of Array.from(document.querySelectorAll('*'))) {
+      const box = element.getBoundingClientRect()
+      if (box.right > widest.right) {
+        widest = {
+          tag: element.tagName,
+          className: String((element as HTMLElement).className || '').slice(0, 80),
+          right: Math.round(box.right),
+        }
+      }
+    }
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      widest,
+    }
   })
-}
+  expect(
+    scrollWidth,
+    `/settings overflows by ${scrollWidth - clientWidth}px; widest element: ` +
+      `<${widest.tag} class="${widest.className}"> reaching ${widest.right}px`
+  ).toBeLessThanOrEqual(clientWidth)
+
+  await testInfo.attach(`settings-${testInfo.project.name}`, {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  })
+
+  // The section nav takes the athlete to the section, not just the URL.
+  await nav.getByRole('link', { name: 'Your data' }).click()
+  await expect(page.getByRole('heading', { name: 'Your data', exact: true })).toBeInViewport()
+})
