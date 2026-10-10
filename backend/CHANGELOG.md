@@ -217,6 +217,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The coach draws the medical line in its prompt** (ai-trainer-ops#5) —
+  `services/prompts.py`. Every coach persona now says it is not a medical
+  professional: no diagnosis, no likely medical cause for a symptom, no
+  treatment, medication or supplement dose, and no claim that training treats or
+  prevents a disease. For chest pain, fainting, dizziness, palpitations,
+  unusual breathlessness or pain that persists or worsens, it tells the athlete to
+  stop training and see a doctor; with a pre-existing condition, to clear training
+  with their doctor. Until now the prompts asked the coach to treat pain,
+  dizziness and illness as coaching data and set no boundary at all.
+  `output_audit.forbidden_claim` still reports what slips past.
+
 - **The stub plan contains a strength day** (ai-trainer-ops#51.5) —
   `services/llm.py`, `tests/test_stub_provider.py`.
 
