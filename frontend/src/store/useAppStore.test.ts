@@ -385,6 +385,45 @@ describe('logout', () => {
   })
 })
 
+describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
+  it('makes a deduped call wait for the load it joined', async () => {
+    let resolveUser!: (value: unknown) => void
+    mockFetchCurrentUser.mockReturnValue(new Promise((resolve) => { resolveUser = resolve }))
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+
+    // What a sign-in page and App's effect do at the same moment.
+    const first = useAppStore.getState().loadUserData('tok-shared')
+    let secondSettled = false
+    const second = useAppStore.getState().loadUserData('tok-shared').then(() => { secondSettled = true })
+
+    // Still one load, and the joiner is still waiting on it.
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(mockFetchCurrentUser).toHaveBeenCalledTimes(1)
+    expect(secondSettled).toBe(false)
+
+    resolveUser({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    await second
+
+    // By the time the joiner continues, the store is filled.
+    expect(useAppStore.getState().userProfile?.email).toBe('alice@example.com')
+    expect(useAppStore.getState().isOnboarded).toBe(true)
+    await first
+  })
+})
+
 describe('loadUserData auth handling', () => {
   it('clears the session on an auth error from the user endpoint', async () => {
     mockFetchCurrentUser.mockRejectedValue(new Error('Token expired'))

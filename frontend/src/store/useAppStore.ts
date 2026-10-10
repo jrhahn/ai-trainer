@@ -537,6 +537,10 @@ function mergePlanWithWorkouts(
   })
 }
 
+// The load `loadUserData` is running, so a deduped call can wait for it rather
+// than return before the data exists (ai-trainer-ops#58).
+let inFlightLoad: { token: string; promise: Promise<void> } | null = null
+
 export const useAppStore = create<AppState>()(
   (set, get) => ({
     ...initialState,    // Expert mode preference — persisted in localStorage, survives tab close.
@@ -668,102 +672,114 @@ export const useAppStore = create<AppState>()(
         persistExpertMode(next)
         return { isExpertMode: next }
       }),
-    loadUserData: async (tokenOverride) => {
+    loadUserData: (tokenOverride) => {
       const token = tokenOverride ?? get().authToken
-      if (!token) return
+      if (!token) return Promise.resolve()
       // Dedupe concurrent loads for the same token: the App effect loads on every
       // authToken change while the login pages also call loadUserData(token)
-      // directly, which otherwise fires two full parallel loads. The in-flight
-      // caller keeps running and the isLoadingUserData overlay covers the window
-      // for whichever caller is skipped here (#458).
-      if (get().isLoadingUserData && get().authToken === token) return
-
-      set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
-      const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
-      const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
-
-      const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult, weatherForecastResult] =
-        await Promise.allSettled([
-          track(fetchCurrentUser(token)),
-          track(fetchTrainingPlan(token)),
-          track(fetchWorkoutLogs(token)),
-          track(fetchChatHistory(token)),
-          track(fetchCoachMemory(token)),
-          track(fetchRaceEvents(token)),
-          track(fetchMetricsHistory(token)),
-          track(fetchRideMetricsHistory(token)),
-          track(fetchWeatherForecast(token)),
-        ])
-
-      // If the session was torn down while we were loading (manual logout, or an
-      // AUTH_EXPIRED_EVENT from a 401 on one of the parallel fetches), do not
-      // resurrect it by writing these now-stale results back. The logout /
-      // re-login that changed the token owns the resulting state (#454).
-      if (get().authToken !== token) {
-        return
+      // directly, which otherwise fires two full parallel loads (#458). The
+      // skipped caller gets the load that is already running, so awaiting this
+      // always means "the data is loaded", never "somebody else started loading
+      // it" — a sign-in page that awaits it and then navigates must not land on
+      // an empty store (ai-trainer-ops#58).
+      if (get().isLoadingUserData && get().authToken === token) {
+        return inFlightLoad?.token === token ? inFlightLoad.promise : Promise.resolve()
       }
 
-      // Auth errors from the user endpoint must clear the session — app can't continue.
-      if (userResult.status === 'rejected') {
-        const message = userResult.reason instanceof Error ? userResult.reason.message : ''
-        if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
-          persistToken(null)
-          set({ ...initialState, isLoadingUserData: false })
-        } else {
-          set({ isLoadingUserData: false, loadingStep: 0, dataLoadWarning: 'Failed to load your profile. Please refresh the page.' })
+      const promise = (async () => {
+        set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
+        const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
+        const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
+
+        const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult, weatherForecastResult] =
+          await Promise.allSettled([
+            track(fetchCurrentUser(token)),
+            track(fetchTrainingPlan(token)),
+            track(fetchWorkoutLogs(token)),
+            track(fetchChatHistory(token)),
+            track(fetchCoachMemory(token)),
+            track(fetchRaceEvents(token)),
+            track(fetchMetricsHistory(token)),
+            track(fetchRideMetricsHistory(token)),
+            track(fetchWeatherForecast(token)),
+          ])
+
+        // If the session was torn down while we were loading (manual logout, or an
+        // AUTH_EXPIRED_EVENT from a 401 on one of the parallel fetches), do not
+        // resurrect it by writing these now-stale results back. The logout /
+        // re-login that changed the token owns the resulting state (#454).
+        if (get().authToken !== token) {
+          return
         }
-        return
+
+        // Auth errors from the user endpoint must clear the session — app can't continue.
+        if (userResult.status === 'rejected') {
+          const message = userResult.reason instanceof Error ? userResult.reason.message : ''
+          if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
+            persistToken(null)
+            set({ ...initialState, isLoadingUserData: false })
+          } else {
+            set({ isLoadingUserData: false, loadingStep: 0, dataLoadWarning: 'Failed to load your profile. Please refresh the page.' })
+          }
+          return
+        }
+
+        const user = userResult.value
+        const workoutLogs = workoutLogsResult.status === 'fulfilled' ? workoutLogsResult.value : {}
+        const plan = planResult.status === 'fulfilled' ? planResult.value : []
+
+        const failed: string[] = []
+        if (planResult.status === 'rejected') failed.push('training plan')
+        if (workoutLogsResult.status === 'rejected') failed.push('workout logs')
+        if (chatHistoryResult.status === 'rejected') failed.push('chat history')
+        if (coachMemoryResult.status === 'rejected') failed.push('coach memory')
+        if (raceEventsResult.status === 'rejected') failed.push('race events')
+        if (metricsHistoryResult.status === 'rejected') failed.push('fitness metrics')
+        if (rideMetricsHistoryResult.status === 'rejected') failed.push('ride history')
+        // The forecast is decoration on top of the plan, not data the dashboard
+        // needs to function, so a failed lookup stays silent rather than nagging.
+        const weather =
+          weatherForecastResult.status === 'fulfilled'
+            ? weatherForecastResult.value
+            : { location: null, days: [] }
+
+        set({
+          authToken: token,
+          userProfile: user.profile,
+          trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
+          workoutLogs,
+          stravaConnection: user.stravaConnection,
+          intervalsConnection: user.intervalsConnection,
+          riderAssessment: user.riderAssessment,
+          ftpPlausibilityWarning: user.ftpPlausibilityWarning,
+          stravaAnalysisComplete: user.stravaAnalysisComplete,
+          lastStravaActivityId: user.lastStravaActivityId ?? null,
+          stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
+          intervalsAnalysisComplete: user.intervalsAnalysisComplete,
+          lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
+          intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled,
+          aiProvider: user.aiProvider,
+          isOnboarded: user.isOnboarded,
+          chatHistory: chatHistoryResult.status === 'fulfilled' ? chatHistoryResult.value : [],
+          coachMemory: coachMemoryResult.status === 'fulfilled' ? coachMemoryResult.value : '',
+          raceEvents: raceEventsResult.status === 'fulfilled' ? raceEventsResult.value : [],
+          metricsHistory: metricsHistoryResult.status === 'fulfilled' ? metricsHistoryResult.value : [],
+          rideMetricsHistory: rideMetricsHistoryResult.status === 'fulfilled' ? rideMetricsHistoryResult.value : [],
+          weatherForecast: Object.fromEntries(weather.days.map((day) => [day.date, day])),
+          homeLocation: weather.location,
+          dataLoadWarning: failed.length > 0
+            ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
+            : null,
+          isLoadingUserData: false,
+          loadingStep: 0,
+        })
+      })()
+      inFlightLoad = { token, promise }
+      const release = () => {
+        if (inFlightLoad?.promise === promise) inFlightLoad = null
       }
-
-      const user = userResult.value
-      const workoutLogs = workoutLogsResult.status === 'fulfilled' ? workoutLogsResult.value : {}
-      const plan = planResult.status === 'fulfilled' ? planResult.value : []
-
-      const failed: string[] = []
-      if (planResult.status === 'rejected') failed.push('training plan')
-      if (workoutLogsResult.status === 'rejected') failed.push('workout logs')
-      if (chatHistoryResult.status === 'rejected') failed.push('chat history')
-      if (coachMemoryResult.status === 'rejected') failed.push('coach memory')
-      if (raceEventsResult.status === 'rejected') failed.push('race events')
-      if (metricsHistoryResult.status === 'rejected') failed.push('fitness metrics')
-      if (rideMetricsHistoryResult.status === 'rejected') failed.push('ride history')
-      // The forecast is decoration on top of the plan, not data the dashboard
-      // needs to function, so a failed lookup stays silent rather than nagging.
-      const weather =
-        weatherForecastResult.status === 'fulfilled'
-          ? weatherForecastResult.value
-          : { location: null, days: [] }
-
-      set({
-        authToken: token,
-        userProfile: user.profile,
-        trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
-        workoutLogs,
-        stravaConnection: user.stravaConnection,
-        intervalsConnection: user.intervalsConnection,
-        riderAssessment: user.riderAssessment,
-        ftpPlausibilityWarning: user.ftpPlausibilityWarning,
-        stravaAnalysisComplete: user.stravaAnalysisComplete,
-        lastStravaActivityId: user.lastStravaActivityId ?? null,
-        stravaAutoSyncEnabled: user.stravaAutoSyncEnabled,
-        intervalsAnalysisComplete: user.intervalsAnalysisComplete,
-        lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
-        intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled,
-        aiProvider: user.aiProvider,
-        isOnboarded: user.isOnboarded,
-        chatHistory: chatHistoryResult.status === 'fulfilled' ? chatHistoryResult.value : [],
-        coachMemory: coachMemoryResult.status === 'fulfilled' ? coachMemoryResult.value : '',
-        raceEvents: raceEventsResult.status === 'fulfilled' ? raceEventsResult.value : [],
-        metricsHistory: metricsHistoryResult.status === 'fulfilled' ? metricsHistoryResult.value : [],
-        rideMetricsHistory: rideMetricsHistoryResult.status === 'fulfilled' ? rideMetricsHistoryResult.value : [],
-        weatherForecast: Object.fromEntries(weather.days.map((day) => [day.date, day])),
-        homeLocation: weather.location,
-        dataLoadWarning: failed.length > 0
-          ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
-          : null,
-        isLoadingUserData: false,
-        loadingStep: 0,
-      })
+      promise.then(release, release)
+      return promise
     },
   })
 )
