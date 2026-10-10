@@ -427,11 +427,13 @@ async def resume_session(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     try:
         user = await auth.get_current_user(request, None, db)
+        # Inside the try: the Authelia branch of get_current_user never looks
+        # at the cookie, so this may be the first time it is decoded.
+        claims = auth.read_access_token(request.cookies[auth.SESSION_COOKIE])
     except HTTPException as exc:
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
         return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
-    claims = auth.read_access_token(request.cookies[auth.SESSION_COOKIE])
     return _start_cookie_session(user, response, session_id=claims.session_id)
 
 

@@ -26,6 +26,11 @@ function startSession(response: SessionResponse | TokenResponse): string {
 
 let resuming: Promise<string | null> | null = null
 
+// The app renders nothing until the session check answers, so a request that
+// hangs (a phone waking from sleep on a dead connection) must not hold the page
+// forever. Found in review on PR #808.
+export const RESUME_TIMEOUT_MS = 10_000
+
 /**
  * Whether this browser still holds a cookie session, asked once per page load.
  *
@@ -34,12 +39,24 @@ let resuming: Promise<string | null> | null = null
  * leave the cookie from one beside the CSRF token from the other.
  */
 export function resumeSession(): Promise<string | null> {
-  // 204 (no body) is "no session"; so is an error, including a backend from
-  // before #45 that has no such route.
-  resuming ??= apiFetch<SessionResponse | undefined>('/auth/resume').then(
-    (response) => (response ? startSession(response) : null),
-    () => null,
-  )
+  if (!resuming) {
+    let timedOut = false
+    const timeout = new Promise<null>((resolve) => {
+      setTimeout(() => {
+        timedOut = true
+        resolve(null)
+      }, RESUME_TIMEOUT_MS)
+    })
+    // 204 (no body) is "no session"; so is an error, including a backend from
+    // before #45 that has no such route. An answer after the timeout is
+    // dropped: by then the athlete may have signed in again, and its CSRF token
+    // would overwrite the new one.
+    const request = apiFetch<SessionResponse | undefined>('/auth/resume').then(
+      (response) => (response && !timedOut ? startSession(response) : null),
+      () => null,
+    )
+    resuming = Promise.race([request, timeout])
+  }
   return resuming
 }
 

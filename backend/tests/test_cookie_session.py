@@ -233,3 +233,11 @@ async def test_a_cookie_without_a_session_id_cannot_write(browser):
         headers={"Cookie": f"{auth.SESSION_COOKIE}={token}", auth.CSRF_HEADER: ""},
     )
     assert response.status_code == 403
+
+
+async def test_resume_clears_a_cookie_that_does_not_decode(browser):
+    response = await browser.get(
+        "/api/v1/auth/resume", headers={"Cookie": f"{auth.SESSION_COOKIE}=not-a-jwt"}
+    )
+    assert response.status_code == 204
+    assert f'{auth.SESSION_COOKIE}=""' in response.headers.get("set-cookie", "")

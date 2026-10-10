@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
 const mockSetCsrfToken = vi.hoisted(() => vi.fn())
@@ -8,7 +8,7 @@ vi.mock('./api', () => ({
   newSessionMarker: () => 'cookie-session:marker',
 }))
 
-import { login, register, getSessionToken, resumeSession, endSession } from './auth'
+import { login, register, getSessionToken, resumeSession, endSession, RESUME_TIMEOUT_MS } from './auth'
 
 async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
@@ -165,6 +165,28 @@ describe('resumeSession (ai-trainer-ops#45)', () => {
     mockApiFetch.mockRejectedValueOnce(new Error('Not Found'))
 
     await expect(resumeSession()).resolves.toBeNull()
+  })
+})
+
+describe('resumeSession on a connection that hangs', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('gives up after the timeout, and ignores an answer that arrives later', async () => {
+    await endSession()
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    let answer: (value: unknown) => void = () => {}
+    mockApiFetch.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+
+    const resumed = resumeSession()
+    await vi.advanceTimersByTimeAsync(RESUME_TIMEOUT_MS)
+    await expect(resumed).resolves.toBeNull()
+
+    answer({ csrfToken: 'csrf-too-late' })
+    await vi.runAllTimersAsync()
+    expect(mockSetCsrfToken).not.toHaveBeenCalledWith('csrf-too-late')
   })
 })
 
