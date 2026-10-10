@@ -98,6 +98,10 @@ vi.mock('../components/AIChat', () => ({
   default: () => <div data-testid="ai-chat" />,
 }))
 
+vi.mock('../components/PredictionScoreboard', () => ({
+  default: () => <div data-testid="prediction-scoreboard-stub" />,
+}))
+
 vi.mock('../components/AthletePerformanceModelCard', () => ({
   default: () => <div data-testid="performance-model-card" />,
 }))
