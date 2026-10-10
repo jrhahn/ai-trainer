@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import MotivationModelSettings from './MotivationModelSettings'
@@ -13,9 +13,13 @@ vi.mock('../services/user', () => ({
   updateMotivationModel: mockUpdate,
 }))
 
+// The learned weights are expert-only (ai-trainer-ops#50); most tests here are
+// about them, so they run in Expert mode unless a test says otherwise.
+const store = vi.hoisted(() => ({ isExpertMode: true }))
+
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; isExpertMode: boolean }) => unknown) =>
+    selector({ authToken: 'test-token', isExpertMode: store.isExpertMode }),
 }))
 
 function makeEntry(overrides: Partial<MotivationEntry> = {}): MotivationEntry {
@@ -70,6 +74,7 @@ function renderComponent() {
 describe('MotivationModelSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    store.isExpertMode = true
     mockFetch.mockResolvedValue(makeModel())
     mockUpdate.mockImplementation(async () => makeModel())
   })
@@ -130,6 +135,19 @@ describe('MotivationModelSettings', () => {
       expect(screen.getByText('45%')).toBeInTheDocument()
     })
     expect(screen.getByLabelText('Enjoyment weight')).toHaveValue('45')
+  })
+
+  it('keeps the learned weights behind Expert mode, and the objectives in front', async () => {
+    store.isExpertMode = false
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Primary objective')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Balance')).toBeNull()
+    expect(screen.queryByLabelText('Enjoyment weight')).toBeNull()
+    expect(screen.queryByText(/MTB · 85%/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
   it('shows what was learned about how the athlete likes to ride', async () => {
@@ -228,6 +246,23 @@ describe('MotivationModelSettings', () => {
       expect(mockUpdate).toHaveBeenCalled()
     })
     expect(mockUpdate.mock.calls[0][1].constraints).toEqual([])
+  })
+
+  it('saves a weight moved on its slider', async () => {
+    renderComponent()
+
+    const slider = await screen.findByLabelText('Enjoyment weight')
+    fireEvent.change(slider, { target: { value: '60' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'test-token',
+        expect.objectContaining({
+          utilityWeights: expect.objectContaining({ enjoyment: 0.6 }),
+        })
+      )
+    )
   })
 
   it('pins a weight so learning leaves it alone', async () => {

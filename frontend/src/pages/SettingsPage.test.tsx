@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -115,6 +115,7 @@ beforeEach(() => {
 
 describe('SettingsPage', () => {
   it('renders the AI provider section', () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
     expect(screen.getByRole('heading', { name: /AI Provider/i })).toBeInTheDocument()
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
@@ -129,6 +130,7 @@ describe('SettingsPage', () => {
      * hundreds of lines further down — which is how someone gave up looking
      * for it entirely.
      */
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     expect(screen.queryByText(/no longer stores or sends/i)).not.toBeInTheDocument()
@@ -142,6 +144,7 @@ describe('SettingsPage', () => {
   })
 
   it('saves the selected AI provider when Save is clicked', async () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.click(screen.getByText('Google Gemini'))
@@ -156,6 +159,7 @@ describe('SettingsPage', () => {
   })
 
   it('shows a success confirmation after saving', async () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
     const aiSection = screen.getByRole('heading', { name: /AI Provider/i }).closest('div')!
     await userEvent.click(within(aiSection).getByRole('button', { name: /save/i }))
@@ -324,7 +328,7 @@ describe('SettingsPage', () => {
 
     setup()
 
-    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    const ftpSection = screen.getByRole('heading', { name: /^FTP$/ }).closest('div')!
     expect(within(ftpSection).getByDisplayValue('285')).toBeInTheDocument()
     expect(within(ftpSection).getByRole('button', { name: /Save FTP/i })).toBeDisabled()
 
@@ -424,7 +428,7 @@ describe('SettingsPage', () => {
     expect(alert).toHaveTextContent(/97% of your best 5-minute power/)
     expect(alert).toHaveTextContent(/looks too high/)
     // Advisory only — the entered FTP is left untouched.
-    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    const ftpSection = screen.getByRole('heading', { name: /^FTP$/ }).closest('div')!
     expect(within(ftpSection).getByDisplayValue('300')).toBeInTheDocument()
   })
 
@@ -448,7 +452,7 @@ describe('SettingsPage', () => {
 
     setup()
 
-    const ftpSection = screen.getByRole('heading', { name: /FTP Management/i }).closest('div')!
+    const ftpSection = screen.getByRole('heading', { name: /^FTP$/ }).closest('div')!
     const input = within(ftpSection).getByDisplayValue('280')
     await userEvent.clear(input)
     await userEvent.type(input, '500')
@@ -481,7 +485,7 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('saves the updated name when Save is clicked in the Account section', async () => {
+  it('saves the updated name when Save is clicked in the Name card', async () => {
     mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Alice Updated' } })
     setup()
 
@@ -489,8 +493,8 @@ describe('SettingsPage', () => {
     await userEvent.clear(nameInput)
     await userEvent.type(nameInput, 'Alice Updated')
 
-    const accountSection = screen.getByRole('heading', { name: /Account/i }).closest('div')!
-    await userEvent.click(within(accountSection).getByRole('button', { name: /save/i }))
+    const nameSection = screen.getByRole('heading', { name: /^Name$/ }).closest('div')!
+    await userEvent.click(within(nameSection).getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { name: 'Alice Updated' })
@@ -506,8 +510,8 @@ describe('SettingsPage', () => {
     await userEvent.clear(nameInput)
     await userEvent.type(nameInput, 'Bob')
 
-    const accountSection = screen.getByRole('heading', { name: /Account/i }).closest('div')!
-    await userEvent.click(within(accountSection).getByRole('button', { name: /save/i }))
+    const nameSection = screen.getByRole('heading', { name: /^Name$/ }).closest('div')!
+    await userEvent.click(within(nameSection).getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Name saved!')).toBeInTheDocument()
@@ -515,18 +519,21 @@ describe('SettingsPage', () => {
   })
 
   it('renders the Heart Rate Settings section', () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
     expect(screen.getByRole('heading', { name: /Heart Rate Settings/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Save & Estimate FTP/i })).toBeInTheDocument()
   })
 
   it('Save & Estimate FTP is disabled when no HR inputs are filled', () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
     const btn = screen.getByRole('button', { name: /Save & Estimate FTP/i })
     expect(btn).toBeDisabled()
   })
 
   it('Save & Estimate FTP becomes enabled when Max HR is entered', async () => {
+    useAppStore.setState({ isExpertMode: true })
     setup()
     const input = screen.getByPlaceholderText(/185/)
     await userEvent.type(input, '188')
@@ -536,6 +543,7 @@ describe('SettingsPage', () => {
 
   it('calls estimateFTP with entered HR values and shows estimate panel when FTP is found', async () => {
     mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
@@ -555,6 +563,7 @@ describe('SettingsPage', () => {
 
   it('shows success message when no FTP estimate is available yet', async () => {
     mockEstimateFTP.mockResolvedValue({ estimatedFTP: null, source: 'none' })
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
@@ -570,6 +579,7 @@ describe('SettingsPage', () => {
     mockEstimateFTP.mockResolvedValue({ estimatedFTP: 260, source: 'ftp_estimation' })
     mockUpdateMetrics.mockResolvedValue({ updated: 8, ftpUsed: 260 })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     // Step 1 – trigger estimate
@@ -642,6 +652,7 @@ describe('SettingsPage', () => {
       stravaAutoSyncEnabled: true,
       intervalsAutoSyncEnabled: false,
     })
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     expect(screen.getAllByText('Connected')).toHaveLength(2)
@@ -742,6 +753,7 @@ describe('SettingsPage', () => {
 
   it('recalculates metrics with the current FTP when confirmed', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
@@ -755,6 +767,7 @@ describe('SettingsPage', () => {
 
   it('does not recalculate when the confirm dialog is cancelled', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
@@ -838,5 +851,108 @@ describe('SettingsPage', () => {
     setup()
 
     expect(screen.queryByText('Active source')).toBeNull()
+  })
+})
+
+describe('SettingsPage sections (ai-trainer-ops#50)', () => {
+  it('has five sections, each reachable from the section nav', () => {
+    const { container } = setup()
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' })
+    const links = within(nav).getAllByRole('link')
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Profile',
+      'Activities',
+      'Coach & AI',
+      'Account & security',
+      'Your data',
+    ])
+    for (const link of links) {
+      const target = container.querySelector(link.getAttribute('href')!)
+      expect(target?.tagName).toBe('SECTION')
+      expect(within(target as HTMLElement).getAllByRole('heading')[0]).toHaveTextContent(
+        link.textContent!
+      )
+    }
+  })
+
+  it('needs no training-load vocabulary without Expert mode', () => {
+    useAppStore.setState({ lastStravaActivityId: 12345, lastIntervalsActivityId: 67890 })
+    const { container } = setup()
+
+    expect(container.textContent).not.toMatch(/\b(r?TSS|ATL|CTL|TSB)\b/)
+    expect(screen.queryByRole('button', { name: /Recalculate/ })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'AI Provider' })).toBeNull()
+    expect(screen.queryByText(/Last sync cursor/)).toBeNull()
+  })
+
+  it('keeps every expert control reachable with Expert mode on', () => {
+    useAppStore.setState({ isExpertMode: true, lastIntervalsActivityId: 67890 })
+    setup()
+
+    expect(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'AI Provider' })).toBeInTheDocument()
+    expect(screen.getByText('Last sync cursor: 67890')).toBeInTheDocument()
+  })
+
+  it('hides a pending FTP estimate when Expert mode is switched off', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+    expect(await screen.findByText(/Step 2/i)).toBeInTheDocument()
+
+    act(() => useAppStore.setState({ isExpertMode: false }))
+
+    expect(screen.queryByText(/Step 2/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Confirm & Recalculate/ })).toBeNull()
+  })
+
+  it('estimates max heart rate from age and saves the estimate', async () => {
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 35'), '5')
+    expect(screen.queryByText(/Estimated Max HR/)).toBeNull()
+    await userEvent.type(screen.getByPlaceholderText('e.g. 35'), '0')
+    expect(screen.getByText('Estimated Max HR: 170 bpm')).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText(/default: 60/), '52')
+    await userEvent.click(screen.getByRole('button', { name: 'Save heart rate' }))
+
+    await waitFor(() =>
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', {
+        maxHeartRate: 170,
+        restingHeartRate: 52,
+      })
+    )
+  })
+
+  it('recalculates with an FTP corrected in the confirm panel', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+    const confirmInput = await screen.findByDisplayValue('248')
+    await userEvent.clear(confirmInput)
+    await userEvent.type(confirmInput, '255')
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/ }))
+
+    await waitFor(() => expect(mockUpdateMetrics).toHaveBeenCalledWith({ currentFTP: 255 }))
+    confirmSpy.mockRestore()
+  })
+
+  it('saves heart rate without estimating FTP outside Expert mode', async () => {
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: 'Save heart rate' }))
+
+    expect(await screen.findByText('Heart rate values saved.')).toBeInTheDocument()
+    expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { maxHeartRate: 185 })
+    expect(mockEstimateFTP).not.toHaveBeenCalled()
   })
 })
