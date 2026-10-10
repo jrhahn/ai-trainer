@@ -60,6 +60,16 @@ def test_the_report_states_change_and_range_coverage():
     assert "Not shown, fewer than 3 athletes: map." in text
 
 
+def test_no_table_when_every_attribute_is_hidden():
+    # The first production run: one athlete, so every row fell under the
+    # minimum, and the report printed a table header with nothing under it.
+    text = backtest_report.render_markdown([Point("ftp", 250, 260, None, None)], 6, 1)
+
+    assert "| attribute |" not in text
+    assert "Signed change" not in text
+    assert "Not shown, fewer than 3 athletes: ftp." in text
+
+
 def test_an_empty_backtest_says_so():
     text = backtest_report.render_markdown([], 6, 0)
     assert "_No attribute had an estimate at both times._" in text
