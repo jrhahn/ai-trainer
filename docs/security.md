@@ -125,8 +125,31 @@ that can read every athlete's address and delete any of them.
 
 ### Sessions and revocation
 
-The access token is a JWT, valid for seven days, held in `sessionStorage` so it
-dies with the tab rather than outliving the browser.
+The web app's session is a JWT in an **HttpOnly cookie** (`tlap_session`), so no
+script on the page can read it (ai-trainer-ops#45). It is valid for 30 days and
+re-issued every time the app starts (`GET /auth/resume`), so an athlete who opens
+the app at least once a month stays signed in. Flags: `HttpOnly`, `SameSite=Lax`,
+and `Secure` wherever the site is HTTPS (outside the dev environments, like the
+trusted-device cookie).
+
+`Lax` rather than `Strict` so that a link from an email or another app arrives
+signed in. Lax already withholds the cookie from cross-site POSTs; on top of
+that, every state-changing request the cookie authenticates must carry
+`X-CSRF-Token`, an HMAC of the session id inside the cookie, which the client
+receives in the body of the sign-in and resume responses and keeps in memory
+only. The session id survives renewal, so a resume in one tab does not
+invalidate the token another tab holds; a new sign-in gets a new one.
+`get_current_user` checks it, so every authenticated route is covered. A
+cross-site page can neither read the token (CORS) nor send the header without a
+preflight the allowlist refuses.
+
+The frontend calls the API on its own origin (`VITE_BACKEND_URL` is empty in
+production), so each domain the app is served on has its own cookie.
+
+Other clients are unchanged: without `X-Auth-Mode: cookie`, the sign-in
+endpoints answer with a bearer token valid for `JWT_EXPIRE_MINUTES` (seven days),
+and a request with an `Authorization` header needs no CSRF token, because a
+forged cross-site request cannot set one.
 
 It is **revocable** (#704). `users.token_generation` is a counter; every token
 carries the value it had when the token was minted, and `get_current_user`

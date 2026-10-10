@@ -1,72 +1,19 @@
 import { create } from 'zustand'
 import { sessionSlot, sessionsForDate } from '../utils/planSessions'
+import { endSession } from '../services/auth'
 
 /**
- * Storage key for the JWT auth token.
- *
- * ## Why sessionStorage instead of localStorage?
- *
- * `sessionStorage` is intentionally chosen over `localStorage` for the
- * following security and functional reasons:
- *
- * - **OAuth / page-reload survival**: OAuth flows (e.g. Strava, Authelia)
- *   redirect the browser away and back. `sessionStorage` persists across
- *   same-tab page reloads and cross-origin redirects within the same tab,
- *   so the token survives the round-trip without requiring the user to log
- *   in again.
- *
- * - **Automatic session scoping**: Each browser tab gets its own independent
- *   `sessionStorage`. When the tab (or window) is closed the storage is
- *   cleared automatically — no explicit logout required.
- *
- * - **Reduced XSS blast radius compared to localStorage**: `localStorage` is
- *   shared across all tabs for the same origin and persists indefinitely,
- *   meaning a stolen token remains usable even after the user walks away
- *   from their machine. `sessionStorage` limits exposure to the lifetime of
- *   the active tab.
- *
- * ### Known tradeoff
- * Unlike `localStorage`, `sessionStorage` does **not** survive opening a new
- * tab or a fresh browser window. Users who open the app in a new tab will
- * need to re-authenticate. This is an accepted UX cost in exchange for the
- * security benefits above.
- *
- * Note: both storage APIs are equally accessible to JavaScript running on the
- * page, so neither provides protection against a successful XSS attack. The
- * primary mitigation for XSS is Content Security Policy, input sanitisation,
- * and React's built-in output escaping.
+ * Where the JWT used to live, before the session moved into an HttpOnly cookie
+ * (ai-trainer-ops#45). Nothing reads it any more; the store removes it once, so
+ * a token that script could read does not outlive the change in an open tab.
  */
-const SESSION_TOKEN_KEY = 'ai_trainer_auth_token'
+const LEGACY_SESSION_TOKEN_KEY = 'ai_trainer_auth_token'
 
-/**
- * Reads the persisted JWT from sessionStorage on app start-up.
- * Returns `null` if the key is absent or if sessionStorage is unavailable
- * (e.g. in privacy/incognito modes that block storage access).
- */
-function readStoredToken(): string | null {
+function forgetLegacyToken(): void {
   try {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY)
+    sessionStorage.removeItem(LEGACY_SESSION_TOKEN_KEY)
   } catch {
-    return null
-  }
-}
-
-/**
- * Writes or removes the JWT in sessionStorage.
- * Pass `null` to clear the token (e.g. on logout or auth error).
- * Errors are swallowed silently — sessionStorage may be unavailable in some
- * browser contexts (private-mode restrictions, embedded iframes with
- * restrictive sandbox attributes, etc.).
- */
-function persistToken(token: string | null): void {
-  try {
-    if (token) {
-      sessionStorage.setItem(SESSION_TOKEN_KEY, token)
-    } else {
-      sessionStorage.removeItem(SESSION_TOKEN_KEY)
-    }
-  } catch {
-    // sessionStorage may be unavailable in some contexts; silently ignore
+    // sessionStorage may be unavailable in some contexts; nothing to forget then
   }
 }
 
@@ -545,19 +492,14 @@ export const useAppStore = create<AppState>()(
   (set, get) => ({
     ...initialState,    // Expert mode preference — persisted in localStorage, survives tab close.
     // NOT part of initialState so that resetAll() / logout() does not clear it.
-    isExpertMode: readExpertMode(),    // Hydrate authToken from sessionStorage on app load.
-    // sessionStorage persists across same-tab page reloads (including OAuth
-    // redirect round-trips) but is cleared when the tab is closed.
-    // See the SESSION_TOKEN_KEY comment above for the full security rationale.
-    authToken: readStoredToken(),
+    isExpertMode: readExpertMode(),    // Null until App has asked the server whether a cookie session exists
+    // (`resumeSession`, ai-trainer-ops#45).
+    authToken: (forgetLegacyToken(), null),
 
-    setAuthToken: (token) => {
-      persistToken(token)
-      set({ authToken: token })
-    },
+    setAuthToken: (token) => set({ authToken: token }),
     clearDataLoadWarning: () => set({ dataLoadWarning: null }),
     logout: () => {
-      persistToken(null)
+      void endSession()
       set(initialState)
     },
     setUserProfile: (profile) => set({ userProfile: profile }),
@@ -601,7 +543,7 @@ export const useAppStore = create<AppState>()(
         }
       }),
     resetAll: () => {
-      persistToken(null)
+      void endSession()
       set(initialState)
     },
     addChatMessage: (msg) =>
@@ -716,7 +658,7 @@ export const useAppStore = create<AppState>()(
         if (userResult.status === 'rejected') {
           const message = userResult.reason instanceof Error ? userResult.reason.message : ''
           if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
-            persistToken(null)
+            void endSession()
             set({ ...initialState, isLoadingUserData: false })
           } else {
             set({ isLoadingUserData: false, loadingStep: 0, dataLoadWarning: 'Failed to load your profile. Please refresh the page.' })

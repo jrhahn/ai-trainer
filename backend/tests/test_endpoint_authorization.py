@@ -41,6 +41,8 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/auth/login"): "same",
     ("POST", "/api/v1/auth/login/totp"): "second factor, still mid-login",
     ("GET", "/api/v1/auth/session"): "reports whether a session exists; must answer for anonymous callers too",
+    ("GET", "/api/v1/auth/resume"): "reports whether this browser holds a cookie session; answers 204 to anonymous callers, and authenticates the cookie itself when there is one (ai-trainer-ops#45)",
+    ("POST", "/api/v1/auth/logout"): "only clears the caller's own session cookie, which a stale or revoked session must be able to do too (ai-trainer-ops#45)",
     ("GET", "/api/v1/auth/captcha/challenge"): "the challenge is what you solve to register (#686)",
     ("GET", "/api/v1/auth/strava/callback"): "Strava redirects the browser here; the caller is Strava, not a session. Its protection is the OAuth state parameter, not a bearer token — see ai-trainer-ops#35",
     ("POST", "/api/v1/admin/login"): "admin login cannot require admin",

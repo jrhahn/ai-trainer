@@ -17,6 +17,7 @@ vi.mock('../services/auth', () => ({
   login: mockLogin,
   loginStep: mockLoginStep,
   loginWithTotp: mockLoginWithTotp,
+  endSession: vi.fn(),
 }))
 
 const mockNavigate = vi.fn()

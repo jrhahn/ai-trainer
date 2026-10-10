@@ -46,6 +46,10 @@ _REQUEST_ID_HEADER = "X-Request-ID"
 _CORS_ALLOWED_HEADERS = [
     "Content-Type",
     "Authorization",
+    # ai-trainer-ops#45: the web app opts into the cookie session, and sends
+    # the CSRF token with every state-changing request.
+    "X-Auth-Mode",
+    "X-CSRF-Token",
     _REQUEST_ID_HEADER,
     _TIMEZONE_HEADER,
 ]

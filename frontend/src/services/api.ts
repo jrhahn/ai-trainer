@@ -22,6 +22,34 @@ function getBrowserTimezone(): string | null {
   }
 }
 
+// "Stay signed in" (ai-trainer-ops#45). The web app's session lives in an
+// HttpOnly cookie that no script can read. The store still holds an
+// `authToken`, because 35 files pass it around and query keys include it, but
+// for a cookie session it is only a marker: unique per sign-in, so one
+// athlete's cached queries never answer for the next, and never sent as a
+// bearer token. A real JWT (the integration tests use them) still is.
+const SESSION_MARKER_PREFIX = 'cookie-session:'
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+export function newSessionMarker(): string {
+  return `${SESSION_MARKER_PREFIX}${generateRequestId()}`
+}
+
+// In memory only: a reload gets it back from /auth/resume.
+let csrfToken: string | null = null
+
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token
+}
+
+/** Authorization and CSRF headers for a request, for the few raw `fetch` calls too. */
+export function authHeaders(token: string | null | undefined, method = 'GET'): Record<string, string> {
+  return {
+    ...(token && !token.startsWith(SESSION_MARKER_PREFIX) ? { Authorization: `Bearer ${token}` } : {}),
+    ...(csrfToken && !SAFE_METHODS.has(method.toUpperCase()) ? { 'X-CSRF-Token': csrfToken } : {}),
+  }
+}
+
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   token?: string | null
   body?: unknown
@@ -38,7 +66,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     credentials: init.credentials ?? 'include',
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...authHeaders(token, method),
+      // Asks every sign-in endpoint for a cookie session rather than a token.
+      'X-Auth-Mode': 'cookie',
       'X-Request-ID': requestId,
       ...(timezone ? { 'X-App-Timezone': timezone } : {}),
       ...headers,

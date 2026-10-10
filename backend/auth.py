@@ -224,10 +224,31 @@ def password_needs_rehash(hashed: str) -> bool:
 GENERATION_CLAIM = "gen"
 """Which generation of the account's sessions this token belongs to (#704)."""
 
+SESSION_ID_CLAIM = "sid"
+"""Which cookie session this token belongs to (ai-trainer-ops#45).
+
+Kept when /auth/resume renews the cookie, so the CSRF token derived from it
+stays valid in every tab until the next sign-in."""
+
 ADMIN_CREDENTIAL_CLAIM = "cred"
 """Which admin credentials this token was issued against (#704)."""
 
 SESSION_REVOKED_DETAIL = "Session has been signed out. Please sign in again."
+
+# "Stay signed in" (ai-trainer-ops#45). The browser holds the session in an
+# HttpOnly cookie, so no script on the page can read it, and the JWT inside it
+# lives for SESSION_DAYS, renewed each time the app starts (/auth/resume).
+SESSION_COOKIE = "tlap_session"
+SESSION_DAYS = 30
+# SameSite=Lax lets a link from an email or another app arrive signed in, and
+# so does not stop a cross-site *navigation* from carrying the cookie. Lax
+# already withholds it from cross-site POSTs; this header is the explicit
+# second line on every state-changing request the cookie authenticates. A
+# cross-site page cannot read the value (CORS) and cannot set the header
+# without a preflight the CORS allowlist refuses.
+CSRF_HEADER = "X-CSRF-Token"
+CSRF_REJECTED_DETAIL = "Missing or invalid CSRF token. Reload the page."
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 ADMIN_SESSION_STALE_DETAIL = "Admin credentials changed. Sign in again."
 
 
@@ -237,6 +258,7 @@ class AccessTokenClaims:
 
     user_id: str
     token_generation: int
+    session_id: str | None = None
 
 
 def _decode(token: str) -> dict:
@@ -253,7 +275,13 @@ def _decode(token: str) -> dict:
         )
 
 
-def create_access_token(user_id: str, *, token_generation: int = 0) -> str:
+def create_access_token(
+    user_id: str,
+    *,
+    token_generation: int = 0,
+    lifetime: timedelta | None = None,
+    session_id: str | None = None,
+) -> str:
     """Mint an access token for *user_id*, stamped with its session generation.
 
     Pass the user's current ``token_generation``. Omitting it stamps the token
@@ -261,9 +289,31 @@ def create_access_token(user_id: str, *, token_generation: int = 0) -> str:
     safe direction — for one who has: ``get_current_user`` refuses it at once,
     rather than handing out a token the revocation cannot reach (#704).
     """
-    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + (
+        lifetime or timedelta(minutes=JWT_EXPIRE_MINUTES)
+    )
     payload = {"sub": user_id, "exp": expire, GENERATION_CLAIM: token_generation}
+    if session_id is not None:
+        payload[SESSION_ID_CLAIM] = session_id
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def csrf_token_for(session_id: str) -> str:
+    """The CSRF token that goes with one cookie session (ai-trainer-ops#45).
+
+    Derived rather than stored: an HMAC of the session id, so it needs no
+    table. Of the session id and not of the cookie's value, because renewal
+    replaces the cookie in every tab at once while each tab keeps the CSRF
+    token it was given; a token tied to the cookie would break the writes of
+    every tab but the one that renewed it (found in review on PR #808). A new
+    sign-in starts a new session id, and with it a new token.
+    """
+    digest = hmac.new(
+        JWT_SECRET.encode("utf-8"),
+        b"csrf\x00" + session_id.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return digest[:32]
 
 
 def admin_credential_fingerprint() -> str:
@@ -324,7 +374,12 @@ def read_access_token(token: str) -> AccessTokenClaims:
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
-    return AccessTokenClaims(user_id=user_id, token_generation=generation)
+    session_id = payload.get(SESSION_ID_CLAIM)
+    return AccessTokenClaims(
+        user_id=user_id,
+        token_generation=generation,
+        session_id=session_id if isinstance(session_id, str) else None,
+    )
 
 
 def decode_token(token: str) -> str:
@@ -366,11 +421,27 @@ async def get_current_user(
         if authelia_user is not None:
             return authelia_user
 
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
-        )
-    claims = read_access_token(credentials.credentials)
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        # The session cookie (ai-trainer-ops#45). A header wins when both are
+        # present: a request that carries one was not forged cross-site.
+        token = request.cookies.get(SESSION_COOKIE)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
+            )
+    claims = read_access_token(token)
+    if credentials is None and request.method not in _SAFE_METHODS:
+        # A cookie without a session id was not minted as a cookie session,
+        # so no CSRF token can match it.
+        expected = csrf_token_for(claims.session_id) if claims.session_id else ""
+        if not expected or not hmac.compare_digest(
+            request.headers.get(CSRF_HEADER, ""), expected
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail=CSRF_REJECTED_DETAIL
+            )
     user = await crud.get_user_by_id(db, claims.user_id)
     if user is None:
         raise HTTPException(

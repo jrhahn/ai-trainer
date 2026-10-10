@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockFetch = vi.hoisted(() => vi.fn())
 vi.stubGlobal('fetch', mockFetch)
 
-import { apiFetch } from './api'
+import { apiFetch, newSessionMarker, setCsrfToken } from './api'
 
 function makeResponse(
   status: number,
@@ -188,5 +188,47 @@ describe('apiFetch', () => {
       }),
     )
     consoleSpy.mockRestore()
+  })
+})
+
+describe('cookie sessions (ai-trainer-ops#45)', () => {
+  const headersOf = () =>
+    (mockFetch.mock.calls[0] as [string, RequestInit])[1].headers as Record<string, string>
+
+  beforeEach(() => {
+    setCsrfToken(null)
+    mockFetch.mockResolvedValue(makeResponse(200, {}))
+  })
+
+  it('never sends a session marker as a bearer token', async () => {
+    await apiFetch('/test', { token: newSessionMarker() })
+
+    expect(headersOf()).not.toHaveProperty('Authorization')
+  })
+
+  it('gives every sign-in its own marker, so cached queries do not cross sessions', () => {
+    expect(newSessionMarker()).not.toBe(newSessionMarker())
+  })
+
+  it('asks for a cookie session on every request', async () => {
+    await apiFetch('/auth/login', { method: 'POST', body: {} })
+
+    expect(headersOf()['X-Auth-Mode']).toBe('cookie')
+  })
+
+  it('sends the CSRF token on a write', async () => {
+    setCsrfToken('csrf-1')
+
+    await apiFetch('/test', { method: 'POST', body: {}, token: newSessionMarker() })
+
+    expect(headersOf()['X-CSRF-Token']).toBe('csrf-1')
+  })
+
+  it('leaves the CSRF token off a read', async () => {
+    setCsrfToken('csrf-1')
+
+    await apiFetch('/test', { token: newSessionMarker() })
+
+    expect(headersOf()).not.toHaveProperty('X-CSRF-Token')
   })
 })

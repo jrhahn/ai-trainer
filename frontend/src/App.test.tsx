@@ -28,6 +28,23 @@ vi.mock('./services/api', async () => ({
   AUTHELIA_URL: 'https://auth.trainlikea.pro',
 }))
 
+// Whether the browser holds a cookie session (ai-trainer-ops#45). Stubbed: the
+// real one asks once per page load and caches the answer, which would carry
+// one test's session into the next.
+const mockResumeSession = vi.hoisted(() => vi.fn())
+vi.mock('./services/auth', async () => ({
+  ...(await vi.importActual<typeof import('./services/auth')>('./services/auth')),
+  resumeSession: mockResumeSession,
+}))
+
+/** Render, then let the session check answer, which is when routing starts. */
+async function renderResumed() {
+  render(<App />)
+  await act(async () => {
+    await Promise.resolve()
+  })
+}
+
 vi.mock('./hooks/useImportProgress', () => ({
   useImportProgress: () => ({
     status: 'idle',
@@ -48,6 +65,7 @@ beforeEach(() => {
   // testing a signed-in app.
   useAppStore.setState({ authToken: null, isOnboarded: false, isLoadingUserData: false })
   window.history.pushState({}, '', '/')
+  mockResumeSession.mockResolvedValue(null)
   mockFetch.mockResolvedValue({
     ok: false,
     status: 401,
@@ -62,16 +80,20 @@ afterEach(() => {
 })
 
 describe('App, signed out', () => {
-  it('reaches the landing page without asking the backend anything', async () => {
-    render(<App />)
+  it('reaches the landing page asking the backend nothing but whether a session exists', async () => {
+    await renderResumed()
 
     await waitFor(() => {
       expect(screen.queryByText(/Checking your secure session/i)).not.toBeInTheDocument()
     })
     // Not "does not call /auth/session" but "calls nothing": a logged-out
     // visitor has no session to check, and any request here is a round trip
-    // between them and the page.
+    // between them and the page. The one exception is the session check
+    // (stubbed here): the session is an HttpOnly cookie, so only the server
+    // can say whether there is one (ai-trainer-ops#45).
     expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockResumeSession).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByRole('link', { name: /sign in|log in/i }).length).toBeGreaterThan(0)
   })
 
   it('never mentions Authelia to a visitor who has no session there', () => {
@@ -88,7 +110,7 @@ describe('App, signed out', () => {
 
 
 describe('App, signed in but not yet told whose session this is (ai-trainer-ops#57)', () => {
-  it('keeps the requested URL instead of answering before it can', () => {
+  it('keeps the requested URL instead of answering before it can', async () => {
     // A load that never settles, which is the whole window this is about: the
     // token is read synchronously at start-up but `isOnboarded` is not
     // persisted, so for as long as the profile is in flight the app holds a
@@ -97,7 +119,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     window.history.pushState({}, '', '/settings')
     useAppStore.setState({ authToken: 'tok-deep-link' })
 
-    render(<App />)
+    await renderResumed()
 
     // Synchronously, with no `waitFor`: the redirect this prevents happened
     // *during* render, so a retrying assertion would simply wait past it and
@@ -114,7 +136,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     window.history.pushState({}, '', '/settings')
     useAppStore.setState({ authToken: 'tok-doomed' })
 
-    render(<App />)
+    void renderResumed()
 
     return waitFor(() => {
       expect(window.location.pathname).not.toBe('/settings')
@@ -130,7 +152,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     mockFetch.mockReturnValue(new Promise(() => {}))
     window.history.pushState({}, '', '/settings')
 
-    render(<App />)
+    await renderResumed()
     // Signed out to begin with, so the landing page is correct here.
     expect(window.location.pathname).toBe('/')
 
@@ -160,7 +182,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
       void useAppStore.getState().loadUserData('tok-via-login-page')
     })
 
-    render(<App />)
+    await renderResumed()
 
     // Let App's own (deduped) call resolve and its `.finally` run. Asserting
     // before this flushes reads the URL *before* the hole can open, which is
@@ -188,7 +210,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     useAppStore.setState({ authToken: 'tok-looked-up' })
     window.history.pushState({}, '', '/settings')
 
-    render(<App />)
+    await renderResumed()
     // Let the lookup finish, so the token counts as checked.
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
     await act(async () => {
@@ -210,7 +232,7 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     useAppStore.setState({ authToken: 'tok-interrupted' })
     window.history.pushState({}, '', '/settings')
 
-    render(<App />)
+    await renderResumed()
     expect(window.location.pathname).toBe('/settings')
 
     await act(async () => {
@@ -221,13 +243,53 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     expect(window.location.pathname).toBe('/')
   })
 
-  it('still sends a visitor with no session to the landing page at once', () => {
-    // The other side of the gate: with no token there is nothing to find out,
-    // so it must not cost a visitor a blank frame.
+  it('sends a visitor with no session to the landing page as soon as the server says so', async () => {
+    // The other side of the gate: once the session check says "none", there is
+    // nothing more to find out, so no profile load holds the page.
     window.history.pushState({}, '', '/settings')
 
-    render(<App />)
+    await renderResumed()
 
     expect(window.location.pathname).toBe('/')
+  })
+})
+
+
+describe('App, with a cookie session from an earlier visit (ai-trainer-ops#45)', () => {
+  it('renders nothing, and keeps the URL, until the server has answered', () => {
+    mockResumeSession.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+
+    const { container } = render(<App />)
+
+    expect(container).toBeEmptyDOMElement()
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('picks the session up and loads the athlete, without a sign-in', async () => {
+    mockResumeSession.mockResolvedValue('cookie-session:restored')
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+
+    await renderResumed()
+
+    expect(useAppStore.getState().authToken).toBe('cookie-session:restored')
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('leaves a sign-in that finished first in charge', async () => {
+    let answer: (marker: string | null) => void = () => {}
+    mockResumeSession.mockReturnValue(new Promise((resolve) => { answer = resolve }))
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    render(<App />)
+
+    useAppStore.setState({ authToken: 'cookie-session:from-login' })
+    await act(async () => {
+      answer('cookie-session:stale')
+      await Promise.resolve()
+    })
+
+    expect(useAppStore.getState().authToken).toBe('cookie-session:from-login')
   })
 })

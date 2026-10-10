@@ -41,6 +41,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Stay signed in** (ai-trainer-ops#45) — `services/api.ts`, `services/auth.ts`,
+  `store/useAppStore.ts`, `App.tsx`. Closing the tab no longer signs the athlete
+  out: the session is an HttpOnly cookie that lasts 30 days from the last visit,
+  instead of a JWT in `sessionStorage` that died with the tab and that any script
+  on the page could read. On start-up the app asks `GET /auth/resume` whether a
+  session exists and renders nothing until it knows, so a deep link survives. The
+  store's `authToken` is now a per-sign-in marker that is never sent as a bearer
+  token. `apiFetch` sends the CSRF token, kept in memory only, on every write.
+  "Sign out" also clears the cookie (`POST /auth/logout`). A response with a
+  plain `access_token` (a backend older than this, mid-deploy) still works. The
+  old `sessionStorage` token is deleted on load. Athletes signed in at deploy
+  time sign in once more.
+
 - **Settings in five sections, with expert controls behind Expert mode**
   (ai-trainer-ops#50) — `SettingsPage.tsx`, `MotivationModelSettings.tsx`. The
   page was seventeen cards in one column, about 7,200 px tall, in the order they

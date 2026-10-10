@@ -1249,12 +1249,13 @@ export async function uploadFitFile(
   token: string,
   file: File,
 ): Promise<FitUploadSummary> {
-  const { API_BASE } = await import('./api')
+  const { API_BASE, authHeaders } = await import('./api')
   const formData = new FormData()
   formData.append('file', file)
   const response = await fetch(`${API_BASE}/users/me/upload-fit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token, 'POST'),
+    credentials: 'include',
     body: formData,
   })
   if (!response.ok) {
@@ -1328,12 +1329,13 @@ export async function uploadFitFiles(
   token: string,
   files: File[],
 ): Promise<FitBulkUploadResponse> {
-  const { API_BASE } = await import('./api')
+  const { API_BASE, authHeaders } = await import('./api')
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))
   const response = await fetch(`${API_BASE}/users/me/upload-fit/bulk`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token, 'POST'),
+    credentials: 'include',
     body: formData,
   })
   if (!response.ok) {

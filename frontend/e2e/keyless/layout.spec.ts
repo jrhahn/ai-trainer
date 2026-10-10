@@ -20,6 +20,9 @@ const PUBLIC_PAGES = ['/', '/login', '/register']
 for (const path of PUBLIC_PAGES) {
   test(`${path} does not scroll sideways`, async ({ page }) => {
     await page.goto(path)
+    // Measured once the app has rendered, which waits for the session check
+    // (ai-trainer-ops#45); an empty page would pass vacuously.
+    await page.locator('#root > *').first().waitFor()
 
     const { scrollWidth, clientWidth, widest } = await page.evaluate(() => {
       let widest = { tag: '', className: '', right: 0 }
@@ -70,6 +73,9 @@ for (const path of ['/login', '/register']) {
   test(`${path} puts the form before the marketing panel, on screen and in the document`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390', 'about the narrow layout')
     await page.goto(path)
+    // The app renders once the session check has answered (ai-trainer-ops#45),
+    // which is after `goto` resolves.
+    await page.getByTestId('auth-form-panel').waitFor()
 
     const { formTop, panelTop, viewportHeight, domOrderIsFormFirst } = await page.evaluate(() => {
       const form = document.querySelector('form') as HTMLElement

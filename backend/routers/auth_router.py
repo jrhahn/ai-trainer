@@ -53,12 +53,15 @@ async def captcha_challenge() -> schemas.CaptchaChallengeResponse:
     return schemas.CaptchaChallengeResponse(**captcha_service.issue_challenge().as_dict())
 
 
-@router.post("/register", response_model=schemas.TokenResponse)
+@router.post(
+    "/register", response_model=schemas.TokenResponse | schemas.SessionResponse
+)
 async def register(
     body: schemas.RegisterRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> schemas.TokenResponse | Response:
+) -> schemas.TokenResponse | schemas.SessionResponse | Response:
     # Before either branch: registration is public on this deployment (it has
     # its own Traefik router) and the Authelia branch below writes to the user
     # store on disk, so the limit has to sit in front of both (#682).
@@ -119,10 +122,54 @@ async def register(
     # response is sent, which creates a race window; an explicit commit here
     # closes it.
     await db.commit()
-    token = auth.create_access_token(
-        user.id, token_generation=user.token_generation
+    return _sign_in(user, request=request, response=response)
+
+
+AUTH_MODE_HEADER = "X-Auth-Mode"
+
+
+def _sign_in(
+    user: models.User, *, request: Request, response: Response
+) -> schemas.TokenResponse | schemas.SessionResponse:
+    """Issue the session every sign-in path ends in.
+
+    The web app sends ``X-Auth-Mode: cookie`` and gets the session as an
+    HttpOnly cookie plus the CSRF token that goes with it, so the body carries
+    nothing a script could steal (ai-trainer-ops#45). Any other client still
+    gets a bearer token, as before.
+    """
+    if request.headers.get(AUTH_MODE_HEADER) == "cookie":
+        return _start_cookie_session(user, response)
+    return schemas.TokenResponse(
+        access_token=auth.create_access_token(
+            user.id, token_generation=user.token_generation
+        )
     )
-    return schemas.TokenResponse(access_token=token)
+
+
+def _start_cookie_session(
+    user: models.User, response: Response, *, session_id: str | None = None
+) -> schemas.SessionResponse:
+    """Set the session cookie; a renewal passes the session id it keeps."""
+    session_id = session_id or secrets.token_urlsafe(16)
+    token = auth.create_access_token(
+        user.id,
+        token_generation=user.token_generation,
+        lifetime=timedelta(days=auth.SESSION_DAYS),
+        session_id=session_id,
+    )
+    # Same flags as the trusted-device cookie below, for the same reasons:
+    # HttpOnly always, Secure wherever the site is HTTPS.
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=auth.SESSION_DAYS * 24 * 3600,
+        httponly=True,
+        secure=not settings.is_dev_environment,
+        samesite="lax",
+        path="/",
+    )
+    return schemas.SessionResponse(csrf_token=auth.csrf_token_for(session_id))
 
 
 TRUSTED_DEVICE_COOKIE = "tlap_device"
@@ -175,7 +222,7 @@ async def _complete_login(
     request: Request,
     response: Response,
     db: AsyncSession,
-) -> schemas.TokenResponse | schemas.LoginChallengeResponse:
+) -> schemas.TokenResponse | schemas.SessionResponse | schemas.LoginChallengeResponse:
     """The one place a login turns into a token (#688).
 
     Both branches of ``login`` used to end by issuing one, which is exactly the
@@ -192,11 +239,7 @@ async def _complete_login(
         )
 
     user.last_login = datetime.now(timezone.utc)
-    return schemas.TokenResponse(
-        access_token=auth.create_access_token(
-            user.id, token_generation=user.token_generation
-        )
-    )
+    return _sign_in(user, request=request, response=response)
 
 
 @router.post("/login")
@@ -205,7 +248,7 @@ async def login(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> schemas.TokenResponse | schemas.LoginChallengeResponse:
+) -> schemas.TokenResponse | schemas.SessionResponse | schemas.LoginChallengeResponse:
     # Both branches below verify a password, so the limit goes in front of the
     # branch rather than inside it — otherwise flipping AUTHELIA_AUTH_ENABLED
     # would silently change whether brute force is bounded (#682).
@@ -258,7 +301,7 @@ async def session_token(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> schemas.TokenResponse | schemas.LoginChallengeResponse:
+) -> schemas.TokenResponse | schemas.SessionResponse | schemas.LoginChallengeResponse:
     """Exchange an Authelia portal session for an app token.
 
     Routed through ``_complete_login`` like the password paths, so it honours
@@ -307,7 +350,7 @@ async def login_totp(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> schemas.TokenResponse:
+) -> schemas.TokenResponse | schemas.SessionResponse:
     """Second step: exchange a challenge plus a code for a token.
 
     The challenge is what carries "a password was already accepted" between the
@@ -355,11 +398,70 @@ async def login_totp(
         _set_trusted_device_cookie(response, device_token)
 
     user.last_login = datetime.now(timezone.utc)
-    return schemas.TokenResponse(
-        access_token=auth.create_access_token(
-            user.id, token_generation=user.token_generation
-        )
+    return _sign_in(user, request=request, response=response)
+
+
+@router.get("/resume", response_model=None)
+async def resume_session(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> schemas.SessionResponse | Response:
+    """Pick up the cookie session when the app starts (ai-trainer-ops#45).
+
+    The client cannot see an HttpOnly cookie, so this is how it learns it is
+    signed in, and how it gets the CSRF token back after a reload. It also
+    re-issues the cookie, so the 30 days count from the last time the app was
+    opened. A bearer token does not qualify: there is no cookie to renew.
+
+    "No session" is a 204, not a 401: every signed-out visitor asks this once,
+    and an error for each of them would be noise in the browser console and in
+    the logs. A cookie that no longer authenticates (expired, revoked) is
+    cleared on the way.
+
+    GET, because after a reload the client has no CSRF token yet. That is safe:
+    a cross-site request can at most renew a session it cannot read, and the
+    CSRF token in the body is out of its reach (CORS).
+    """
+    if auth.SESSION_COOKIE not in request.cookies:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    try:
+        user = await auth.get_current_user(request, None, db)
+        # Inside the try: the Authelia branch of get_current_user never looks
+        # at the cookie, so this may be the first time it is decoded.
+        claims = auth.read_access_token(request.cookies[auth.SESSION_COOKIE])
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
+    if claims.user_id != user.id:
+        # The Authelia branch identified someone other than the cookie's owner
+        # (a stale cookie from another account). Renewing would hand that
+        # user a cookie carrying the other account's session id.
+        return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
+    return _start_cookie_session(user, response, session_id=claims.session_id)
+
+
+def _end_cookie_session(response: Response) -> Response:
+    response.delete_cookie(
+        auth.SESSION_COOKIE,
+        httponly=True,
+        secure=not settings.is_dev_environment,
+        samesite="lax",
+        path="/",
     )
+    return response
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout() -> Response:
+    """End this browser's cookie session (ai-trainer-ops#45).
+
+    No authentication and no CSRF check: it only ever removes the caller's own
+    cookie, which is what a stale or revoked session needs to be able to do
+    too. "Sign out everywhere" is /sessions/revoke.
+    """
+    return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
 
 
 @router.get("/totp/status", response_model=schemas.TotpStatusResponse)

@@ -272,6 +272,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class SessionResponse(CamelModel):
+    """A cookie session started (ai-trainer-ops#45): the token is in the
+    HttpOnly cookie, and this is the CSRF token that goes with it."""
+
+    csrf_token: str
+
+
 # ---------------------------------------------------------------------------
 # Rider assessment
 # ---------------------------------------------------------------------------

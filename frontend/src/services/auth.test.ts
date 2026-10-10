@@ -1,9 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
-vi.mock('./api', () => ({ apiFetch: mockApiFetch }))
+const mockSetCsrfToken = vi.hoisted(() => vi.fn())
+vi.mock('./api', () => ({
+  apiFetch: mockApiFetch,
+  setCsrfToken: mockSetCsrfToken,
+  newSessionMarker: () => 'cookie-session:marker',
+}))
 
-import { login, register, getSessionToken } from './auth'
+import { login, register, getSessionToken, resumeSession, endSession, RESUME_TIMEOUT_MS } from './auth'
 
 async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
@@ -17,12 +22,13 @@ beforeEach(() => {
 })
 
 describe('login', () => {
-  it('returns the access_token from the backend', async () => {
-    mockApiFetch.mockResolvedValue({ access_token: 'jwt-token-abc', token_type: 'bearer' })
+  it('starts a cookie session and keeps its CSRF token', async () => {
+    mockApiFetch.mockResolvedValue({ csrfToken: 'csrf-jwt-token-abc' })
 
     const token = await login('alice@example.com', 'password123')
 
-    expect(token).toBe('jwt-token-abc')
+    expect(token).toBe('cookie-session:marker')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-jwt-token-abc')
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/login', {
       method: 'POST',
       body: { email: 'alice@example.com', password: 'password123' },
@@ -47,15 +53,16 @@ describe('register', () => {
     })
   }
 
-  it('returns the access_token when registration returns a token', async () => {
+  it('starts a cookie session when registration signs in', async () => {
     mockRegisterFlow({
       challenge: null,
-      result: { access_token: 'new-jwt-token', token_type: 'bearer' },
+      result: { csrfToken: 'csrf-new-jwt-token' },
     })
 
     const token = await register('Alice', 'alice@example.com', 'securepass')
 
-    expect(token).toBe('new-jwt-token')
+    expect(token).toBe('cookie-session:marker')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-new-jwt-token')
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/register', {
       method: 'POST',
       body: { name: 'Alice', email: 'alice@example.com', password: 'securepass' },
@@ -81,12 +88,13 @@ describe('register', () => {
         signature: 'server-signature',
         maxnumber: 100,
       },
-      result: { access_token: 'new-jwt-token', token_type: 'bearer' },
+      result: { csrfToken: 'csrf-new-jwt-token' },
     })
 
     const token = await register('Alice', 'alice@example.com', 'securepass')
 
-    expect(token).toBe('new-jwt-token')
+    expect(token).toBe('cookie-session:marker')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-new-jwt-token')
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/register', {
       method: 'POST',
       body: {
@@ -112,7 +120,7 @@ describe('register', () => {
         signature: 'server-signature',
         maxnumber: 5,
       },
-      result: { access_token: 'unreachable', token_type: 'bearer' },
+      result: { csrfToken: 'csrf-unreachable' },
     })
 
     await expect(register('Alice', 'alice@example.com', 'securepass')).rejects.toThrow()
@@ -121,12 +129,99 @@ describe('register', () => {
 })
 
 describe('getSessionToken', () => {
-  it('returns the access_token from the session endpoint', async () => {
-    mockApiFetch.mockResolvedValue({ access_token: 'session-token', token_type: 'bearer' })
+  it('starts a cookie session from the Authelia session endpoint', async () => {
+    mockApiFetch.mockResolvedValue({ csrfToken: 'csrf-session-token' })
 
     const token = await getSessionToken()
 
-    expect(token).toBe('session-token')
+    expect(token).toBe('cookie-session:marker')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-session-token')
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/session')
+  })
+})
+
+describe('resumeSession (ai-trainer-ops#45)', () => {
+  it('asks once per page load, however often it is called', async () => {
+    mockApiFetch.mockResolvedValue({ csrfToken: 'csrf-resumed' })
+
+    const [first, second] = await Promise.all([resumeSession(), resumeSession()])
+
+    expect(first).toBe('cookie-session:marker')
+    expect(second).toBe(first)
+    expect(mockApiFetch).toHaveBeenCalledTimes(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/resume')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-resumed')
+  })
+
+  it('reports no session when the server answers 204, and asks again after a sign-out', async () => {
+    await endSession()
+    mockApiFetch.mockResolvedValueOnce(undefined)
+
+    await expect(resumeSession()).resolves.toBeNull()
+  })
+
+  it('reports no session when the request fails', async () => {
+    await endSession()
+    mockApiFetch.mockRejectedValueOnce(new Error('Not Found'))
+
+    await expect(resumeSession()).resolves.toBeNull()
+  })
+})
+
+describe('resumeSession on a connection that hangs', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('gives up after the timeout, and ignores an answer that arrives later', async () => {
+    await endSession()
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    let answer: (value: unknown) => void = () => {}
+    mockApiFetch.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+
+    const resumed = resumeSession()
+    await vi.advanceTimersByTimeAsync(RESUME_TIMEOUT_MS)
+    await expect(resumed).resolves.toBeNull()
+
+    answer({ csrfToken: 'csrf-too-late' })
+    await vi.runAllTimersAsync()
+    expect(mockSetCsrfToken).not.toHaveBeenCalledWith('csrf-too-late')
+  })
+})
+
+describe('resumeSession on a connection that answers', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('leaves no timer running once the server has answered', async () => {
+    await endSession()
+    vi.useFakeTimers()
+    mockApiFetch.mockResolvedValueOnce(undefined)
+
+    await resumeSession()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('endSession', () => {
+  it('forgets the CSRF token and clears the cookie, without throwing', async () => {
+    mockApiFetch.mockRejectedValue(new Error('offline'))
+
+    await expect(endSession()).resolves.toBeUndefined()
+
+    expect(mockSetCsrfToken).toHaveBeenCalledWith(null)
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/logout', { method: 'POST' })
+  })
+})
+
+describe('a server that still answers with a bearer token', () => {
+  it('is used as before, so a frontend deployed ahead of its backend keeps working', async () => {
+    mockApiFetch.mockResolvedValue({ access_token: 'jwt-from-old-backend', token_type: 'bearer' })
+
+    await expect(login('alice@example.com', 'pw')).resolves.toBe('jwt-from-old-backend')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith(null)
   })
 })
