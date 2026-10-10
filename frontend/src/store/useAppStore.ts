@@ -131,6 +131,9 @@ export interface WorkoutFeedback {
   completedAt: string
   /** The sport the session was logged in; the server always says (#714). */
   sport?: string
+  /** How far it went, when the athlete said (ai-trainer-ops#47). `null` is
+   *  "they did not say", which is not zero kilometres. */
+  distanceKm?: number | null
 }
 
 export interface TrainingDay {

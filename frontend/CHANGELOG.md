@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **"Distance (km)" when entering an activity** (ai-trainer-ops#47) —
+  `AddActivityDialog.tsx`, `DashboardPage.tsx`. Optional, and offered only for
+  the sports that cover ground: a gym session has no distance, and the field
+  would invite a number that means nothing, since the strength model reads sets,
+  reps and load (#714).
+
+  A blank field for a run or a ride sends `null`, which is "none"; a strength
+  session sends **no key at all**, so correcting an entry's sport cannot blank a
+  distance it still has. Editing prefills what was entered and comes back empty
+  for a session nobody measured, rather than claiming 0 km.
+
+  Not in this change: showing the distance in the activity list. That needs a new
+  field on the ride-metrics payload, and the value of it is small next to what
+  the figure already does invisibly — an entered run's distance now counts
+  towards the weekly mileage the durability ceiling reads.
+
 ### Fixed
 
 - **A link to anything but the dashboard now opens that thing**

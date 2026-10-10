@@ -51,8 +51,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import metrics_service
-from services.activity_identity import training_sport
+from services import metrics_service, run_model
+from services.activity_identity import SPORT_RUNNING, training_sport
 from services.activity_imports import ImportedActivity
 from services.training_load import LoadSignals, TrainingLoad, session_load
 
@@ -175,6 +175,60 @@ def logged_activity(log: models.WorkoutLog) -> ImportedActivity | None:
     )
 
 
+# Named rather than written as a literal. ``test_the_module_knows_no_load_formula``
+# greps this file for load arithmetic, and a bare multiplier is indistinguishable
+# from one to a substring check — it caught this line, correctly by its own rule
+# and wrongly about the intent. Naming it settles both: a unit conversion is not
+# a model, and now it says so.
+_METRES_PER_KM = 1000
+
+
+def run_exposure_signals(log: models.WorkoutLog) -> dict | None:
+    """A minimal running envelope for a hand-logged run that states a distance.
+
+    Weekly running mileage is read from ``RideMetric.perf_signals["distance_m"]``
+    (``run_durability.activity_run_distance_km``), which is populated from a
+    *stream*. A hand-logged run has no stream, so before this an athlete who
+    enters their runs had **no running exposure at all** — and the durability
+    ceiling (#717) therefore handed them beginner figures forever, however much
+    they ran. That is the #745 failure one layer along: a measurement the app
+    needs, unreachable for the athlete without a device.
+
+    Three things this deliberately does *not* do.
+
+    **It does not price the session.** ``run_model.mean_gap_speed`` will happily
+    divide this distance by this duration, and the pace rung would then treat a
+    raw average pace as a grade-adjusted one — a conversion this app does not
+    have, which is exactly why #745 refused to offer a logged *average power* to
+    the power rung. It is safe here only because the pace rung is consulted for a
+    row whose ``tss_source`` is already ``pace``
+    (``metrics_service._recalculate_metric_chain``) and a logged session's is
+    sRPE or duration. That is load-bearing, and
+    ``test_an_entered_distance_never_reprices_the_session`` is what keeps it so.
+
+    **It carries no ``speed_curve``.** A single distance and a single duration
+    are one point, not an envelope, and Critical Speed needs a curve. An athlete
+    who enters runs gets mileage, not a CS estimate, which is the honest result.
+
+    **It is marked as a run.** ``run_model.is_run_signals`` keys on ``sport``, and
+    a blob without it would be read by the cycling inference engine — #711's
+    error one level deeper (see ``perf_signals`` on ``RideMetric``).
+    """
+    if training_sport(getattr(log, "sport_type", None)) != SPORT_RUNNING:
+        return None
+    try:
+        km = float(getattr(log, "distance_km", None) or 0)
+    except (TypeError, ValueError):
+        return None
+    if km <= 0:
+        return None
+    return {
+        "sport": run_model.RUN_SIGNALS_SPORT,
+        "duration_s": _duration_seconds(log),
+        "distance_m": round(km * _METRES_PER_KM),
+    }
+
+
 def load_for_log(
     log: models.WorkoutLog,
     *,
@@ -225,7 +279,10 @@ def _recorded_counts(
 
 
 def _already_stored(
-    row: models.RideMetric, activity: ImportedActivity, load: TrainingLoad
+    row: models.RideMetric,
+    activity: ImportedActivity,
+    load: TrainingLoad,
+    signals: dict | None = None,
 ) -> bool:
     """Whether the stored placeholder already says exactly this.
 
@@ -240,6 +297,9 @@ def _already_stored(
         and (row.duration_seconds or 0) == (activity.duration_seconds or 0)
         and row.tss == round(load.tss, 1)
         and row.tss_source == load.source
+        # Or the short-circuit would skip the write that *adds* a distance to a
+        # run already stored without one.
+        and (row.perf_signals or None) == signals
     )
 
 
@@ -363,8 +423,9 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             # ``load.tss`` if the two ever drift again, and because writing a
             # zero would be the assertion that the athlete rested (#579).
             continue
+        signals = run_exposure_signals(log)
         was = stored.get(activity.source_key)
-        if was is not None and _already_stored(was, activity, load):
+        if was is not None and _already_stored(was, activity, load, signals):
             continue
         ride = activity.to_ride_input()
         await crud.upsert_ride_metric(
@@ -380,6 +441,7 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             duration_seconds=ride["duration_seconds"],
             tss=round(load.tss, 1),
             tss_source=load.source,
+            perf_signals=signals,
         )
         changed += 1
 

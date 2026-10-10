@@ -35,6 +35,8 @@ export interface EditedActivity {
   sport: ManualActivityInput['sport']
   durationMinutes: number
   perceivedEffort: EffortLevel
+  /** Empty string when the athlete never said, which is not "0 km". */
+  distanceKm: string
   notes: string
 }
 
@@ -64,6 +66,7 @@ export default function AddActivityDialog({
   )
   const [minutes, setMinutes] = useState(editing ? String(editing.durationMinutes) : '')
   const [effort, setEffort] = useState<EffortLevel>(editing ? editing.perceivedEffort : 3)
+  const [distance, setDistance] = useState(editing ? editing.distanceKm : '')
   const [notes, setNotes] = useState(editing ? editing.notes : '')
   // Enter it by hand, or bring the file the device recorded (ai-trainer-ops#48):
   // one entry point for "something happened that the app does not know about".
@@ -95,7 +98,19 @@ export default function AddActivityDialog({
     setSaving(true)
     setError('')
     try {
-      const fields = { sport, durationMinutes: duration, perceivedEffort: effort, notes: notes.trim() }
+      // `null` clears a stored distance; a sport that has none sends no key at
+      // all, so the backend leaves whatever is there alone rather than wiping it
+      // on a sport correction.
+      const parsedDistance = Number(distance)
+      const fields = {
+        sport,
+        durationMinutes: duration,
+        perceivedEffort: effort,
+        notes: notes.trim(),
+        ...(sport === 'strength'
+          ? {}
+          : { distanceKm: distance.trim() && parsedDistance > 0 ? parsedDistance : null }),
+      }
       if (editing) {
         await updateManualActivity(authToken, editing.date, editing.slot, fields)
       } else {
@@ -207,6 +222,34 @@ export default function AddActivityDialog({
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
+
+        {/* Only for the sports that cover ground. A gym session has no distance,
+            and offering the field would invite a number that means nothing — the
+            strength model reads sets, reps and load (#714). Optional even for
+            those: leaving it blank is "I did not measure", and the backend
+            stores that as absent rather than as 0 km. */}
+        {sport !== 'strength' && (
+          <div>
+            <label
+              htmlFor="activity-distance"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Distance (km) <span className="text-gray-400">— optional</span>
+            </label>
+            <input
+              id="activity-distance"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={1000}
+              step="0.1"
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              placeholder="e.g. 10.5"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        )}
 
         <div>
           <div className="flex items-baseline justify-between gap-2 mb-1">

@@ -495,6 +495,9 @@ async def get_workouts(
             # So an entered activity can be edited in the sport it was entered
             # in (#47); every logged session carries one since #714.
             "sport": log.sport_type,
+            # ``None`` travels as null rather than 0: the edit form has to be
+            # able to come back empty for a session nobody measured.
+            "distanceKm": log.distance_km,
         }
         # Keyed by session (#496): the first session keeps the bare date so every
         # existing client keeps reading exactly what it read before, and only the
@@ -633,6 +636,7 @@ async def add_manual_activity(
         notes=body.notes,
         completed_at=f"{body.date}T12:00:00",
         sport_type=sport,
+        distance_km=body.distance_km,
     )
     await _price_logged_session(
         db, current_user, date=body.date, sport=sport,
@@ -674,6 +678,19 @@ async def update_manual_activity(
         if "average_heart_rate" in body.model_fields_set
         else existing.average_heart_rate
     )
+    # Same rule as the heart rate, and for the same reason. The dialog sends a
+    # distance only for the sports that have one, so an omitted key has to mean
+    # "leave it": otherwise correcting a run's note, which sends no distance
+    # because the form was not asked about one, would delete the distance the
+    # athlete entered. Correcting a run *to* a strength session therefore leaves
+    # the stored distance in place — see
+    # `test_correcting_a_run_to_strength_keeps_the_distance_for_a_change_back`,
+    # which is where that choice is written down.
+    distance = (
+        body.distance_km
+        if "distance_km" in body.model_fields_set
+        else existing.distance_km
+    )
     await crud.upsert_workout_log(
         db,
         current_user.id,
@@ -683,6 +700,7 @@ async def update_manual_activity(
         average_power=None,
         average_heart_rate=heart_rate,
         peak_power=None,
+        distance_km=distance,
         perceived_effort=body.perceived_effort,
         notes=body.notes,
         completed_at=f"{date}T12:00:00",
