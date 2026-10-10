@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`scripts/cost_report.py`: LLM cost per active user** (ai-trainer-ops#8) —
+  reads `llm_calls` for the last `--days` (default 30) and prints, as Markdown,
+  the median, mean and most expensive athlete, split into scheduled analysis
+  steps, per-ride review, chat and other, plus a per-source table. Aggregates
+  only, nothing about any athlete. Priced at the coach model's list price
+  ($0.30 / $2.50 per million); tokens on any other model are listed, not
+  guessed at. It cannot tell a call on an athlete's own key from one the
+  operator paid for. A test fails when a mapped source stops being written
+  anywhere, so a rename cannot quietly move spend into "other".
+
 - **An entered activity can say how far it went** (ai-trainer-ops#47) —
   `workout_logs.distance_km` (migration `20261010_000001`), accepted by
   `POST`/`PUT /users/me/activities` and reported by `GET /users/me/workouts`.
