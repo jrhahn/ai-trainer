@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than instead of it, so all of this happened behind "Loading your
   training data…", which is why it never looked like a routing problem.
 
+  One of #797's own browser specs had to change with it: its reload test walked
+  back through the dashboard after reloading Settings, because that is where a
+  reload used to land. The spec beside it had found this defect and that one had
+  quietly encoded it. It now asserts that a reload of Settings *stays* on
+  Settings, and the `TODO(ai-trainer-ops#57)` workaround in its `openSettings`
+  helper is gone with the bug.
+
   "Not loaded yet" is now its own state and the router is not asked until it is
   over — the same confusion #41 had when `isOnboarded` was written before the
   plan existed. A visitor with no token is "known" from the first render, so
