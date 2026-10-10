@@ -41,8 +41,9 @@ export const RESUME_TIMEOUT_MS = 10_000
 export function resumeSession(): Promise<string | null> {
   if (!resuming) {
     let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<null>((resolve) => {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         timedOut = true
         resolve(null)
       }, RESUME_TIMEOUT_MS)
@@ -54,7 +55,7 @@ export function resumeSession(): Promise<string | null> {
     const request = apiFetch<SessionResponse | undefined>('/auth/resume').then(
       (response) => (response && !timedOut ? startSession(response) : null),
       () => null,
-    )
+    ).finally(() => clearTimeout(timer))
     resuming = Promise.race([request, timeout])
   }
   return resuming

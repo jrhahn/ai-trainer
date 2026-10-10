@@ -190,6 +190,22 @@ describe('resumeSession on a connection that hangs', () => {
   })
 })
 
+describe('resumeSession on a connection that answers', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('leaves no timer running once the server has answered', async () => {
+    await endSession()
+    vi.useFakeTimers()
+    mockApiFetch.mockResolvedValueOnce(undefined)
+
+    await resumeSession()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
 describe('endSession', () => {
   it('forgets the CSRF token and clears the cookie, without throwing', async () => {
     mockApiFetch.mockRejectedValue(new Error('offline'))

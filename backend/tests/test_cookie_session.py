@@ -241,3 +241,27 @@ async def test_resume_clears_a_cookie_that_does_not_decode(browser):
     )
     assert response.status_code == 204
     assert f'{auth.SESSION_COOKIE}=""' in response.headers.get("set-cookie", "")
+
+
+async def test_resume_does_not_renew_a_cookie_for_someone_else(browser, monkeypatch):
+    # With forward-auth, get_current_user can name a user without reading the
+    # cookie at all. A stale cookie from another account must be cleared, not
+    # renewed for the user the proxy named. Raised in review on PR #808.
+    import crud
+    from tests.conftest import TestSessionLocal
+
+    await browser.post(
+        "/api/v1/auth/register",
+        json={"name": "Other", "email": "other@example.com", "password": PASSWORD},
+    )
+    async with TestSessionLocal() as session:
+        other = await crud.get_user_by_email_simple(session, "other@example.com")
+    await _sign_up(browser)
+
+    async def proxy_names_the_other_user(*_args, **_kwargs):
+        return other
+
+    monkeypatch.setattr(auth, "get_current_user", proxy_names_the_other_user)
+    response = await browser.get("/api/v1/auth/resume")
+    assert response.status_code == 204
+    assert auth.SESSION_COOKIE not in browser.cookies

@@ -434,6 +434,11 @@ async def resume_session(
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
         return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
+    if claims.user_id != user.id:
+        # The Authelia branch identified someone other than the cookie's owner
+        # (a stale cookie from another account). Renewing would hand that
+        # user a cookie carrying the other account's session id.
+        return _end_cookie_session(Response(status_code=status.HTTP_204_NO_CONTENT))
     return _start_cookie_session(user, response, session_id=claims.session_id)
 
 
