@@ -9,10 +9,25 @@
  *
  * This one types into every input onboarding offers — race goal and date, a
  * fitness level, FTP, max heart rate, the structured-plan checkbox, an
- * assessment method — and then asks Settings what the account actually holds.
- * That is the assertion ai-trainer-ops#43 says nobody can make today ("some of
- * what it does ask has no visible effect"), and it is the one that would have
- * caught #40, where onboarding deleted the athlete's name.
+ * assessment method — and reads back everything the app shows anywhere:
+ *
+ * | answer | read back from |
+ * |---|---|
+ * | name, email | Settings |
+ * | FTP, max heart rate | Settings |
+ * | race date, race description | the dashboard's season countdown |
+ * | fitness level, assessment source, race goal | **not read back** — see below |
+ * | structured-plan checkbox | **not read back** |
+ *
+ * The last two rows are the honest limit of this spec, and it was a review on
+ * PR #797 that made me state it rather than imply otherwise: nothing in the app
+ * displays `fitnessLevel`, `followsTrainingPlan` or `assessmentMethod`, so if
+ * onboarding dropped them on the floor nothing here would notice. What is done
+ * instead is to make the *entering* of them verifiable — every choice asserts
+ * its own `aria-pressed` immediately after the click, so a locator that drifted
+ * onto the wrong control fails here rather than passing quietly. Reading them
+ * back needs somewhere to read them from, which is ai-trainer-ops#50's and
+ * #43's territory.
  *
  * As everywhere in this stack, nothing reads the generated plan: it is `[stub]`
  * text by construction. What is read back is the athlete's own input.
@@ -78,8 +93,18 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   // Step 1 is the greeting.
   await continueButton(page).click()
 
+  // Exact option labels rather than alternation regexes, and every choice
+  // asserts that it took. A `/race/i`-style locator can drift onto a different
+  // control when copy changes and the test still passes, which is the one way
+  // these steps could lie (found in review on PR #797).
+  const choose = async (name: string) => {
+    const option = page.getByRole('button', { name, exact: false })
+    await option.first().click()
+    await expect(option.first()).toHaveAttribute('aria-pressed', 'true')
+  }
+
   // Step 2 — the race goal, which is the branch that reveals the date fields.
-  await page.getByRole('button', { name: /race/i }).first().click()
+  await choose('Race Prep')
   const date = page.locator('input[type="date"]')
   await expect(date).toBeVisible()
   await date.fill(raceDate())
@@ -88,16 +113,18 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
 
   // Step 3 — fitness level plus the two numbers the coach would otherwise have
   // to estimate from the first rides.
-  await page.getByRole('button', { name: /intermediate|1-3 years|1–3 years/i }).first().click()
+  await choose('Intermediate')
   await page.getByPlaceholder('e.g. 250').fill(ANSWERS.ftp)
   await page.getByPlaceholder('e.g. 185').fill(ANSWERS.maxHeartRate)
-  await page.getByRole('checkbox').first().check()
+  const followsPlan = page.getByRole('checkbox').first()
+  await followsPlan.check()
+  await expect(followsPlan).toBeChecked()
   await continueButton(page).click()
 
-  // Step 4 — the assessment source. "Use the parameters I entered" is the one
-  // that needs no provider round trip, which is also what #43 calls out as two
-  // steps for one decision.
-  await page.getByRole('button', { name: /parameters i entered|use my/i }).first().click()
+  // Step 4 — the assessment source. "Use parameters I entered" is the one that
+  // needs no provider round trip, which is also what #43 calls out as two steps
+  // for one decision.
+  await choose('Use parameters I entered')
   await continueButton(page).click()
 
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
@@ -114,6 +141,10 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
  * found it — it is written up separately rather than asserted here, because this
  * spec is about whether onboarding's answers reach the account, and a spec that
  * fails for a second reason tells you about neither.
+ *
+ * TODO(ai-trainer-ops#57): once the deep-link fix is in, this can go back to a
+ * plain `page.goto('/settings')`. Left as a marker so the workaround does not
+ * outlive the bug it works around.
  */
 async function openSettings(page: Page) {
   const link = page.getByRole('link', { name: 'Settings' }).first()
@@ -146,6 +177,15 @@ test.describe('onboarding with everything filled in', () => {
     await onboardThoroughly(page, athlete)
     await waitForPopulatedDashboard(page, athlete)
 
+    // The race answers, read back where the app actually shows them: the season
+    // countdown renders the description up to a spaced dash, and a day count
+    // derived from the date. Both only appear if the two fields survived the
+    // trip, which is what makes this worth asserting rather than the goal chip.
+    await expect(page.getByText(ANSWERS.raceDescription).first()).toBeVisible()
+    // 89–91 rather than exactly 90: the fixture builds the date from
+    // `toISOString()` (UTC) while the countdown counts calendar days locally.
+    await expect(page.getByText(/\b(89|90|91) days\b/).first()).toBeVisible()
+
     await openSettings(page)
 
     // Name and email, the pair ai-trainer-ops#46 asks for and #40 broke: the
@@ -165,6 +205,10 @@ test.describe('onboarding with everything filled in', () => {
   test('survives a reload, because the answers are on the account and not in the tab', async ({
     page,
   }) => {
+    // Watched here too: the rehydration path is where a console error is most
+    // likely, and leaving it off one of two tests was an inconsistency the
+    // review on PR #797 picked up.
+    const errors = watchConsole(page)
     const athlete = newAthlete()
 
     await onboardThoroughly(page, athlete)
@@ -183,5 +227,7 @@ test.describe('onboarding with everything filled in', () => {
     await expect(page.getByLabel('Current FTP (watts)')).toHaveValue(ANSWERS.ftp)
     await expect(page.getByLabel('Max Heart Rate (bpm)')).toHaveValue(ANSWERS.maxHeartRate)
     await expect(page.getByText(`Signed in as ${athlete.email}`)).toBeVisible()
+
+    expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
 })
