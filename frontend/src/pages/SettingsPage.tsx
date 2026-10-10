@@ -516,7 +516,7 @@ export default function SettingsPage() {
         <div className="min-w-0 max-w-2xl flex-1 space-y-10">
         <Section id="profile">
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Name</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Name</h3>
             <div>
               <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
                 <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
@@ -544,7 +544,7 @@ export default function SettingsPage() {
 
           {/* Running threshold pace — what FTP is to the bike (#716). */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h3>
             <p className="text-xs text-gray-500 mb-4">
               The pace you could hold for about an hour. Runs are scored against it instead of
               being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
@@ -600,7 +600,7 @@ export default function SettingsPage() {
 
           {/* FTP Management */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">FTP</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">FTP</h3>
             <p className="text-xs text-gray-500 mb-4">
               The power you could hold for about an hour. Rides are scored against it.
               {userProfile?.currentFTP != null && (
@@ -691,7 +691,7 @@ export default function SettingsPage() {
 
           {/* Heart Rate Settings */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Heart Rate Settings</h3>
             <p className="text-xs text-gray-500 mb-1">
               Max HR and resting HR are used for HR-based FTP estimation and training zones.
             </p>
@@ -835,7 +835,7 @@ export default function SettingsPage() {
         <Section id="activities">
           {/* Data Sources */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Data Sources</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Data Sources</h3>
             <p className="text-xs text-gray-500 mb-2">
               Choose how AI Trainer imports your training history. Automatic sources are convenient,
               while FIT files keep the original workout data directly in your hands.
@@ -1063,7 +1063,7 @@ export default function SettingsPage() {
             <>
               {/* AI Provider */}
               <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-                <h2 className="text-base font-bold text-gray-900 mb-1">AI Provider</h2>
+                <h3 className="text-base font-bold text-gray-900 mb-1">AI Provider</h3>
                 <p className="text-xs text-gray-500 mb-4">
                   Choose which server-side model powers your training plan and coach chat.
                 </p>
@@ -1142,7 +1142,7 @@ export default function SettingsPage() {
 
         <Section id="account">
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Account</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Account</h3>
             <p className="text-xs text-gray-500 mb-4">Signed in as {userProfile?.email ?? 'unknown'}.</p>
 
             <button
@@ -1166,7 +1166,7 @@ export default function SettingsPage() {
           {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
               way to keep a copy sits right above the way to delete everything. */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Your Data</h2>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Your Data</h3>
             <p className="text-xs text-gray-500 mb-4">
               Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.
             </p>
@@ -1181,7 +1181,7 @@ export default function SettingsPage() {
 
           {/* Danger zone */}
           <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">
-            <h2 className="text-base font-bold text-red-600 mb-1">Danger Zone</h2>
+            <h3 className="text-base font-bold text-red-600 mb-1">Danger Zone</h3>
             <p className="text-xs text-gray-500 mb-4">
               Permanently delete all your data and start over from scratch.
             </p>

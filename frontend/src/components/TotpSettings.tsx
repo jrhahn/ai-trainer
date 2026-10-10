@@ -87,14 +87,14 @@ export default function TotpSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
+      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         {status?.enabled ? (
           <ShieldCheck size={16} className="text-green-600" />
         ) : (
           <ShieldOff size={16} className="text-gray-400" />
         )}
         Two-Factor Authentication
-      </h2>
+      </h3>
       <p className="text-xs text-gray-500 mb-4">
         Ask for a code from your authenticator app when signing in, so a stolen
         password is not enough on its own.

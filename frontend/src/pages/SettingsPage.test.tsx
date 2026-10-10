@@ -876,6 +876,17 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     }
   })
 
+  it('puts card headings one level below their section heading (ai-trainer-ops#60)', () => {
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' })
+    for (const link of within(nav).getAllByRole('link')) {
+      const section = document.querySelector(link.getAttribute('href')!) as HTMLElement
+      expect(within(section).getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    }
+  })
+
   it('needs no training-load vocabulary without Expert mode', () => {
     useAppStore.setState({ lastStravaActivityId: 12345, lastIntervalsActivityId: 67890 })
     const { container } = setup()

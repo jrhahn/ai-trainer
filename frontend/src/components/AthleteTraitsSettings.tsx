@@ -761,9 +761,9 @@ export default function AthleteTraitsSettings() {
     <div className="space-y-4">
       {groups.map(([category, facts]) => (
         <div key={category}>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
             {formatCategory(category)}
-          </h4>
+          </h5>
           <ul className="space-y-2">
             {facts.map((fact) => (
               <TraitRow key={fact.id} fact={fact} token={authToken!} />
@@ -779,9 +779,9 @@ export default function AthleteTraitsSettings() {
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-6">
       <div>
-        <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+        <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
           <Brain size={16} /> Learned Athlete Traits
-        </h2>
+        </h3>
         <p className="text-xs text-gray-500 mb-4">
           Patterns the coach has learned about you. Review, correct, confirm, or
           remove anything that looks wrong — changes are reflected in future coach
@@ -802,7 +802,7 @@ export default function AthleteTraitsSettings() {
         <div className="space-y-5">
           {factGroups.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-1">Facts</h3>
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">Facts</h4>
               <p className="text-xs text-gray-500 mb-2">
                 Stable values measured or stated about you — e.g. FTP, max heart
                 rate, weight.
@@ -812,9 +812,9 @@ export default function AthleteTraitsSettings() {
           )}
           {observationGroups.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-1">
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">
                 Observations
-              </h3>
+              </h4>
               <p className="text-xs text-gray-500 mb-2">
                 Patterns of repeated behaviour the coach inferred from your
                 training — treated as tendencies, not certainties.
@@ -827,9 +827,9 @@ export default function AthleteTraitsSettings() {
 
       {hypotheses && hypotheses.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
             <FlaskConical size={16} /> Working Hypotheses
-          </h2>
+          </h3>
           <p className="text-xs text-gray-500 mb-4">
             Testable ideas the coach is tracking but hasn't confirmed yet. Confirm
             one to turn it into a learned trait, or dismiss it if it doesn't hold
@@ -849,9 +849,9 @@ export default function AthleteTraitsSettings() {
 
       {openQuestions && openQuestions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
             <HelpCircle size={16} /> Open Questions
-          </h2>
+          </h3>
           <p className="text-xs text-gray-500 mb-4">
             Things the coach can't answer yet and is actively tracking. Each shows
             the evidence so far and what it still needs. Questions close on their
@@ -871,9 +871,9 @@ export default function AthleteTraitsSettings() {
 
       {experiments && experiments.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
             <Beaker size={16} /> Suggested Experiments
-          </h2>
+          </h3>
           <p className="text-xs text-gray-500 mb-4">
             Where the coach is unsure, it suggests a small experiment to settle the
             question with data instead of guessing. Run one, then mark it done or
@@ -893,9 +893,9 @@ export default function AthleteTraitsSettings() {
 
       {predictions && predictions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
             <Target size={16} /> Predictions
-          </h2>
+          </h3>
           <p className="text-xs text-gray-500 mb-4">
             To measure its own coaching quality, the coach makes checkable
             predictions and later scores them against what actually happened.
@@ -924,7 +924,7 @@ export default function AthleteTraitsSettings() {
       )}
 
       <div className="border-t border-gray-100 pt-5">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Privacy Controls</h3>
+        <h4 className="text-sm font-semibold text-gray-800 mb-3">Privacy Controls</h4>
 
         <div className="flex items-center justify-between py-2">
           <div>

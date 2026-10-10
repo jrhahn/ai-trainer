@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Settings card headings sit one level below their section** (ai-trainer-ops#60) —
+  `SettingsPage.tsx`, `AIKeySettings`, `AthleteTraitsSettings`,
+  `ConversationImportSettings`, `MotivationModelSettings`, `SessionSettings`,
+  `TotpSettings`. The five section headings are `h2`. The cards inside them
+  were `h2` as well, so a screen reader's heading list was flat. Cards are now
+  `h3` and their sub-headings one level lower. The classes are unchanged, so
+  nothing looks different. These components render only on Settings.
+
 ### Changed
 
 - **Settings in five sections, with expert controls behind Expert mode**

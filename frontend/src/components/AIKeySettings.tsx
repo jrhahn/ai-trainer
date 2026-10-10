@@ -101,10 +101,10 @@ export default function AIKeySettings() {
       id="your-ai-provider-key"
       className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
     >
-      <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
+      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <Key size={16} className="text-amber-500" />
         Your AI Provider Key
-      </h2>
+      </h3>
       <p className="text-xs text-gray-500 mb-2">
         Supply your own API key so your AI requests are billed to your account.
         The key is encrypted at rest and never returned in API responses.

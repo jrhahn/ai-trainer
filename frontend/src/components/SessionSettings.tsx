@@ -41,10 +41,10 @@ export default function SessionSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h2 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
+      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <LogOut size={16} className="text-gray-400" />
         Active Sessions
-      </h2>
+      </h3>
       <p className="text-xs text-gray-500 mb-4">
         Sign out of every browser and device, including this one. Use this if you
         have been signed in somewhere you no longer control, or if you think
