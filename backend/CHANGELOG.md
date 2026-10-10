@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`scripts/backtest_report.py`: how far the performance model moves once
+  more data arrives** (ai-trainer-ops#27, item 2). Hides the last `--weeks`
+  (default 6) of ride metrics per athlete, infers FTP, MAP, critical speed,
+  threshold pace and the rest from what was known then, and compares each
+  numeric estimate with today's: median absolute change, mean signed change,
+  and how often today's value fell inside the earlier stated range. **The
+  reference is the model's own later estimate, not a measurement**, and the
+  report says so. Aggregates only.
+
 - **`scripts/cost_report.py`: LLM cost per active user** (ai-trainer-ops#8) —
   reads `llm_calls` for the last `--days` (default 30) and prints, as Markdown,
   the median, mean and most expensive athlete, split into scheduled analysis
