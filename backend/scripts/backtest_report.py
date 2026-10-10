@@ -106,7 +106,10 @@ def render_markdown(points: Iterable[Point], weeks: int, athletes: int) -> str:
         changes = [(p.earlier - p.later) / p.later * 100 for p in group]
         ranged = [p for p in group if p.low is not None and p.high is not None]
         inside = sum(p.low <= p.later <= p.high for p in ranged)
-        coverage = f"{inside}/{len(ranged)}" if ranged else "no range stated"
+        if len(ranged) >= MIN_ATHLETES:
+            coverage = f"{inside}/{len(ranged)}"
+        else:
+            coverage = f"fewer than {MIN_ATHLETES} ranges stated"
         lines.append(
             f"| {name} | {len(group)} | {statistics.median(abs(c) for c in changes):.1f}% "
             f"| {statistics.fmean(changes):+.1f}% | {coverage} |"

@@ -45,7 +45,7 @@ def test_the_report_states_change_and_range_coverage():
     points = [
         Point("ftp", 240, 300, 230, 280),  # -20%, outside its range
         Point("ftp", 300, 300, 290, 310),  # 0%, inside
-        Point("ftp", 330, 300, None, None),  # +10%, no range
+        Point("ftp", 330, 300, 320, 340),  # +10%, outside
         *[Point("critical_speed", 4.0, 4.0, None, None)] * 3,
         Point("map", 350, 340, None, None),
     ]
@@ -53,8 +53,8 @@ def test_the_report_states_change_and_range_coverage():
     text = backtest_report.render_markdown(points, 6, 3)
 
     assert "3 athletes with ride metrics." in text
-    assert "| ftp | 3 | 10.0% | -3.3% | 1/2 |" in text
-    assert "| critical_speed | 3 | 0.0% | +0.0% | no range stated |" in text
+    assert "| ftp | 3 | 10.0% | -3.3% | 1/3 |" in text
+    assert "| critical_speed | 3 | 0.0% | +0.0% | fewer than 3 ranges stated |" in text
     # One athlete's row would be that athlete's own number.
     assert "| map |" not in text
     assert "Not shown, fewer than 3 athletes: map." in text
