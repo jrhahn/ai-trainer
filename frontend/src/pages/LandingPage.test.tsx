@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LandingPage, { openSourceFacts, pillars, steps } from './LandingPage'
 
 function setup() {
-  render(
+  return render(
     <MemoryRouter>
       <LandingPage />
     </MemoryRouter>
@@ -54,12 +56,29 @@ describe('LandingPage', () => {
     }
   })
 
-  it('names the differentiators: free, open source, own key, Strava via intervals.icu', () => {
+  it('names the differentiators: free, source available, own key, Strava via intervals.icu', () => {
     setup()
-    expect(screen.getByText(/open source · free to run/i)).toBeInTheDocument()
+    expect(screen.getByText(/source available · free to run/i)).toBeInTheDocument()
     expect(screen.getAllByText(/google gemini key/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/agpl-3\.0/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/intervals\.icu pulls your rides straight from strava/i)).toBeInTheDocument()
+  })
+
+  it('names the licence the code actually carries, and never calls it open source', () => {
+    // The page said "AGPL-3.0" and "open source" after the code had moved to
+    // the FSL, which the README calls "source available, not open source".
+    const licence = readFileSync(resolve(__dirname, '../../../LICENSE'), 'utf8')
+    const spdx = licence.match(/^FSL-[\d.]+-\w+$/m)?.[0]
+    expect(spdx).toBeTruthy()
+
+    const { container } = setup()
+    const text = container.textContent ?? ''
+    expect(text).toContain(spdx!)
+    expect(text).not.toMatch(/open.source|AGPL/i)
+  })
+
+  it('offers entering sessions by hand as well as a FIT file', () => {
+    setup()
+    expect(screen.getByText(/upload a fit file or enter your sessions yourself/i)).toBeInTheDocument()
   })
 
   it('points new users at the setup guide', () => {

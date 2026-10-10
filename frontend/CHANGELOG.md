@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The landing page names the right licence** (ai-trainer-ops#53) —
+  `LandingPage.tsx`. It said "Open source", "AGPL-3.0, all of it" and
+  "open-source … AGPL-3.0" in the footer, but the code is under FSL-1.1-ALv2,
+  which the README calls "source available, not open source". Now "Source
+  available" and "FSL-1.1-ALv2", and a test reads the licence from `LICENSE` so
+  the two cannot drift apart again. Also: the setup-guide line names
+  intervals.icu before Strava, and the data step offers entering sessions by
+  hand next to a FIT upload.
+
 - **The app works on every domain it is served on** (ai-trainer-ops#45) —
   `services/api.ts`, `deploy/ansible/templates/app.env.j2`, `compose.yml`.
   Production baked one domain into the bundle as the API address, so on the
