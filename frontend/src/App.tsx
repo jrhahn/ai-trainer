@@ -55,10 +55,27 @@ export default function App() {
   // branch and replace the URL before the effect could hold it. Found in review
   // on PR #798.
   const [checkedToken, setCheckedToken] = useState<string | null>(null)
-  const profileChecked = !authToken || checkedToken === authToken
+  // Three conditions, and the third is not redundant. `loadUserData` dedupes
+  // concurrent loads for one token and the skipped caller gets an immediate
+  // `undefined` (#458) — and on the *real* sign-in path the login page starts
+  // the load first, so App's call is always the deduped one. Its `.finally`
+  // therefore fires at once and marks the token checked while the profile is
+  // still in flight, with `isOnboarded` still false: the redirect this gate
+  // exists to prevent, on every fresh sign-in. `!isLoadingUserData` is what
+  // closes that, and it cannot stand alone either — on the first render of a
+  // full page load no load has started yet, so only `checkedToken` knows.
+  // Found in review on PR #798.
+  const profileChecked =
+    !authToken || (checkedToken === authToken && !isLoadingUserData)
 
   useEffect(() => {
-    if (!authToken) return
+    if (!authToken) {
+      // Not strictly needed — `!authToken` already reports "checked" — but a
+      // stale token left here would re-open the original hole if a sign-out and
+      // sign-in ever produced the same token string.
+      setCheckedToken(null)
+      return
+    }
     let cancelled = false
     // `.finally` rather than `.then`, though the two are equivalent today:
     // `loadUserData` catches everything and returns, so it does not reject, and

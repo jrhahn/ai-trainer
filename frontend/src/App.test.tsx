@@ -144,6 +144,35 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     expect(window.location.pathname).toBe('/settings')
   })
 
+  it('holds the URL on the real sign-in path, where the load is already running', async () => {
+    // The sign-in pages call `loadUserData(token)` themselves, and that sets
+    // the token and `isLoadingUserData` before its first await. App's own call
+    // then hits the dedupe guard and returns immediately, so its `.finally`
+    // fires while the profile is still in flight. Marking the token checked on
+    // that signal alone lifted the gate with `isOnboarded` still false — the
+    // redirect this whole change exists to prevent, on every fresh sign-in.
+    // Found in review on PR #798.
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    window.history.pushState({}, '', '/settings')
+
+    await act(async () => {
+      // Exactly what LoginPage/RegisterPage/AuthCallbackPage do.
+      void useAppStore.getState().loadUserData('tok-via-login-page')
+    })
+
+    render(<App />)
+
+    // Let App's own (deduped) call resolve and its `.finally` run. Asserting
+    // before this flushes reads the URL *before* the hole can open, which is
+    // how the first version of this test passed against the bug.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(window.location.pathname).toBe('/settings')
+  })
+
   it('does not blank the page after a logout that follows a completed load', async () => {
     // The case `!authToken ||` exists for, and the one a `checkedToken ===
     // authToken` comparison alone gets wrong: once a token *has* been looked up,

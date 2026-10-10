@@ -92,6 +92,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing to someone who should see the landing page. Both found in review on
   PR #798, and both now pinned by tests.
 
+  And the gate waits for the load to have **settled**, not merely to have been
+  attempted. `loadUserData` dedupes concurrent loads for one token and hands the
+  skipped caller an immediate `undefined` (#458) — and on the real sign-in path
+  the login page starts the load first, so App's call is always the deduped one.
+  Marking the token checked on that signal alone lifted the gate while the
+  profile was still in flight, with `isOnboarded` still `false`: the redirect
+  this change exists to prevent, on every fresh sign-in. Also found in review on
+  PR #798. The first version of the test for it passed against the bug, because
+  it asserted before the `.finally` microtask had run.
+
 ### Added
 
 - **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,
