@@ -68,6 +68,16 @@ export default function App() {
   const profileChecked =
     !authToken || (checkedToken === authToken && !isLoadingUserData)
 
+  // A warning for whoever adds the first mid-session reload: because
+  // `isLoadingUserData` is part of the condition, the gate *re-holds* every time
+  // a load starts again, and a re-hold unmounts the authenticated tree. Today
+  // that is harmless — the only callers of `loadUserData` are this effect and
+  // the three sign-in pages, so it never runs except at sign-in. A "refresh my
+  // data" button calling it would blank whatever page the athlete was on.
+  // If that day comes, ai-trainer-ops#58 is the fix: once a deduped call
+  // resolves with the real load, `checkedToken` alone is enough and this term
+  // can go.
+
   useEffect(() => {
     if (!authToken) {
       // Not strictly needed — `!authToken` already reports "checked" — but a
