@@ -15,6 +15,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { AUTH_EXPIRED_EVENT } from './services/api'
+import { resumeSession } from './services/auth'
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -25,9 +26,28 @@ export default function App() {
   const loadingStep = useAppStore((s) => s.loadingStep)
   const loadUserData = useAppStore((s) => s.loadUserData)
   const logout = useAppStore((s) => s.logout)
+  const setAuthToken = useAppStore((s) => s.setAuthToken)
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
+
+  // Whether the server has said if this browser holds a session at all
+  // (ai-trainer-ops#45). The session is an HttpOnly cookie, so the client cannot
+  // look; until the answer arrives nothing is rendered, not even the callback
+  // routes, which would otherwise start with no session and report it expired.
+  const [sessionResumed, setSessionResumed] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void resumeSession().then((marker) => {
+      if (cancelled) return
+      // A sign-in that finished first owns the session.
+      if (marker && !useAppStore.getState().authToken) setAuthToken(marker)
+      setSessionResumed(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [setAuthToken])
 
   // Whether the server has yet said *who this session is*. A stored token is
   // read synchronously at start-up, but `isOnboarded` is not persisted and
@@ -125,6 +145,8 @@ export default function App() {
   } else if (hasGlobalImportProgress) {
     loadingSubtitle = `Processing activities: ${Math.min(importProgress.processed, importProgress.total)} / ${importProgress.total}`
   }
+
+  if (!sessionResumed) return null
 
   return (
     <BrowserRouter>

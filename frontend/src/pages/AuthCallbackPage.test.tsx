@@ -10,7 +10,7 @@ const { mockGetSessionToken, mockLoadUserData } = vi.hoisted(() => ({
   mockLoadUserData: vi.fn(),
 }))
 
-vi.mock('../services/auth', () => ({ getSessionToken: mockGetSessionToken }))
+vi.mock('../services/auth', () => ({ getSessionToken: mockGetSessionToken, endSession: vi.fn() }))
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async (importOriginal) => {

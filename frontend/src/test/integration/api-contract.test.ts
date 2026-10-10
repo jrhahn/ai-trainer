@@ -26,7 +26,19 @@
  *   GET  /users/me/ai-key/status via fetchAIKeyStatus()
  */
 
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+
+// Node's fetch keeps no cookies, so the web app's cookie session
+// (ai-trainer-ops#45) cannot work here. Without its opt-in header the backend
+// answers with bearer tokens, which the service functions accept as well; the
+// cookie path itself is covered by backend/tests/test_cookie_session.py and by
+// the Playwright stacks, which run a real browser.
+const nodeFetch = globalThis.fetch
+vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+  const headers = { ...(init?.headers as Record<string, string> | undefined) }
+  delete headers['X-Auth-Mode']
+  return nodeFetch(input, { ...init, headers })
+})
 import { login, register } from '../../services/auth'
 import {
   clearChatHistoryRemote,

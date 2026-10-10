@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Stay signed in: an HttpOnly session cookie with a CSRF token** (ai-trainer-ops#45) —
+  `auth.py`, `routers/auth_router.py`, `main.py`. A sign-in that sends
+  `X-Auth-Mode: cookie` (the web app always does) gets its session as the
+  `tlap_session` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` outside dev, 30 days)
+  and a `csrfToken` in the body instead of an `access_token`, so no script can read
+  the session. `get_current_user` accepts the cookie when there is no
+  `Authorization` header, and requires `X-CSRF-Token` (an HMAC of the cookie) on
+  every state-changing request the cookie authenticates. `GET /auth/resume`
+  tells the app whether the browser holds a session, hands the CSRF token back
+  after a reload, and renews the cookie, so the 30 days count from the last visit;
+  it answers 204 to signed-out visitors and clears a cookie that no longer
+  authenticates. `POST /auth/logout` clears the cookie. "Sign out everywhere"
+  ends cookie sessions like any other (#704). Other clients still get bearer
+  tokens. Tests: `tests/test_cookie_session.py`.
+
 - **`scripts/backtest_report.py`: how far the performance model moves once
   more data arrives** (ai-trainer-ops#27, item 2). Hides the last `--weeks`
   (default 6) of ride metrics per athlete, infers FTP, MAP, critical speed,

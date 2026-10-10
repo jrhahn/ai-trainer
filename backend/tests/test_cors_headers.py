@@ -27,6 +27,10 @@ def _headers_the_frontend_sends() -> set[str]:
     start = source.index("export async function apiFetch")
     body = source[start : source.index("\n}", start)]
     headers_block = body[body.index("headers: {") : body.index("body:", body.index("headers: {"))]
+    # The auth headers are built by `authHeaders`, which apiFetch spreads in
+    # (ai-trainer-ops#45); its keys count as sent.
+    auth_start = source.index("export function authHeaders")
+    headers_block += source[auth_start : source.index("\n}", auth_start)]
     # Keys appear both quoted ('X-Request-ID': ...) and bare (Authorization: ...).
     quoted = re.findall(r"'([A-Za-z][A-Za-z0-9-]*)':", headers_block)
     bare = re.findall(r"[{,]\s*([A-Za-z][A-Za-z0-9-]*):", headers_block)
@@ -36,7 +40,7 @@ def _headers_the_frontend_sends() -> set[str]:
 def test_frontend_client_is_readable() -> None:
     """Guard the guard: a moved file must fail loudly, not silently pass."""
     found = _headers_the_frontend_sends()
-    assert {"content-type", "authorization"} <= found, found
+    assert {"content-type", "authorization", "x-csrf-token"} <= found, found
 
 
 def test_every_header_the_frontend_sends_is_allowed() -> None:

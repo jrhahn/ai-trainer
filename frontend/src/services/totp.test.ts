@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
-vi.mock('./api', () => ({ apiFetch: mockApiFetch }))
+const mockSetCsrfToken = vi.hoisted(() => vi.fn())
+vi.mock('./api', () => ({
+  apiFetch: mockApiFetch,
+  setCsrfToken: mockSetCsrfToken,
+  newSessionMarker: () => 'cookie-session:marker',
+}))
 
 import { loginStep, loginWithTotp } from './auth'
 import {
@@ -19,12 +24,12 @@ describe('loginStep', () => {
   it('returns a token when no second factor is configured', async () => {
     mockApiFetch.mockImplementation(async (path: string) => {
       if (path === '/auth/captcha/challenge') throw new Error('Not Found')
-      return { access_token: 'jwt-abc', token_type: 'bearer' }
+      return { csrfToken: 'csrf-jwt-abc' }
     })
 
     await expect(loginStep('a@example.com', 'pw')).resolves.toEqual({
       kind: 'token',
-      token: 'jwt-abc',
+      token: 'cookie-session:marker',
     })
   })
 
@@ -45,11 +50,12 @@ describe('loginStep', () => {
 
 describe('loginWithTotp', () => {
   it('sends the challenge, the code and the remember flag', async () => {
-    mockApiFetch.mockResolvedValue({ access_token: 'jwt-xyz', token_type: 'bearer' })
+    mockApiFetch.mockResolvedValue({ csrfToken: 'csrf-jwt-xyz' })
 
     const token = await loginWithTotp('chal-1', '123456', true)
 
-    expect(token).toBe('jwt-xyz')
+    expect(token).toBe('cookie-session:marker')
+    expect(mockSetCsrfToken).toHaveBeenCalledWith('csrf-jwt-xyz')
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/login/totp', {
       method: 'POST',
       body: { challenge: 'chal-1', code: '123456', rememberDevice: true },
@@ -63,7 +69,7 @@ describe('loginWithTotp', () => {
      * flag was silently dropped — the device was never trusted and nothing
      * reported why.
      */
-    mockApiFetch.mockResolvedValue({ access_token: 'x', token_type: 'bearer' })
+    mockApiFetch.mockResolvedValue({ csrfToken: 'csrf-x' })
 
     await loginWithTotp('c', '1', false)
 

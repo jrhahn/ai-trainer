@@ -171,6 +171,25 @@ test.describe('a stranger registers and reaches a usable app', () => {
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
 
+  test('a new tab is still signed in (ai-trainer-ops#45)', async ({ page, context }) => {
+    const errors = watchConsole(page)
+    const athlete = newAthlete()
+
+    await register(page, athlete)
+    await expect(page.getByText(/^Welcome,/).first()).toBeVisible({ timeout: 30_000 })
+
+    // What used to sign the athlete out: the tab goes, and the app is opened
+    // again. The session is an HttpOnly cookie now, so nothing on the page can
+    // read it, and it outlives the tab.
+    await page.close()
+    const again = await context.newPage()
+    await again.goto('/')
+    await expect(again.getByText(/^Welcome,/).first()).toBeVisible({ timeout: 30_000 })
+    expect(await again.evaluate(() => document.cookie)).not.toContain('tlap_session')
+
+    expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
+  })
+
   test('signing out and back in keeps the account', async ({ page }) => {
     const errors = watchConsole(page)
     const athlete = newAthlete()
@@ -179,11 +198,10 @@ test.describe('a stranger registers and reaches a usable app', () => {
     await expect(page.getByText(/^Welcome,/).first()).toBeVisible({ timeout: 30_000 })
 
     // Registration leaves the athlete signed in, and an authenticated visit to
-    // /login is routed away — so the session is dropped first. Clearing storage
-    // rather than clicking a sign-out, because onboarding offers none: a
-    // half-onboarded athlete who closes the tab is exactly what #45 is about,
-    // and this reproduces that rather than a tidy logout.
-    await page.evaluate(() => sessionStorage.clear())
+    // /login is routed away — so the session is dropped first. Clearing the
+    // session cookie rather than clicking a sign-out, because onboarding offers
+    // none: this is the session running out, not a tidy logout.
+    await page.context().clearCookies()
     await page.goto('/login')
     await page.getByPlaceholder('you@example.com').fill(athlete.email)
     await page.getByPlaceholder('Your password').fill(athlete.password)

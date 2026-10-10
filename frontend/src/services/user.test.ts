@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
-vi.mock('./api', () => ({ API_BASE: '/api/v1', apiFetch: mockApiFetch }))
+vi.mock('./api', () => ({
+  API_BASE: '/api/v1',
+  apiFetch: mockApiFetch,
+  authHeaders: (token: string) => ({ Authorization: `Bearer ${token}` }),
+}))
 
 import {
   fetchCurrentUser,
@@ -787,6 +791,7 @@ describe('fit uploads', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit', {
       method: 'POST',
       headers: { Authorization: 'Bearer tok-fit' },
+      credentials: 'include',
       body: expect.any(FormData),
     })
   })
@@ -818,6 +823,7 @@ describe('fit uploads', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit/bulk', {
       method: 'POST',
       headers: { Authorization: 'Bearer tok-fit' },
+      credentials: 'include',
       body: expect.any(FormData),
     })
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit
