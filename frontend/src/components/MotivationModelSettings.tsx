@@ -308,9 +308,9 @@ export default function MotivationModelSettings() {
   return (
     <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
       <div>
-        <h2 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
+        <h3 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
           <Target size={16} /> What You Train For
-        </h2>
+        </h3>
         <p className="text-xs text-gray-500">
           Your fitness serves something. This is what the coach believes that is —
           it decides which sessions get recommended and how they are explained to
@@ -350,9 +350,9 @@ export default function MotivationModelSettings() {
       </div>
 
       <div className="border-t border-gray-100 pt-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-700">
+        <h4 className="mb-1 text-sm font-semibold text-gray-700">
           Also matters
-        </h3>
+        </h4>
         <p className="mb-2 text-xs text-gray-500">
           Secondary objectives, most important first.
         </p>
@@ -360,9 +360,9 @@ export default function MotivationModelSettings() {
       </div>
 
       <div className="border-t border-gray-100 pt-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-700">
+        <h4 className="mb-1 text-sm font-semibold text-gray-700">
           Never trade away
-        </h3>
+        </h4>
         <p className="mb-2 text-xs text-gray-500">
           Constraints rule options out entirely — they are not weighed against
           anything.
@@ -373,7 +373,7 @@ export default function MotivationModelSettings() {
       {isExpertMode && (
         <>
           <div className="border-t border-gray-100 pt-4">
-            <h3 className="mb-1 text-sm font-semibold text-gray-700">Balance</h3>
+            <h4 className="mb-1 text-sm font-semibold text-gray-700">Balance</h4>
             <p className="mb-3 text-xs text-gray-500">
               How much each of these counts when the coach picks between two sessions.
               Pin one to fix it — the coach will keep learning the rest around it.
@@ -423,9 +423,9 @@ export default function MotivationModelSettings() {
 
           {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
             <div className="border-t border-gray-100 pt-4">
-              <h3 className="mb-1 text-sm font-semibold text-gray-700">
+              <h4 className="mb-1 text-sm font-semibold text-gray-700">
                 How you like to ride
-              </h3>
+              </h4>
               <p className="mb-2 text-xs text-gray-500">
                 Learned from what you actually ride, not from what was planned. The
                 coach uses it to pick between two sessions that would train you

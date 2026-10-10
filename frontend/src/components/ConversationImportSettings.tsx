@@ -106,9 +106,9 @@ export default function ConversationImportSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
+      <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
         <MessageSquareText size={16} /> Import Coach Conversations
-      </h2>
+      </h3>
       <p className="text-xs text-gray-500 mb-4">
         Paste a past coaching conversation. The coach will suggest durable traits
         and preferences to learn — you choose which to keep before anything is
@@ -144,9 +144,9 @@ export default function ConversationImportSettings() {
 
       {candidates && candidates.length > 0 && (
         <div className="mt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
             Review candidates ({candidates.length})
-          </h3>
+          </h4>
           <ul className="space-y-2">
             {candidates.map((candidate, index) => (
               <CandidateRow
