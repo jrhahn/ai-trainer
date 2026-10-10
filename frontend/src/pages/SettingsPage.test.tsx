@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -893,6 +893,21 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     expect(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'AI Provider' })).toBeInTheDocument()
     expect(screen.getByText('Last sync cursor: 67890')).toBeInTheDocument()
+  })
+
+  it('hides a pending FTP estimate when Expert mode is switched off', async () => {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: 248, source: 'ftp_estimation' })
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await userEvent.click(screen.getByRole('button', { name: /Save & Estimate FTP/i }))
+    expect(await screen.findByText(/Step 2/i)).toBeInTheDocument()
+
+    act(() => useAppStore.setState({ isExpertMode: false }))
+
+    expect(screen.queryByText(/Step 2/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Confirm & Recalculate/ })).toBeNull()
   })
 
   it('saves heart rate without estimating FTP outside Expert mode', async () => {

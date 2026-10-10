@@ -781,7 +781,7 @@ export default function SettingsPage() {
             </button>
 
             {/* Step 2: FTP confirmation panel */}
-            {ftpEstimate !== null && (
+            {isExpertMode && ftpEstimate !== null && (
               <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
                 <p className="text-sm font-semibold text-gray-800">
                   Step 2 — Confirm FTP before rebuilding metrics
