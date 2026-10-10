@@ -1891,6 +1891,26 @@ def test_running_coach_persona_is_warm_but_not_overfamiliar():
     assert "supportive buddy" not in text
 
 
+def test_every_coach_persona_draws_the_medical_line():
+    """No diagnosis or treatment, and a doctor for red-flag symptoms (ai-trainer-ops#5).
+
+    Every coach prompt starts from one of these personas, so the boundary is
+    pinned here rather than per surface.
+    """
+    from services.prompts import (
+        COACH_PERSONA,
+        GENERAL_ENDURANCE_COACH_PERSONA,
+        RUNNING_COACH_PERSONA,
+    )
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA, GENERAL_ENDURANCE_COACH_PERSONA):
+        text = persona.lower()
+        assert "not a medical professional" in text
+        assert "never diagnose" in text
+        assert "chest pain" in text and "see a doctor" in text
+        assert "pre-existing condition" in text
+
+
 def test_coach_persona_handles_jokes_and_sarcasm():
     """Both personas must understand jokes and sarcasm without losing the coaching thread."""
     from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
