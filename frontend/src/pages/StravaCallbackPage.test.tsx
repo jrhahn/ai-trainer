@@ -15,6 +15,7 @@ const mockApiFetch = vi.fn()
 vi.mock('../services/api', () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
   API_BASE: 'http://localhost:8000/api/v1',
+  setCsrfToken: vi.fn(),
 }))
 
 function setup(search = '') {

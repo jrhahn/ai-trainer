@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event'
 import AdminPage from './AdminPage'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
-vi.mock('../services/api', () => ({ apiFetch: mockApiFetch, API_BASE: 'http://api.test/api/v1' }))
+vi.mock('../services/api', () => ({
+  apiFetch: mockApiFetch,
+  API_BASE: 'http://api.test/api/v1',
+  setCsrfToken: vi.fn(),
+}))
 
 const user = {
   id: 'u1',
