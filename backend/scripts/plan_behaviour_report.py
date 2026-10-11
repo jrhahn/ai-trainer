@@ -128,26 +128,35 @@ def behaviour(
     """One athlete's plan behaviour, or ``None`` with too little planned history."""
     plan = final_plan(history)
     starts = _week_starts(today, weeks)
-    planned, mixes, planned_days, hard, total = [], [], [], [], []
+    planned, mixes, planned_days, hard = [], [], [], []
     for start in starts:
-        days = [d for (when, _), d in plan.items() if start <= when < start + timedelta(days=7)]
+        week = {
+            key: day
+            for key, day in plan.items()
+            if start <= key[0] < start + timedelta(days=7)
+        }
         mix: dict[str, float] = {}
-        for day in days:
+        for day in week.values():
             kind = str(day.get("workoutType") or "unknown")
             mix[kind] = mix.get(kind, 0.0) + _minutes(day)
         planned.append(sum(mix.values()))
         mixes.append(mix)
-        planned_days.append(len({when for (when, _) in plan if start <= when < start + timedelta(days=7)}))
+        planned_days.append(len({when for when, _ in week}))
         hard.append(sum(v for k, v in mix.items() if k in HARD_TYPES))
-        total.append(sum(mix.values()))
 
-    covered = [i for i, n in enumerate(planned_days) if n >= MIN_PLANNED_DAYS_PER_WEEK]
-    if len(covered) < 4:
+    # The most recent unbroken run of weeks the plan covers. A week with too
+    # few planned days is missing history, and a series with a hole in it would
+    # read the hole as a recovery week: so the run stops there.
+    end = len(starts)
+    while end and planned_days[end - 1] < MIN_PLANNED_DAYS_PER_WEEK:
+        end -= 1
+    first = end
+    while first and planned_days[first - 1] >= MIN_PLANNED_DAYS_PER_WEEK:
+        first -= 1
+    if end - first < 4:
         return None
-    first = covered[0]
-    planned = planned[first:]
-    mixes = mixes[first:]
-    hard, total = hard[first:], total[first:]
+    planned, mixes, hard = planned[first:end], mixes[first:end], hard[first:end]
+    total = planned
 
     ridden_by_day: dict[date, float] = {}
     for ride in rides:
@@ -158,7 +167,7 @@ def behaviour(
             ) / 60
     ridden = [
         sum(ridden_by_day.get(start + timedelta(days=d), 0.0) for d in range(7))
-        for start in starts[first:]
+        for start in starts[first:end]
     ]
 
     similarities = [
@@ -259,9 +268,17 @@ async def build(weeks: int, user_email: str | None = None, today: date | None = 
         for user_id in user_ids:
             history = (
                 await session.scalars(
-                    select(models.PlanDayHistory).where(
+                    select(models.PlanDayHistory)
+                    .where(
                         models.PlanDayHistory.user_id == user_id,
                         models.PlanDayHistory.date >= since,
+                    )
+                    # Oldest first, so a tie on a missing timestamp goes to the
+                    # row written last rather than to whatever order the
+                    # database returns.
+                    .order_by(
+                        models.PlanDayHistory.recorded_at,
+                        models.PlanDayHistory.id,
                     )
                 )
             ).all()

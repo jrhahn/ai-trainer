@@ -48,7 +48,7 @@ def _history(weekly: list[list[tuple[str, int]]]):
     return rows
 
 
-def test_the_same_fortnight_forever_has_no_recovery_week():
+def test_the_same_week_repeated_has_no_recovery_week():
     result = pbr.behaviour(_history([SAME_WEEK] * 12), [], TODAY, 12)
 
     assert result.planned_recovery_weeks == 0
@@ -82,6 +82,42 @@ def test_the_last_applied_version_of_a_day_wins_and_blocked_rows_do_not():
     plan = pbr.final_plan(rows)
 
     assert plan[(date(2026, 10, 1), 0)]["workoutType"] == "tempo"
+
+
+def test_a_hole_in_the_history_is_not_a_recovery_week():
+    """Twelve identical weeks with one unrecorded in the middle."""
+    rows = [
+        row
+        for row in _history([SAME_WEEK] * 12)
+        if not pbr._week_starts(TODAY, 12)[5]
+        <= date.fromisoformat(row.date)
+        < pbr._week_starts(TODAY, 12)[6]
+    ]
+    result = pbr.behaviour(rows, [], TODAY, 12)
+
+    assert result.weeks == 6  # the run after the hole
+    assert result.planned_recovery_weeks == 0
+
+
+def test_a_removed_day_drops_out_and_a_second_session_counts():
+    when = "2026-10-01"
+    rows = [
+        SimpleNamespace(date=when, slot=0, applied=True, recorded_at=None,
+                        new_day={"workoutType": "tempo", "durationMinutes": 60}),
+        SimpleNamespace(date=when, slot=0, applied=True, recorded_at=None,
+                        new_day=None),
+        SimpleNamespace(date=when, slot=1, applied=True, recorded_at=None,
+                        new_day={"workoutType": "strength", "durationMinutes": 45}),
+    ]
+
+    plan = pbr.final_plan(rows)
+
+    assert list(plan) == [(date(2026, 10, 1), 1)]
+
+
+def test_the_script_refuses_fewer_than_four_weeks(capsys):
+    with pytest.raises(SystemExit):
+        pbr.main(["--weeks", "3"])
 
 
 def test_too_little_history_is_not_a_finding():
