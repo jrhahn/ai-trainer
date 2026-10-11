@@ -55,8 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The owner: the chat is the interface. The first screen is now the
     greeting with "Add activity" beside it, today's session, the week strip
     and the coach.
-  - The season countdown, the recent-activities list, the prediction
-    scoreboard and the expert cards sit behind one native "More" disclosure.
+  - The recent-activities list, the prediction scoreboard and the expert
+    cards sit behind one native "More" disclosure. The season countdown stays
+    up front; it only shows when a race is ahead.
   - A ride the coach needs an answer about (an ambiguous match or an open
     "what was this session?") stays on the first screen under "Needs your
     answer".

@@ -1136,6 +1136,10 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* The race the athlete trains for stays in view: it renders only when
+          one is ahead, and it is the goal, not history (ai-trainer-ops#68). */}
+      <SeasonCountdown />
+
       {/* Anything the plan and the sync do not know about: a ride on a rest
           day, a run instead of the ride, a day the plan never covered (#47).
           Opened from the header button. */}
@@ -1278,10 +1282,9 @@ export default function DashboardPage() {
           disclosure: no state, keyboard and screen reader work as they are. */}
       <details className="group rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
         <summary className="cursor-pointer select-none text-sm font-semibold text-gray-600 hover:text-amber-700">
-          More: recent activities, season and predictions
+          More: recent activities and predictions
         </summary>
         <div className="mt-3 space-y-5">
-          <SeasonCountdown />
           {otherRides.length > 0 && (
             <div>
               <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent activities</h2>
