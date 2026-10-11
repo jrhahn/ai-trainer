@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
-from services import run_durability, training_monotony, training_phase
+from services import goal_progress, run_durability, training_monotony, training_phase
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -82,9 +82,12 @@ async def plan_writer_context(
     exposure = run_durability.run_exposure(activity_rows, today)
     distribution = training_monotony.load_distribution(activity_rows, today)
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
+    goals = await goal_section_for_user(db, user_id, today)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(plan, today, exposure, distribution, phase),
+        coherence=_coherence_block(
+            plan, today, exposure, distribution, phase=phase, goals=goals
+        ),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
@@ -116,6 +119,37 @@ async def training_phase_section_for_user(
         latitude=home.latitude if home is not None else None,
     )
     return training_phase.training_phase_section(phase)
+
+
+# Goal progress looks back twelve weeks, longer than the audits sharing
+# ``athlete_activity_history``, so it reads its own, larger window.
+GOAL_HISTORY_ROW_LIMIT = 500
+
+
+async def goal_section_for_user(db, user_id: str, today) -> str:
+    """The athlete's measurable goals and how far away each is (ai-trainer-ops#65).
+
+    Shared by every writer for the reason the phase is: the chat, the nightly run
+    and auto-adapt get it through ``plan_writer_context``, and a full regeneration
+    calls this directly.
+    """
+    goals = await crud.list_active_goals(db, user_id)
+    if not goals:
+        return ""
+    activity_rows = await athlete_activity_history(
+        db, user_id, limit=GOAL_HISTORY_ROW_LIMIT
+    )
+    return goal_progress.goal_progress_section(
+        [
+            (
+                goal,
+                goal_progress.goal_progress(
+                    goal.metric, goal.scope, goal.target, activity_rows, today
+                ),
+            )
+            for goal in goals
+        ]
+    )
 
 
 async def athlete_activity_history(
@@ -187,6 +221,7 @@ def _coherence_block(
     exposure: run_durability.RunExposure,
     distribution: training_monotony.LoadDistribution | None,
     phase: str = "",
+    goals: str = "",
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
 
@@ -219,6 +254,7 @@ def _coherence_block(
         plan_interference_section(find_interference(plan, today), today),
         _durability_section(plan, today, exposure),
         training_monotony_section(distribution),
+        goals,
     ]
     return "\n\n".join(section for section in sections if section)
 

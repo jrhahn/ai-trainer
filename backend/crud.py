@@ -3794,6 +3794,8 @@ async def upsert_ride_metric(
     activity_name: str | None = None,
     activity_start_datetime: str | None = None,
     duration_seconds: int | None = None,
+    distance_km: float | None = None,
+    elevation_gain_m: float | None = None,
     start_lat: float | None = None,
     start_lng: float | None = None,
     weather_temperature_c: float | None = None,
@@ -3863,6 +3865,13 @@ async def upsert_ride_metric(
         perf_signals=perf_signals,
         summary=summary,
     )
+    # Only what was reported. Every import path re-runs on every sync, and not
+    # all of them carry these (a FIT file or a hand-logged session may not), so a
+    # missing value must never erase one an earlier sync stored (ai-trainer-ops#65).
+    if distance_km is not None:
+        values["distance_km"] = distance_km
+    if elevation_gain_m is not None:
+        values["elevation_gain_m"] = elevation_gain_m
 
     exact_existing = (
         await get_ride_metric_by_source(
@@ -4890,3 +4899,67 @@ async def revoke_user_tokens(db: AsyncSession, user_id: str) -> int:
         select(models.User.token_generation).where(models.User.id == user_id)
     )
     return int(generation or 0)
+
+
+# ---------------------------------------------------------------------------
+# Measurable goals (ai-trainer-ops#65)
+# ---------------------------------------------------------------------------
+
+
+async def list_active_goals(db: AsyncSession, user_id: str) -> list[models.AthleteGoal]:
+    result = await db.execute(
+        select(models.AthleteGoal)
+        .where(
+            models.AthleteGoal.user_id == user_id,
+            models.AthleteGoal.status == "active",
+        )
+        .order_by(models.AthleteGoal.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_active_goal(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    metric: str,
+    scope: str,
+    target: float,
+    statement: str = "",
+    deadline: str | None = None,
+) -> models.AthleteGoal:
+    """Set the athlete's goal for *metric* and *scope*.
+
+    The previous active goal for the same measure is kept as ``replaced`` rather
+    than overwritten, so a target that changed can still be traced to what the
+    athlete said before.
+    """
+    existing = await db.scalar(
+        select(models.AthleteGoal).where(
+            models.AthleteGoal.user_id == user_id,
+            models.AthleteGoal.metric == metric,
+            models.AthleteGoal.scope == scope,
+            models.AthleteGoal.status == "active",
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if existing is not None:
+        if existing.target == target and existing.deadline == deadline:
+            return existing
+        existing.status = "replaced"
+        existing.updated_at = now
+        # Before the insert: the partial unique index allows one active row.
+        await db.flush()
+    goal = models.AthleteGoal(
+        user_id=user_id,
+        metric=metric,
+        scope=scope,
+        target=target,
+        statement=statement,
+        deadline=deadline,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(goal)
+    await db.flush()
+    return goal
