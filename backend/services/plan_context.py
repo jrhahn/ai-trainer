@@ -81,7 +81,7 @@ async def plan_writer_context(
     activity_rows = await athlete_activity_history(db, user_id)
     exposure = run_durability.run_exposure(activity_rows, today)
     distribution = training_monotony.load_distribution(activity_rows, today)
-    goals = await goal_section_for_user(db, user_id, today, activity_rows)
+    goals = await goal_section_for_user(db, user_id, today)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
         coherence=_coherence_block(plan, today, exposure, distribution, goals),
@@ -91,9 +91,12 @@ async def plan_writer_context(
     )
 
 
-async def goal_section_for_user(
-    db, user_id: str, today, activity_rows: list | None = None
-) -> str:
+# Goal progress looks back twelve weeks, longer than the audits sharing
+# ``athlete_activity_history``, so it reads its own, larger window.
+GOAL_HISTORY_ROW_LIMIT = 500
+
+
+async def goal_section_for_user(db, user_id: str, today) -> str:
     """The athlete's measurable goals and how far away each is (ai-trainer-ops#65).
 
     Shared by every writer for the reason the phase is: the chat, the nightly run
@@ -103,8 +106,9 @@ async def goal_section_for_user(
     goals = await crud.list_active_goals(db, user_id)
     if not goals:
         return ""
-    if activity_rows is None:
-        activity_rows = await athlete_activity_history(db, user_id)
+    activity_rows = await athlete_activity_history(
+        db, user_id, limit=GOAL_HISTORY_ROW_LIMIT
+    )
     return goal_progress.goal_progress_section(
         [
             (

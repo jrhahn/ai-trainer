@@ -62,10 +62,22 @@ def test_a_stated_goal_is_captured(message, metric, scope, target):
         "I will ride 80 km tomorrow",  # a plan for one day
         "Morgen will ich 1500 hm fahren",  # the same, in German
         "Mein Kumpel will 3000 hm fahren",  # someone else's wish
+        "My friend's goal is 3000 hm",  # someone else's goal
+        "I did 3000 hm, which was my goal",  # a result, not a goal
     ],
 )
 def test_other_sentences_are_not_goals(message):
     assert gp.extract_goal(message) is None
+
+
+def test_each_measure_takes_its_own_scope():
+    goals = gp.extract_goals("My goal: 100 km a week and 3000 hm in one ride")
+
+    assert {(g.metric, g.scope) for g in goals} == {
+        (gp.DISTANCE, gp.WEEK),
+        (gp.ELEVATION, gp.RIDE),
+    }
+    assert gp.extract_goal("Mein Ziel: pro Woche 10000 hm").scope == gp.WEEK
 
 
 def test_two_measures_in_one_sentence_are_two_goals():

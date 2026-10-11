@@ -46,7 +46,17 @@ _DISTANCE_UNIT = r"(?:km\b|kilomet(?:er|re)s?\b)"
 # "I will ride 80 km tomorrow", which is a plan for one day and must not replace
 # a real goal, so a wish counts only in the first person and without a near date.
 _GOAL_WORD = re.compile(
-    r"\b(?:goal|target|aim|dream|ziel|traum|vorgenommen|schaffen|achieve)",
+    r"\b(?:goals?|targets?|aim|dream|ziele?|traum|vorgenommen|schaffen|achieve)\b",
+    re.IGNORECASE,
+)
+# "my goal" / "mein Ziel" is the athlete's own; "my friend's goal" is not.
+_OWN_GOAL = re.compile(
+    r"\b(?:my|mein(?:e|em|en)?)\s+(?:goals?|targets?|aim|dream|ziele?|traum)\b",
+    re.IGNORECASE,
+)
+# A report of something done ("I did 3000 hm, which was my goal") is a result.
+_PAST = re.compile(
+    r"\b(?:did|was|rode|have done|geschafft|war|bin\b.*\bgefahren|habe\b.*\bgefahren)\b",
     re.IGNORECASE,
 )
 _WISH = re.compile(
@@ -97,11 +107,12 @@ def _parse_number(raw: str) -> float | None:
 
 
 def _states_intent(text: str) -> bool:
+    if _PAST.search(text):
+        return False
+    own = bool(_OWN_GOAL.search(text) or _FIRST_PERSON.search(text))
     if _GOAL_WORD.search(text):
-        return True
-    return bool(
-        _WISH.search(text) and _FIRST_PERSON.search(text) and not _NEAR_DATE.search(text)
-    )
+        return own
+    return bool(_WISH.search(text) and own and not _NEAR_DATE.search(text))
 
 
 def extract_goals(message: str) -> list[StatedGoal]:
@@ -113,9 +124,15 @@ def extract_goals(message: str) -> list[StatedGoal]:
     text = (message or "").strip()
     if not text or text.endswith("?") or not _states_intent(text):
         return []
-    scope = WEEK if _WEEK.search(text) else RIDE
+    matches = list(_QUANTITY.finditer(text))
     goals: dict[str, StatedGoal] = {}
-    for match in _QUANTITY.finditer(text):
+    for index, match in enumerate(matches):
+        # The scope is read from this quantity's own stretch of text, so "100 km
+        # a week and 3000 hm in one ride" is one weekly and one single-ride goal.
+        # The first stretch includes the words before it ("pro Woche 10000 hm").
+        start = 0 if index == 0 else match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        scope = WEEK if _WEEK.search(text[start:end]) else RIDE
         value = _parse_number(match.group(1))
         if value is None:
             continue
