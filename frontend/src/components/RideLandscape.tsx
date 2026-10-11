@@ -35,12 +35,37 @@ function line(ys: number[], from: number, to: number): string {
 }
 
 const LAYERS = [
-  { ys: ridge(250, [[70, 900, 0.4], [30, 310, 1.1], [12, 130, 2.0]]), fill: 'var(--ridge-1)' },
-  { ys: ridge(330, [[60, 1100, 2.2], [26, 380, 0.3], [10, 150, 1.7]]), fill: 'var(--ridge-2)' },
-  { ys: ridge(410, [[55, 1300, 4.0], [22, 420, 2.6], [8, 170, 0.9]]), fill: 'var(--ridge-3)' },
+  {
+    ys: ridge(250, [
+      [70, 900, 0.4],
+      [30, 310, 1.1],
+      [12, 130, 2.0],
+    ]),
+    fill: 'var(--ridge-1)',
+  },
+  {
+    ys: ridge(330, [
+      [60, 1100, 2.2],
+      [26, 380, 0.3],
+      [10, 150, 1.7],
+    ]),
+    fill: 'var(--ridge-2)',
+  },
+  {
+    ys: ridge(410, [
+      [55, 1300, 4.0],
+      [22, 420, 2.6],
+      [8, 170, 0.9],
+    ]),
+    fill: 'var(--ridge-3)',
+  },
 ]
 // The nearest ridge climbs from the left, and the route ends on its summit.
-const FRONT = ridge(470, [[70, 2400, -1.2], [14, 460, 3.3], [5, 190, 0.2]])
+const FRONT = ridge(470, [
+  [70, 2400, -1.2],
+  [14, 460, 3.3],
+  [5, 190, 0.2],
+])
 const ROUTE_FROM = 4
 const ROUTE_TO = FRONT.indexOf(Math.min(...FRONT)) + 1
 

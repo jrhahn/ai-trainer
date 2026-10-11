@@ -35,6 +35,12 @@ describe('LandingPage', () => {
     expect(words.length).toBeLessThan(200)
   })
 
+  it('keeps the landscape out of the accessibility tree', () => {
+    const { container } = setup()
+    const svg = container.querySelector('svg.ride-landscape')
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('has one call to sign up in the page body, not a closing banner', () => {
     setup()
     expect(screen.getAllByRole('link', { name: /create a free account/i })).toHaveLength(1)
