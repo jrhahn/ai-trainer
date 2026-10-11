@@ -41,7 +41,10 @@ def align_target_to_named_zone(day: dict, ftp: float | None) -> dict:
     # Z1 is open below and Z7 open above, so neither has a range to move into.
     if zone is None or not 2 <= zone <= 6:
         return day
-    bounds = power_zone_boundaries(ftp)[zone - 1]
+    zones = power_zone_boundaries(ftp)
+    if not zones:  # a non-positive FTP has no zones to move into
+        return day
+    bounds = zones[zone - 1]
     if high >= bounds["low_w"] and low <= bounds["high_w"]:
         return day
     return {

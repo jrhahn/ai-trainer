@@ -39,6 +39,11 @@ def test_the_session_from_the_owners_chat_gets_its_z2_watts():
         _day("Z2 with two blocks of Z4.", 110, 145),  # two zones named
         _day("Recovery spin in Z1.", 200, 230),  # Z1 is open below
         _day("Easy endurance.", 110, 145),  # no zone named
+        _day("Max Z2 today.", 110, 145),
+        _day("Höchstens Z2.", 110, 145),
+        _day("Not Z2, keep it lighter.", 110, 145),
+        _day("Bis Z2 ist erlaubt.", 110, 145),
+        _day("Up to Z2.", 110, 145),
         _day("Steady Z2.", 110, 145, intervals=[{"durationMinutes": 5}]),
     ],
 )
@@ -46,10 +51,33 @@ def test_anything_else_is_left_alone(day):
     assert align_target_to_named_zone(day, FTP) is day
 
 
+def test_a_target_above_the_zone_comes_down_too():
+    aligned = align_target_to_named_zone(_day("Steady Z2.", 260, 300), FTP)
+
+    assert aligned["targetPower"] == {"low": 176, "high": 240}
+
+
+def test_the_title_alone_can_name_the_zone():
+    day = {
+        "title": "Z3 tempo",
+        "description": None,
+        "targetPower": {"low": 110, "high": 145},
+    }
+
+    assert align_target_to_named_zone(day, FTP)["targetPower"] == {
+        "low": 240,
+        "high": 288,
+    }
+
+
 def test_without_an_ftp_or_a_target_nothing_moves():
     day = _day("Steady Z2.", 110, 145)
 
     assert align_target_to_named_zone(day, None) is day
+    assert align_target_to_named_zone(day, -50) is day
+    for broken in ({"low": 110}, {"low": "110", "high": 145}, {"high": None}):
+        partial = {**day, "targetPower": broken}
+        assert align_target_to_named_zone(partial, FTP) is partial
     assert align_target_to_named_zone({"description": "Steady Z2."}, FTP) == {
         "description": "Steady Z2."
     }
