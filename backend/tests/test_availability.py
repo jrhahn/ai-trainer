@@ -168,3 +168,70 @@ def test_no_lift_for_ordinary_message():
     }
     # "remove the warmup" is not a constraint lift.
     assert extract_constraint_lift("remove the warmup", today=TODAY)["lift"] is False
+
+
+# ---------------------------------------------------------------------------
+# Sentences from the owner's coach chat, paraphrased (ai-trainer-ops#72)
+# ---------------------------------------------------------------------------
+
+
+def _kinds(text: str) -> list[tuple[str, str]]:
+    return [
+        (item["constraint_type"], item["constraint_date"])
+        for item in extract_availability_constraints(text, today=TODAY)
+    ]
+
+
+def test_each_day_in_one_sentence_gets_its_own_intent():
+    # Wednesday: Thursday gym, Friday off, Saturday the long ride. All three
+    # used to be pinned as required long sessions.
+    assert _kinds(
+        "morgen upperbody und core im gym und freitag off, samstag wie geplant die lange einheit"
+    ) == [("no_training", "2026-06-05"), ("required_workout", "2026-06-06")]
+
+
+def test_days_joined_by_and_share_the_intent_after_them():
+    assert _kinds("saturday and sunday i could do a long ride") == [
+        ("required_workout", "2026-06-06"),
+        ("required_workout", "2026-06-07"),
+    ]
+
+
+def test_a_stated_day_off_is_captured_without_a_training_word():
+    assert _kinds("donnerstag muss frei bleiben, da hat jemand geburtstag") == [
+        ("no_training", "2026-06-04")
+    ]
+    assert _kinds("Keep in mind tomorrow is rest day") == [
+        ("no_training", "2026-06-04")
+    ]
+    assert _kinds("friday i dont have time for training") == [
+        ("no_training", "2026-06-05")
+    ]
+
+
+def test_a_question_pins_nothing():
+    assert _kinds("tomorrow off? would that work") == []
+    assert _kinds("why did the plan drop sunday's long endurance ride?") == []
+    assert (
+        _kinds("macht es sinn morgen gym und freitag off, samstag die lange einheit?")
+        == []
+    )
+
+
+def test_an_instrument_that_was_off_is_not_a_day_off():
+    assert _kinds("my power meter was off today") == []
+
+
+def test_a_stated_absence_blocks_every_day_of_it():
+    days = _kinds(
+        "ab dem 4. November bis zum 26. November bin ich im Urlaub, da kann ich nicht trainieren"
+    )
+
+    assert days[0] == ("no_training", "2026-11-04")
+    assert days[-1] == ("no_training", "2026-11-26")
+    assert len(days) == 23
+
+
+def test_a_range_without_an_absence_or_too_long_a_range_is_ignored():
+    assert _kinds("from 4 to 26 november the trails are wet") == []
+    assert _kinds("from 1 january to 30 april i am on holiday") == []

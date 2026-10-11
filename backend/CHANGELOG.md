@@ -137,6 +137,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Availability capture gives each day its own intent, sees days off, skips
+  questions, and reads date ranges** (ai-trainer-ops#72) — `services/availability.py`.
+  - "Tomorrow gym and Friday off, Saturday the long one" pinned Thursday,
+    Friday and Saturday as required long rides. A clause is now split at each
+    day it names. A day joined to the next by only "and" or "," shares the
+    next day's intent.
+  - "Thursday stays free", "tomorrow is a rest day", "Friday off" and "I don't
+    have time on Friday" now block the day. "The power meter was off" does
+    not.
+  - A question pins nothing. "Why did the plan drop Sunday's long ride?" used
+    to pin Sunday as a required long ride.
+  - "From 4 to 26 November I'm on holiday, I can't train" blocks each of those
+    days, up to 45 days.
+  - Tests: `tests/test_availability.py`.
+
 - **The backtest report prints no empty table** (ai-trainer-ops#27) —
   `scripts/backtest_report.py`. When every attribute fell under the
   3-athlete minimum, as in the first weekly run on production, it printed a

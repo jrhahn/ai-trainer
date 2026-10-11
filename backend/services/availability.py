@@ -42,7 +42,80 @@ UNAVAILABLE_PATTERNS = (
     r"\bno\s+time\b",
     r"\bcan(?:not|'t)\s+(?:train|ride|work\s*out)\b",
     r"\bnot\s+available\b",
+    r"\b(?:don'?t|do\s+not)\s+have\s+(?:the\s+|any\s+)?time\b",
 )
+
+# A day the athlete says is off (ai-trainer-ops#72). Unlike "no time" these need
+# no training word beside them: "Thursday stays free", "tomorrow is a rest day",
+# "Friday off" say it on their own, and for weeks the coach kept planning those
+# days because nothing captured them. Only statements count: "tomorrow off?" is
+# the athlete asking, and the coach may answer.
+OFF_DAY_PATTERNS = (
+    r"\b(?:day\s+off|off\s+day|rest(?:ing)?\s*day|ruhetag)\b",
+    r"\b(?:bleibt|bleiben|muss|ist)\s+(?:\w+\s+)?frei\b",
+    r"\bfrei\s+(?:bleiben|halten|lassen|nehmen)\b",
+    r"\b(?:is|ist|i'?m|bin|am)\s+off\b",
+    r"\b(?:off|frei)\s*(?=$|[,;:-]|\s+(?:and|und)\b)",
+)
+# "the power meter was off" is not a day off.
+_NOT_A_DAY_OFF = re.compile(r"\b(?:was|war|were|waren)\s+off\b")
+
+HOLIDAY_PATTERNS = (
+    r"\burlaub\b",
+    r"\bferien\b",
+    r"\bholiday\b",
+    r"\bvacation\b",
+    r"\bnicht\s+trainieren\b",
+    r"\bcan(?:not|'t)\s+train\b",
+)
+
+MONTHS = {
+    "januar": 1,
+    "january": 1,
+    "jan": 1,
+    "februar": 2,
+    "february": 2,
+    "feb": 2,
+    "märz": 3,
+    "maerz": 3,
+    "march": 3,
+    "mar": 3,
+    "april": 4,
+    "apr": 4,
+    "mai": 5,
+    "may": 5,
+    "juni": 6,
+    "june": 6,
+    "jun": 6,
+    "juli": 7,
+    "july": 7,
+    "jul": 7,
+    "august": 8,
+    "aug": 8,
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+    "oktober": 10,
+    "october": 10,
+    "okt": 10,
+    "oct": 10,
+    "november": 11,
+    "nov": 11,
+    "dezember": 12,
+    "december": 12,
+    "dez": 12,
+    "dec": 12,
+}
+_MONTH = "(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b"
+_DATE_RANGE = re.compile(
+    r"\b(?:ab|vom|von|from|between)\s+(?:dem\s+|the\s+)?(\d{1,2})\.?\s*(?:"
+    + _MONTH
+    + r"\s*)?"
+    r"(?:bis|to|until|till|and|-|–)\s+(?:zum\s+|the\s+)?(\d{1,2})\.?\s*" + _MONTH
+)
+# ponytail: one constraint row per day; a range longer than this is a typo or a
+# season, not a trip, and would flood the prompt. A range row would lift the cap.
+MAX_RANGE_DAYS = 45
 
 TRAINING_CONTEXT_PATTERNS = (
     r"\btraining\b",
@@ -84,8 +157,82 @@ LIFT_PATTERNS = (
 _CLAUSE_BOUNDARY = re.compile(r"[?!.;]+|\s+but\s+|\s+aber\s+|\s+however\s+")
 
 
-def _split_clauses(normalized: str) -> list[str]:
-    return [part.strip() for part in _CLAUSE_BOUNDARY.split(normalized) if part.strip()]
+def _split_clauses(normalized: str) -> list[tuple[str, bool]]:
+    """Clauses, each with whether it is a question."""
+    clauses: list[tuple[str, bool]] = []
+    start = 0
+    for boundary in _CLAUSE_BOUNDARY.finditer(normalized):
+        clauses.append(
+            (normalized[start : boundary.start()].strip(), "?" in boundary.group())
+        )
+        start = boundary.end()
+    clauses.append((normalized[start:].strip(), False))
+    return [(text, question) for text, question in clauses if text]
+
+
+_DAY_MENTION = re.compile(
+    r"\b(?:" + "|".join(WEEKDAYS) + r")s?\b|\b(?:morgen|tomorrow|heute|today)\b"
+)
+_JOINER_ONLY = re.compile(r"^[\s,&+/]*(?:and|und|or|oder|sowie)?[\s,&+/]*$")
+
+
+def _day_segments(clause: str) -> list[str]:
+    """Split a clause so each part carries the days it names and what it says.
+
+    "tomorrow gym and Friday off, Saturday the long one" names three days with
+    three intents. Scanned as one clause, the long ride pinned all three as
+    required sessions, Friday included (ai-trainer-ops#72). A part runs from one
+    day mention to the next; text before the first day belongs to the first; a
+    day joined to the next by only "and" or "," shares the next one's intent, so
+    "Saturday and Sunday a long ride" still pins both.
+    """
+    mentions = list(_DAY_MENTION.finditer(clause))
+    if len(mentions) < 2:
+        return [clause]
+    ends = [mention.start() for mention in mentions[1:]] + [len(clause)]
+    merged: list[str] = []
+    for index in range(len(mentions) - 1, -1, -1):
+        start = 0 if index == 0 else mentions[index].start()
+        segment = clause[start : ends[index]]
+        if merged and _JOINER_ONLY.match(clause[mentions[index].end() : ends[index]]):
+            merged[-1] = segment + merged[-1]
+        else:
+            merged.append(segment)
+    return list(reversed(merged))
+
+
+def _date_range(normalized: str, today: date) -> list[date]:
+    """Every day of a stated absence such as "4 to 26 November on holiday"."""
+    days: list[date] = []
+    for match in _DATE_RANGE.finditer(normalized):
+        after = normalized[match.start() : match.end() + 120]
+        if not any(
+            re.search(pattern, after)
+            for pattern in HOLIDAY_PATTERNS + UNAVAILABLE_PATTERNS
+        ):
+            continue
+        first_day, first_month, last_day, last_month = match.groups()
+        last_month_number = MONTHS[last_month]
+        first_month_number = MONTHS[first_month] if first_month else last_month_number
+        try:
+            first = date(today.year, first_month_number, int(first_day))
+            last = date(today.year, last_month_number, int(last_day))
+        except ValueError:
+            continue
+        if last < first:
+            first = first.replace(year=first.year - 1)
+        if last < today:
+            first, last = (
+                first.replace(year=first.year + 1),
+                last.replace(year=last.year + 1),
+            )
+        if (last - first).days >= MAX_RANGE_DAYS:
+            continue
+        day = max(first, today)
+        while day <= last:
+            days.append(day)
+            day += timedelta(days=1)
+    return days
 
 
 def _next_weekday(today: date, weekday: int) -> date:
@@ -123,6 +270,56 @@ def _target_dates(normalized: str, today: date) -> list[tuple[str, str]]:
     return list(seen.items())
 
 
+def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
+    targets = _target_dates(segment, today)
+    if not targets:
+        return []
+    constraints: list[dict] = []
+    has_unavailable = any(
+        re.search(pattern, segment) for pattern in UNAVAILABLE_PATTERNS
+    )
+    has_training_context = any(
+        re.search(pattern, segment) for pattern in TRAINING_CONTEXT_PATTERNS
+    )
+    is_off_day = _NOT_A_DAY_OFF.search(segment) is None and any(
+        re.search(pattern, segment) for pattern in OFF_DAY_PATTERNS
+    )
+    if (has_unavailable and has_training_context) or is_off_day:
+        for date_iso, weekday_label in targets:
+            constraints.append(
+                {
+                    "constraint_type": "no_training",
+                    "constraint_date": date_iso,
+                    "weekday": weekday_label,
+                    "reason": "Athlete said they are unavailable for training.",
+                    "source": source,
+                    "expires_on": date_iso,
+                }
+            )
+
+    has_long_session = any(
+        re.search(pattern, segment) for pattern in LONG_SESSION_PATTERNS
+    )
+    if has_long_session:
+        min_minutes = _parse_duration_minutes(segment) or DEFAULT_LONG_SESSION_MINUTES
+        for date_iso, weekday_label in targets:
+            constraints.append(
+                {
+                    "constraint_type": "required_workout",
+                    "constraint_date": date_iso,
+                    "weekday": weekday_label,
+                    "reason": "Athlete asked for a long endurance session on this day.",
+                    "source": source,
+                    "expires_on": date_iso,
+                    "required_workout": {
+                        "workoutType": "endurance",
+                        "minDurationMinutes": min_minutes,
+                    },
+                }
+            )
+    return constraints
+
+
 def extract_availability_constraints(
     text: str,
     *,
@@ -141,61 +338,33 @@ def extract_availability_constraints(
     source = text.strip()[:500]
     constraints: list[dict] = []
 
+    for day in _date_range(normalized, today):
+        constraints.append(
+            {
+                "constraint_type": "no_training",
+                "constraint_date": day.isoformat(),
+                "weekday": WEEKDAY_LABELS[day.weekday()],
+                "reason": "Athlete said they are away and cannot train.",
+                "source": source,
+                "expires_on": day.isoformat(),
+            }
+        )
+
     # Scan each clause independently so an intent only applies to the days named
-    # alongside it, not to every day mentioned anywhere in the message (#412).
-    for clause in _split_clauses(normalized):
-        targets = _target_dates(clause, today)
-        if not targets:
+    # alongside it, not to every day mentioned anywhere in the message (#412), and
+    # each day within a clause to its own part of it (ai-trainer-ops#72). A
+    # question pins nothing: "why did the plan drop Sunday's long ride?" is a
+    # question about the plan, not a request for one.
+    for clause, is_question in _split_clauses(normalized):
+        if is_question:
             continue
-
-        has_unavailable = any(
-            re.search(pattern, clause) for pattern in UNAVAILABLE_PATTERNS
-        )
-        has_training_context = any(
-            re.search(pattern, clause) for pattern in TRAINING_CONTEXT_PATTERNS
-        )
-        if has_unavailable and has_training_context:
-            for date_iso, weekday_label in targets:
-                constraints.append(
-                    {
-                        "constraint_type": "no_training",
-                        "constraint_date": date_iso,
-                        "weekday": weekday_label,
-                        "reason": "Athlete said they are unavailable for training.",
-                        "source": source,
-                        "expires_on": date_iso,
-                    }
-                )
-
-        has_long_session = any(
-            re.search(pattern, clause) for pattern in LONG_SESSION_PATTERNS
-        )
-        if has_long_session:
-            min_minutes = (
-                _parse_duration_minutes(clause) or DEFAULT_LONG_SESSION_MINUTES
-            )
-            for date_iso, weekday_label in targets:
-                constraints.append(
-                    {
-                        "constraint_type": "required_workout",
-                        "constraint_date": date_iso,
-                        "weekday": weekday_label,
-                        "reason": "Athlete asked for a long endurance session on this day.",
-                        "source": source,
-                        "expires_on": date_iso,
-                        "required_workout": {
-                            "workoutType": "endurance",
-                            "minDurationMinutes": min_minutes,
-                        },
-                    }
-                )
+        for segment in _day_segments(clause):
+            constraints.extend(_segment_constraints(segment, today, source))
 
     # Keep the first occurrence per (type, date).
     by_key: dict[tuple[str, str], dict] = {}
     for item in constraints:
-        by_key.setdefault(
-            (item["constraint_type"], item["constraint_date"]), item
-        )
+        by_key.setdefault((item["constraint_type"], item["constraint_date"]), item)
     return list(by_key.values())
 
 
@@ -219,7 +388,7 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
 
     dates: list[str] = []
     lift = False
-    for clause in _split_clauses(normalized):
+    for clause, _question in _split_clauses(normalized):
         if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
             continue
         lift = True
