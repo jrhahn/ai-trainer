@@ -55,15 +55,19 @@ logger = logging.getLogger(__name__)
 STRAVA_LIST_PER_PAGE = 200
 # Widen the intervals fetch window slightly around the stored ride dates.
 INTERVALS_WINDOW_PADDING = timedelta(days=2)
-# ``(distance_km, elevation_gain_m)`` per activity, keyed the way the matching
-# below keys rides: the Strava id, or the intervals id as a float.
-Measures = dict[object, tuple[float | None, float | None]]
+# ``(distance_km, elevation_gain_m)`` per activity, keyed by source and the id
+# the matching below uses: the Strava id, or the intervals id as a float. The
+# source is part of the key because ``123 == 123.0`` in Python, so a Strava id
+# and an intervals id that happen to coincide would otherwise share an entry.
+Measures = dict[tuple[str, object], tuple[float | None, float | None]]
 
 
-def _record_measures(measures: Measures | None, key: object, activity: dict) -> None:
+def _record_measures(
+    measures: Measures | None, source: str, key: object, activity: dict
+) -> None:
     if measures is None:
         return
-    measures[key] = (
+    measures[(source, key)] = (
         reported_distance_km(activity.get("distance")),
         reported_elevation_m(activity.get("total_elevation_gain")),
     )
@@ -118,7 +122,7 @@ async def fetch_strava_moving_times(
                 if isinstance(activity_id, int) and isinstance(moving, int):
                     moving_by_id[activity_id] = moving
                 if isinstance(activity_id, int):
-                    _record_measures(measures, activity_id, activity)
+                    _record_measures(measures, "strava", activity_id, activity)
             if len(batch) < STRAVA_LIST_PER_PAGE:
                 break
             page += 1
@@ -150,7 +154,7 @@ async def fetch_intervals_moving_times(
         key = float(intervals_activity_id(raw_id))
         if isinstance(moving, int) and moving > 0:
             moving_by_key[key] = moving
-        _record_measures(measures, key, activity)
+        _record_measures(measures, "intervals", key, activity)
     return moving_by_key
 
 
@@ -291,9 +295,9 @@ async def fill_missing_measures(
             continue
         source = metric.activity_source or "strava"
         key = (
-            metric.strava_activity_id
+            (source, metric.strava_activity_id)
             if source == "strava"
-            else float(metric.strava_activity_id)
+            else (source, float(metric.strava_activity_id))
             if source == "intervals"
             else None
         )

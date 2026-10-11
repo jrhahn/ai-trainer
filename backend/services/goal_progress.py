@@ -70,11 +70,14 @@ _WISH = re.compile(
     re.IGNORECASE,
 )
 _FIRST_PERSON = re.compile(r"\b(?:i|i'?d|i'?m|ich)\b", re.IGNORECASE)
+_WEEKDAYS = "monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+_WOCHENTAGE = "montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag"
 _NEAR_DATE = re.compile(
     r"\b(?:today|tonight|tomorrow|this (?:morning|afternoon|evening|week|weekend)|"
-    r"on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    rf"next (?:week|weekend|{_WEEKDAYS})|(?:on )?(?:{_WEEKDAYS})|in (?:a|two|three|\d+) days?|"
     r"heute|morgen|übermorgen|uebermorgen|am wochenende|diese woche|"
-    r"am (?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag))\b",
+    r"(?:nächste[nrs]?|naechste[nrs]?|kommende[nrs]?) (?:woche|wochenende)|"
+    rf"(?:am )?(?:nächsten |naechsten |kommenden )?(?:{_WOCHENTAGE})|in (?:\d+|zwei|drei) tagen)\b",
     re.IGNORECASE,
 )
 _RIDE = re.compile(
@@ -222,7 +225,7 @@ def goal_progress(
     for row in rows or []:
         day = _as_date(getattr(row, "activity_date", None))
         value = getattr(row, metric, None)
-        if day is None or value is None or not (today - day).days < BASELINE_DAYS + 7:
+        if day is None or value is None or not 0 <= (today - day).days <= BASELINE_DAYS:
             continue
         count += 1
         per_day[day] = per_day.get(day, 0.0) + float(value)

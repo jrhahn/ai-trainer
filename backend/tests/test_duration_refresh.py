@@ -146,8 +146,10 @@ async def test_missing_distance_and_climbing_are_filled_never_overwritten(monkey
         duration_refresh.crud, "get_all_ride_metrics_ordered", fake_metrics
     )
     measures = {
-        float(intervals_activity_id("i166933341")): (84.21, 2134.6),
-        77: (99.0, 1999.0),
+        ("intervals", float(intervals_activity_id("i166933341"))): (84.21, 2134.6),
+        ("strava", 77): (99.0, 1999.0),
+        # The same number from the other provider must not reach the Strava row.
+        ("intervals", 77.0): (1.0, 1.0),
     }
 
     filled = await duration_refresh.fill_missing_measures(
@@ -175,7 +177,9 @@ async def test_the_intervals_list_records_the_measures(monkeypatch):
         measures=measures,
     )
 
-    assert measures == {float(intervals_activity_id("i166933341")): (84.21, 2134.6)}
+    assert measures == {
+        ("intervals", float(intervals_activity_id("i166933341"))): (84.21, 2134.6)
+    }
 
 
 def test_backfill_cli_delegates_to_service():

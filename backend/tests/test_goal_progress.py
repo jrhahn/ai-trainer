@@ -62,6 +62,9 @@ def test_a_stated_goal_is_captured(message, metric, scope, target):
         "I will ride 80 km tomorrow",  # a plan for one day
         "Morgen will ich 1500 hm fahren",  # the same, in German
         "Mein Kumpel will 3000 hm fahren",  # someone else's wish
+        "I will ride 120 km next Saturday",  # a plan for one day, further out
+        "Nächste Woche will ich 2000 hm fahren",
+        "I want to do 150 km in two days",
         "My friend's goal is 3000 hm",  # someone else's goal
         "I did 3000 hm, which was my goal",  # a result, not a goal
         "My friend's goal is 3000 hm, I think that's too much",  # still theirs
