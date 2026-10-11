@@ -45,6 +45,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `scripts/backfill_activity_moving_time.py --apply` once to fill the whole
     history.
   - Tests: `tests/test_goal_progress.py`, `tests/test_duration_refresh.py`.
+- **`scripts/plan_behaviour_report.py`: how the coach's plans behave over weeks**
+  (ai-trainer-ops#66, part 1). It reads the last applied version of every
+  planned day (`plan_day_history`) and the rides (`ride_metrics`). Per athlete
+  it reports:
+  - planned and ridden weekly volume;
+  - recovery weeks, meaning a week at most 75% of the 3 before it;
+  - the variation of the planned weekly volume;
+  - week-to-week similarity of the session mix;
+  - the hard share per 4-week block.
+
+  Without flags it prints aggregates only, and hides any figure from fewer
+  than 3 athletes. `--user-email` prints one athlete's own figures. Tests:
+  `tests/test_plan_behaviour_report.py`.
 
 - **Stay signed in: an HttpOnly session cookie with a CSRF token** (ai-trainer-ops#45) —
   `auth.py`, `routers/auth_router.py`, `main.py`. A sign-in that sends
