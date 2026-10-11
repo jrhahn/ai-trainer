@@ -663,6 +663,7 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
+  const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
@@ -1085,8 +1086,16 @@ export default function DashboardPage() {
   }
   // A ride the coach needs an answer about stays on the first screen; the rest
   // of the history is one tap away (ai-trainer-ops#68).
-  const needsAnswer = (ride: RideMetricPoint) =>
-    ride.planMatchStatus === 'ambiguous' || Boolean(ride.purposeQuestionOpen)
+  // A ride stays here for the rest of the visit once it was here: answering it
+  // must not move the row, or the question's own "thanks" would unmount with
+  // it before the athlete sees it.
+  rideKeysAwaitingAnswer.current = new Set([
+    ...rideKeysAwaitingAnswer.current,
+    ...recentRides
+      .filter((ride) => ride.planMatchStatus === 'ambiguous' || Boolean(ride.purposeQuestionOpen))
+      .map(rideActivityKey),
+  ])
+  const needsAnswer = (ride: RideMetricPoint) => rideKeysAwaitingAnswer.current.has(rideActivityKey(ride))
   const ridesAwaitingAnswer = recentRides.filter(needsAnswer)
   const otherRides = recentRides.filter((ride) => !needsAnswer(ride))
 
@@ -1280,6 +1289,7 @@ export default function DashboardPage() {
       {/* Everything else is one tap away, not stacked under the coach
           (ai-trainer-ops#68; the owner: "the chat is the interface"). A native
           disclosure: no state, keyboard and screen reader work as they are. */}
+      {(otherRides.length > 0 || isExpertMode) && (
       <details className="group rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
         <summary className="cursor-pointer select-none text-sm font-semibold text-gray-600 hover:text-amber-700">
           More: recent activities and predictions
@@ -1320,6 +1330,7 @@ export default function DashboardPage() {
           {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
         </div>
       </details>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -853,6 +853,33 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
     const unclear = screen.getByText('Unclear Ride')
     expect(more!.contains(unclear)).toBe(false)
     expect(needsAnswer.parentElement!.contains(unclear)).toBe(true)
+  })
+
+  it('keeps an answered ride where it was for the rest of the visit', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: today, activityName: 'Unclear Ride', stravaActivityId: 2, purposeQuestionOpen: true }),
+      ],
+    })
+    const { container } = renderDashboard()
+    await screen.findByText('Needs your answer')
+
+    act(() => {
+      useAppStore.setState({
+        rideMetricsHistory: [
+          makeRide({ activityDate: today, activityName: 'Unclear Ride', stravaActivityId: 2, purposeQuestionOpen: false }),
+        ],
+      })
+    })
+
+    expect(screen.getByText('Needs your answer')).toBeInTheDocument()
+    expect(container.querySelector('details')?.contains(screen.getByText('Unclear Ride')) ?? false).toBe(false)
+  })
+
+  it('shows no empty "More" to an athlete without history', () => {
+    setupStore({ rideMetricsHistory: [] })
+    const { container } = renderDashboard()
+    expect(container.querySelector('details')).toBeNull()
   })
 
   it('offers "Add activity" in the header, beside the greeting', () => {
