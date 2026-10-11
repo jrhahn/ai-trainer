@@ -26,6 +26,7 @@ import { formatTemperature } from '../utils/weather'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { useImportProgress } from '../hooks/useImportProgress'
 import PredictionScoreboard from '../components/PredictionScoreboard'
+import { useScoredPredictions } from '../hooks/useScoredPredictions'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
 import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, fetchWorkoutLogs, setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
@@ -663,6 +664,8 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
+  const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
+  const { hasScored: hasScoredPredictions } = useScoredPredictions()
   const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
@@ -939,19 +942,189 @@ export default function DashboardPage() {
       .finally(() => setSummaryLoading(false))
   }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
+  // One activity row: the ride, what was planned, the match, the legs, and the
+  // two questions only the athlete can answer (#574, #580).
+  const renderRide = (ride: RideMetricPoint) => {
+    const plan = planForRide(ride, trainingPlan)
+    const { score, label: scoreLabel, style: scoreBadgeStyle } = rideMatchBadge(
+      ride,
+      plan
+    )
+    return (
+      <div
+        key={rideActivityKey(ride)}
+        className="bg-white rounded-lg border border-gray-100 px-3 py-2"
+      >
+        {/* Activity row */}
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-gray-500 shrink-0 w-16">
+            {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </p>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize shrink-0">
+            {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+          </span>
+          <span className="text-xs text-gray-700 font-medium flex-1 truncate">
+            {enteredActivitySlot(ride) != null
+              ? 'Entered by you'
+              : (ride.activityName ?? 'Activity')}
+          </span>
+          {ride.weatherTemperatureC != null && (
+            <span
+              className="flex items-center gap-1 text-xs text-gray-500 shrink-0"
+              title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
+            >
+              <WeatherIcon condition={ride.weatherCondition} />
+              {formatTemperature(ride.weatherTemperatureC)}
+            </span>
+          )}
+          {ride.durationSeconds != null && (
+            <span className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+              <Clock size={11} />
+              {formatDuration(ride.durationSeconds)}
+            </span>
+          )}
+          {enteredActivitySlot(ride) != null && (
+            <button
+              type="button"
+              onClick={() => void editEnteredActivity(ride)}
+              aria-label={`Edit the ${ride.sportType} you entered on ${ride.activityDate}`}
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+            >
+              <Pencil size={13} aria-hidden="true" />
+            </button>
+          )}
+          {enteredActivitySlot(ride) != null && (
+            <button
+              type="button"
+              onClick={() => void removeEnteredActivity(ride)}
+              aria-label={`Delete the ${ride.sportType} you entered on ${ride.activityDate}`}
+              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
+            >
+              <Trash2 size={13} aria-hidden="true" />
+            </button>
+          )}
+          {isNew(ride) && (
+            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
+              new
+            </span>
+          )}
+        </div>
+        {/* Plan comparison row */}
+        <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
+          <span className="text-xs text-gray-500">planned:</span>
+          <span className="text-xs text-gray-600 font-medium truncate flex-1">
+            {plan ? (
+              <>
+                {plan.title ?? plan.workoutType}
+                {plan.durationMinutes ? ` · ${formatPlanDuration(plan)}` : ''}
+                {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
+              </>
+            ) : (
+              'No planned workout found'
+            )}
+          </span>
+          {plan && (
+            <button
+              onClick={() =>
+                setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
+              }
+              title="Ask coach about this match"
+              className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
+            >
+              {scoreLabel}
+            </button>
+          )}
+          {authToken && (
+            <div
+              className="flex items-center gap-0.5 shrink-0"
+              role="group"
+              aria-label="How did your legs feel?"
+            >
+              {LEG_FEELINGS.map((feel) => {
+                const active = ride.feelLegs === feel.value
+                return (
+                  <button
+                    key={feel.value}
+                    type="button"
+                    onClick={() => handleSetLegs(ride, feel.value)}
+                    title={`Legs: ${feel.label}`}
+                    aria-label={`Legs felt ${feel.label}`}
+                    aria-pressed={active}
+                    className={`rounded px-1.5 py-1 leading-none transition-all ${
+                      active
+                        ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
+                        : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
+                    }`}
+                  >
+                    {/* White on the amber chosen state, where the
+                        feeling's own colour would not be legible.
+                        `aria-hidden`: the button is already labelled
+                        "Legs felt Fresh". */}
+                    <feel.Icon
+                      size={14}
+                      className={active ? 'text-white' : feel.color}
+                      aria-hidden="true"
+                    />
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        {/* The matcher refused to guess which session this was; this is
+            where the athlete answers it (#574). Renders nothing for the
+            normal, unambiguous ride. */}
+        <AmbiguousMatchResolver ride={ride} />
+        {/* And the other question the coach cannot answer on its own:
+            what this session was, when the data could not say (#580).
+            Also renders nothing for a ride that classified cleanly. */}
+        <SessionPurposeQuestion ride={ride} />
+      </div>
+    )
+  }
+  // A ride the coach needs an answer about stays on the first screen; the rest
+  // of the history is one tap away (ai-trainer-ops#68).
+  // A ride stays here for the rest of the visit once it was here: answering it
+  // must not move the row, or the question's own "thanks" would unmount with
+  // it before the athlete sees it.
+  rideKeysAwaitingAnswer.current = new Set([
+    ...rideKeysAwaitingAnswer.current,
+    ...recentRides
+      .filter((ride) => ride.planMatchStatus === 'ambiguous' || Boolean(ride.purposeQuestionOpen))
+      .map(rideActivityKey),
+  ])
+  const needsAnswer = (ride: RideMetricPoint) => rideKeysAwaitingAnswer.current.has(rideActivityKey(ride))
+  const ridesAwaitingAnswer = recentRides.filter(needsAnswer)
+  const otherRides = recentRides.filter((ride) => !needsAnswer(ride))
+
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {/* No name means no comma: "Good morning!", not "Good morning, !" (ai-trainer-ops#40). */}
-          {/* No waving hand (ai-trainer-ops#51.7). It was one of the emoji
-              the issue names, and there is no lucide icon that reads as a
-              greeting — `Hand` is a hand, not a wave. A greeting by name needs
-              no decoration, so it is dropped rather than translated. */}
-          {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`}
-        </h1>
-        <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+      {/* Header. Adding an activity sits here, beside the greeting, instead of
+          taking a row of its own above the week (ai-trainer-ops#68). */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {/* No name means no comma: "Good morning!", not "Good morning, !" (ai-trainer-ops#40). */}
+            {/* No waving hand (ai-trainer-ops#51.7). It was one of the emoji
+                the issue names, and there is no lucide icon that reads as a
+                greeting — `Hand` is a hand, not a wave. A greeting by name needs
+                no decoration, so it is dropped rather than translated. */}
+            {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`}
+          </h1>
+          <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddActivityOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+        >
+          <Plus size={15} aria-hidden="true" />
+          Add activity
+        </button>
       </div>
 
       {/* What the athlete came for, before anything else on the page.  Also
@@ -974,21 +1147,13 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* The race the athlete trains for stays in view: it renders only when
+          one is ahead, and it is the goal, not history (ai-trainer-ops#68). */}
       <SeasonCountdown />
 
       {/* Anything the plan and the sync do not know about: a ride on a rest
           day, a run instead of the ride, a day the plan never covered (#47).
-          Shown with or without a plan — the athlete without one needs it most. */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setAddActivityOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
-        >
-          <Plus size={15} aria-hidden="true" />
-          Add activity
-        </button>
-      </div>
+          Opened from the header button. */}
       <AddActivityDialog open={addActivityOpen} onClose={() => setAddActivityOpen(false)} />
       {editingActivity && (
         <AddActivityDialog
@@ -1114,185 +1279,60 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Rides that actually happened.  The upcoming-plan preview that used to
-          share this block is gone: WeekStrip shows the same days without
-          truncating their names. */}
-      {recentRides.length > 0 && (
+      {/* A ride the coach needs an answer about is the one piece of history
+          that stays on the first screen (ai-trainer-ops#68). */}
+      {ridesAwaitingAnswer.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent activities</h2>
-          <div className="space-y-1.5">
-            {recentRides.map((ride) => {
-              const plan = planForRide(ride, trainingPlan)
-              const { score, label: scoreLabel, style: scoreBadgeStyle } = rideMatchBadge(
-                ride,
-                plan
-              )
-              return (
-                <div
-                  key={rideActivityKey(ride)}
-                  className="bg-white rounded-lg border border-gray-100 px-3 py-2"
-                >
-                  {/* Activity row */}
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-500 shrink-0 w-16">
-                      {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </p>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize shrink-0">
-                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-xs text-gray-700 font-medium flex-1 truncate">
-                      {enteredActivitySlot(ride) != null
-                        ? 'Entered by you'
-                        : (ride.activityName ?? 'Activity')}
-                    </span>
-                    {ride.weatherTemperatureC != null && (
-                      <span
-                        className="flex items-center gap-1 text-xs text-gray-500 shrink-0"
-                        title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
-                      >
-                        <WeatherIcon condition={ride.weatherCondition} />
-                        {formatTemperature(ride.weatherTemperatureC)}
-                      </span>
-                    )}
-                    {ride.durationSeconds != null && (
-                      <span className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
-                        <Clock size={11} />
-                        {formatDuration(ride.durationSeconds)}
-                      </span>
-                    )}
-                    {enteredActivitySlot(ride) != null && (
-                      <button
-                        type="button"
-                        onClick={() => void editEnteredActivity(ride)}
-                        aria-label={`Edit the ${ride.sportType} you entered on ${ride.activityDate}`}
-                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
-                      >
-                        <Pencil size={13} aria-hidden="true" />
-                      </button>
-                    )}
-                    {enteredActivitySlot(ride) != null && (
-                      <button
-                        type="button"
-                        onClick={() => void removeEnteredActivity(ride)}
-                        aria-label={`Delete the ${ride.sportType} you entered on ${ride.activityDate}`}
-                        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
-                      >
-                        <Trash2 size={13} aria-hidden="true" />
-                      </button>
-                    )}
-                    {isNew(ride) && (
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
-                        new
-                      </span>
-                    )}
-                  </div>
-                  {/* Plan comparison row */}
-                  <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-                    <span className="text-xs text-gray-500">planned:</span>
-                    <span className="text-xs text-gray-600 font-medium truncate flex-1">
-                      {plan ? (
-                        <>
-                          {plan.title ?? plan.workoutType}
-                          {plan.durationMinutes ? ` · ${formatPlanDuration(plan)}` : ''}
-                          {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
-                        </>
-                      ) : (
-                        'No planned workout found'
-                      )}
-                    </span>
-                    {plan && (
-                      <button
-                        onClick={() =>
-                          setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
-                        }
-                        title="Ask coach about this match"
-                        className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
-                      >
-                        {scoreLabel}
-                      </button>
-                    )}
-                    {authToken && (
-                      <div
-                        className="flex items-center gap-0.5 shrink-0"
-                        role="group"
-                        aria-label="How did your legs feel?"
-                      >
-                        {LEG_FEELINGS.map((feel) => {
-                          const active = ride.feelLegs === feel.value
-                          return (
-                            <button
-                              key={feel.value}
-                              type="button"
-                              onClick={() => handleSetLegs(ride, feel.value)}
-                              title={`Legs: ${feel.label}`}
-                              aria-label={`Legs felt ${feel.label}`}
-                              aria-pressed={active}
-                              className={`rounded px-1.5 py-1 leading-none transition-all ${
-                                active
-                                  ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
-                                  : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
-                              }`}
-                            >
-                              {/* White on the amber chosen state, where the
-                                  feeling's own colour would not be legible.
-                                  `aria-hidden`: the button is already labelled
-                                  "Legs felt Fresh". */}
-                              <feel.Icon
-                                size={14}
-                                className={active ? 'text-white' : feel.color}
-                                aria-hidden="true"
-                              />
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {/* The matcher refused to guess which session this was; this is
-                      where the athlete answers it (#574). Renders nothing for the
-                      normal, unambiguous ride. */}
-                  <AmbiguousMatchResolver ride={ride} />
-                  {/* And the other question the coach cannot answer on its own:
-                      what this session was, when the data could not say (#580).
-                      Also renders nothing for a ride that classified cleanly. */}
-                  <SessionPurposeQuestion ride={ride} />
-                </div>
-              )
-            })}
-          </div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Needs your answer</h2>
+          <div className="space-y-1.5">{ridesAwaitingAnswer.map(renderRide)}</div>
         </div>
       )}
 
-      {/* How often the coach's checkable predictions came true, misses
-          included (ai-trainer-ops#16). Renders nothing until one is scored. */}
-      <PredictionScoreboard />
+      {/* Everything else is one tap away, not stacked under the coach
+          (ai-trainer-ops#68; the owner: "the chat is the interface"). A native
+          disclosure: no state, keyboard and screen reader work as they are. */}
+      {(otherRides.length > 0 || hasScoredPredictions || isExpertMode) && (
+      <details className="group rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
+        <summary className="cursor-pointer select-none text-sm font-semibold text-gray-600 hover:text-amber-700">
+          More: recent activities and predictions
+        </summary>
+        <div className="mt-3 space-y-5">
+          {otherRides.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent activities</h2>
+              <div className="space-y-1.5">{otherRides.map(renderRide)}</div>
+            </div>
+          )}
 
-      {/* Everything below here is expert mode, gathered in one place so turning
-          it on adds a block at the bottom rather than pushing the coach down. */}
-      {isExpertMode && (
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-xs">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-            Consumed tokens
-          </p>
-          <p className="text-2xl font-bold text-gray-900">
-            {consumedTokens.toLocaleString()}
-          </p>
+          {/* How often the coach's checkable predictions came true, misses
+              included (ai-trainer-ops#16). Renders nothing until one is scored. */}
+          <PredictionScoreboard />
+
+          {/* Everything below here is expert mode, gathered in one place so turning
+              it on adds a block at the bottom rather than pushing the coach down. */}
+          {isExpertMode && (
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-xs">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                Consumed tokens
+              </p>
+              <p className="text-2xl font-bold text-gray-900">
+                {consumedTokens.toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          {/* Form and fitness over time: a diagnostic, not a daily read.  #619
+              promoted it onto the front page; it belongs behind expert mode. */}
+          {isExpertMode && <ProgressionChart />}
+
+          {/* Coach's model of the athlete + its confidences — expert mode only */}
+          {isExpertMode && <AthletePerformanceModelCard />}
+
+          {/* Recent plan changes / override analytics — expert mode only (#357) */}
+          {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
         </div>
+      </details>
       )}
-
-      {/* Form and fitness over time: a diagnostic, not a daily read.  #619
-          promoted it onto the front page; it belongs behind expert mode. */}
-      {isExpertMode && <ProgressionChart />}
-
-      {/* Coach's model of the athlete + its confidences — expert mode only */}
-      {isExpertMode && <AthletePerformanceModelCard />}
-
-      {/* Recent plan changes / override analytics — expert mode only (#357) */}
-      {isExpertMode && authToken && <PlanChangesPanel authToken={authToken} />}
     </div>
   )
 }

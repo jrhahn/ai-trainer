@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -30,7 +30,9 @@ const {
   mockFetchMetrics,
   mockSaveWorkoutLog,
   mockRateCompletedWorkout,
+  mockFetchPredictions,
 } = vi.hoisted(() => ({
+  mockFetchPredictions: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
   mockRateCompletedWorkout: vi.fn(),
   mockDeleteManualActivity: vi.fn(),
@@ -61,6 +63,7 @@ vi.mock('../services/user', () => ({
   addManualActivity: vi.fn(),
   saveWorkoutLog: mockSaveWorkoutLog,
   fetchTrainingPlan: vi.fn().mockResolvedValue([]),
+  fetchAthletePredictions: mockFetchPredictions,
   saveTrainingPlan: vi.fn(),
 }))
 
@@ -822,6 +825,80 @@ describe('DashboardPage — Activities section layout', () => {
     })
     renderDashboard()
     expect(await screen.findByText('Recent activities')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// First screen vs "More" (ai-trainer-ops#68)
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — the coach first, the rest one tap away', () => {
+  it('puts history behind a closed "More" and keeps rides that need an answer out front', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Settled Ride', stravaActivityId: 1 }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Unclear Ride',
+          stravaActivityId: 2,
+          purposeQuestionOpen: true,
+        }),
+      ],
+    })
+    const { container } = renderDashboard()
+
+    const more = container.querySelector('details')
+    expect(more).not.toBeNull()
+    expect(more!.open).toBe(false)
+    expect(within(more!).getByText('Settled Ride')).toBeInTheDocument()
+
+    const needsAnswer = await screen.findByText('Needs your answer')
+    const unclear = screen.getByText('Unclear Ride')
+    expect(more!.contains(unclear)).toBe(false)
+    expect(needsAnswer.parentElement!.contains(unclear)).toBe(true)
+  })
+
+  it('keeps an answered ride where it was for the rest of the visit', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: today, activityName: 'Unclear Ride', stravaActivityId: 2, purposeQuestionOpen: true }),
+      ],
+    })
+    const { container } = renderDashboard()
+    await screen.findByText('Needs your answer')
+
+    act(() => {
+      useAppStore.setState({
+        rideMetricsHistory: [
+          makeRide({ activityDate: today, activityName: 'Unclear Ride', stravaActivityId: 2, purposeQuestionOpen: false }),
+        ],
+      })
+    })
+
+    expect(screen.getByText('Needs your answer')).toBeInTheDocument()
+    expect(container.querySelector('details')?.contains(screen.getByText('Unclear Ride')) ?? false).toBe(false)
+  })
+
+  it('shows no empty "More" to an athlete without history', () => {
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 0, correct: 0 } })
+    setupStore({ rideMetricsHistory: [] })
+    const { container } = renderDashboard()
+    expect(container.querySelector('details')).toBeNull()
+  })
+
+  it('keeps scored predictions reachable without other rides', async () => {
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 3, correct: 2 } })
+    setupStore({ rideMetricsHistory: [] })
+    const { container } = renderDashboard()
+    await waitFor(() => expect(container.querySelector('details')).not.toBeNull())
+  })
+
+  it('offers "Add activity" in the header, beside the greeting', () => {
+    setupStore({})
+    renderDashboard()
+    const heading = screen.getByRole('heading', { level: 1 })
+    const header = heading.closest('div')!.parentElement!
+    expect(within(header).getByRole('button', { name: /add activity/i })).toBeInTheDocument()
   })
 })
 

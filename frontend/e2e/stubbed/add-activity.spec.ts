@@ -70,7 +70,9 @@ test('two runs entered on one day are two activities, and one can go again', asy
   await expect(page.getByText('Done', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/was Recovery/)).toHaveCount(0)
 
-  // Correct one of them: the duration changes in place, no third entry.
+  // Correct one of them: the duration changes in place, no third entry. The
+  // history lives behind "More" since ai-trainer-ops#68.
+  await page.getByText(/^More:/).click()
   await page.getByRole('button', { name: /edit the running you entered/i }).first().click()
   await expect(page.getByRole('heading', { name: 'Edit activity' })).toBeVisible()
   await page.getByLabel('Duration (minutes)').fill('75')
