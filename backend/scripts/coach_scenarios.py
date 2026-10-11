@@ -11,6 +11,14 @@ October 2026, paraphrased into a synthetic athlete: no names, no health details,
 no message copied verbatim. It calls ``ai_service.ask_trainer`` with built
 inputs, never a database, so a run reads and writes no athlete's data.
 
+Each scenario passes only the inputs its situation needs, in the parameter the
+chat route uses for them (the profile, a stated objective in
+``motivation_model``, constraints in the profile); weather, memory facts, the
+performance model and the plan's change history are left out. So a scenario
+tests the model's answer to that situation, not the whole production prompt,
+and "claims-match-changes" checks the reply against the model's own plan
+update, not against what the pipeline then applies.
+
 Every check is deterministic and deliberately narrow: it catches the specific
 failure the chat showed, not "good coaching" in general. A failed check is a
 lead to read the reply, which the report quotes; it is not proof on its own.
@@ -124,6 +132,7 @@ class Scenario:
     profile: dict
     checks: list[tuple[str, Check]]
     coach_memory: str = ""
+    motivation_model: dict | None = None
     history: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -324,10 +333,14 @@ def scenarios(today: date) -> list[Scenario]:
             question="Heute 2-3h Grundlage: Rennrad oder MTB?",
             plan=week,
             profile=_profile(),
-            coach_memory=(
-                "The athlete rides to be on technical MTB trails; road riding is training to them, "
-                "trails are why they ride. They have said the MTB is what keeps them motivated."
-            ),
+            # Where production puts a stated objective (#563), set by the athlete.
+            motivation_model={
+                "primary_objective": (
+                    "Ride as many technical MTB trails as possible; fitness is the means, "
+                    "road riding is only training"
+                ),
+                "primary_objective_source": "user_set",
+            },
             checks=[
                 ("replies in German", in_german),
                 (
@@ -389,6 +402,7 @@ async def run(
                 scenario.profile,
                 provider=provider,
                 coach_memory=scenario.coach_memory or None,
+                motivation_model=scenario.motivation_model,
                 conversation_history=scenario.history or None,
             )
         # A broken call is a result too, not a crash of the run.
@@ -437,6 +451,8 @@ def render(outcomes) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print the report and exit 0 whatever it says: a run is a reading to post
+    and compare over time, and one model reply is not a gate."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--provider", default="gemini")
     parser.add_argument("--only", help="run one scenario by name")

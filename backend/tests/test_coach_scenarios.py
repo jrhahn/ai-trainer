@@ -152,3 +152,20 @@ def test_language_detection_on_chat_lines():
         )
         == "en"
     )
+
+
+@pytest.mark.asyncio
+async def test_the_trail_scenario_sends_its_objective_where_production_does(
+    monkeypatch,
+):
+    seen = {}
+
+    async def ask_trainer(question, plan, profile, **kwargs):
+        seen.update(kwargs)
+        return {"response": "Nimm das MTB.", "plan_updates": []}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    await cs.run("gemini", only="trail-motivation", today=TODAY)
+
+    assert "trails" in seen["motivation_model"]["primary_objective"]
