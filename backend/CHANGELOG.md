@@ -150,6 +150,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     profile". The race section names it as a past race not to plan toward.
     Race day itself and later dates are unchanged.
   - Tests: `tests/test_past_race_profile.py`.
+- **The acknowledgement after answering a coach question is in the athlete's
+  language** (ai-trainer-ops#74) — `services/prompts.evaluate_inquiry_answer_system`.
+  #658 put the language rule on every athlete-facing prompt but this one, so a
+  German answer to a German question got its "thanks, noted" in English. The
+  prompt now states the rule. `reply` and `question` are written in the
+  athlete's language, and `fact` stays English like every stored fact.
+  - Tests: `tests/test_coach_language.py`.
+
+- **An FTP said in the coach chat now reaches the profile** (ai-trainer-ops#70) —
+  `services/stated_ftp.py`, `routers/ai.py`.
+  - "My FTP is rather 285 W" used to get "I've updated your FTP" from the coach
+    and no write: no code path set `current_ftp` from chat, so the zones kept
+    using the old value for months.
+  - A first-person statement with a watt figure now sets `current_ftp` before
+    the turn reads the profile, and the reply ends with a note saying so. Past
+    ride metrics, CTL and ATL are left as they were.
+  - Questions, past values, negations, other people's FTP, figures without a
+    unit and long pasted messages are not captured.
+  - Tests: `tests/test_stated_ftp.py`.
 
 - **The backtest report prints no empty table** (ai-trainer-ops#27) —
   `scripts/backtest_report.py`. When every attribute fell under the
