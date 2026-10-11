@@ -950,7 +950,9 @@ async def _generate_plan_for_user(
     phase_section = await plan_context.training_phase_section_for_user(
         db, current_user.id, app_today(timezone_name=timezone_name)
     )
-    athlete_model_section = f"{athlete_model_section}\n{phase_section}"
+    athlete_model_section = "\n".join(
+        part for part in (athlete_model_section, phase_section) if part
+    )
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:
             plan = await ai_service.generate_training_plan(

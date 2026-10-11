@@ -180,9 +180,11 @@ def load_rhythm(rows: Iterable[object], today: date) -> LoadRhythm:
 
     loading = 0
     for index in range(len(weekly) - 1, 2, -1):
-        previous = weekly[index - 3 : index]
-        reference = sum(previous) / 3
-        if reference > 0 and weekly[index] <= LIGHT_WEEK_RATIO * reference:
+        reference = sum(weekly[index - 3 : index]) / 3
+        # A week with no training is the lightest week there is, whatever came
+        # before it. Without this, an athlete coming back from three empty weeks
+        # would have those weeks counted as loading.
+        if weekly[index] == 0 or weekly[index] <= LIGHT_WEEK_RATIO * reference:
             break
         loading += 1
     return LoadRhythm(

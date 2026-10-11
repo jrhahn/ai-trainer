@@ -98,6 +98,15 @@ def test_right_after_a_light_week_load_may_rise():
     assert not rhythm.recovery_due
 
 
+def test_empty_weeks_are_recovery_not_loading():
+    """Back after a break: the empty weeks were the rest, so the count restarts."""
+    june = date(2026, 6, 10)
+    rhythm = tp.load_rhythm(_rides(june, [8, 8, 8, 0, 0, 0, 0, 8]), june)
+
+    assert rhythm.loading_weeks == 1
+    assert not rhythm.recovery_due
+
+
 def test_short_history_makes_no_claim_about_the_rhythm():
     june = date(2026, 6, 10)
     rhythm = tp.load_rhythm(_rides(june, [8, 8]), june)
@@ -161,3 +170,19 @@ async def test_every_plan_writer_is_told_the_phase():
     assert "Phase: build" in context.coherence
     assert race.isoformat() in context.coherence
     assert regen in context.coherence
+
+
+@pytest.mark.asyncio
+async def test_a_full_regeneration_is_told_the_phase(
+    client, auth_headers, mock_ai_service
+):
+    """The path that would otherwise undo the nightly run's phase."""
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
+
+    assert response.status_code == 200
+    section = mock_ai_service["generate_training_plan"].call_args.kwargs[
+        "athlete_model_section"
+    ]
+    assert section.startswith("Training phase")
