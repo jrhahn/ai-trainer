@@ -235,3 +235,29 @@ def test_a_stated_absence_blocks_every_day_of_it():
 def test_a_range_without_an_absence_or_too_long_a_range_is_ignored():
     assert _kinds("from 4 to 26 november the trails are wet") == []
     assert _kinds("from 1 january to 30 april i am on holiday") == []
+
+
+def test_a_free_day_in_german_is_an_offer_not_a_block():
+    assert _kinds("Samstag habe ich frei, da kann ich lang fahren") == []
+    assert _kinds("Sonntag ist frei") == []
+
+
+def test_date_range_edges():
+    # Started already: only today onward is blocked.
+    started = extract_availability_constraints(
+        "vom 1. bis 5. Juni bin ich im Urlaub", today=TODAY
+    )
+    assert [c["constraint_date"] for c in started] == [
+        "2026-06-03",
+        "2026-06-04",
+        "2026-06-05",
+    ]
+    # Over the turn of the year.
+    winter = _kinds("from 28 december to 2 january i am on holiday")
+    assert winter[0] == ("no_training", "2026-12-28")
+    assert winter[-1] == ("no_training", "2027-01-02")
+    # A range already over this year means next year's.
+    spring = _kinds("from 4 to 6 march i am on holiday")
+    assert [d for _t, d in spring] == ["2027-03-04", "2027-03-05", "2027-03-06"]
+    # A date that does not exist is ignored.
+    assert _kinds("from 30 to 31 february i am on holiday") == []

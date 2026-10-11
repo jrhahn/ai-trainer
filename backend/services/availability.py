@@ -52,10 +52,12 @@ UNAVAILABLE_PATTERNS = (
 # the athlete asking, and the coach may answer.
 OFF_DAY_PATTERNS = (
     r"\b(?:day\s+off|off\s+day|rest(?:ing)?\s*day|ruhetag)\b",
-    r"\b(?:bleibt|bleiben|muss|ist)\s+(?:\w+\s+)?frei\b",
-    r"\bfrei\s+(?:bleiben|halten|lassen|nehmen)\b",
-    r"\b(?:is|ist|i'?m|bin|am)\s+off\b",
-    r"\b(?:off|frei)\s*(?=$|[,;:-]|\s+(?:and|und)\b)",
+    # German "frei" alone is ambiguous: "Samstag habe ich frei" means the
+    # athlete is free to ride. Only the forms that keep a day clear count.
+    r"\b(?:bleibt|bleiben|muss)\s+(?:\w+\s+)?frei\b",
+    r"\bfrei\s+(?:bleiben|halten|lassen)\b",
+    r"\b(?:is|i'?m|am)\s+off\b",
+    r"\boff\s*(?=$|[,;:-]|\s+(?:and|und)\b)",
 )
 # "the power meter was off" is not a day off.
 _NOT_A_DAY_OFF = re.compile(r"\b(?:was|war|were|waren)\s+off\b")
