@@ -120,6 +120,15 @@ def test_the_script_refuses_fewer_than_four_weeks(capsys):
         pbr.main(["--weeks", "3"])
 
 
+def test_blocks_end_at_the_newest_week():
+    """Six weeks give one block: the last four, not the first."""
+    vo2 = [("intervals" if k == "tempo" else k, m) for k, m in SAME_WEEK]
+    result = pbr.behaviour(_history([SAME_WEEK, SAME_WEEK] + [vo2] * 4), [], TODAY, 6)
+
+    hard = sum(m for k, m in vo2 if k == "intervals")
+    assert result.hard_share_by_block == (round(hard / sum(m for _, m in vo2), 3),)
+
+
 def test_too_little_history_is_not_a_finding():
     assert pbr.behaviour(_history([SAME_WEEK] * 2), [], TODAY, 12) is None
 

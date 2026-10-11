@@ -174,11 +174,14 @@ def behaviour(
         s for s in (_cosine(a, b) for a, b in zip(mixes, mixes[1:])) if s is not None
     ]
     mean = statistics.fmean(planned)
+    # Blocks are cut back from the newest week, so the weeks a run that is not a
+    # multiple of four leaves over are the oldest ones, not the most recent.
     blocks = []
-    for index in range(0, len(planned) - BLOCK_WEEKS + 1, BLOCK_WEEKS):
-        block_total = sum(total[index : index + BLOCK_WEEKS])
+    for end_index in range(len(planned), BLOCK_WEEKS - 1, -BLOCK_WEEKS):
+        start_index = end_index - BLOCK_WEEKS
+        block_total = sum(total[start_index:end_index])
         if block_total:
-            blocks.append(sum(hard[index : index + BLOCK_WEEKS]) / block_total)
+            blocks.insert(0, sum(hard[start_index:end_index]) / block_total)
     return AthleteBehaviour(
         weeks=len(planned),
         planned_minutes=tuple(round(m) for m in planned),
@@ -305,7 +308,12 @@ async def build(weeks: int, user_email: str | None = None, today: date | None = 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--weeks", type=int, default=12, help="weeks to measure (default 12)")
+    parser.add_argument(
+        "--weeks",
+        type=int,
+        default=12,
+        help="weeks to measure (default 12); hard share is per 4-week block, newest first",
+    )
     parser.add_argument("--user-email", default=None, help="one athlete's own figures")
     args = parser.parse_args(argv)
     if args.weeks < 4:
