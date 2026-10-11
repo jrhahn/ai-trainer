@@ -59,10 +59,19 @@ def upgrade() -> None:
     op.create_index(
         "ix_athlete_goals_user_status", "athlete_goals", ["user_id", "status"]
     )
+    op.create_index(
+        "uq_athlete_goals_one_active",
+        "athlete_goals",
+        ["user_id", "metric", "scope"],
+        unique=True,
+        sqlite_where=sa.text("status = 'active'"),
+        postgresql_where=sa.text("status = 'active'"),
+    )
 
 
 def downgrade() -> None:
     if "athlete_goals" in _inspector().get_table_names():
+        op.drop_index("uq_athlete_goals_one_active", table_name="athlete_goals")
         op.drop_index("ix_athlete_goals_user_status", table_name="athlete_goals")
         op.drop_table("athlete_goals")
     existing = _columns("ride_metrics")

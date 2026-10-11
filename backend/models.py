@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -1352,7 +1353,20 @@ class AthleteGoal(Base):
     """
 
     __tablename__ = "athlete_goals"
-    __table_args__ = (Index("ix_athlete_goals_user_status", "user_id", "status"),)
+    __table_args__ = (
+        Index("ix_athlete_goals_user_status", "user_id", "status"),
+        # One active goal per measure, enforced rather than assumed: two chat
+        # messages arriving together must not leave the coach two lines.
+        Index(
+            "uq_athlete_goals_one_active",
+            "user_id",
+            "metric",
+            "scope",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(

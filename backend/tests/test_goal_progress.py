@@ -64,6 +64,7 @@ def test_a_stated_goal_is_captured(message, metric, scope, target):
         "Mein Kumpel will 3000 hm fahren",  # someone else's wish
         "My friend's goal is 3000 hm",  # someone else's goal
         "I did 3000 hm, which was my goal",  # a result, not a goal
+        "My friend's goal is 3000 hm, I think that's too much",  # still theirs
     ],
 )
 def test_other_sentences_are_not_goals(message):
@@ -78,6 +79,16 @@ def test_each_measure_takes_its_own_scope():
         (gp.ELEVATION, gp.RIDE),
     }
     assert gp.extract_goal("Mein Ziel: pro Woche 10000 hm").scope == gp.WEEK
+    assert (
+        gp.extract_goal("My goal is 4000 hm in one ride, I train twice a week").scope
+        == gp.RIDE
+    )
+
+
+def test_numbers_are_read_the_way_people_write_them():
+    assert gp.extract_goal("Mein Ziel: 4'000 hm").target == 4000
+    assert gp.extract_goal("My goal is 4,000 m of climbing").target == 4000
+    assert gp.extract_goal("Mein Ziel: 2,5 km") is None  # a decimal, below any real ride
 
 
 def test_two_measures_in_one_sentence_are_two_goals():
@@ -121,6 +132,13 @@ def test_weekly_goals_sum_a_rolling_week():
     progress = gp.goal_progress(gp.ELEVATION, gp.WEEK, 5000, rows, TODAY)
 
     assert progress.best_recent == 3700
+
+
+def test_two_rides_on_one_day_both_count_toward_a_week():
+    rows = [_ride(2, 800), _ride(2, 700), _ride(4, 1000)]
+    progress = gp.goal_progress(gp.ELEVATION, gp.WEEK, 5000, rows, TODAY)
+
+    assert progress.best_recent == 2500
 
 
 def test_no_data_is_said_rather_than_guessed():
@@ -231,3 +249,27 @@ async def test_a_new_target_replaces_the_old_one():
 
     assert [g.target for g in goals] == [4000]
     assert [g.target for g in replaced] == [3000]
+
+
+@pytest.mark.asyncio
+async def test_going_back_to_an_old_target_starts_a_new_row():
+    async with TestSessionLocal() as db:
+        user = await crud.create_user(
+            db, email="goal-aba@example.com", name="R", hashed_password="x"
+        )
+        for target in (3000, 4000, 3000):
+            await crud.upsert_active_goal(
+                db, user.id, metric=gp.ELEVATION, scope=gp.RIDE, target=target
+            )
+        rows = (
+            await db.scalars(
+                select(models.AthleteGoal).order_by(models.AthleteGoal.created_at)
+            )
+        ).all()
+        await db.commit()
+
+    assert [(g.target, g.status) for g in rows] == [
+        (3000, "replaced"),
+        (4000, "replaced"),
+        (3000, "active"),
+    ]

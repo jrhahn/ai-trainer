@@ -4948,6 +4948,8 @@ async def upsert_active_goal(
             return existing
         existing.status = "replaced"
         existing.updated_at = now
+        # Before the insert: the partial unique index allows one active row.
+        await db.flush()
     goal = models.AthleteGoal(
         user_id=user_id,
         metric=metric,

@@ -54,6 +54,12 @@ _OWN_GOAL = re.compile(
     r"\b(?:my|mein(?:e|em|en)?)\s+(?:goals?|targets?|aim|dream|ziele?|traum)\b",
     re.IGNORECASE,
 )
+# Someone else's goal: "my friend's goal", "sein Ziel", "the club's target".
+_OTHERS_GOAL = re.compile(
+    r"(?:\b\w+'s|\b(?:his|her|their|sein(?:e|em|en)?|ihr(?:e|em|en)?|des|der))\s+"
+    r"(?:goals?|targets?|aim|dream|ziele?|traum)\b",
+    re.IGNORECASE,
+)
 # A report of something done ("I did 3000 hm, which was my goal") is a result.
 _PAST = re.compile(
     r"\b(?:did|was|rode|have done|geschafft|war|bin\b.*\bgefahren|habe\b.*\bgefahren)\b",
@@ -71,6 +77,14 @@ _NEAR_DATE = re.compile(
     r"am (?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag))\b",
     re.IGNORECASE,
 )
+_RIDE = re.compile(
+    r"\b(?:in one ride|in a single ride|single ride|in one day|in a day|in one go|"
+    r"an einem tag|in einer fahrt|pro fahrt|am stück|am stueck)\b",
+    re.IGNORECASE,
+)
+# How far either side of a number its scope words are looked for. "4000 hm in
+# one ride, I train twice a week" must not become a weekly goal.
+_SCOPE_REACH = 30
 _WEEK = re.compile(r"\b(?:per week|a week|each week|weekly|pro woche|in der woche|wöchentlich|woechentlich)\b", re.IGNORECASE)
 _QUANTITY = re.compile(
     rf"{_NUMBER}\s*(?P<unit>{_ELEVATION_UNIT}|{_DISTANCE_UNIT})", re.IGNORECASE
@@ -111,7 +125,7 @@ def _states_intent(text: str) -> bool:
         return False
     own = bool(_OWN_GOAL.search(text) or _FIRST_PERSON.search(text))
     if _GOAL_WORD.search(text):
-        return own
+        return own and not _OTHERS_GOAL.search(text)
     return bool(_WISH.search(text) and own and not _NEAR_DATE.search(text))
 
 
@@ -127,12 +141,15 @@ def extract_goals(message: str) -> list[StatedGoal]:
     matches = list(_QUANTITY.finditer(text))
     goals: dict[str, StatedGoal] = {}
     for index, match in enumerate(matches):
-        # The scope is read from this quantity's own stretch of text, so "100 km
-        # a week and 3000 hm in one ride" is one weekly and one single-ride goal.
-        # The first stretch includes the words before it ("pro Woche 10000 hm").
-        start = 0 if index == 0 else match.start()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        scope = WEEK if _WEEK.search(text[start:end]) else RIDE
+        # The scope is read from the words next to this number only, never
+        # across another number: "100 km a week and 3000 hm in one ride" is one
+        # weekly and one single-ride goal, and "pro Woche 10000 hm" is weekly.
+        low_edge = matches[index - 1].end() if index else 0
+        high_edge = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        near = text[
+            max(low_edge, match.start() - _SCOPE_REACH) : min(high_edge, match.end() + _SCOPE_REACH)
+        ]
+        scope = WEEK if _WEEK.search(near) and not _RIDE.search(near) else RIDE
         value = _parse_number(match.group(1))
         if value is None:
             continue
