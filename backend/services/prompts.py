@@ -38,6 +38,7 @@ from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
+from .dates import app_today
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -1069,12 +1070,62 @@ def race_events_context_section(race_events: list[dict] | None) -> str:
     return "\n".join(lines)
 
 
-def race_profile_context_section(profile: dict) -> str:
+_RACE_FIELDS = ("raceDate", "race_date", "raceDescription", "race_description")
+
+
+def _past_profile_race(profile: dict, today: date | None) -> date | None:
+    """The profile's race date when that race has already been run."""
+    raw = profile.get("raceDate") or profile.get("race_date")
+    if not raw:
+        return None
+    try:
+        raced = date.fromisoformat(str(raw)[:10])
+    except ValueError:
+        return None
+    return raced if raced < (today or app_today()) else None
+
+
+def prompt_profile(profile: dict, today: date | None = None) -> dict:
+    """The profile as a prompt should show it: a race already run is history.
+
+    The setup form's race stays on the account after race day. Rendered as is,
+    ``trainingGoal: race`` with a May date read to the model as next May's race,
+    and for five months the coach and the nightly run planned toward "your
+    80 km race in May" for an athlete who had raced it and said there was no
+    race (ai-trainer-ops#71). A past race moves to ``lastRace``; the goal says
+    there is none ahead. Race events are separate and already future-only.
+    """
+    raced = _past_profile_race(profile, today)
+    if raced is None:
+        return profile
+    shown = {key: value for key, value in profile.items() if key not in _RACE_FIELDS}
+    if (profile.get("trainingGoal") or profile.get("training_goal")) == "race":
+        shown.pop("training_goal", None)
+        shown["trainingGoal"] = "no upcoming race in the profile"
+    shown["lastRace"] = {
+        "date": raced.isoformat(),
+        "description": profile.get("raceDescription")
+        or profile.get("race_description"),
+    }
+    return shown
+
+
+def race_profile_context_section(profile: dict, today: date | None = None) -> str:
     """Return race context from the profile when a race was entered during setup."""
     race_date = profile.get("raceDate") or profile.get("race_date")
     race_description = profile.get("raceDescription") or profile.get("race_description")
     if not race_date and not race_description:
         return ""
+
+    raced = _past_profile_race(profile, today)
+    if raced is not None:
+        what = f" ({untrusted_text.mark(race_description)})" if race_description else ""
+        return (
+            "Profile race context:\n"
+            f"- Past race: {raced.isoformat()}{what}. It has already been run. "
+            "There is no upcoming race in the profile: do not plan toward this one, "
+            "taper for it, or speak of it as ahead."
+        )
 
     lines = [
         "Profile race context:",
@@ -1101,7 +1152,11 @@ def generate_plan_user(
     athlete_model_section: str = "",
     timezone_name: str | None = None,
 ) -> str:
-    race_profile_section = race_profile_context_section(profile)
+    try:
+        plan_today: date | None = date.fromisoformat(today[:10])
+    except ValueError:
+        plan_today = None  # the calendar section already copes; race context uses the app's today
+    race_profile_section = race_profile_context_section(profile, plan_today)
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     weather_section = f"\n{weather_context_section}" if weather_context_section else ""
@@ -1109,7 +1164,7 @@ def generate_plan_user(
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
-        f"Profile: {untrusted_text.marked_json(profile)}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
+        f"Profile: {untrusted_text.marked_json(prompt_profile(profile, plan_today))}{race_profile_section}{assessment_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}\n"
         f"Generate a {PLAN_HORIZON_DAYS}-day training plan starting from today that reflects "
         "the athlete's actual fitness level from recent rides and any upcoming race context."
     )
@@ -1248,7 +1303,7 @@ def adapt_plan_user(
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
-        f"Profile: {untrusted_text.marked_json(profile)}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
+        f"Profile: {untrusted_text.marked_json(prompt_profile(profile))}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {untrusted_text.marked_json(recent_feedback)}\n"
         f"Remaining plan days: {untrusted_text.marked_json(annotated_days)}"
         f"{history_section}{coherence_warnings}{commitments_section}\n"
@@ -1339,7 +1394,7 @@ def plan_change_summary_user(
     )
     return (
         f"Context: {run_context}\n"
-        f"Athlete profile: {untrusted_text.marked_json(profile)}"
+        f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}"
         f"{assessment_section}{load_section}{weather_section}\n"
         f"{athlete_language_section(language_samples)}"
         "Changes you just made (old → new):\n"
@@ -2841,7 +2896,7 @@ def ask_trainer_system_sections(
             f"Today's date: {today}\n"
             f"{date_context}\n"
         ),
-        "profile": f"Athlete profile: {untrusted_text.marked_json(profile)}\n",
+        "profile": f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}\n",
         "race-profile": race_profile_section,
         "plan-past": (
             "Last 7 days of training (historical context, not upcoming): "
@@ -3819,7 +3874,7 @@ def rate_workout_user(
     }
 
     profile_section = (
-        f"\n\nAthlete profile: {untrusted_text.marked_json(profile)}" if profile else ""
+        f"\n\nAthlete profile: {untrusted_text.marked_json(prompt_profile(profile))}" if profile else ""
     )
 
     # --- Strava stream delta section ---
@@ -4890,7 +4945,7 @@ def batch_review_user(
     """
     date_context = app_date_context(timezone_name=timezone_name)
     profile_section = (
-        f"\nAthlete profile: {untrusted_text.marked_json(profile)}" if profile else ""
+        f"\nAthlete profile: {untrusted_text.marked_json(prompt_profile(profile))}" if profile else ""
     )
 
     plan_section = ""
@@ -5057,7 +5112,7 @@ def next_ride_recommendation_user(
 
     if profile:
         athlete_context_parts.append(
-            f"Athlete profile: {untrusted_text.marked_json(profile)}"
+            f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}"
         )
 
     if rider_assessment:
