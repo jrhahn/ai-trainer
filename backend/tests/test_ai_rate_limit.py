@@ -492,7 +492,7 @@ async def test_an_over_budget_request_answers_402_not_429(
     detail = response.json()["detail"]
     # What to do about it, in words the athlete can act on (ai-trainer-ops#79).
     assert "free coaching allowance" in detail
-    assert "own Gemini key" in detail
+    assert "own AI key" in detail
     # Not the rate limit: no Retry-After, because there is nothing to retry into.
     assert "Retry-After" not in response.headers
 

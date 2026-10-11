@@ -91,10 +91,10 @@ class TokenBudgetExceededError(Exception):
         self.window_days = window_days
         super().__init__(
             f"You have used the free coaching allowance: {spent:,} of {budget:,} "
-            f"tokens in the last {window_days} days. Add your own Gemini key in "
-            f"Settings to keep going without a limit, or get in touch with whoever "
-            f"runs this coach. The allowance frees up again as older usage ages "
-            f"out of the {window_days}-day window."
+            f"tokens in the last {window_days} days. Add your own AI key (Gemini "
+            f"or OpenAI) in Settings to keep going without a limit, or get in "
+            f"touch with whoever runs this coach. The allowance frees up again as "
+            f"older usage ages out of the {window_days}-day window."
         )
 
 
