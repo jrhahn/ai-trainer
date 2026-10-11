@@ -137,6 +137,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A race already run is history, not next year's target** (ai-trainer-ops#71) —
+  `services/prompts.py`.
+  - The setup form's race stays on the account after race day. Every coach
+    prompt dumped the profile as is (`trainingGoal: race`, a May date), and
+    `race_profile_context_section` told the model to "use this for
+    race-specific preparation and taper timing". For five months the coach and
+    the nightly run planned toward "your 80 km race in May" for an athlete who
+    had raced it in May and said there was no race.
+  - `prompt_profile` now moves a past race to `lastRace` in every prompt that
+    dumps the profile, and a `race` goal reads "no upcoming race in the
+    profile". The race section names it as a past race not to plan toward.
+    Race day itself and later dates are unchanged.
+  - Tests: `tests/test_past_race_profile.py`.
 - **The acknowledgement after answering a coach question is in the athlete's
   language** (ai-trainer-ops#74) — `services/prompts.evaluate_inquiry_answer_system`.
   #658 put the language rule on every athlete-facing prompt but this one, so a
