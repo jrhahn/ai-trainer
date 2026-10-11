@@ -156,6 +156,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach is told which language the athlete writes** (ai-trainer-ops#78) —
+  `services/athlete_language.py`, `services/prompts.py`, `services/ai_service.py`.
+  - With only the general rule ("infer the athlete's language from their
+    words") and one short German question in a 16k-token English prompt, the
+    model answered in English. The first real scenario run showed it twice.
+  - The chat route now counts German and English function words in the
+    message, and in earlier athlete messages if the message is too short.
+    The output contract then names the result: "The athlete writes German:
+    write "response" in German". Any other language is left to the general
+    rule.
+  - Tests: `tests/test_athlete_language.py`.
 - **Coach scenarios show the model the days they are about**
   (ai-trainer-ops#76) — `scripts/coach_scenarios.py`.
   - On the first run against the real model, two scenarios appended their

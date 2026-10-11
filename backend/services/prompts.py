@@ -2816,6 +2816,7 @@ def ask_trainer_system_sections(
     plan_changes_section: str = "",
     plan_coherence_warnings: str = "",
     plan_commitment_notes: str = "",
+    reply_language: str | None = None,
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -2954,6 +2955,13 @@ def ask_trainer_system_sections(
     # the cached prefix.  The weather rules join it here because they are
     # conditional, and the reasoning framework because its second step depends on
     # whether ride metrics exist.
+    # Named, not left to inference: the model answered German questions in
+    # English with the general rule alone (ai-trainer-ops#78).
+    named_language = (
+        f" The athlete writes {reply_language}: write \"response\" in {reply_language}."
+        if reply_language
+        else ""
+    )
     closing_instructions = (
         f"{weather_instructions}"
         "\n\nBefore writing your response, reason through: "
@@ -2973,7 +2981,7 @@ def ask_trainer_system_sections(
         # last, and language is an output property like any other: stated only up
         # front, 187 of 251 chat replies came back in English anyway (#658).
         '- "response": your natural language answer as a string (required). '
-        f"{ATHLETE_LANGUAGE_RULE}\n"
+        f"{ATHLETE_LANGUAGE_RULE}{named_language}\n"
         '- "physiologyRationale": one short phrase capturing what the load/freshness/fatigue '
         "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
