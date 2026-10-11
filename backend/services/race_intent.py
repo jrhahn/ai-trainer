@@ -25,10 +25,21 @@ _NO_RACE = re.compile(
 )
 
 
+# "No race pace this week", "no race this weekend": training talk about the
+# next days, not the season's race. Clearing deletes calendar races, so these
+# must not even propose it.
+_NOT_THE_SEASON = re.compile(
+    r"\brace\s+(?:pace|day|week|weekend|prep|bike|wheels?|tyres?|tires?)\b"
+    r"|\b(?:this|next)\s+(?:week|weekend)\b|\b(?:today|tomorrow|tonight)\b"
+    r"|\b(?:heute|morgen|diese[ns]?\s+woche|(?:am|dieses?)\s+wochenende)\b",
+    re.IGNORECASE,
+)
+
+
 def says_no_race(message: str) -> bool:
     """A statement (not a question) that the athlete has no race ahead."""
     for sentence in re.split(r"(?<=[.!?\n])", message):
-        if sentence.rstrip().endswith("?"):
+        if sentence.rstrip().endswith("?") or _NOT_THE_SEASON.search(sentence):
             continue
         if _NO_RACE.search(sentence):
             return True

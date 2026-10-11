@@ -55,7 +55,7 @@ from services.analysis import (
 )
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.fitness_ledger import ledger_from_metric
-from services.dates import app_today_iso
+from services.dates import app_today_iso, request_timezone
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
 from services.ride_matching import apply_ride_plan_matches
@@ -1021,6 +1021,7 @@ async def remove_goal(
 
 @router.post("/race/clear")
 async def clear_profile_race(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
@@ -1031,7 +1032,8 @@ async def clear_profile_race(
     the next race-event sync, so upcoming calendar races go too; past ones stay
     as history. The sync then rewrites the coach memory's race section.
     """
-    today = app_today_iso()
+    # The athlete's day, the same one the chat used to count the races it named.
+    today = app_today_iso(timezone_name=request_timezone(request))
     removed = 0
     for event in await crud.get_race_events(db, current_user.id):
         if event.date >= today:
