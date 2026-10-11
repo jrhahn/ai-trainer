@@ -18,6 +18,7 @@ from services.prompts import (
     athlete_language_section,
     batch_review_system,
     coach_static_prefix,
+    evaluate_inquiry_answer_system,
     generate_inquiries_system,
     next_ride_recommendation_system,
     plan_change_summary_system,
@@ -182,6 +183,9 @@ def test_all_athlete_facing_prompts_state_the_language_rule():
         process_pending_feedbacks_system(),
         next_ride_recommendation_system(),
         generate_inquiries_system(3),
+        # The acknowledgement after the athlete answers one (ai-trainer-ops#74).
+        evaluate_inquiry_answer_system(is_final_attempt=False),
+        evaluate_inquiry_answer_system(is_final_attempt=True),
     ):
         assert ATHLETE_LANGUAGE_RULE in prompt
 
@@ -231,3 +235,10 @@ async def test_an_athlete_who_never_wrote_anything_yields_no_samples():
 
     async with TestSessionLocal() as db:
         assert await crud.get_recent_athlete_messages(db, user_id) == []
+
+
+def test_the_inquiry_acknowledgement_keeps_the_stored_fact_in_english():
+    prompt = evaluate_inquiry_answer_system(is_final_attempt=False)
+
+    assert "write 'reply' and 'question' in it" in prompt
+    assert "Write 'fact' in English" in prompt
