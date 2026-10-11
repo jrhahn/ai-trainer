@@ -108,3 +108,53 @@ async def test_restating_the_current_ftp_writes_nothing_and_says_nothing(
     async with TestSessionLocal() as db:
         assert (await db.scalar(select(models.User))).current_ftp == current
     assert "set your FTP" not in response.json()["response"]
+
+
+@pytest.mark.asyncio
+async def test_the_note_speaks_the_athletes_language(client, auth_headers, mock_ai_service):
+    # The owner's message of 2026-10-11 got an English note under a German reply.
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Mein FTP liegt so bei 300W"},
+    )
+
+    reply = response.json()["response"]
+    assert "Ich habe deine FTP auf 300 W gesetzt" in reply
+    assert "Note:" not in reply
+
+
+def test_the_router_notes_have_a_german_form():
+    from routers import ai as ai_router
+
+    blocked = [
+        {"constraintType": "no_training", "weekday": "friday"},
+        {"constraintType": "required_workout", "weekday": "saturday"},
+    ]
+    override = ai_router._format_constraint_override_note(blocked, german=True)
+    assert override.startswith("(Hinweis: ")
+    assert "Samstag konnte ich nicht ändern" in override
+    assert "Für Freitag konnte ich kein Training einplanen" in override
+    lifted = ai_router._format_constraint_lift_note([{"date": "2026-10-12"}], german=True)
+    assert "Verfügbarkeitsvorgabe für 2026-10-12 aufgehoben" in lifted
+    assert ai_router._day_label({}, german=True) == "diesen Tag"
+    assert "Trainingsort auf Darmstadt" in ai_router._location_note("Darmstadt", german=True)
+    assert "2026-11-30 konnte ich nicht ändern" in ai_router._unresolved_dates_note(
+        "2026-11-30", german=True
+    )
+    assert "I could not update 2026-11-30" in ai_router._unresolved_dates_note(
+        "2026-11-30", german=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_undetermined_language_keeps_the_english_note(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "FTP: my FTP 310W"},
+    )
+
+    assert "I've set your FTP to 310 W" in response.json()["response"]

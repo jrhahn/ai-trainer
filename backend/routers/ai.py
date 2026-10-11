@@ -26,6 +26,7 @@ from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
 from services import goal_progress, plan_context, race_intent, stated_ftp
+from services.athlete_language import athlete_language
 from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
@@ -290,9 +291,10 @@ async def _capture_self_reported_signals_from_message(
       becomes evidence on the athlete's motivation model — what the training is
       actually for.
 
-    Returns a deterministic confirmation note when the location moved — the honest
-    record of what the backend actually did, independent of the model's prose (the
-    same contract as the availability-constraint lift note, #437).
+    Returns the new training location's label when it moved, for the
+    deterministic confirmation note — the honest record of what the backend
+    actually did, independent of the model's prose (the same contract as the
+    availability-constraint lift note, #437).
     """
     try:
         await weather_preference.capture_weather_preferences_from_message(
@@ -344,16 +346,12 @@ async def _capture_self_reported_signals_from_message(
 
     # A new base invalidates the cached forecast for the old one.
     clear_forecast_cache()
-    where = row.label or f"{row.latitude:.2f}, {row.longitude:.2f}"
-    return (
-        f"(Note: I've set your usual training location to {where}, so your weather "
-        f"outlook and any weather-driven plan changes now use that.)"
-    ), captured_goals
+    return row.label or f"{row.latitude:.2f}, {row.longitude:.2f}", captured_goals
 
 
 async def _capture_stated_ftp(
     db: AsyncSession, user: models.User, message: str
-) -> str | None:
+) -> int | None:
     """Set the FTP the athlete states in chat, and say so (ai-trainer-ops#70).
 
     Runs before the profile is read, so this very turn's zones already use it.
@@ -370,9 +368,56 @@ async def _capture_stated_ftp(
     except Exception:
         logger.warning("Stated-FTP capture failed", exc_info=True)
         return None
+    return watts
+
+
+# The router's own notes under a coach reply, in the athlete's language: an
+# English "(Note: …)" under a German reply read as a system message, not as
+# the coach (ai-trainer-ops#74 follow-up).
+_GERMAN_WEEKDAYS = {
+    "monday": "Montag",
+    "tuesday": "Dienstag",
+    "wednesday": "Mittwoch",
+    "thursday": "Donnerstag",
+    "friday": "Freitag",
+    "saturday": "Samstag",
+    "sunday": "Sonntag",
+}
+
+
+def _location_note(where: str, german: bool) -> str:
+    if german:
+        return (
+            f"(Hinweis: Ich habe deinen üblichen Trainingsort auf {where} gesetzt. "
+            f"Wetter und wetterbedingte Planänderungen richten sich jetzt danach.)"
+        )
+    return (
+        f"(Note: I've set your usual training location to {where}, so your weather "
+        f"outlook and any weather-driven plan changes now use that.)"
+    )
+
+
+def _ftp_note(watts: int, german: bool) -> str:
+    if german:
+        return (
+            f"(Hinweis: Ich habe deine FTP auf {watts} W gesetzt. Zonen und "
+            f"Wattvorgaben nutzen sie ab jetzt. Vergangene Fahrten behalten ihre Werte.)"
+        )
     return (
         f"(Note: I've set your FTP to {watts} W, so your zones and power targets "
         f"now use it. Past rides keep the values they were scored with.)"
+    )
+
+
+def _unresolved_dates_note(joined: str, german: bool) -> str:
+    if german:
+        return (
+            f"(Hinweis: {joined} konnte ich nicht ändern — der Tag gehört nicht "
+            f"zu deinem aktuellen Trainingsplan, es wurde nichts gespeichert.)"
+        )
+    return (
+        f"(Note: I could not update {joined} — that day is not part of your "
+        f"current training plan, so no change was saved.)"
     )
 
 
@@ -390,15 +435,17 @@ def _filter_plan_updates_for_availability_constraints(
     return filter_plan_updates_for_constraints(updates, constraints)
 
 
-def _day_label(override: dict) -> str:
+def _day_label(override: dict, german: bool = False) -> str:
     """Human-friendly day label for a constraint override note."""
     weekday = override.get("weekday")
     if weekday:
+        if german:
+            return _GERMAN_WEEKDAYS.get(str(weekday).lower(), str(weekday).capitalize())
         return str(weekday).capitalize()
-    return str(override.get("date") or "that day")
+    return str(override.get("date") or ("diesen Tag" if german else "that day"))
 
 
-def _format_constraint_override_note(overrides: list[dict]) -> str:
+def _format_constraint_override_note(overrides: list[dict], german: bool = False) -> str:
     """Compose an honest note about coach-requested changes a constraint blocked.
 
     The plan pipeline enforces hard availability constraints deterministically,
@@ -408,30 +455,48 @@ def _format_constraint_override_note(overrides: list[dict]) -> str:
     required = [o for o in overrides if o.get("constraintType") == "required_workout"]
     unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
     sentences: list[str] = []
-    if required:
+    if required and german:
+        days = ", ".join(_day_label(o, german) for o in required)
+        sentences.append(
+            f"{days} konnte ich nicht ändern: Eine deiner Verfügbarkeitsvorgaben legt "
+            f"dort eine Pflichteinheit fest, also bleibt der Plan so. Sag Bescheid, "
+            f"wenn ich die Vorgabe aufheben soll."
+        )
+    elif required:
         days = ", ".join(_day_label(o) for o in required)
         sentences.append(
             f"I couldn't change {days}: it's pinned as a required session by one of "
             f"your availability constraints, so the plan keeps it as-is. Let me know "
             f"if you'd like to lift that constraint."
         )
-    if unavailable:
+    if unavailable and german:
+        days = ", ".join(_day_label(o, german) for o in unavailable)
+        sentences.append(
+            f"Für {days} konnte ich kein Training einplanen: Eine deiner "
+            f"Verfügbarkeitsvorgaben markiert den Tag als nicht verfügbar."
+        )
+    elif unavailable:
         days = ", ".join(_day_label(o) for o in unavailable)
         sentences.append(
             f"I couldn't schedule training on {days}: it's marked unavailable by one "
             f"of your availability constraints."
         )
-    return "(Note: " + " ".join(sentences) + ")"
+    return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
 
 
-def _format_constraint_lift_note(lifted: list[dict]) -> str:
+def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> str:
     """Confirm, deterministically, which availability constraints were lifted.
 
     The lift is applied by the router before the plan pipeline runs, so this is
     the honest record of what happened — independent of whatever the model says
     in its prose (#437).
     """
-    days = ", ".join(_day_label(c) for c in lifted)
+    days = ", ".join(_day_label(c, german) for c in lifted)
+    if german:
+        return (
+            f"(Hinweis: Ich habe die Verfügbarkeitsvorgabe für {days} aufgehoben, "
+            f"der Plan lässt sich dort jetzt ändern.)"
+        )
     plural = "constraints" if len(lifted) > 1 else "constraint"
     return (
         f"(Note: I lifted the availability {plural} on {days}, so the plan can now "
@@ -1066,7 +1131,7 @@ async def ask_trainer(
     # Load state from DB
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    ftp_note = await _capture_stated_ftp(db, current_user, body.question)
+    stated_ftp_watts = await _capture_stated_ftp(db, current_user, body.question)
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
@@ -1078,7 +1143,7 @@ async def ask_trainer(
     )
     # Capture weather self-reports before the forecast is read, so a location the
     # athlete states in this very message anchors this turn's outlook (#495).
-    home_location_note, captured_goals = (
+    new_location, captured_goals = (
         await _capture_self_reported_signals_from_message(
             db, current_user.id, body.question
         )
@@ -1230,6 +1295,14 @@ async def ask_trainer(
             logger.warning("Rider-identity read failed", exc_info=True)
 
     chat_messages = await crud.get_chat_messages(db, current_user.id)
+    # The language the router's own notes are written in (see _ftp_note).
+    notes_in_german = (
+        athlete_language(
+            body.question,
+            [m.content for m in chat_messages if m.role == "user"][-5:],
+        )
+        == "German"
+    )
     conversation_history = [
         {"role": msg.role, "content": msg.content}
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
@@ -1370,9 +1443,7 @@ async def ask_trainer(
         if unresolved_dates:
             joined = ", ".join(unresolved_dates)
             result["response"] = (
-                f"{result['response']}\n\n"
-                f"(Note: I could not update {joined} — that day is not part of your "
-                f"current training plan, so no change was saved.)"
+                f"{result['response']}\n\n{_unresolved_dates_note(joined, notes_in_german)}"
             )
             plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
 
@@ -1391,7 +1462,7 @@ async def ask_trainer(
         )
         if overrides:
             result["response"] = (
-                f"{result['response']}\n\n{_format_constraint_override_note(overrides)}"
+                f"{result['response']}\n\n{_format_constraint_override_note(overrides, notes_in_german)}"
             )
             # Remember which constraints blocked this turn so a follow-up "lift
             # that constraint" can resolve "that" to them (#437).
@@ -1403,15 +1474,19 @@ async def ask_trainer(
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
         result["response"] = (
-            f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints)}"
+            f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints, notes_in_german)}"
         )
 
     # Coach honesty: the training location was moved by the router, before the model
     # replied, so confirm it deterministically rather than hoping the prose does (#495).
-    if home_location_note:
-        result["response"] = f"{result['response']}\n\n{home_location_note}"
-    if ftp_note:
-        result["response"] = f"{result['response']}\n\n{ftp_note}"
+    if new_location:
+        result["response"] = (
+            f"{result['response']}\n\n{_location_note(new_location, notes_in_german)}"
+        )
+    if stated_ftp_watts:
+        result["response"] = (
+            f"{result['response']}\n\n{_ftp_note(stated_ftp_watts, notes_in_german)}"
+        )
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
