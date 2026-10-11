@@ -92,6 +92,10 @@ async def fetch_recent_activities(
             "average_heartrate",
             "average_cadence",
             "distance",
+            # Climbing for goal progress (ai-trainer-ops#65). Every field must be
+            # named here: the backfill of 2026-10-11 filled distance on 76 rides
+            # and elevation on none, because this list left it out.
+            "total_elevation_gain",
             "start_latlng",
         )
     )
