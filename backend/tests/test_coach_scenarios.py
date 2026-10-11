@@ -217,3 +217,23 @@ async def test_a_claimed_change_without_the_change_fails(
 
 def test_a_set_of_intervals_is_not_a_claimed_change():
     assert not cs._CLAIMED_CHANGE.search("Do a set of intervals and set up the bike.")
+
+
+def test_every_scenario_plan_is_in_date_order_with_one_day_per_date():
+    # ask_trainer reads the next days in list order; an appended day fell out
+    # of its window on the first real run.
+    for scenario in cs.scenarios(TODAY):
+        dates = [day["date"] for day in scenario.plan]
+        assert dates == sorted(dates), scenario.name
+        assert len(dates) == len(set(dates)), scenario.name
+
+
+def test_mountain_bike_in_two_words_counts_as_the_mtb():
+    [check] = [
+        c
+        for label, c in next(
+            s for s in cs.scenarios(TODAY) if s.name == "trail-motivation"
+        ).checks
+        if label == "recommends the MTB"
+    ]
+    assert check(cs.Result("Take the mountain bike today, not the road bike.", []))
