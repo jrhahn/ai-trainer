@@ -106,7 +106,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         detail: { path, requestId: serverRequestId },
       }))
     }
-    throw new Error(message)
+    // The status rides along so a caller can tell an exhausted allowance (402)
+    // from a failure (ai-trainer-ops#79); the message stays the server's words.
+    throw Object.assign(new Error(message), { status: response.status })
   }
 
   if (response.status === 204) {

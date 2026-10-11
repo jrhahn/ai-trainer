@@ -489,7 +489,10 @@ async def test_an_over_budget_request_answers_402_not_429(
     )
 
     assert response.status_code == 402, response.text
-    assert "budget" in response.json()["detail"].lower()
+    detail = response.json()["detail"]
+    # What to do about it, in words the athlete can act on (ai-trainer-ops#79).
+    assert "free coaching allowance" in detail
+    assert "own Gemini key" in detail
     # Not the rate limit: no Retry-After, because there is nothing to retry into.
     assert "Retry-After" not in response.headers
 
@@ -538,3 +541,51 @@ async def test_the_budget_is_enforced_by_the_usage_scope_itself(
             entered = True
 
     assert not entered, "the budget was checked after the block had already run"
+
+
+
+# ---------------------------------------------------------------------------
+# The free tier rations the owner's key only (ai-trainer-ops#79)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_athlete_with_their_own_key_is_never_limited(db, budget_user, monkeypatch):
+    monkeypatch.setattr(settings, "ai_token_budget", 1000)
+    budget_user.ai_provider = "gemini"
+    budget_user.user_gemini_api_key = "own-key"
+    await _record_spend(db, budget_user.id, tokens=50_000)
+
+    await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+
+
+@pytest.mark.asyncio
+async def test_settings_show_the_allowance_while_the_owner_pays(
+    client: AsyncClient, auth_headers, db: AsyncSession, monkeypatch
+):
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    monkeypatch.setattr(settings, "ai_token_budget", 5_000_000)
+    await _record_spend(db, me.json()["id"], tokens=1_234)
+    await db.commit()
+
+    status = (await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)).json()
+
+    assert status["allowanceTokens"] == 5_000_000
+    assert status["allowanceUsed"] == 1_234
+    assert status["allowanceWindowDays"] == 30
+
+
+@pytest.mark.asyncio
+async def test_settings_show_no_allowance_with_an_own_key(
+    client: AsyncClient, auth_headers, db: AsyncSession, monkeypatch
+):
+    monkeypatch.setattr(settings, "ai_token_budget", 5_000_000)
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    user = await db.get(models.User, me.json()["id"])
+    user.ai_provider = "gemini"
+    user.user_gemini_api_key = "own-key"
+    await db.commit()
+
+    status = (await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)).json()
+
+    assert status["allowanceTokens"] is None

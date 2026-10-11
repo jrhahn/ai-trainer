@@ -1784,18 +1784,44 @@ async def export_memory(
     )
 
 
-@router.get("/ai-key/status", response_model=schemas.AIKeyStatusSchema)
-async def get_ai_key_status(
-    current_user: models.User = Depends(auth.get_current_user),
+async def _ai_key_status(
+    db: AsyncSession, user: models.User
 ) -> schemas.AIKeyStatusSchema:
+    """The athlete's key situation, and how much of the free allowance is used.
+
+    The allowance (ai-trainer-ops#79) applies only while the owner's key pays;
+    with their own key, or with no budget configured, it is ``None``.
+    """
+    limited = settings.ai_token_budget > 0 and llm_service.pays_with_admin_key(user)
+    used = (
+        await crud.sum_user_tokens_since(
+            db,
+            user.id,
+            datetime.now(timezone.utc)
+            - timedelta(days=settings.ai_token_budget_window_days),
+        )
+        if limited
+        else 0
+    )
     return schemas.AIKeyStatusSchema(
-        provider=current_user.ai_provider or "gemini",
-        has_openai_key=bool(current_user.user_openai_api_key),
-        has_gemini_key=bool(current_user.user_gemini_api_key),
+        provider=user.ai_provider or "gemini",
+        has_openai_key=bool(user.user_openai_api_key),
+        has_gemini_key=bool(user.user_gemini_api_key),
         openai_model=settings.openai_coach_model,
         gemini_model=settings.gemini_coach_model,
-        key_required=llm_service.user_must_supply_own_key(current_user),
+        key_required=llm_service.user_must_supply_own_key(user),
+        allowance_tokens=settings.ai_token_budget if limited else None,
+        allowance_used=used,
+        allowance_window_days=settings.ai_token_budget_window_days,
     )
+
+
+@router.get("/ai-key/status", response_model=schemas.AIKeyStatusSchema)
+async def get_ai_key_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.AIKeyStatusSchema:
+    return await _ai_key_status(db, current_user)
 
 
 @router.put("/ai-key", response_model=schemas.AIKeyStatusSchema)
@@ -1818,14 +1844,7 @@ async def save_ai_key(
     # Recomputed rather than assumed False: the key just saved may be for a
     # provider this deployment cannot reach, and the caller is about to decide
     # whether onboarding may continue.
-    return schemas.AIKeyStatusSchema(
-        provider=current_user.ai_provider,
-        has_openai_key=bool(current_user.user_openai_api_key),
-        has_gemini_key=bool(current_user.user_gemini_api_key),
-        openai_model=settings.openai_coach_model,
-        gemini_model=settings.gemini_coach_model,
-        key_required=llm_service.user_must_supply_own_key(current_user),
-    )
+    return await _ai_key_status(db, current_user)
 
 
 @router.delete("/ai-key", status_code=status.HTTP_204_NO_CONTENT)

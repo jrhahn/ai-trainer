@@ -57,6 +57,23 @@ describe('AIKeySettings', () => {
     expect(screen.getByRole('button', { name: /Remove key/ })).toBeInTheDocument()
   })
 
+  it('shows the free allowance while the owner pays (ai-trainer-ops#79)', async () => {
+    mockFetchStatus.mockResolvedValue(
+      status({ allowanceTokens: 5_000_000, allowanceUsed: 1_250_000, allowanceWindowDays: 30 }),
+    )
+    renderComponent()
+    expect(await screen.findByTestId('free-allowance')).toHaveTextContent(
+      /1,250k of 5,000k tokens used in the last 30 days/,
+    )
+  })
+
+  it('shows no allowance with an own key', async () => {
+    mockFetchStatus.mockResolvedValue(status({ hasGeminiKey: true, hasOpenaiKey: true, allowanceTokens: null }))
+    renderComponent()
+    await screen.findByText('Key saved')
+    expect(screen.queryByTestId('free-allowance')).not.toBeInTheDocument()
+  })
+
   it('disables Test and Save while the input is empty', async () => {
     renderComponent()
     await screen.findByText('No key saved')

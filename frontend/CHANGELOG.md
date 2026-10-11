@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The free allowance, visible and explained** (ai-trainer-ops#79) —
+  `components/AIKeySettings.tsx`, `components/AIChat.tsx`, `services/api.ts`.
+  - Settings shows "Free coaching allowance: 1,250k of 5,000k tokens used in
+    the last 30 days. With your own key there is no limit." while the owner's
+    key pays.
+  - When the allowance is spent, the chat shows the server's explanation and
+    where to add a key, instead of "Sorry, something went wrong".
+  - `apiFetch` errors now carry the HTTP `status`.
+
 - **Keep or undo what the coach just noted** (ai-trainer-ops#65, #71) —
   `components/ReplyConfirmations.tsx`, `components/AIChat.tsx`.
   - Under a coach reply that stored a goal, the athlete sees "Goal noted: 4,000

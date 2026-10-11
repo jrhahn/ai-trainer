@@ -761,6 +761,19 @@ def user_must_supply_own_key(user: models.User) -> bool:
     )
 
 
+def pays_with_admin_key(user: models.User) -> bool:
+    """Whether *user*'s AI calls are paid by the backend owner's key (ops#79).
+
+    The free-tier budget rations exactly that: an athlete with their own key for
+    the provider they are routed to spends their own money and is never limited.
+    """
+    if stub_is_active():
+        return False
+    provider = resolve_user_provider(user)
+    own = user.user_gemini_api_key if provider == "gemini" else user.user_openai_api_key
+    return not own
+
+
 def resolve_user_provider(user: models.User) -> str:
     """Return the AI provider name to use for *user*.
 

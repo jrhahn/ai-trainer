@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The free allowance rations the owner's key only** (ai-trainer-ops#79) —
+  `services/llm.pays_with_admin_key`, `services/token_accounting.py`,
+  `routers/users.py`.
+  - `ai_token_budget` now applies only while the backend owner's key pays.
+    An athlete with their own key for the provider they use is never limited.
+  - The 402 says what to do: "You have used the free coaching allowance … Add
+    your own Gemini key in Settings to keep going without a limit, or get in
+    touch with whoever runs this coach."
+  - `GET /users/me/ai-key/status` (and the `PUT` that answers with it) adds
+    `allowanceTokens` (`null` when unlimited), `allowanceUsed` and
+    `allowanceWindowDays`.
+  - Tests: `tests/test_ai_rate_limit.py`.
+
 - **Confirm what the chat captured or proposes** (ai-trainer-ops#65, #71) —
   `services/race_intent.py`, `routers/ai.py`, `routers/users.py`, `crud.remove_goal`.
   - `ask-trainer` now returns `capturedGoals` (id and label of each goal this
