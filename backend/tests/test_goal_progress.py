@@ -83,6 +83,14 @@ def test_each_measure_takes_its_own_scope():
         gp.extract_goal("My goal is 4000 hm in one ride, I train twice a week").scope
         == gp.RIDE
     )
+    assert gp.extract_goal("My goal is 4000 hm, I ride twice a week").scope == gp.RIDE
+    assert gp.extract_goal("Ich möchte 10000 hm pro Woche schaffen").scope == gp.WEEK
+
+
+def test_a_past_ride_in_the_same_message_keeps_the_goal_out():
+    """Deliberately the safe direction: a report anywhere means no goal is stored,
+    and the athlete can say the goal again on its own."""
+    assert gp.extract_goal("I did 3000 hm last week and now I want 4000 hm") is None
 
 
 def test_numbers_are_read_the_way_people_write_them():

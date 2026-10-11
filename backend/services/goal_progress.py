@@ -85,7 +85,19 @@ _RIDE = re.compile(
 # How far either side of a number its scope words are looked for. "4000 hm in
 # one ride, I train twice a week" must not become a weekly goal.
 _SCOPE_REACH = 30
-_WEEK = re.compile(r"\b(?:per week|a week|each week|weekly|pro woche|in der woche|wöchentlich|woechentlich)\b", re.IGNORECASE)
+# A weekly scope must be attached to the number: "100 km a week", "10000 hm pro
+# Woche", "pro Woche 10000 hm". A frequency elsewhere in the sentence ("I ride
+# twice a week") says how often they train, not what the goal is per.
+_WEEK_AFTER = re.compile(
+    r"\s*(?:\w+\s+)?(?:per week|a week|each week|every week|weekly|pro woche|"
+    r"in der woche|jede woche|wöchentlich|woechentlich)\b",
+    re.IGNORECASE,
+)
+_WEEK_BEFORE = re.compile(
+    r"(?:per week|each week|every week|weekly|pro woche|jede woche|wöchentlich|"
+    r"woechentlich)\s*[:,]?\s*$",
+    re.IGNORECASE,
+)
 _QUANTITY = re.compile(
     rf"{_NUMBER}\s*(?P<unit>{_ELEVATION_UNIT}|{_DISTANCE_UNIT})", re.IGNORECASE
 )
@@ -146,10 +158,10 @@ def extract_goals(message: str) -> list[StatedGoal]:
         # weekly and one single-ride goal, and "pro Woche 10000 hm" is weekly.
         low_edge = matches[index - 1].end() if index else 0
         high_edge = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        near = text[
-            max(low_edge, match.start() - _SCOPE_REACH) : min(high_edge, match.end() + _SCOPE_REACH)
-        ]
-        scope = WEEK if _WEEK.search(near) and not _RIDE.search(near) else RIDE
+        before = text[max(low_edge, match.start() - _SCOPE_REACH) : match.start()]
+        after = text[match.end() : min(high_edge, match.end() + _SCOPE_REACH)]
+        weekly = _WEEK_AFTER.match(after) or _WEEK_BEFORE.search(before)
+        scope = WEEK if weekly and not _RIDE.search(before + after) else RIDE
         value = _parse_number(match.group(1))
         if value is None:
             continue
