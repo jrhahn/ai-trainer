@@ -99,7 +99,8 @@ _ENGLISH_WORDS = frozenset(
     ]
 )
 _CLAIMED_CHANGE = re.compile(
-    r"\b(?:habe|hab ich|ich hab|i've|i have|updated|angepasst|eingetragen|umgestellt|geändert|moved|changed|set)\b",
+    r"\b(?:habe|hab ich|ich hab|i've|i have|updated|angepasst|eingetragen|umgestellt|"
+    r"geändert|gestellt|verschoben|gemacht|moved|changed)\b",
     re.IGNORECASE,
 )
 
@@ -391,6 +392,10 @@ async def run(
 ) -> list[tuple[Scenario, Result | None, list[str], str]]:
     """Ask each scenario once; return the scenario, its result, failed checks, error."""
     today = today or app_today()
+    names = [scenario.name for scenario in scenarios(today)]
+    if only and only not in names:
+        # A typo must not read as a clean run of nothing.
+        raise ValueError(f"no scenario named {only!r}; choose from {', '.join(names)}")
     outcomes = []
     for scenario in scenarios(today):
         if only and scenario.name != only:
@@ -457,7 +462,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", default="gemini")
     parser.add_argument("--only", help="run one scenario by name")
     args = parser.parse_args(argv)
-    print(render(asyncio.run(run(args.provider, args.only))))
+    try:
+        outcomes = asyncio.run(run(args.provider, args.only))
+    except ValueError as error:
+        parser.error(str(error))
+    print(render(outcomes))
     return 0
 
 

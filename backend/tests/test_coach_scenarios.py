@@ -169,3 +169,51 @@ async def test_the_trail_scenario_sends_its_objective_where_production_does(
     await cs.run("gemini", only="trail-motivation", today=TODAY)
 
     assert "trails" in seen["motivation_model"]["primary_objective"]
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_scenario_name_is_an_error_not_an_empty_pass():
+    with pytest.raises(ValueError, match="no scenario named 'past-rcae'"):
+        await cs.run("gemini", only="past-rcae", today=TODAY)
+
+
+def test_the_cli_rejects_an_unknown_name():
+    with pytest.raises(SystemExit) as exit_info:
+        cs.main(["--only", "nope"])
+    assert exit_info.value.code == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reply, updates, failing",
+    [
+        # The chat's failure: a change announced, none made.
+        (
+            "Ich habe den Freitag auf Ruhetag gestellt.",
+            [],
+            "claims a change only alongside one",
+        ),
+        (
+            "Ich habe das angepasst.",
+            [{"date": TOMORROW, "workoutType": "rest"}],
+            "makes Friday a rest day in the plan update",
+        ),
+    ],
+)
+async def test_a_claimed_change_without_the_change_fails(
+    monkeypatch, reply, updates, failing
+):
+    async def ask_trainer(*_args, **_kwargs):
+        return {"response": reply, "plan_updates": updates}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    [(_scenario, _result, failed, _error)] = await cs.run(
+        "gemini", only="claims-match-changes", today=TODAY
+    )
+
+    assert failing in failed
+
+
+def test_a_set_of_intervals_is_not_a_claimed_change():
+    assert not cs._CLAIMED_CHANGE.search("Do a set of intervals and set up the bike.")
