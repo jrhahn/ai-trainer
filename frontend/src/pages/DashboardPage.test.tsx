@@ -30,7 +30,9 @@ const {
   mockFetchMetrics,
   mockSaveWorkoutLog,
   mockRateCompletedWorkout,
+  mockFetchPredictions,
 } = vi.hoisted(() => ({
+  mockFetchPredictions: vi.fn(),
   mockSaveWorkoutLog: vi.fn(),
   mockRateCompletedWorkout: vi.fn(),
   mockDeleteManualActivity: vi.fn(),
@@ -61,6 +63,7 @@ vi.mock('../services/user', () => ({
   addManualActivity: vi.fn(),
   saveWorkoutLog: mockSaveWorkoutLog,
   fetchTrainingPlan: vi.fn().mockResolvedValue([]),
+  fetchAthletePredictions: mockFetchPredictions,
   saveTrainingPlan: vi.fn(),
 }))
 
@@ -877,9 +880,17 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
   })
 
   it('shows no empty "More" to an athlete without history', () => {
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 0, correct: 0 } })
     setupStore({ rideMetricsHistory: [] })
     const { container } = renderDashboard()
     expect(container.querySelector('details')).toBeNull()
+  })
+
+  it('keeps scored predictions reachable without other rides', async () => {
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 3, correct: 2 } })
+    setupStore({ rideMetricsHistory: [] })
+    const { container } = renderDashboard()
+    await waitFor(() => expect(container.querySelector('details')).not.toBeNull())
   })
 
   it('offers "Add activity" in the header, beside the greeting', () => {

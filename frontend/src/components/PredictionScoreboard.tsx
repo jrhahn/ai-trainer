@@ -1,8 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
 import { Target } from 'lucide-react'
-import { useAppStore } from '../store/useAppStore'
-import { fetchAthletePredictions } from '../services/user'
-import { ATHLETE_PREDICTIONS_QUERY_KEY } from './AthleteTraitsSettings'
+import { useScoredPredictions } from '../hooks/useScoredPredictions'
 
 /**
  * The coach's hit rate, with the misses one click away (ai-trainer-ops#16).
@@ -19,12 +16,7 @@ import { ATHLETE_PREDICTIONS_QUERY_KEY } from './AthleteTraitsSettings'
  * prediction right or wrong there refreshes this card too.
  */
 export default function PredictionScoreboard() {
-  const authToken = useAppStore((s) => s.authToken)
-  const { data } = useQuery({
-    queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY, authToken, 'resolved'],
-    queryFn: () => fetchAthletePredictions(authToken!, { includeResolved: true }),
-    enabled: !!authToken,
-  })
+  const { data } = useScoredPredictions()
 
   const accuracy = data?.accuracy
   // Nothing scored yet: a "0 of 0" card would only say the feature exists.
