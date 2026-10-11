@@ -32,6 +32,7 @@ from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
 from services import run_durability
+from services import zone_label
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
@@ -1009,6 +1010,11 @@ async def _enforce_and_persist(
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
+    # The words and the watts of a session must say the same thing (ops#75).
+    proposed_plan = [
+        zone_label.align_target_to_named_zone(day, user.current_ftp)
+        for day in proposed_plan
+    ]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
     current_row = await crud.get_training_plan(db, user.id)
     current_plan = current_row.plan if current_row is not None else []
