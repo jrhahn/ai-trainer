@@ -156,6 +156,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Short requests get their language named too** (ai-trainer-ops#78) —
+  `services/athlete_language.py`. "Bitte mach Freitag zum Ruhetag." had no
+  word from the lists, so no language was named and the reply came back in
+  English on the second scenario run. Common request words are added:
+  bitte, danke, zum, zur, mach…, lass, ja, nein; please, thanks, make, let,
+  yes.
+
 - **The coach is told which language the athlete writes** (ai-trainer-ops#78) —
   `services/athlete_language.py`, `services/prompts.py`, `services/ai_service.py`.
   - With only the general rule ("infer the athlete's language from their

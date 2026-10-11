@@ -89,3 +89,15 @@ def test_history_is_read_newest_first_and_stops_once_it_knows():
     ]
 
     assert athlete_language("ok", earlier) == "English"
+
+
+@pytest.mark.parametrize(
+    "message, language",
+    [
+        # The second scenario run: no word of this request was in the lists.
+        ("Bitte mach Freitag zum Ruhetag.", "German"),
+        ("Please make Friday a rest day.", "English"),
+    ],
+)
+def test_short_requests(message, language):
+    assert athlete_language(message) == language
