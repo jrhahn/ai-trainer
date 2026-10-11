@@ -55,6 +55,8 @@ export interface CapturedGoal {
 export interface RaceProposal {
   raceDate?: string | null
   raceDescription?: string | null
+  // Upcoming calendar races that clearing removes too.
+  calendarRaces?: number
 }
 
 export interface AskTrainerResult {

@@ -1024,17 +1024,26 @@ async def clear_profile_race(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    """Remove the setup form's race, after the athlete confirmed it in chat.
+    """Clear the race the athlete confirmed they no longer have.
 
     The confirm step the owner chose for "I have no race" (ai-trainer-ops#71,
-    #63 Q21). Race events are separate and stay; only the profile's race goes.
+    #63 Q21). The profile's race comes back from any upcoming calendar race on
+    the next race-event sync, so upcoming calendar races go too; past ones stay
+    as history. The sync then rewrites the coach memory's race section.
     """
+    today = app_today_iso()
+    removed = 0
+    for event in await crud.get_race_events(db, current_user.id):
+        if event.date >= today:
+            await crud.delete_race_event(db, event)
+            removed += 1
+    await _sync_race_context(db, current_user)
     current_user.race_date = None
     current_user.race_description = None
     if current_user.training_goal == "race":
         current_user.training_goal = "general_fitness"
     await db.flush()
-    return {"status": "cleared"}
+    return {"status": "cleared", "removedRaceEvents": removed}
 
 
 @router.get("/chat", response_model=schemas.ChatHistoryResponse)

@@ -20,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     chose a confirm step (ai-trainer-ops#63, Q21).
   - `DELETE /users/me/goals/{id}` marks a goal `removed`.
     `POST /users/me/race/clear` clears the profile's race date and
-    description and turns a `race` goal into `general_fitness`. Race events
-    are untouched.
+    description and turns a `race` goal into `general_fitness`. It also
+    removes upcoming calendar races, because otherwise the next race-event
+    sync would put the profile race back; past races stay. The proposal
+    reports how many calendar races clearing removes.
   - Tests: `tests/test_chat_confirmations.py`.
 
 - **Coach scenarios from real conversations, against the real model**

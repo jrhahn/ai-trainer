@@ -1088,6 +1088,11 @@ async def ask_trainer(
         {
             "race_date": current_user.race_date,
             "race_description": current_user.race_description,
+            # Clearing also removes upcoming calendar races; the button says so.
+            "calendar_races": sum(
+                event.date >= app_today_iso(timezone_name=timezone_name)
+                for event in await crud.get_race_events(db, current_user.id)
+            ),
         }
         if race_intent.says_no_race(body.question)
         and (current_user.race_date or current_user.training_goal == "race")

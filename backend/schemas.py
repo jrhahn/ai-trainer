@@ -2202,6 +2202,7 @@ class RaceProposalSchema(CamelModel):
 
     race_date: Optional[str] = None
     race_description: Optional[str] = None
+    calendar_races: int = 0
 
 
 class AskTrainerResponse(CamelModel):

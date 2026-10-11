@@ -5000,6 +5000,8 @@ async def remove_goal(
         select(models.AthleteGoal).where(
             models.AthleteGoal.id == goal_id,
             models.AthleteGoal.user_id == user_id,
+            # Only the goal in force: an achieved or replaced one is history.
+            models.AthleteGoal.status == "active",
         )
     )
     if goal is None:

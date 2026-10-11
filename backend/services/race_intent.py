@@ -16,7 +16,10 @@ _NO_RACE = re.compile(
     r"|(?:don'?t|do\s+not)\s+have\s+(?:any\s+)?(?:further\s+|more\s+)?races?(?:\s+events?)?"
     r"|kein(?:e|en)?\s+(?:rennen|wettkampf|wettkämpfe)"
     r"|(?:das\s+)?(?:rennen|race)\s+(?:ist\s+)?(?:abgesagt|gestrichen|vorbei|cancelled|canceled|off|over)"
-    r"|(?:mein\s+|das\s+|my\s+|the\s+)?(?:\w+\s+)?(?:ziel|goal)\s+(?:ist\s+|is\s+)?(?:erst\s+mal\s+|erstmal\s+)?(?:weg|vorbei|gestrichen|gone|over|dropped|off)"
+    # "the goal over the winter" and "goal off-road" are not the goal being gone:
+    # over/off/vorbei need the verb, only the unambiguous words may stand alone.
+    r"|(?:\w+\s+)?(?:ziel|goal)\s+(?:ist\s+|is\s+)?(?:erst\s+mal\s+|erstmal\s+)?(?:weg|gestrichen|gone|dropped)"
+    r"|(?:\w+\s+)?(?:ziel|goal)\s+(?:ist|is)\s+(?:erst\s+mal\s+|erstmal\s+)?(?:vorbei|over|off)"
     r")\b",
     re.IGNORECASE,
 )

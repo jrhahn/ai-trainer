@@ -21,6 +21,8 @@ import {
   createRaceEvent,
   updateRaceEventRemote,
   deleteRaceEventRemote,
+  removeGoalRemote,
+  clearProfileRaceRemote,
   fetchChatHistory,
   clearChatHistoryRemote,
   fetchCoachMemory,
@@ -1206,3 +1208,16 @@ describe('updateManualActivity (ai-trainer-ops#47)', () => {
   })
 })
 
+
+
+describe('chat confirmations (ai-trainer-ops#65, #71)', () => {
+  beforeEach(() => mockApiFetch.mockReset().mockResolvedValue({}))
+
+  it('removes a goal and clears the profile race on the right routes', async () => {
+    await removeGoalRemote('tok-123', 'goal-1')
+    await clearProfileRaceRemote('tok-123')
+
+    expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me/goals/goal-1', { token: 'tok-123', method: 'DELETE' })
+    expect(mockApiFetch).toHaveBeenNthCalledWith(2, '/users/me/race/clear', { token: 'tok-123', method: 'POST' })
+  })
+})

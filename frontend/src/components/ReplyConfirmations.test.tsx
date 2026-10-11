@@ -66,6 +66,15 @@ describe('ReplyConfirmations', () => {
     await waitFor(() => expect(useAppStore.getState().userProfile).toEqual({ name: 'Rider' }))
   })
 
+  it('says that upcoming calendar races go too', () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({ raceProposal: { raceDate: '2027-05-13', raceDescription: 'Calendar race', calendarRaces: 2 } })}
+      />,
+    )
+    expect(screen.getByText(/and 2 upcoming races in your calendar/)).toBeInTheDocument()
+  })
+
   it('says so when the server refuses', async () => {
     mocks.removeGoalRemote.mockRejectedValue(new Error('404'))
     render(<ReplyConfirmations msg={reply({ capturedGoals: [{ id: 'g1', label: '200 km in one ride' }] })} />)

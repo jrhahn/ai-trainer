@@ -22,6 +22,11 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const proposal = msg.raceProposal
   if (captured.length === 0 && !proposal) return null
   const raceLabel = [proposal?.raceDescription, proposal?.raceDate].filter(Boolean).join(', ')
+  const calendarRaces = proposal?.calendarRaces ?? 0
+  const calendarText =
+    calendarRaces > 0
+      ? ` and ${calendarRaces === 1 ? 'the upcoming race' : `${calendarRaces} upcoming races`} in your calendar`
+      : ''
 
   const removeGoal = async (id: string) => {
     if (!authToken) return
@@ -89,7 +94,10 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         <div className="text-xs text-gray-600">
           <p className="flex items-center gap-1">
             <Flag size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
-            <span>Remove the race from your profile{raceLabel ? ` (${raceLabel})` : ''}?</span>
+            <span>
+              Remove the race from your profile{calendarText}
+              {raceLabel ? ` (${raceLabel})` : ''}?
+            </span>
           </p>
           {race === 'open' && (
             <div className="mt-1 flex flex-wrap gap-2 pl-4">
