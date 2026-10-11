@@ -409,6 +409,18 @@ def _ftp_note(watts: int, german: bool) -> str:
     )
 
 
+def _unresolved_dates_note(joined: str, german: bool) -> str:
+    if german:
+        return (
+            f"(Hinweis: {joined} konnte ich nicht ändern — der Tag gehört nicht "
+            f"zu deinem aktuellen Trainingsplan, es wurde nichts gespeichert.)"
+        )
+    return (
+        f"(Note: I could not update {joined} — that day is not part of your "
+        f"current training plan, so no change was saved.)"
+    )
+
+
 def _profile_with_availability_constraints(
     profile: dict, constraints: list[dict]
 ) -> dict:
@@ -1430,12 +1442,8 @@ async def ask_trainer(
         )
         if unresolved_dates:
             joined = ", ".join(unresolved_dates)
-            result["response"] = f"{result['response']}\n\n" + (
-                f"(Hinweis: {joined} konnte ich nicht ändern — der Tag gehört nicht "
-                f"zu deinem aktuellen Trainingsplan, es wurde nichts gespeichert.)"
-                if notes_in_german
-                else f"(Note: I could not update {joined} — that day is not part of your "
-                f"current training plan, so no change was saved.)"
+            result["response"] = (
+                f"{result['response']}\n\n{_unresolved_dates_note(joined, notes_in_german)}"
             )
             plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
 
