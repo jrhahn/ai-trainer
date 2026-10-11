@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Keep or undo what the coach just noted** (ai-trainer-ops#65, #71) —
+  `components/ReplyConfirmations.tsx`, `components/AIChat.tsx`.
+  - Under a coach reply that stored a goal, the athlete sees "Goal noted: 4,000
+    m of climbing in one ride" with Keep and Remove. To correct a goal, they
+    say the new target.
+  - When the athlete said there is no race, the reply asks "Remove the race
+    from your profile (…)?". Nothing changes until they press Remove race.
+  - Tests: `components/ReplyConfirmations.test.tsx`.
+
 - **The coach's track record on the dashboard** (ai-trainer-ops#16) —
   `PredictionScoreboard.tsx`, `DashboardPage.tsx`. "Your coach made 7 checkable
   predictions about you. 5 came true (71%)." Below that, the predictions it got

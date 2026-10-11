@@ -4989,6 +4989,29 @@ async def list_active_goals(db: AsyncSession, user_id: str) -> list[models.Athle
     return list(result.scalars().all())
 
 
+async def remove_goal(
+    db: AsyncSession, user_id: str, goal_id: str
+) -> models.AthleteGoal | None:
+    """Mark the athlete's goal ``removed``; ``None`` if it is not theirs (ops#65).
+
+    Kept as a row, like a replaced goal, so what was said stays traceable.
+    """
+    goal = await db.scalar(
+        select(models.AthleteGoal).where(
+            models.AthleteGoal.id == goal_id,
+            models.AthleteGoal.user_id == user_id,
+            # Only the goal in force: an achieved or replaced one is history.
+            models.AthleteGoal.status == "active",
+        )
+    )
+    if goal is None:
+        return None
+    goal.status = "removed"
+    goal.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return goal
+
+
 async def upsert_active_goal(
     db: AsyncSession,
     user_id: str,

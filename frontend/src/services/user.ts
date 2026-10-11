@@ -285,6 +285,14 @@ export async function deleteRaceEventRemote(token: string, eventId: string): Pro
   })
 }
 
+export async function removeGoalRemote(token: string, goalId: string): Promise<void> {
+  await apiFetch(`/users/me/goals/${goalId}`, { token, method: 'DELETE' })
+}
+
+export async function clearProfileRaceRemote(token: string): Promise<void> {
+  await apiFetch('/users/me/race/clear', { token, method: 'POST' })
+}
+
 export async function fetchChatHistory(token: string): Promise<ChatMessage[]> {
   const response = await apiFetch<{ messages: ChatMessage[] }>('/users/me/chat', { token })
   return response.messages
