@@ -58,3 +58,12 @@ def test_a_goal_other_than_race_is_kept():
     general = {**PAST, "trainingGoal": "general_fitness"}
 
     assert prompts.prompt_profile(general, TODAY)["trainingGoal"] == "general_fitness"
+
+
+def test_every_prompt_that_dumps_the_profile_goes_through_prompt_profile():
+    # A new prompt that dumps the raw profile would bring the phantom race back.
+    import inspect
+
+    source = inspect.getsource(prompts)
+    assert "marked_json(profile)" not in source
+    assert source.count("marked_json(prompt_profile(profile") >= 7

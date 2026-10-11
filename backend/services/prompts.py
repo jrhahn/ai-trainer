@@ -38,7 +38,6 @@ from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
-from .dates import app_today
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -1265,7 +1264,9 @@ def adapt_plan_user(
     metrics_section = f"\n{metrics_history_section}" if metrics_history_section else ""
     weather_section = f"\n{weather_context_section}" if weather_context_section else ""
     events_section = f"\n{race_events_section}" if race_events_section else ""
-    race_profile_section = race_profile_context_section(profile)
+    race_profile_section = race_profile_context_section(
+        profile, app_today(timezone_name=timezone_name)
+    )
     race_profile_section = f"\n{race_profile_section}" if race_profile_section else ""
     taper_section = ""
     if taper_days_remaining is not None:
@@ -1303,7 +1304,7 @@ def adapt_plan_user(
     return (
         f"{app_date_context(timezone_name=timezone_name)}\n"
         f"{_plan_window_section(today, PLAN_HORIZON_DAYS)}\n"
-        f"Profile: {untrusted_text.marked_json(prompt_profile(profile))}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
+        f"Profile: {untrusted_text.marked_json(prompt_profile(profile, app_today(timezone_name=timezone_name)))}{race_profile_section}{assessment_section}{load_section}{metrics_section}{weather_section}{events_section}{athlete_model_section}{taper_section}\n"
         f"Recent feedback: {untrusted_text.marked_json(recent_feedback)}\n"
         f"Remaining plan days: {untrusted_text.marked_json(annotated_days)}"
         f"{history_section}{coherence_warnings}{commitments_section}\n"
@@ -4950,7 +4951,7 @@ def batch_review_user(
     """
     date_context = app_date_context(timezone_name=timezone_name)
     profile_section = (
-        f"\nAthlete profile: {untrusted_text.marked_json(prompt_profile(profile))}" if profile else ""
+        f"\nAthlete profile: {untrusted_text.marked_json(prompt_profile(profile, app_today(timezone_name=timezone_name)))}" if profile else ""
     )
 
     plan_section = ""
@@ -5117,7 +5118,7 @@ def next_ride_recommendation_user(
 
     if profile:
         athlete_context_parts.append(
-            f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}"
+            f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile, app_today(timezone_name=timezone_name)))}"
         )
 
     if rider_assessment:
