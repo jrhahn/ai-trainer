@@ -1,261 +1,117 @@
 import { Link } from 'react-router-dom'
-import { Apple, ArrowRight, Bike, HeartPulse, KeyRound, MessageCircle, RefreshCw, Target } from 'lucide-react'
-import CoachChatPreview from '../components/CoachChatPreview'
+import { ArrowRight, Bike } from 'lucide-react'
+import RideLandscape from '../components/RideLandscape'
 import { GITHUB_URL, SETUP_GUIDE_URL } from '../utils/links'
 
-function GithubMark({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-    </svg>
-  )
-}
-
-// Exported for the copy-voice guard in LandingPage.test.tsx: the rule of three is
-// what made the first draft read as generated, and it survived one rewrite (#610).
-export const pillars = [
+// Exported for the copy-voice guard in LandingPage.test.tsx (#610). Three short
+// moments, a sentence or two each, with no cards or icons around them: the page
+// should feel like the coach, quiet and attentive, rather than like a feature
+// grid (ai-trainer-ops#67).
+export const moments = [
   {
-    icon: Target,
-    title: 'Knows your season',
-    body: 'Set the target event once. Everything after that is built backwards from the date. Tell it Thursdays are gone until March and the week rearranges itself instead of quietly falling behind.',
+    title: 'It already knows',
+    body: 'Every ride you sync shapes the next session, so the week fits how the last one actually went.',
   },
   {
-    icon: MessageCircle,
-    title: 'Answers on the spot',
-    body: 'Ask why your heart rate sat ten beats high on Sunday and the answer comes from your last four weeks rather than a textbook. Normal language. No dropdowns.',
+    title: 'It asks only when it matters',
+    body: 'A question comes when the answer would change your plan. The rest of the time it gets on with it.',
   },
   {
-    icon: RefreshCw,
-    title: 'Reworks the week',
-    body: 'You missed Tuesday and the legs are still flat. Say so. The plan moves and so does everything downstream of it, which is the part you would otherwise rebuild by hand.',
+    title: 'Talk to it if you want',
+    body: 'Tell it the legs are flat or ask what to eat before a long day. The plan moves with you.',
   },
 ]
 
-export const steps = [
-  {
-    title: 'Connect once',
-    body: 'intervals.icu pulls your rides straight from Strava, and we read them from there. Prefer to stay off both? Upload a FIT file or enter your sessions yourself.',
-  },
-  {
-    title: 'Set the target',
-    body: 'One conversation. The event and its date, and how many hours a week you can honestly give it.',
-  },
-  {
-    title: 'Ride',
-    body: 'Tomorrow morning the session is waiting. Tell your coach how it went and the next one gets sharper.',
-  },
-]
-
-export const openSourceFacts = [
-  {
-    icon: KeyRound,
-    title: 'Your key, your account',
-    body: 'A Google Gemini key takes two minutes to create and costs nothing to start. The requests run on your account, so any bill you ever see comes from Google.',
-  },
-  {
-    icon: GithubMark,
-    title: 'Source available, all of it',
-    body: 'Every line is public. If you disagree with how the coach decided your rest day, go and read the function that decided it.',
-  },
-  {
-    icon: HeartPulse,
-    title: 'No lock-in',
-    body: 'Run the whole stack on your own hardware whenever you feel like it. Your ride history sits in intervals.icu either way, which is where it was before you got here.',
-  },
+export const facts = [
+  'Free to use. You bring your own Google Gemini key.',
+  'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.',
 ]
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-[#0f1116] text-white">
-      <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 py-5 sm:px-8">
-        {/* `min-w-0` + `truncate`, not `shrink-0` (ai-trainer-ops#51.3). The
-            header held three items that all refused to shrink, and at 390 px
-            they needed 399 — so the whole landing page scrolled sideways, which
-            is the first thing a phone visitor meets. The wordmark is the one
-            element that can give; a slightly clipped brand beats a page that
-            slides under the thumb. */}
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-[#0f1116]">
-            <Bike size={20} aria-hidden="true" />
-          </span>
-          <span className="truncate text-base font-bold sm:text-lg">Train Like a Pro</span>
-        </span>
-        <nav className="ml-auto flex shrink-0 items-center gap-3 sm:gap-5">
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden items-center gap-2 text-sm font-medium text-slate-300 hover:text-white sm:flex"
-          >
-            <GithubMark />
-            GitHub
-          </a>
-          <Link to="/login" className="whitespace-nowrap text-sm font-semibold text-slate-200 hover:text-white">
-            Sign in
-          </Link>
-          <Link
-            to="/register"
-            className="whitespace-nowrap rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
-          >
-            Create account
-          </Link>
-        </nav>
-      </header>
+    <main className="landing min-h-screen bg-[#0f1116] text-white">
+      <section className="relative isolate flex min-h-[92vh] flex-col overflow-hidden">
+        <RideLandscape className="absolute inset-x-0 bottom-0 -z-10 h-[62%] w-full" />
 
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60rem_36rem_at_18%_-10%,rgba(245,158,11,0.22),transparent_60%),radial-gradient(48rem_32rem_at_88%_18%,rgba(20,184,166,0.16),transparent_62%)]" />
-        <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] lg:items-center lg:pt-20">
+        <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 py-5 sm:px-8">
+          {/* `min-w-0` + `truncate` so the wordmark gives way at 390 px instead of
+              the page scrolling sideways (ai-trainer-ops#51.3). */}
+          <span className="flex min-w-0 items-center gap-2">
+            <Bike size={22} aria-hidden="true" className="shrink-0 text-amber-400" />
+            <span className="truncate text-base font-semibold tracking-tight sm:text-lg">Train Like a Pro</span>
+          </span>
+          <nav className="ml-auto flex shrink-0 items-center gap-4 sm:gap-6">
+            <Link to="/login" className="whitespace-nowrap text-sm font-medium text-slate-300 hover:text-white">
+              Sign in
+            </Link>
+            <Link
+              to="/register"
+              className="whitespace-nowrap rounded-full border border-white/20 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+            >
+              Create account
+            </Link>
+          </nav>
+        </header>
+
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div>
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-amber-300">
-              Source available · Free to run
-            </p>
-            <h1 className="max-w-[15ch] text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.5rem]">
-              Coaching that keeps up with your week.
+            <h1 className="max-w-[16ch] text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
+              A coach who already knows your riding.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-              Talk to it the way you would talk to a person. It has read every ride you have done and it
-              plans tomorrow around how last week actually went, not around what the plan said in January.
+            <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
+              It reads every ride you sync, so there is little to explain and nothing to fill in. Talk to it whenever
+              you like.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
                 to="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-6 py-3.5 text-base font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
+                className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-6 py-3 text-base font-semibold text-[#0f1116] transition-colors hover:bg-amber-400"
               >
                 Create a free account
                 <ArrowRight size={18} aria-hidden="true" />
               </Link>
-              <Link
-                to="/login"
-                className="inline-flex items-center justify-center rounded-lg border border-white/15 px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/10"
-              >
+              <Link to="/login" className="text-base font-medium text-slate-300 hover:text-white">
                 Sign in
               </Link>
             </div>
-            <p className="mt-5 text-sm text-slate-400">
-              You bring a Google Gemini key. There is no subscription and no card to enter.
-            </p>
           </div>
 
-          <CoachChatPreview />
+          <figure className="max-w-sm lg:mt-10">
+            <blockquote className="rounded-2xl rounded-bl-sm bg-white/[0.07] px-5 py-4 text-[15px] leading-7 text-slate-100 backdrop-blur-sm">
+              Saw Sunday&apos;s long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to
+              Thursday.
+            </blockquote>
+            <figcaption className="mt-2 pl-1 text-xs text-slate-400">Your coach, Monday morning</figcaption>
+          </figure>
         </div>
       </section>
 
-      <section className="border-t border-white/5 bg-[#12141b]">
-        <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
-          <h2 className="max-w-2xl text-balance text-3xl font-black tracking-tight sm:text-4xl">
-            Built around one date and the weeks in front of it.
-          </h2>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {pillars.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
-                  <Icon size={21} aria-hidden="true" />
-                </span>
-                <h3 className="mt-5 text-xl font-bold">{title}</h3>
-                <p className="mt-3 text-[15px] leading-7 text-slate-300">{body}</p>
-              </div>
+      <section className="mx-auto w-full max-w-6xl px-5 py-24 sm:px-8">
+        <ul className="grid gap-12 md:grid-cols-3 md:gap-10">
+          {moments.map(({ title, body }) => (
+            <li key={title} className="border-t border-white/15 pt-6">
+              <h2 className="text-lg font-semibold">{title}</h2>
+              <p className="mt-3 text-[15px] leading-7 text-slate-400">{body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <footer className="border-t border-white/10">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-10 text-sm text-slate-400 sm:px-8 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-xl space-y-1.5">
+            {facts.map((fact) => (
+              <p key={fact}>{fact}</p>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
-        <div className="grid gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:items-center">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Getting started</p>
-            <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Ten minutes to set up.</h2>
-            <p className="mt-5 max-w-md text-[15px] leading-7 text-slate-300">
-              Rides sync in the background from then on. By Monday morning the coach is working from
-              Sunday's actual numbers.
-            </p>
-            <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-slate-300">
-              <Apple size={15} aria-hidden="true" className="text-amber-300" />
-              Nutrition questions count too
-            </span>
-            <p className="mt-6 text-sm text-slate-400">
-              <a
-                href={SETUP_GUIDE_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="font-semibold text-amber-300 underline-offset-4 hover:underline"
-              >
-                Setup guide
-              </a>{' '}
-              — intervals.icu, Strava and your Gemini key, step by step.
-            </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
+              Setup guide
+            </a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
+              Source available, FSL-1.1-ALv2
+            </a>
           </div>
-
-          <ol className="space-y-4">
-            {steps.map(({ title, body }, index) => (
-              <li key={title} className="flex gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-black text-[#0f1116]">
-                  {index + 1}
-                </span>
-                <div>
-                  <h3 className="text-lg font-bold">{title}</h3>
-                  <p className="mt-2 text-[15px] leading-7 text-slate-300">{body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      <section className="border-y border-white/5 bg-[#12141b]">
-        <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8">
-          <h2 className="max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
-            What it costs: nothing.
-          </h2>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {openSourceFacts.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
-                  <Icon size={21} aria-hidden="true" />
-                </span>
-                <h3 className="mt-5 text-xl font-bold">{title}</h3>
-                <p className="mt-3 text-[15px] leading-7 text-slate-300">{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-5 py-20 text-center sm:px-8">
-        <h2 className="mx-auto max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
-          Put a date on the calendar.
-        </h2>
-        <p className="mx-auto mt-5 max-w-xl text-[15px] leading-7 text-slate-300">
-          Sign up and say what you are training for. There is a session waiting tomorrow morning.
-        </p>
-        <Link
-          to="/register"
-          className="mt-8 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-7 py-3.5 text-base font-bold text-[#0f1116] transition-colors hover:bg-amber-400"
-        >
-          Create a free account
-          <ArrowRight size={18} aria-hidden="true" />
-        </Link>
-      </section>
-
-      <footer className="border-t border-white/5">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:px-8">
-          <span>Train Like a Pro — source-available cycling coaching, FSL-1.1-ALv2.</span>
-          <a
-            href={SETUP_GUIDE_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-slate-300 hover:text-white sm:ml-auto"
-          >
-            Setup guide
-          </a>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 font-medium text-slate-300 hover:text-white"
-          >
-            <GithubMark />
-            Source on GitHub
-          </a>
         </div>
       </footer>
     </main>

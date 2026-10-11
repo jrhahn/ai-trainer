@@ -50,6 +50,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A calmer landing page** (ai-trainer-ops#67): `LandingPage.tsx`,
+  `components/RideLandscape.tsx`, `index.css`, `index.html`. The owner's
+  verdict on the old page was "too AI-generated: too much text, too many
+  widgets". The page now carries:
+  - one visual: ridgelines drawn from elevation-like curves, with a route
+    that climbs to the summit. It draws once and stays still under reduced
+    motion;
+  - one headline about the feeling, "A coach who already knows your riding",
+    one sentence, and one call to sign up;
+  - a single coach message;
+  - three short moments without cards or icons, and the practical facts in
+    the footer.
+
+  The pill badge, the glow gradients, both three-card grids, the numbered
+  steps and the closing banner are gone. The copy went from about 400 words
+  to under 200, and a test now holds it there. The page title is "Train Like
+  a Pro".
+
 - **Stay signed in** (ai-trainer-ops#45) — `services/api.ts`, `services/auth.ts`,
   `store/useAppStore.ts`, `App.tsx`. Closing the tab no longer signs the athlete
   out: the session is an HttpOnly cookie that lasts 30 days from the last visit,
