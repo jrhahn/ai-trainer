@@ -20,6 +20,7 @@ from pydantic import ValidationError
 import schemas
 
 from . import metrics, output_audit, token_accounting, untrusted_text
+from .athlete_language import athlete_language
 from .activity_identity import activity_sport_type, power_model_applies
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
@@ -945,6 +946,14 @@ async def ask_trainer(
         plan_changes_section=plan_changes_section,
         plan_coherence_warnings=plan_coherence_warnings,
         plan_commitment_notes=plan_commitment_notes,
+        reply_language=athlete_language(
+            question,
+            [
+                str(m.get("content") or "")
+                for m in (conversation_history or [])
+                if m.get("role") == "user"
+            ],
+        ),
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real
