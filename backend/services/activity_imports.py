@@ -59,6 +59,9 @@ class ImportedActivity:
     activity_date: str
     sport_type: str = "cycling"
     duration_seconds: int | None = None
+    # As the provider reported them; ``None`` when it did not (ai-trainer-ops#65).
+    distance_km: float | None = None
+    elevation_gain_m: float | None = None
     streams: dict[str, Any] = field(default_factory=dict)
     start_lat: float | None = None
     start_lng: float | None = None
@@ -112,6 +115,8 @@ class ImportedActivity:
             "activity_date": self.activity_date,
             "sport_type": self.sport_type,
             "duration_seconds": self.duration_seconds,
+            "distance_km": self.distance_km,
+            "elevation_gain_m": self.elevation_gain_m,
             "start_lat": self.start_lat,
             "start_lng": self.start_lng,
             "streams": self.streams,
@@ -156,6 +161,24 @@ async def find_existing_import(
         exclude_activity_source=activity.source,
         exclude_external_activity_id=activity.source_key,
     )
+
+
+def reported_distance_km(metres: object) -> float | None:
+    """A provider's distance in metres as kilometres, or ``None`` when absent.
+
+    Zero is treated as absent: providers report 0 for an indoor or gym session
+    that has no distance, which is "not measured" rather than "went nowhere".
+    """
+    if isinstance(metres, bool) or not isinstance(metres, (int, float)) or metres <= 0:
+        return None
+    return round(metres / 1000, 2)
+
+
+def reported_elevation_m(metres: object) -> float | None:
+    """A provider's climbing in metres, or ``None`` when absent or negative."""
+    if isinstance(metres, bool) or not isinstance(metres, (int, float)) or metres < 0:
+        return None
+    return round(float(metres), 1)
 
 
 def to_ride_inputs(activities: list[ImportedActivity]) -> list[dict[str, Any]]:

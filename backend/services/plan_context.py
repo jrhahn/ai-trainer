@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
-from services import run_durability, training_monotony
+from services import goal_progress, run_durability, training_monotony
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -81,12 +81,40 @@ async def plan_writer_context(
     activity_rows = await athlete_activity_history(db, user_id)
     exposure = run_durability.run_exposure(activity_rows, today)
     distribution = training_monotony.load_distribution(activity_rows, today)
+    goals = await goal_section_for_user(db, user_id, today, activity_rows)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(plan, today, exposure, distribution),
+        coherence=_coherence_block(plan, today, exposure, distribution, goals),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
+    )
+
+
+async def goal_section_for_user(
+    db, user_id: str, today, activity_rows: list | None = None
+) -> str:
+    """The athlete's measurable goals and how far away each is (ai-trainer-ops#65).
+
+    Shared by every writer for the reason the phase is: the chat, the nightly run
+    and auto-adapt get it through ``plan_writer_context``, and a full regeneration
+    calls this directly.
+    """
+    goals = await crud.list_active_goals(db, user_id)
+    if not goals:
+        return ""
+    if activity_rows is None:
+        activity_rows = await athlete_activity_history(db, user_id)
+    return goal_progress.goal_progress_section(
+        [
+            (
+                goal,
+                goal_progress.goal_progress(
+                    goal.metric, goal.scope, goal.target, activity_rows, today
+                ),
+            )
+            for goal in goals
+        ]
     )
 
 
@@ -158,6 +186,7 @@ def _coherence_block(
     today,
     exposure: run_durability.RunExposure,
     distribution: training_monotony.LoadDistribution | None,
+    goals: str = "",
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
 
@@ -185,6 +214,7 @@ def _coherence_block(
         plan_interference_section(find_interference(plan, today), today),
         _durability_section(plan, today, exposure),
         training_monotony_section(distribution),
+        goals,
     ]
     return "\n\n".join(section for section in sections if section)
 

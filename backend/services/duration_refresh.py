@@ -5,6 +5,11 @@ early sync/analysis can store the wall-clock ``elapsed_time`` (incl. pauses)
 instead. Because the ride is then considered "already imported" by id, it is
 never corrected (#429 Bug A). Strava can drift for the same reason.
 
+The same provider lists also carry each activity's distance and climbing, which
+rides synced before ai-trainer-ops#65 never stored. The refresh fills them in
+where they are missing, from the payload it already fetched, so a goal like
+"4000 m in one ride" can be measured against the rides before it was set.
+
 This module holds the source-aware correction used by two callers:
 
 * the daily scheduler job (``duration_refresh_job``), which refreshes a recent
@@ -39,6 +44,7 @@ import crud
 import models
 from config import settings
 from services import metrics_service
+from services.activity_imports import reported_distance_km, reported_elevation_m
 from services.intervals_service import fetch_recent_activities, intervals_activity_id
 from services.plan_maintenance import seconds_until_next_daily_run
 from services.scheduler import ScheduledJob
@@ -49,6 +55,20 @@ logger = logging.getLogger(__name__)
 STRAVA_LIST_PER_PAGE = 200
 # Widen the intervals fetch window slightly around the stored ride dates.
 INTERVALS_WINDOW_PADDING = timedelta(days=2)
+# ``(distance_km, elevation_gain_m)`` per activity, keyed the way the matching
+# below keys rides: the Strava id, or the intervals id as a float.
+Measures = dict[object, tuple[float | None, float | None]]
+
+
+def _record_measures(measures: Measures | None, key: object, activity: dict) -> None:
+    if measures is None:
+        return
+    measures[key] = (
+        reported_distance_km(activity.get("distance")),
+        reported_elevation_m(activity.get("total_elevation_gain")),
+    )
+
+
 # Hour of day (app timezone) to run the daily refresh. Offset from the 2am plan
 # maintenance so the two heavy jobs do not overlap.
 DURATION_REFRESH_HOUR = 4
@@ -63,7 +83,10 @@ class DurationRefreshResult:
 
 
 async def fetch_strava_moving_times(
-    access_token: str, *, after: datetime | None = None
+    access_token: str,
+    *,
+    after: datetime | None = None,
+    measures: Measures | None = None,
 ) -> dict[int, int]:
     """Return ``{strava_activity_id: moving_time_seconds}``.
 
@@ -94,6 +117,8 @@ async def fetch_strava_moving_times(
                 moving = activity.get("moving_time")
                 if isinstance(activity_id, int) and isinstance(moving, int):
                     moving_by_id[activity_id] = moving
+                if isinstance(activity_id, int):
+                    _record_measures(measures, activity_id, activity)
             if len(batch) < STRAVA_LIST_PER_PAGE:
                 break
             page += 1
@@ -102,7 +127,11 @@ async def fetch_strava_moving_times(
 
 
 async def fetch_intervals_moving_times(
-    api_key: str, athlete_id: str, oldest: date, newest: date
+    api_key: str,
+    athlete_id: str,
+    oldest: date,
+    newest: date,
+    measures: Measures | None = None,
 ) -> dict[float, int]:
     """Return ``{float(intervals_activity_id): moving_time}`` over the range.
 
@@ -116,8 +145,12 @@ async def fetch_intervals_moving_times(
     for activity in activities:
         moving = activity.get("moving_time")
         raw_id = activity.get("id")
-        if isinstance(moving, int) and moving > 0 and raw_id is not None:
-            moving_by_key[float(intervals_activity_id(raw_id))] = moving
+        if raw_id is None:
+            continue
+        key = float(intervals_activity_id(raw_id))
+        if isinstance(moving, int) and moving > 0:
+            moving_by_key[key] = moving
+        _record_measures(measures, key, activity)
     return moving_by_key
 
 
@@ -142,7 +175,11 @@ def _within_window(metric: models.RideMetric, since: date | None) -> bool:
 
 
 async def corrected_durations(
-    db: AsyncSession, user: models.User, *, since: date | None = None
+    db: AsyncSession,
+    user: models.User,
+    *,
+    since: date | None = None,
+    measures: Measures | None = None,
 ) -> list[tuple[models.RideMetric, int, int]]:
     """Return ``(metric, old, new)`` for every ride whose duration should change.
 
@@ -164,7 +201,9 @@ async def corrected_durations(
             if since is not None
             else None
         )
-        moving_by_id = await fetch_strava_moving_times(access_token, after=after)
+        moving_by_id = await fetch_strava_moving_times(
+            access_token, after=after, measures=measures
+        )
         for metric in strava_metrics:
             moving = moving_by_id.get(metric.strava_activity_id)
             if moving and moving > 0 and moving != (metric.duration_seconds or 0):
@@ -182,6 +221,7 @@ async def corrected_durations(
                 user.intervals_token.athlete_id,
                 oldest=min(dates) - INTERVALS_WINDOW_PADDING,
                 newest=max(dates) + INTERVALS_WINDOW_PADDING,
+                measures=measures,
             )
             for metric in intervals_metrics:
                 moving = moving_by_key.get(float(metric.strava_activity_id))
@@ -202,11 +242,15 @@ async def refresh_user_durations(
     if user.strava_token is None and user.intervals_token is None:
         return 0, 0
 
-    changes = await corrected_durations(db, user, since=since)
+    measures: Measures = {}
+    changes = await corrected_durations(db, user, since=since, measures=measures)
     for metric, old, new in changes:
         _log_change(metric, old, new)
         if apply:
             metric.duration_seconds = new
+    filled = await fill_missing_measures(db, user, measures, since=since, apply=apply)
+    if filled:
+        logger.info("  user=%s: distance/elevation filled on %s rides", user.id, filled)
 
     recalculated = 0
     if changes and apply:
@@ -223,6 +267,50 @@ async def refresh_user_durations(
         await db.commit()
 
     return len(changes), recalculated
+
+
+async def fill_missing_measures(
+    db: AsyncSession,
+    user: models.User,
+    measures: Measures,
+    *,
+    since: date | None = None,
+    apply: bool,
+) -> int:
+    """Fill distance and climbing on rides that have none (ai-trainer-ops#65).
+
+    Only fills, never overwrites: a stored value came from the same provider at
+    import. No chain recalculation, because neither figure enters the load model.
+    """
+    if not measures:
+        return 0
+    filled = 0
+    metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
+    for metric in metrics:
+        if not _within_window(metric, since):
+            continue
+        source = metric.activity_source or "strava"
+        key = (
+            metric.strava_activity_id
+            if source == "strava"
+            else float(metric.strava_activity_id)
+            if source == "intervals"
+            else None
+        )
+        if key not in measures:
+            continue
+        distance, elevation = measures[key]
+        changed = False
+        if metric.distance_km is None and distance is not None:
+            changed = True
+            if apply:
+                metric.distance_km = distance
+        if metric.elevation_gain_m is None and elevation is not None:
+            changed = True
+            if apply:
+                metric.elevation_gain_m = elevation
+        filled += changed
+    return filled
 
 
 async def run_duration_refresh(

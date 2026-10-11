@@ -11,6 +11,11 @@ scheduler job runs over a recent window). See that module for how Strava and
 intervals.icu rides are matched (including the float-tolerant intervals join for
 the float64-corrupted ids, #429 Bug B).
 
+Since ai-trainer-ops#65 the same run also fills in each ride's distance and
+climbing where they are missing, from the same provider payload. Rides synced
+before that issue have neither, and a measurable goal ("4000 m in one ride")
+is measured against them.
+
 Usage (from backend/):
     python scripts/backfill_activity_moving_time.py               # dry run
     python scripts/backfill_activity_moving_time.py --apply       # persist
