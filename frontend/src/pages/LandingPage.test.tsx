@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import LandingPage, { openSourceFacts, pillars, steps } from './LandingPage'
+import LandingPage, { facts, moments } from './LandingPage'
 
 function setup() {
   return render(
@@ -18,9 +18,26 @@ function sentences(text: string): string[] {
 }
 
 describe('LandingPage', () => {
-  it('leads with the coaching promise rather than metrics', () => {
+  it('leads with the coach knowing the rider rather than with metrics', () => {
     setup()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/coaching that keeps up with your week/i)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/a coach who already knows your riding/i)
+  })
+
+  // --- calm (ai-trainer-ops#67) --------------------------------------------
+  // The owner's verdict on the previous page: too much text, too many widgets.
+  // These pin the two things that made it so, so a later edit cannot quietly
+  // grow it back.
+
+  it('keeps the copy short', () => {
+    const { container } = setup()
+    const words = (container.textContent ?? '').split(/\s+/).filter(Boolean)
+    // The previous page carried about 400 words; half of that is the ceiling.
+    expect(words.length).toBeLessThan(200)
+  })
+
+  it('has one call to sign up in the page body, not a closing banner', () => {
+    setup()
+    expect(screen.getAllByRole('link', { name: /create a free account/i })).toHaveLength(1)
   })
 
   it('offers both sign-up and sign-in paths', () => {
@@ -44,7 +61,7 @@ describe('LandingPage', () => {
   })
 
   it('keeps the feature copy off the rule of three', () => {
-    for (const { body } of [...pillars, ...steps, ...openSourceFacts]) {
+    for (const body of [...moments.map((m) => m.body), ...facts]) {
       // Three items in one breath, whether joined by commas ...
       for (const sentence of sentences(body)) {
         expect((sentence.match(/,/g) ?? []).length).toBeLessThan(2)
@@ -58,9 +75,10 @@ describe('LandingPage', () => {
 
   it('names the differentiators: free, source available, own key, Strava via intervals.icu', () => {
     setup()
-    expect(screen.getByText(/source available · free to run/i)).toBeInTheDocument()
+    expect(screen.getByText(/free to use/i)).toBeInTheDocument()
+    expect(screen.getByText(/source available/i)).toBeInTheDocument()
     expect(screen.getAllByText(/google gemini key/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/intervals\.icu pulls your rides straight from strava/i)).toBeInTheDocument()
+    expect(screen.getByText(/strava through intervals\.icu/i)).toBeInTheDocument()
   })
 
   it('names the licence the code actually carries, and never calls it open source', () => {
@@ -91,6 +109,6 @@ describe('LandingPage', () => {
 
   it('promises nutrition questions too', () => {
     setup()
-    expect(screen.getByText(/nutrition questions count too/i)).toBeInTheDocument()
+    expect(screen.getByText(/ask what to eat/i)).toBeInTheDocument()
   })
 })
