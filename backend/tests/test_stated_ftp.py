@@ -33,6 +33,12 @@ def test_the_athletes_own_ftp_is_captured(message, watts):
         "my FTP was 320W before the calibration",
         "Meine FTP war 320 W.",
         "my FTP is not 320W",
+        "If my FTP is 320 W I will ride more.",
+        "Wenn meine FTP 320 W ist, fahre ich mehr.",
+        "Früher war meine FTP 320 W.",
+        "Vorher meine FTP 320 W, jetzt weiß ich es nicht.",
+        "Meine FTP ist keine 320 W.",
+        "Ich weiß nicht, ob meine FTP 320 W ist",
         "his FTP is 400 W",
         "Bei deiner FTP von 302 W ist das stark.",
         "my FTP is 9000 W",
@@ -81,4 +87,24 @@ async def test_a_question_about_ftp_changes_nothing_and_claims_nothing(
 
     async with TestSessionLocal() as db:
         assert (await db.scalar(select(models.User))).current_ftp == before
+    assert "set your FTP" not in response.json()["response"]
+
+
+@pytest.mark.asyncio
+async def test_restating_the_current_ftp_writes_nothing_and_says_nothing(
+    client, auth_headers, mock_ai_service
+):
+    current = 280
+    async with TestSessionLocal() as db:
+        (await db.scalar(select(models.User))).current_ftp = current
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": f"my FTP is {current} W, as before"},
+    )
+
+    async with TestSessionLocal() as db:
+        assert (await db.scalar(select(models.User))).current_ftp == current
     assert "set your FTP" not in response.json()["response"]
