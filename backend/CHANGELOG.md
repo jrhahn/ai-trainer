@@ -151,6 +151,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "From 4 to 26 November I'm on holiday, I can't train" blocks each of those
     days, up to 45 days.
   - Tests: `tests/test_availability.py`.
+- **A reworded memory fact strengthens the one it restates** (ai-trainer-ops#73) —
+  `crud.observe_athlete_memory_fact`.
+  - The extractor rewords what it already knows. One athlete's memory held
+    thirteen rows saying their FTP is 285 W, filed under two categories, all
+    competing for the prompt's few memory slots.
+  - When no row has the exact key, a write now looks for a fact of the same
+    athlete with the same figures and at least 40% of the same words, or 70%
+    of the same words when there are no figures. The habitual filler words
+    are dropped first, and "functional threshold power" is read as "FTP". A
+    match gains the observation instead of a new row being added.
+  - Existing duplicates are left as they are. They decay to stale as usual.
+  - Tests: `tests/test_memory_fact_dedup.py`.
+- **A race already run is history, not next year's target** (ai-trainer-ops#71) —
+  `services/prompts.py`.
+  - The setup form's race stays on the account after race day. Every coach
+    prompt dumped the profile as is (`trainingGoal: race`, a May date), and
+    `race_profile_context_section` told the model to "use this for
+    race-specific preparation and taper timing". For five months the coach and
+    the nightly run planned toward "your 80 km race in May" for an athlete who
+    had raced it in May and said there was no race.
+  - `prompt_profile` now moves a past race to `lastRace` in every prompt that
+    dumps the profile, and a `race` goal reads "no upcoming race in the
+    profile". The race section names it as a past race not to plan toward.
+    Race day itself and later dates are unchanged.
+  - Tests: `tests/test_past_race_profile.py`.
 - **The acknowledgement after answering a coach question is in the athlete's
   language** (ai-trainer-ops#74) — `services/prompts.evaluate_inquiry_answer_system`.
   #658 put the language rule on every athlete-facing prompt but this one, so a
