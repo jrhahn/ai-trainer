@@ -54,6 +54,23 @@ async def test_rewordings_of_one_fact_make_one_row_with_the_evidence_of_all():
         row = await db.scalar(select(models.AthleteMemoryFact))
         assert row.observation_count == len(FTP_RESTATEMENTS)
         assert row.fact == FTP_RESTATEMENTS[0][1]
+        assert row.category == "fact"  # later "general" writes joined it
+
+
+@pytest.mark.asyncio
+async def test_a_rewording_revives_a_stale_fact():
+    async with TestSessionLocal() as db:
+        user_id = await _user(db)
+        row = await crud.observe_athlete_memory_fact(
+            db, user_id, fact=FTP_RESTATEMENTS[0][1], category="fact"
+        )
+        row.status = "stale"
+        await db.flush()
+
+        await crud.observe_athlete_memory_fact(db, user_id, fact=FTP_RESTATEMENTS[1][1])
+
+        assert await _count(db, user_id) == 1
+        assert row.status == "active"
 
 
 @pytest.mark.asyncio
