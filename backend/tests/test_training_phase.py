@@ -107,6 +107,15 @@ def test_empty_weeks_are_recovery_not_loading():
     assert not rhythm.recovery_due
 
 
+def test_after_an_empty_week_the_restart_is_gentle():
+    june = date(2026, 6, 10)
+    phase = tp.training_phase(june, [], _rides(june, [8, 8, 8, 8, 8, 8, 8, 0]))
+    section = tp.training_phase_section(phase)
+
+    assert "Restart gently" in section
+    assert "Load may rise" not in section
+
+
 def test_short_history_makes_no_claim_about_the_rhythm():
     june = date(2026, 6, 10)
     rhythm = tp.load_rhythm(_rides(june, [8, 8]), june)

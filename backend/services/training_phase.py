@@ -289,7 +289,17 @@ def training_phase_section(phase: TrainingPhase) -> str:
     rhythm = phase.rhythm
     if phase.phase not in (TRANSITION, TAPER) and rhythm.loading_weeks is not None:
         recent = ", ".join(f"{h:g}" for h in rhythm.weekly_hours[-4:])
-        if rhythm.recovery_due:
+        if rhythm.weekly_hours[-1] == 0:
+            # A week off (injury, illness, travel) is not the first week of a block.
+            # "Load may rise" from zero would invite going straight back to the
+            # old volume.
+            lines.append(
+                f"- Load rhythm: no training in the last 7 days (hours in the last 4 "
+                f"weeks, oldest first: {recent}). Restart gently: short, easy "
+                "sessions first, and return to the earlier volume over one to two "
+                "weeks rather than at once."
+            )
+        elif rhythm.recovery_due:
             lines.append(
                 f"- Load rhythm: {rhythm.loading_weeks} loading weeks since the last "
                 f"lighter one (hours in the last 4 weeks, oldest first: {recent}). "
