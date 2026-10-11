@@ -66,3 +66,16 @@ async def test_ask_trainer_sends_the_named_language(monkeypatch):
     )
 
     assert "The athlete writes German" in seen["system"]
+
+
+def test_a_short_message_that_leans_clearly_wins_over_history():
+    english_turns = [
+        "Is the plan for tomorrow still the same?",
+        "What should I eat before?",
+    ]
+
+    assert athlete_language("heute, oder?", english_turns) == "German"
+
+
+def test_a_word_both_languages_share_is_no_evidence():
+    assert athlete_language("was") is None
