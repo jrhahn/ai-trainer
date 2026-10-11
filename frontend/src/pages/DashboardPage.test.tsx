@@ -826,6 +826,45 @@ describe('DashboardPage — Activities section layout', () => {
 })
 
 // ---------------------------------------------------------------------------
+// First screen vs "More" (ai-trainer-ops#68)
+// ---------------------------------------------------------------------------
+
+describe('DashboardPage — the coach first, the rest one tap away', () => {
+  it('puts history behind a closed "More" and keeps rides that need an answer out front', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Settled Ride', stravaActivityId: 1 }),
+        makeRide({
+          activityDate: today,
+          activityName: 'Unclear Ride',
+          stravaActivityId: 2,
+          purposeQuestionOpen: true,
+        }),
+      ],
+    })
+    const { container } = renderDashboard()
+
+    const more = container.querySelector('details')
+    expect(more).not.toBeNull()
+    expect(more!.open).toBe(false)
+    expect(within(more!).getByText('Settled Ride')).toBeInTheDocument()
+
+    const needsAnswer = await screen.findByText('Needs your answer')
+    const unclear = screen.getByText('Unclear Ride')
+    expect(more!.contains(unclear)).toBe(false)
+    expect(needsAnswer.parentElement!.contains(unclear)).toBe(true)
+  })
+
+  it('offers "Add activity" in the header, beside the greeting', () => {
+    setupStore({})
+    renderDashboard()
+    const heading = screen.getByRole('heading', { level: 1 })
+    const header = heading.closest('div')!.parentElement!
+    expect(within(header).getByRole('button', { name: /add activity/i })).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // ProgressionChart visibility
 // ---------------------------------------------------------------------------
 
