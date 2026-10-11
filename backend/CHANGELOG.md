@@ -137,6 +137,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reworded memory fact strengthens the one it restates** (ai-trainer-ops#73) —
+  `crud.observe_athlete_memory_fact`.
+  - The extractor rewords what it already knows. One athlete's memory held
+    thirteen rows saying their FTP is 285 W, filed under two categories, all
+    competing for the prompt's few memory slots.
+  - When no row has the exact key, a write now looks for a fact of the same
+    athlete with the same figures and at least 40% of the same words, or 70%
+    of the same words when there are no figures. The habitual filler words
+    are dropped first, and "functional threshold power" is read as "FTP". A
+    match gains the observation instead of a new row being added.
+  - Existing duplicates are left as they are. They decay to stale as usual.
+  - Tests: `tests/test_memory_fact_dedup.py`.
+
 - **The backtest report prints no empty table** (ai-trainer-ops#27) —
   `scripts/backtest_report.py`. When every attribute fell under the
   3-athlete minimum, as in the first weekly run on production, it printed a

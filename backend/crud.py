@@ -6,6 +6,7 @@ tests can patch a single module instead of mocking low-level session methods.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 
@@ -1229,6 +1230,59 @@ def _normalise_athlete_memory_fact_key(fact: str) -> str:
     return " ".join(fact.casefold().split())[:255]
 
 
+# Near-duplicate memory facts (ai-trainer-ops#73). The extractor rewords what
+# it already knows on every pass: one athlete's memory held "FTP is
+# approximately 285W", "The athlete has a typical functional threshold power of
+# 285W" and eleven more, each a new row because the exact key differed, and all
+# of them competing for the prompt's few memory slots. Two facts are the same
+# when they carry the same figures and most of the same words once the
+# extractor's habitual filler is dropped; without figures, nearly all words.
+_MEMORY_FACT_FILLER = frozenset(
+    """the a an athlete athlete's athletes has have had is are was be been being of to in
+    on at for with and or by maintains maintain maintained consistently consistent highly
+    high stable reliable reliably typical typically approximately around about roughly
+    estimated estimate generally usually frequently regularly often tends tend their
+    his her its this that these those which who across during while when""".split()
+)
+_MEMORY_FACT_SYNONYMS = (
+    (re.compile(r"functional threshold power(?:\s*\(ftp\))?"), "ftp"),
+    (re.compile(r"\bwatts?\b"), "w"),
+)
+_MEMORY_FACT_FIGURE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:w|bpm|h|min|km|hm|m|%)?\b")
+MEMORY_FACT_SAME_WITH_FIGURES = 0.4
+MEMORY_FACT_SAME_WITHOUT_FIGURES = 0.7
+
+
+def _memory_fact_signature(fact: str) -> tuple[frozenset[str], frozenset[str]]:
+    text = fact.casefold()
+    for pattern, replacement in _MEMORY_FACT_SYNONYMS:
+        text = pattern.sub(replacement, text)
+    figures = frozenset(
+        re.sub(r"\s+", "", figure) for figure in _MEMORY_FACT_FIGURE.findall(text)
+    )
+    words = frozenset(
+        word
+        for word in re.findall(r"[a-zäöüß]+", _MEMORY_FACT_FIGURE.sub(" ", text))
+        if len(word) > 2 and word not in _MEMORY_FACT_FILLER
+    )
+    return figures, words
+
+
+def _memory_fact_overlap(a: str, b: str) -> float:
+    """How alike two facts are, 0 to 1; 0 when their figures differ."""
+    (figures_a, words_a), (figures_b, words_b) = (
+        _memory_fact_signature(a),
+        _memory_fact_signature(b),
+    )
+    if not words_a or not words_b or figures_a != figures_b:
+        return 0.0
+    overlap = len(words_a & words_b) / len(words_a | words_b)
+    floor = (
+        MEMORY_FACT_SAME_WITH_FIGURES if figures_a else MEMORY_FACT_SAME_WITHOUT_FIGURES
+    )
+    return overlap if overlap >= floor else 0.0
+
+
 def _normalise_athlete_memory_category(category: str | None) -> str:
     value = (category or "general").strip().lower().replace(" ", "_")
     return value[:50] or "general"
@@ -1395,6 +1449,23 @@ async def observe_athlete_memory_fact(
             models.AthleteMemoryFact.fact_key == fact_key,
         )
     )
+    if existing is None:
+        # A reworded restatement strengthens the fact it restates, in any
+        # category: the extractor files the same FTP under "fact" one day and
+        # "general" the next (ai-trainer-ops#73).
+        # ponytail: scans every fact of the athlete (a few hundred at most); an
+        # index on the figures would be needed for thousands.
+        candidates = await db.scalars(
+            select(models.AthleteMemoryFact).where(
+                models.AthleteMemoryFact.user_id == user_id
+            )
+        )
+        scored = [
+            (_memory_fact_overlap(candidate.fact, cleaned_fact), candidate)
+            for candidate in candidates
+        ]
+        best = max(scored, key=lambda pair: pair[0], default=(0.0, None))
+        existing = best[1] if best[0] > 0 else None
     if existing is None:
         existing = models.AthleteMemoryFact(
             user_id=user_id,
