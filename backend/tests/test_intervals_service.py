@@ -347,3 +347,31 @@ async def test_fetch_activity_streams_paths(monkeypatch):
     _patch_client(monkeypatch, _FakeResp(401))
     with pytest.raises(isvc.IntervalsAuthError):
         await isvc.fetch_activity_streams("key", 9)
+
+
+@pytest.mark.asyncio
+async def test_fetch_recent_activities_asks_for_the_measures_goals_need(monkeypatch):
+    # Goal progress reads distance and climbing from this list (ai-trainer-ops#65).
+    seen = {}
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None, auth=None):
+            seen.update(params or {})
+            return _FakeResp(200, [])
+
+    monkeypatch.setattr(isvc.httpx, "AsyncClient", _FakeClient)
+
+    await isvc.fetch_recent_activities("key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7))
+
+    fields = seen["fields"].split(",")
+    assert "distance" in fields
+    assert "total_elevation_gain" in fields
