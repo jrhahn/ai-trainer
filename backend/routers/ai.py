@@ -25,7 +25,7 @@ from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
-from services import goal_progress, plan_context
+from services import goal_progress, plan_context, stated_ftp
 from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
@@ -346,6 +346,31 @@ async def _capture_self_reported_signals_from_message(
     return (
         f"(Note: I've set your usual training location to {where}, so your weather "
         f"outlook and any weather-driven plan changes now use that.)"
+    )
+
+
+async def _capture_stated_ftp(
+    db: AsyncSession, user: models.User, message: str
+) -> str | None:
+    """Set the FTP the athlete states in chat, and say so (ai-trainer-ops#70).
+
+    Runs before the profile is read, so this very turn's zones already use it.
+    Only the profile value moves: past ride metrics, CTL and ATL stay as they
+    were, which is what an athlete correcting a miscalibrated meter asked for.
+    The note is the honest record of the write, as for the location (#495).
+    """
+    watts = stated_ftp.extract_stated_ftp(message)
+    if watts is None or watts == user.current_ftp:
+        return None
+    try:
+        async with db.begin_nested():
+            user.current_ftp = watts
+    except Exception:
+        logger.warning("Stated-FTP capture failed", exc_info=True)
+        return None
+    return (
+        f"(Note: I've set your FTP to {watts} W, so your zones and power targets "
+        f"now use it. Past rides keep the values they were scored with.)"
     )
 
 
@@ -1039,6 +1064,7 @@ async def ask_trainer(
     # Load state from DB
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
+    ftp_note = await _capture_stated_ftp(db, current_user, body.question)
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
@@ -1365,6 +1391,8 @@ async def ask_trainer(
     # replied, so confirm it deterministically rather than hoping the prose does (#495).
     if home_location_note:
         result["response"] = f"{result['response']}\n\n{home_location_note}"
+    if ftp_note:
+        result["response"] = f"{result['response']}\n\n{ftp_note}"
 
     # --- Phase 7: Persist inferred user ride feedback ---
     ride_note_update = result.pop("ride_note_update", None)
