@@ -171,6 +171,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **intervals.icu rides bring their climbing** (ai-trainer-ops#65) —
+  `services/intervals_service.fetch_recent_activities`. The field list asked
+  for `distance` but not `total_elevation_gain`. The import and the backfill
+  therefore stored no elevation for any intervals.icu ride: the 2026-10-11
+  backfill filled distance on 76 rides and elevation on none. Run the
+  backfill once more after this deploy.
+
 - **Short requests get their language named too** (ai-trainer-ops#78) —
   `services/athlete_language.py`. "Bitte mach Freitag zum Ruhetag." had no
   word from the lists, so no language was named and the reply came back in
