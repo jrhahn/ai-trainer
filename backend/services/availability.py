@@ -208,6 +208,10 @@ def _date_range(normalized: str, today: date) -> list[date]:
     days: list[date] = []
     for match in _DATE_RANGE.finditer(normalized):
         after = normalized[match.start() : match.end() + 120]
+        # A question about a range asks; it does not block (same rule as the
+        # clauses below).
+        if "?" in after.split("!")[0]:
+            continue
         if not any(
             re.search(pattern, after)
             for pattern in HOLIDAY_PATTERNS + UNAVAILABLE_PATTERNS
@@ -216,18 +220,20 @@ def _date_range(normalized: str, today: date) -> list[date]:
         first_day, first_month, last_day, last_month = match.groups()
         last_month_number = MONTHS[last_month]
         first_month_number = MONTHS[first_month] if first_month else last_month_number
+        # Every date built here can fail: 30 February, or 29 February moved
+        # into a year without one. A range that cannot be dated is skipped.
         try:
             first = date(today.year, first_month_number, int(first_day))
             last = date(today.year, last_month_number, int(last_day))
+            if last < first:
+                first = first.replace(year=first.year - 1)
+            if last < today:
+                first, last = (
+                    first.replace(year=first.year + 1),
+                    last.replace(year=last.year + 1),
+                )
         except ValueError:
             continue
-        if last < first:
-            first = first.replace(year=first.year - 1)
-        if last < today:
-            first, last = (
-                first.replace(year=first.year + 1),
-                last.replace(year=last.year + 1),
-            )
         if (last - first).days >= MAX_RANGE_DAYS:
             continue
         day = max(first, today)

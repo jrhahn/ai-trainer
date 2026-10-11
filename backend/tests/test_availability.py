@@ -259,5 +259,11 @@ def test_date_range_edges():
     # A range already over this year means next year's.
     spring = _kinds("from 4 to 6 march i am on holiday")
     assert [d for _t, d in spring] == ["2027-03-04", "2027-03-05", "2027-03-06"]
-    # A date that does not exist is ignored.
+    # A date that does not exist is ignored, also once moved to next year.
     assert _kinds("from 30 to 31 february i am on holiday") == []
+    leap = extract_availability_constraints(
+        "from 29 february to 5 march i am on holiday", today=date(2028, 6, 1)
+    )
+    assert leap == []
+    # A question about a range blocks nothing.
+    assert _kinds("can i train from 4 to 26 november? i'm on holiday") == []
