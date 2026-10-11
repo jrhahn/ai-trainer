@@ -355,7 +355,7 @@ def scenarios(today: date) -> list[Scenario]:
                             )
                         )
                         is not None
-                        and m.group(1).lower().replace(" ", "")
+                        and re.sub(r"\s+", "", m.group(1).lower())
                         in {"mtb", "mountainbike"}
                     ),
                 ),
