@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Confirm what the chat captured or proposes** (ai-trainer-ops#65, #71) —
+  `services/race_intent.py`, `routers/ai.py`, `routers/users.py`, `crud.remove_goal`.
+  - `ask-trainer` now returns `capturedGoals` (id and label of each goal this
+    message stored) and `raceProposal`. The proposal is set when the athlete
+    says there is no race ("I don't have any race coming up", "kein Rennen",
+    "das Ziel ist weg") and the profile still holds one. Questions never
+    propose.
+  - The race is only proposed, never cleared on the sentence alone; the owner
+    chose a confirm step (ai-trainer-ops#63, Q21).
+  - `DELETE /users/me/goals/{id}` marks a goal `removed`.
+    `POST /users/me/race/clear` clears the profile's race date and
+    description and turns a `race` goal into `general_fitness`. Race events
+    are untouched.
+  - Tests: `tests/test_chat_confirmations.py`.
+
 - **Coach scenarios from real conversations, against the real model**
   (ai-trainer-ops#76) — `scripts/coach_scenarios.py`.
   - Seven situations where the coach went wrong in the owner's chat,

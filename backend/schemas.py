@@ -2190,8 +2190,24 @@ def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     return PlanDay.model_validate({**base, **patch})
 
 
+class CapturedGoalSchema(CamelModel):
+    """A goal the chat just stored, shown for the athlete to keep or undo (ops#65)."""
+
+    id: str
+    label: str
+
+
+class RaceProposalSchema(CamelModel):
+    """The athlete said there is no race: offer to clear the profile's (ops#71)."""
+
+    race_date: Optional[str] = None
+    race_description: Optional[str] = None
+
+
 class AskTrainerResponse(CamelModel):
     response: str
+    captured_goals: list[CapturedGoalSchema] = []
+    race_proposal: Optional[RaceProposalSchema] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     updated_plan: Optional[list[Any]] = None
     sources: Optional[list[Any]] = None

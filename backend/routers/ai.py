@@ -25,7 +25,7 @@ from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
-from services import goal_progress, plan_context, stated_ftp
+from services import goal_progress, plan_context, race_intent, stated_ftp
 from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
@@ -275,7 +275,7 @@ async def _capture_self_reported_signals_from_message(
     db: AsyncSession,
     user_id: str,
     message: str,
-) -> str | None:
+) -> tuple[str | None, list[models.AthleteGoal]]:
     """Sync the athlete's self-reports from their message (#495, #563).
 
     Three independent captures, all deterministic and all best-effort:
@@ -316,10 +316,11 @@ async def _capture_self_reported_signals_from_message(
     # One savepoint per goal: a write that fails (say, the one-active-goal index
     # losing a race with a second message) costs that goal only, never the
     # captures after it on the same session.
+    captured_goals: list[models.AthleteGoal] = []
     for stated in goal_progress.extract_goals(message):
         try:
             async with db.begin_nested():
-                await crud.upsert_active_goal(
+                goal = await crud.upsert_active_goal(
                     db,
                     user_id,
                     metric=stated.metric,
@@ -327,6 +328,7 @@ async def _capture_self_reported_signals_from_message(
                     target=stated.target,
                     statement=stated.statement,
                 )
+                captured_goals.append(goal)
         except Exception:
             logger.warning("Goal capture failed", exc_info=True)
 
@@ -336,9 +338,9 @@ async def _capture_self_reported_signals_from_message(
         )
     except Exception:
         logger.warning("Home-location capture failed", exc_info=True)
-        return None
+        return None, captured_goals
     if row is None:
-        return None
+        return None, captured_goals
 
     # A new base invalidates the cached forecast for the old one.
     clear_forecast_cache()
@@ -346,7 +348,7 @@ async def _capture_self_reported_signals_from_message(
     return (
         f"(Note: I've set your usual training location to {where}, so your weather "
         f"outlook and any weather-driven plan changes now use that.)"
-    )
+    ), captured_goals
 
 
 async def _capture_stated_ftp(
@@ -1076,8 +1078,20 @@ async def ask_trainer(
     )
     # Capture weather self-reports before the forecast is read, so a location the
     # athlete states in this very message anchors this turn's outlook (#495).
-    home_location_note = await _capture_self_reported_signals_from_message(
-        db, current_user.id, body.question
+    home_location_note, captured_goals = (
+        await _capture_self_reported_signals_from_message(
+            db, current_user.id, body.question
+        )
+    )
+    # Offered, never applied: the athlete confirms in the chat (ops#71, #63 Q21).
+    race_proposal = (
+        {
+            "race_date": current_user.race_date,
+            "race_description": current_user.race_description,
+        }
+        if race_intent.says_no_race(body.question)
+        and (current_user.race_date or current_user.training_goal == "race")
+        else None
     )
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
@@ -1511,6 +1525,16 @@ async def ask_trainer(
     # commit_plan_updates, has to be inside the transaction it closes.
     await db.commit()
 
+    # What the router captured or proposes, for the athlete to confirm or undo
+    # under the reply (ops#65, #71). Built from rows, never from the model.
+    result["captured_goals"] = [
+        {
+            "id": goal.id,
+            "label": goal_progress.goal_name(goal.metric, goal.scope, goal.target),
+        }
+        for goal in captured_goals
+    ]
+    result["race_proposal"] = race_proposal
     return schemas.AskTrainerResponse.model_validate(result)
 
 

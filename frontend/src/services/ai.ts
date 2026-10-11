@@ -46,8 +46,21 @@ export interface RideLabelUpdate {
   labelOverride: string
 }
 
+// What the chat captured or proposes, confirmed under the reply (ai-trainer-ops#65, #71).
+export interface CapturedGoal {
+  id: string
+  label: string
+}
+
+export interface RaceProposal {
+  raceDate?: string | null
+  raceDescription?: string | null
+}
+
 export interface AskTrainerResult {
   response: string
+  capturedGoals?: CapturedGoal[]
+  raceProposal?: RaceProposal | null
   planUpdates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
@@ -59,6 +72,8 @@ export interface AskTrainerResult {
 
 interface BackendAskTrainerResult {
   response: string
+  capturedGoals?: CapturedGoal[]
+  raceProposal?: RaceProposal | null
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
@@ -130,6 +145,8 @@ export async function askTrainer(
     physiologyRationale: result.physiologyRationale ?? result.physiology_rationale,
     contextRationale: result.contextRationale ?? result.context_rationale,
     objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
+    capturedGoals: result.capturedGoals ?? [],
+    raceProposal: result.raceProposal ?? null,
   }
 }
 

@@ -1005,6 +1005,38 @@ async def delete_race_event(
     return {"status": "deleted"}
 
 
+@router.delete("/goals/{goal_id}")
+async def remove_goal(
+    goal_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Undo a goal the chat captured (ai-trainer-ops#65, owner decision Q20)."""
+    if await crud.remove_goal(db, current_user.id, goal_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
+        )
+    return {"status": "removed"}
+
+
+@router.post("/race/clear")
+async def clear_profile_race(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Remove the setup form's race, after the athlete confirmed it in chat.
+
+    The confirm step the owner chose for "I have no race" (ai-trainer-ops#71,
+    #63 Q21). Race events are separate and stay; only the profile's race goes.
+    """
+    current_user.race_date = None
+    current_user.race_description = None
+    if current_user.training_goal == "race":
+        current_user.training_goal = "general_fitness"
+    await db.flush()
+    return {"status": "cleared"}
+
+
 @router.get("/chat", response_model=schemas.ChatHistoryResponse)
 async def get_chat(
     db: AsyncSession = Depends(get_db),
