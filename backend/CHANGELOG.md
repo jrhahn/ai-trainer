@@ -156,6 +156,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach scenarios show the model the days they are about**
+  (ai-trainer-ops#76) — `scripts/coach_scenarios.py`.
+  - On the first run against the real model, two scenarios appended their
+    key day to the end of the plan. `ask_trainer` reads the coming days in
+    list order, so that day was outside the window and the model never saw
+    it. Plans are now in date order.
+  - "mountain bike" in two words now counts as recommending the MTB.
+
 - **A session's power target matches the zone its words name** (ai-trainer-ops#75) —
   `services/zone_label.py`, `services/plan_pipeline.py`.
   - A session described as Z2 came with a 110–145 W target, which is

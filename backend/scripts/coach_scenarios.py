@@ -183,8 +183,14 @@ def scenarios(today: date) -> list[Scenario]:
         _day(today, offset, "endurance", "Z2 endurance", 90) for offset in range(-3, 10)
     ]
 
-    def with_day(day: dict) -> list[dict]:
-        return [d for d in week if d["date"] != day["date"]] + [day]
+    def with_days(*days: dict) -> list[dict]:
+        # In date order: ask_trainer takes the next days from the list as given,
+        # so a day appended at the end fell out of the window it reads.
+        replaced = {day["date"] for day in days}
+        return sorted(
+            [d for d in week if d["date"] not in replaced] + list(days),
+            key=lambda d: d["date"],
+        )
 
     return [
         Scenario(
@@ -242,7 +248,7 @@ def scenarios(today: date) -> list[Scenario]:
             name="tomorrow-off",
             issue="ops#72",
             question="Morgen kann ich nicht trainieren. Was machen wir mit den Intervallen?",
-            plan=with_day(_day(today, 1, "intervals", "VO2 max 5x4", 90)),
+            plan=with_days(_day(today, 1, "intervals", "VO2 max 5x4", 90)),
             profile=_profile(
                 availabilityConstraints=[
                     {
@@ -268,7 +274,7 @@ def scenarios(today: date) -> list[Scenario]:
             name="today-is-today",
             issue="date confusion",
             question="Was steht heute an?",
-            plan=with_day(_day(today, 0, "endurance", "Long endurance ride", 210)),
+            plan=with_days(_day(today, 0, "endurance", "Long endurance ride", 210)),
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
@@ -301,17 +307,11 @@ def scenarios(today: date) -> list[Scenario]:
                 "I had two full rest days and my legs feel really fresh. "
                 "Could I do a sweet spot session today instead of the easy spin?"
             ),
-            plan=[
-                *(
-                    d
-                    for d in week
-                    if d["date"]
-                    not in {_iso(today, -2), _iso(today, -1), _iso(today, 0)}
-                ),
+            plan=with_days(
                 _day(today, -2, "rest", "Rest day", 0),
                 _day(today, -1, "rest", "Rest day", 0),
                 _day(today, 0, "recovery", "Easy spin", 45),
-            ],
+            ),
             profile=_profile(),
             checks=[
                 ("replies in English", in_english),
@@ -349,13 +349,14 @@ def scenarios(today: date) -> list[Scenario]:
                     lambda r: (
                         (
                             m := re.search(
-                                r"\b(mtb|mountainbike|rennrad|road)\b",
+                                r"\b(mtb|mountain\s*bike|rennrad|road)\b",
                                 r.reply,
                                 re.IGNORECASE,
                             )
                         )
                         is not None
-                        and m.group(1).lower() in {"mtb", "mountainbike"}
+                        and m.group(1).lower().replace(" ", "")
+                        in {"mtb", "mountainbike"}
                     ),
                 ),
             ],
@@ -364,7 +365,7 @@ def scenarios(today: date) -> list[Scenario]:
             name="claims-match-changes",
             issue="unapplied changes, chat 2026-06-24",
             question="Bitte mach Freitag zum Ruhetag.",
-            plan=with_day(
+            plan=with_days(
                 _day(today, friday_offset, "intervals", "Threshold 3x12", 90)
             ),
             profile=_profile(),
