@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
-from services import goal_progress, run_durability, training_monotony
+from services import goal_progress, run_durability, training_monotony, training_phase
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -81,14 +81,44 @@ async def plan_writer_context(
     activity_rows = await athlete_activity_history(db, user_id)
     exposure = run_durability.run_exposure(activity_rows, today)
     distribution = training_monotony.load_distribution(activity_rows, today)
+    phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(plan, today, exposure, distribution, goals),
+        coherence=_coherence_block(
+            plan, today, exposure, distribution, phase=phase, goals=goals
+        ),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
     )
+
+
+async def training_phase_section_for_user(
+    db, user_id: str, today, activity_rows: list | None = None
+) -> str:
+    """Where the athlete is in their season, as a prompt block (ai-trainer-ops#64).
+
+    Here rather than in ``services/training_phase`` so that module stays pure, and
+    shared by every writer: the chat, the nightly run and auto-adapt get it through
+    ``plan_writer_context``; a full regeneration, which builds no writer context,
+    calls this directly. Two writers planning different phases for the same week
+    would undo each other every night.
+    """
+    if activity_rows is None:
+        activity_rows = await athlete_activity_history(db, user_id)
+    user = await crud.get_user_by_id(db, user_id)
+    race_dates = [event.date for event in await crud.get_race_events(db, user_id)]
+    if user is not None and user.race_date:
+        race_dates.append(user.race_date)
+    home = await crud.get_athlete_home_location(db, user_id)
+    phase = training_phase.training_phase(
+        today,
+        race_dates,
+        activity_rows,
+        latitude=home.latitude if home is not None else None,
+    )
+    return training_phase.training_phase_section(phase)
 
 
 # Goal progress looks back twelve weeks, longer than the audits sharing
@@ -190,6 +220,7 @@ def _coherence_block(
     today,
     exposure: run_durability.RunExposure,
     distribution: training_monotony.LoadDistribution | None,
+    phase: str = "",
     goals: str = "",
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
@@ -212,8 +243,13 @@ def _coherence_block(
     than what is planned. It belongs in this block anyway: it is decidable without
     an LLM, it is about this week, and the writer has to know it before it writes —
     a flat week is fixed by placing an easy day, which is a planning act.
+
+    The training phase (ai-trainer-ops#64) comes first: it is the frame the other
+    findings are fixed inside, like the durability ceiling a constraint and not a
+    defect.
     """
     sections = [
+        phase,
         plan_coherence_section(find_repeated_sessions(plan, today), today),
         plan_interference_section(find_interference(plan, today), today),
         _durability_section(plan, today, exposure),
