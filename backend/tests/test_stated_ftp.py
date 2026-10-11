@@ -108,3 +108,29 @@ async def test_restating_the_current_ftp_writes_nothing_and_says_nothing(
     async with TestSessionLocal() as db:
         assert (await db.scalar(select(models.User))).current_ftp == current
     assert "set your FTP" not in response.json()["response"]
+
+
+@pytest.mark.asyncio
+async def test_the_note_speaks_the_athletes_language(client, auth_headers, mock_ai_service):
+    # The owner's message of 2026-10-11 got an English note under a German reply.
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Mein FTP liegt so bei 300W"},
+    )
+
+    reply = response.json()["response"]
+    assert "Ich habe deine FTP auf 300 W gesetzt" in reply
+    assert "Note:" not in reply
+
+
+def test_the_router_notes_have_a_german_form():
+    from routers import ai as ai_router
+
+    blocked = [{"constraintType": "no_training", "weekday": "friday"}]
+    assert "Freitag" in ai_router._format_constraint_override_note(blocked, german=True)
+    assert "Hinweis" in ai_router._format_constraint_lift_note(
+        [{"weekday": "saturday"}], german=True
+    )
+    assert "Trainingsort auf Darmstadt" in ai_router._location_note("Darmstadt", german=True)
+    assert "I've set your FTP" in ai_router._ftp_note(285, german=False)

@@ -173,6 +173,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The router's notes under a coach reply are in the athlete's language**
+  (ai-trainer-ops#78 follow-up) — `routers/ai.py`. "Mein FTP liegt so bei 300W"
+  got a German reply followed by "(Note: I've set your FTP to 300 W…)". The
+  notes for the FTP, the training location, blocked and lifted availability,
+  and dates outside the plan now have a German form ("Hinweis: …", German
+  weekday names). It is chosen by `athlete_language` from the message and the
+  last five athlete messages.
+
 - **intervals.icu rides bring their climbing** (ai-trainer-ops#65) —
   `services/intervals_service.fetch_recent_activities`. The field list asked
   for `distance` but not `total_elevation_gain`. The import and the backfill
