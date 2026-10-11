@@ -75,7 +75,9 @@ def test_long_session_duration_is_parsed():
 
 def test_plain_training_mention_creates_no_required_constraint():
     # "training" alone is not a long-session phrase.
-    result = extract_availability_constraints("I love training on saturday", today=TODAY)
+    result = extract_availability_constraints(
+        "I love training on saturday", today=TODAY
+    )
     assert all(r["constraint_type"] != "required_workout" for r in result)
 
 
@@ -101,9 +103,7 @@ def test_rest_day_not_pinned_as_required_session():
     assert "2026-06-04" not in required_dates
     # Saturday and Sunday still get the long endurance requirement.
     assert required_dates == {"2026-06-06", "2026-06-07"}
-    assert all(
-        r["required_workout"]["workoutType"] == "endurance" for r in required
-    )
+    assert all(r["required_workout"]["workoutType"] == "endurance" for r in required)
 
 
 def test_intent_does_not_leak_across_clauses():
@@ -145,9 +145,7 @@ def test_lift_german_sperre_aufheben_detected():
 
 
 def test_lift_with_named_day_resolves_date():
-    result = extract_constraint_lift(
-        "remove the constraint on friday", today=TODAY
-    )
+    result = extract_constraint_lift("remove the constraint on friday", today=TODAY)
     assert result["lift"] is True
     assert result["dates"] == ["2026-06-05"]  # next friday
 
@@ -265,5 +263,18 @@ def test_date_range_edges():
         "from 29 february to 5 march i am on holiday", today=date(2028, 6, 1)
     )
     assert leap == []
-    # A question about a range blocks nothing.
+    # A question about a range blocks nothing; a statement followed by a
+    # question still does, and the holiday word may come first.
     assert _kinds("can i train from 4 to 26 november? i'm on holiday") == []
+    assert (
+        len(
+            _kinds(
+                "Ab dem 4. bis zum 26. November bin ich im Urlaub. Kannst du den Plan anpassen?"
+            )
+        )
+        == 23
+    )
+    assert (
+        len(_kinds("I'm on holiday from 4 to 26 November. Can you adjust the plan?"))
+        == 23
+    )

@@ -203,17 +203,29 @@ def _day_segments(clause: str) -> list[str]:
     return list(reversed(merged))
 
 
+# A sentence ends at "?", "!", ";" or a full stop that does not close a date
+# number ("4." in "4. November" is part of the date).
+_SENTENCE_END = re.compile(r"(?<!\d)\.|[?!;]")
+
+
+def _sentence_around(text: str, start: int, end: int) -> tuple[str, bool]:
+    """The sentence holding ``text[start:end]`` and whether it is a question."""
+    before = [m.end() for m in _SENTENCE_END.finditer(text, 0, start)]
+    after = _SENTENCE_END.search(text, end)
+    sentence_start = before[-1] if before else 0
+    sentence_end = after.end() if after else len(text)
+    return text[sentence_start:sentence_end], bool(after and after.group() == "?")
+
+
 def _date_range(normalized: str, today: date) -> list[date]:
     """Every day of a stated absence such as "4 to 26 November on holiday"."""
     days: list[date] = []
     for match in _DATE_RANGE.finditer(normalized):
-        after = normalized[match.start() : match.end() + 120]
+        sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
         # clauses below).
-        if "?" in after.split("!")[0]:
-            continue
-        if not any(
-            re.search(pattern, after)
+        if is_question or not any(
+            re.search(pattern, sentence)
             for pattern in HOLIDAY_PATTERNS + UNAVAILABLE_PATTERNS
         ):
             continue
