@@ -313,18 +313,22 @@ async def _capture_self_reported_signals_from_message(
 
     # A goal with a number on it ("4000 hm in one ride"), so the coach can say
     # how far away it is rather than only repeat it (ai-trainer-ops#65).
-    try:
-        for stated in goal_progress.extract_goals(message):
-            await crud.upsert_active_goal(
-                db,
-                user_id,
-                metric=stated.metric,
-                scope=stated.scope,
-                target=stated.target,
-                statement=stated.statement,
-            )
-    except Exception:
-        logger.warning("Goal capture failed", exc_info=True)
+    # One savepoint per goal: a write that fails (say, the one-active-goal index
+    # losing a race with a second message) costs that goal only, never the
+    # captures after it on the same session.
+    for stated in goal_progress.extract_goals(message):
+        try:
+            async with db.begin_nested():
+                await crud.upsert_active_goal(
+                    db,
+                    user_id,
+                    metric=stated.metric,
+                    scope=stated.scope,
+                    target=stated.target,
+                    statement=stated.statement,
+                )
+        except Exception:
+            logger.warning("Goal capture failed", exc_info=True)
 
     try:
         row = await home_location.capture_home_location_from_message(

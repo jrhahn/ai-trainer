@@ -284,3 +284,32 @@ async def test_going_back_to_an_old_target_starts_a_new_row():
         (4000, "replaced"),
         (3000, "active"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_goal_write_costs_only_that_goal(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    calls = []
+
+    async def failing_once(db, user_id, **goal):
+        calls.append(goal["metric"])
+        if len(calls) == 1:
+            raise RuntimeError("lost the race for the active goal")
+        return await original(db, user_id, **goal)
+
+    original = crud.upsert_active_goal
+    monkeypatch.setattr(crud, "upsert_active_goal", failing_once)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "My goal is 150 km and 3000 hm in one ride."},
+    )
+
+    assert response.status_code == 200
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        goals = await crud.list_active_goals(db, user.id)
+    assert len(calls) == 2
+    assert [g.metric for g in goals] == [calls[1]]
