@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Coach scenarios from real conversations, against the real model**
+  (ai-trainer-ops#76) — `scripts/coach_scenarios.py`.
+  - Seven situations where the coach went wrong in the owner's chat,
+    paraphrased into a synthetic athlete:
+    - a past race;
+    - the current FTP;
+    - "tomorrow off";
+    - today's weekday;
+    - readiness after rest;
+    - trail motivation;
+    - a claimed change.
+  - Each situation calls `ai_service.ask_trainer` with built inputs and no
+    database, and applies narrow deterministic checks. The output is a
+    pass/fail table with the failing replies quoted.
+  - Run it manually: `python -m scripts.coach_scenarios [--provider gemini] [--only NAME]`.
+  - Tests: `tests/test_coach_scenarios.py`. Each check fails on the reply the
+    chat actually got and passes a sound one. A broken call is reported, not
+    raised, and the whole run goes through the stub provider.
+
 - **The coach plans inside a training phase** (ai-trainer-ops#64) —
   `services/training_phase.py`, `services/plan_context.py`, `routers/ai.py`,
   `services/prompts.py`. Every plan writer (regeneration, chat, nightly run,
