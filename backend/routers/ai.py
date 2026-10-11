@@ -314,8 +314,7 @@ async def _capture_self_reported_signals_from_message(
     # A goal with a number on it ("4000 hm in one ride"), so the coach can say
     # how far away it is rather than only repeat it (ai-trainer-ops#65).
     try:
-        stated = goal_progress.extract_goal(message)
-        if stated is not None:
+        for stated in goal_progress.extract_goals(message):
             await crud.upsert_active_goal(
                 db,
                 user_id,

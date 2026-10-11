@@ -42,9 +42,23 @@ _ELEVATION_UNIT = (
     r"|metres?\s+(?:of\s+)?(?:climbing|elevation)|meters?\s+(?:of\s+)?(?:climbing|elevation))"
 )
 _DISTANCE_UNIT = r"(?:km\b|kilomet(?:er|re)s?\b)"
-_INTENT = re.compile(
-    r"\b(?:goal|target|aim|want to|wanna|i'?d like to|plan to|dream|"
-    r"ziel|möchte|moechte|will\b|würde gern|wuerde gern|schaffen|vorgenommen)",
+# A goal word is enough on its own. A wish ("I want to", "ich will") also says
+# "I will ride 80 km tomorrow", which is a plan for one day and must not replace
+# a real goal, so a wish counts only in the first person and without a near date.
+_GOAL_WORD = re.compile(
+    r"\b(?:goal|target|aim|dream|ziel|traum|vorgenommen|schaffen|achieve)",
+    re.IGNORECASE,
+)
+_WISH = re.compile(
+    r"\b(?:want to|wanna|i'?d like to|plan to|möchte|moechte|will|würde gern|wuerde gern)\b",
+    re.IGNORECASE,
+)
+_FIRST_PERSON = re.compile(r"\b(?:i|i'?d|i'?m|ich)\b", re.IGNORECASE)
+_NEAR_DATE = re.compile(
+    r"\b(?:today|tonight|tomorrow|this (?:morning|afternoon|evening|week|weekend)|"
+    r"on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"heute|morgen|übermorgen|uebermorgen|am wochenende|diese woche|"
+    r"am (?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag))\b",
     re.IGNORECASE,
 )
 _WEEK = re.compile(r"\b(?:per week|a week|each week|weekly|pro woche|in der woche|wöchentlich|woechentlich)\b", re.IGNORECASE)
@@ -82,27 +96,41 @@ def _parse_number(raw: str) -> float | None:
         return None
 
 
-def extract_goal(message: str) -> StatedGoal | None:
-    """A goal stated in *message*, or ``None``.
+def _states_intent(text: str) -> bool:
+    if _GOAL_WORD.search(text):
+        return True
+    return bool(
+        _WISH.search(text) and _FIRST_PERSON.search(text) and not _NEAR_DATE.search(text)
+    )
 
-    Questions are not goals: "could I do 4000 hm?" asks, it does not commit.
+
+def extract_goals(message: str) -> list[StatedGoal]:
+    """Every goal stated in *message*, one per measure.
+
+    "150 km and 3000 hm in one ride" is two goals. Questions are not goals:
+    "could I do 4000 hm?" asks, it does not commit.
     """
     text = (message or "").strip()
-    if not text or text.endswith("?") or not _INTENT.search(text):
-        return None
-    match = _QUANTITY.search(text)
-    if match is None:
-        return None
-    value = _parse_number(match.group(1))
-    if value is None:
-        return None
-    unit = match.group("unit").lower()
-    metric = DISTANCE if re.match(_DISTANCE_UNIT, unit, re.IGNORECASE) else ELEVATION
+    if not text or text.endswith("?") or not _states_intent(text):
+        return []
     scope = WEEK if _WEEK.search(text) else RIDE
-    low, high = _BOUNDS[(metric, scope)]
-    if not low <= value <= high:
-        return None
-    return StatedGoal(metric, scope, value, text[:500])
+    goals: dict[str, StatedGoal] = {}
+    for match in _QUANTITY.finditer(text):
+        value = _parse_number(match.group(1))
+        if value is None:
+            continue
+        unit = match.group("unit").lower()
+        metric = DISTANCE if re.match(_DISTANCE_UNIT, unit, re.IGNORECASE) else ELEVATION
+        low, high = _BOUNDS[(metric, scope)]
+        if low <= value <= high and metric not in goals:
+            goals[metric] = StatedGoal(metric, scope, value, text[:500])
+    return list(goals.values())
+
+
+def extract_goal(message: str) -> StatedGoal | None:
+    """The first goal stated in *message*, or ``None``."""
+    goals = extract_goals(message)
+    return goals[0] if goals else None
 
 
 @dataclass(frozen=True)

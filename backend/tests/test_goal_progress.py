@@ -59,10 +59,22 @@ def test_a_stated_goal_is_captured(message, metric, scope, target):
         "I want to ride 4000 m",  # metres of what?
         "Mein Ziel sind 40000000 hm",  # not a real number for one ride
         "I want to feel fresher on Sunday",  # no number
+        "I will ride 80 km tomorrow",  # a plan for one day
+        "Morgen will ich 1500 hm fahren",  # the same, in German
+        "Mein Kumpel will 3000 hm fahren",  # someone else's wish
     ],
 )
 def test_other_sentences_are_not_goals(message):
     assert gp.extract_goal(message) is None
+
+
+def test_two_measures_in_one_sentence_are_two_goals():
+    goals = gp.extract_goals("My goal is 150 km and 3000 hm in one ride")
+
+    assert {(g.metric, g.target) for g in goals} == {
+        (gp.DISTANCE, 150),
+        (gp.ELEVATION, 3000),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +212,10 @@ async def test_a_new_target_replaces_the_old_one():
                 db, user.id, metric=gp.ELEVATION, scope=gp.RIDE, target=target
             )
         goals = await crud.list_active_goals(db, user.id)
+        replaced = await db.scalars(
+            select(models.AthleteGoal).where(models.AthleteGoal.status == "replaced")
+        )
         await db.commit()
 
     assert [g.target for g in goals] == [4000]
+    assert [g.target for g in replaced] == [3000]

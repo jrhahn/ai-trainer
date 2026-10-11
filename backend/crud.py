@@ -4928,7 +4928,12 @@ async def upsert_active_goal(
     statement: str = "",
     deadline: str | None = None,
 ) -> models.AthleteGoal:
-    """Set the athlete's goal for *metric* and *scope*, replacing the old target."""
+    """Set the athlete's goal for *metric* and *scope*.
+
+    The previous active goal for the same measure is kept as ``replaced`` rather
+    than overwritten, so a target that changed can still be traced to what the
+    athlete said before.
+    """
     existing = await db.scalar(
         select(models.AthleteGoal).where(
             models.AthleteGoal.user_id == user_id,
@@ -4939,12 +4944,10 @@ async def upsert_active_goal(
     )
     now = datetime.now(timezone.utc)
     if existing is not None:
-        existing.target = target
-        existing.statement = statement
-        existing.deadline = deadline
+        if existing.target == target and existing.deadline == deadline:
+            return existing
+        existing.status = "replaced"
         existing.updated_at = now
-        await db.flush()
-        return existing
     goal = models.AthleteGoal(
         user_id=user_id,
         metric=metric,
