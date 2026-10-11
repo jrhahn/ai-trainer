@@ -17,12 +17,13 @@ _GERMAN = frozenset(
     """und der die das ist nicht ich du dich dein deine mein meine heute morgen mit
     für auf ein eine einen wir es zu den dem bei oder aber noch schon auch wie
     soll kann habe hab bin war mir mich sind lieber eher von vom meiner meinem
-    wäre würde sollte mal nur jetzt sehr""".split()
+    wäre würde sollte mal nur jetzt sehr bitte danke zum zur mach mache machen
+    lass ja nein""".split()
 )
 _ENGLISH = frozenset(
     """the and you your is not today tomorrow with for on a we it to of in at this
     that i my me should could can have had am are or but still already how what
-    rather would just now very""".split()
+    rather would just now very please thanks make let yes""".split()
 )
 # Fewer function words than this and a message says too little on its own.
 MIN_EVIDENCE = 3
