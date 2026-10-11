@@ -944,6 +944,13 @@ async def _generate_plan_for_user(
             db, current_user, timezone_name=timezone_name
         )
     )
+    # A regeneration builds no writer context, so it reads the phase itself; the
+    # nightly run then plans inside the same phase rather than undoing this one
+    # (ai-trainer-ops#64).
+    phase_section = await plan_context.training_phase_section_for_user(
+        db, current_user.id, app_today(timezone_name=timezone_name)
+    )
+    athlete_model_section = f"{athlete_model_section}\n{phase_section}"
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:
             plan = await ai_service.generate_training_plan(
