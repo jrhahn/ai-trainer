@@ -79,3 +79,13 @@ def test_a_short_message_that_leans_clearly_wins_over_history():
 
 def test_a_word_both_languages_share_is_no_evidence():
     assert athlete_language("was") is None
+
+
+def test_history_is_read_newest_first_and_stops_once_it_knows():
+    earlier = [
+        "Ich bin heute echt müde und habe keine Lust.",  # oldest, German
+        "Is the plan for tomorrow still the same?",
+        "What should I eat before the ride?",  # newest, English
+    ]
+
+    assert athlete_language("ok", earlier) == "English"
