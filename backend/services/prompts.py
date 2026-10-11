@@ -3430,6 +3430,11 @@ def evaluate_inquiry_answer_system(is_final_attempt: bool) -> str:
         "Leave 'question' empty.\n"
         f"If it is NOT answered: set 'answered' false. {fallback} Leave 'fact' "
         "empty.\n"
+        # The acknowledgement is the one line the athlete reads after answering,
+        # and it went out in English to German answers (ai-trainer-ops#74).
+        f"{ATHLETE_LANGUAGE_RULE} Their reply above is in their language: write "
+        "'reply' and 'question' in it. Write 'fact' in English, like every stored "
+        "fact.\n"
         "ALWAYS respond with a valid JSON object of the form: "
         '{"answered": bool, "fact": str, "reply": str, "question": str}.'
     )

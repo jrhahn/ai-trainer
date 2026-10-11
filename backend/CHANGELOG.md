@@ -137,6 +137,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The acknowledgement after answering a coach question is in the athlete's
+  language** (ai-trainer-ops#74) — `services/prompts.evaluate_inquiry_answer_system`.
+  #658 put the language rule on every athlete-facing prompt but this one, so a
+  German answer to a German question got its "thanks, noted" in English. The
+  prompt now states the rule. `reply` and `question` are written in the
+  athlete's language, and `fact` stays English like every stored fact.
+  - Tests: `tests/test_coach_language.py`.
+
 - **An FTP said in the coach chat now reaches the profile** (ai-trainer-ops#70) —
   `services/stated_ftp.py`, `routers/ai.py`.
   - "My FTP is rather 285 W" used to get "I've updated your FTP" from the coach
