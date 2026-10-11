@@ -2714,6 +2714,8 @@ def build_ride_metrics_chain(
                 "activity_date": activity_date_str,
                 "sport_type": ride.get("sport_type", "cycling"),
                 "duration_seconds": ride.get("duration_seconds"),
+                "distance_km": ride.get("distance_km"),
+                "elevation_gain_m": ride.get("elevation_gain_m"),
                 "start_lat": ride.get("start_lat"),
                 "start_lng": ride.get("start_lng"),
                 "weather_temperature_c": ride.get("weather_temperature_c"),

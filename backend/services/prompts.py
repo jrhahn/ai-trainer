@@ -222,7 +222,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Do not rely on a 'weeklyHours' field; derive realistic weekly volume from the athlete's fitness level
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
-- Progressive overload: gradually increase load week-over-week, but include a recovery day after every hard session.
+- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
 - Never schedule two hard days back-to-back.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
 - Never schedule the same session (same type, title and duration) on two consecutive days.
@@ -1039,7 +1039,8 @@ def generate_plan_system() -> str:
         f"{plan_allocation_rule()}\n"
         "Workout type guidance:\n"
         "- If there is an upcoming race in the athlete profile or race calendar, include race-specific workouts and a taper week\n"
-        "- If there is no upcoming race, build a balanced general-fitness plan with endurance, strength, consistency, and recovery\n"
+        "- If there is no upcoming race, follow the training phase block: its phase and block focus decide the emphasis. "
+        "Do not fall back to the same balanced general-fitness fortnight every time\n"
         "- Tailor workout types to the rider type "
         "(e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)"
     )

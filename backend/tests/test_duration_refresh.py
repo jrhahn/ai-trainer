@@ -125,6 +125,63 @@ async def test_corrected_durations_since_excludes_old_rides(monkeypatch):
     assert changes == []
 
 
+@pytest.mark.asyncio
+async def test_missing_distance_and_climbing_are_filled_never_overwritten(monkeypatch):
+    """ai-trainer-ops#65: rides synced before the columns existed get them."""
+    empty = _corrupted_intervals_metric()
+    empty.distance_km = None
+    empty.elevation_gain_m = None
+    kept = SimpleNamespace(
+        activity_source="strava",
+        activity_date="2026-07-18",
+        strava_activity_id=77,
+        distance_km=50.0,
+        elevation_gain_m=900.0,
+    )
+
+    async def fake_metrics(db, user_id):
+        return [empty, kept]
+
+    monkeypatch.setattr(
+        duration_refresh.crud, "get_all_ride_metrics_ordered", fake_metrics
+    )
+    measures = {
+        ("intervals", float(intervals_activity_id("i166933341"))): (84.21, 2134.6),
+        ("strava", 77): (99.0, 1999.0),
+        # The same number from the other provider must not reach the Strava row.
+        ("intervals", 77.0): (1.0, 1.0),
+    }
+
+    filled = await duration_refresh.fill_missing_measures(
+        None, _intervals_user(), measures, apply=True
+    )
+
+    assert filled == 1
+    assert (empty.distance_km, empty.elevation_gain_m) == (84.21, 2134.6)
+    assert (kept.distance_km, kept.elevation_gain_m) == (50.0, 900.0)
+
+
+@pytest.mark.asyncio
+async def test_the_intervals_list_records_the_measures(monkeypatch):
+    async def fake_fetch(api_key, athlete_id, *, oldest, newest):
+        return [
+            {"id": "i166933341", "moving_time": 15914, "distance": 84213.0,
+             "total_elevation_gain": 2134.6},
+        ]
+
+    monkeypatch.setattr(duration_refresh, "fetch_recent_activities", fake_fetch)
+    measures: dict = {}
+
+    await duration_refresh.fetch_intervals_moving_times(
+        "key", "0", oldest=date(2026, 1, 1), newest=date(2026, 12, 31),
+        measures=measures,
+    )
+
+    assert measures == {
+        ("intervals", float(intervals_activity_id("i166933341"))): (84.21, 2134.6)
+    }
+
+
 def test_backfill_cli_delegates_to_service():
     # The CLI wrapper imports the shared correction rather than reimplementing it.
     assert backfill.refresh_user_durations is duration_refresh.refresh_user_durations
@@ -238,7 +295,7 @@ async def test_corrected_durations_matches_strava_by_exact_id(monkeypatch):
     async def fake_token(token, db):
         return "access-tok"
 
-    async def fake_fetch(access_token, *, after=None):
+    async def fake_fetch(access_token, *, after=None, measures=None):
         captured["after"] = after
         captured["token"] = access_token
         return {555: 15914, 777: 999}
@@ -288,7 +345,7 @@ async def test_refresh_user_durations_applies_and_recalculates(monkeypatch):
     metric = _corrupted_intervals_metric()
     db = _FakeDB()
 
-    async def fake_corrected(db_, user, *, since=None):
+    async def fake_corrected(db_, user, *, since=None, measures=None):
         return [(metric, 30491, 15914)]
 
     async def fake_recalc(db_, user):
@@ -314,7 +371,7 @@ async def test_refresh_user_durations_dry_run_does_not_mutate(monkeypatch):
     original = metric.duration_seconds
     db = _FakeDB()
 
-    async def fake_corrected(db_, user, *, since=None):
+    async def fake_corrected(db_, user, *, since=None, measures=None):
         return [(metric, original, 15914)]
 
     async def boom(*a, **k):  # pragma: no cover - must not run on a dry run
@@ -339,7 +396,7 @@ async def test_refresh_user_durations_survives_missing_ftp(monkeypatch):
     metric = _corrupted_intervals_metric()
     db = _FakeDB()
 
-    async def fake_corrected(db_, user, *, since=None):
+    async def fake_corrected(db_, user, *, since=None, measures=None):
         return [(metric, 30491, 15914)]
 
     async def no_ftp(db_, user):
