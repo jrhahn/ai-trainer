@@ -156,6 +156,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A session's power target matches the zone its words name** (ai-trainer-ops#75) —
+  `services/zone_label.py`, `services/plan_pipeline.py`.
+  - A session described as Z2 came with a 110–145 W target, which is
+    recovery at the athlete's FTP. The athlete had to ask three times what to
+    ride.
+  - The plan gate now checks every proposed day. When the title and
+    description name exactly one zone from Z2 to Z6 and the target lies
+    entirely outside it, the target is set to that zone's watts for the
+    athlete's FTP.
+  - These days are left alone: a zone named as a bound ("below Z2"), two
+    zones named, Z1 or Z7, days with intervals, and days without an FTP or a
+    target.
+  - Tests: `tests/test_zone_label.py`.
+- **Availability capture gives each day its own intent, sees days off, skips
+  questions, and reads date ranges** (ai-trainer-ops#72) — `services/availability.py`.
+  - "Tomorrow gym and Friday off, Saturday the long one" pinned Thursday,
+    Friday and Saturday as required long rides. A clause is now split at each
+    day it names. A day joined to the next by only "and" or "," shares the
+    next day's intent.
+  - "Thursday stays free", "tomorrow is a rest day", "Friday off" and "I don't
+    have time on Friday" now block the day. "The power meter was off" does
+    not.
+  - A question pins nothing. "Why did the plan drop Sunday's long ride?" used
+    to pin Sunday as a required long ride.
+  - "From 4 to 26 November I'm on holiday, I can't train" blocks each of those
+    days, up to 45 days.
+  - Tests: `tests/test_availability.py`.
+- **A reworded memory fact strengthens the one it restates** (ai-trainer-ops#73) —
+  `crud.observe_athlete_memory_fact`.
+  - The extractor rewords what it already knows. One athlete's memory held
+    thirteen rows saying their FTP is 285 W, filed under two categories, all
+    competing for the prompt's few memory slots.
+  - When no row has the exact key, a write now looks for a fact of the same
+    athlete with the same figures and at least 40% of the same words, or 70%
+    of the same words when there are no figures. The habitual filler words
+    are dropped first, and "functional threshold power" is read as "FTP". A
+    match gains the observation instead of a new row being added.
+  - Existing duplicates are left as they are. They decay to stale as usual.
+  - Tests: `tests/test_memory_fact_dedup.py`.
+- **A race already run is history, not next year's target** (ai-trainer-ops#71) —
+  `services/prompts.py`.
+  - The setup form's race stays on the account after race day. Every coach
+    prompt dumped the profile as is (`trainingGoal: race`, a May date), and
+    `race_profile_context_section` told the model to "use this for
+    race-specific preparation and taper timing". For five months the coach and
+    the nightly run planned toward "your 80 km race in May" for an athlete who
+    had raced it in May and said there was no race.
+  - `prompt_profile` now moves a past race to `lastRace` in every prompt that
+    dumps the profile, and a `race` goal reads "no upcoming race in the
+    profile". The race section names it as a past race not to plan toward.
+    Race day itself and later dates are unchanged.
+  - Tests: `tests/test_past_race_profile.py`.
+- **The acknowledgement after answering a coach question is in the athlete's
+  language** (ai-trainer-ops#74) — `services/prompts.evaluate_inquiry_answer_system`.
+  #658 put the language rule on every athlete-facing prompt but this one, so a
+  German answer to a German question got its "thanks, noted" in English. The
+  prompt now states the rule. `reply` and `question` are written in the
+  athlete's language, and `fact` stays English like every stored fact.
+  - Tests: `tests/test_coach_language.py`.
+
 - **An FTP said in the coach chat now reaches the profile** (ai-trainer-ops#70) —
   `services/stated_ftp.py`, `routers/ai.py`.
   - "My FTP is rather 285 W" used to get "I've updated your FTP" from the coach

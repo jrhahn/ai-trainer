@@ -75,7 +75,9 @@ def test_long_session_duration_is_parsed():
 
 def test_plain_training_mention_creates_no_required_constraint():
     # "training" alone is not a long-session phrase.
-    result = extract_availability_constraints("I love training on saturday", today=TODAY)
+    result = extract_availability_constraints(
+        "I love training on saturday", today=TODAY
+    )
     assert all(r["constraint_type"] != "required_workout" for r in result)
 
 
@@ -101,9 +103,7 @@ def test_rest_day_not_pinned_as_required_session():
     assert "2026-06-04" not in required_dates
     # Saturday and Sunday still get the long endurance requirement.
     assert required_dates == {"2026-06-06", "2026-06-07"}
-    assert all(
-        r["required_workout"]["workoutType"] == "endurance" for r in required
-    )
+    assert all(r["required_workout"]["workoutType"] == "endurance" for r in required)
 
 
 def test_intent_does_not_leak_across_clauses():
@@ -145,9 +145,7 @@ def test_lift_german_sperre_aufheben_detected():
 
 
 def test_lift_with_named_day_resolves_date():
-    result = extract_constraint_lift(
-        "remove the constraint on friday", today=TODAY
-    )
+    result = extract_constraint_lift("remove the constraint on friday", today=TODAY)
     assert result["lift"] is True
     assert result["dates"] == ["2026-06-05"]  # next friday
 
@@ -168,3 +166,115 @@ def test_no_lift_for_ordinary_message():
     }
     # "remove the warmup" is not a constraint lift.
     assert extract_constraint_lift("remove the warmup", today=TODAY)["lift"] is False
+
+
+# ---------------------------------------------------------------------------
+# Sentences from the owner's coach chat, paraphrased (ai-trainer-ops#72)
+# ---------------------------------------------------------------------------
+
+
+def _kinds(text: str) -> list[tuple[str, str]]:
+    return [
+        (item["constraint_type"], item["constraint_date"])
+        for item in extract_availability_constraints(text, today=TODAY)
+    ]
+
+
+def test_each_day_in_one_sentence_gets_its_own_intent():
+    # Wednesday: Thursday gym, Friday off, Saturday the long ride. All three
+    # used to be pinned as required long sessions.
+    assert _kinds(
+        "morgen upperbody und core im gym und freitag off, samstag wie geplant die lange einheit"
+    ) == [("no_training", "2026-06-05"), ("required_workout", "2026-06-06")]
+
+
+def test_days_joined_by_and_share_the_intent_after_them():
+    assert _kinds("saturday and sunday i could do a long ride") == [
+        ("required_workout", "2026-06-06"),
+        ("required_workout", "2026-06-07"),
+    ]
+
+
+def test_a_stated_day_off_is_captured_without_a_training_word():
+    assert _kinds("donnerstag muss frei bleiben, da hat jemand geburtstag") == [
+        ("no_training", "2026-06-04")
+    ]
+    assert _kinds("Keep in mind tomorrow is rest day") == [
+        ("no_training", "2026-06-04")
+    ]
+    assert _kinds("friday i dont have time for training") == [
+        ("no_training", "2026-06-05")
+    ]
+
+
+def test_a_question_pins_nothing():
+    assert _kinds("tomorrow off? would that work") == []
+    assert _kinds("why did the plan drop sunday's long endurance ride?") == []
+    assert (
+        _kinds("macht es sinn morgen gym und freitag off, samstag die lange einheit?")
+        == []
+    )
+
+
+def test_an_instrument_that_was_off_is_not_a_day_off():
+    assert _kinds("my power meter was off today") == []
+
+
+def test_a_stated_absence_blocks_every_day_of_it():
+    days = _kinds(
+        "ab dem 4. November bis zum 26. November bin ich im Urlaub, da kann ich nicht trainieren"
+    )
+
+    assert days[0] == ("no_training", "2026-11-04")
+    assert days[-1] == ("no_training", "2026-11-26")
+    assert len(days) == 23
+
+
+def test_a_range_without_an_absence_or_too_long_a_range_is_ignored():
+    assert _kinds("from 4 to 26 november the trails are wet") == []
+    assert _kinds("from 1 january to 30 april i am on holiday") == []
+
+
+def test_a_free_day_in_german_is_an_offer_not_a_block():
+    assert _kinds("Samstag habe ich frei, da kann ich lang fahren") == []
+    assert _kinds("Sonntag ist frei") == []
+
+
+def test_date_range_edges():
+    # Started already: only today onward is blocked.
+    started = extract_availability_constraints(
+        "vom 1. bis 5. Juni bin ich im Urlaub", today=TODAY
+    )
+    assert [c["constraint_date"] for c in started] == [
+        "2026-06-03",
+        "2026-06-04",
+        "2026-06-05",
+    ]
+    # Over the turn of the year.
+    winter = _kinds("from 28 december to 2 january i am on holiday")
+    assert winter[0] == ("no_training", "2026-12-28")
+    assert winter[-1] == ("no_training", "2027-01-02")
+    # A range already over this year means next year's.
+    spring = _kinds("from 4 to 6 march i am on holiday")
+    assert [d for _t, d in spring] == ["2027-03-04", "2027-03-05", "2027-03-06"]
+    # A date that does not exist is ignored, also once moved to next year.
+    assert _kinds("from 30 to 31 february i am on holiday") == []
+    leap = extract_availability_constraints(
+        "from 29 february to 5 march i am on holiday", today=date(2028, 6, 1)
+    )
+    assert leap == []
+    # A question about a range blocks nothing; a statement followed by a
+    # question still does, and the holiday word may come first.
+    assert _kinds("can i train from 4 to 26 november? i'm on holiday") == []
+    assert (
+        len(
+            _kinds(
+                "Ab dem 4. bis zum 26. November bin ich im Urlaub. Kannst du den Plan anpassen?"
+            )
+        )
+        == 23
+    )
+    assert (
+        len(_kinds("I'm on holiday from 4 to 26 November. Can you adjust the plan?"))
+        == 23
+    )

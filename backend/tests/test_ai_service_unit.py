@@ -1638,6 +1638,8 @@ def test_race_profile_context_empty_without_race_date_or_description():
 
 
 def test_race_profile_context_includes_race_date_and_description():
+    from datetime import date
+
     from services.prompts import race_profile_context_section
 
     section = race_profile_context_section(
@@ -1645,7 +1647,8 @@ def test_race_profile_context_includes_race_date_and_description():
             "trainingGoal": "general_fitness",
             "raceDate": "2026-09-15",
             "raceDescription": "Local gran fondo with repeated climbs",
-        }
+        },
+        date(2026, 9, 1),  # before race day; a past race is history (ops#71)
     )
 
     assert "Profile race context" in section
