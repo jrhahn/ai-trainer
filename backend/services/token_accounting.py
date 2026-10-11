@@ -90,9 +90,11 @@ class TokenBudgetExceededError(Exception):
         self.budget = budget
         self.window_days = window_days
         super().__init__(
-            f"AI token budget exhausted: {spent:,} of {budget:,} tokens used in "
-            f"the last {window_days} days. The budget resets as older usage "
-            f"ages out of the window."
+            f"You have used the free coaching allowance: {spent:,} of {budget:,} "
+            f"tokens in the last {window_days} days. Add your own AI key (Gemini "
+            f"or OpenAI) in Settings to keep going without a limit, or get in "
+            f"touch with whoever runs this coach. The allowance frees up again as "
+            f"older usage ages out of the {window_days}-day window."
         )
 
 
@@ -113,6 +115,12 @@ async def enforce_token_budget(
     """
     budget = settings.ai_token_budget
     if budget <= 0 or not source.startswith("api:"):
+        return
+    # Only the owner's key is rationed (ai-trainer-ops#79); imported here
+    # because llm imports this module.
+    from services.llm import pays_with_admin_key
+
+    if not pays_with_admin_key(user):
         return
 
     window_days = settings.ai_token_budget_window_days

@@ -1004,6 +1004,13 @@ export interface AIKeyStatus {
    * failure than the one this fixes.
    */
   keyRequired?: boolean
+  /**
+   * The free allowance on the owner's key, in tokens per `allowanceWindowDays`;
+   * `null` when unlimited, i.e. with the athlete's own key (ai-trainer-ops#79).
+   */
+  allowanceTokens?: number | null
+  allowanceUsed?: number
+  allowanceWindowDays?: number
 }
 
 export async function fetchAIKeyStatus(token: string): Promise<AIKeyStatus> {

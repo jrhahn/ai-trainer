@@ -132,6 +132,15 @@ export default function AIKeySettings() {
         ))}
       </div>
 
+      {/* The free allowance while the owner's key pays (ai-trainer-ops#79). */}
+      {keyStatus?.allowanceTokens ? (
+        <p className="mb-4 text-xs text-gray-600" data-testid="free-allowance">
+          Free coaching allowance: {Math.round((keyStatus.allowanceUsed ?? 0) / 1000).toLocaleString()}k of{' '}
+          {Math.round(keyStatus.allowanceTokens / 1000).toLocaleString()}k tokens used in the last{' '}
+          {keyStatus.allowanceWindowDays ?? 30} days. With your own key there is no limit.
+        </p>
+      ) : null}
+
       {/* Current status badge */}
       <div className="flex items-center gap-2 mb-4">
         {currentProviderHasKey ? (

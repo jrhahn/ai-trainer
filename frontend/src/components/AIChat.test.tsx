@@ -334,6 +334,23 @@ describe('AIChat', () => {
     })
   })
 
+  it('passes on what to do when the free allowance is spent (ai-trainer-ops#79)', async () => {
+    mockAskTrainer.mockRejectedValue(
+      Object.assign(new Error('You have used the free coaching allowance: 5,000,000 of 5,000,000 tokens.'), {
+        status: 402,
+      }),
+    )
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Question')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    expect(await screen.findByText(/free coaching allowance/)).toBeInTheDocument()
+    expect(screen.getByText(/Your AI Provider Key/)).toBeInTheDocument()
+    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+  })
+
   it('shows error message when askTrainer throws', async () => {
     mockAskTrainer.mockRejectedValue(new Error('Network error'))
     setupStore()

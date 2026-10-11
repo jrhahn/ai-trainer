@@ -613,11 +613,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
       } else {
         setStaleRefreshWarning(false)
       }
-    } catch {
+    } catch (err) {
       setLastFailedMessage(userMsg)
+      // An exhausted free allowance is not a failure to apologise for: the
+      // server says what to do about it (ai-trainer-ops#79).
+      const allowanceSpent = (err as { status?: number } | null)?.status === 402
       addChatMessage({
         role: 'assistant',
-        content: 'Sorry, something went wrong and I could not respond.',
+        content: allowanceSpent
+          ? `${(err as Error).message}\n\nSettings → Your AI Provider Key.`
+          : 'Sorry, something went wrong and I could not respond.',
         timestamp: new Date().toISOString(),
         failedUserMessage: userMsg,
       })

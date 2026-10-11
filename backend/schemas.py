@@ -1442,6 +1442,10 @@ class AIKeyStatusSchema(CamelModel):
     working, and so the field being absent never reads as "go and ask for a
     key".
     """
+    allowance_tokens: Optional[int] = None
+    """The free allowance on the owner's key, or ``None`` when unlimited (ops#79)."""
+    allowance_used: int = 0
+    allowance_window_days: int = 30
 
 
 class AIKeySaveRequest(CamelModel):
