@@ -1043,8 +1043,13 @@ async def test_a_clean_week_costs_the_prompt_nothing():
         context = await plan_context.plan_writer_context(
             db, user_id, [_day(mon, "endurance"), _day(tue, "intervals")]
         )
+        phase = await plan_context.training_phase_section_for_user(
+            db, user_id, app_today()
+        )
 
-    assert context.coherence == ""
+    # The training phase is the frame every week is planned in, so it speaks
+    # even when nothing is wrong (ai-trainer-ops#64). Nothing else may.
+    assert context.coherence == phase
 
 
 def test_the_prompt_section_is_empty_for_a_week_with_nothing_wrong():

@@ -22,7 +22,11 @@ from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
 from services import logged_sessions, metrics_service, reported_effort
 from services.fitness_ledger import LoadLedger, ledger_from_row
-from services.activity_imports import ImportedActivity
+from services.activity_imports import (
+    ImportedActivity,
+    reported_distance_km,
+    reported_elevation_m,
+)
 from services.ride_matching import apply_ride_plan_matches
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
@@ -468,6 +472,10 @@ async def _run_import_background(
                     activity_date=activity_date,
                     sport_type=sport_type,
                     duration_seconds=duration_seconds,
+                    distance_km=reported_distance_km(activity.get("distance")),
+                    elevation_gain_m=reported_elevation_m(
+                        activity.get("total_elevation_gain")
+                    ),
                     streams=streams,
                     weather=weather_fields,
                     metadata={"strava_activity_id": activity_id},

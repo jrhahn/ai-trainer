@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -308,6 +309,9 @@ class User(Base):
         relationship(back_populates="user", cascade="all, delete-orphan")
     )
     plan_commitments: Mapped[list["PlanCommitment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    goals: Mapped[list["AthleteGoal"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     home_location: Mapped["AthleteHomeLocation | None"] = relationship(
@@ -1335,6 +1339,58 @@ class AthleteAvailabilityConstraint(Base):
     user: Mapped["User"] = relationship(back_populates="availability_constraints")
 
 
+class AthleteGoal(Base):
+    """A goal with a number on it, so the coach can say how far away it is (ai-trainer-ops#65).
+
+    Free-text objectives (:class:`AthleteMotivationModel`) say what the athlete
+    is training *for*. They cannot say "your biggest day in the last 12 weeks was
+    2100 m, so 4000 m is about twice that", because they hold no metric and no
+    target. This does. Progress is never stored: it is computed from the rides
+    each time (``services.goal_progress``), so it cannot go stale.
+
+    One active goal per metric and scope. Stating a new target replaces the old
+    one rather than piling up beside it.
+    """
+
+    __tablename__ = "athlete_goals"
+    __table_args__ = (
+        Index("ix_athlete_goals_user_status", "user_id", "status"),
+        # One active goal per measure, enforced rather than assumed: two chat
+        # messages arriving together must not leave the coach two lines.
+        Index(
+            "uq_athlete_goals_one_active",
+            "user_id",
+            "metric",
+            "scope",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # ``elevation_gain_m`` or ``distance_km``: the RideMetric column it is measured on.
+    metric: Mapped[str] = mapped_column(String(30), nullable=False)
+    # ``ride`` (one activity) or ``week`` (a rolling seven days).
+    scope: Mapped[str] = mapped_column(String(10), nullable=False)
+    target: Mapped[float] = mapped_column(Float, nullable=False)
+    deadline: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The athlete's own words, so the coach can be honest about where it came from.
+    statement: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="goals")
+
+
 class PlanCommitment(Base):
     """A coaching arrangement that spans more days than it changed (#667).
 
@@ -1666,6 +1722,12 @@ class RideMetric(Base):
         String(50), default="cycling", nullable=False
     )
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # What the provider reported, so a goal like "4000 m in one ride" can be
+    # measured against the rides that led up to it (ai-trainer-ops#65). NULL is
+    # "not reported", not zero: rows synced before this column existed, and a
+    # gym session, have neither.
+    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     weather_temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)

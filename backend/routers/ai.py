@@ -25,7 +25,7 @@ from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
-from services import plan_context
+from services import goal_progress, plan_context
 from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
@@ -34,7 +34,11 @@ from services import status_pipeline
 from services import rider_identity
 from services import summary_pipeline
 from services import workout_curiosity
-from services.activity_imports import ImportedActivity
+from services.activity_imports import (
+    ImportedActivity,
+    reported_distance_km,
+    reported_elevation_m,
+)
 from services.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
 from services.ai_service import (
     MAX_CONVERSATION_HISTORY,
@@ -306,6 +310,25 @@ async def _capture_self_reported_signals_from_message(
         )
     except Exception:
         logger.warning("Motivation capture failed", exc_info=True)
+
+    # A goal with a number on it ("4000 hm in one ride"), so the coach can say
+    # how far away it is rather than only repeat it (ai-trainer-ops#65).
+    # One savepoint per goal: a write that fails (say, the one-active-goal index
+    # losing a race with a second message) costs that goal only, never the
+    # captures after it on the same session.
+    for stated in goal_progress.extract_goals(message):
+        try:
+            async with db.begin_nested():
+                await crud.upsert_active_goal(
+                    db,
+                    user_id,
+                    metric=stated.metric,
+                    scope=stated.scope,
+                    target=stated.target,
+                    statement=stated.statement,
+                )
+        except Exception:
+            logger.warning("Goal capture failed", exc_info=True)
 
     try:
         row = await home_location.capture_home_location_from_message(
@@ -786,6 +809,10 @@ async def analyse_activities(
                 activity_date=activity_date,
                 sport_type=sport_type,
                 duration_seconds=duration_seconds,
+                distance_km=reported_distance_km(a_dict.get("distance")),
+                elevation_gain_m=reported_elevation_m(
+                    a_dict.get("total_elevation_gain")
+                ),
                 streams=streams_by_id.get(str(activity.id), {}),
                 weather=weather_by_id.get(activity.id, {}),
                 summary_avg_power_w=a_dict.get("average_watts"),
@@ -943,6 +970,17 @@ async def _generate_plan_for_user(
         await freshness_allocation.athlete_model_section_for_user(
             db, current_user, timezone_name=timezone_name
         )
+    )
+    # A regeneration builds no writer context, so it reads the phase and the goals
+    # itself; the nightly run then plans inside the same phase rather than undoing
+    # this one (ai-trainer-ops#64, #65).
+    today = app_today(timezone_name=timezone_name)
+    phase_section = await plan_context.training_phase_section_for_user(
+        db, current_user.id, today
+    )
+    goal_section = await plan_context.goal_section_for_user(db, current_user.id, today)
+    athlete_model_section = "\n".join(
+        part for part in (athlete_model_section, phase_section, goal_section) if part
     )
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:

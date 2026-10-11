@@ -8,7 +8,11 @@ from typing import Any
 
 import httpx
 
-from services.activity_imports import ImportedActivity
+from services.activity_imports import (
+    ImportedActivity,
+    reported_distance_km,
+    reported_elevation_m,
+)
 from services.training_load import LOAD_SOURCE_PROVIDER
 
 INTERVALS_API_BASE = "https://intervals.icu/api/v1"
@@ -314,6 +318,10 @@ def map_activity_to_imported_activity(
         sport_type=_first_str(source, "type", "sport", default="cycling") or "cycling",
         duration_seconds=_first_int(
             source, "moving_time", "elapsed_time", "duration", default=0
+        ),
+        distance_km=reported_distance_km(_first_float(source, "distance", "icu_distance")),
+        elevation_gain_m=reported_elevation_m(
+            _first_float(source, "total_elevation_gain", "elevation_gain", "icu_elevation_gain")
         ),
         start_lat=_start_latlng(source)[0],
         start_lng=_start_latlng(source)[1],

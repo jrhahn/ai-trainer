@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach plans inside a training phase** (ai-trainer-ops#64) —
+  `services/training_phase.py`, `services/plan_context.py`, `routers/ai.py`,
+  `services/prompts.py`. Every plan writer (regeneration, chat, nightly run,
+  auto-adapt) now receives a computed phase block:
+  - The phase: transition, base, build, peak, taper or maintenance. It comes
+    from the next and last race and the month, read for the southern
+    hemisphere when the home location is known.
+  - The load rhythm from actual weekly hours: three loading weeks, then a
+    recovery week.
+  - Without a race, a focus that rotates every four weeks.
+  - In October and November, an athlete with no race who has not yet had a
+    break is offered a few days off. This is a proposal they can decline.
+  - The prompt no longer falls back to "a balanced general-fitness plan" or to
+    week-over-week overload with no recovery week.
+  - Tests: `tests/test_training_phase.py`.
+- **Goals with a number on them, and how far away they are** (ai-trainer-ops#65) —
+  `services/goal_progress.py`, `models.AthleteGoal`, migration
+  `20261011_000001`, `services/plan_context.py`, `routers/ai.py`.
+  - A goal said in the coach chat ("Mein Ziel: 4000 hm an einem Tag", "I want to
+    do a 200 km ride", "10000 hm pro Woche") is captured deterministically:
+    - it needs a number with a unit and a statement of intent;
+    - questions and reports of past rides are not goals;
+    - a new target for the same measure replaces the old one.
+  - Every plan writer and the chat are given the progress: the best ride or
+    rolling week in the last 4 and 12 weeks, the gap, and a next big day about
+    15% above the biggest recent one. When no ride reports the measure, they
+    are told progress is unknown.
+  - `ride_metrics` gains `distance_km` and `elevation_gain_m`. They are taken
+    from the provider at import (Strava, intervals.icu, the client-posted
+    path). They were dropped until now. A later sync without the figure never
+    erases it.
+  - The daily duration refresh fills both on rides that lack them, from the
+    payload it already fetches. Run
+    `scripts/backfill_activity_moving_time.py --apply` once to fill the whole
+    history.
+  - Tests: `tests/test_goal_progress.py`, `tests/test_duration_refresh.py`.
+
 - **Stay signed in: an HttpOnly session cookie with a CSRF token** (ai-trainer-ops#45) —
   `auth.py`, `routers/auth_router.py`, `main.py`. A sign-in that sends
   `X-Auth-Mode: cookie` (the web app always does) gets its session as the

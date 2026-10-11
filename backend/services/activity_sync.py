@@ -24,6 +24,8 @@ from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
     find_existing_import,
+    reported_distance_km,
+    reported_elevation_m,
     to_ride_inputs,
 )
 from services.dates import app_today
@@ -199,6 +201,8 @@ def _strava_activity_to_imported_activity(
         duration_seconds=int(
             activity.get("moving_time") or activity.get("elapsed_time") or 0
         ),
+        distance_km=reported_distance_km(activity.get("distance")),
+        elevation_gain_m=reported_elevation_m(activity.get("total_elevation_gain")),
         streams=streams,
         start_lat=(
             float(activity["start_latlng"][0])
