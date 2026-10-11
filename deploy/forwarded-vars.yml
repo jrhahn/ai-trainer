@@ -277,9 +277,10 @@ forwarded:
     name: AI_TOKEN_BUDGET
     mode: omit_if_empty
     why: >-
-      Never pick this from a cost estimate. The first value, 5M, was below the
-      operator's own usage — measured at ~6.3M tokens per rolling 30 days from
-      the llm_calls table — and locked them out of their own coach (#684).
+      The free allowance on the owner's key (ai-trainer-ops#79). It applies
+      only while the owner's key pays (ai-trainer#830), so the operator must
+      save their own key in Settings before lowering it: 5M once locked them
+      out of their own coach at ~6.3M tokens per rolling 30 days (#684).
 
   - var: allow_admin_ai_key_fallback
     from: variable
