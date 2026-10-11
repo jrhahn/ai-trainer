@@ -166,6 +166,10 @@ export interface ChatMessage {
   physiologyRationale?: string
   contextRationale?: string
   objectiveRationale?: string
+  // Live only, never stored with the chat: the confirm step for what this
+  // reply's turn captured or proposes (ai-trainer-ops#65, #71).
+  capturedGoals?: Array<{ id: string; label: string }>
+  raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
 }
 
 export interface StravaConnection {

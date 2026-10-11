@@ -256,7 +256,7 @@ def _amount(metric: str, value: float) -> str:
     return f"{value:,.0f} m" if metric == ELEVATION else f"{value:,.0f} km"
 
 
-def _goal_name(metric: str, scope: str, target: float) -> str:
+def goal_name(metric: str, scope: str, target: float) -> str:
     what = "of climbing" if metric == ELEVATION else ""
     where = "in one ride" if scope == RIDE else "in one week"
     return " ".join(part for part in (_amount(metric, target), what, where) if part)
@@ -272,7 +272,7 @@ def goal_progress_section(goals: list[tuple[object, GoalProgress]]) -> str:
         "not in every message):"
     ]
     for goal, progress in goals:
-        name = _goal_name(progress.metric, progress.scope, progress.target)
+        name = goal_name(progress.metric, progress.scope, progress.target)
         deadline = getattr(goal, "deadline", None)
         line = f"- Goal: {name}" + (f", by {deadline}" if deadline else "") + "."
         if progress.best_baseline is None:

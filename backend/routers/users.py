@@ -55,7 +55,7 @@ from services.analysis import (
 )
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.fitness_ledger import ledger_from_metric
-from services.dates import app_today_iso
+from services.dates import app_today_iso, request_timezone
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
 from services.ride_matching import apply_ride_plan_matches
@@ -1003,6 +1003,49 @@ async def delete_race_event(
     await crud.delete_race_event(db, event)
     await _sync_race_context(db, current_user)
     return {"status": "deleted"}
+
+
+@router.delete("/goals/{goal_id}")
+async def remove_goal(
+    goal_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Undo a goal the chat captured (ai-trainer-ops#65, owner decision Q20)."""
+    if await crud.remove_goal(db, current_user.id, goal_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
+        )
+    return {"status": "removed"}
+
+
+@router.post("/race/clear")
+async def clear_profile_race(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Clear the race the athlete confirmed they no longer have.
+
+    The confirm step the owner chose for "I have no race" (ai-trainer-ops#71,
+    #63 Q21). The profile's race comes back from any upcoming calendar race on
+    the next race-event sync, so upcoming calendar races go too; past ones stay
+    as history. The sync then rewrites the coach memory's race section.
+    """
+    # The athlete's day, the same one the chat used to count the races it named.
+    today = app_today_iso(timezone_name=request_timezone(request))
+    removed = 0
+    for event in await crud.get_race_events(db, current_user.id):
+        if event.date >= today:
+            await crud.delete_race_event(db, event)
+            removed += 1
+    await _sync_race_context(db, current_user)
+    current_user.race_date = None
+    current_user.race_description = None
+    if current_user.training_goal == "race":
+        current_user.training_goal = "general_fitness"
+    await db.flush()
+    return {"status": "cleared", "removedRaceEvents": removed}
 
 
 @router.get("/chat", response_model=schemas.ChatHistoryResponse)

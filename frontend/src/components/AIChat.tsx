@@ -20,6 +20,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
+import ReplyConfirmations from './ReplyConfirmations'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
@@ -410,6 +411,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ) : (
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
+        {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
         {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
           <div className="mt-2 border-t border-gray-200 pt-2">
             <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
@@ -594,6 +596,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
         physiologyRationale: result.physiologyRationale || undefined,
         contextRationale: result.contextRationale || undefined,
         objectiveRationale: result.objectiveRationale || undefined,
+        capturedGoals: result.capturedGoals?.length ? result.capturedGoals : undefined,
+        raceProposal: result.raceProposal ?? undefined,
       })
       setLastFailedMessage(null)
 
