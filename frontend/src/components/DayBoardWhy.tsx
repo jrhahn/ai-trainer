@@ -30,7 +30,7 @@ export default function DayBoardWhy() {
 
   // Develop is what is deployed: every merge to it deploys.
   const sourceUrl = board
-    ? `${GITHUB_URL}/blob/develop/${board.source.path}#L${board.source.line}`
+    ? `${GITHUB_URL}/blob/${board.source.ref}/${board.source.path}#L${board.source.line}`
     : ''
 
   return (

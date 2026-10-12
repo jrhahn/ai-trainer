@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
+    # The deployed commit, rendered by the deploy playbook. Empty in development,
+    # where source links fall back to develop.
+    git_sha: str = ""
     activity_sync_interval_seconds: int = 1800
     duration_refresh_lookback_days: int = 21
     """How many days back the daily duration-refresh job re-checks moving_time.

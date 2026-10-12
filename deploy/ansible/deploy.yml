@@ -3,6 +3,12 @@
   become: true
   vars:
     app_dir: /opt/ai-trainer
+    # The commit being deployed, read from the checkout on the controller. The
+    # backend reports it so source links point at the code that is running,
+    # not at whatever develop has moved to since (ai-trainer-ops#17). A runtime
+    # value rather than a build arg: images are built on the host, and nothing
+    # is pushed to a registry for this.
+    git_sha: "{{ lookup('pipe', 'git -C ' ~ playbook_dir ~ ' rev-parse HEAD') }}"
     debian_apt_mirror: http://deb.debian.org/debian
     debian_security_mirror: http://deb.debian.org/debian-security
     docker_arch_map:
