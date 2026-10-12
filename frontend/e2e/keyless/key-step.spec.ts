@@ -114,4 +114,71 @@ test.describe('BYOK-only onboarding asks for a key', () => {
     await expect(page.getByText(/step \d of 6/i)).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
   })
+
+  test('accepts a key the provider accepts, and moves on to the summary', async ({ page }) => {
+    // ai-trainer-ops#46, #39 Q12: CI holds no real Gemini key, so the two
+    // provider answers are faked with route interception. Everything else is
+    // the real stack: the production build, the session, the step order and
+    // the decision to advance, which reads `keyRequired` from the PUT answer.
+    // Not end to end for the provider: the backend's own key check is covered
+    // by its tests, and the refusal path above makes the real round trip.
+    const sent: Array<{ url: string; body: unknown }> = []
+    await page.route('**/users/me/ai-key/test', async (route) => {
+      sent.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      await route.fulfill({ json: { ok: true } })
+    })
+    await page.route('**/users/me/ai-key', async (route) => {
+      if (route.request().method() !== 'PUT') return route.fallback()
+      sent.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      await route.fulfill({
+        json: {
+          provider: 'gemini',
+          hasOpenaiKey: false,
+          hasGeminiKey: true,
+          keyRequired: false,
+        },
+      })
+    })
+
+    await register(page, newAthlete())
+    for (let step = 0; step < 4; step++) {
+      await page.getByRole('button', { name: /^continue$/i }).first().click()
+    }
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
+
+    await page.getByLabel(/gemini api key/i).fill('AIzaFakeButAcceptedKey')
+    await page.getByRole('button', { name: /test key/i }).click()
+    await expect(page.getByText('The key works.')).toBeVisible()
+    await page.getByRole('button', { name: /save and continue/i }).click()
+
+    await expect(page.getByText('Ready to Go!')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
+    // The key went to both calls as typed, for the provider the step names.
+    expect(sent.map((call) => call.body)).toEqual([
+      { provider: 'gemini', apiKey: 'AIzaFakeButAcceptedKey' },
+      { provider: 'gemini', apiKey: 'AIzaFakeButAcceptedKey' },
+    ])
+  })
+
+  test('stays on the step when the key is saved but still not enough', async ({ page }) => {
+    // The other half of the decision: a 200 whose `keyRequired` is still true
+    // must not advance, or the athlete is back on "Generate" with the same 402.
+    await page.route('**/users/me/ai-key', async (route) => {
+      if (route.request().method() !== 'PUT') return route.fallback()
+      await route.fulfill({
+        json: { provider: 'gemini', hasOpenaiKey: false, hasGeminiKey: true, keyRequired: true },
+      })
+    })
+
+    await register(page, newAthlete())
+    for (let step = 0; step < 4; step++) {
+      await page.getByRole('button', { name: /^continue$/i }).first().click()
+    }
+    await page.getByLabel(/gemini api key/i).fill('AIzaFakeButUselessKey')
+    await page.getByRole('button', { name: /save and continue/i }).click()
+
+    await expect(page.getByText(/still cannot reach a model/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
+    await expect(page.getByText('Ready to Go!')).toHaveCount(0)
+  })
 })
