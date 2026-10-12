@@ -50,12 +50,26 @@ def test_saying_you_are_ill(message, ends_on):
 @pytest.mark.parametrize(
     "message",
     [
+        "I have a cold, but I normally ride 5 days a week.",
+        "Ich bin krank, sonst trainiere ich 4 Tage.",
+    ],
+)
+def test_a_number_of_days_that_is_not_the_illness_sets_no_end(message):
+    assert extract_states(message, MONDAY) == [StatedState(KIND_ILL, MONDAY, None)]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
         "I'm sick of intervals.",
         "I was ill last week.",
         "Am I ill?",
         "I'm not sick.",
         "I had a cold shower after the ride.",
         "Ich war krank, jetzt geht's wieder.",
+        "If I get a fever I'll skip Saturday.",
+        "I hope I don't get the flu.",
+        "Falls ich krank bin, sag ich Bescheid.",
     ],
 )
 def test_not_saying_it(message):
@@ -84,6 +98,7 @@ def test_a_day_with_less_to_give(message, day):
         ("I'm feeling better.", True),
         ("No longer sick!", True),
         ("my legs feel better", False),
+        ("I'm better at climbing now.", False),
         ("Am I better?", False),
     ],
 )
@@ -125,8 +140,11 @@ def test_intensity_on_a_tired_day_is_a_departure_and_the_next_day_is_not():
 def test_an_open_illness_expires_on_its_own():
     ill = StatedState(KIND_ILL, MONDAY, None)
     last = MONDAY + timedelta(days=OPEN_ILLNESS_DAYS - 1 + RETURN_EASY_DAYS)
-    assert still_relevant(ill.kind, ill.starts_on, ill.ends_on, last)
-    assert not still_relevant(ill.kind, ill.starts_on, ill.ends_on, last + timedelta(days=1))
+    assert still_relevant(ill, last)
+    assert not still_relevant(ill, last + timedelta(days=1))
+    # Said again on day 9: it holds for another ten days from there.
+    again = StatedState(KIND_ILL, MONDAY, None, MONDAY + timedelta(days=8))
+    assert still_relevant(again, last + timedelta(days=8))
 
 
 def test_the_state_section_says_prior_not_rule():
@@ -257,3 +275,28 @@ async def test_saying_it_twice_keeps_one_illness(client, auth_headers, mock_ai_s
         states = await crud.list_relevant_states(db, await _user_id(), app_today())
     assert [s.kind for s in states] == [KIND_ILL]
     assert states[0].ends_on is not None
+
+
+@pytest.mark.asyncio
+async def test_ill_again_after_well_again_reopens_the_illness(
+    client, auth_headers, mock_ai_service
+):
+    today = app_today()
+    async with TestSessionLocal() as db:
+        user_id = await _user_id()
+        await crud.record_state(
+            db,
+            user_id,
+            StatedState(KIND_ILL, today - timedelta(days=6), today - timedelta(days=2)),
+            today - timedelta(days=6),
+        )
+        await db.commit()
+
+    await client.post(
+        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm sick again."}
+    )
+
+    async with TestSessionLocal() as db:
+        [state] = await crud.list_relevant_states(db, user_id, today)
+    assert state.ends_on is None
+    assert state.said_on == today

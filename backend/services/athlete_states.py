@@ -24,8 +24,9 @@ from services.availability import WEEKDAYS, _next_weekday, _target_dates
 KIND_ILL = "ill"
 KIND_REDUCED = "reduced"
 
-# An illness with no stated end is assumed to be over after this long. Without
-# a cap, one "I have a cold" would mark the athlete ill for good.
+# An illness with no stated end is assumed to be over this long after the
+# athlete last said it. Without a cap, one "I have a cold" would mark the athlete
+# ill for good; counted from the last mention, saying it again keeps it.
 OPEN_ILLNESS_DAYS = 10
 # Days after an illness ends in which hard work is still a departure. Return-to-
 # sport consensus (IOC 2016 consensus on load and illness; the "neck check")
@@ -54,7 +55,7 @@ _RECOVERED = re.compile(
     r"\b(?:"
     r"wieder\s+(?:gesund|fit)|(?:bin|fühle\s+mich)\s+(?:\w+\s+)?gesund|nicht\s+mehr\s+krank"
     r"|no\s+longer\s+(?:sick|ill)|not\s+(?:sick|ill)\s+any\s*more"
-    r"|(?:i'?m|i\s+am|i\s+feel|feeling)\s+(?:\w+\s+)?(?:better|healthy|recovered)"
+    r"|(?:i'?m|i\s+am|i\s+feel|feeling)\s+(?:\w+\s+)?(?:better|healthy|recovered)(?!\s+(?:at|than)\b)"
     r"|i'?ve\s+recovered|i\s+have\s+recovered"
     r")\b",
     re.IGNORECASE,
@@ -79,8 +80,15 @@ _UNTIL = re.compile(
     + r"|tomorrow|morgen)\b",
     re.IGNORECASE,
 )
+# The prefix is required: "I ride 5 days a week" is not an illness end.
 _FOR_DAYS = re.compile(
-    r"\b(?:for\s+(?:the\s+next\s+)?|für\s+|die\s+nächsten\s+)?(\d{1,2})\s+(?:days|tage)\b",
+    r"\b(?:for\s+(?:the\s+next\s+)?|next\s+|für\s+(?:die\s+nächsten\s+)?"
+    r"|die\s+nächsten\s+|noch\s+)(\d{1,2})\s+(?:days|tage)\b",
+    re.IGNORECASE,
+)
+# "If I get a fever", "I hope I don't get the flu": not ill now.
+_HYPOTHETICAL = re.compile(
+    r"\b(?:if|in\s+case|hope|hoping|might|may|could|falls|wenn|hoffe|hoffentlich|vielleicht)\b",
     re.IGNORECASE,
 )
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
@@ -91,6 +99,8 @@ class StatedState:
     kind: str
     starts_on: date
     ends_on: date | None
+    # When the athlete last said it; an open illness expires from here.
+    said_on: date | None = None
 
 
 def _statements(message: str) -> list[str]:
@@ -121,7 +131,13 @@ def extract_states(message: str, today: date) -> list[StatedState]:
     found: list[StatedState] = []
     ill = False
     for sentence in _statements(message):
-        if not ill and _ILL.search(sentence) and not _NOT_ILL.search(sentence):
+        match = _ILL.search(sentence)
+        if (
+            not ill
+            and match
+            and not _NOT_ILL.search(sentence)
+            and not _HYPOTHETICAL.search(sentence, 0, match.start())
+        ):
             ill = True
             found.append(StatedState(KIND_ILL, today, _illness_end(sentence, today)))
             continue
@@ -145,17 +161,19 @@ def says_recovered(message: str) -> bool:
     return any(_RECOVERED.search(sentence) for sentence in _statements(message))
 
 
-def effective_end(kind: str, starts_on: date, ends_on: date | None) -> date:
-    """The last day a state holds; an open illness lasts ``OPEN_ILLNESS_DAYS``."""
-    if ends_on is not None:
-        return ends_on
-    return starts_on + timedelta(days=OPEN_ILLNESS_DAYS - 1 if kind == KIND_ILL else 0)
+def effective_end(state: StatedState) -> date:
+    """The last day a state holds; an open illness lasts ``OPEN_ILLNESS_DAYS`` from its last mention."""
+    if state.ends_on is not None:
+        return state.ends_on
+    if state.kind != KIND_ILL:
+        return state.starts_on
+    return (state.said_on or state.starts_on) + timedelta(days=OPEN_ILLNESS_DAYS - 1)
 
 
-def still_relevant(kind: str, starts_on: date, ends_on: date | None, today: date) -> bool:
+def still_relevant(state: StatedState, today: date) -> bool:
     """Whether a state still says anything about the plan from ``today``."""
-    tail = RETURN_EASY_DAYS if kind == KIND_ILL else 0
-    return effective_end(kind, starts_on, ends_on) + timedelta(days=tail) >= today
+    tail = RETURN_EASY_DAYS if state.kind == KIND_ILL else 0
+    return effective_end(state) + timedelta(days=tail) >= today
 
 
 def label(kind: str, starts_on: date, ends_on: date | None) -> str:

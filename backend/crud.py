@@ -5073,7 +5073,11 @@ def _state_dates(row: models.AthleteState) -> tuple[date, date | None]:
 
 
 def _stated_state(row: models.AthleteState) -> athlete_states.StatedState:
-    return athlete_states.StatedState(row.kind, *_state_dates(row))
+    return athlete_states.StatedState(
+        row.kind,
+        *_state_dates(row),
+        date.fromisoformat(row.said_on) if row.said_on else None,
+    )
 
 
 async def _relevant_state_rows(
@@ -5090,9 +5094,7 @@ async def _relevant_state_rows(
     return [
         row
         for row in rows
-        if athlete_states.still_relevant(
-            row.kind, *_state_dates(row), today
-        )
+        if athlete_states.still_relevant(_stated_state(row), today)
     ]
 
 
@@ -5117,6 +5119,8 @@ async def record_state(
             elif row.ends_on is not None and date.fromisoformat(row.ends_on) < today:
                 # Ill again after saying they were well: the end no longer holds.
                 row.ends_on = None
+            # Still ill: an open illness expires from the last time it was said.
+            row.said_on = today.isoformat()
             row.updated_at = now
             await db.flush()
             return row
@@ -5127,6 +5131,7 @@ async def record_state(
         kind=state.kind,
         starts_on=state.starts_on.isoformat(),
         ends_on=state.ends_on.isoformat() if state.ends_on else None,
+        said_on=today.isoformat(),
         created_at=now,
         updated_at=now,
     )
@@ -5142,9 +5147,9 @@ async def end_illness(
     for row in await _relevant_state_rows(db, user_id, today):
         if row.kind != athlete_states.KIND_ILL:
             continue
-        starts_on, ends_on = _state_dates(row)
-        if athlete_states.effective_end(row.kind, starts_on, ends_on) < today:
+        if athlete_states.effective_end(_stated_state(row)) < today:
             continue
+        starts_on, _ = _state_dates(row)
         row.ends_on = max(starts_on, today - timedelta(days=1)).isoformat()
         row.updated_at = datetime.now(timezone.utc)
         await db.flush()

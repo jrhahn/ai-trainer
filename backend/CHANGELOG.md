@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     days" when stated), "well again", and days with less to give (after a party,
     a long work day, a bad night). Only the kind and the dates are stored, never
     the sentence, because an illness is health data.
-  - An illness with no stated end expires after 10 days.
+  - An illness with no stated end expires 10 days after the athlete last said
+    it.
   - `plan_priors` reports intensity during an illness and for 3 days after it
     (expert consensus), and intensity on a day with less to give
     (athlete-stated). Nothing is reverted: the coach keeps the departure and

@@ -268,7 +268,7 @@ def _intense_dates(plan, first: date, last: date) -> list[date]:
 def _states(plan, today, states) -> list[PriorDeparture]:
     found = []
     for state in states or ():
-        end = athlete_states.effective_end(state.kind, state.starts_on, state.ends_on)
+        end = athlete_states.effective_end(state)
         if state.kind == athlete_states.KIND_ILL:
             last = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
             hard = _intense_dates(plan, max(state.starts_on, today), last)
@@ -301,7 +301,7 @@ def athlete_states_section(states, today: date) -> str:
     lines = []
     for state in states or ():
         if state.kind == athlete_states.KIND_ILL:
-            end = athlete_states.effective_end(state.kind, state.starts_on, state.ends_on)
+            end = athlete_states.effective_end(state)
             easy_until = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
             if state.ends_on is not None and state.ends_on < today:
                 lines.append(

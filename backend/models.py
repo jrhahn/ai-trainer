@@ -1418,6 +1418,8 @@ class AthleteState(Base):
     starts_on: Mapped[str] = mapped_column(String(10), nullable=False)
     # NULL: an illness with no stated end, which expires on its own.
     ends_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The last day the athlete said it: an open illness expires from here.
+    said_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # ``active`` or ``removed`` (the athlete pressed Remove under the reply).
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(

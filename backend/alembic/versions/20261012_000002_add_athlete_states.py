@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(20), nullable=False),
         sa.Column("starts_on", sa.String(10), nullable=False),
         sa.Column("ends_on", sa.String(10), nullable=True),
+        sa.Column("said_on", sa.String(10), nullable=True),
         sa.Column("status", sa.String(20), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
