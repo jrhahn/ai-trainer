@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Planning priors, reported and never enforced** (ai-trainer-ops#26) —
+  `services/plan_priors.py`, `services/plan_context.priors_section_for_user`.
+  Every plan writer (chat, nightly run, auto-adapt) now sees where the current
+  plan departs from four priors, each labelled with its evidence:
+  - stated weekly hours and training days (athlete-stated);
+  - a taper that cuts volume by less than 20 % or drops all intensity in the
+    last 10 days (strong evidence: Bosquet 2007, Mujika & Padilla 2003);
+  - a week more than 30 % above the last four weeks' average (heuristic).
+  The coach keeps a departure when it judges it right for the athlete and says
+  why, or brings the plan back. Nothing is reverted: these are priors, not
+  rules. `TRAINING_PLAN_PRINCIPLES` now calls the athlete's time a strong prior
+  and the ramp a heuristic. Hypothesis properties cover the checker.
 - **Sports and training days on the profile** (ai-trainer-ops#43) —
   `models.User.sports`, `models.User.training_days`, migration
   `20261012_000001`. Both are JSON lists of fixed choices (`cycling`,

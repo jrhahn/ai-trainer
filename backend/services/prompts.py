@@ -219,9 +219,10 @@ TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
 - Keep weekday sessions short (120 minutes maximum) to fit around work.
-- The athlete's time, from onboarding (ai-trainer-ops#43). 'weeklyHours' is the most they can give: keep each week's planned time at or below it. Schedule sessions only on the weekdays in 'trainingDays' and rest on the others, unless the athlete says otherwise for a specific day. Plan only the sports in 'sports'. When a field is missing, derive realistic weekly volume from the athlete's fitness level and recent training.
+- The athlete's time, from onboarding (ai-trainer-ops#43), is a strong prior, not a hard rule. 'weeklyHours' is what they said they can give: plan each week at or below it. Schedule sessions on the weekdays in 'trainingDays' and rest on the others. Plan only the sports in 'sports'. Depart from any of these only when what you know about the athlete justifies it, and then say why. When a field is missing, derive realistic weekly volume from the athlete's fitness level and recent training.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
+- Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
 - Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
 - Never schedule two hard days back-to-back.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
