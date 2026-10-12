@@ -98,6 +98,28 @@ class TokenBudgetExceededError(Exception):
         )
 
 
+class GlobalTokenBudgetExceededError(TokenBudgetExceededError):
+    """The owner's key has spent its daily cap across all free accounts.
+
+    The per-user budget does not bound the total: registration allows a few
+    accounts an hour, and each may spend its full allowance. This caps what a
+    wave of new accounts can cost in a day (ai-trainer-ops#39). Answered like
+    the per-user budget, 402 with a pointer to an own key, because that is the
+    one thing the athlete can do about it.
+    """
+
+    def __init__(self, *, spent: int, budget: int) -> None:
+        self.spent = spent
+        self.budget = budget
+        self.window_days = 1
+        Exception.__init__(
+            self,
+            "The free coaching on this server has reached its limit for today. "
+            "Add your own AI key (Gemini or OpenAI) in Settings to keep going "
+            "now; the free allowance comes back as the last day's usage ages out.",
+        )
+
+
 async def enforce_token_budget(
     db: AsyncSession, user: models.User, *, source: str, now: datetime | None = None
 ) -> None:
@@ -114,7 +136,8 @@ async def enforce_token_budget(
     all rather than one more prompt.
     """
     budget = settings.ai_token_budget
-    if budget <= 0 or not source.startswith("api:"):
+    daily = settings.ai_global_daily_token_budget
+    if (budget <= 0 and daily <= 0) or not source.startswith("api:"):
         return
     # Only the owner's key is rationed (ai-trainer-ops#79); imported here
     # because llm imports this module.
@@ -123,14 +146,21 @@ async def enforce_token_budget(
     if not pays_with_admin_key(user):
         return
 
-    window_days = settings.ai_token_budget_window_days
     reference = now or datetime.now(timezone.utc)
-    since = reference - timedelta(days=window_days)
-    spent = await crud.sum_user_tokens_since(db, user.id, since)
-    if spent >= budget:
-        raise TokenBudgetExceededError(
-            spent=spent, budget=budget, window_days=window_days
+    if budget > 0:
+        window_days = settings.ai_token_budget_window_days
+        since = reference - timedelta(days=window_days)
+        spent = await crud.sum_user_tokens_since(db, user.id, since)
+        if spent >= budget:
+            raise TokenBudgetExceededError(
+                spent=spent, budget=budget, window_days=window_days
+            )
+    if daily > 0:
+        spent = await crud.sum_admin_key_tokens_since(
+            db, reference - timedelta(days=1)
         )
+        if spent >= daily:
+            raise GlobalTokenBudgetExceededError(spent=spent, budget=daily)
 
 
 @dataclass

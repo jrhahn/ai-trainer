@@ -21,6 +21,7 @@ from config import settings
 from routers import dependencies as rate_limit_dep
 from services.rate_limit import SlidingWindowLimiter, Window
 from services.token_accounting import (
+    GlobalTokenBudgetExceededError,
     TokenBudgetExceededError,
     enforce_token_budget,
     track_llm_usage,
@@ -589,3 +590,46 @@ async def test_settings_show_no_allowance_with_an_own_key(
     status = (await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)).json()
 
     assert status["allowanceTokens"] is None
+
+
+# ---------------------------------------------------------------------------
+# The global daily cap on the owner's key (ai-trainer-ops#39)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_daily_cap_counts_every_free_account(db, budget_user, monkeypatch):
+    """Many accounts, each under its own budget, still stop at the daily cap."""
+    monkeypatch.setattr(settings, "ai_token_budget", 1_000_000)
+    monkeypatch.setattr(settings, "ai_global_daily_token_budget", 1000)
+    other = await crud.create_user(
+        db, email="other@example.com", name="Other Rider", hashed_password="x"
+    )
+    await db.flush()
+    await _record_spend(db, other.id, tokens=600)
+    await _record_spend(db, budget_user.id, tokens=300)
+
+    await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+
+    await _record_spend(db, other.id, tokens=200)
+    with pytest.raises(GlobalTokenBudgetExceededError):
+        await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+
+
+@pytest.mark.asyncio
+async def test_the_daily_cap_ignores_own_keys_and_yesterday(db, budget_user, monkeypatch):
+    monkeypatch.setattr(settings, "ai_global_daily_token_budget", 1000)
+    byok = await crud.create_user(
+        db, email="byok@example.com", name="Own Key", hashed_password="x"
+    )
+    byok.user_gemini_api_key = "own-key"
+    await db.flush()
+    await _record_spend(db, byok.id, tokens=50_000)
+    await _record_spend(db, budget_user.id, tokens=50_000, age_days=1.1)
+
+    await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+
+    # An athlete with their own key is not stopped by the owner's cap.
+    await _record_spend(db, budget_user.id, tokens=5000)
+    byok.ai_provider = "gemini"
+    await enforce_token_budget(db, byok, source="api:ask-trainer")

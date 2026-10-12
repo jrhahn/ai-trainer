@@ -10,7 +10,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Sequence
 
-from sqlalchemy import String, case, cast, delete, func, or_, select, update
+from sqlalchemy import String, and_, case, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -237,6 +237,32 @@ async def sum_user_tokens_since(
         select(func.coalesce(func.sum(models.LlmCall.total_tokens), 0)).where(
             models.LlmCall.user_id == user_id,
             models.LlmCall.created_at >= since,
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def sum_admin_key_tokens_since(db: AsyncSession, since: datetime) -> int:
+    """Total provider tokens since *since* that the owner's key likely paid for.
+
+    Counts calls by users with no own key saved, and calls billed to nobody.
+    """
+    # ponytail: decided by the keys a user holds *now*, so a user who saved a
+    # key today moves their earlier calls out of the sum; store the paying key
+    # on llm_calls if that ever matters.
+    result = await db.execute(
+        select(func.coalesce(func.sum(models.LlmCall.total_tokens), 0))
+        .select_from(models.LlmCall)
+        .outerjoin(models.User, models.User.id == models.LlmCall.user_id)
+        .where(
+            models.LlmCall.created_at >= since,
+            or_(
+                models.LlmCall.user_id.is_(None),
+                and_(
+                    models.User.user_gemini_api_key.is_(None),
+                    models.User.user_openai_api_key.is_(None),
+                ),
+            ),
         )
     )
     return int(result.scalar_one() or 0)

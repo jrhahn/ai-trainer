@@ -204,6 +204,7 @@ def test_the_spend_controls_are_forwarded(manifest: dict):
     forwarded = _forwarded(manifest)
     assert "allow_admin_ai_key_fallback" in forwarded
     assert "ai_token_budget" in forwarded
+    assert "ai_global_daily_token_budget" in forwarded
 
 
 def test_the_secrets_that_must_never_render_empty_are_required(manifest: dict):

@@ -418,6 +418,14 @@ class Settings(BaseSettings):
     messages a month.
     """
     ai_token_budget_window_days: int = 30
+    ai_global_daily_token_budget: int = 0
+    """Provider tokens the owner's key may spend per rolling 24 hours, summed
+    over every account it pays for. ``0`` disables it.
+
+    The per-user budget does not bound the total: a wave of new accounts can
+    each spend a full allowance. Above this, every account without its own key
+    is asked for one until the day's usage ages out.
+    """
 
     # ------------------------------------------------------------------
     # Auth brute-force controls (#682)
