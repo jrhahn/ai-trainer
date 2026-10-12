@@ -23,6 +23,15 @@ describe('LandingPage', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/a coach who already knows your riding/i)
   })
 
+  it('says once, near the top, that runs and strength are planned too', () => {
+    // ai-trainer-ops#53 item 1, #39 Q13: multisport since #709, said once; the
+    // example stays a ride.
+    const { container } = setup()
+    const top = container.querySelector('h1')?.nextElementSibling?.textContent ?? ''
+    expect(top).toMatch(/runs and strength/i)
+    expect((container.textContent ?? '').match(/strength/gi)).toHaveLength(1)
+  })
+
   // --- calm (ai-trainer-ops#67) --------------------------------------------
   // The owner's verdict on the previous page: too much text, too many widgets.
   // These pin the two things that made it so, so a later edit cannot quietly
