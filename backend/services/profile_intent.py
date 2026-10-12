@@ -46,6 +46,12 @@ _FROM_NOW_ON = re.compile(
     r"\b(?:from\s+now\s+on|going\s+forward|ab\s+jetzt|ab\s+sofort|künftig|in\s+zukunft)\b",
     re.IGNORECASE,
 )
+# "I can only ride on Saturday this week" is a one-off, not the training days.
+_ONE_OFF = re.compile(
+    r"\b(?:this|next)\s+(?:week|weekend)|\b(?:today|tomorrow|tonight)\b"
+    r"|\b(?:diese|nächste|naechste)\s+woche|\b(?:heute|morgen)\b|\b(?:dieses|am)\s+wochenende",
+    re.IGNORECASE,
+)
 _NOT_ON = re.compile(r"\b(?:not|nicht|kein|keine|never|nie)\b", re.IGNORECASE)
 
 _SPORT_WORDS = {
@@ -79,7 +85,7 @@ def _hours(sentence: str) -> float | None:
 
 
 def _days(sentence: str) -> list[str] | None:
-    if _NOT_ON.search(sentence) or _PAST.search(sentence):
+    if _NOT_ON.search(sentence) or _PAST.search(sentence) or _ONE_OFF.search(sentence):
         return None
     named = {WEEKDAY_LABELS[WEEKDAYS[m.group(1).lower()]] for m in _WEEKDAY.finditer(sentence)}
     if not named:
@@ -130,7 +136,8 @@ def propose_profile_change(
     current_sports = list(sports or [])
     for sentence in _statements(message):
         hours = _hours(sentence)
-        if hours is not None and hours != weekly_hours:
+        if hours is not None:
+            # The last statement wins, even when it is the profile's own value.
             proposal["weekly_hours"] = hours
         days = _days(sentence)
         if days is not None and days != list(training_days or []):
@@ -138,6 +145,8 @@ def propose_profile_change(
         new_sports = _sports(sentence, proposal.get("sports", current_sports))
         if new_sports is not None:
             proposal["sports"] = new_sports
-    if proposal.get("sports") == current_sports:
-        proposal.pop("sports")
+    if set(proposal.get("sports", current_sports)) == set(current_sports):
+        proposal.pop("sports", None)
+    if proposal.get("weekly_hours") == weekly_hours:
+        proposal.pop("weekly_hours", None)
     return proposal or None

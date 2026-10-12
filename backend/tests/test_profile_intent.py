@@ -53,10 +53,24 @@ def test_a_stated_change_is_proposed(message, proposal):
         "I have 6 hours a week.",
         "I only train on Tuesday, Thursday, Saturday and Sunday.",
         "60 hours a week at work.",
+        "I can only ride on Saturday this week.",
+        "Diese Woche kann ich nur Samstag.",
+        "Ich kann morgen nur kurz, dienstags geht nicht.",
     ],
 )
 def test_nothing_is_proposed(message):
     assert propose_profile_change(message, **PROFILE) is None
+
+
+def test_the_last_stated_hours_win_even_when_they_are_the_profiles():
+    message = "8 hours a week from now on. No wait, 6 hours a week is right."
+    assert propose_profile_change(message, **PROFILE) is None
+
+
+def test_the_same_sports_in_another_order_are_no_change():
+    profile = {**PROFILE, "sports": ["running", "cycling"]}
+    message = "I've started strength. Actually, I stopped strength."
+    assert propose_profile_change(message, **profile) is None
 
 
 @pytest.mark.asyncio

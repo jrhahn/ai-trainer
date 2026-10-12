@@ -117,6 +117,7 @@ describe('ReplyConfirmations', () => {
   it('leaves the profile alone, and says when the update fails', async () => {
     mocks.updateCurrentUser.mockRejectedValueOnce(new Error('offline'))
     const { unmount } = render(<ReplyConfirmations msg={reply({ profileProposal: { sports: ['cycling', 'running'] } })} />)
+    expect(screen.getByText('sports: Cycling, Running')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /leave it/i }))
     expect(mocks.updateCurrentUser).not.toHaveBeenCalled()
     expect(screen.getByText('Left as it was.')).toBeInTheDocument()
