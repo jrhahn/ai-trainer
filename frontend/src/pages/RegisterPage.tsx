@@ -16,7 +16,7 @@ function getPasswordChecks(password: string, name: string, email: string) {
 
   return [
     // Length plus a common/personal-word check, no composition rules (NIST SP 800-63B, ai-trainer-ops#44).
-    { id: 'length', label: 'At least 10 characters (a short phrase works)', valid: password.length >= 10 },
+    { id: 'length', label: 'At least 10 characters (a short phrase works)', valid: [...password].length >= 10 },
     { id: 'variety', label: 'Not just a few repeated characters', valid: new Set(lowerPassword).size >= 5 },
     {
       id: 'trivial',

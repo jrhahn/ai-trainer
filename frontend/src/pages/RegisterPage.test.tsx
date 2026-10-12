@@ -109,6 +109,15 @@ describe('RegisterPage', () => {
     expect(mockRegister).not.toHaveBeenCalled()
   })
 
+  it('marks a long run of a few repeated characters as too simple', async () => {
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'abababababab')
+
+    expect(screen.getByText('At least 10 characters (a short phrase works)').parentElement).toHaveClass('text-green-700')
+    expect(screen.getByText('Not just a few repeated characters').parentElement).toHaveClass('text-gray-500')
+  })
+
   it('shows a clear error when confirmation does not match', async () => {
     setup()
 
