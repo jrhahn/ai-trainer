@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -374,7 +374,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByText(/Connect with Strava/i)).toBeInTheDocument()
-    expect(screen.getByText(/Use parameters I entered/i)).toBeInTheDocument()
+    expect(screen.getByText(/enter sessions myself/i)).toBeInTheDocument()
   })
 
   it('shows the StravaConnect component when "Connect with Strava" is selected on step 4', async () => {
@@ -688,15 +688,54 @@ describe('OnboardingPage', () => {
     expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
   })
 
-  it('shows the registered name and email in the summary', async () => {
+  it('shows the answers in the summary, not the name and email it cannot change', async () => {
     setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: 'Anna Test' } })
     render(<OnboardingPage />)
     const user = userEvent.setup()
     await goToAssessment(user)
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(screen.getByText('Anna Test')).toBeInTheDocument()
-    expect(screen.getByText('alex@example.com')).toBeInTheDocument()
+    expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
+    expect(screen.getByText('cycling')).toBeInTheDocument()
+    expect(screen.getByText('8 h/week, Tue Thu Sat Sun')).toBeInTheDocument()
+  })
+
+  it('needs a sport and a day before it moves on (ai-trainer-ops#43)', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Cycling' }))
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Running' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    for (const day of ['Tue', 'Thu', 'Sat', 'Sun']) await user.click(screen.getByRole('button', { name: day }))
+    expect(screen.getByText('Pick at least one day.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  })
+
+  it('sends the sports, hours and days with the profile the plan is built from', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Strength' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.change(screen.getByLabelText(/Hours per week/), { target: { value: '9' } })
+    await user.click(screen.getByRole('button', { name: 'Mon' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      sports: ['cycling', 'strength'],
+      weeklyHours: 9,
+      trainingDays: ['tuesday', 'thursday', 'saturday', 'sunday', 'monday'],
+    })
   })
 
   it('keeps the name in the store when the profile arrives between render and click', async () => {

@@ -31,6 +31,8 @@ interface BackendUserResponse {
   raceDate?: string | null
   raceDescription?: string | null
   weeklyHours?: number
+  sports?: UserProfile['sports'] | null
+  trainingDays?: UserProfile['trainingDays'] | null
   followsTrainingPlan: boolean
   maxHeartRate?: number
   restingHeartRate?: number
@@ -91,7 +93,9 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       trainingGoal: normalizeTrainingGoal(user.trainingGoal),
       raceDate: user.raceDate ?? undefined,
       raceDescription: user.raceDescription ?? undefined,
-      weeklyHours: user.weeklyHours ?? 8,
+      weeklyHours: user.weeklyHours ?? undefined,
+      sports: user.sports ?? undefined,
+      trainingDays: user.trainingDays ?? undefined,
       followsTrainingPlan: user.followsTrainingPlan ?? false,
       maxHeartRate: user.maxHeartRate,
       restingHeartRate: user.restingHeartRate,
@@ -126,6 +130,8 @@ export async function updateCurrentUser(
     raceDate: 'raceDate' in updates ? updates.raceDate ?? null : undefined,
     raceDescription: 'raceDescription' in updates ? updates.raceDescription ?? null : undefined,
     weeklyHours: updates.weeklyHours,
+    sports: updates.sports,
+    trainingDays: updates.trainingDays,
     followsTrainingPlan: updates.followsTrainingPlan,
     maxHeartRate: updates.maxHeartRate,
     restingHeartRate: updates.restingHeartRate,

@@ -7,9 +7,9 @@
  * and proves nothing about the answers: every field could be discarded on the
  * way and all of those specs would still pass.
  *
- * This one types into every input onboarding offers — race goal and date, a
- * fitness level, FTP, max heart rate, the structured-plan checkbox, an
- * assessment method — and reads back everything the app shows anywhere:
+ * This one types into every input onboarding offers — sports, race goal and
+ * date, weekly hours and training days, a fitness level, FTP, max heart rate,
+ * an assessment method — and reads back everything the app shows anywhere:
  *
  * | answer | read back from |
  * |---|---|
@@ -17,11 +17,11 @@
  * | FTP, max heart rate | Settings |
  * | race date, race description | the dashboard's season countdown |
  * | fitness level, assessment source, race goal | **not read back** — see below |
- * | structured-plan checkbox | **not read back** |
+ * | sports, weekly hours, training days | the summary step only (ai-trainer-ops#43) |
  *
  * The last two rows are the honest limit of this spec, and it was a review on
  * PR #797 that made me state it rather than imply otherwise: nothing in the app
- * displays `fitnessLevel`, `followsTrainingPlan` or `assessmentMethod`, so if
+ * displays `fitnessLevel` or `assessmentMethod`, so if
  * onboarding dropped them on the floor nothing here would notice. What is done
  * instead is to make the *entering* of them verifiable — every choice asserts
  * its own `aria-pressed` immediately after the click, so a locator that drifted
@@ -90,9 +90,6 @@ const continueButton = (page: Page) => page.getByRole('button', { name: /^contin
 async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthlete>) {
   await register(page, athlete)
 
-  // Step 1 is the greeting.
-  await continueButton(page).click()
-
   // Plain strings rather than alternation regexes, and no `.first()`. The name
   // of each of these buttons is its whole card — label plus description — so the
   // match is a substring, and a substring that hit two cards used to be resolved
@@ -107,6 +104,10 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
     await expect(option).toHaveAttribute('aria-pressed', 'true')
   }
 
+  // Step 1 — the greeting and the sports. Cycling is preselected.
+  await choose('Running')
+  await continueButton(page).click()
+
   // Step 2 — the race goal, which is the branch that reveals the date fields.
   await choose('Race Prep')
   const date = page.locator('input[type="date"]')
@@ -115,25 +116,24 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await page.getByPlaceholder(/gran fondo/i).fill(ANSWERS.raceDescription)
   await continueButton(page).click()
 
-  // Step 3 — fitness level plus the two numbers the coach would otherwise have
-  // to estimate from the first rides.
+  // Step 3 — time, then the optional fold: fitness level plus the two numbers
+  // the coach would otherwise have to estimate from the first rides.
+  await page.getByLabel(/hours per week/i).fill('9')
+  await choose('Mon')
+  await page.getByText('Optional: level, FTP, max heart rate').click()
   await choose('Intermediate')
   await page.getByPlaceholder('e.g. 250').fill(ANSWERS.ftp)
   await page.getByPlaceholder('e.g. 185').fill(ANSWERS.maxHeartRate)
-  // By name, not by position: the last unscoped locator in this spec. It is
-  // wrapped in its own label, so it has one.
-  const followsPlan = page.getByRole('checkbox', {
-    name: /structured training plan/i,
-  })
-  await followsPlan.check()
-  await expect(followsPlan).toBeChecked()
   await continueButton(page).click()
 
-  // Step 4 — the assessment source. "Use parameters I entered" is the one that
-  // needs no provider round trip, which is also what #43 calls out as two steps
-  // for one decision.
-  await choose('Use parameters I entered')
+  // Step 4 — the assessment source. Entering sessions yourself is the one that
+  // needs no provider round trip.
+  await choose('enter sessions myself')
   await continueButton(page).click()
+
+  // The summary reads back the three answers ai-trainer-ops#43 added.
+  await expect(page.getByText('cycling, running')).toBeVisible()
+  await expect(page.getByText('9 h/week, Mon Tue Thu Sat Sun')).toBeVisible()
 
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
 }

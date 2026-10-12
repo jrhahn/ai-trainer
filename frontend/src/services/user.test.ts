@@ -154,7 +154,8 @@ describe('fetchCurrentUser', () => {
     expect(result.profile.name).toBe('')
     expect(result.profile.bikeType).toBe('road')
     expect(result.profile.trainingGoal).toBe('general_fitness')
-    expect(result.profile.weeklyHours).toBe(8)
+    // Not 8: weeklyHours is a ceiling for the planner now (ai-trainer-ops#43), so an unstated value stays unstated.
+    expect(result.profile.weeklyHours).toBeUndefined()
     expect(result.profile.consumedTokens).toBe(0)
     expect(result.profile.fitnessLevel).toBe('intermediate')
     expect(result.lastStravaActivityId).toBeNull()

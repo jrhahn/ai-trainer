@@ -219,7 +219,7 @@ TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
 - Keep weekday sessions short (120 minutes maximum) to fit around work.
-- Do not rely on a 'weeklyHours' field; derive realistic weekly volume from the athlete's fitness level
+- The athlete's time, from onboarding (ai-trainer-ops#43). 'weeklyHours' is the most they can give: keep each week's planned time at or below it. Schedule sessions only on the weekdays in 'trainingDays' and rest on the others, unless the athlete says otherwise for a specific day. Plan only the sports in 'sports'. When a field is missing, derive realistic weekly volume from the athlete's fitness level and recent training.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
 - Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.

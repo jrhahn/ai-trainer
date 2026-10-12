@@ -328,6 +328,8 @@ class UserResponse(CamelModel):
     race_date: Optional[str] = None
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
+    sports: Optional[list[str]] = None
+    training_days: Optional[list[str]] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
     resting_heart_rate: Optional[int] = None
@@ -359,6 +361,14 @@ class UserResponse(CamelModel):
     )
 
 
+# The onboarding answers (ai-trainer-ops#43): the sports the planner can plan,
+# and the days of the week as lower-case English names.
+OnboardingSport = Literal["cycling", "running", "strength"]
+TrainingWeekday = Literal[
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+]
+
+
 class UpdateProfileRequest(CamelModel):
     """All fields optional – PATCH-style partial update via PUT."""
 
@@ -367,7 +377,9 @@ class UpdateProfileRequest(CamelModel):
     training_goal: Optional[str] = None
     race_date: Optional[str] = None
     race_description: Optional[str] = None
-    weekly_hours: Optional[float] = None
+    weekly_hours: Optional[float] = Field(default=None, ge=1, le=40)
+    sports: Optional[list[OnboardingSport]] = Field(default=None, min_length=1)
+    training_days: Optional[list[TrainingWeekday]] = Field(default=None, min_length=1)
     follows_training_plan: Optional[bool] = None
     max_heart_rate: Optional[int] = Field(
         default=None, ge=MAX_HR_MIN_BPM, le=MAX_HR_MAX_BPM
@@ -1586,6 +1598,8 @@ class UserProfileSchema(CamelModel):
     race_date: Optional[str] = None
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = None
+    sports: Optional[list[str]] = None
+    training_days: Optional[list[str]] = None
     follows_training_plan: bool = False
     max_heart_rate: Optional[int] = None
     resting_heart_rate: Optional[int] = None
@@ -1610,6 +1624,8 @@ class UserProfileSchema(CamelModel):
             race_date=user.race_date,
             race_description=user.race_description,
             weekly_hours=user.weekly_hours,
+            sports=user.sports,
+            training_days=user.training_days,
             follows_training_plan=user.follows_training_plan,
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,
