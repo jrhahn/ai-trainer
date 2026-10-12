@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-import pytest
-from sqlalchemy import select
-
 import crud
 import models
+import pytest
 from services import motivation_model as mm
 from services import weather_preference, weather_service
 from services.weather_preference import DIRECTION_SENSITIVE
+from sqlalchemy import select
+
 from tests.conftest import TestSessionLocal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
