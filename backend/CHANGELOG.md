@@ -21,9 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   why, or brings the plan back. Nothing is reverted: these are priors, not
   rules. `TRAINING_PLAN_PRINCIPLES` now calls the athlete's time a strong prior
   and the ramp a heuristic. Hypothesis properties cover the checker.
-
-### Added
-
 - **Sports and training days on the profile** (ai-trainer-ops#43) —
   `models.User.sports`, `models.User.training_days`, migration
   `20261012_000001`. Both are JSON lists of fixed choices (`cycling`,
