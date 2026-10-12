@@ -152,3 +152,53 @@ async def test_the_tool_is_rate_limited_deployment_wide(client, monkeypatch):
 
     assert third.status_code == 429
     assert "Retry-After" in third.headers
+
+
+@pytest.mark.asyncio
+async def test_power_without_timestamps_is_refused_not_an_empty_curve(
+    client, monkeypatch
+):
+    real = tools._parse_fit_activity
+
+    def without_time(*args):
+        parsed = real(*args)
+        parsed.streams.pop("time")
+        return parsed
+
+    monkeypatch.setattr(tools, "_parse_fit_activity", without_time)
+    response = await _post(client, "ride.fit", b"ride")
+
+    assert response.status_code == 422
+    assert "timestamps" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_uploads_are_computed_one_at_a_time(client, monkeypatch):
+    """The 'cannot crash it' half: a burst queues instead of running in parallel."""
+    import asyncio
+    import threading
+
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+    real = tools.power_duration
+
+    def counted(*args):
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        try:
+            import time
+
+            time.sleep(0.05)
+            return real(*args)
+        finally:
+            with lock:
+                running -= 1
+
+    monkeypatch.setattr(tools, "power_duration", counted)
+    responses = await asyncio.gather(*(_post(client, f"{i}.fit", b"ride") for i in range(3)))
+
+    assert [r.status_code for r in responses] == [200, 200, 200]
+    assert peak == 1

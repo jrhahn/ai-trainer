@@ -124,7 +124,7 @@ export default function PowerCurvePage() {
             onChange={(e) => void onFile(e.target.files?.[0])} />
         </label>
         {error && <p role="alert" className="mt-4 text-red-300">{error}</p>}
-        {data && (
+        {data && data.points.length > 0 && (
           <section className="mt-8">
             <Chart data={data} svgRef={svgRef} />
             <p className="mt-3 text-sm text-slate-400">

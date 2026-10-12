@@ -74,6 +74,12 @@ async def power_curve(file: UploadFile) -> schemas.PowerCurveResponse:
                 detail="This file has no power data. The curve needs a power meter.",
             )
         result = await asyncio.to_thread(power_duration, watts, times)
+    if not result["points"]:
+        # No timeline to window over, or a ride under five seconds of power.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This file has too little power data with timestamps for a curve.",
+        )
     return schemas.PowerCurveResponse(
         duration_seconds=parsed.duration_seconds, **result
     )
