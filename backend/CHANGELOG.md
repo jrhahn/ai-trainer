@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Illness and tired days said in chat, as planning priors** (ai-trainer-ops#18,
+  #39 Q1) — `services/athlete_states.py`, model `AthleteState`, migration
+  `20261012_000002`.
+  - The chat captures "I'm ill" / "ich bin krank" (with "until Friday" or "for 3
+    days" when stated), "well again", and days with less to give (after a party,
+    a long work day, a bad night). Only the kind and the dates are stored, never
+    the sentence, because an illness is health data.
+  - An illness with no stated end expires 10 days after the athlete last said
+    it.
+  - `plan_priors` reports intensity during an illness and for 3 days after it
+    (expert consensus), and intensity on a day with less to give
+    (athlete-stated). Nothing is reverted: the coach keeps the departure and
+    says why, or brings the plan back.
+  - Every plan writer sees the athlete's state, including a full regeneration.
+  - `ask-trainer` returns `capturedStates`. `DELETE /users/me/states/{id}`
+    deletes a state the athlete takes back.
 - **Planning priors, reported and never enforced** (ai-trainer-ops#26) —
   `services/plan_priors.py`, `services/plan_context.priors_section_for_user`.
   Every plan writer (chat, nightly run, auto-adapt) now sees where the current

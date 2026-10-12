@@ -52,6 +52,14 @@ export interface CapturedGoal {
   label: string
 }
 
+// An illness or a tired day the chat stored (ai-trainer-ops#18). "Well again"
+// ends an illness and has nothing to take back, so it is not removable.
+export interface CapturedState {
+  id: string
+  label: string
+  removable: boolean
+}
+
 export interface RaceProposal {
   raceDate?: string | null
   raceDescription?: string | null
@@ -62,6 +70,7 @@ export interface RaceProposal {
 export interface AskTrainerResult {
   response: string
   capturedGoals?: CapturedGoal[]
+  capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
   planUpdates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
@@ -75,6 +84,7 @@ export interface AskTrainerResult {
 interface BackendAskTrainerResult {
   response: string
   capturedGoals?: CapturedGoal[]
+  capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
@@ -148,6 +158,7 @@ export async function askTrainer(
     contextRationale: result.contextRationale ?? result.context_rationale,
     objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
     capturedGoals: result.capturedGoals ?? [],
+    capturedStates: result.capturedStates ?? [],
     raceProposal: result.raceProposal ?? null,
   }
 }

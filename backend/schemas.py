@@ -2228,6 +2228,18 @@ class CapturedGoalSchema(CamelModel):
     label: str
 
 
+class CapturedStateSchema(CamelModel):
+    """An illness or a tired day the chat just stored (ai-trainer-ops#18).
+
+    ``removable`` is false for "well again", which ends an illness rather than
+    adding one: there is nothing to take back with a button.
+    """
+
+    id: str
+    label: str
+    removable: bool = True
+
+
 class RaceProposalSchema(CamelModel):
     """The athlete said there is no race: offer to clear the profile's (ops#71)."""
 
@@ -2239,6 +2251,7 @@ class RaceProposalSchema(CamelModel):
 class AskTrainerResponse(CamelModel):
     response: str
     captured_goals: list[CapturedGoalSchema] = []
+    captured_states: list[CapturedStateSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     updated_plan: Optional[list[Any]] = None

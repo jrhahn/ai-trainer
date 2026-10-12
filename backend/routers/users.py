@@ -1021,6 +1021,20 @@ async def remove_goal(
     return {"status": "removed"}
 
 
+@router.delete("/states/{state_id}")
+async def remove_state(
+    state_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Undo an illness or tired day the chat captured (ai-trainer-ops#18)."""
+    if not await crud.delete_state(db, current_user.id, state_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="State not found"
+        )
+    return {"status": "removed"}
+
+
 @router.post("/race/clear")
 async def clear_profile_race(
     request: Request,
