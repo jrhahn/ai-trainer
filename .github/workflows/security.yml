@@ -11,7 +11,7 @@ name: Security
 # at a time:
 #
 #   semgrep      gate   (backlog cleared in #762)
-#   pip-audit    report
+#   pip-audit    report; the weekly run fails on a finding (alarm)
 #   npm audit    report
 #   trivy        report
 #   ZAP baseline report
@@ -62,6 +62,7 @@ jobs:
           node-version: '22'
 
       - name: pip-audit (backend, from the lockfile)
+        id: pip_audit
         working-directory: backend
         run: |
           # Audit what uv.lock resolves to, not what happens to be installed:
@@ -72,6 +73,7 @@ jobs:
             --disable-pip --no-deps --format markdown --output /tmp/pip-audit.md
           status=$?
           set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
           # pip-audit writes no file at all when it finds nothing, and "no
           # report" must not read the same as "clean".
           if [ "$status" -eq 0 ] && [ ! -s /tmp/pip-audit.md ]; then
@@ -121,6 +123,16 @@ jobs:
           name: dependency-audit
           path: security-reports/
           if-no-files-found: ignore
+
+      # The alarm the owner chose over a gate (ai-trainer-ops#39 Q7): a PR is
+      # never failed by an advisory against a lockfile it did not touch, but
+      # the weekly run fails on any finding, and GitHub mails a failed
+      # scheduled run. After the upload, so the report is always attached.
+      - name: Alarm on a pip-audit finding (weekly run only)
+        if: github.event_name == 'schedule' && steps.pip_audit.outputs.status != '0'
+        run: |
+          echo "::error::pip-audit exit status ${{ steps.pip_audit.outputs.status }}: see the job summary and the dependency-audit artifact."
+          exit 1
 
   semgrep:
     # A GATE: any finding fails the job. A false positive is annotated in place
