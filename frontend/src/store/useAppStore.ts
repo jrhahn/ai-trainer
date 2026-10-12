@@ -177,6 +177,7 @@ export interface ChatMessage {
   capturedGoals?: Array<{ id: string; label: string }>
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
+  profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null } | null
 }
 
 export interface StravaConnection {

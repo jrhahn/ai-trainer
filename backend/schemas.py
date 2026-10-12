@@ -2240,6 +2240,17 @@ class CapturedStateSchema(CamelModel):
     removable: bool = True
 
 
+class ProfileProposalSchema(CamelModel):
+    """Hours, training days or sports the athlete said in chat, to confirm (ops#43).
+
+    Only the fields that differ from the profile are set.
+    """
+
+    weekly_hours: Optional[float] = None
+    training_days: Optional[list[TrainingWeekday]] = None
+    sports: Optional[list[OnboardingSport]] = None
+
+
 class RaceProposalSchema(CamelModel):
     """The athlete said there is no race: offer to clear the profile's (ops#71)."""
 
@@ -2253,6 +2264,7 @@ class AskTrainerResponse(CamelModel):
     captured_goals: list[CapturedGoalSchema] = []
     captured_states: list[CapturedStateSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None
+    profile_proposal: Optional[ProfileProposalSchema] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     updated_plan: Optional[list[Any]] = None
     sources: Optional[list[Any]] = None

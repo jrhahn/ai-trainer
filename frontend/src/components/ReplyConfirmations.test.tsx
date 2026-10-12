@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   removeStateRemote: vi.fn(),
   clearProfileRaceRemote: vi.fn(),
   fetchCurrentUser: vi.fn(),
+  updateCurrentUser: vi.fn(),
 }))
 vi.mock('../services/user', () => mocks)
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   mocks.removeStateRemote.mockResolvedValue(undefined)
   mocks.clearProfileRaceRemote.mockResolvedValue(undefined)
   mocks.fetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider' } })
+  mocks.updateCurrentUser.mockResolvedValue({ profile: { name: 'Rider', weeklyHours: 4 } })
 })
 
 describe('ReplyConfirmations', () => {
@@ -90,6 +92,40 @@ describe('ReplyConfirmations', () => {
     )
     expect(screen.getByText('Well again: easy days until 2026-10-15')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('proposes a profile change from chat and applies it only on Update', async () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({ profileProposal: { weeklyHours: 4, trainingDays: ['tuesday', 'saturday'], sports: null } })}
+      />,
+    )
+    expect(screen.getByText('4 h a week; train on Tuesday, Saturday')).toBeInTheDocument()
+    expect(mocks.updateCurrentUser).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: /update profile/i }))
+
+    expect(mocks.updateCurrentUser).toHaveBeenCalledWith('test-token', {
+      weeklyHours: 4,
+      trainingDays: ['tuesday', 'saturday'],
+      sports: undefined,
+    })
+    expect(await screen.findByText(/Updated\./)).toBeInTheDocument()
+    expect(useAppStore.getState().userProfile?.weeklyHours).toBe(4)
+  })
+
+  it('leaves the profile alone, and says when the update fails', async () => {
+    mocks.updateCurrentUser.mockRejectedValueOnce(new Error('offline'))
+    const { unmount } = render(<ReplyConfirmations msg={reply({ profileProposal: { sports: ['cycling', 'running'] } })} />)
+    expect(screen.getByText('sports: Cycling, Running')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /leave it/i }))
+    expect(mocks.updateCurrentUser).not.toHaveBeenCalled()
+    expect(screen.getByText('Left as it was.')).toBeInTheDocument()
+    unmount()
+
+    render(<ReplyConfirmations msg={reply({ profileProposal: { sports: ['cycling', 'running'] } })} />)
+    await userEvent.click(screen.getByRole('button', { name: /update profile/i }))
+    expect(await screen.findByText('Could not update it. Try again later.')).toBeInTheDocument()
   })
 
   it('keeps a goal without calling the server', async () => {

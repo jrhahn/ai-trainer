@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Profile change offered under the coach reply** (ai-trainer-ops#43) —
+  `components/ReplyConfirmations.tsx`. "Update your profile: 4 h a week; train
+  on Tuesday, Saturday?" with Update profile and Leave it. Update saves through
+  `PUT /users/me` and refreshes the profile.
 - **Illness and tired days under the coach reply** (ai-trainer-ops#18) —
   `components/ReplyConfirmations.tsx`. A state the chat captured shows with
   Keep and Remove, like a captured goal. "Well again" shows without buttons.

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hours, training days and sports said in chat, offered as a profile change**
+  (ai-trainer-ops#43, #39) — `services/profile_intent.py`. "Ab jetzt nur noch
+  4 Stunden pro Woche", "I can only train on Tuesday and Saturday", "I've
+  started running" come back as `profileProposal` with only the fields that
+  differ. Nothing is applied: the athlete confirms under the reply. Reports
+  ("last week I did 10 hours"), questions, one-off days ("Thursday I have no
+  time", "every Saturday a long ride") and dropping the only sport propose
+  nothing.
 - **Illness and tired days said in chat, as planning priors** (ai-trainer-ops#18,
   #39 Q1) — `services/athlete_states.py`, model `AthleteState`, migration
   `20261012_000002`.
