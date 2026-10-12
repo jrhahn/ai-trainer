@@ -23,7 +23,7 @@ describe('DayBoardWhy', () => {
       options: [
         {
           key: 'trail', label: 'Trail day', prescription: '', modality: 'mtb',
-          base: 6.1, heatCost: 0, freshnessCost: 0, competesWith: '', competesWithLabel: '', score: 6.1,
+          base: 6.1, heatCost: 2.7, freshnessCost: 0, competesWith: '', competesWithLabel: '', score: 3.4,
         },
         {
           key: 'key_session', label: 'Key session', prescription: '', modality: 'road',
@@ -40,6 +40,7 @@ describe('DayBoardWhy', () => {
 
     expect(await screen.findByText('Key session')).toBeInTheDocument()
     expect(screen.getByText(/−1.2 freshness for the weekend trail ride/)).toBeInTheDocument()
+    expect(screen.getByText(/−2.7 heat/)).toBeInTheDocument()
     expect(screen.getByText(/heat tolerance is not measured yet/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /allocate_day/ })).toHaveAttribute(
       'href',
@@ -54,10 +55,31 @@ describe('DayBoardWhy', () => {
     expect(await screen.findByText(/Nothing to weigh yet/)).toBeInTheDocument()
   })
 
-  it('says so when it cannot load', async () => {
-    mocks.fetchDayBoard.mockRejectedValue(new Error('offline'))
+  it('says so when it cannot load, and clears that once a retry works', async () => {
+    mocks.fetchDayBoard.mockRejectedValueOnce(new Error('offline'))
+    mocks.fetchDayBoard.mockResolvedValueOnce({ hot: false, heatTolerance: '', options: [], source })
     render(<DayBoardWhy />)
-    await userEvent.click(screen.getByText('What the planner weighs for a day'))
+    const toggle = screen.getByText('What the planner weighs for a day')
+    await userEvent.click(toggle)
     expect(await screen.findByText('Could not load it. Try again later.')).toBeInTheDocument()
+
+    await userEvent.click(toggle)
+    await userEvent.click(toggle)
+
+    expect(await screen.findByText(/Nothing to weigh yet/)).toBeInTheDocument()
+    expect(screen.queryByText('Could not load it. Try again later.')).not.toBeInTheDocument()
+  })
+
+  it('sends one request while one is in flight', async () => {
+    let resolve: (value: unknown) => void = () => {}
+    mocks.fetchDayBoard.mockReturnValue(new Promise((r) => (resolve = r)))
+    render(<DayBoardWhy />)
+    const toggle = screen.getByText('What the planner weighs for a day')
+    await userEvent.click(toggle)
+    await userEvent.click(toggle)
+    await userEvent.click(toggle)
+    resolve({ hot: false, heatTolerance: '', options: [], source })
+    expect(await screen.findByText(/Nothing to weigh yet/)).toBeInTheDocument()
+    expect(mocks.fetchDayBoard).toHaveBeenCalledTimes(1)
   })
 })

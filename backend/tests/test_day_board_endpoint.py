@@ -8,15 +8,17 @@ from sqlalchemy import select
 import crud
 import models
 from services import motivation_model as mm
+from services import weather_preference, weather_service
+from services.weather_preference import DIRECTION_SENSITIVE
 from tests.conftest import TestSessionLocal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-async def _athlete_with_an_objective() -> None:
+async def _athlete_with_an_objective(*, memory: bool = True) -> None:
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
-        user.memory_updates_enabled = True
+        user.memory_updates_enabled = memory
         await crud.upsert_athlete_motivation_model(
             db,
             user.id,
@@ -68,6 +70,38 @@ async def test_nothing_known_means_no_board(client, auth_headers):
 
     assert response.status_code == 200
     assert response.json()["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_memory_off_means_no_board_even_with_an_objective(client, auth_headers):
+    """The planner gets no board then, so the athlete is not shown one either."""
+    await _athlete_with_an_objective(memory=False)
+
+    response = await client.get("/api/v1/users/me/day-board", headers=auth_headers)
+
+    assert response.json()["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_hot_day_for_a_heat_sensitive_athlete_shows_the_heat_cost(
+    client, auth_headers, monkeypatch
+):
+    await _athlete_with_an_objective()
+
+    async def hot_forecast(db, user_id, horizon_days):
+        return None, [{"temperature_max_c": 34.0}]
+
+    async def sensitive(db, user_id):
+        return DIRECTION_SENSITIVE
+
+    monkeypatch.setattr(weather_service, "daily_forecast_for_user", hot_forecast)
+    monkeypatch.setattr(weather_preference, "heat_tolerance_for_user", sensitive)
+
+    body = (await client.get("/api/v1/users/me/day-board", headers=auth_headers)).json()
+
+    assert body["hot"] is True
+    assert body["heatTolerance"] == DIRECTION_SENSITIVE
+    assert any(option["heatCost"] > 0 for option in body["options"])
 
 
 @pytest.mark.asyncio

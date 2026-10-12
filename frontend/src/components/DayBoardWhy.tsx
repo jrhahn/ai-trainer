@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { fetchDayBoard } from '../services/user'
 import type { DayBoard } from '../services/user'
@@ -12,13 +12,19 @@ export default function DayBoardWhy() {
   const [board, setBoard] = useState<DayBoard | null>(null)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
+  // One request at a time: closing and reopening while it runs must not send another.
+  const loading = useRef(false)
 
   const load = async () => {
-    if (board || !authToken) return
+    if (board || !authToken || loading.current) return
+    loading.current = true
+    setFailed(false)
     try {
       setBoard(await fetchDayBoard(authToken))
     } catch {
       setFailed(true)
+    } finally {
+      loading.current = false
     }
   }
 
