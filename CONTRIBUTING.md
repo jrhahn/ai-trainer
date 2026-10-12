@@ -28,7 +28,8 @@ git push --force-with-lease
 ```
 
 The **DCO** check on your pull request fails and names each commit that has no
-sign-off for its own author. Bot commits are exempt, and so are the
+sign-off for its own author. A merge commit counts too, so prefer rebasing onto
+`develop` over merging it in. Bot commits are exempt, and so are the
 maintainer's own pull requests.
 
 A contributor licence agreement may be added later, once outside contributions

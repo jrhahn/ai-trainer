@@ -33,7 +33,7 @@ def unsigned(commits: list[dict], exempt: set[str]) -> list[str]:
         email = commit["author"]["email"].lower()
         signed = {mail.lower() for _, mail in _SIGNED_OFF.findall(commit["message"])}
         if email not in signed:
-            subject = commit["message"].splitlines()[0]
+            subject = (commit["message"].splitlines() or [""])[0]
             missing.append(f"{item['sha'][:7]} {subject} (author {email})")
     return missing
 
@@ -49,7 +49,7 @@ def _commit(sha, login, email, message):
 def self_test() -> None:
     signed = _commit("a" * 40, "someone", "s@example.com", "Fix\n\nSigned-off-by: S <S@example.com>")
     other = _commit("b" * 40, "someone", "s@example.com", "Fix\n\nSigned-off-by: X <x@example.com>")
-    bare = _commit("c" * 40, None, "n@example.com", "Fix")
+    bare = _commit("c" * 40, None, "n@example.com", "")
     bot = _commit("d" * 40, "dependabot[bot]", "bot@example.com", "Bump")
     owner = _commit("e" * 40, "JRHahn", "o@example.com", "Merge")
     assert unsigned([signed, bot, owner], {"jrhahn"}) == []
