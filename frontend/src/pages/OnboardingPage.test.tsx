@@ -379,6 +379,28 @@ describe('OnboardingPage', () => {
     expect(screen.getByText(/enter sessions myself/i)).toBeInTheDocument()
   })
 
+  it('still offers Strava to an athlete coming back from its OAuth redirect', () => {
+    // Progress saved before the redirect says 'strava'; the connection is not
+    // in the store yet. The option must not vanish under them.
+    sessionStorage.setItem(
+      'ai_trainer_onboarding_progress',
+      JSON.stringify({
+        step: 4,
+        trainingGoal: 'general_fitness',
+        raceDate: '',
+        raceDescription: '',
+        assessmentMethod: 'strava',
+        followsTrainingPlan: false,
+        fitnessLevel: 'intermediate',
+      }),
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(screen.getByText(/Connect with Strava/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /connect strava/i }).length).toBeGreaterThan(0)
+  })
+
   it('enables Continue on step 4 once Strava is connected', async () => {
     // User already has Strava connected when they reach step 4
     setupStore({ stravaConnection: { athleteId: 42, athleteName: 'Alex Rider' } })
