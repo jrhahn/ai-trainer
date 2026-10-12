@@ -59,6 +59,27 @@ describe('ReplyConfirmations', () => {
     expect(await screen.findByText('Removed.')).toBeInTheDocument()
   })
 
+  it('keeps a captured state without calling the server, and says when Remove fails', async () => {
+    mocks.removeStateRemote.mockRejectedValue(new Error('offline'))
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          capturedStates: [
+            { id: 's1', label: 'Ill since 2026-10-12', removable: true },
+            { id: 's2', label: 'Less to give on 2026-10-13', removable: true },
+          ],
+        })}
+      />,
+    )
+
+    await userEvent.click(screen.getAllByRole('button', { name: /keep/i })[0])
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(screen.getByText('Kept.')).toBeInTheDocument()
+    expect(mocks.removeStateRemote).toHaveBeenCalledWith('test-token', 's2')
+    expect(await screen.findByText('Could not remove it. Try again later.')).toBeInTheDocument()
+  })
+
   it('offers no Remove for "well again", which ends an illness', () => {
     render(
       <ReplyConfirmations
