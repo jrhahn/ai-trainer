@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **New athletes connect Strava through intervals.icu** (ai-trainer-ops#39 Q6)
+  — `pages/OnboardingPage.tsx`. Onboarding no longer offers "Connect with
+  Strava" to an athlete without a Strava connection. The intervals.icu option
+  says to connect Strava to intervals.icu instead. An athlete already connected
+  to Strava still sees it, and every existing connection keeps working.
+
 ### Added
 
 - **Profile change offered under the coach reply** (ai-trainer-ops#43) —

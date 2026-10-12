@@ -364,7 +364,8 @@ describe('OnboardingPage', () => {
     expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
   })
 
-  it('shows the Connect Strava option on step 4', async () => {
+  it('offers no Strava to a new athlete and points to intervals.icu instead', async () => {
+    // ai-trainer-ops#39 Q6: Strava is reached through intervals.icu.
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
@@ -373,41 +374,9 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(screen.getByText(/Connect with Strava/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Connect with Strava/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Connect Strava to intervals.icu/i)).toBeInTheDocument()
     expect(screen.getByText(/enter sessions myself/i)).toBeInTheDocument()
-  })
-
-  it('shows the StravaConnect component when "Connect with Strava" is selected on step 4', async () => {
-    setupStore({ stravaConnection: null })
-    render(<OnboardingPage />)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    // Select "Connect with Strava"
-    await user.click(screen.getByText(/Connect with Strava/i))
-
-    // The StravaConnect "Connect Strava" button should now be visible
-    expect(screen.getByRole('button', { name: /connect strava/i })).toBeInTheDocument()
-  })
-
-  it('disables Continue on step 4 when Strava method is selected but not yet connected', async () => {
-    setupStore({ stravaConnection: null })
-    render(<OnboardingPage />)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    // Select "Connect with Strava" option
-    await user.click(screen.getByText(/Connect with Strava/i))
-
-    // Continue button should be disabled until Strava is actually connected
-    const continueButton = screen.getByRole('button', { name: 'Continue' })
-    expect(continueButton).toBeDisabled()
   })
 
   it('enables Continue on step 4 once Strava is connected', async () => {
@@ -424,62 +393,6 @@ describe('OnboardingPage', () => {
     // and the button should be enabled (showing 'Analyse & Generate Plan')
     const actionButton = screen.getByRole('button', { name: 'Analyse & Generate Plan' })
     expect(actionButton).not.toBeDisabled()
-  })
-
-  it('saves onboarding progress to sessionStorage so it survives the OAuth redirect', async () => {
-    setupStore({ stravaConnection: null })
-    render(<OnboardingPage />)
-    const user = userEvent.setup()
-
-    // Advance to step 4 and select Strava method
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByText(/Connect with Strava/i))
-
-    // sessionStorage must contain the current progress so it can be restored
-    // after the OAuth redirect takes the user away and back to the onboarding page
-    await waitFor(() => {
-      const raw = sessionStorage.getItem('ai_trainer_onboarding_progress')
-      expect(raw).not.toBeNull()
-      const progress = JSON.parse(raw!)
-      expect(progress.step).toBe(4)
-      expect(progress.assessmentMethod).toBe('strava')
-    })
-  })
-
-  it('saves Strava onboarding progress immediately before leaving for OAuth', async () => {
-    let capturedHref = ''
-    Object.defineProperty(window, 'location', {
-      value: {
-        ...window.location,
-        set href(url: string) {
-          capturedHref = url
-        },
-        get href() {
-          return capturedHref
-        },
-      },
-      writable: true,
-    })
-
-    setupStore({ stravaConnection: null })
-    render(<OnboardingPage />)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(screen.getByText(/Connect with Strava/i))
-    await user.click(screen.getByRole('button', { name: /connect strava/i }))
-
-    await waitFor(() => expect(mockGetStravaAuthUrl).toHaveBeenCalled())
-    const raw = sessionStorage.getItem('ai_trainer_onboarding_progress')
-    expect(raw).not.toBeNull()
-    const progress = JSON.parse(raw!)
-    expect(progress.step).toBe(4)
-    expect(progress.assessmentMethod).toBe('strava')
-    expect(capturedHref).toBe('https://strava.test/auth')
   })
 
   it('does not send restingHeartRate during onboarding', async () => {
@@ -524,8 +437,8 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
   }
 
-  it('offers intervals.icu before Strava on step 4', async () => {
-    setupStore({ stravaConnection: null })
+  it('offers intervals.icu before Strava on step 4 to an athlete already on Strava', async () => {
+    setupStore({ stravaConnection: { athleteId: 42, athleteName: 'Alex Rider' } })
     render(<OnboardingPage />)
     await goToAssessment(userEvent.setup())
 
