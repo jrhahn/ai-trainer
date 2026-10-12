@@ -22,7 +22,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import crud
-from services import goal_progress, run_durability, training_monotony, training_phase
+from services import (
+    goal_progress,
+    plan_priors,
+    run_durability,
+    training_monotony,
+    training_phase,
+)
 from services.dates import app_today
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
@@ -83,10 +89,17 @@ async def plan_writer_context(
     distribution = training_monotony.load_distribution(activity_rows, today)
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
+    priors = await priors_section_for_user(db, user_id, plan, today, activity_rows)
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
         coherence=_coherence_block(
-            plan, today, exposure, distribution, phase=phase, goals=goals
+            plan,
+            today,
+            exposure,
+            distribution,
+            phase=phase,
+            goals=goals,
+            priors=priors,
         ),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
@@ -119,6 +132,33 @@ async def training_phase_section_for_user(
         latitude=home.latitude if home is not None else None,
     )
     return training_phase.training_phase_section(phase)
+
+
+async def priors_section_for_user(
+    db, user_id: str, plan: list[dict] | None, today, activity_rows: list
+) -> str:
+    """Where the plan departs from the planning priors (ai-trainer-ops#26).
+
+    Reported to the writer, never enforced: see ``services/plan_priors``.
+    """
+    user = await crud.get_user_by_id(db, user_id)
+    if user is None:
+        return ""
+    race_dates = [event.date for event in await crud.get_race_events(db, user_id)]
+    if user.race_date:
+        race_dates.append(user.race_date)
+    return plan_priors.plan_priors_section(
+        plan_priors.find_prior_departures(
+            plan,
+            today,
+            weekly_hours=user.weekly_hours,
+            training_days=user.training_days,
+            race_dates=race_dates,
+            recent_weekly_hours=training_phase.load_rhythm(
+                activity_rows, today
+            ).weekly_hours,
+        )
+    )
 
 
 # Goal progress looks back twelve weeks, longer than the audits sharing
@@ -222,6 +262,7 @@ def _coherence_block(
     distribution: training_monotony.LoadDistribution | None,
     phase: str = "",
     goals: str = "",
+    priors: str = "",
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
 
@@ -254,6 +295,7 @@ def _coherence_block(
         plan_interference_section(find_interference(plan, today), today),
         _durability_section(plan, today, exposure),
         training_monotony_section(distribution),
+        priors,
         goals,
     ]
     return "\n\n".join(section for section in sections if section)
