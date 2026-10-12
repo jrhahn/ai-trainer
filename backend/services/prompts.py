@@ -957,7 +957,12 @@ def freshness_allocation_section(allocation: dict | None) -> str:
         )
 
     tolerance = allocation.get("heat_tolerance")
-    if tolerance:
+    if tolerance == "tolerant":
+        lines.append(
+            "- This athlete is heat-tolerant, so the ranking deducts nothing for "
+            "heat; do not discount hot days a second time."
+        )
+    elif tolerance:
         lines.append(
             f"- The heat deduction above is already scaled for this athlete being "
             f"heat-{tolerance}; do not discount hot days a second time."
