@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The landing page says once that runs and strength are planned too**
+  (ai-trainer-ops#53 item 1, #39 Q13) — `pages/LandingPage.tsx`. The hero's
+  second line now reads "It reads every ride you sync, and plans your runs and
+  strength days around them too". The headline and the example stay cycling.
+
 ### Added
 
 - **"What the planner weighs for a day" under today's session**
