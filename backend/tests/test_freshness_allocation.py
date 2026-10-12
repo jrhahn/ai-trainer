@@ -108,14 +108,26 @@ def test_a_heat_tolerant_athlete_keeps_their_hot_day_riding():
     failure mode, and one this codebase has already had to fix once for the
     coach's prose.
     """
-    naive = fa.allocate_day(TRAIL_RIDER, hot=True)
+    sensitive = fa.allocate_day(
+        TRAIL_RIDER, hot=True, heat_tolerance=fa.DIRECTION_SENSITIVE
+    )
     tolerant = fa.allocate_day(
         TRAIL_RIDER, hot=True, heat_tolerance=fa.DIRECTION_TOLERANT
     )
 
-    assert _keys(naive)[0] == "strength"
+    assert _keys(sensitive)[0] == "strength"
     assert _keys(tolerant)[0] == "trail"
-    assert _by_key(tolerant, "trail")["heat_cost"] < _by_key(naive, "trail")["heat_cost"]
+    assert _by_key(tolerant, "trail")["heat_cost"] == 0
+
+
+def test_with_no_heat_reading_a_hot_day_ranks_like_a_mild_one():
+    """ai-trainer-ops#39 Q3: heat costs only what is known about the athlete."""
+    gain_map = {SYSTEM_THRESHOLD: GAIN_LARGE, SYSTEM_ENDURANCE: GAIN_MAINTENANCE}
+    for motivation in (None, TRAIL_RIDER):
+        hot = fa.allocate_day(motivation, gain_map=gain_map, hot=True)
+        mild = fa.allocate_day(motivation, gain_map=gain_map)
+        assert _keys(hot) == _keys(mild)
+        assert all(option["heat_cost"] == 0 for option in hot["options"])
 
 
 def test_a_heat_sensitive_athlete_is_pushed_further_off_the_hot_day():
@@ -142,11 +154,16 @@ def test_the_trail_riders_freshness_is_worth_most_off_road():
 
 
 def test_thursday_in_the_heat_becomes_strength_not_another_threshold_session():
-    """The decision the coach had to make by hand, made by the board instead."""
+    """The decision the coach had to make by hand, made by the board instead.
+
+    For an athlete measured to fade in the heat: without a reading the board no
+    longer charges for heat at all (ai-trainer-ops#39 Q3).
+    """
     allocation = fa.allocate_day(
         TRAIL_RIDER,
         gain_map={SYSTEM_THRESHOLD: GAIN_LARGE, SYSTEM_ENDURANCE: GAIN_MAINTENANCE},
         hot=True,
+        heat_tolerance=fa.DIRECTION_SENSITIVE,
     )
 
     assert _keys(allocation)[0] == "strength"
@@ -287,12 +304,22 @@ def test_recovery_value_is_derived_and_never_stored():
 def test_the_section_names_every_deduction():
     """A day that lost to weather and one that lost to the weekend lost differently."""
     section = prompts.freshness_allocation_section(
-        fa.allocate_day(TRAIL_RIDER, hot=True)
+        fa.allocate_day(
+            TRAIL_RIDER, hot=True, heat_tolerance=fa.DIRECTION_SENSITIVE
+        )
     )
 
-    assert "heat" in section
+    assert " heat)" in section or " heat," in section
     assert "freshness owed to" in section
     assert fa.demand_label(fa.DEMAND_TRAIL) in section
+
+
+def test_the_section_says_when_heat_was_not_priced():
+    """No reading, no deduction: the model must not assume the heat was priced."""
+    section = prompts.freshness_allocation_section(fa.allocate_day(TRAIL_RIDER, hot=True))
+    assert "No heat sensitivity is measured" in section
+    mild = prompts.freshness_allocation_section(fa.allocate_day(TRAIL_RIDER))
+    assert "No heat sensitivity" not in mild
 
 
 def test_the_section_is_empty_without_an_allocation():

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Heat costs only what is known about the athlete** (ai-trainer-ops#39 Q3) —
+  `services/freshness_allocation.py`. With no heat-tolerance reading the day
+  board charged hot days anyway: across 1,875 hot combinations of gain map and
+  race count it moved the default athlete's top choice in 1,190. Now heat costs
+  only an athlete measured to be heat-sensitive (scale 1.35, unchanged). An
+  unknown or heat-tolerant athlete pays nothing, so a tolerant athlete never
+  pays more than an unknown one. The board's prompt says when heat was not
+  priced. New property: with no reading, a hot day ranks like a mild one. New
+  policy guard on `HEAT_SCALE_UNKNOWN`.
+
 ### Added
 
 - **Hours, training days and sports said in chat, offered as a profile change**

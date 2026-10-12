@@ -962,6 +962,14 @@ def freshness_allocation_section(allocation: dict | None) -> str:
             f"- The heat deduction above is already scaled for this athlete being "
             f"heat-{tolerance}; do not discount hot days a second time."
         )
+    elif allocation.get("hot"):
+        # ai-trainer-ops#39 Q3: no reading, no deduction. Say so, so the model
+        # neither assumes the heat was priced nor that it does not matter.
+        lines.append(
+            "- No heat sensitivity is measured for this athlete, so the ranking "
+            "deducts nothing for heat. If they say the heat bothers them, move "
+            "hard outdoor work off the hottest days."
+        )
     lines.append(
         "This ranks what a day is best spent ON. It does not know the calendar, "
         "so you still place the sessions — availability, race dates and "
