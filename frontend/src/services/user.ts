@@ -1392,7 +1392,7 @@ export interface DayBoard {
   hot: boolean
   heatTolerance: string
   options: DayBoardOption[]
-  source: { path: string; line: number; symbol: string }
+  source: { path: string; line: number; symbol: string; ref: string }
 }
 
 export async function fetchDayBoard(token: string): Promise<DayBoard> {

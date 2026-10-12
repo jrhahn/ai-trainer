@@ -108,3 +108,18 @@ async def test_a_hot_day_for_a_heat_sensitive_athlete_shows_the_heat_cost(
 async def test_the_board_needs_a_signed_in_athlete(client):
     response = await client.get("/api/v1/users/me/day-board")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_the_link_is_pinned_to_the_deployed_commit(
+    client, auth_headers, monkeypatch
+):
+    """A line number into ``develop`` drifts with every merge; the SHA does not."""
+    from config import settings
+
+    response = await client.get("/api/v1/users/me/day-board", headers=auth_headers)
+    assert response.json()["source"]["ref"] == "develop"
+
+    monkeypatch.setattr(settings, "git_sha", "0a1b2c3d")
+    response = await client.get("/api/v1/users/me/day-board", headers=auth_headers)
+    assert response.json()["source"]["ref"] == "0a1b2c3d"

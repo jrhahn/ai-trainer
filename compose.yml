@@ -129,6 +129,9 @@ services:
       # into .env (deploy/ansible/templates/app.env.j2); local Compose stays on
       # the development default so a fresh checkout still comes up.
       APP_ENV: ${APP_ENV:-development}
+      # The deployed commit (deploy/ansible/deploy.yml), so source links in the
+      # app point at the code that is running. Empty locally.
+      GIT_SHA: ${GIT_SHA:-}
       # Fernet key encrypting user API keys and OAuth tokens at rest. Without a
       # line here the value never reaches the container even when it is set in
       # .env, and EncryptedString silently falls back to storing plaintext.
