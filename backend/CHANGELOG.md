@@ -11,13 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A daily cap on the owner's key across all accounts** (ai-trainer-ops#39) —
   `AI_GLOBAL_DAILY_TOKEN_BUDGET`, tokens per rolling 24 hours summed over every
-  account without its own key (and unattributed calls). Above it, `api:`
+  call no own key paid for: unattributed calls, and calls whose user holds no
+  own key for that call's provider. Above it, `api:`
   requests from such accounts answer 402 asking for an own key; scheduled work
   is not stopped. Off by default in code; deploys render 10M, overridable by
   repository variable. The log line says `AI global daily token budget
   exceeded`, which is what a later alert can match.
-
-### Added
 
 - **The day board, readable by the athlete** (ai-trainer-ops#17, #39 Q9) —
   `GET /users/me/day-board`. Returns the board the planner gets, from the same

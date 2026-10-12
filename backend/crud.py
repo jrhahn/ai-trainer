@@ -245,7 +245,8 @@ async def sum_user_tokens_since(
 async def sum_admin_key_tokens_since(db: AsyncSession, since: datetime) -> int:
     """Total provider tokens since *since* that the owner's key likely paid for.
 
-    Counts calls by users with no own key saved, and calls billed to nobody.
+    Counts calls billed to nobody, and calls whose user holds no own key for
+    the provider the call went to (an OpenAI key does not pay a Gemini call).
     """
     # ponytail: decided by the keys a user holds *now*, so a user who saved a
     # key today moves their earlier calls out of the sum; store the paying key
@@ -259,7 +260,11 @@ async def sum_admin_key_tokens_since(db: AsyncSession, since: datetime) -> int:
             or_(
                 models.LlmCall.user_id.is_(None),
                 and_(
+                    models.LlmCall.provider == "gemini",
                     models.User.user_gemini_api_key.is_(None),
+                ),
+                and_(
+                    models.LlmCall.provider == "openai",
                     models.User.user_openai_api_key.is_(None),
                 ),
             ),
