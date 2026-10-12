@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **"What the planner weighs for a day" under today's session**
+  (ai-trainer-ops#17) — `components/DayBoardWhy.tsx`. Opens to the day board
+  with each deduction by name and a link to `allocate_day` on GitHub. Loaded
+  only when opened.
+
 ### Changed
 
 - **New athletes connect Strava through intervals.icu** (ai-trainer-ops#39 Q6)
