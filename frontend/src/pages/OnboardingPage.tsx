@@ -143,6 +143,11 @@ const WEEKDAYS: { value: Weekday; label: string }[] = [
 const DEFAULT_TRAINING_DAYS: Weekday[] = ['tuesday', 'thursday', 'saturday', 'sunday']
 const DEFAULT_WEEKLY_HOURS = 6
 
+/** Into the slider's range, which is the backend's (1–40). */
+function clampHours(hours: number): number {
+  return Math.min(Math.max(Math.round(hours), 1), 40)
+}
+
 function toggled<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
@@ -199,8 +204,7 @@ export default function OnboardingPage() {
       raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
       assessmentMethod: defaultAssessmentMethod(),
       sports: userProfile?.sports ?? ['cycling'],
-      // Clamped into the slider's range, which is the backend's (1–40).
-      weeklyHours: Math.min(Math.max(Math.round(userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS), 1), 40),
+      weeklyHours: clampHours(userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS),
       trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
       currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
       fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
@@ -272,7 +276,7 @@ export default function OnboardingPage() {
       fitnessLevel: savedProgress.fitnessLevel,
       // Absent in progress saved before ai-trainer-ops#43.
       sports: savedProgress.sports ?? base.sports,
-      weeklyHours: savedProgress.weeklyHours ?? base.weeklyHours,
+      weeklyHours: clampHours(savedProgress.weeklyHours ?? base.weeklyHours),
       trainingDays: savedProgress.trainingDays ?? base.trainingDays,
     }
   })
