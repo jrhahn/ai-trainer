@@ -281,6 +281,9 @@ export default function OnboardingPage() {
     }
   })
 
+  // Back from the Strava OAuth redirect, the form already says 'strava'.
+  const offerStrava = Boolean(stravaConnection) || form.assessmentMethod === 'strava'
+
   // True only when the component mounted after a Strava OAuth redirect (saved
   // progress had step=3 with assessmentMethod='strava').  Cleared after the
   // auto-advance fires so that manual Back-navigation never re-triggers it.
@@ -910,7 +913,7 @@ export default function OnboardingPage() {
                 <>
                   <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
                   <p className="text-sm text-gray-500 mb-4">
-                    Connect intervals.icu or Strava for automatic analysis of your last 7 rides, or log your sessions yourself.
+                    Connect intervals.icu for automatic analysis of your last 7 rides, or log your sessions yourself.
                   </p>
                   <div className="space-y-3">
                     <button
@@ -929,12 +932,18 @@ export default function OnboardingPage() {
                           <p className="text-xs text-gray-500 mt-1">
                             Recommended. Analyses your last 7 rides with your intervals.icu API key.
                           </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            On Strava? Connect Strava to intervals.icu (free), and your rides reach us through it.
+                          </p>
                         </div>
                         {form.assessmentMethod === 'intervals' && (
                           <CheckCircle size={16} className="text-amber-500 shrink-0" />
                         )}
                       </div>
                     </button>
+                    {/* Strava is offered only to an athlete already connected (ai-trainer-ops#39 Q6):
+                        new athletes come through intervals.icu, existing connections keep working. */}
+                    {offerStrava && (
                     <button
                       type="button"
                       aria-pressed={form.assessmentMethod === 'strava'}
@@ -957,6 +966,7 @@ export default function OnboardingPage() {
                         )}
                       </div>
                     </button>
+                    )}
                     <button
                       type="button"
                       aria-pressed={form.assessmentMethod === 'manual'}
