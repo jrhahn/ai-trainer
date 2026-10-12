@@ -14,9 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   must match. `src/test/setup.ts` now imports `@testing-library/jest-dom/vitest`,
   the entry that types the matchers for vitest. Under vitest 5 the plain entry
   left 1008 type errors in `tsc -b`.
-
-### Changed
-
 - **Onboarding asks what the planner needs** (ai-trainer-ops#43, #39 Q10) —
   `pages/OnboardingPage.tsx`.
   - Step 1 asks for the sports (Cycling, Running, Strength chips).
