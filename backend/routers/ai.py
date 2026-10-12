@@ -25,7 +25,13 @@ from services import metrics_service
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
-from services import goal_progress, plan_context, race_intent, stated_ftp
+from services import (
+    athlete_states,
+    goal_progress,
+    plan_context,
+    race_intent,
+    stated_ftp,
+)
 from services.athlete_language import athlete_language
 from services import plan_maintenance
 from services import plan_pipeline
@@ -347,6 +353,50 @@ async def _capture_self_reported_signals_from_message(
     # A new base invalidates the cached forecast for the old one.
     clear_forecast_cache()
     return row.label or f"{row.latitude:.2f}, {row.longitude:.2f}", captured_goals
+
+
+async def _capture_athlete_states(
+    db: AsyncSession, user_id: str, message: str, timezone_name: str | None
+) -> list[dict]:
+    """Store what the athlete says about being ill or tired, for the reply to show (#18).
+
+    Before the prompt is built, so this turn's plan already sees it. Kept as a
+    prior, never a guard (#39 Q1): ``plan_priors`` reports, the coach decides.
+    Best-effort like the captures above: a failed write costs the state only.
+    """
+    today = app_today(timezone_name=timezone_name)
+    captured: list[dict] = []
+    try:
+        async with db.begin_nested():
+            if athlete_states.says_recovered(message):
+                ended = await crud.end_illness(db, user_id, today)
+                if ended is not None and ended.ends_on:
+                    captured.append(
+                        {
+                            "id": ended.id,
+                            "label": athlete_states.recovered_label(
+                                _date.fromisoformat(ended.ends_on)
+                            ),
+                            "removable": False,
+                        }
+                    )
+            for stated in athlete_states.extract_states(message, today):
+                row = await crud.record_state(db, user_id, stated, today)
+                captured.append(
+                    {
+                        "id": row.id,
+                        "label": athlete_states.label(
+                            row.kind,
+                            _date.fromisoformat(row.starts_on),
+                            _date.fromisoformat(row.ends_on) if row.ends_on else None,
+                        ),
+                        "removable": True,
+                    }
+                )
+    except Exception:
+        logger.warning("Athlete-state capture failed", exc_info=True)
+        return []
+    return captured
 
 
 async def _capture_stated_ftp(
@@ -1071,8 +1121,14 @@ async def _generate_plan_for_user(
         db, current_user.id, today
     )
     goal_section = await plan_context.goal_section_for_user(db, current_user.id, today)
+    # No plan to depart from yet, so this is the athlete's stated state only (#18).
+    state_section = await plan_context.priors_section_for_user(
+        db, current_user.id, None, today, []
+    )
     athlete_model_section = "\n".join(
-        part for part in (athlete_model_section, phase_section, goal_section) if part
+        part
+        for part in (athlete_model_section, phase_section, goal_section, state_section)
+        if part
     )
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
         try:
@@ -1147,6 +1203,9 @@ async def ask_trainer(
         await _capture_self_reported_signals_from_message(
             db, current_user.id, body.question
         )
+    )
+    captured_states = await _capture_athlete_states(
+        db, current_user.id, body.question, timezone_name
     )
     # Offered, never applied: the athlete confirms in the chat (ops#71, #63 Q21).
     race_proposal = (
@@ -1615,6 +1674,7 @@ async def ask_trainer(
         for goal in captured_goals
     ]
     result["race_proposal"] = race_proposal
+    result["captured_states"] = captured_states
     return schemas.AskTrainerResponse.model_validate(result)
 
 

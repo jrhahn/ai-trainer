@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Illness and tired days under the coach reply** (ai-trainer-ops#18) —
+  `components/ReplyConfirmations.tsx`. A state the chat captured shows with
+  Keep and Remove, like a captured goal. "Well again" shows without buttons.
+
 ### Changed
 
 - **vitest 5** — `vitest` and `@vitest/coverage-v8` move from 4.1 to 5.0

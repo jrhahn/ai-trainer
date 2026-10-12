@@ -147,7 +147,10 @@ async def priors_section_for_user(
     race_dates = [event.date for event in await crud.get_race_events(db, user_id)]
     if user.race_date:
         race_dates.append(user.race_date)
-    return plan_priors.plan_priors_section(
+    # What the athlete said about being ill or tired (#18): the writer plans from
+    # it even when the plan does not depart from anything yet.
+    states = await crud.list_relevant_states(db, user_id, today)
+    departures = plan_priors.plan_priors_section(
         plan_priors.find_prior_departures(
             plan,
             today,
@@ -157,7 +160,13 @@ async def priors_section_for_user(
             recent_weekly_hours=training_phase.load_rhythm(
                 activity_rows, today
             ).weekly_hours,
+            states=states,
         )
+    )
+    return "\n\n".join(
+        part
+        for part in (plan_priors.athlete_states_section(states, today), departures)
+        if part
     )
 
 

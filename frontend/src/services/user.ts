@@ -295,6 +295,10 @@ export async function removeGoalRemote(token: string, goalId: string): Promise<v
   await apiFetch(`/users/me/goals/${goalId}`, { token, method: 'DELETE' })
 }
 
+export async function removeStateRemote(token: string, stateId: string): Promise<void> {
+  await apiFetch(`/users/me/states/${stateId}`, { token, method: 'DELETE' })
+}
+
 export async function clearProfileRaceRemote(token: string): Promise<void> {
   await apiFetch('/users/me/race/clear', { token, method: 'POST' })
 }

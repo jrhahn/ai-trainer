@@ -23,8 +23,15 @@ The four priors and their evidence:
   disputed (Impellizzeri 2020). Only a wide outlier is reported, and it is
   labelled as a heuristic.
 
-Illness is not here. It needs a structured illness state captured from chat,
-which does not exist yet (#18).
+* **Illness** (expert consensus). The IOC consensus on load and illness
+  (Schwellnus et al. 2016) and the "neck check" ask for no hard work while ill
+  and a graded return after, with no fixed number of days. The prior is no
+  intensity while ill and for ``athlete_states.RETURN_EASY_DAYS`` days after.
+* **A day with less to give** (athlete-stated). After a party, on a long work
+  day: no intensity that day.
+
+Both come from states the athlete said in chat (``services/athlete_states``,
+#18, #39 Q1).
 
 Pure: no database, no clock. ``plan_context`` reads the inputs.
 """
@@ -34,15 +41,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from services import athlete_states
+
 EVIDENCE_ATHLETE = "athlete-stated"
 EVIDENCE_STRONG = "strong evidence"
 EVIDENCE_HEURISTIC = "heuristic"
+EVIDENCE_CONSENSUS = "expert consensus"
 
 PRIOR_STATED_HOURS = "stated-hours"
 PRIOR_TRAINING_DAYS = "training-days"
 PRIOR_TAPER_VOLUME = "taper-volume"
 PRIOR_TAPER_INTENSITY = "taper-intensity"
 PRIOR_RAMP = "ramp"
+PRIOR_ILLNESS = "illness"
+PRIOR_REDUCED_DAY = "reduced-day"
 
 WEEK_DAYS = 7
 # The final week should hold at most this share of the week before it. Bosquet's
@@ -240,6 +252,93 @@ def _ramp(totals, today, recent_weekly_hours) -> list[PriorDeparture]:
     ]
 
 
+def _intense_dates(plan, first: date, last: date) -> list[date]:
+    return sorted(
+        {
+            when
+            for day in plan or []
+            if isinstance(day, dict)
+            and _workout_type(day) in INTENSITY_TYPES
+            and (when := _as_date(day.get("date"))) is not None
+            and first <= when <= last
+        }
+    )
+
+
+def _states(plan, today, states) -> list[PriorDeparture]:
+    found = []
+    for state in states or ():
+        end = athlete_states.effective_end(state.kind, state.starts_on, state.ends_on)
+        if state.kind == athlete_states.KIND_ILL:
+            last = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
+            hard = _intense_dates(plan, max(state.starts_on, today), last)
+            if hard:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_ILLNESS,
+                        EVIDENCE_CONSENSUS,
+                        f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
+                        f"athlete is ill (until {end.isoformat()} at the latest) and a "
+                        f"return usually stays easy until {last.isoformat()}.",
+                    )
+                )
+        else:
+            hard = _intense_dates(plan, max(state.starts_on, today), end)
+            if hard:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_REDUCED_DAY,
+                        EVIDENCE_ATHLETE,
+                        f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
+                        f"athlete said they will have less to give that day.",
+                    )
+                )
+    return found
+
+
+def athlete_states_section(states, today: date) -> str:
+    """What the athlete said about their state, for a writer that plans from it."""
+    lines = []
+    for state in states or ():
+        if state.kind == athlete_states.KIND_ILL:
+            end = athlete_states.effective_end(state.kind, state.starts_on, state.ends_on)
+            easy_until = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
+            if state.ends_on is not None and state.ends_on < today:
+                lines.append(
+                    f"  - Was ill until {state.ends_on.isoformat()}. Prior: easy "
+                    f"sessions until {easy_until.isoformat()}, then a graded return."
+                )
+            elif state.ends_on is None:
+                lines.append(
+                    f"  - Ill since {state.starts_on.isoformat()}, no end stated. "
+                    f"Prior: rest or easy only while ill, easy for "
+                    f"{athlete_states.RETURN_EASY_DAYS} days after. Ask how they feel "
+                    f"before planning hard work."
+                )
+            else:
+                lines.append(
+                    f"  - Ill until {state.ends_on.isoformat()}. Prior: rest or easy "
+                    f"only, then easy until {easy_until.isoformat()}."
+                )
+        else:
+            lines.append(
+                f"  - Less to give on {state.starts_on.isoformat()} (the athlete said "
+                f"so). Prior: no intensity that day."
+            )
+    if not lines:
+        return ""
+    return "\n".join(
+        [
+            (
+                "Athlete state (said in chat; priors from expert consensus, not "
+                "rules. The common 'neck check' guidance: symptoms above the neck "
+                "may allow easy riding, fever or chest symptoms ask for rest):"
+            ),
+            *lines,
+        ]
+    )
+
+
 def find_prior_departures(
     plan: list[dict] | None,
     today: date,
@@ -248,6 +347,7 @@ def find_prior_departures(
     training_days: list[str] | None = None,
     race_dates: list[object] | None = None,
     recent_weekly_hours: tuple[float, ...] | list[float] | None = None,
+    states: list[athlete_states.StatedState] | None = None,
 ) -> list[PriorDeparture]:
     """Where ``plan`` departs from each prior. Empty when it sits inside all of them."""
     totals = _minutes_by_date(plan)
@@ -256,6 +356,7 @@ def find_prior_departures(
         *_training_days(plan, today, training_days),
         *_taper(plan, totals, today, race_dates),
         *_ramp(totals, today, recent_weekly_hours),
+        *_states(plan, today, states),
     ]
 
 
@@ -273,7 +374,7 @@ def plan_priors_section(departures: list[PriorDeparture]) -> str:
     lines.append(
         "Use your judgement. If what you know about this athlete justifies a "
         "departure, keep it and tell the athlete why in one sentence. Otherwise "
-        "bring the plan back towards the prior. Weigh athlete-stated priors and "
-        "strong evidence above a heuristic."
+        "bring the plan back towards the prior. Weigh athlete-stated priors, "
+        "strong evidence and expert consensus above a heuristic."
     )
     return "\n".join(lines)

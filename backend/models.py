@@ -318,6 +318,9 @@ class User(Base):
     goals: Mapped[list["AthleteGoal"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    states: Mapped[list["AthleteState"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     home_location: Mapped["AthleteHomeLocation | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -1393,6 +1396,38 @@ class AthleteGoal(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="goals")
+
+
+class AthleteState(Base):
+    """A short-lived state the athlete said in chat: ill, or a day with less to give (ai-trainer-ops#18).
+
+    A prior for the planner, never a guard (#39 Q1): see ``services.athlete_states``
+    and ``services.plan_priors``. Only the kind and the dates are kept, not the
+    athlete's sentence, because an illness is health data.
+    """
+
+    __tablename__ = "athlete_states"
+    __table_args__ = (Index("ix_athlete_states_user_status", "user_id", "status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # ``ill`` or ``reduced``.
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    starts_on: Mapped[str] = mapped_column(String(10), nullable=False)
+    # NULL: an illness with no stated end, which expires on its own.
+    ends_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # ``active`` or ``removed`` (the athlete pressed Remove under the reply).
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="states")
 
 
 class PlanCommitment(Base):

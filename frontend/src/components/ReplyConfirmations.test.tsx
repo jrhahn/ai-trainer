@@ -7,6 +7,7 @@ import type { ChatMessage } from '../store/useAppStore'
 
 const mocks = vi.hoisted(() => ({
   removeGoalRemote: vi.fn(),
+  removeStateRemote: vi.fn(),
   clearProfileRaceRemote: vi.fn(),
   fetchCurrentUser: vi.fn(),
 }))
@@ -21,6 +22,7 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   useAppStore.setState({ authToken: 'test-token' })
   mocks.removeGoalRemote.mockResolvedValue(undefined)
+  mocks.removeStateRemote.mockResolvedValue(undefined)
   mocks.clearProfileRaceRemote.mockResolvedValue(undefined)
   mocks.fetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider' } })
 })
@@ -41,6 +43,32 @@ describe('ReplyConfirmations', () => {
 
     expect(mocks.removeGoalRemote).toHaveBeenCalledWith('test-token', 'g1')
     expect(await screen.findByText('Removed.')).toBeInTheDocument()
+  })
+
+  it('shows a captured illness and deletes it on Remove', async () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({ capturedStates: [{ id: 's1', label: 'Ill since 2026-10-12', removable: true }] })}
+      />,
+    )
+    expect(screen.getByText('Ill since 2026-10-12')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(mocks.removeStateRemote).toHaveBeenCalledWith('test-token', 's1')
+    expect(await screen.findByText('Removed.')).toBeInTheDocument()
+  })
+
+  it('offers no Remove for "well again", which ends an illness', () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          capturedStates: [{ id: 's1', label: 'Well again: easy days until 2026-10-15', removable: false }],
+        })}
+      />,
+    )
+    expect(screen.getByText('Well again: easy days until 2026-10-15')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('keeps a goal without calling the server', async () => {

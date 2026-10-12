@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { Check, Flag, Target, X } from 'lucide-react'
+import { Check, Flag, Target, Thermometer, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { clearProfileRaceRemote, fetchCurrentUser, removeGoalRemote } from '../services/user'
+import { clearProfileRaceRemote, fetchCurrentUser, removeGoalRemote, removeStateRemote } from '../services/user'
 import type { ChatMessage } from '../store/useAppStore'
 
 // The confirm step under a coach reply (ai-trainer-ops#65, #71). A goal said in
 // chat is stored at once, so the athlete can keep it or take it back; "I have no
 // race" only proposes clearing the profile's race, which needs a press. Both
 // decisions are the owner's (ops#63, Q20 and Q21). To correct a goal, the
-// athlete says the new target: the newer one replaces it.
+// athlete says the new target: the newer one replaces it. An illness or a tired
+// day (#18) works like a goal: stored at once, undone with Remove.
 type GoalState = 'open' | 'kept' | 'removed' | 'failed'
 type RaceState = 'open' | 'kept' | 'cleared' | 'failed'
 
@@ -16,11 +17,13 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const authToken = useAppStore((s) => s.authToken)
   const setUserProfile = useAppStore((s) => s.setUserProfile)
   const [goals, setGoals] = useState<Record<string, GoalState>>({})
+  const [states, setStates] = useState<Record<string, GoalState>>({})
   const [race, setRace] = useState<RaceState>('open')
 
   const captured = msg.capturedGoals ?? []
+  const capturedStates = msg.capturedStates ?? []
   const proposal = msg.raceProposal
-  if (captured.length === 0 && !proposal) return null
+  if (captured.length === 0 && capturedStates.length === 0 && !proposal) return null
   const raceLabel = [proposal?.raceDescription, proposal?.raceDate].filter(Boolean).join(', ')
   const calendarRaces = proposal?.calendarRaces ?? 0
   const calendarText =
@@ -35,6 +38,16 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       setGoals((g) => ({ ...g, [id]: 'removed' }))
     } catch {
       setGoals((g) => ({ ...g, [id]: 'failed' }))
+    }
+  }
+
+  const removeState = async (id: string) => {
+    if (!authToken) return
+    try {
+      await removeStateRemote(authToken, id)
+      setStates((s) => ({ ...s, [id]: 'removed' }))
+    } catch {
+      setStates((s) => ({ ...s, [id]: 'failed' }))
     }
   }
 
@@ -82,6 +95,41 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                   <X size={11} aria-hidden="true" /> Remove
                 </button>
                 <span className="text-gray-400">To change it, just tell me the new target.</span>
+              </div>
+            )}
+            {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">Removed.</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+          </div>
+        )
+      })}
+      {capturedStates.map((item) => {
+        const state = states[item.id] ?? 'open'
+        return (
+          <div key={item.id} className="text-xs text-gray-600">
+            <p className="flex items-center gap-1">
+              <Thermometer size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+              <span>
+                Noted: <strong>{item.label}</strong>
+              </span>
+            </p>
+            {item.removable && state === 'open' && (
+              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => setStates((s) => ({ ...s, [item.id]: 'kept' }))}
+                >
+                  <Check size={11} aria-hidden="true" /> Keep
+                </button>
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => void removeState(item.id)}
+                >
+                  <X size={11} aria-hidden="true" /> Remove
+                </button>
+                <span className="text-gray-400">If it changes, just tell me.</span>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}

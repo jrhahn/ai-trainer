@@ -7,7 +7,7 @@ tests can patch a single module instead of mocking low-level session methods.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Sequence
 
 from sqlalchemy import String, case, cast, delete, func, or_, select, update
@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 import models
 from services import (
+    athlete_states,
     motivation_model,
     plan_compliance,
     ride_purpose_question,
@@ -5057,3 +5058,110 @@ async def upsert_active_goal(
     db.add(goal)
     await db.flush()
     return goal
+
+
+# ---------------------------------------------------------------------------
+# Athlete states said in chat (ai-trainer-ops#18, #39 Q1)
+# ---------------------------------------------------------------------------
+
+
+def _state_dates(row: models.AthleteState) -> tuple[date, date | None]:
+    return (
+        date.fromisoformat(row.starts_on),
+        date.fromisoformat(row.ends_on) if row.ends_on else None,
+    )
+
+
+def _stated_state(row: models.AthleteState) -> athlete_states.StatedState:
+    return athlete_states.StatedState(row.kind, *_state_dates(row))
+
+
+async def _relevant_state_rows(
+    db: AsyncSession, user_id: str, today: date
+) -> list[models.AthleteState]:
+    rows = await db.scalars(
+        select(models.AthleteState)
+        .where(
+            models.AthleteState.user_id == user_id,
+            models.AthleteState.status == "active",
+        )
+        .order_by(models.AthleteState.starts_on)
+    )
+    return [
+        row
+        for row in rows
+        if athlete_states.still_relevant(
+            row.kind, *_state_dates(row), today
+        )
+    ]
+
+
+async def list_relevant_states(
+    db: AsyncSession, user_id: str, today: date
+) -> list[athlete_states.StatedState]:
+    """The athlete's states that still say something about the plan from *today*."""
+    return [_stated_state(row) for row in await _relevant_state_rows(db, user_id, today)]
+
+
+async def record_state(
+    db: AsyncSession, user_id: str, state: athlete_states.StatedState, today: date
+) -> models.AthleteState:
+    """Store a stated state. A second "I'm ill" updates the illness in force."""
+    now = datetime.now(timezone.utc)
+    for row in await _relevant_state_rows(db, user_id, today):
+        if row.kind != state.kind:
+            continue
+        if state.kind == athlete_states.KIND_ILL:
+            if state.ends_on is not None:
+                row.ends_on = state.ends_on.isoformat()
+            elif row.ends_on is not None and date.fromisoformat(row.ends_on) < today:
+                # Ill again after saying they were well: the end no longer holds.
+                row.ends_on = None
+            row.updated_at = now
+            await db.flush()
+            return row
+        if row.starts_on == state.starts_on.isoformat():
+            return row
+    row = models.AthleteState(
+        user_id=user_id,
+        kind=state.kind,
+        starts_on=state.starts_on.isoformat(),
+        ends_on=state.ends_on.isoformat() if state.ends_on else None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def end_illness(
+    db: AsyncSession, user_id: str, today: date
+) -> models.AthleteState | None:
+    """The athlete says they are well: the illness in force ended yesterday."""
+    for row in await _relevant_state_rows(db, user_id, today):
+        if row.kind != athlete_states.KIND_ILL:
+            continue
+        starts_on, ends_on = _state_dates(row)
+        if athlete_states.effective_end(row.kind, starts_on, ends_on) < today:
+            continue
+        row.ends_on = max(starts_on, today - timedelta(days=1)).isoformat()
+        row.updated_at = datetime.now(timezone.utc)
+        await db.flush()
+        return row
+    return None
+
+
+async def delete_state(db: AsyncSession, user_id: str, state_id: str) -> bool:
+    """Delete a state the athlete took back. Deleted, not flagged: it is health data."""
+    row = await db.scalar(
+        select(models.AthleteState).where(
+            models.AthleteState.id == state_id,
+            models.AthleteState.user_id == user_id,
+        )
+    )
+    if row is None:
+        return False
+    await db.delete(row)
+    await db.flush()
+    return True
