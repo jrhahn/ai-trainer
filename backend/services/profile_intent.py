@@ -21,7 +21,8 @@ HOURS_MAX = 40
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 
 _WEEKLY_HOURS = re.compile(
-    r"\b(\d{1,2}(?:[.,]5)?)\s*(?:h|hrs?|hours?|stunden?|std)\.?\s+"
+    # Never the tail of another number: "7,25" is not 25.
+    r"(?<![\d.,])\b(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:h|hrs?|hours?|stunden?|std)\.?\s+"
     r"(?:per|a|each|every|pro|in\s+der|die|jede)\s+(?:week|woche)\b",
     re.IGNORECASE,
 )

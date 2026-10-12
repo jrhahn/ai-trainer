@@ -21,6 +21,8 @@ PROFILE = {
         ("I can do 8 hours a week now.", {"weekly_hours": 8.0}),
         ("7,5 Std. die Woche gehen.", {"weekly_hours": 7.5}),
         ("I can do 7.5 hours a week now.", {"weekly_hours": 7.5}),
+        ("I can do 7.25 hours a week now.", {"weekly_hours": 7.25}),
+        ("1,25 Stunden pro Woche, mehr nicht.", {"weekly_hours": 1.25}),
         (
             "Ich kann nur noch dienstags und samstags trainieren.",
             {"training_days": ["tuesday", "saturday"]},
