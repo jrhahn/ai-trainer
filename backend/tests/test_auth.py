@@ -40,13 +40,11 @@ async def test_register_duplicate_email_returns_409(client):
 @pytest.mark.parametrize(
     ("password", "expected"),
     [
-        ("short1!", "at least 8 characters"),
-        ("NOLOWERCASE1!", "lowercase"),
-        ("nouppercase1!", "uppercase"),
-        ("NoNumber!", "number"),
-        ("NoSpecial1", "special"),
-        ("Password1!", "common"),
-        ("Rider2026!", "name or email"),
+        ("Short1!x", "at least 10 characters"),
+        ("abababababab", "repeat a few characters"),
+        ("MyPassword99", "common"),
+        ("1234567890ab", "common"),
+        ("Rider2026!long", "name or email"),
     ],
 )
 async def test_register_rejects_weak_passwords(client, password, expected):
@@ -60,6 +58,19 @@ async def test_register_rejects_weak_passwords(client, password, expected):
     )
     assert response.status_code == 422
     assert expected in response.text
+
+
+@pytest.mark.asyncio
+async def test_register_accepts_a_long_passphrase_without_character_classes(client):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Test Rider",
+            "email": "phrase@example.com",
+            "password": "gravel hills at dawn",
+        },
+    )
+    assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio

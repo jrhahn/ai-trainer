@@ -103,9 +103,8 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'password')
 
-    expect(screen.getByText('One uppercase letter')).toBeInTheDocument()
-    expect(screen.getByText('One number')).toBeInTheDocument()
-    expect(screen.getByText('One special character')).toBeInTheDocument()
+    expect(screen.getByText('At least 10 characters (a short phrase works)')).toBeInTheDocument()
+    expect(screen.queryByText('One uppercase letter')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
     expect(mockRegister).not.toHaveBeenCalled()
   })

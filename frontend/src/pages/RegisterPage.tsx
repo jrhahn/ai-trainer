@@ -6,7 +6,7 @@ import AuthShell from '../components/AuthShell'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 
-const weakTerms = ['password', 'qwerty', 'admin', 'welcome', 'trainlikea']
+const weakTerms = ['password', 'passwort', 'qwert', '12345', 'abcde', 'admin', 'welcome', 'trainlikea']
 
 function getPasswordChecks(password: string, name: string, email: string) {
   const lowerPassword = password.toLowerCase()
@@ -15,11 +15,9 @@ function getPasswordChecks(password: string, name: string, email: string) {
   const personalParts = [emailLocal, ...emailLocal.split(/[^a-z0-9]+/), ...nameParts].filter((part) => part.length >= 3)
 
   return [
-    { id: 'length', label: 'At least 8 characters', valid: password.length >= 8 },
-    { id: 'lowercase', label: 'One lowercase letter', valid: /[a-z]/.test(password) },
-    { id: 'uppercase', label: 'One uppercase letter', valid: /[A-Z]/.test(password) },
-    { id: 'number', label: 'One number', valid: /\d/.test(password) },
-    { id: 'special', label: 'One special character', valid: /[^A-Za-z0-9]/.test(password) },
+    // Length plus a common/personal-word check, no composition rules (NIST SP 800-63B, ai-trainer-ops#44).
+    { id: 'length', label: 'At least 10 characters (a short phrase works)', valid: password.length >= 10 },
+    { id: 'variety', label: 'Not just a few repeated characters', valid: new Set(lowerPassword).size >= 5 },
     {
       id: 'trivial',
       label: 'No common words, name, or email',
@@ -140,7 +138,7 @@ export default function RegisterPage() {
                 className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 autoComplete="new-password"
                 placeholder="Strong password"
-                minLength={8}
+                minLength={10}
                 required
               />
               <button
@@ -174,7 +172,7 @@ export default function RegisterPage() {
                 }`}
                 autoComplete="new-password"
                 placeholder="Repeat your password"
-                minLength={8}
+                minLength={10}
                 required
                 aria-invalid={showMismatch}
               />

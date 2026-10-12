@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Password rules follow NIST SP 800-63B** (ai-trainer-ops#44, #39 Q11) —
+  `schemas.RegisterRequest`. At least 10 characters, at least 5 different
+  characters, and no common, app or personal words. The lowercase, uppercase,
+  number and special-character rules are gone: they produce `Sommer2026!`,
+  not stronger passwords. A passphrase like "gravel hills at dawn" is accepted.
+
 ### Added
 
 - **The free allowance rations the owner's key only** (ai-trainer-ops#79) —
