@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Password rules follow NIST SP 800-63B** (ai-trainer-ops#44, #39 Q11) —
+  `schemas.RegisterRequest`. At least 10 characters, at least 5 different
+  characters, and no common, app or personal words. The lowercase, uppercase,
+  number and special-character rules are gone: they produce `Sommer2026!`,
+  not stronger passwords. A passphrase like "gravel hills at dawn" is accepted.
+
 ### Added
 
 - **Sports and training days on the profile** (ai-trainer-ops#43) —
@@ -18,8 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Do not rely on a 'weeklyHours' field" became: `weeklyHours` is the most
   they can give, sessions go only on `trainingDays` unless the athlete says
   otherwise for a day, and only the listed `sports` are planned.
-
-### Added
 
 - **The free allowance rations the owner's key only** (ai-trainer-ops#79) —
   `services/llm.pays_with_admin_key`, `services/token_accounting.py`,
@@ -366,8 +372,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     can now, and `test_the_output_holds_at_most_one_spelling_of_every_field`
     asserts the acceptance property over every modelled field.
 
-### Added
-
 - **An entered activity can be corrected** (ai-trainer-ops#47) —
   `PUT /users/me/activities/{date}/{slot}`. Sport, minutes, effort and note
   are corrected in place, so its load row is corrected rather than joined by
@@ -400,8 +404,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   take slots from 100 up, so a later plan never reads one as feedback on a
   session of its own. Future days are refused, with one day of slack for
   time zones.
-
-### Fixed
 
 - **Two hand-logged sessions of one sport on one day were one session, three
   times over** — `crud.py`. Logged sessions carry no start time and share a
@@ -439,8 +441,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_provider`: a harness told to go and fetch a key would be configuring the
   thing the stub stands in for.
 
-### Changed
-
 - **The coach draws the medical line in its prompt** (ai-trainer-ops#5) —
   `services/prompts.py`. Every coach persona now says it is not a medical
   professional: no diagnosis, no likely medical cause for a symptom, no
@@ -463,8 +463,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   browser suite at all, and two defects sat behind it: a row of buttons whose
   widths ran 40, 74, 85, 40, 40, and a log screen that renamed the level the
   athlete had just chosen.
-
-### Added
 
 - **A stub AI provider, locked out of production twice**
   (ai-trainer-ops#46) — `config.py`, `services/llm.py`,
@@ -506,8 +504,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"development"` default: an instance that set the flag and forgot `APP_ENV`
   would otherwise pass the boot lock while believing it was in production, and
   a lock that depends on another lock is one lock. Found in review.
-
-### Fixed
 
 - **An athlete cannot choose how large a coach prompt is**
   (ai-trainer-ops#33) — `services/untrusted_text.py`, `services/rag.py`,
@@ -591,8 +587,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name is trimmed, and a blank one or an explicit `null` answers 422. The
   column is nullable, so `null` was a second way to erase it.
 
-### Added
-
 - **Request smuggling through the real proxy pair** (ai-trainer-ops#34) —
   `tests/test_proxy_pair_smuggling.py`, `.github/workflows/ci.yml`. The
   production Traefik image (version read from `compose.yml`) runs in front of
@@ -659,8 +653,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4.14.2, `pyasn1` 0.6.3 → 0.6.4, `mako` 1.3.10 → 1.3.12, `click` 8.3.2 →
   8.3.3. `pip-audit` over the lockfile is now clean.
 
-### Changed
-
 - **The output audit covers every prose surface, not only the chat**
   (ai-trainer-ops#28) — `services/ai_service.py`,
   `tests/test_output_audit_surfaces.py`.
@@ -673,8 +665,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt *and* the user message they were generated from. Still report-only:
   nothing returned changes. Output that is never shown (a truncated summary, a
   rejected badge) is not counted, so it does not dilute the denominator.
-
-### Fixed
 
 - **Deleting an account works in PostgreSQL, and deletes everything**
   (ai-trainer-ops#6) — `models.py`, `tests/test_account_data_rights.py`.
@@ -694,8 +684,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   production. Mutation-checked: without the cascades it fails with exactly the
   PostgreSQL error.
 
-### Added
-
 - **`GET /users/me/export`: everything stored about the account as one JSON
   file** (ai-trainer-ops#6, GDPR Art. 15 and 20) — `services/account_export.py`,
   `routers/users.py`.
@@ -704,8 +692,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   export without anyone remembering it. Credentials are left out: every
   `EncryptedString` column (provider keys, Strava and intervals.icu tokens, the
   TOTP secret) and the password, trusted-device and recovery-code hashes.
-
-### Added
 
 - **A backup that can actually be restored, rehearsed once end to end**
   (ai-trainer-ops#13) — `scripts/backup.sh`, `scripts/restore.sh`,
@@ -767,8 +753,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Two manual steps remain before this is live, and the runbook names them: a
   passphrase on the VPS and a fetch key on the home server.
 
-### Changed
-
 - **One encryption key per secret type, instead of one for all of them**
   (ai-trainer-ops#12) — `config.py`, `models.py`, `.env.example`,
   `deploy/forwarded-vars.yml`, `deploy/ansible/templates/app.env.j2`,
@@ -812,8 +796,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sets it and sent intervals, AI and TOTP secrets to a `SECRETS_ENCRYPTION_KEY`
   that deployment never set — plaintext, silently. That is #612's failure mode,
   reintroduced by a rename.
-
-### Fixed
 
 - **A login no longer answers faster for an address with no account**
   (ai-trainer-ops#35) — `auth.py`, `routers/auth_router.py`.
@@ -862,8 +844,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forgotten password gets reset, since neither has a route. Raised by the
   reviewer on #753.
 
-### Added
-
 - **A suite for what an attacker can learn and what a borrowed session can
   destroy** (ai-trainer-ops#35) — `backend/tests/test_auth_hardening.py`.
 
@@ -875,8 +855,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client address, and neither a password-reset nor a password-change route
   exists — the two questions currently answered by absence, which fail the day
   that changes.
-
-### Fixed
 
 - **An unconfigured proxy secret no longer means "trust the identity headers"**
   (ai-trainer-ops#34) — `services`-adjacent `auth.py`, plus `compose.yml`,
@@ -908,8 +886,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spellings from becoming two accounts. And the first request of a new Authelia
   identity was a 500: `crud.create_user` returns an instance with no
   relationships loaded, and an auth dependency's return value gets serialised.
-
-### Added
 
 - **The `Remote-*` boundary is a test rather than a paragraph**
   (ai-trainer-ops#34) — `tests/test_remote_user_boundary.py`, 74 tests in three
@@ -1144,8 +1120,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it its own chain would mean asserting that an athlete's limiter is their squat,
   which is a claim about a lift rather than about what holds back their riding or
   running.
-
-### Fixed
 
 - **The ROI fallback handed a run-only athlete a cycling week on the only path
   production uses** — `sport=None` is how every caller invokes
@@ -1676,8 +1650,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panel demand a code that a non-base32 one can never accept, which is the
   shape of #684 and #696.
 
-### Fixed
-
 - **A footpod run was read on the wrong clock** (`services/run_model.py`, #716)
   — not every field is recorded at the same rate, and the importers say so:
   `velocity_time`, `altitude_time` and `heartrate_time` sit beside their fields
@@ -1727,8 +1699,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an issue removing from the power block, and a reader cannot tell seconds from
   a pace per mile from a speed. It is `"4:10 /km"` there; `UserResponse` and the
   profile-update request still carry the number, which is what the browser needs.
-
-### Changed
 
 - **`WorkoutLogRequest` is a `CamelModel`, and a logged session records its
   sport** (`schemas.py`, `routers/users.py`, #714) — the request model was a bare
@@ -1935,8 +1905,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exactly the #617 shape. The template parse now reads whole Jinja expressions,
   not just the name after `{{`.
 
-### Fixed
-
 - **A prescribed lift could cost the athlete a whole plan**
   (`schemas.StrengthPrescription`, `schemas.PlanDay._coerce_strength_exercises`,
   #714, epic #709) — `strengthExercises` was the only field on `PlanDay` that
@@ -2039,8 +2007,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   401, because a deployment that was never set up should not announce itself as
   broken to every visitor.
 
-### Added
-
 - **A proof-of-work challenge gates registration** (`services/captcha.py`,
   `routers/auth_router.py`, `routers/dependencies.py`, `schemas.py`,
   `config.py`, `compose.yml`, `deploy/ansible/templates/app.env.j2`) — nine bot
@@ -2078,8 +2044,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   earlier would let an attacker invalidate someone else's in-flight challenge
   by submitting garbage against it.
 
-### Fixed
-
 - **BYOK-only was bypassed by the .fit upload routes** (`routers/dependencies.py`,
   `routers/users.py`, `routers/ai.py`) — with `ALLOW_ADMIN_AI_KEY_FALLBACK=false`,
   `upload-fit` and `upload-fit/bulk` kept spending the *owner's* provider key,
@@ -2106,16 +2070,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would not have caught this, since it patches `get_provider` to raise and so
   exercises the handler rather than the wiring.
 
-### Added
-
 - **`/users/me/ai-key/status` reports the models the backend actually runs**
   (`schemas.py`, `routers/users.py`) — the settings UI hard-coded them as
   display strings in two components that disagreed with each other ("Gemini 2.0
   Flash" and "Gemini 2.5 Flash") and with the backend, which has been on
   `gemini-3.5-flash-lite` since #511 (#691). A copy of a config value drifts
   from it; serving the value cannot.
-
-### Fixed
 
 - **The #682 deploy took down login and the coach** (`routers/auth_router.py`,
   `deploy/ansible/deploy.yml`, `deploy/ansible/templates/app.env.j2`,
@@ -2142,8 +2102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   25,000,000 — several times observed peak, and still a per-user ceiling rather
   than none — and made overridable through the `AI_TOKEN_BUDGET` repository
   variable so the next change does not need a code edit.
-
-### Added
 
 - **Brute-force limits on every auth route** (`routers/dependencies.py`,
   `routers/auth_router.py`, `routers/admin.py`, `config.py`, `compose.yml`,
@@ -2173,8 +2131,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ownership comes from the host. Now that the container no longer runs as root
   a mismatch would turn every sign-up into a 500, visible only to the person
   failing to sign up; it is checked once at boot instead.
-
-### Fixed
 
 - **Authelia ran on three secrets published in this repository**
   (`.github/workflows/deploy.yml`, `compose.yml`,
@@ -2220,14 +2176,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `async` as well: it does nothing blocking, so a sync `def` only bought a
   threadpool hop on the route Docker polls every ten seconds.
 
-### Changed
-
 - **The backend container no longer runs as root** (`Dockerfile`) — the process
   needs no write access to the image. `APP_UID` must match the owner of the
   bind-mounted `./authelia` directory on the deploy host; the startup warning
   above reports a mismatch.
-
-### Added
 
 - **A registered account can no longer spend the owner's provider key without
   limit** (`services/rate_limit.py`, `services/token_accounting.py`,
@@ -2333,8 +2285,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path; it reaches the login-summary and power-block prompts, where it is now
   marked. A test fails if a future change adds it, so the question gets answered
   rather than silently skipped.
-
-### Changed
 
 - **`llm_calls` is indexed by `(user_id, created_at)`**
   (`alembic/versions/20260821_000001_add_llm_calls_user_window_index.py`,
@@ -2479,8 +2429,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Decisively, it cannot tell policy from prose — the modules worth checking are
   mostly `ValueRule(...)` and `SignalRule(...)` declarations, so its survivors
   would be regex and English. (#600)
-
-### Changed
 
 - **A memory observation crosses the trust threshold on its second sighting,
   not its third** — no code change; three docstrings and a test comment said
