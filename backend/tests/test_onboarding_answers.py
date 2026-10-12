@@ -1,7 +1,6 @@
 """The onboarding answers reach the profile and the planner (ai-trainer-ops#43)."""
 
 import pytest
-
 from schemas import UserProfileSchema
 from services.prompts import TRAINING_PLAN_PRINCIPLES
 
