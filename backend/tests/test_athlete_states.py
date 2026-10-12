@@ -300,3 +300,28 @@ async def test_ill_again_after_well_again_reopens_the_illness(
         [state] = await crud.list_relevant_states(db, user_id, today)
     assert state.ends_on is None
     assert state.said_on == today
+
+
+@pytest.mark.asyncio
+async def test_a_party_said_in_chat_marks_the_next_day_and_is_kept_once(
+    client, auth_headers, mock_ai_service
+):
+    for _ in range(2):
+        response = await client.post(
+            "/api/v1/ai/ask-trainer",
+            headers=auth_headers,
+            json={"question": "Party tonight."},
+        )
+
+    tomorrow = app_today() + timedelta(days=1)
+    [captured] = response.json()["capturedStates"]
+    assert captured["label"] == f"Less to give on {tomorrow.isoformat()}"
+    assert captured["removable"] is True
+
+    plan = [{"date": tomorrow.isoformat(), "workoutType": "threshold", "durationMinutes": 60}]
+    async with TestSessionLocal() as db:
+        # Said twice, stored once.
+        assert len((await db.scalars(select(models.AthleteState))).all()) == 1
+        context = await plan_context.plan_writer_context(db, await _user_id(), plan)
+    assert f"Less to give on {tomorrow.isoformat()}" in context.coherence
+    assert f"[athlete-stated] Intensity on {tomorrow.isoformat()}" in context.coherence

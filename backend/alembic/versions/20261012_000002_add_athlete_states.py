@@ -33,16 +33,13 @@ def upgrade() -> None:
         sa.Column("starts_on", sa.String(10), nullable=False),
         sa.Column("ends_on", sa.String(10), nullable=True),
         sa.Column("said_on", sa.String(10), nullable=True),
-        sa.Column("status", sa.String(20), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index(
-        "ix_athlete_states_user_status", "athlete_states", ["user_id", "status"]
-    )
+    op.create_index("ix_athlete_states_user_id", "athlete_states", ["user_id"])
 
 
 def downgrade() -> None:
     if "athlete_states" in sa_inspect(op.get_bind()).get_table_names():
-        op.drop_index("ix_athlete_states_user_status", table_name="athlete_states")
+        op.drop_index("ix_athlete_states_user_id", table_name="athlete_states")
         op.drop_table("athlete_states")

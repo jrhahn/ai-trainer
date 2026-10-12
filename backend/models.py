@@ -1403,11 +1403,12 @@ class AthleteState(Base):
 
     A prior for the planner, never a guard (#39 Q1): see ``services.athlete_states``
     and ``services.plan_priors``. Only the kind and the dates are kept, not the
-    athlete's sentence, because an illness is health data.
+    athlete's sentence, because an illness is health data. Remove deletes the
+    row; there is no soft delete.
     """
 
     __tablename__ = "athlete_states"
-    __table_args__ = (Index("ix_athlete_states_user_status", "user_id", "status"),)
+    __table_args__ = (Index("ix_athlete_states_user_id", "user_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
@@ -1420,8 +1421,6 @@ class AthleteState(Base):
     ends_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # The last day the athlete said it: an open illness expires from here.
     said_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    # ``active`` or ``removed`` (the athlete pressed Remove under the reply).
-    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )

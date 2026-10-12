@@ -5085,10 +5085,7 @@ async def _relevant_state_rows(
 ) -> list[models.AthleteState]:
     rows = await db.scalars(
         select(models.AthleteState)
-        .where(
-            models.AthleteState.user_id == user_id,
-            models.AthleteState.status == "active",
-        )
+        .where(models.AthleteState.user_id == user_id)
         .order_by(models.AthleteState.starts_on)
     )
     return [
