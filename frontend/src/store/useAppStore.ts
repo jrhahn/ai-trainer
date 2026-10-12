@@ -48,6 +48,9 @@ import {
 
 export type AiProvider = 'openai' | 'gemini'
 
+export type Sport = 'cycling' | 'running' | 'strength'
+export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+
 export interface UserProfile {
   name: string
   email: string
@@ -56,6 +59,9 @@ export interface UserProfile {
   raceDate?: string
   raceDescription?: string
   weeklyHours?: number
+  /** Asked at onboarding (ai-trainer-ops#43). Undefined means not stated. */
+  sports?: Sport[]
+  trainingDays?: Weekday[]
   followsTrainingPlan: boolean
   maxHeartRate?: number
   restingHeartRate?: number

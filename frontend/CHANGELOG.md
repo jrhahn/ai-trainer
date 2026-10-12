@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Onboarding asks what the planner needs** (ai-trainer-ops#43, #39 Q10) —
+  `pages/OnboardingPage.tsx`.
+  - Step 1 asks for the sports (Cycling, Running, Strength chips).
+  - Step 3 asks for hours per week (slider) and training days (seven toggles).
+    Level, FTP and max HR are folded into an optional section.
+  - "I currently follow a structured training plan" is gone: it changed nothing
+    the athlete could see.
+  - The summary shows sports and time instead of name and email.
+  - "Use parameters I entered" is now "I'll enter sessions myself".
+- `services/user.ts` no longer turns an unstated `weeklyHours` into 8, because
+  the planner now treats it as a ceiling.
+
+### Changed
+
 - **Registration asks for length, not character classes** (ai-trainer-ops#44) —
   `pages/RegisterPage.tsx`. The checklist is now "At least 10 characters (a
   short phrase works)", "Not just a few repeated characters" and "No common

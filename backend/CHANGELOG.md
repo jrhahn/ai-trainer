@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Sports and training days on the profile** (ai-trainer-ops#43) —
+  `models.User.sports`, `models.User.training_days`, migration
+  `20261012_000001`. Both are JSON lists of fixed choices (`cycling`,
+  `running`, `strength`; `monday`…`sunday`), validated on `PUT /users/me`
+  together with `weeklyHours` (1–40). NULL means not stated.
+- **The planner uses the athlete's time** — `services/prompts.TRAINING_PLAN_PRINCIPLES`.
+  "Do not rely on a 'weeklyHours' field" became: `weeklyHours` is the most
+  they can give, sessions go only on `trainingDays` unless the athlete says
+  otherwise for a day, and only the listed `sports` are planned.
+
 ### Changed
 
 - **Password rules follow NIST SP 800-63B** (ai-trainer-ops#44, #39 Q11) —

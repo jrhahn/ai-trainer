@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useAppStore, type UserProfile, type RiderAssessment } from '../store/useAppStore'
+import { useAppStore, type UserProfile, type RiderAssessment, type Sport, type Weekday } from '../store/useAppStore'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
@@ -65,8 +65,10 @@ type PersistedProgress = {
   raceDate: string
   raceDescription: string
   assessmentMethod: FormData['assessmentMethod']
-  followsTrainingPlan: boolean
   fitnessLevel: FormData['fitnessLevel']
+  sports?: Sport[]
+  weeklyHours?: number
+  trainingDays?: Weekday[]
 }
 
 function readOnboardingProgress(): PersistedProgress | null {
@@ -86,8 +88,10 @@ function saveOnboardingProgress(step: number, form: FormData): void {
       raceDate: form.raceDate,
       raceDescription: form.raceDescription,
       assessmentMethod: form.assessmentMethod,
-      followsTrainingPlan: form.followsTrainingPlan,
       fitnessLevel: form.fitnessLevel,
+      sports: form.sports,
+      weeklyHours: form.weeklyHours,
+      trainingDays: form.trainingDays,
     }
     sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
   } catch {
@@ -110,10 +114,42 @@ type FormData = {
   // intervals.icu first (ai-trainer-ops#20): it is where this audience already
   // keeps its data, and it carries none of Strava's API-terms risk.
   assessmentMethod: 'intervals' | 'strava' | 'manual'
-  followsTrainingPlan: boolean
+  // The three answers the planner needs most (ai-trainer-ops#43).
+  sports: Sport[]
+  weeklyHours: number
+  trainingDays: Weekday[]
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
   maxHeartRate: string
+}
+
+const SPORTS: { value: Sport; label: string }[] = [
+  { value: 'cycling', label: 'Cycling' },
+  { value: 'running', label: 'Running' },
+  { value: 'strength', label: 'Strength' },
+]
+
+const WEEKDAYS: { value: Weekday; label: string }[] = [
+  { value: 'monday', label: 'Mon' },
+  { value: 'tuesday', label: 'Tue' },
+  { value: 'wednesday', label: 'Wed' },
+  { value: 'thursday', label: 'Thu' },
+  { value: 'friday', label: 'Fri' },
+  { value: 'saturday', label: 'Sat' },
+  { value: 'sunday', label: 'Sun' },
+]
+
+/** Four days and six hours: a starting point to change with one tap, not a guess about the athlete. */
+const DEFAULT_TRAINING_DAYS: Weekday[] = ['tuesday', 'thursday', 'saturday', 'sunday']
+const DEFAULT_WEEKLY_HOURS = 6
+
+/** Into the slider's range, which is the backend's (1–40). */
+function clampHours(hours: number): number {
+  return Math.min(Math.max(Math.round(hours), 1), 40)
+}
+
+function toggled<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
 
 function normalizeTrainingGoal(goal: unknown): FormData['trainingGoal'] {
@@ -167,7 +203,9 @@ export default function OnboardingPage() {
       raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',
       raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
       assessmentMethod: defaultAssessmentMethod(),
-      followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
+      sports: userProfile?.sports ?? ['cycling'],
+      weeklyHours: clampHours(userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS),
+      trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
       currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
       fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
       maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
@@ -235,8 +273,11 @@ export default function OnboardingPage() {
       raceDate: trainingGoal === 'race' ? savedProgress.raceDate : '',
       raceDescription: trainingGoal === 'race' ? savedProgress.raceDescription : '',
       assessmentMethod: savedProgress.assessmentMethod,
-      followsTrainingPlan: savedProgress.followsTrainingPlan,
       fitnessLevel: savedProgress.fitnessLevel,
+      // Absent in progress saved before ai-trainer-ops#43.
+      sports: savedProgress.sports ?? base.sports,
+      weeklyHours: clampHours(savedProgress.weeklyHours ?? base.weeklyHours),
+      trainingDays: savedProgress.trainingDays ?? base.trainingDays,
     }
   })
 
@@ -299,6 +340,8 @@ export default function OnboardingPage() {
     }))
 
   const canNext = () => {
+    if (step === 1) return form.sports.length > 0
+    if (step === 3) return form.trainingDays.length > 0
     if (step === 2 && form.trainingGoal === 'race') return form.raceDate.trim().length > 0
     if (step === STEP_ASSESSMENT && form.assessmentMethod === 'strava')
       return Boolean(stravaConnection)
@@ -358,7 +401,11 @@ export default function OnboardingPage() {
       trainingGoal: isRacePrep ? 'race' : 'general_fitness',
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
       raceDescription: isRacePrep ? form.raceDescription || undefined : undefined,
-      followsTrainingPlan: form.followsTrainingPlan,
+      sports: form.sports,
+      weeklyHours: form.weeklyHours,
+      trainingDays: form.trainingDays,
+      // No longer asked (ai-trainer-ops#43): it changed nothing the athlete could see.
+      followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
       maxHeartRate: resolvedMaxHR,
@@ -582,7 +629,7 @@ export default function OnboardingPage() {
   ]
 
   const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
-    { value: 'beginner', label: 'Beginner', desc: 'Cycling < 1 year' },
+    { value: 'beginner', label: 'Beginner', desc: 'Training < 1 year' },
     { value: 'intermediate', label: 'Intermediate', desc: '1-3 years experience' },
     { value: 'advanced', label: 'Advanced', desc: '3+ years, racing or structured training' },
   ]
@@ -630,18 +677,36 @@ export default function OnboardingPage() {
                 Welcome, {userProfile?.name?.trim() || 'athlete'}!
               </h2>
               <p className="text-gray-500 mb-4 text-sm leading-relaxed">
-                We want to set up your first <span className="font-semibold text-gray-700">14-day cycling training plan</span>.
-                We just need a few quick inputs.
+                We want to set up your first <span className="font-semibold text-gray-700">14-day training plan</span>.
+                Which sports should it plan?
               </p>
+              <div className="mb-4 flex flex-wrap justify-center gap-2" role="group" aria-label="Sports">
+                {SPORTS.map(({ value, label }) => {
+                  const on = form.sports.includes(value)
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => update('sports', toggled(form.sports, value))}
+                      className={`rounded-full border-2 px-4 py-1.5 text-sm font-medium transition-all ${
+                      on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-600 hover:border-amber-300'
+                    }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 text-left space-y-1">
                 {/* Three ticks that were ✅, which is a green box in a browser
                     with no emoji font (ai-trainer-ops#51.7). `aria-hidden`:
                     read aloud, "white heavy check mark" three times adds
                     nothing to three plain statements. */}
                 {[
-                  'A few short questions',
-                  'Takes about 3 minutes',
-                  'You can update details later anytime',
+                  'Four short questions, one tap each',
+                  'Takes about a minute',
+                  'You can change everything later, in chat or Settings',
                 ].map((promise) => (
                   <p key={promise} className="flex items-start gap-1.5">
                     <CheckCircle2
@@ -718,14 +783,61 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: Training Inputs */}
+          {/* Step 3: Time (ai-trainer-ops#43). Level, FTP and max HR are optional
+              and folded away: the coach estimates them from the first sessions. */}
           {step === 3 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Training Inputs</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Tell us about your current fitness — everything is optional and can be updated later.
-              </p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">How much time do you have?</h2>
+              <p className="text-sm text-gray-500 mb-4">Your plan stays inside this. You can change it any time.</p>
               <div className="space-y-5">
+                <div>
+                  <label htmlFor="onboarding-weekly-hours" className="flex justify-between text-sm font-medium text-gray-700 mb-2">
+                    <span>Hours per week</span>
+                    <span className="text-amber-700">{form.weeklyHours} h</span>
+                  </label>
+                  <input
+                    id="onboarding-weekly-hours"
+                    type="range"
+                    min={1}
+                    max={40}
+                    step={1}
+                    value={form.weeklyHours}
+                    onChange={(e) => update('weeklyHours', Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                  />
+                </div>
+                <div>
+                  <p className="block text-sm font-medium text-gray-700 mb-2">Days you can train</p>
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days you can train">
+                    {WEEKDAYS.map(({ value, label }) => {
+                      const on = form.trainingDays.includes(value)
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => update('trainingDays', toggled(form.trainingDays, value))}
+                          className={`w-11 rounded-lg border-2 py-1.5 text-sm font-medium transition-all ${
+                            on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:border-amber-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {form.trainingDays.length === 0 && (
+                    <p className="mt-1 text-xs text-red-600">Pick at least one day.</p>
+                  )}
+                </div>
+                <details className="rounded-lg border border-gray-200 px-4 py-3">
+                  <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                    Optional: level, FTP, max heart rate
+                  </summary>
+                  <p className="mt-2 mb-4 text-xs text-gray-500">
+                    Skip these if you are not sure. The coach estimates them from your first sessions.
+                  </p>
+                  <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
                   <div className="space-y-2">
@@ -779,15 +891,8 @@ export default function OnboardingPage() {
 
                   </div>
                 </div>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.followsTrainingPlan}
-                    onChange={(e) => update('followsTrainingPlan', e.target.checked)}
-                    className="w-4 h-4 rounded accent-amber-500"
-                  />
-                  <span className="text-sm text-gray-700">I currently follow a structured training plan</span>
-                </label>
+                  </div>
+                </details>
               </div>
             </div>
           )}
@@ -805,7 +910,7 @@ export default function OnboardingPage() {
                 <>
                   <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
                   <p className="text-sm text-gray-500 mb-4">
-                    Connect intervals.icu or Strava for automatic analysis of your last 7 rides, or use the parameters you just entered.
+                    Connect intervals.icu or Strava for automatic analysis of your last 7 rides, or log your sessions yourself.
                   </p>
                   <div className="space-y-3">
                     <button
@@ -864,9 +969,9 @@ export default function OnboardingPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-sm text-gray-900">Use parameters I entered</p>
+                          <p className="font-semibold text-sm text-gray-900">I&apos;ll enter sessions myself</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            We&apos;ll use the FTP and heart-rate values from the previous step.
+                            The coach starts from your answers and learns from the sessions you log.
                           </p>
                         </div>
                         {form.assessmentMethod === 'manual' && (
@@ -1022,9 +1127,9 @@ export default function OnboardingPage() {
                   const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
                   return (
                     [
-                      ['Name', userProfile?.name ?? ''],
-                      ['Email', userProfile?.email ?? ''],
+                      ['Sports', form.sports.join(', ')],
                       ['Goal', form.trainingGoal.replace('_', ' ')],
+                      ['Time', `${form.weeklyHours} h/week, ${WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => d.label).join(' ')}`],
                       ['Assessment', form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
                       ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
                       ['Fitness Level', form.fitnessLevel],

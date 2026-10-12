@@ -141,6 +141,8 @@ def _user_to_response(
         race_date=user.race_date,
         race_description=user.race_description,
         weekly_hours=user.weekly_hours,
+        sports=user.sports,
+        training_days=user.training_days,
         follows_training_plan=user.follows_training_plan,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,

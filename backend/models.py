@@ -142,6 +142,10 @@ class User(Base):
     race_date: Mapped[str | None] = mapped_column(String(20))
     race_description: Mapped[str | None] = mapped_column(Text)
     weekly_hours: Mapped[float | None] = mapped_column()
+    # Asked at onboarding (ai-trainer-ops#43): which sports to plan, and which
+    # weekdays the athlete can train. NULL means not stated.
+    sports: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    training_days: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
