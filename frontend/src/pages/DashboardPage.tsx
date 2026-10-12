@@ -11,6 +11,7 @@ import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionHero from '../components/SessionHero'
+import DayBoardWhy from '../components/DayBoardWhy'
 import { sessionAtSlot, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
 import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
@@ -1135,6 +1136,7 @@ export default function DashboardPage() {
         doneKeys={selectedDoneKeys}
         onLog={setLoggingSession}
       />
+      {selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
       {loggingSession && (
         <WorkoutFeedbackForm
           day={loggingSession}

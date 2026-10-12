@@ -2240,6 +2240,42 @@ class CapturedStateSchema(CamelModel):
     removable: bool = True
 
 
+class DayBoardOptionSchema(CamelModel):
+    """One kind of day on the board, with each deduction by name (ai-trainer-ops#17)."""
+
+    key: str
+    label: str
+    prescription: str
+    modality: str
+    base: float
+    heat_cost: float
+    freshness_cost: float
+    competes_with: str = ""
+    competes_with_label: str = ""
+    score: float
+
+
+class CodeSourceSchema(CamelModel):
+    """Where in the public repository the numbers were computed."""
+
+    path: str
+    line: int
+    symbol: str
+
+
+class DayBoardResponse(CamelModel):
+    """The day board the planner got, for the athlete to read (ai-trainer-ops#17, #39 Q9).
+
+    ``options`` is empty when nothing is known about the athlete yet, or when
+    memory is off; the planner then gets no board either.
+    """
+
+    hot: bool = False
+    heat_tolerance: str = ""
+    options: list[DayBoardOptionSchema] = []
+    source: CodeSourceSchema
+
+
 class ProfileProposalSchema(CamelModel):
     """Hours, training days or sports the athlete said in chat, to confirm (ops#43).
 

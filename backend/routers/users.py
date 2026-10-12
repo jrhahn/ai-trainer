@@ -1,6 +1,7 @@
 """User profile, plan, workout, chat, and coach-memory routes."""
 
 import hashlib
+import inspect
 import io
 import json
 import logging
@@ -39,7 +40,7 @@ from routers.dependencies import (
     require_password,
     set_user_ai_keys,
 )
-from services import account_export
+from services import account_export, freshness_allocation
 from services import ai_service, metrics_service
 from services import authelia_store
 from services import logged_sessions
@@ -1019,6 +1020,46 @@ async def remove_goal(
             status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
         )
     return {"status": "removed"}
+
+
+@router.get("/day-board", response_model=schemas.DayBoardResponse)
+async def get_day_board(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.DayBoardResponse:
+    """The day board the planner gets, with every deduction (ai-trainer-ops#17).
+
+    Built by the same function as the plan prompt's board, so the athlete reads
+    what the planner read. ``source`` points at the code that computed it.
+    """
+    board = await freshness_allocation.board_for_user(
+        db, current_user, timezone_name=request_timezone(request)
+    )
+    source = schemas.CodeSourceSchema(
+        path="backend/services/freshness_allocation.py",
+        line=inspect.getsourcelines(freshness_allocation.allocate_day)[1],
+        symbol="allocate_day",
+    )
+    if board is None:
+        return schemas.DayBoardResponse(source=source)
+    allocation = board[2]
+    return schemas.DayBoardResponse(
+        hot=allocation["hot"],
+        heat_tolerance=allocation["heat_tolerance"],
+        options=[
+            schemas.DayBoardOptionSchema(
+                **{k: v for k, v in option.items() if k != "components"},
+                competes_with_label=(
+                    freshness_allocation.demand_label(option["competes_with"])
+                    if option["competes_with"]
+                    else ""
+                ),
+            )
+            for option in allocation["options"]
+        ],
+        source=source,
+    )
 
 
 @router.delete("/states/{state_id}")

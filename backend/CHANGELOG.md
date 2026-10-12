@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The day board, readable by the athlete** (ai-trainer-ops#17, #39 Q9) —
+  `GET /users/me/day-board`. Returns the board the planner gets, from the same
+  builder (`freshness_allocation.board_for_user`, split out of
+  `athlete_model_section_for_user`): each kind of day with its value, heat and
+  freshness deductions, what the freshness is owed to, and `source` (path,
+  line and symbol of `allocate_day`). Empty when nothing is known or memory is
+  off, the same as for the planner.
+
 ### Changed
 
 - **Heat costs only what is known about the athlete** (ai-trainer-ops#39 Q3) —

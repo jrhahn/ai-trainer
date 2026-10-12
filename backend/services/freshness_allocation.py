@@ -434,7 +434,31 @@ async def athlete_model_section_for_user(
     timezone_name: str | None = None,
     horizon_days: int = PLAN_HORIZON_DAYS,
 ) -> str:
-    """The whole athlete-model block for a plan prompt, or ``""``.
+    """The whole athlete-model block for a plan prompt, or ``""``."""
+    from services.prompts import planner_athlete_model_section
+
+    board = await board_for_user(
+        db, user, timezone_name=timezone_name, horizon_days=horizon_days
+    )
+    if board is None:
+        return ""
+    motivation, identity, allocation = board
+    return planner_athlete_model_section(
+        motivation=motivation, identity=identity, allocation=allocation
+    )
+
+
+async def board_for_user(
+    db: "AsyncSession",
+    user: Any,
+    *,
+    timezone_name: str | None = None,
+    horizon_days: int = PLAN_HORIZON_DAYS,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]] | None:
+    """The athlete's motivation, identity and day board, or ``None``.
+
+    One builder for the plan prompt and for the board the athlete can read
+    (ai-trainer-ops#17), so what the athlete is shown is what the planner got.
 
     Every plan entry point calls exactly this — the nightly regen and the manual
     "generate a plan" button must not disagree about who the athlete is, which
@@ -457,9 +481,7 @@ async def athlete_model_section_for_user(
     # athlete who turned memory off does not want their objective recalled into a
     # plan either.
     if not getattr(user, "memory_updates_enabled", False):
-        return ""
-
-    from services.prompts import planner_athlete_model_section
+        return None
 
     user_id = user.id
     motivation: dict[str, Any] | None = None
@@ -491,10 +513,10 @@ async def athlete_model_section_for_user(
             )
     except Exception:
         logger.warning("Planner athlete-model read failed", exc_info=True)
-        return ""
+        return None
 
     if motivation is None and identity is None:
-        return ""
+        return None
 
     # Heat only enters the board when the horizon actually contains a hot day.
     # Scoring every plan against 34 °C in February would be the same mistake as
@@ -520,9 +542,7 @@ async def athlete_model_section_for_user(
         hot=hot,
         heat_tolerance=heat_tolerance,
     )
-    return planner_athlete_model_section(
-        motivation=motivation, identity=identity, allocation=allocation
-    )
+    return motivation, identity, allocation
 
 
 def _today_iso(timezone_name: str | None) -> str:

@@ -1373,3 +1373,28 @@ export async function uploadFitFiles(
   }
   return response.json()
 }
+
+// The day board the planner got, with every deduction (ai-trainer-ops#17).
+export interface DayBoardOption {
+  key: string
+  label: string
+  prescription: string
+  modality: string
+  base: number
+  heatCost: number
+  freshnessCost: number
+  competesWith: string
+  competesWithLabel: string
+  score: number
+}
+
+export interface DayBoard {
+  hot: boolean
+  heatTolerance: string
+  options: DayBoardOption[]
+  source: { path: string; line: number; symbol: string }
+}
+
+export async function fetchDayBoard(token: string): Promise<DayBoard> {
+  return apiFetch<DayBoard>('/users/me/day-board', { token })
+}
