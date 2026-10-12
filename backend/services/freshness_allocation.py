@@ -28,7 +28,9 @@ So this module adds the missing term. Two ideas, both small:
 Three properties, each of them a way this could have gone wrong:
 
 * **A default athlete is unaffected.** With the cold-start weight vector and no
-  learned affinity, the board still ranks the key session first. The whole point
+  learned affinity, the board still ranks the key session first, on a hot day
+  too: heat costs only an athlete whose heat sensitivity has been measured
+  (ai-trainer-ops#39 Q3). The whole point
   of #564's guard applies one level up: a planner that quietly reorders everyone's
   week is a worse product, not a better one.
 * **Nothing new is persisted.** Recovery value is a function, not a table. The
@@ -275,13 +277,19 @@ FRESHNESS_PENALTY_SCALE = 2.0
 # the plan prompts already flag, so an athlete is not told 29 °C is hot in one
 # section and fine in the next.
 HEAT_PENALTY = 2.0
-# A learned tolerance is evidence and gets to act like it. Nagging a demonstrably
-# heat-tolerant athlete off every warm day is its own failure mode, and one this
-# codebase has already had to fix once.
+# Heat costs only what is known about this athlete (ai-trainer-ops#39 Q3, the
+# owner's call). With no reading the board deducted for heat anyway and moved
+# the default athlete's top choice on 1,190 of 1,875 hot combinations of gain
+# map and race count; at no cost it moves none. A tolerant athlete then cannot
+# carry more than an unknown one, so tolerance costs nothing either. Nagging a
+# demonstrably heat-tolerant athlete off every warm day is its own failure mode,
+# and one this codebase has already had to fix once. The prompts still say a day
+# is hot; this only stops the board from ranking on a guess.
 HEAT_TOLERANCE_SCALE = {
-    DIRECTION_TOLERANT: 0.35,
+    DIRECTION_TOLERANT: 0.0,
     DIRECTION_SENSITIVE: 1.35,
 }
+HEAT_SCALE_UNKNOWN = 0.0
 
 
 def _pick_modality(candidates: Sequence[str], affinity: Mapping[str, float]) -> str:
@@ -351,7 +359,7 @@ def allocate_day(
     )
     affinity = mm.normalize_modality_affinity(model.get("modality_affinity"))
     values = recovery_value(model, upcoming_races=upcoming_races)
-    heat_scale = HEAT_TOLERANCE_SCALE.get(heat_tolerance or "", 1.0)
+    heat_scale = HEAT_TOLERANCE_SCALE.get(heat_tolerance or "", HEAT_SCALE_UNKNOWN)
 
     options: list[dict[str, Any]] = []
     for archetype in ARCHETYPES:

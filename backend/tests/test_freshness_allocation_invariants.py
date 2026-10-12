@@ -165,17 +165,23 @@ def test_on_a_mild_day_heat_tolerance_changes_nothing(m, g, r, t1, t2):
 @_SETTINGS
 @given(motivations, gain_maps, races)
 def test_heat_costs_order_by_tolerance(m, g, r):
-    """Tolerant pays least, sensitive most, unknown pays the unscaled cost."""
+    """Only a measured sensitivity pays; tolerant and unknown pay nothing (#39 Q3)."""
     cost = {
         t: {o["key"]: o["heat_cost"] for o in _board(m, g, r, True, t)["options"]}
         for t in (DIRECTION_TOLERANT, None, DIRECTION_SENSITIVE)
     }
     for key in _ARCHETYPES:
-        assert (
-            cost[DIRECTION_TOLERANT][key]
-            <= cost[None][key]
-            <= cost[DIRECTION_SENSITIVE][key]
-        )
+        assert cost[DIRECTION_TOLERANT][key] == cost[None][key] == 0
+        assert cost[None][key] <= cost[DIRECTION_SENSITIVE][key]
+
+
+@_SETTINGS
+@given(motivations, gain_maps, races)
+def test_with_no_heat_reading_heat_reorders_nothing(m, g, r):
+    """The default athlete's board is the same on a hot day as on a mild one."""
+    hot = [o["key"] for o in _board(m, g, r, True, None)["options"]]
+    mild = [o["key"] for o in _board(m, g, r, False, None)["options"]]
+    assert hot == mild
 
 
 # ---------------------------------------------------------------------------

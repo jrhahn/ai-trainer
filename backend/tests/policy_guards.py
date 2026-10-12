@@ -174,6 +174,15 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_freshness_allocation.py",),
     ),
     PolicyGuard(
+        target="services.freshness_allocation:HEAT_SCALE_UNKNOWN",
+        decides=(
+            "whether an athlete with no heat reading is ranked off a hot day "
+            "on a guess (ai-trainer-ops#39 Q3)"
+        ),
+        moved_to="1.0",
+        tests=("tests/test_freshness_allocation.py",),
+    ),
+    PolicyGuard(
         target="services.freshness_allocation:FRESHNESS_PENALTY_SCALE",
         decides="whether a hard session is charged for the weekend it costs",
         moved_to="0.0",
