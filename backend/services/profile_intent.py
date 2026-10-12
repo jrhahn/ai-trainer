@@ -70,6 +70,8 @@ _DROP_GERMAN = r"(?:kein(?:e|en)?\s+{words}\s+mehr|{words}\s+(?:\w+\s+)?(?:nicht
 
 def _statements(message: str) -> list[str]:
     message = message.replace("’", "'")
+    # "7.5 hours": a decimal point does not end the sentence.
+    message = re.sub(r"(?<=\d)\.(?=\d)", ",", message)
     # "7,5 Std. die Woche": an abbreviation's full stop does not end the sentence.
     message = re.sub(r"\b(std|hrs?)\.", r"\1", message, flags=re.IGNORECASE)
     return [
