@@ -35,15 +35,16 @@ _PAST = re.compile(
 _WEEKDAY = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")s?\b", re.IGNORECASE)
 # A weekday alone is this week ("Thursday I have no time" is an availability
 # constraint), and "every Saturday a long ride" names one session, not the
-# training days. So the sentence must say these are the days: "only", "my
-# training days", "I train on". "From now on" counts only with two or more days.
+# training days. "My training days" and "I train on" say so with one day.
+# "Only", "nur" and "from now on" say so only with two or more days: "On Sunday
+# I only have an hour" is about Sunday.
 _TRAINING_DAYS = re.compile(
-    r"\b(?:only|nur|my\s+training\s+days|meine\s+trainingstage|"
+    r"\b(?:my\s+training\s+days|meine\s+trainingstage|"
     r"i\s+(?:can\s+)?train\s+on|ich\s+(?:kann|trainiere)\s+(?:\w+\s+)?(?:am|an))\b",
     re.IGNORECASE,
 )
-_FROM_NOW_ON = re.compile(
-    r"\b(?:from\s+now\s+on|going\s+forward|ab\s+jetzt|ab\s+sofort|künftig|in\s+zukunft)\b",
+_WEAK_MARKER = re.compile(
+    r"\b(?:only|nur|from\s+now\s+on|going\s+forward|ab\s+jetzt|ab\s+sofort|künftig|in\s+zukunft)\b",
     re.IGNORECASE,
 )
 # "I can only ride on Saturday this week" is a one-off, not the training days.
@@ -52,14 +53,16 @@ _ONE_OFF = re.compile(
     r"|\b(?:diese|nächste|naechste)\s+woche|\b(?:heute|morgen)\b|\b(?:dieses|am)\s+wochenende",
     re.IGNORECASE,
 )
-_NOT_ON = re.compile(r"\b(?:not|nicht|kein|keine|never|nie)\b", re.IGNORECASE)
+_NOT_ON = re.compile(
+    r"\b(?:not|no|off|can'?t|cannot|don'?t|nicht|kein|keine|never|nie)\b", re.IGNORECASE
+)
 
 _SPORT_WORDS = {
     "cycling": r"(?:cycling|riding|the\s+bike|radfahren|rad\s*fahren|radeln)",
     "running": r"(?:running|run|jogging|laufen|laufe|joggen|jogge)",
     "strength": r"(?:strength(?:\s+training)?|the\s+gym|weights|krafttraining|kraft|gym)",
 }
-_ADD = r"(?:(?:i'?ve\s+|i\s+have\s+)?started|(?:i'?m|i\s+am)\s+(?:also\s+)?(?:doing|adding)|also\s+do|now\s+also|add|angefangen\s+(?:mit\s+)?|jetzt\s+auch|auch\s+noch|dazu)"
+_ADD = r"(?:(?:i'?ve\s+|i\s+have\s+)?started|(?:i'?m|i\s+am)\s+(?:also\s+)?(?:doing|adding)|also\s+do|now\s+also|angefangen\s+(?:mit\s+)?|jetzt\s+auch|auch\s+noch|dazu)"
 # "keine Zeit fürs Laufen" is not giving it up: German needs "mehr" or "aufgehört".
 _DROP_BEFORE = r"(?:stopped|quit|gave\s+up|no\s+more|no\s+longer|aufgehört\s+mit(?:\s+dem)?)"
 _DROP_GERMAN = r"(?:kein(?:e|en)?\s+{words}\s+mehr|{words}\s+(?:\w+\s+)?(?:nicht\s+mehr|aufgehört))"
@@ -92,7 +95,7 @@ def _days(sentence: str) -> list[str] | None:
         return None
     if not (
         _TRAINING_DAYS.search(sentence)
-        or (_FROM_NOW_ON.search(sentence) and len(named) >= 2)
+        or (_WEAK_MARKER.search(sentence) and len(named) >= 2)
     ):
         return None
     return [day for day in WEEKDAY_LABELS.values() if day in named]
@@ -140,7 +143,7 @@ def propose_profile_change(
             # The last statement wins, even when it is the profile's own value.
             proposal["weekly_hours"] = hours
         days = _days(sentence)
-        if days is not None and days != list(training_days or []):
+        if days is not None:
             proposal["training_days"] = days
         new_sports = _sports(sentence, proposal.get("sports", current_sports))
         if new_sports is not None:
@@ -149,4 +152,6 @@ def propose_profile_change(
         proposal.pop("sports", None)
     if proposal.get("weekly_hours") == weekly_hours:
         proposal.pop("weekly_hours", None)
+    if set(proposal.get("training_days", training_days or [])) == set(training_days or []):
+        proposal.pop("training_days", None)
     return proposal or None

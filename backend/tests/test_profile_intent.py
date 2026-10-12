@@ -56,6 +56,10 @@ def test_a_stated_change_is_proposed(message, proposal):
         "I can only ride on Saturday this week.",
         "Diese Woche kann ich nur Samstag.",
         "Ich kann morgen nur kurz, dienstags geht nicht.",
+        "On Sunday I only have an hour.",
+        "Only Thursday I have no time.",
+        "Ich habe nur Montag Zeit für ein kurzes Training.",
+        "Add a run on Friday to the plan.",
     ],
 )
 def test_nothing_is_proposed(message):
@@ -67,10 +71,32 @@ def test_the_last_stated_hours_win_even_when_they_are_the_profiles():
     assert propose_profile_change(message, **PROFILE) is None
 
 
+def test_the_last_stated_days_win_even_when_they_are_the_profiles():
+    message = (
+        "Only Tuesday and Saturday. "
+        "Actually, my training days are Tuesday, Thursday, Saturday and Sunday."
+    )
+    assert propose_profile_change(message, **PROFILE) is None
+
+
 def test_the_same_sports_in_another_order_are_no_change():
     profile = {**PROFILE, "sports": ["running", "cycling"]}
     message = "I've started strength. Actually, I stopped strength."
     assert propose_profile_change(message, **profile) is None
+
+
+@pytest.mark.asyncio
+async def test_confirming_hours_alone_leaves_sports_and_days(client, auth_headers):
+    """What Update profile sends for an hours-only proposal: omitted fields stay."""
+    await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"weeklyHours": 6, "trainingDays": ["saturday"], "sports": ["cycling"]},
+    )
+    await client.put("/api/v1/users/me", headers=auth_headers, json={"weeklyHours": 4})
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+    assert (user.weekly_hours, user.training_days, user.sports) == (4, ["saturday"], ["cycling"])
 
 
 @pytest.mark.asyncio
