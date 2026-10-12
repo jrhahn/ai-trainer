@@ -126,18 +126,23 @@ class RegisterRequest(BaseModel):
         password_lower = password.lower()
         failures: list[str] = []
 
-        if len(password) < 8:
-            failures.append("be at least 8 characters")
-        if not re.search(r"[a-z]", password):
-            failures.append("include a lowercase letter")
-        if not re.search(r"[A-Z]", password):
-            failures.append("include an uppercase letter")
-        if not re.search(r"\d", password):
-            failures.append("include a number")
-        if not re.search(r"[^A-Za-z0-9]", password):
-            failures.append("include a special character")
+        # NIST SP 800-63B: length plus a check against common and personal
+        # words, and no composition rules (ai-trainer-ops#44, #39 Q11).
+        if len(password) < 10:
+            failures.append("be at least 10 characters")
+        if len(set(password_lower)) < 5:
+            failures.append("not repeat a few characters")
 
-        weak_terms = ("password", "qwerty", "admin", "welcome", "trainlikea")
+        weak_terms = (
+            "password",
+            "passwort",
+            "qwert",
+            "12345",
+            "abcde",
+            "admin",
+            "welcome",
+            "trainlikea",
+        )
         if any(term in password_lower for term in weak_terms):
             failures.append("avoid common or app-related words")
 

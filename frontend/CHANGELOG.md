@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Registration asks for length, not character classes** (ai-trainer-ops#44) —
+  `pages/RegisterPage.tsx`. The checklist is now "At least 10 characters (a
+  short phrase works)", "Not just a few repeated characters" and "No common
+  words, name, or email", matching the backend. The confirmation field stays
+  until a password reset exists.
+
 ### Added
 
 - **The free allowance, visible and explained** (ai-trainer-ops#79) —
