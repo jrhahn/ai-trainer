@@ -2261,6 +2261,9 @@ class CodeSourceSchema(CamelModel):
     path: str
     line: int
     symbol: str
+    # The commit the line number belongs to: the deployed one, or ``develop``
+    # when the backend does not know (local runs).
+    ref: str = "develop"
 
 
 class DayBoardResponse(CamelModel):

@@ -1040,6 +1040,7 @@ async def get_day_board(
         path="backend/services/freshness_allocation.py",
         line=inspect.getsourcelines(freshness_allocation.allocate_day)[1],
         symbol="allocate_day",
+        ref=settings.git_sha or "develop",
     )
     if board is None:
         return schemas.DayBoardResponse(source=source)

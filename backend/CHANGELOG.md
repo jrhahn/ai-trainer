@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository variable. The log line says `AI global daily token budget
   exceeded`, which is what a later alert can match.
 
+- **Source links name the deployed commit** (ai-trainer-ops#17) — the deploy
+  playbook reads `git rev-parse HEAD` from the checkout it ships and renders it
+  as `GIT_SHA`; the backend reports it as `source.ref` on the day board, or
+  `develop` when unset. A runtime variable, so nothing new is built or pushed.
+
 - **The day board, readable by the athlete** (ai-trainer-ops#17, #39 Q9) —
   `GET /users/me/day-board`. Returns the board the planner gets, from the same
   builder (`freshness_allocation.board_for_user`, split out of

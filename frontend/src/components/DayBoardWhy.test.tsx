@@ -7,7 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 const mocks = vi.hoisted(() => ({ fetchDayBoard: vi.fn() }))
 vi.mock('../services/user', () => mocks)
 
-const source = { path: 'backend/services/freshness_allocation.py', line: 341, symbol: 'allocate_day' }
+const source = { path: 'backend/services/freshness_allocation.py', line: 341, symbol: 'allocate_day', ref: '0a1b2c3' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -44,7 +44,7 @@ describe('DayBoardWhy', () => {
     expect(screen.getByText(/heat tolerance is not measured yet/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /allocate_day/ })).toHaveAttribute(
       'href',
-      'https://github.com/jrhahn/ai-trainer/blob/develop/backend/services/freshness_allocation.py#L341',
+      'https://github.com/jrhahn/ai-trainer/blob/0a1b2c3/backend/services/freshness_allocation.py#L341',
     )
   })
 
