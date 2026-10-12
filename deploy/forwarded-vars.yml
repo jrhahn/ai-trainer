@@ -282,6 +282,15 @@ forwarded:
       save their own key in Settings before lowering it: 5M once locked them
       out of their own coach at ~6.3M tokens per rolling 30 days (#684).
 
+  - var: ai_global_daily_token_budget
+    from: variable
+    name: AI_GLOBAL_DAILY_TOKEN_BUDGET
+    mode: omit_if_empty
+    why: >-
+      What the owner's key may spend per rolling 24 hours over every account
+      it pays for (ai-trainer-ops#39). The per-user budget does not bound a
+      wave of new accounts; this does.
+
   - var: allow_admin_ai_key_fallback
     from: variable
     name: ALLOW_ADMIN_AI_KEY_FALLBACK

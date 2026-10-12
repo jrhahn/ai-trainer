@@ -28,7 +28,10 @@ from services.plan_maintenance import daily_plan_maintenance_job
 from services.prediction_evaluation import prediction_evaluation_job
 from services.scheduler import InProcessScheduler
 from services import totp as totp_service
-from services.token_accounting import TokenBudgetExceededError
+from services.token_accounting import (
+    GlobalTokenBudgetExceededError,
+    TokenBudgetExceededError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +245,8 @@ async def token_budget_exceeded_handler(
     request_id = getattr(request.state, "request_id", None)
     # "tokens" here are LLM usage counts, not credentials (ai-trainer-ops#32).
     logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
-        "AI token budget exceeded on %s %s (request_id=%s): %d of %d tokens in %d days",
+        "AI %s token budget exceeded on %s %s (request_id=%s): %d of %d tokens in %d days",
+        "global daily" if isinstance(exc, GlobalTokenBudgetExceededError) else "user",
         request.method,
         request.url.path,
         request_id,
