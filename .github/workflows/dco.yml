@@ -1,0 +1,38 @@
+name: DCO
+
+# Every commit in an outside contribution carries a Developer Certificate of
+# Origin sign-off (ai-trainer-ops#23, #39 Q15). See CONTRIBUTING.md.
+#
+# The owner's own PRs are skipped: the owner holds the rights, and their commits
+# often carry a work address GitHub links to no account, so a per-commit login
+# exemption would not see them. Bot commits (dependabot) are exempt per commit.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco:
+    name: DCO sign-off
+    if: github.event.pull_request.user.login != github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      # The checker from the base branch, not from the PR: a PR could otherwise
+      # edit the script that judges it.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Check every commit for a sign-off by its author
+        # pipefail: a failed `gh api` must fail the job, not hand the checker
+        # an empty list it would pass.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          python3 .github/scripts/check_dco.py --self-test
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/commits?per_page=100" --paginate --jq '.[]' \
+            | python3 .github/scripts/check_dco.py --exempt "${{ github.repository_owner }}"
