@@ -513,6 +513,11 @@ class Settings(BaseSettings):
     """
     captcha_challenge_rate_limit_seconds: int = 300
 
+    # The public power-curve tool (ai-trainer-ops#25), deployment-wide. A human
+    # tries a few files; a script hits the minute window at once.
+    power_curve_rate_limit_burst: int = 10
+    power_curve_rate_limit_hourly: int = 120
+
     # ------------------------------------------------------------------
     # Second factor (#688)
     #

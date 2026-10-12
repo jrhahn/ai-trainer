@@ -47,6 +47,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/auth/strava/callback"): "Strava redirects the browser here; the caller is Strava, not a session. Its protection is the OAuth state parameter, not a bearer token — see ai-trainer-ops#35",
     ("POST", "/api/v1/admin/login"): "admin login cannot require admin",
     ("GET", "/api/v1/admin/totp-required"): "tells the login form whether to ask for a code, before anyone is logged in",
+    ("POST", "/api/v1/tools/power-curve"): "the free no-signup FIT tool (ai-trainer-ops#25): reads one upload, stores nothing, calls no model, rate-limited deployment-wide",
     ("GET", "/healthz"): "liveness probe, no data",
     ("GET", "/metrics"): "Prometheus exposition. Not routed by Traefik (see the README deployment section), so it is reachable only from the host — if that ever changes it needs a guard, because it leaks user counts and usage shape",
 }

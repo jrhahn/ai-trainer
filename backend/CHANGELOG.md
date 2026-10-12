@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A free power-curve tool, no account** (ai-trainer-ops#25) —
+  `POST /tools/power-curve` takes one .fit and returns the ride's mean-maximal
+  power at standard durations and a two-parameter critical-power fit over its
+  2-20 minute points with a two-standard-error band (`services/power_curve.py`).
+  Stores nothing and calls no model. Rate-limited deployment-wide (10 a minute,
+  120 an hour), one parse at a time, parsed off the event loop, under the
+  existing .fit size cap.
+
 - **The day board, readable by the athlete** (ai-trainer-ops#17, #39 Q9) —
   `GET /users/me/day-board`. Returns the board the planner gets, from the same
   builder (`freshness_allocation.board_for_user`, split out of

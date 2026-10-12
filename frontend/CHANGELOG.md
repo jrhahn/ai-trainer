@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`/curve`, the free power-curve tool** (ai-trainer-ops#25) — upload one
+  .fit without an account; see the ride's best efforts, the critical-power fit
+  with its band, and download the chart as a PNG to share. Linked from the
+  landing page footer.
+
 ### Changed
 
 - **The landing page says once that runs and strength are planned too**
