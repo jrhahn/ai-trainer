@@ -129,6 +129,9 @@ services:
       # into .env (deploy/ansible/templates/app.env.j2); local Compose stays on
       # the development default so a fresh checkout still comes up.
       APP_ENV: ${APP_ENV:-development}
+      # The deployed commit (deploy/ansible/deploy.yml), so source links in the
+      # app point at the code that is running. Empty locally.
+      GIT_SHA: ${GIT_SHA:-}
       # Fernet key encrypting user API keys and OAuth tokens at rest. Without a
       # line here the value never reaches the container even when it is set in
       # .env, and EncryptedString silently falls back to storing plaintext.
@@ -171,6 +174,7 @@ services:
       # 0 disables the budget. A coach message is ~16k tokens (#510/#556).
       AI_TOKEN_BUDGET: ${AI_TOKEN_BUDGET:-0}
       AI_TOKEN_BUDGET_WINDOW_DAYS: ${AI_TOKEN_BUDGET_WINDOW_DAYS:-30}
+      AI_GLOBAL_DAILY_TOKEN_BUDGET: ${AI_GLOBAL_DAILY_TOKEN_BUDGET:-0}
       # Auth brute-force controls (#682). Listed for the same reason as the
       # block above: a var absent here never reaches the backend, so leaving
       # these to the code defaults would make them invisible and untunable.

@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     backend_url: str = "http://localhost:8000"
     server_url: str = ""
+    # The deployed commit, rendered by the deploy playbook. Empty in development,
+    # where source links fall back to develop.
+    git_sha: str = ""
     activity_sync_interval_seconds: int = 1800
     duration_refresh_lookback_days: int = 21
     """How many days back the daily duration-refresh job re-checks moving_time.
@@ -418,6 +421,14 @@ class Settings(BaseSettings):
     messages a month.
     """
     ai_token_budget_window_days: int = 30
+    ai_global_daily_token_budget: int = 0
+    """Provider tokens the owner's key may spend per rolling 24 hours, summed
+    over every account it pays for. ``0`` disables it.
+
+    The per-user budget does not bound the total: a wave of new accounts can
+    each spend a full allowance. Above this, every account without its own key
+    is asked for one until the day's usage ages out.
+    """
 
     # ------------------------------------------------------------------
     # Auth brute-force controls (#682)
