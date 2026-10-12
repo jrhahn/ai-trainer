@@ -66,6 +66,10 @@ def main() -> int:
         self_test()
         return 0
     commits = [json.loads(line) for line in sys.stdin if line.strip()]
+    # A pull request always has a commit; none means the read failed.
+    if not commits:
+        print("::error::No commits read for this pull request; nothing was checked.")
+        return 1
     missing = unsigned(commits, {login.lower() for login in args.exempt})
     for line in missing:
         print(f"::error::No DCO sign-off for {line}. See CONTRIBUTING.md.")
