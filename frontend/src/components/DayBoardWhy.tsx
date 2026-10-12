@@ -28,7 +28,7 @@ export default function DayBoardWhy() {
     }
   }
 
-  // Develop is what is deployed: every merge to it deploys.
+  // ref is the deployed commit, or develop when the backend does not know it.
   const sourceUrl = board
     ? `${GITHUB_URL}/blob/${board.source.ref}/${board.source.path}#L${board.source.line}`
     : ''
