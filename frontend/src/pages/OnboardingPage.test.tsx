@@ -716,6 +716,17 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   })
 
+  it('clamps stored hours into the slider range', async () => {
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, weeklyHours: 55 } })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText('40 h')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Hours per week/)).toHaveValue('40')
+  })
+
   it('sends the sports, hours and days with the profile the plan is built from', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)

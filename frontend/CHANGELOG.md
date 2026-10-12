@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "Use parameters I entered" is now "I'll enter sessions myself".
 - `services/user.ts` no longer turns an unstated `weeklyHours` into 8, because
   the planner now treats it as a ceiling.
+
+### Changed
+
 - **Registration asks for length, not character classes** (ai-trainer-ops#44) —
   `pages/RegisterPage.tsx`. The checklist is now "At least 10 characters (a
   short phrase works)", "Not just a few repeated characters" and "No common
@@ -85,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `h3` and their sub-headings one level lower. The classes are unchanged, so
   nothing looks different. These components render only on Settings.
 
+### Changed
+
 - **The dashboard opens on today's session, the week and the coach**
   (ai-trainer-ops#68) — `pages/DashboardPage.tsx`.
   - The owner: the chat is the interface. The first screen is now the
@@ -148,6 +153,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moved to Profile; email and Sign Out stay in Account & security. Docs now say
   "Settings → Activities".
 
+### Added
+
 - **"Distance (km)" when entering an activity** (ai-trainer-ops#47) —
   `AddActivityDialog.tsx`, `DashboardPage.tsx`. Optional, and offered only for
   the sports that cover ground: a gym session has no distance, and the field
@@ -163,6 +170,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field on the ride-metrics payload, and the value of it is small next to what
   the figure already does invisibly — an entered run's distance now counts
   towards the weekly mileage the durability ceiling reads.
+
+### Fixed
 
 - **Signing in waits for the profile before it navigates**
   (ai-trainer-ops#58) — `store/useAppStore.ts`, `App.tsx`. `loadUserData`
@@ -214,6 +223,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on PR #797 pointed out that `aria-label` alone does only the first. Current FTP
   keeps an `aria-label`, because it has no visible label to bind to: a section
   heading and a placeholder were all it ever had.
+
+### Added
 
 - **A browser spec for onboarding with every field filled in**
   (ai-trainer-ops#46) — `e2e/stubbed/onboarding-complete.spec.ts`. The existing
@@ -273,6 +284,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PR #798. The first version of the test for it passed against the bug, because
   it asserted before the `.finally` microtask had run.
 
+### Added
+
 - **Edit what you entered** (ai-trainer-ops#47) — `AddActivityDialog.tsx`,
   `DashboardPage.tsx`. A pencil next to "Entered by you" opens the same form,
   filled in with what was entered and with the day fixed. Moving an entry to
@@ -300,6 +313,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Log Completed Workout". The save path (store, server, coach rating on the
   session's own slot) moved from `WorkoutPage` into a shared hook, so the two
   entry points cannot drift apart. Covered by a browser test.
+
+### Fixed
 
 - **A hand-logged session no longer un-logs itself when the coach replies**
   (ai-trainer-ops#52) — `hooks/useLogPlannedSession.ts`. After the coach's
@@ -371,6 +386,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   numbered 6 and shown fifth; the number on screen comes from the order, not the
   id.
 
+### Changed
+
 - **`OnboardingPage` gained 17 tests, and the ai-trainer-ops#40 guard moved
   stacks.**
 
@@ -381,6 +398,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   observe. It moved to the stubbed stack, which completes onboarding, as an
   anchored greeting: the full name is only on screen at desktop width, and that
   spec also runs at 390 px.
+
+### Changed
 
 - **Emoji replaced by lucide icons across the interface** (ai-trainer-ops#51.7)
   — `src/utils/sessionIcon.ts` (new), `src/components/TrainingCalendar.tsx`,
@@ -425,6 +444,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   month calendar and fails on any codepoint in the emoji blocks, paired with a
   positive check that the calendar still draws three distinguishable icons for
   ride, lift and rest — "no emoji" being perfectly true of a blank page.
+
+### Added
 
 - **Two end-to-end stacks, so the dashboard is reachable at last**
   (ai-trainer-ops#46) — `e2e/stack.ts`, `playwright.config.ts`,
@@ -492,6 +513,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Mutation check, as the issue asks: reintroducing the name bug turns the job
   red.
+
+### Fixed
 
 - **A long word no longer breaks the layout on a phone** (ai-trainer-ops#51.4,
   #51.5) — `src/components/WeekStrip.tsx`,
@@ -610,6 +633,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the failure message — "399 > 390" alone is a failure someone has to
   reproduce before they can act on it.
 
+### Changed
+
 - **intervals.icu is the active source when both are connected**
   (ai-trainer-ops#49, answering #39 Q5) — `src/hooks/useStravaSync.ts`,
   `src/pages/SettingsPage.tsx`.
@@ -632,6 +657,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   respects the #664 guard and does **not** regenerate an existing plan —
   otherwise everyone with both sources would have had their plan rewritten on
   the first load after this shipped.
+
+### Fixed
 
 - **Onboarding no longer marks the account onboarded without a plan**
   (ai-trainer-ops#41) — `src/pages/OnboardingPage.tsx`.
@@ -661,6 +688,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Good morning, !". Onboarding now reads both from the loaded profile and
   sends neither. The greeting drops the comma when there is no name.
 
+### Changed
+
 - **intervals.icu is the first way in, Strava the convenience**
   (ai-trainer-ops#20) — `OnboardingPage.tsx`, `SettingsPage.tsx`,
   `AuthShell.tsx`. Onboarding's assessment step offers "Connect intervals.icu"
@@ -682,6 +711,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `server_tokens off`. Deliberately no `Cross-Origin-Embedder-Policy`; the
   reason is in `nginx.conf`. The headers are now pinned by a test, because
   nothing else fails when one is dropped.
+
+### Added
 
 - **"Export My Data" in Settings** (ai-trainer-ops#6) — `SettingsPage.tsx`,
   `services/user.ts`. Downloads `GET /users/me/export` as
@@ -793,6 +824,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A server with `CAPTCHA_ENABLED=false` answers the challenge endpoint with
   404, and the client then registers exactly as before rather than burning CPU
   on a puzzle nobody will check.
+
+### Fixed
 
 - **Every logged-out page load flashed Authelia before the homepage**
   (`src/App.tsx`, #704) — App probed `GET /auth/session` on mount whenever there

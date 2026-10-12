@@ -199,7 +199,8 @@ export default function OnboardingPage() {
       raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
       assessmentMethod: defaultAssessmentMethod(),
       sports: userProfile?.sports ?? ['cycling'],
-      weeklyHours: userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS,
+      // Clamped into the slider's range, which is the backend's (1–40).
+      weeklyHours: Math.min(Math.max(Math.round(userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS), 1), 40),
       trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
       currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
       fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
@@ -794,7 +795,7 @@ export default function OnboardingPage() {
                     id="onboarding-weekly-hours"
                     type="range"
                     min={1}
-                    max={20}
+                    max={40}
                     step={1}
                     value={form.weeklyHours}
                     onChange={(e) => update('weeklyHours', Number(e.target.value))}

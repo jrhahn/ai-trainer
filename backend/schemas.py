@@ -410,6 +410,12 @@ class UpdateProfileRequest(CamelModel):
     last_intervals_activity_id: Optional[int] = None
     intervals_auto_sync_enabled: Optional[bool] = None
 
+    @field_validator("sports", "training_days")
+    @classmethod
+    def choices_once_each(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """A set of choices: a repeated entry is kept once, in its first place."""
+        return None if v is None else list(dict.fromkeys(v))
+
     @field_validator("name")
     @classmethod
     def name_is_not_blank(cls, v: Optional[str]) -> Optional[str]:
