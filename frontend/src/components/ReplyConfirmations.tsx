@@ -1,7 +1,13 @@
 import { useState } from 'react'
-import { Check, Flag, Target, Thermometer, X } from 'lucide-react'
+import { Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { clearProfileRaceRemote, fetchCurrentUser, removeGoalRemote, removeStateRemote } from '../services/user'
+import {
+  clearProfileRaceRemote,
+  fetchCurrentUser,
+  removeGoalRemote,
+  removeStateRemote,
+  updateCurrentUser,
+} from '../services/user'
 import type { ChatMessage } from '../store/useAppStore'
 
 // The confirm step under a coach reply (ai-trainer-ops#65, #71). A goal said in
@@ -12,6 +18,18 @@ import type { ChatMessage } from '../store/useAppStore'
 // day (#18) works like a goal: stored at once, undone with Remove.
 type GoalState = 'open' | 'kept' | 'removed' | 'failed'
 type RaceState = 'open' | 'kept' | 'cleared' | 'failed'
+type ProfileState = 'open' | 'kept' | 'updated' | 'failed'
+
+const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
+
+// What the reply offers to change, in the athlete's terms (ai-trainer-ops#43).
+function describeProfileChange(proposal: NonNullable<ChatMessage['profileProposal']>): string {
+  const parts: string[] = []
+  if (proposal.weeklyHours != null) parts.push(`${proposal.weeklyHours} h a week`)
+  if (proposal.trainingDays?.length) parts.push(`train on ${proposal.trainingDays.map(capitalize).join(', ')}`)
+  if (proposal.sports?.length) parts.push(`sports: ${proposal.sports.map(capitalize).join(', ')}`)
+  return parts.join('; ')
+}
 
 export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const authToken = useAppStore((s) => s.authToken)
@@ -19,11 +37,14 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const [goals, setGoals] = useState<Record<string, GoalState>>({})
   const [states, setStates] = useState<Record<string, GoalState>>({})
   const [race, setRace] = useState<RaceState>('open')
+  const [profileChange, setProfileChange] = useState<ProfileState>('open')
 
   const captured = msg.capturedGoals ?? []
   const capturedStates = msg.capturedStates ?? []
   const proposal = msg.raceProposal
-  if (captured.length === 0 && capturedStates.length === 0 && !proposal) return null
+  const profileProposal = msg.profileProposal
+  const profileText = profileProposal ? describeProfileChange(profileProposal) : ''
+  if (captured.length === 0 && capturedStates.length === 0 && !proposal && !profileText) return null
   const raceLabel = [proposal?.raceDescription, proposal?.raceDate].filter(Boolean).join(', ')
   const calendarRaces = proposal?.calendarRaces ?? 0
   const calendarText =
@@ -48,6 +69,21 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       setStates((s) => ({ ...s, [id]: 'removed' }))
     } catch {
       setStates((s) => ({ ...s, [id]: 'failed' }))
+    }
+  }
+
+  const applyProfileChange = async () => {
+    if (!authToken || !profileProposal) return
+    try {
+      const user = await updateCurrentUser(authToken, {
+        weeklyHours: profileProposal.weeklyHours ?? undefined,
+        trainingDays: profileProposal.trainingDays ?? undefined,
+        sports: profileProposal.sports ?? undefined,
+      })
+      setProfileChange('updated')
+      setUserProfile(user.profile)
+    } catch {
+      setProfileChange('failed')
     }
   }
 
@@ -138,6 +174,37 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
           </div>
         )
       })}
+      {profileText && (
+        <div className="text-xs text-gray-600">
+          <p className="flex items-center gap-1">
+            <SlidersHorizontal size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+            <span>
+              Update your profile: <strong>{profileText}</strong>?
+            </span>
+          </p>
+          {profileChange === 'open' && (
+            <div className="mt-1 flex flex-wrap gap-2 pl-4">
+              <button
+                type="button"
+                className={`${button} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+                onClick={() => void applyProfileChange()}
+              >
+                <Check size={11} aria-hidden="true" /> Update profile
+              </button>
+              <button
+                type="button"
+                className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                onClick={() => setProfileChange('kept')}
+              >
+                <X size={11} aria-hidden="true" /> Leave it
+              </button>
+            </div>
+          )}
+          {profileChange === 'kept' && <p className="pl-4 text-gray-400">Left as it was.</p>}
+          {profileChange === 'updated' && <p className="pl-4 text-gray-400">Updated. The coach plans with it from now on.</p>}
+          {profileChange === 'failed' && <p className="pl-4 text-red-600">Could not update it. Try again later.</p>}
+        </div>
+      )}
       {proposal && (
         <div className="text-xs text-gray-600">
           <p className="flex items-center gap-1">

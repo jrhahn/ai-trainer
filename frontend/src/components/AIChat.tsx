@@ -599,6 +599,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         capturedGoals: result.capturedGoals?.length ? result.capturedGoals : undefined,
         capturedStates: result.capturedStates?.length ? result.capturedStates : undefined,
         raceProposal: result.raceProposal ?? undefined,
+        profileProposal: result.profileProposal ?? undefined,
       })
       setLastFailedMessage(null)
 

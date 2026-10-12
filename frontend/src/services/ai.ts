@@ -3,8 +3,10 @@ import type {
   RaceEvent,
   RiderAssessment,
   RideMetricPoint,
+  Sport,
   StravaActivity,
   TrainingDay,
+  Weekday,
 } from '../store/useAppStore'
 import type { AthleteModel, AthletePerformanceModel } from './user'
 import { apiFetch } from './api'
@@ -60,6 +62,14 @@ export interface CapturedState {
   removable: boolean
 }
 
+// Hours, training days or sports said in chat, offered as a profile change
+// (ai-trainer-ops#43). Only the fields that differ from the profile are set.
+export interface ProfileProposal {
+  weeklyHours?: number | null
+  trainingDays?: Weekday[] | null
+  sports?: Sport[] | null
+}
+
 export interface RaceProposal {
   raceDate?: string | null
   raceDescription?: string | null
@@ -72,6 +82,7 @@ export interface AskTrainerResult {
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
+  profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
@@ -86,6 +97,7 @@ interface BackendAskTrainerResult {
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
+  profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
@@ -160,6 +172,7 @@ export async function askTrainer(
     capturedGoals: result.capturedGoals ?? [],
     capturedStates: result.capturedStates ?? [],
     raceProposal: result.raceProposal ?? null,
+    profileProposal: result.profileProposal ?? null,
   }
 }
 

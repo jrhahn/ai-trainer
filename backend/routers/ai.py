@@ -29,6 +29,7 @@ from services import (
     athlete_states,
     goal_progress,
     plan_context,
+    profile_intent,
     race_intent,
     stated_ftp,
 )
@@ -1222,6 +1223,13 @@ async def ask_trainer(
         and (current_user.race_date or current_user.training_goal == "race")
         else None
     )
+    # Hours, days or sports said in chat: offered, never applied (ops#43, #39).
+    profile_proposal = profile_intent.propose_profile_change(
+        body.question,
+        weekly_hours=current_user.weekly_hours,
+        training_days=current_user.training_days,
+        sports=current_user.sports,
+    )
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
@@ -1674,6 +1682,7 @@ async def ask_trainer(
         for goal in captured_goals
     ]
     result["race_proposal"] = race_proposal
+    result["profile_proposal"] = profile_proposal
     result["captured_states"] = captured_states
     return schemas.AskTrainerResponse.model_validate(result)
 
