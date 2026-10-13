@@ -105,6 +105,9 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link to="/curve" className="text-slate-300 hover:text-white">
+              Free power-curve tool
+            </Link>
             <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
               Setup guide
             </a>

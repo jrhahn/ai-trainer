@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 import auth as _auth
 from config import settings
 from database import Base, async_session_maker, engine
-from routers import ai, admin, auth_router, intervals, strava, users
+from routers import ai, admin, auth_router, intervals, strava, tools, users
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
@@ -300,6 +300,7 @@ api_v1.include_router(ai.router)
 api_v1.include_router(strava.router)
 api_v1.include_router(intervals.router)
 api_v1.include_router(admin.router)
+api_v1.include_router(tools.router)
 app.include_router(api_v1)
 
 

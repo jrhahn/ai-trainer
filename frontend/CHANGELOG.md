@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`/curve`, the free power-curve tool** (ai-trainer-ops#25) — upload one
+  .fit without an account; see the ride's best efforts, the critical-power fit
+  with its band, and download the chart as a PNG to share. Linked from the
+  landing page footer.
+
 ### Changed
 
 - **"How this is computed" links to the running commit** (ai-trainer-ops#17) —
   the link uses `source.ref` from the backend, so its line number still points
   at `allocate_day` after develop moves on.
-
-### Changed
 
 - **The landing page says once that runs and strength are planned too**
   (ai-trainer-ops#53 item 1, #39 Q13) — `pages/LandingPage.tsx`. The hero's

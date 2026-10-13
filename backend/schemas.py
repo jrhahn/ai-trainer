@@ -2894,3 +2894,35 @@ class ProcessPendingFeedbacksResponse(CamelModel):
 
     login_summary: str
     """Updated training summary incorporating the batched ride feedback."""
+
+
+class PowerDurationPointSchema(CamelModel):
+    seconds: int
+    watts: int
+
+
+class PowerCurveBandSchema(CamelModel):
+    seconds: int
+    watts: int
+    low: int
+    high: int
+
+
+class CriticalPowerSchema(CamelModel):
+    cp: int
+    cp_low: int
+    cp_high: int
+    w_prime: int
+    w_prime_low: int
+    w_prime_high: int
+    points_used: int
+
+
+class PowerCurveResponse(CamelModel):
+    """The public FIT tool's answer (ai-trainer-ops#25). Nothing is stored."""
+
+    duration_seconds: int
+    points: list[PowerDurationPointSchema]
+    # None when the ride has no hard short effort or too few 2-20 min points.
+    model: CriticalPowerSchema | None
+    curve: list[PowerCurveBandSchema]

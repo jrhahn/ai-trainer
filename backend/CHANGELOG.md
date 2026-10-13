@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A free power-curve tool, no account** (ai-trainer-ops#25) —
+  `POST /tools/power-curve` takes one .fit and returns the ride's mean-maximal
+  power at standard durations and a two-parameter critical-power fit over its
+  2-20 minute points with a two-standard-error band (`services/power_curve.py`).
+  Stores nothing and calls no model. Rate-limited deployment-wide (10 a minute,
+  120 an hour), one parse at a time, parsed off the event loop, under the
+  existing .fit size cap.
+
 - **A daily cap on the owner's key across all accounts** (ai-trainer-ops#39) —
   `AI_GLOBAL_DAILY_TOKEN_BUDGET`, tokens per rolling 24 hours summed over every
   call no own key paid for: unattributed calls, and calls whose user holds no
