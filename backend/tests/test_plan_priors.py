@@ -254,6 +254,11 @@ def test_hard_days_in_the_past_are_history():
     assert find_prior_departures(plan, TODAY) == []
 
 
+def test_a_bogus_far_future_date_is_ignored_not_an_overflow():
+    plan = [*_plan({}), {"date": "9999-12-31", "workoutType": "intervals", "durationMinutes": 60}]
+    assert find_prior_departures(plan, TODAY) == []
+
+
 @_SETTINGS
 @given(hard=st.lists(st.booleans(), min_size=14, max_size=14))
 def test_back_to_back_findings_name_exactly_the_consecutive_hard_days(hard):

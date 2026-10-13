@@ -9,7 +9,7 @@ either brings the plan back or keeps the departure and says why. That was the
 owner's call: "no rigid rules, rather a prior the agent adjusts from its own
 judgement".
 
-The four priors and their evidence:
+The priors and their evidence:
 
 * **Stated hours** (athlete-stated). ``weeklyHours`` is what the athlete said
   they can give. Not a science question.
@@ -74,6 +74,9 @@ RAMP_RATIO_MAX = 1.3
 # Below this many hours a week the baseline says nothing a ratio could use: one
 # extra ride would read as a 100 % ramp.
 RAMP_MIN_BASELINE_HOURS = 2.0
+# How far ahead back-to-back hard days are looked for. A plan holds weeks, not
+# years; the cap also keeps a bogus far-future date out of date arithmetic.
+BACK_TO_BACK_HORIZON_DAYS = 366
 # Tolerance on the athlete's stated hours, so rounding in a description is not a
 # finding. Ten minutes, not a percentage: the stated figure is the athlete's.
 STATED_HOURS_SLACK_MINUTES = 10
@@ -302,7 +305,9 @@ def _states(plan, today, states) -> list[PriorDeparture]:
 
 
 def _back_to_back(plan, today) -> list[PriorDeparture]:
-    hard = set(_intense_dates(plan, today, date.max))
+    hard = set(
+        _intense_dates(plan, today, today + timedelta(days=BACK_TO_BACK_HORIZON_DAYS))
+    )
     pairs = sorted(d for d in hard if d + timedelta(days=1) in hard)
     if not pairs:
         return []
