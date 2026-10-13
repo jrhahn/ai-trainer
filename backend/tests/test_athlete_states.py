@@ -118,7 +118,12 @@ def test_intervals_during_an_illness_and_its_return_are_a_departure():
     ill = StatedState(KIND_ILL, MONDAY, MONDAY + timedelta(days=1))
     plan = [_day(1), _day(4), _day(5), _day(2, "endurance")]
 
-    [found] = find_prior_departures(plan, MONDAY, states=[ill])
+    # Friday and Saturday also stack hard days; that is a prior of its own.
+    [found] = [
+        f
+        for f in find_prior_departures(plan, MONDAY, states=[ill])
+        if f.prior == PRIOR_ILLNESS
+    ]
 
     assert found.prior == PRIOR_ILLNESS
     assert found.evidence == "expert consensus"
@@ -130,7 +135,11 @@ def test_intervals_during_an_illness_and_its_return_are_a_departure():
 def test_intensity_on_a_tired_day_is_a_departure_and_the_next_day_is_not():
     tired = StatedState(KIND_REDUCED, MONDAY + timedelta(days=1), MONDAY + timedelta(days=1))
 
-    [found] = find_prior_departures([_day(1), _day(2)], MONDAY, states=[tired])
+    [found] = [
+        f
+        for f in find_prior_departures([_day(1), _day(2)], MONDAY, states=[tired])
+        if f.prior == PRIOR_REDUCED_DAY
+    ]
 
     assert found.prior == PRIOR_REDUCED_DAY
     assert "2026-10-13" in found.statement

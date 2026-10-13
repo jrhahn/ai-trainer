@@ -225,3 +225,49 @@ def test_stated_hours_findings_are_exactly_the_weeks_over_the_limit(minutes, hou
 def test_without_any_athlete_input_nothing_is_reported(minutes):
     plan = [_day(offset, m) for offset, m in enumerate(minutes)]
     assert find_prior_departures(plan, TODAY) == []
+
+
+# --- back-to-back hard days --------------------------------------------------
+
+
+def test_two_hard_days_in_a_row_are_reported_as_a_heuristic():
+    plan = _plan({})
+    plan[2] = _day(2, 60, "intervals")
+    plan[3] = _day(3, 60, "threshold")
+    findings = find_prior_departures(plan, TODAY)
+    assert _priors(findings) == [plan_priors.PRIOR_BACK_TO_BACK]
+    assert findings[0].evidence == plan_priors.EVIDENCE_HEURISTIC
+    assert plan[2]["date"] in findings[0].statement
+    assert plan[3]["date"] in findings[0].statement
+
+
+def test_an_easy_day_between_hard_days_is_silent():
+    plan = _plan({})
+    plan[2] = _day(2, 60, "intervals")
+    plan[3] = _day(3, 90, "endurance")
+    plan[4] = _day(4, 60, "vo2max")
+    assert find_prior_departures(plan, TODAY) == []
+
+
+def test_hard_days_in_the_past_are_history():
+    plan = [_day(-2, 60, "intervals"), _day(-1, 60, "intervals"), *_plan({})]
+    assert find_prior_departures(plan, TODAY) == []
+
+
+@_SETTINGS
+@given(hard=st.lists(st.booleans(), min_size=14, max_size=14))
+def test_back_to_back_findings_name_exactly_the_consecutive_hard_days(hard):
+    plan = [
+        _day(offset, 60, "intervals" if is_hard else "endurance")
+        for offset, is_hard in enumerate(hard)
+    ]
+    findings = [
+        f
+        for f in find_prior_departures(plan, TODAY)
+        if f.prior == plan_priors.PRIOR_BACK_TO_BACK
+    ]
+    starts = [i for i in range(13) if hard[i] and hard[i + 1]]
+    assert len(findings) == (1 if starts else 0)
+    for i in starts:
+        pair = f"{plan[i]['date']} and {plan[i + 1]['date']}"
+        assert pair in findings[0].statement

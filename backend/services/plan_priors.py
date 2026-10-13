@@ -29,6 +29,10 @@ The four priors and their evidence:
   intensity while ill and for ``athlete_states.RETURN_EASY_DAYS`` days after.
 * **A day with less to give** (athlete-stated). After a party, on a long work
   day: no intensity that day.
+* **Back-to-back hard days** (heuristic). The hard/easy principle is coaching
+  tradition rather than a trial result, and block periodisation stacks hard
+  days on purpose (Ronnestad et al. 2014). So two intensity days in a row are
+  reported, and a block with a reason is a normal thing to keep.
 
 Both come from states the athlete said in chat (``services/athlete_states``,
 #18, #39 Q1).
@@ -55,6 +59,7 @@ PRIOR_TAPER_INTENSITY = "taper-intensity"
 PRIOR_RAMP = "ramp"
 PRIOR_ILLNESS = "illness"
 PRIOR_REDUCED_DAY = "reduced-day"
+PRIOR_BACK_TO_BACK = "back-to-back-hard"
 
 WEEK_DAYS = 7
 # The final week should hold at most this share of the week before it. Bosquet's
@@ -296,6 +301,24 @@ def _states(plan, today, states) -> list[PriorDeparture]:
     return found
 
 
+def _back_to_back(plan, today) -> list[PriorDeparture]:
+    hard = set(_intense_dates(plan, today, date.max))
+    pairs = sorted(d for d in hard if d + timedelta(days=1) in hard)
+    if not pairs:
+        return []
+    listed = ", ".join(
+        f"{d.isoformat()} and {(d + timedelta(days=1)).isoformat()}" for d in pairs
+    )
+    return [
+        PriorDeparture(
+            PRIOR_BACK_TO_BACK,
+            EVIDENCE_HEURISTIC,
+            f"Intensity on consecutive days: {listed}. Hard days usually have an "
+            f"easy day between them, unless this is a deliberate block.",
+        )
+    ]
+
+
 def athlete_states_section(states, today: date) -> str:
     """What the athlete said about their state, for a writer that plans from it."""
     lines = []
@@ -357,6 +380,7 @@ def find_prior_departures(
         *_taper(plan, totals, today, race_dates),
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
+        *_back_to_back(plan, today),
     ]
 
 
