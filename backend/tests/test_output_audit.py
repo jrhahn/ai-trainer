@@ -211,6 +211,29 @@ def test_the_coaching_senses_of_medical_words_are_not_findings():
     assert _claims("A healthy dose of zone 2 will fix this.") == []
 
 
+def test_a_german_assertion_is_reported():
+    """The coach answers in the athlete's language (ai-trainer-ops#78)."""
+    assert _claims("Das klingt nach einer Sehnenentzündung.") == ["Sehnenentzündung"]
+    assert _claims("Du hast vermutlich Eisenmangel.") == ["Eisenmangel"]
+    assert _claims("Die übliche Therapie ist Ruhe.") == ["Therapie"]
+
+
+def test_a_german_conditional_or_disclaimer_is_not_a_finding():
+    assert _claims("Wenn du Asthma hast, frag deinen Arzt.") == []
+    assert _claims("Falls du eine Herzerkrankung hast, kläre das ärztlich ab.") == []
+    assert (
+        _claims("Ich bin kein Arzt und das ist keine Diagnose, lass das ärztlich abklären.")
+        == []
+    )
+
+
+def test_the_german_coaching_senses_are_not_findings():
+    """A race-time forecast and letting a cold heal are coaching, not medicine."""
+    assert _claims("Die Prognose für deine Zielzeit ist gut.") == []
+    assert _claims("Lass die Erkältung ausheilen, dann geht es weiter.") == []
+    assert _claims("Eisenmangel ist bei Ausdauersportlern häufig.") == []
+
+
 def test_detection_does_not_depend_on_capitalisation():
     assert _claims("YOU HAVE ANEMIA.") == ["ANEMIA"]
     assert _claims("A TREATMENT is needed.") == ["TREATMENT"]

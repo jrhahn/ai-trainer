@@ -291,6 +291,12 @@ _SAFE_PHRASES = (
     # says both of these often and means neither medically.
     r"treat (?:yourself|it|this|that|them) (?:to|as)",
     r"a (?:healthy |small |big |large )?dose of",
+    # German (ai-trainer-ops#78: the coach answers in the athlete's language).
+    r"(?:ich bin |das ist |das sind |ist |sind )?kein(?:e|en)? "
+    r"(?:arzt|ärztin|diagnose|medizinische\w* (?:rat|beratung|diagnose)|ersatz für)",
+    r"ersetz\w* kein\w* (?:ärztliche\w* |medizinische\w* )?"
+    r"(?:rat|beratung|diagnose|behandlung|untersuchung)",
+    r"ärztlich\w* (?:abklären|abklärung|untersuchen|untersuchung|rat|beratung)",
 )
 _SAFE_PHRASE = re.compile("|".join(_SAFE_PHRASES), re.IGNORECASE)
 
@@ -314,6 +320,18 @@ _MEDICAL_ACTS = (
     "clinically",
     "contraindicat",
     "symptom",
+    # German. "Prognose" and "Rezept" are left out on purpose: in this app they
+    # are mostly a race-time forecast and a recipe.
+    "therapie",
+    "therapeut",
+    "behandlung",
+    "medikament",
+    "medikation",
+    "verschreib",
+    "dosierung",
+    "milligramm",
+    "kontraindi",
+    "klinisch",
 )
 _MEDICAL_ACT = re.compile(
     "|".join(rf"\b{term}\w*" for term in _MEDICAL_ACTS), re.IGNORECASE
@@ -351,6 +369,32 @@ _CONDITIONS = (
     "deficiency",
     "disease",
     "infection",
+    # German
+    "anämie",
+    "blutarmut",
+    "eisenmangel",
+    "schilddrüsen\\w+",
+    "bluthochdruck",
+    "hypertonie",
+    "herzrhythmusstörung\\w*",
+    "vorhofflimmern",
+    "herz(?:erkrankung|fehler|problem|krankheit)\\w*",
+    "essstörung",
+    "osteoporose",
+    "osteopenie",
+    "stressfraktur",
+    "ermüdungsbruch",
+    "sehnenentzündung",
+    "tendinopathie",
+    "rhabdomyolyse",
+    "gehirnerschütterung",
+    "myokarditis",
+    "herzmuskelentzündung",
+    "übertrainingssyndrom",
+    "schlafapnoe",
+    "erkrankung",
+    "krankheit",
+    "infektion",
 )
 _CONDITION = re.compile("|".join(_CONDITIONS), re.IGNORECASE)
 
@@ -362,6 +406,14 @@ _CLAIM_VERBS = (
     r"diagnosis of",
     r"suffering from",
     r"signs? of",
+    # German. Only main-clause word order: in "wenn du Asthma hast" the verb
+    # moves to the end, so a conditional never reads as a claim to begin with.
+    r"du (?:hast|leidest)(?: (?:wohl|vermutlich|wahrscheinlich|vielleicht|"
+    r"möglicherweise|eventuell))?",
+    r"(?:das|es|dies) (?:ist|klingt nach|sieht nach|deutet auf|spricht für|"
+    r"weist auf|passt zu)",
+    r"leidest (?:an|unter)",
+    r"(?:an)?zeichen (?:von|für|einer|eines)",
 )
 _CLAIM_VERB = re.compile("|".join(_CLAIM_VERBS), re.IGNORECASE)
 
@@ -372,7 +424,10 @@ _CLAIM_WINDOW = 48
 
 # A claim verb under one of these is a conditional, not an assertion: "if you
 # have a heart condition, ask your doctor" is the sentence the product wants.
-_CONDITIONAL = re.compile(r"(?:if|unless|whether|in case|should)\s*$", re.IGNORECASE)
+_CONDITIONAL = re.compile(
+    r"(?:if|unless|whether|in case|should|wenn|falls|ob|sofern|sollte)\s*$",
+    re.IGNORECASE,
+)
 _CONDITIONAL_LOOKBACK = 16
 
 
