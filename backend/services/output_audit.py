@@ -332,6 +332,22 @@ _MEDICAL_ACTS = (
     "milligramm",
     "kontraindi",
     "klinisch",
+    # Drugs, in both languages. Telling an athlete to take one is a medical
+    # act whatever the sentence around it. Caffeine is left out: it is a
+    # sports-nutrition topic, not a medicine here.
+    "ibuprofen",
+    "paracetamol",
+    "acetaminophen",
+    "aspirin(?!g)",  # not "aspiring"
+    "diclofenac",
+    "naproxen",
+    "nsaid",
+    "painkiller",
+    "schmerzmittel",
+    "antibiotic",
+    "antibiotik",
+    "cortison",
+    "kortison",
 )
 _MEDICAL_ACT = re.compile(
     "|".join(rf"\b{term}\w*" for term in _MEDICAL_ACTS), re.IGNORECASE
