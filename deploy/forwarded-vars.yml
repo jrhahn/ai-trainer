@@ -27,7 +27,8 @@
 # feels like the whole job, and nothing anywhere reports that it had no effect.
 #
 # Why a manifest rather than a list in the workflow: the deploy now runs from
-# the private `ai-trainer-ops` repository (#699), so the workflow that forwards
+# the private `ai-trainer-ops` repository (#699), now on the owner's Forgejo,
+# where its secrets and variables live. So the workflow that forwards
 # these values is not visible to this repository's tests. Keeping the list here
 # means the guard survives the move, and `deploy/render_extra_vars.py` — also
 # here, also reviewable — is what actually reads it. The ops workflow passes
@@ -342,7 +343,7 @@ template_default_only:
   - authelia_remote_email_header
   - authelia_remote_name_header
   # Computed by the playbook from the checkout (`git rev-parse HEAD`), so a
-  # GitHub setting would only be able to make it lie.
+  # repository setting would only be able to make it lie.
   - git_sha
   # SMTP is unconfigured on this deployment (the notifier writes to a file).
   # When it is set up, these move into `forwarded` — see #687. Note that
