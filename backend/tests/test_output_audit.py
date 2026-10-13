@@ -227,6 +227,22 @@ def test_a_german_conditional_or_disclaimer_is_not_a_finding():
     )
 
 
+def test_a_conditional_is_a_whole_word():
+    """"Job" and "relief" end in a conditional; neither is one."""
+    from services.output_audit import _CONDITIONAL
+
+    assert _CONDITIONAL.search("ob ") and _CONDITIONAL.search("so if ")
+    assert not _CONDITIONAL.search("ein Job ") and not _CONDITIONAL.search("relief ")
+
+
+def test_the_separable_referral_needs_no_blanking_and_hides_nothing():
+    """"Kläre das ärztlich ab" holds no medical word, so a claim next to it stays."""
+    assert _claims("Kläre das bitte ärztlich ab.") == []
+    assert _claims("Du hast vermutlich Eisenmangel, kläre das ärztlich ab.") == [
+        "Eisenmangel"
+    ]
+
+
 def test_the_german_coaching_senses_are_not_findings():
     """A race-time forecast and letting a cold heal are coaching, not medicine."""
     assert _claims("Die Prognose für deine Zielzeit ist gut.") == []

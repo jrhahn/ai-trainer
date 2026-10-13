@@ -197,6 +197,7 @@ REFERRAL = st.sampled_from(
         " Das ist keine Diagnose.",
         " Lass das bitte ärztlich abklären.",
         " Das ersetzt keine ärztliche Beratung.",
+        " Kläre das bitte ärztlich ab.",
     ]
 )
 

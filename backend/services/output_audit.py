@@ -425,7 +425,7 @@ _CLAIM_WINDOW = 48
 # A claim verb under one of these is a conditional, not an assertion: "if you
 # have a heart condition, ask your doctor" is the sentence the product wants.
 _CONDITIONAL = re.compile(
-    r"(?:if|unless|whether|in case|should|wenn|falls|ob|sofern|sollte)\s*$",
+    r"\b(?:if|unless|whether|in case|should|wenn|falls|ob|sofern|sollte)\s*$",
     re.IGNORECASE,
 )
 _CONDITIONAL_LOOKBACK = 16
