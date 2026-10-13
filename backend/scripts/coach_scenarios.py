@@ -24,6 +24,13 @@ failure the chat showed, not "good coaching" in general. A failed check is a
 lead to read the reply, which the report quotes; it is not proof on its own.
 Model output varies, so read a check that fails once as a flake and one that
 fails run after run as a finding.
+
+The output audit (ai-trainer-ops#28) runs inside ``ask_trainer`` on every reply.
+In production it logs counts only, because a reply is the athlete's health data.
+These athletes are synthetic, so the report lists each finding in full: the
+unexplained number or the medical term, and why it was flagged. That list is
+what #28 asks to read before either check becomes a gate. It is reported, never
+counted as a failed check.
 """
 
 from __future__ import annotations
@@ -31,11 +38,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from services import ai_service
+from services import ai_service, output_audit
 from services.dates import app_today
 
 GERMAN_WEEKDAYS = [
@@ -116,6 +124,7 @@ def language(text: str) -> str:
 class Result:
     reply: str
     updates: list[dict]
+    audit: list[output_audit.Finding] = field(default_factory=list)
 
     def update_for(self, day: str) -> dict | None:
         return next((u for u in self.updates if u.get("date") == day), None)
@@ -388,6 +397,24 @@ def scenarios(today: date) -> list[Scenario]:
     ]
 
 
+@contextmanager
+def _audit_findings() -> Iterator[list[output_audit.Finding]]:
+    """Keep what ``output_audit.report`` finds while one scenario runs."""
+    found: list[output_audit.Finding] = []
+    real = output_audit.report
+
+    def report(text, context=None, *, surface):
+        findings = real(text, context, surface=surface)
+        found.extend(findings)
+        return findings
+
+    output_audit.report = report
+    try:
+        yield found
+    finally:
+        output_audit.report = real
+
+
 async def run(
     provider: str, only: str | None = None, today: date | None = None
 ) -> list[tuple[Scenario, Result | None, list[str], str]]:
@@ -402,21 +429,24 @@ async def run(
         if only and scenario.name != only:
             continue
         try:
-            raw = await ai_service.ask_trainer(
-                scenario.question,
-                scenario.plan,
-                scenario.profile,
-                provider=provider,
-                coach_memory=scenario.coach_memory or None,
-                motivation_model=scenario.motivation_model,
-                conversation_history=scenario.history or None,
-            )
+            with _audit_findings() as found:
+                raw = await ai_service.ask_trainer(
+                    scenario.question,
+                    scenario.plan,
+                    scenario.profile,
+                    provider=provider,
+                    coach_memory=scenario.coach_memory or None,
+                    motivation_model=scenario.motivation_model,
+                    conversation_history=scenario.history or None,
+                )
         # A broken call is a result too, not a crash of the run.
         except Exception as error:
             outcomes.append((scenario, None, [], f"{type(error).__name__}: {error}"))
             continue
         result = Result(
-            str(raw.get("response") or ""), list(raw.get("plan_updates") or [])
+            str(raw.get("response") or ""),
+            list(raw.get("plan_updates") or []),
+            list(found),
         )
         failed = [label for label, check in scenario.checks if not check(result)]
         outcomes.append((scenario, result, failed, ""))
@@ -442,8 +472,17 @@ def render(outcomes) -> str:
             else ("pass" if not failed else "fail: " + "; ".join(failed))
         )
         lines.append(f"| `{scenario.name}` | {scenario.issue} | {verdict} |")
+    audited = [(s, r) for s, r, _f, _e in outcomes if r and r.audit]
+    lines += ["", "**Output audit (ai-trainer-ops#28), reported only**", ""]
+    if not audited:
+        lines.append("_No unexplained numbers and no medical claims in any reply._")
+    for scenario, result in audited:
+        listed = "; ".join(
+            f"{f.check} `{f.detail}` ({f.reason})" for f in result.audit
+        )
+        lines.append(f"- `{scenario.name}`: {listed}")
     for scenario, result, failed, _error in outcomes:
-        if result and failed:
+        if result and (failed or result.audit):
             excerpt = " ".join(result.reply.split())[:400]
             lines += [
                 "",

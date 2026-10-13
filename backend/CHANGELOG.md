@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach scenarios list the output audit's findings** (ai-trainer-ops#28) —
+  `scripts/coach_scenarios.py` keeps what `output_audit.report` finds in each
+  reply and prints every unexplained number and medical term with its reason.
+  The athletes are synthetic, so the detail production only counts can be
+  read here before either check becomes a gate. Findings are reported, not
+  counted as failed checks.
 - **Back-to-back hard days as a planning prior** (ai-trainer-ops#26) —
   `plan_priors` reports intensity on consecutive days to every plan writer,
   labelled a heuristic: the hard/easy principle is coaching tradition, and
