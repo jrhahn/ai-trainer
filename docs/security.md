@@ -508,16 +508,17 @@ empty value and a missing one are not the same thing to `${VAR:-default}`.
 ### Where the deployment lives
 
 Production secrets and host configuration belong in the private companion
-repository `ai-trainer-ops`, not here. A merge to `develop` dispatches its deploy
-workflow with the commit SHA; it checks out this repository at that commit —
+repository `ai-trainer-ops`, not here. It lives on the owner's self-hosted
+Forgejo, and its deploy workflow polls: every ten minutes it compares
+`develop` here with the `GIT_SHA` the last deploy wrote into the production
+`.env`, and when they differ it fetches this repository at that commit —
 public, so no credential is involved — and ships it.
 
-The dispatch travels one way and carries nothing but a SHA. This repository
-cannot read anything in ops.
+Nothing travels from here to ops any more. This repository holds no token for
+it, triggers nothing in it and cannot read anything in it.
 
-The cutover is complete. The workflow here is one `dispatch` job, and the only
-secret it needs is the dispatch token — which can trigger a deploy in ops and
-do nothing else.
+Before the move off GitHub, a `dispatch` job here sent the commit SHA to ops
+with `OPS_DISPATCH_TOKEN`. That job is gone with the move.
 
 It did not go cleanly, and the failure is the useful part. The first attempt
 kept a fallback deploy job here, guarded on whether `OPS_DISPATCH_TOKEN` was
