@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Back-to-back hard days as a planning prior** (ai-trainer-ops#26) —
+  `plan_priors` reports intensity on consecutive days to every plan writer,
+  labelled a heuristic: the hard/easy principle is coaching tradition, and
+  block periodisation stacks hard days on purpose. The coach keeps a block
+  with a reason or puts an easy day between. Nothing is reverted.
 - **A free power-curve tool, no account** (ai-trainer-ops#25) —
   `POST /tools/power-curve` takes one .fit and returns the ride's mean-maximal
   power at standard durations and a two-parameter critical-power fit over its
