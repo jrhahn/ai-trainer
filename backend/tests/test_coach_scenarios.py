@@ -237,3 +237,54 @@ def test_mountain_bike_in_two_words_counts_as_the_mtb():
         if label == "recommends the MTB"
     ]
     assert check(cs.Result("Take the mountain bike today, not the road bike.", []))
+
+
+# --- the output audit (ai-trainer-ops#28) ------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_audit_findings_of_a_reply_are_listed_in_full(monkeypatch):
+    """Synthetic athletes, so the report may show what production only counts."""
+    reply = "Bei deinem FTP von 320 W liegt Z2 bei 176 bis 240 W."
+
+    async def ask_trainer(question, *_args, **_kwargs):
+        # What ask_trainer does with every reply: audit it against its context.
+        cs.output_audit.report(reply, ["FTP 285 W"], surface="ask_trainer")
+        return {"response": reply, "plan_updates": []}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    outcomes = await cs.run("gemini", only="current-ftp", today=TODAY)
+    report = cs.render(outcomes)
+
+    [(_s, result, _f, _e)] = outcomes
+    assert [f.detail for f in result.audit] == ["320", "176", "240"]
+    assert "number_provenance `320`" in report
+    assert "<code>current-ftp</code> reply" in report
+
+
+@pytest.mark.asyncio
+async def test_an_audit_finding_is_not_a_failed_check(monkeypatch):
+    reply, updates = GOOD["current-ftp"]
+
+    async def ask_trainer(*_args, **_kwargs):
+        cs.output_audit.report("You may have tendinitis.", None, surface="ask_trainer")
+        return {"response": reply, "plan_updates": updates}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    outcomes = await cs.run("gemini", only="current-ftp", today=TODAY)
+
+    assert "1 of 1 passed" in cs.render(outcomes)
+    assert outcomes[0][1].audit[0].check == cs.output_audit.CHECK_CLAIMS
+
+
+@pytest.mark.asyncio
+async def test_clean_replies_say_so_and_the_audit_is_restored(monkeypatch):
+    real = cs.output_audit.report
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(GOOD))
+
+    report = cs.render(await cs.run("gemini", today=TODAY))
+
+    assert "No unexplained numbers and no medical claims" in report
+    assert cs.output_audit.report is real
