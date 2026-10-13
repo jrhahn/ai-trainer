@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The forbidden-claim check reads German** (ai-trainer-ops#28, #5) —
+  `output_audit.forbidden_claims` knew English only, while the coach answers
+  in the athlete's language (#78). It now knows German medical acts
+  (Therapie, Behandlung, Medikament, Dosierung, …), named conditions
+  (Sehnenentzündung, Eisenmangel, Herzerkrankung, …), main-clause claim
+  verbs ("du hast", "das klingt nach") and German disclaimers ("das ist
+  keine Diagnose", "ärztlich abklären"). "Prognose" and "Rezept" are left
+  out, since here they are a race forecast and a recipe. Still report-only.
 - **The coach scenarios list the output audit's findings** (ai-trainer-ops#28) —
   `scripts/coach_scenarios.py` keeps what `output_audit.report` finds in each
   reply and prints every unexplained number and medical term with its reason.

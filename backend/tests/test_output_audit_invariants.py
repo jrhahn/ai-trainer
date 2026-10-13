@@ -182,6 +182,9 @@ CLAIM_TEXT = st.sampled_from(
         "Treat yourself to a rest day.",
         "This might be an iron deficiency.",
         "Iron deficiency is common in endurance athletes.",
+        "Das klingt nach einer Sehnenentzündung.",
+        "Wenn du Asthma hast, frag deinen Arzt.",
+        "Die übliche Therapie ist Ruhe.",
     ]
 )
 
@@ -191,6 +194,10 @@ REFERRAL = st.sampled_from(
         " Please see a doctor about it.",
         " Consult your physician first.",
         " I am not a doctor.",
+        " Das ist keine Diagnose.",
+        " Lass das bitte ärztlich abklären.",
+        " Das ersetzt keine ärztliche Beratung.",
+        " Kläre das bitte ärztlich ab.",
     ]
 )
 
