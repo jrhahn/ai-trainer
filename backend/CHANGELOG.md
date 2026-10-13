@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Drug names count as a medical act** (ai-trainer-ops#28, #5) —
+  `output_audit` reports ibuprofen, paracetamol, aspirin, NSAIDs,
+  painkillers/Schmerzmittel, antibiotics and cortisone in English and
+  German. Caffeine is left out as sports nutrition. Still report-only.
 - **The forbidden-claim check reads German** (ai-trainer-ops#28, #5) —
   `output_audit.forbidden_claims` knew English only, while the coach answers
   in the athlete's language (#78). It now knows German medical acts

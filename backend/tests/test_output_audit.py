@@ -250,6 +250,12 @@ def test_the_german_coaching_senses_are_not_findings():
     assert _claims("Eisenmangel ist bei Ausdauersportlern häufig.") == []
 
 
+def test_naming_a_drug_is_a_medical_act_in_either_language():
+    assert _claims("Nimm vor der Ausfahrt ein Ibuprofen.") == ["Ibuprofen"]
+    assert _claims("A painkiller will get you through it.") == ["painkiller"]
+    assert _claims("Ein Espresso mit Koffein vor dem Rennen hilft.") == []
+
+
 def test_detection_does_not_depend_on_capitalisation():
     assert _claims("YOU HAVE ANEMIA.") == ["ANEMIA"]
     assert _claims("A TREATMENT is needed.") == ["TREATMENT"]
