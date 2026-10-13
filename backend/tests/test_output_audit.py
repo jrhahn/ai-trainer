@@ -254,6 +254,13 @@ def test_naming_a_drug_is_a_medical_act_in_either_language():
     assert _claims("Nimm vor der Ausfahrt ein Ibuprofen.") == ["Ibuprofen"]
     assert _claims("A painkiller will get you through it.") == ["painkiller"]
     assert _claims("Ein Espresso mit Koffein vor dem Rennen hilft.") == []
+    assert _claims("Take an aspirin first.") == ["aspirin"]
+    assert _claims("Aspiring racers train smart.") == []
+    # Word-start stems: plurals and compounds count.
+    assert _claims("Antibiotika und Schmerzmitteln helfen hier nicht.") == [
+        "Antibiotika",
+        "Schmerzmitteln",
+    ]
 
 
 def test_detection_does_not_depend_on_capitalisation():

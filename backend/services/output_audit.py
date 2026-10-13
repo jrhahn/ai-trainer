@@ -338,7 +338,7 @@ _MEDICAL_ACTS = (
     "ibuprofen",
     "paracetamol",
     "acetaminophen",
-    "aspirin",
+    "aspirin(?!g)",  # not "aspiring"
     "diclofenac",
     "naproxen",
     "nsaid",
